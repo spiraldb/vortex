@@ -1,0 +1,14 @@
+[package]
+name = "enc-rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+arrow2 = "0.18.0"
+bytemuck = { version = "1", features = ["derive"] }
+dyn-clone = "1.0.16"
+roaring = "0.10.2"
+strum = { version = "0.25", features = ["derive"] }
+strum_macros = "0.25.3"

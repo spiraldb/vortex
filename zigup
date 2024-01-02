@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ZIG_HOME="${ZIG_HOME:-$HOME/.zig}"
+ZIG_LATEST="${ZIG_HOME}/zig-latest"
+mkdir -p "$ZIG_HOME"
+
+VERSION=$(cat ".zig-version" | tr -d '\n ')
+
+osOut="$(uname -s)"
+case "${osOut}" in
+    Linux*)     OS="linux";;
+    Darwin*)    OS="macos";;
+esac
+
+archOut="$(uname -m)"
+case "${archOut}" in
+    arm64*)     ARCH="aarch64";;
+    x86_64*)    ARCH="x86_64";;
+esac
+
+ARCH_VERSION="zig-${OS}-${ARCH}-${VERSION}"
+
+if [ ! -d "${ZIG_HOME}/${ARCH_VERSION}" ]
+then
+    echo "Downloading Zig version $VERSION"
+    curl -s -L "https://ziglang.org/builds/${ARCH_VERSION}.tar.xz" | tar -x -J -C "${ZIG_HOME}"
+else
+    echo "Zig version $VERSION already installed"
+fi
+
+# Always update the symlink to the requested version
+rm -f "$ZIG_LATEST"
+ln -s "${ZIG_HOME}/${ARCH_VERSION}" "$ZIG_LATEST"
+
+echo "Add ${ZIG_LATEST} to the \$PATH"
