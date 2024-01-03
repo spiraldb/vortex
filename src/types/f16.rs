@@ -1,5 +1,6 @@
 // Take from arrow2 https://github.com/jorgecarleitao/arrow2/blob/3ddc6a10c6fbc2d0f85a9f66eeb46112abd07029/src/types/native.rs
 
+use crate::types::{PType, PrimitiveType};
 use bytemuck::{Pod, Zeroable};
 
 #[derive(Copy, Clone, Default, Zeroable, Pod)]
@@ -158,4 +159,10 @@ impl std::fmt::Display for f16 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_f32())
     }
+}
+
+impl PrimitiveType for f16 {
+    const PTYPE: PType = PType::F16;
+    type ArrowType = arrow2::types::f16;
+    type Bytes = [u8; 2];
 }

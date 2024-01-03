@@ -1,6 +1,8 @@
-pub(crate) mod dtype;
+mod dtype;
 mod f16;
-pub(crate) mod ptype;
+pub use dtype::*;
+mod ptype;
+pub use ptype::*;
 
 mod private {
     use super::f16::f16;
