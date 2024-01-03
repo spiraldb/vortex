@@ -1,4 +1,4 @@
-use super::Array;
+use super::{impl_array, Array, ArrayKind};
 use crate::types::DType;
 
 mod mutable;
@@ -34,11 +34,17 @@ pub struct BinaryArray {
 }
 
 impl Array for BinaryArray {
+    impl_array!();
+
     fn len(&self) -> usize {
         self.views.len() / std::mem::size_of::<BinaryView>()
     }
 
-    fn datatype(&self) -> DType {
-        DType::Utf8
+    fn datatype(&self) -> &DType {
+        &DType::Binary
+    }
+
+    fn kind(&self) -> Option<ArrayKind> {
+        Some(ArrayKind::Binary)
     }
 }

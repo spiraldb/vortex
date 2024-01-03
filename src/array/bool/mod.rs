@@ -1,6 +1,6 @@
 mod mutable;
 
-use super::Array;
+use super::{impl_array, Array, ArrayKind};
 use crate::types::DType;
 
 #[derive(Clone)]
@@ -9,14 +9,19 @@ pub struct BoolArray {
 }
 
 impl Array for BoolArray {
+    impl_array!();
 
     #[inline]
     fn len(&self) -> usize {
-        return self.buffer.len();
+        self.buffer.len()
     }
 
     #[inline]
-    fn datatype(&self) -> DType {
-        DType::Bool
+    fn datatype(&self) -> &DType {
+        &DType::Bool
+    }
+
+    fn kind(&self) -> Option<ArrayKind> {
+        Some(ArrayKind::Bool)
     }
 }

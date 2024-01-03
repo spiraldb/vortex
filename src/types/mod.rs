@@ -1,11 +1,12 @@
 mod dtype;
-mod f16;
 pub use dtype::*;
+mod float16;
+pub use float16::*;
 mod ptype;
 pub use ptype::*;
 
 mod private {
-    use super::f16::f16;
+    use super::f16;
 
     pub trait Sealed {}
 

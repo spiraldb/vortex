@@ -1,5 +1,5 @@
 // Take from arrow2 https://github.com/jorgecarleitao/arrow2/blob/3ddc6a10c6fbc2d0f85a9f66eeb46112abd07029/src/types/native.rs
-
+// Consider replacing this with half-rs instead of reusing
 use crate::types::{PType, PrimitiveType};
 use bytemuck::{Pod, Zeroable};
 
