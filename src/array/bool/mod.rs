@@ -1,11 +1,19 @@
-mod mutable;
-
-use super::{impl_array, Array, ArrayKind};
+use super::{impl_array, Array};
 use crate::types::DType;
+
+use arrow2::array::BooleanArray as ArrowBooleanArray;
 
 #[derive(Clone)]
 pub struct BoolArray {
-    buffer: arrow2::array::BooleanArray,
+    buffer: ArrowBooleanArray,
+}
+
+pub const KIND: &str = "enc.bool";
+
+impl BoolArray {
+    pub fn new(buffer: ArrowBooleanArray) -> Self {
+        Self { buffer }
+    }
 }
 
 impl Array for BoolArray {
@@ -17,11 +25,12 @@ impl Array for BoolArray {
     }
 
     #[inline]
-    fn datatype(&self) -> &DType {
+    fn dtype(&self) -> &DType {
         &DType::Bool
     }
 
-    fn kind(&self) -> Option<ArrayKind> {
-        Some(ArrayKind::Bool)
+    #[inline]
+    fn kind(&self) -> &str {
+        KIND
     }
 }

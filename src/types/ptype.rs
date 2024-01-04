@@ -44,7 +44,7 @@ macro_rules! ptype {
     ($type:ty, $ptype:expr) => {
         impl PrimitiveType for $type {
             const PTYPE: PType = $ptype;
-            type ArrowType = $type;
+            type ArrowType = Self;
             type Bytes = [u8; std::mem::size_of::<Self>()];
         }
     };

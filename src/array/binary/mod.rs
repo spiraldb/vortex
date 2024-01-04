@@ -1,7 +1,6 @@
-use super::{impl_array, Array, ArrayKind};
+use super::{impl_array, Array};
 use crate::types::DType;
-
-mod mutable;
+use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
@@ -26,25 +25,48 @@ union BinaryView {
     _ref: Ref,
 }
 
+pub const KIND: &str = "enc.varbinary";
+
 #[derive(Clone)]
-// TODO(robert): Abstract over Utf8/Binary
-pub struct BinaryArray {
-    views: arrow2::array::PrimitiveArray<u8>,
+pub struct VarBinaryArray {
+    views: ArrowPrimitiveArray<u8>,
     data: Vec<Box<dyn Array>>,
+    dtype: DType,
 }
 
-impl Array for BinaryArray {
+impl VarBinaryArray {
+    pub fn new(views: ArrowPrimitiveArray<u8>, data: Vec<Box<dyn Array>>) -> Self {
+        Self {
+            views,
+            data,
+            dtype: DType::Binary,
+        }
+    }
+
+    // TODO(robert): Validate data is utf8
+    pub fn new_utf8(views: ArrowPrimitiveArray<u8>, data: Vec<Box<dyn Array>>) -> Self {
+        Self {
+            views,
+            data,
+            dtype: DType::Utf8,
+        }
+    }
+}
+
+impl Array for VarBinaryArray {
     impl_array!();
 
     fn len(&self) -> usize {
         self.views.len() / std::mem::size_of::<BinaryView>()
     }
 
-    fn datatype(&self) -> &DType {
-        &DType::Binary
+    #[inline]
+    fn dtype(&self) -> &DType {
+        &self.dtype
     }
 
-    fn kind(&self) -> Option<ArrayKind> {
-        Some(ArrayKind::Binary)
+    #[inline]
+    fn kind(&self) -> &str {
+        KIND
     }
 }

@@ -9,8 +9,6 @@ use strum_macros::EnumString;
 
 #[derive(Debug, PartialEq, EnumString)]
 pub enum ArrayKind {
-    #[strum(serialize = "enc.binary")]
-    Binary,
     #[strum(serialize = "enc.bool")]
     Bool,
     #[strum(serialize = "enc.chunked")]
@@ -29,10 +27,8 @@ pub enum ArrayKind {
     RoaringUint,
     #[strum(serialize = "enc.struct")]
     Struct,
-}
-
-pub fn id_to_array_kind(id: &str) -> Option<ArrayKind> {
-    ArrayKind::from_str(id).ok()
+    #[strum(serialize = "enc.varbinary")]
+    VarBinary,
 }
 
 /// An Enc Array is the base object representing all arrays in enc.
@@ -54,15 +50,22 @@ pub trait Array: dyn_clone::DynClone {
     fn len(&self) -> usize;
 
     /// Check if array is empty
+    #[inline]
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Get the `DType` of the array
-    fn datatype(&self) -> &DType;
+    fn dtype(&self) -> &DType;
 
-    /// Return ArrayKind for the array.
-    fn kind(&self) -> Option<ArrayKind>;
+    /// Return stable identifier of the array kind.
+    fn kind(&self) -> &str;
+
+    /// Enum variant of kind for builtin array types.
+    #[inline]
+    fn enum_kind(&self) -> Option<ArrayKind> {
+        ArrayKind::from_str(self.kind()).ok()
+    }
 
     /// Clone a `&dyn Array` to an owned `Box<dyn Array>`.
     fn to_boxed(&self) -> Box<dyn Array>;
