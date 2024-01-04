@@ -1,7 +1,9 @@
-use super::{impl_array, Array};
+use arrow2::array::{Array as ArrowArray, BooleanArray as ArrowBooleanArray};
+use arrow2::scalar::{BooleanScalar, Scalar};
+
 use crate::types::DType;
 
-use arrow2::array::BooleanArray as ArrowBooleanArray;
+use super::{impl_array, Array, ArrowIterator};
 
 #[derive(Clone)]
 pub struct BoolArray {
@@ -32,5 +34,13 @@ impl Array for BoolArray {
     #[inline]
     fn kind(&self) -> &str {
         KIND
+    }
+
+    fn scalar_at(&self, index: usize) -> Box<dyn Scalar> {
+        Box::new(BooleanScalar::from(self.buffer.get(index)))
+    }
+
+    fn iter_arrow(&self) -> Box<ArrowIterator> {
+        Box::new(std::iter::once(self.buffer.clone().boxed()))
     }
 }

@@ -1,3 +1,5 @@
+use arrow2::datatypes::DataType;
+
 use super::PType;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -45,6 +47,17 @@ pub enum DType {
     Map(Box<DType>, Box<DType>),
 }
 
+impl DType {
+    pub fn is_primitive(&self) -> bool {
+        match self {
+            DType::Int(_) => true,
+            DType::UInt(_) => true,
+            DType::Float(_) => true,
+            _ => false,
+        }
+    }
+}
+
 impl From<PType> for DType {
     fn from(item: PType) -> Self {
         match item {
@@ -59,6 +72,29 @@ impl From<PType> for DType {
             PType::F16 => DType::Float(FloatWidth::_16),
             PType::F32 => DType::Float(FloatWidth::_32),
             PType::F64 => DType::Float(FloatWidth::_64),
+        }
+    }
+}
+
+impl TryFrom<&DataType> for DType {
+    type Error = ();
+
+    fn try_from(value: &DataType) -> Result<Self, Self::Error> {
+        match value {
+            DataType::Null => Ok(DType::Null),
+            DataType::Boolean => Ok(DType::Bool),
+            DataType::Int8 => Ok(DType::Int(IntWidth::_8)),
+            DataType::Int16 => Ok(DType::Int(IntWidth::_16)),
+            DataType::Int32 => Ok(DType::Int(IntWidth::_32)),
+            DataType::Int64 => Ok(DType::Int(IntWidth::_64)),
+            DataType::UInt8 => Ok(DType::UInt(IntWidth::_8)),
+            DataType::UInt16 => Ok(DType::UInt(IntWidth::_16)),
+            DataType::UInt32 => Ok(DType::UInt(IntWidth::_32)),
+            DataType::UInt64 => Ok(DType::UInt(IntWidth::_64)),
+            DataType::Float16 => Ok(DType::Float(FloatWidth::_16)),
+            DataType::Float32 => Ok(DType::Float(FloatWidth::_32)),
+            DataType::Float64 => Ok(DType::Float(FloatWidth::_64)),
+            _ => Err(()),
         }
     }
 }

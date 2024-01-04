@@ -1,11 +1,19 @@
-mod binary;
-mod bool;
-mod primitive;
-
-use crate::types::DType;
 use std::any::Any;
 use std::str::FromStr;
+
+use arrow2::array::Array as ArrowArray;
 use strum_macros::EnumString;
+
+use crate::Scalar;
+use crate::types::DType;
+
+mod binary;
+mod bool;
+mod compute;
+mod constant;
+mod encode;
+mod primitive;
+mod ree;
 
 #[derive(Debug, PartialEq, EnumString)]
 pub enum ArrayKind {
@@ -39,6 +47,8 @@ pub enum ArrayKind {
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
+pub type ArrowIterator = dyn Iterator<Item=Box<dyn ArrowArray>>;
+
 pub trait Array: dyn_clone::DynClone {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
@@ -68,23 +78,31 @@ pub trait Array: dyn_clone::DynClone {
     }
 
     /// Clone a `&dyn Array` to an owned `Box<dyn Array>`.
-    fn to_boxed(&self) -> Box<dyn Array>;
+    fn boxed(self) -> Box<dyn Array>;
+
+    fn scalar_at(&self, index: usize) -> Box<dyn Scalar>;
+
+    fn iter_arrow(&self) -> Box<ArrowIterator>;
 }
 
 dyn_clone::clone_trait_object!(Array);
 
 macro_rules! impl_array {
     () => {
+        #[inline]
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
 
+        #[inline]
         fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
             self
         }
 
-        fn to_boxed(&self) -> Box<dyn Array> {
-            Box::new(self.clone())
+        #[inline]
+        /// Moves the array from stack to heap
+        fn boxed(self) -> Box<dyn Array> {
+            Box::new(self)
         }
     };
 }
