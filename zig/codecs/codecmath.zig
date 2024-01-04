@@ -207,21 +207,27 @@ pub const CompressError = error{
     TooManySamplesFromSlice,
 };
 
-pub fn defaultSample(comptime T: type, gpa: std.mem.Allocator, vec: []const T) !SampleSliceIterator(T) {
+pub fn sample(comptime T: type, gpa: std.mem.Allocator, vec: []const T) ![]const T {
     const numSampleSlices = 10;
     const sampleSliceLen = 64;
-    return sample(T, gpa, vec, sampleSliceLen, numSampleSlices);
+    const totalNumSamples = @min(vec.len, numSampleSlices * sampleSliceLen);
+
+    var sampleList = try std.ArrayList(T).initCapacity(gpa, totalNumSamples);
+    defer sampleList.deinit();
+
+    if (vec.len <= totalNumSamples) {
+        sampleList.appendSliceAssumeCapacity(vec);
+    } else {
+        var iter = try SampleSliceIterator(T).init(gpa, vec, sampleSliceLen, numSampleSlices);
+        defer iter.deinit();
+        while (iter.next()) |slice| {
+            sampleList.appendSliceAssumeCapacity(slice);
+        }
+    }
+    return try sampleList.toOwnedSlice();
 }
 
-pub fn sample(comptime T: type, gpa: std.mem.Allocator, vec: []const T, sampleSliceLen: u16, numSampleSlices: u16) !SampleSliceIterator(T) {
-    return SampleSliceIterator(T){
-        .parent = vec,
-        .sampleSlices = try stratifiedSlices(gpa, vec.len, sampleSliceLen, numSampleSlices),
-        .allocator = gpa,
-    };
-}
-
-pub fn stratifiedSlices(gpa: std.mem.Allocator, length: usize, sampleSliceLen: u16, numSampleSlices: u16) ![]const ArraySlice {
+fn stratifiedSlices(gpa: std.mem.Allocator, length: usize, sampleSliceLen: u16, numSampleSlices: u16) ![]const ArraySlice {
     const totalNumSamples: u64 = sampleSliceLen * numSampleSlices;
     if (totalNumSamples >= length) {
         const singleton = try gpa.alloc(ArraySlice, 1);
@@ -282,11 +288,25 @@ pub fn SampleSliceIterator(comptime T: type) type {
         totalNumSamplesCachedDoNotAccess: ?usize = null,
         allocator: std.mem.Allocator,
 
+        pub fn init(allocator: std.mem.Allocator, parent: []const T, sampleSliceLen: u16, numSampleSlices: u16) !Self {
+            return Self{
+                .parent = parent,
+                .sampleSlices = try stratifiedSlices(allocator, parent.len, sampleSliceLen, numSampleSlices),
+                .allocator = allocator,
+            };
+        }
+
+        pub fn initDefault(allocator: std.mem.Allocator, parent: []const T) !Self {
+            const sampleSliceLen: u16 = 64;
+            const numSampleSlices: u16 = 10;
+            return init(allocator, parent, sampleSliceLen, numSampleSlices);
+        }
+
         pub fn deinit(self: *Self) void {
             self.allocator.free(self.sampleSlices);
         }
 
-        pub fn numSampleSlices(self: *const Self) usize {
+        pub fn len(self: *const Self) usize {
             return self.sampleSlices.len;
         }
 
@@ -331,10 +351,10 @@ test "sample" {
         f.* = @floatFromInt(i);
     }
 
-    var sampleIter = try defaultSample(f64, std.testing.allocator, &floats);
+    var sampleIter = try SampleSliceIterator(f64).initDefault(std.testing.allocator, &floats);
     defer sampleIter.deinit();
     try std.testing.expectEqual(@as(usize, 640), sampleIter.totalNumSamples());
-    for (0..2) |_| {
+    for (0..10) |_| {
         var i: usize = 0;
         while (sampleIter.next()) |slice| : (i += 1) {
             try std.testing.expectEqual(@as(usize, 64), slice.len);
@@ -347,14 +367,14 @@ test "sample" {
     }
 }
 
-test "sample small array" {
+test "sample iter small array" {
     var tooSmall: [10]f64 = undefined;
     for (&tooSmall, 0..) |*f, i| {
         f.* = @floatFromInt(i);
     }
-    var sampleIter = try defaultSample(f64, std.testing.allocator, &tooSmall);
+    var sampleIter = try SampleSliceIterator(f64).initDefault(std.testing.allocator, &tooSmall);
     defer sampleIter.deinit();
     try std.testing.expectEqual(tooSmall.len, sampleIter.totalNumSamples());
-    try std.testing.expectEqual(@as(usize, 1), sampleIter.numSampleSlices());
+    try std.testing.expectEqual(@as(usize, 1), sampleIter.len());
     try std.testing.expectEqualSlices(f64, &tooSmall, sampleIter.next().?);
 }

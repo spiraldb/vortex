@@ -4,9 +4,18 @@ const codecmath = @import("codecmath.zig");
 const fastlanes = @import("fastlanes.zig");
 const Alignment = fastlanes.Alignment;
 
+// comptime {
+//     const exportTypes = [_]type{ f32, f64 };
+//     for (exportTypes) |F| {
+//         const codec = AdaptiveLosslessFloatingPoint(F);
+//         @export(codec.encodeSingle, std.builtin.ExportOptions{ .name = "alp_encode_single_" ++ @typeName(F), .linkage = .Strong });
+//         @export(codec.decodeSingle, std.builtin.ExportOptions{ .name = "alp_decode_single_" ++ @typeName(F), .linkage = .Strong });
+//     }
+// }
+
 // for encoding, we multiply a given element 'n' by 10^e and 10^(-f)
 // for decoding, we do the reverse: n * 10^f * 10^(-e)
-pub const Exponents = struct {
+pub const Exponents = extern struct {
     e: u8,
     f: u8,
 };
@@ -40,7 +49,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             }
         };
 
-        inline fn encodeSingle(val: F, exponents: Exponents) EncInt {
+        pub inline fn encodeSingle(val: F, exponents: Exponents) EncInt {
             const rounded: F = codecmath.fastFloatRound(F, val * F10[exponents.e] * i_F10[exponents.f]);
             const inBounds: u1 = @intFromBool(rounded < codecmath.coveringIntMax(F)) & @intFromBool(rounded > codecmath.coveringIntMin(F));
             // mask is all 1s if in bounds, all zeros otherwise
@@ -49,24 +58,22 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             return @intFromFloat(masked);
         }
 
-        inline fn decodeSingle(enc: EncInt, exponents: Exponents) F {
+        pub inline fn decodeSingle(enc: EncInt, exponents: Exponents) F {
             return @as(F, @floatFromInt(enc)) * F10[exponents.f] * i_F10[exponents.e];
         }
 
         pub fn encode(allocator: Allocator, elems: []const F) !ALPEncoded {
             var encoded = try allocator.alignedAlloc(EncInt, Alignment, elems.len);
             errdefer allocator.free(encoded);
-            var decoded = try allocator.alloc(F, elems.len);
-            defer allocator.free(decoded);
 
-            const exponents = try findExponents(allocator, elems);
+            const exponents = try sampleFindExponents(allocator, elems);
             var numExceptions: u32 = 0;
             var exceptionPositions = try std.bit_set.DynamicBitSet.initEmpty(allocator, elems.len);
             errdefer exceptionPositions.deinit();
             for (elems, 0..) |n, i| {
                 encoded[i] = encodeSingle(n, exponents);
-                decoded[i] = decodeSingle(encoded[i], exponents);
-                const neq = decoded[i] != elems[i];
+                const decoded: F = decodeSingle(encoded[i], exponents);
+                const neq = decoded != elems[i];
                 numExceptions += @intFromBool(neq);
                 exceptionPositions.setValue(i, neq);
             }
@@ -88,9 +95,13 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             };
         }
 
-        pub fn findExponents(gpa: std.mem.Allocator, vec: []const F) !Exponents {
-            var sampleIter = try codecmath.defaultSample(F, gpa, vec);
-            defer sampleIter.deinit();
+        pub fn sampleFindExponents(gpa: std.mem.Allocator, vec: []const F) !Exponents {
+            const sample: []const F = try codecmath.sample(F, gpa, vec);
+            defer gpa.free(sample);
+            return findExponents(sample);
+        }
+
+        pub fn findExponents(vec: []const F) !Exponents {
             var bestE: usize = 0;
             var bestF: usize = 0;
             var bestSize: usize = std.math.maxInt(usize);
@@ -99,11 +110,10 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             // after that, try e's in descending order, with a gap no larger than the original e - f
             for (0..codecmath.maxExponentToTry(F) + 1) |e| {
                 for (0..e) |f| {
-                    const size = estimateSizeWithExponents(&sampleIter, Exponents{
+                    const size = estimateSizeWithExponents(vec, Exponents{
                         .e = @intCast(e),
                         .f = @intCast(f),
                     });
-                    sampleIter.reset();
 
                     if (size < bestSize) {
                         bestSize = size;
@@ -120,7 +130,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             return .{ .e = @intCast(bestE), .f = @intCast(bestF) };
         }
 
-        fn estimateSizeWithExponents(sliceIter: *codecmath.SampleSliceIterator(F), exponents: Exponents) usize {
+        fn estimateSizeWithExponents(sampleSlice: []const F, exponents: Exponents) usize {
             const EncIntBitWidth = comptime @bitSizeOf(EncInt);
             const zz = @import("zigzag.zig").ZigZag(EncInt);
             const maxEncInt: zz.Unsigned = std.math.maxInt(zz.Unsigned);
@@ -128,25 +138,23 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             var numExceptions: usize = 0;
             var bitWidthFreq: [EncIntBitWidth + 1]usize = [_]usize{0} ** (EncIntBitWidth + 1);
             var minEncoded: zz.Unsigned = maxEncInt;
-            while (sliceIter.next()) |sampleSlice| {
-                for (sampleSlice) |val| {
-                    const encoded = encodeSingle(val, exponents);
-                    const decoded = decodeSingle(encoded, exponents);
-                    const eq: u1 = @intFromBool(decoded == val);
-                    const neq: u1 = ~eq;
+            for (sampleSlice) |val| {
+                const encoded = encodeSingle(val, exponents);
+                const decoded = decodeSingle(encoded, exponents);
+                const eq: u1 = @intFromBool(decoded == val);
+                const neq: u1 = ~eq;
 
-                    numExceptions += neq;
-                    // if encoding is a success, count number of leading zeroes to estimate bitpacking efficacy
-                    // see comment below for why we zigzag before counting clz
-                    // NB: if encoding failed, encoded/zzEncoded are both 0.
-                    const zzEncoded = zz.encode_single(encoded);
-                    const encodedClz = @clz(zzEncoded);
+                numExceptions += neq;
+                // if encoding is a success, count number of leading zeroes to estimate bitpacking efficacy
+                // see comment below for why we zigzag before counting clz
+                // NB: if encoding failed, encoded/zzEncoded are both 0.
+                const zzEncoded = zz.encode_single(encoded);
+                const encodedClz = @clz(zzEncoded);
 
-                    // element count of elements of bit width i
-                    bitWidthFreq[EncIntBitWidth - encodedClz] += eq;
-                    const encodedOrMaxInt = zzEncoded * @as(zz.Unsigned, eq) + maxEncInt * @as(zz.Unsigned, neq);
-                    minEncoded = @min(minEncoded, encodedOrMaxInt);
-                }
+                // element count of elements of bit width i
+                bitWidthFreq[EncIntBitWidth - encodedClz] += eq;
+                const encodedOrMaxInt = zzEncoded * @as(zz.Unsigned, eq) + maxEncInt * @as(zz.Unsigned, neq);
+                minEncoded = @min(minEncoded, encodedOrMaxInt);
             }
 
             // We estimate the encoded size assuming that the downstream encodings are zigzag + fastlanes ffor,
@@ -183,7 +191,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
                 if (packedWidth >= fforExceptionCounts.len) {
                     break;
                 }
-                const sizeInBits = packedWidth * sliceIter.totalNumSamples() + fforExceptionCounts[packedWidth] * EncIntBitWidth;
+                const sizeInBits = packedWidth * sampleSlice.len + fforExceptionCounts[packedWidth] * EncIntBitWidth;
                 if (sizeInBits < bestPackedSize) {
                     bestPackedSize = sizeInBits;
                     bestPackedWidth = packedWidth;

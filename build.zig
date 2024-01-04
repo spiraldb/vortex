@@ -2,6 +2,8 @@ const std = @import("std");
 const py = @import("./pydust.build.zig");
 
 pub fn build(b: *std.Build) void {
+    b.reference_trace = 16;
+
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -51,6 +53,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "roaring", .module = roaring },
         },
     });
+
     const codecs_test = b.addTest(.{
         .root_source_file = .{ .path = "zig/codecs/codecs.zig" },
         .target = target,
@@ -119,6 +122,21 @@ pub fn build(b: *std.Build) void {
     const enc_test_step = b.step("test.enc", "Run enc tests");
     enc_test_step.dependOn(&enc_test_run.step);
     test_step.dependOn(enc_test_step);
+
+    const lib_step = b.addStaticLibrary(std.Build.StaticLibraryOptions{
+        .name = "zenc",
+        .root_source_file = .{ .path = "zig/zenc.zig" },
+        .link_libc = true,
+        .use_llvm = true,
+        .target = target,
+        .optimize = optimize,
+    });
+    dependencyRoaring(lib_step);
+    dependencyStreamvbyte(lib_step);
+    lib_step.addModule("codecs", codecs);
+    lib_step.addModule("roaring", roaring);
+    lib_step.addModule("zimd", zimd);
+    b.installArtifact(lib_step);
 
     // pydust
     const pydust = py.addPydust(b, .{

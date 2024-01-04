@@ -20,7 +20,7 @@ const encode_masks: [256]MaskVec = blk: {
 
 const decode_table: [256]MaskVec = blk: {
     var decodeTable: [256]MaskVec = undefined;
-    inline for (0..255) |c| {
+    for (0..255) |c| {
         decodeTable[c] = decode_shuffle_mask(c);
     }
     break :blk decodeTable;

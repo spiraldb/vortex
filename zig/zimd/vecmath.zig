@@ -155,9 +155,9 @@ inline fn scalarPairwise(comptime op: PairwiseOp, comptime E: type, elems: []con
     return true;
 }
 
-const RunLengthStats = struct {
-    runCount: usize,
-    runElementCount: usize,
+pub const RunLengthStats = extern struct {
+    runCount: u64,
+    runElementCount: u64,
 };
 
 pub fn runLengthStats(comptime E: type, elems: []const E) RunLengthStats {
