@@ -2,7 +2,6 @@
 #define ENC_ZIG_H
 
 #include "stdint.h"
-#include "stddef.h"
 #include "stdbool.h"
 #include "float.h"
 #include "assert.h"

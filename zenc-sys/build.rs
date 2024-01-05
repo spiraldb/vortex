@@ -1,5 +1,6 @@
 use std::env;
 use std::path::PathBuf;
+use walkdir::WalkDir;
 
 fn main() {
     let buildrs_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -9,7 +10,6 @@ fn main() {
         .join("../../")
         .canonicalize()
         .expect("Failed to canonicalize root dir");
-    let zig_out_lib_path = root_dir.join("zig-out/lib");
     let zenc_header = root_dir
         .join("zig/zenc.h")
         .canonicalize()
@@ -18,20 +18,26 @@ fn main() {
     // Tell cargo to tell rustc to link zenc
     println!(
         "cargo:rustc-link-search={}",
-        zig_out_lib_path.to_str().unwrap()
+        root_dir.join("zig-out/lib").to_str().unwrap()
     );
     println!("cargo:rustc-link-lib=zenc");
 
-    // Tell cargo to invalidate the built crate whenever the buildscript or the zig wrappers change
-    println!(
-        "cargo:rerun-if-changed={}",
-        buildrs_dir.join("build.rs").to_str().unwrap()
-    );
-    println!("cargo:rerun-if-changed={}", zenc_header.to_str().unwrap());
-    println!(
-        "cargo:rerun-if-changed={}",
-        root_dir.join("zig/zenc.zig").to_str().unwrap()
-    );
+    // Tell cargo to invalidate the built crate whenever the buildscripts or the upstream zig changes
+    rerun_if_changed(&buildrs_dir.join("build.rs"));
+    rerun_if_changed(&root_dir.join("build.zig"));
+    rerun_if_changed(&zenc_header);
+    for entry in WalkDir::new(root_dir.join("zig"))
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path()
+                .extension()
+                .map(|e| e == "zig" || e == "h")
+                .unwrap_or(false)
+        })
+    {
+        rerun_if_changed(&entry.path().to_path_buf());
+    }
 
     if !std::process::Command::new("zig")
         .arg("build")
@@ -68,4 +74,17 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
+}
+
+fn rerun_if_changed(path: &PathBuf) {
+    println!(
+        "cargo:rerun-if-changed={}",
+        path.canonicalize()
+            .expect(&format!(
+                "failed to canonicalize {}",
+                path.to_str().unwrap()
+            ))
+            .to_str()
+            .unwrap()
+    );
 }

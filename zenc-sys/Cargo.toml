@@ -6,3 +6,4 @@ links = "zenc"
 
 [build-dependencies]
 bindgen = "0.69.1"
+walkdir = "2.4.0"
