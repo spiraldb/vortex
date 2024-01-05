@@ -1,6 +1,7 @@
 use arrow2::array::{PrimitiveArray as ArrowPrimitiveArray, Utf8Array};
 use arrow2::datatypes::{PhysicalType, PrimitiveType};
 
+use crate::error::EncResult;
 use crate::scalar::{Scalar, Utf8Scalar};
 use crate::types::DType;
 
@@ -113,7 +114,7 @@ impl Array for VarBinaryArray {
         KIND
     }
 
-    fn scalar_at(&self, index: usize) -> Box<dyn Scalar> {
+    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         let view_slice: &[u8] =
             &self.views.values().as_slice()[index * VIEW_SIZE..(index + 1) * VIEW_SIZE];
         let view = BinaryView::from_le_bytes(view_slice);
@@ -130,30 +131,32 @@ impl Array for VarBinaryArray {
                             .downcast_ref::<ArrowPrimitiveArray<u8>>()
                             .unwrap();
 
-                        Utf8Scalar::new(String::from_utf8_unchecked(
+                        Ok(Utf8Scalar::new(String::from_utf8_unchecked(
                             primitive_array.values().as_slice()[view._ref.offset as usize
                                 ..(view._ref.offset + view._ref.size) as usize]
                                 .to_vec(),
                         ))
-                        .boxed()
+                        .boxed())
                     }
                     PhysicalType::Utf8 => {
                         let utf8_array = arrow_data_buffer
                             .as_any()
                             .downcast_ref::<Utf8Array<i32>>()
                             .unwrap();
-                        arrow2::scalar::new_scalar(utf8_array, view._ref.offset as usize)
-                            .as_ref()
-                            .try_into()
-                            .unwrap()
+                        Ok(
+                            arrow2::scalar::new_scalar(utf8_array, view._ref.offset as usize)
+                                .as_ref()
+                                .into(),
+                        )
                     }
+
                     _ => panic!("TODO(robert): Implement more"),
                 }
             } else {
-                Utf8Scalar::new(String::from_utf8_unchecked(
+                Ok(Utf8Scalar::new(String::from_utf8_unchecked(
                     view.inlined.data[..view.inlined.size as usize].to_vec(),
                 ))
-                .boxed()
+                .boxed())
             }
         }
     }
@@ -202,11 +205,11 @@ mod test {
         let binary_arr = VarBinaryArray::new(view_arr, vec![values.boxed()]);
         assert_eq!(binary_arr.len(), 2);
         assert_eq!(
-            binary_arr.scalar_at(0),
+            binary_arr.scalar_at(0).unwrap(),
             Utf8Scalar::new("abcdefgh".into()).boxed()
         );
         assert_eq!(
-            binary_arr.scalar_at(1),
+            binary_arr.scalar_at(1).unwrap(),
             Utf8Scalar::new("cdefabcdefabc".into()).boxed()
         )
     }

@@ -1,4 +1,6 @@
 use crate::array::{impl_array, Array, ArrowIterator};
+use crate::arrow;
+use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
@@ -35,18 +37,17 @@ impl Array for ConstantArray {
     }
 
     // TODO(robert): Return Result
-    fn scalar_at(&self, index: usize) -> Box<dyn Scalar> {
+    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         if index >= self.length {
-            panic!("TODO(robert): return result")
+            return Err(EncError::OutOfBounds(index, 0, self.length));
         }
-        self.scalar.clone()
+        Ok(self.scalar.clone())
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let arrow_scalar: Box<dyn arrow2::scalar::Scalar> =
-            self.scalar.as_ref().try_into().unwrap();
+        let arrow_scalar: Box<dyn arrow2::scalar::Scalar> = self.scalar.as_ref().into();
         Box::new(std::iter::once(
-            crate::arrow::compute::repeat(arrow_scalar.as_ref(), self.length).unwrap(),
+            arrow::compute::repeat(arrow_scalar.as_ref(), self.length).into(),
         ))
     }
 }

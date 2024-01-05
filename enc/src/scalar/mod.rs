@@ -1,8 +1,6 @@
 use std::any::Any;
 use std::fmt::Debug;
 
-use arrow2::scalar::Scalar as ArrowScalar;
-
 pub use bool::*;
 pub use nullable::*;
 pub use primitive::*;

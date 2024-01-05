@@ -1,5 +1,6 @@
 use crate::array::{impl_array, Array, ArrowIterator};
 use crate::arrow::compat;
+use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
@@ -37,7 +38,7 @@ impl Array for REEArray {
         KIND
     }
 
-    fn scalar_at(&self, index: usize) -> Box<dyn Scalar> {
+    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         use polars_core::prelude::*;
         use polars_ops::prelude::*;
 
@@ -95,7 +96,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn new() {
+    fn new() -> EncResult<()> {
         let arr = REEArray::new(
             PrimitiveArray::from_vec(vec![2, 5, 10]).boxed(),
             PrimitiveArray::from_vec(vec![1, 2, 3]).boxed(),
@@ -107,9 +108,11 @@ mod test {
         // 0, 1 => 1
         // 2, 3, 4 => 2
         // 5, 6, 7, 8, 9 => 3
-        assert_eq!(arr.scalar_at(0).try_into(), Ok(1));
-        assert_eq!(arr.scalar_at(2).try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(5).try_into(), Ok(3));
-        assert_eq!(arr.scalar_at(9).try_into(), Ok(3));
+        assert_eq!(arr.scalar_at(0)?.try_into(), Ok(1));
+        assert_eq!(arr.scalar_at(2)?.try_into(), Ok(2));
+        assert_eq!(arr.scalar_at(5)?.try_into(), Ok(3));
+        assert_eq!(arr.scalar_at(9)?.try_into(), Ok(3));
+
+        Ok(())
     }
 }

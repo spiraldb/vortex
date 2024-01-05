@@ -3,4 +3,5 @@ mod arrow;
 pub mod scalar;
 pub mod types;
 
-mod compute;
+pub mod compute;
+mod error;

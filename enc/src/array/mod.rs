@@ -4,6 +4,7 @@ use std::str::FromStr;
 use arrow2::array::Array as ArrowArray;
 use strum_macros::EnumString;
 
+use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
@@ -56,6 +57,9 @@ pub trait Array: dyn_clone::DynClone + 'static {
     /// Converts itself to a mutable reference of [`Any`], which enables mutable downcasting to concrete types.
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
+    /// Clone a `&dyn Array` to an owned `Box<dyn Array>`.
+    fn boxed(self) -> Box<dyn Array>;
+
     /// Get the length of the array
     fn len(&self) -> usize;
 
@@ -77,10 +81,7 @@ pub trait Array: dyn_clone::DynClone + 'static {
         ArrayKind::from_str(self.kind()).ok()
     }
 
-    /// Clone a `&dyn Array` to an owned `Box<dyn Array>`.
-    fn boxed(self) -> Box<dyn Array>;
-
-    fn scalar_at(&self, index: usize) -> Box<dyn Scalar>;
+    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
 
     fn iter_arrow(&self) -> Box<ArrowIterator>;
 }

@@ -1,5 +1,6 @@
-use arrow2::array::{Array as ArrowArray, BooleanArray as ArrowBooleanArray};
+use arrow2::array::BooleanArray as ArrowBooleanArray;
 
+use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
@@ -36,11 +37,11 @@ impl Array for BoolArray {
         KIND
     }
 
-    fn scalar_at(&self, index: usize) -> Box<dyn Scalar> {
-        arrow2::scalar::new_scalar(&self.buffer, index)
+    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+        // TODO(ngates): this panics when index OOB
+        Ok(arrow2::scalar::new_scalar(&self.buffer, index)
             .as_ref()
-            .try_into()
-            .unwrap()
+            .into())
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

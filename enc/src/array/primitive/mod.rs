@@ -2,11 +2,10 @@ use std::iter;
 
 use arrow2::array::Array as ArrowArray;
 use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
-use arrow2::datatypes::PhysicalType;
 use arrow2::types::NativeType;
-use arrow2::types::PrimitiveType as ArrowPrimitiveType;
 
 use crate::array::{impl_array, Array, ArrowIterator};
+use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::{DType, PType};
 
@@ -20,8 +19,8 @@ pub struct PrimitiveArray {
 pub const KIND: &str = "enc.primitive";
 
 impl PrimitiveArray {
-    pub fn new(buffer: &dyn ArrowArray) -> Self {
-        let ptype: PType = buffer.data_type().try_into().unwrap();
+    pub fn new<T: NativeType>(buffer: &ArrowPrimitiveArray<T>) -> Self {
+        let ptype: PType = T::PRIMITIVE.try_into().unwrap();
         Self {
             buffer: buffer.to_boxed(),
             ptype,
@@ -31,25 +30,6 @@ impl PrimitiveArray {
 
     pub fn from_vec<T: NativeType>(values: Vec<T>) -> Self {
         Self::new(&ArrowPrimitiveArray::from_vec(values))
-    }
-
-    pub fn unchecked_scalar_at<T: NativeType>(&self, index: usize) -> Option<T> {
-        // Utility function for extracting a scalar and casting it into the native type.
-        // Panics if the type is incorrect.
-        // TODO(ngates): add a cast_scalar_at which is useful when we know our array must
-        //  be an integer, but we don't care which integer width it is.
-        self.buffer
-            .as_any()
-            .downcast_ref::<ArrowPrimitiveArray<T>>()
-            .unwrap()
-            .get(index)
-    }
-
-    fn primitive_type(&self) -> ArrowPrimitiveType {
-        match self.buffer.data_type().to_physical_type() {
-            PhysicalType::Primitive(primitive) => primitive,
-            _ => panic!("Not a primitive type"),
-        }
     }
 }
 
@@ -71,11 +51,10 @@ impl Array for PrimitiveArray {
         KIND
     }
 
-    fn scalar_at(&self, index: usize) -> Box<dyn Scalar> {
-        return arrow2::scalar::new_scalar(self.buffer.as_ref(), index)
+    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+        Ok(arrow2::scalar::new_scalar(self.buffer.as_ref(), index)
             .as_ref()
-            .try_into()
-            .unwrap();
+            .into())
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -97,8 +76,8 @@ mod test {
         assert_eq!(arr.dtype, DType::Int(IntWidth::_32));
 
         // Ensure we can fetch the scalar at the given index.
-        assert_eq!(arr.scalar_at(0).try_into(), Ok(1));
-        assert_eq!(arr.scalar_at(1).try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(2).try_into(), Ok(3));
+        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(1));
+        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(2));
+        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(3));
     }
 }
