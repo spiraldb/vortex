@@ -12,6 +12,9 @@ zenc-sys = { path = "../zenc-sys" }
 arrow2 = { version = "0.18.0", features = ["compute"] }
 bytemuck = { version = "1", features = ["derive"] }
 dyn-clone = "1.0.16"
+polars-arrow = "0.36.2"
+polars-core = "0.36.2"
+polars-ops = { version = "0.36.2", features = ["search_sorted"] }
 roaring = "0.10.2"
 strum = { version = "0.25", features = ["derive"] }
 strum_macros = "0.25.3"

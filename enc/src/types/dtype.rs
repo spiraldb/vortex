@@ -42,7 +42,7 @@ pub enum DType {
     LocalDate,
     Instant(TimeUnit),
     ZonedDateTime(TimeUnit),
-    Struct(Vec<String>, Vec<Box<DType>>),
+    Struct(Vec<String>, Vec<DType>),
     List(Box<DType>),
     Map(Box<DType>, Box<DType>),
 }

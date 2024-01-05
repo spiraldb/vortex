@@ -4,16 +4,16 @@ use std::str::FromStr;
 use arrow2::array::Array as ArrowArray;
 use strum_macros::EnumString;
 
+use crate::scalar::Scalar;
 use crate::types::DType;
-use crate::Scalar;
 
-mod binary;
-mod bool;
-mod compute;
-mod constant;
+pub mod binary;
+pub mod bool;
+pub mod constant;
+pub mod primitive;
+pub mod ree;
+
 mod encode;
-mod primitive;
-mod ree;
 
 #[derive(Debug, PartialEq, EnumString)]
 pub enum ArrayKind {
@@ -49,7 +49,7 @@ pub enum ArrayKind {
 /// the data type, e.g. LargeString, RunEndEncoded.
 pub type ArrowIterator = dyn Iterator<Item = Box<dyn ArrowArray>>;
 
-pub trait Array: dyn_clone::DynClone {
+pub trait Array: dyn_clone::DynClone + 'static {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
 

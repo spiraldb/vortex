@@ -3,14 +3,12 @@ use std::iter;
 use arrow2::array::Array as ArrowArray;
 use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
 use arrow2::datatypes::PhysicalType;
-use arrow2::scalar::PrimitiveScalar as ArrowPrimitiveScalar;
 use arrow2::types::NativeType;
 use arrow2::types::PrimitiveType as ArrowPrimitiveType;
-use arrow2::with_match_primitive_without_interval_type;
 
 use crate::array::{impl_array, Array, ArrowIterator};
+use crate::scalar::Scalar;
 use crate::types::{DType, PType};
-use crate::Scalar;
 
 #[derive(Clone)]
 pub struct PrimitiveArray {
@@ -29,6 +27,10 @@ impl PrimitiveArray {
             ptype,
             dtype: ptype.into(),
         }
+    }
+
+    pub fn from_vec<T: NativeType>(values: Vec<T>) -> Self {
+        Self::new(&ArrowPrimitiveArray::from_vec(values))
     }
 
     pub fn unchecked_scalar_at<T: NativeType>(&self, index: usize) -> Option<T> {
@@ -70,14 +72,10 @@ impl Array for PrimitiveArray {
     }
 
     fn scalar_at(&self, index: usize) -> Box<dyn Scalar> {
-        with_match_primitive_without_interval_type!(self.primitive_type(), |$T| {
-            let value: Option<$T> = self.buffer
-                .as_any()
-                .downcast_ref::<ArrowPrimitiveArray<$T>>()
-                .unwrap()
-                .get(index);
-            dyn_clone::clone_box(&ArrowPrimitiveScalar::from(value))
-        })
+        return arrow2::scalar::new_scalar(self.buffer.as_ref(), index)
+            .as_ref()
+            .try_into()
+            .unwrap();
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -93,18 +91,14 @@ mod test {
 
     #[test]
     fn from_arrow() {
-        let arr = PrimitiveArray::new(&ArrowPrimitiveArray::<i32>::from_vec(vec![1, 2, 3]));
+        let arr = PrimitiveArray::from_vec(vec![1, 2, 3]);
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.ptype, PType::I32);
         assert_eq!(arr.dtype, DType::Int(IntWidth::_32));
 
         // Ensure we can fetch the scalar at the given index.
-        assert_eq!(
-            arr.scalar_at(0).as_ref(),
-            &ArrowPrimitiveScalar::from(Some(1)) as &dyn Scalar
-        );
-
-        assert_eq!(arr.unchecked_scalar_at(1), Some(2));
-        assert_eq!(arr.unchecked_scalar_at(2), Some(3));
+        assert_eq!(arr.scalar_at(0).try_into(), Ok(1));
+        assert_eq!(arr.scalar_at(1).try_into(), Ok(2));
+        assert_eq!(arr.scalar_at(2).try_into(), Ok(3));
     }
 }

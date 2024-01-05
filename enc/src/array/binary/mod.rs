@@ -1,7 +1,7 @@
 use arrow2::array::{PrimitiveArray as ArrowPrimitiveArray, Utf8Array};
 use arrow2::datatypes::{PhysicalType, PrimitiveType};
-use arrow2::scalar::{Scalar, Utf8Scalar};
 
+use crate::scalar::{Scalar, Utf8Scalar};
 use crate::types::DType;
 
 use super::{impl_array, Array, ArrowIterator};
@@ -130,11 +130,12 @@ impl Array for VarBinaryArray {
                             .downcast_ref::<ArrowPrimitiveArray<u8>>()
                             .unwrap();
 
-                        Box::new(Utf8Scalar::<i32>::new(Some(String::from_utf8_unchecked(
+                        Utf8Scalar::new(String::from_utf8_unchecked(
                             primitive_array.values().as_slice()[view._ref.offset as usize
                                 ..(view._ref.offset + view._ref.size) as usize]
                                 .to_vec(),
-                        ))))
+                        ))
+                        .boxed()
                     }
                     PhysicalType::Utf8 => {
                         let utf8_array = arrow_data_buffer
@@ -142,13 +143,17 @@ impl Array for VarBinaryArray {
                             .downcast_ref::<Utf8Array<i32>>()
                             .unwrap();
                         arrow2::scalar::new_scalar(utf8_array, view._ref.offset as usize)
+                            .as_ref()
+                            .try_into()
+                            .unwrap()
                     }
                     _ => panic!("TODO(robert): Implement more"),
                 }
             } else {
-                Box::new(Utf8Scalar::<i32>::new(Some(String::from_utf8_unchecked(
+                Utf8Scalar::new(String::from_utf8_unchecked(
                     view.inlined.data[..view.inlined.size as usize].to_vec(),
-                ))))
+                ))
+                .boxed()
             }
         }
     }
@@ -160,11 +165,12 @@ impl Array for VarBinaryArray {
 
 #[cfg(test)]
 mod test {
+    use arrow2::*;
+
     use crate::array::binary::{BinaryView, Inlined, Ref, VarBinaryArray};
     use crate::array::primitive::PrimitiveArray;
     use crate::array::Array;
-    use arrow2::scalar::Utf8Scalar;
-    use arrow2::*;
+    use crate::scalar::{Scalar, Utf8Scalar};
 
     #[test]
     pub fn test_varbin() {
@@ -197,11 +203,11 @@ mod test {
         assert_eq!(binary_arr.len(), 2);
         assert_eq!(
             binary_arr.scalar_at(0),
-            Box::new(Utf8Scalar::<i32>::new(Some("abcdefgh"))) as Box<dyn scalar::Scalar>
+            Utf8Scalar::new("abcdefgh".into()).boxed()
         );
         assert_eq!(
             binary_arr.scalar_at(1),
-            Box::new(Utf8Scalar::<i32>::new(Some("cdefabcdefabc"))) as Box<dyn scalar::Scalar>
+            Utf8Scalar::new("cdefabcdefabc".into()).boxed()
         )
     }
 }

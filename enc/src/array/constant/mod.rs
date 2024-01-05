@@ -1,23 +1,20 @@
 use crate::array::{impl_array, Array, ArrowIterator};
+use crate::scalar::Scalar;
 use crate::types::DType;
-use crate::Scalar;
 
 #[derive(Clone)]
 pub struct ConstantArray {
     scalar: Box<dyn Scalar>,
     length: usize,
-    dtype: DType,
 }
 
 pub const KIND: &str = "enc.constant";
 
 impl ConstantArray {
     pub fn new(scalar: &dyn Scalar, length: usize) -> Self {
-        let dtype = scalar.data_type().try_into().unwrap();
         Self {
             scalar: dyn_clone::clone_box(scalar),
             length,
-            dtype,
         }
     }
 }
@@ -30,7 +27,7 @@ impl Array for ConstantArray {
     }
 
     fn dtype(&self) -> &DType {
-        &self.dtype
+        self.scalar.dtype()
     }
 
     fn kind(&self) -> &str {
@@ -46,8 +43,10 @@ impl Array for ConstantArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
+        let arrow_scalar: Box<dyn arrow2::scalar::Scalar> =
+            self.scalar.as_ref().try_into().unwrap();
         Box::new(std::iter::once(
-            crate::arrow::compute::repeat(self.scalar.as_ref(), self.length).unwrap(),
+            crate::arrow::compute::repeat(arrow_scalar.as_ref(), self.length).unwrap(),
         ))
     }
 }
