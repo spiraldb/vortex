@@ -1,0 +1,15 @@
+[package]
+name = "zenc"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+paste = "1.0.14"
+zenc-sys = { version = "0.1.0", path = "../zenc-sys" }
+
+[dependencies.num-traits]
+version = "0.2"
+default-features = false
+features = ["libm"]
