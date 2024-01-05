@@ -22,6 +22,7 @@ fn main() {
     );
     println!("cargo:rustc-link-lib=zenc");
 
+    rerun_if_changed(&buildrs_dir.join("build.rs"));
     for entry in WalkDir::new(root_dir.join("zig"))
         .into_iter()
         .filter_map(|e| e.ok())
@@ -35,8 +36,15 @@ fn main() {
         rerun_if_changed(entry.path());
     }
 
+    let is_dev = env::var("PROFILE").unwrap() == "dev";
+    let zig_opt = if is_dev {
+        "-Doptimize=Debug"
+    } else {
+        "-Doptimize=ReleaseSafe"
+    };
     if !std::process::Command::new("zig")
         .arg("build")
+        .arg(zig_opt)
         .args(["--summary", "all"])
         .current_dir(root_dir.clone())
         .spawn()
