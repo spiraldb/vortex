@@ -49,12 +49,7 @@ pub enum DType {
 
 impl DType {
     pub fn is_primitive(&self) -> bool {
-        match self {
-            DType::Int(_) => true,
-            DType::UInt(_) => true,
-            DType::Float(_) => true,
-            _ => false,
-        }
+        matches!(self, DType::Int(_) | DType::UInt(_) | DType::Float(_))
     }
 }
 

@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 fn main() {
@@ -22,10 +22,6 @@ fn main() {
     );
     println!("cargo:rustc-link-lib=zenc");
 
-    // Tell cargo to invalidate the built crate whenever the buildscripts or the upstream zig changes
-    rerun_if_changed(&buildrs_dir.join("build.rs"));
-    rerun_if_changed(&root_dir.join("build.zig"));
-    rerun_if_changed(&zenc_header);
     for entry in WalkDir::new(root_dir.join("zig"))
         .into_iter()
         .filter_map(|e| e.ok())
@@ -36,15 +32,17 @@ fn main() {
                 .unwrap_or(false)
         })
     {
-        rerun_if_changed(&entry.path().to_path_buf());
+        rerun_if_changed(entry.path());
     }
 
     if !std::process::Command::new("zig")
         .arg("build")
+        .args(["--summary", "all"])
         .current_dir(root_dir.clone())
-        .output()
-        .expect("could not spawn `clang`")
-        .status
+        .spawn()
+        .expect("Could not invoke `zig build`")
+        .wait()
+        .unwrap()
         .success()
     {
         // Panic if the command was not successful.
@@ -76,14 +74,11 @@ fn main() {
         .expect("Couldn't write bindings!");
 }
 
-fn rerun_if_changed(path: &PathBuf) {
+fn rerun_if_changed(path: &Path) {
     println!(
         "cargo:rerun-if-changed={}",
         path.canonicalize()
-            .expect(&format!(
-                "failed to canonicalize {}",
-                path.to_str().unwrap()
-            ))
+            .unwrap_or_else(|_| panic!("failed to canonicalize {}", path.to_str().unwrap()))
             .to_str()
             .unwrap()
     );

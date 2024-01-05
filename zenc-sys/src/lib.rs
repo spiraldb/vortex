@@ -10,7 +10,7 @@ mod test {
 
     #[test]
     fn test_zimd_max() {
-        let mut vec = vec![1.0, 2.0, 3.0];
+        let vec = [1.0, 2.0, 3.0];
         let max = unsafe { zimd_max_f64(vec.as_ptr(), vec.len()) };
         assert_eq!(max, 3.0);
     }

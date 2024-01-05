@@ -136,6 +136,7 @@ pub fn build(b: *std.Build) void {
     lib_step.addModule("codecs", codecs);
     lib_step.addModule("roaring", roaring);
     lib_step.addModule("zimd", zimd);
+    lib_step.bundle_compiler_rt = true;
     b.installArtifact(lib_step);
 
     // pydust

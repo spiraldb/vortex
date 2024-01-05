@@ -31,6 +31,7 @@ union BinaryView {
 }
 
 impl BinaryView {
+    #[inline]
     pub fn from_le_bytes(bytes: &[u8]) -> BinaryView {
         let size = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
         if size > 12 {
@@ -52,6 +53,8 @@ impl BinaryView {
         }
     }
 
+    #[inline]
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_le_bytes(&self) -> [u8; 16] {
         let mut bytes: [u8; 16] = [0; 16];
         unsafe {

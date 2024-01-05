@@ -47,7 +47,7 @@ impl Array for ConstantArray {
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         let arrow_scalar: Box<dyn arrow2::scalar::Scalar> = self.scalar.as_ref().into();
         Box::new(std::iter::once(
-            arrow::compute::repeat(arrow_scalar.as_ref(), self.length).into(),
+            arrow::compute::repeat(arrow_scalar.as_ref(), self.length),
         ))
     }
 }

@@ -8,23 +8,23 @@ pub struct RunLengthStats {
 }
 
 pub fn max<T: PrimitiveNumber>(elems: &[T]) -> T {
-    return T::max(elems, private::Sealed);
+    T::max(elems, private::Sealed)
 }
 
 pub fn min<T: PrimitiveNumber>(elems: &[T]) -> T {
-    return T::min(elems, private::Sealed);
+    T::min(elems, private::Sealed)
 }
 
 pub fn is_constant<T: PrimitiveNumber>(elems: &[T]) -> bool {
-    return T::is_constant(elems, private::Sealed);
+    T::is_constant(elems, private::Sealed)
 }
 
 pub fn is_sorted<T: PrimitiveNumber>(elems: &[T]) -> bool {
-    return T::is_sorted(elems, private::Sealed);
+    T::is_sorted(elems, private::Sealed)
 }
 
 pub fn run_length_stats<T: PrimitiveNumber>(elems: &[T]) -> RunLengthStats {
-    return T::run_length_stats(elems, private::Sealed);
+    T::run_length_stats(elems, private::Sealed)
 }
 
 pub trait PrimitiveNumber: Num {
@@ -94,10 +94,10 @@ mod test {
         assert_eq!(min, 1.0);
 
         let is_constant = is_constant(&vec);
-        assert_eq!(is_constant, false);
+        assert!(!is_constant);
 
         let is_sorted = is_sorted(&vec);
-        assert_eq!(is_sorted, true);
+        assert!(is_sorted);
 
         let run_length_stats = run_length_stats(&vec);
         assert_eq!(run_length_stats.run_count, 0);
