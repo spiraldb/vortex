@@ -9,21 +9,29 @@ fn main() {
         .join("../../")
         .canonicalize()
         .expect("Failed to canonicalize root dir");
-    let zig_out_lib_path = root_dir
-        .join("zig-out/lib");
+    let zig_out_lib_path = root_dir.join("zig-out/lib");
     let zenc_header = root_dir
         .join("zig/zenc.h")
         .canonicalize()
         .expect("Failed to canonicalize zenc.h path");
 
     // Tell cargo to tell rustc to link zenc
-    println!("cargo:rustc-link-search={}", zig_out_lib_path.to_str().unwrap());
+    println!(
+        "cargo:rustc-link-search={}",
+        zig_out_lib_path.to_str().unwrap()
+    );
     println!("cargo:rustc-link-lib=zenc");
 
     // Tell cargo to invalidate the built crate whenever the buildscript or the zig wrappers change
-    println!("cargo:rerun-if-changed={}", buildrs_dir.join("build.rs").to_str().unwrap());
+    println!(
+        "cargo:rerun-if-changed={}",
+        buildrs_dir.join("build.rs").to_str().unwrap()
+    );
     println!("cargo:rerun-if-changed={}", zenc_header.to_str().unwrap());
-    println!("cargo:rerun-if-changed={}", root_dir.join("zig/zenc.zig").to_str().unwrap());
+    println!(
+        "cargo:rerun-if-changed={}",
+        root_dir.join("zig/zenc.zig").to_str().unwrap()
+    );
 
     if !std::process::Command::new("zig")
         .arg("build")
@@ -34,7 +42,10 @@ fn main() {
         .success()
     {
         // Panic if the command was not successful.
-        panic!("failed to successfully invoke `zig build` in {}", root_dir.to_str().unwrap());
+        panic!(
+            "failed to successfully invoke `zig build` in {}",
+            root_dir.to_str().unwrap()
+        );
     }
 
     // The bindgen::Builder is the main entry point

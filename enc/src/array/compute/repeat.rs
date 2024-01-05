@@ -1,5 +1,5 @@
-use crate::array::Array;
 use crate::array::constant::ConstantArray;
+use crate::array::Array;
 use crate::Scalar;
 
 pub fn repeat(scalar: &dyn Scalar, n: usize) -> Result<Box<dyn Array>, ()> {

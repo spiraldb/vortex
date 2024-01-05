@@ -1,5 +1,5 @@
-use arrow2::array::{Array as ArrowArray, BooleanArray as ArrowBooleanArray};
-use arrow2::scalar::{BooleanScalar, Scalar};
+use arrow2::array::BooleanArray as ArrowBooleanArray;
+use arrow2::scalar::Scalar;
 
 use crate::types::DType;
 
@@ -37,7 +37,7 @@ impl Array for BoolArray {
     }
 
     fn scalar_at(&self, index: usize) -> Box<dyn Scalar> {
-        Box::new(BooleanScalar::from(self.buffer.get(index)))
+        arrow2::scalar::new_scalar(&self.buffer, index)
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

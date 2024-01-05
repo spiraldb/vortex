@@ -8,11 +8,9 @@ use arrow2::types::NativeType;
 use arrow2::types::PrimitiveType as ArrowPrimitiveType;
 use arrow2::with_match_primitive_without_interval_type;
 
-use crate::array::{Array, ArrowIterator, impl_array};
-use crate::Scalar;
+use crate::array::{impl_array, Array, ArrowIterator};
 use crate::types::{DType, PType};
-
-mod mutable;
+use crate::Scalar;
 
 #[derive(Clone)]
 pub struct PrimitiveArray {
@@ -101,7 +99,10 @@ mod test {
         assert_eq!(arr.dtype, DType::Int(IntWidth::_32));
 
         // Ensure we can fetch the scalar at the given index.
-        assert_eq!(arr.scalar_at(0).as_ref(), &ArrowPrimitiveScalar::from(Some(1)) as &dyn Scalar);
+        assert_eq!(
+            arr.scalar_at(0).as_ref(),
+            &ArrowPrimitiveScalar::from(Some(1)) as &dyn Scalar
+        );
 
         assert_eq!(arr.unchecked_scalar_at(1), Some(2));
         assert_eq!(arr.unchecked_scalar_at(2), Some(3));

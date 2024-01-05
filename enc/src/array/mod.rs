@@ -4,8 +4,8 @@ use std::str::FromStr;
 use arrow2::array::Array as ArrowArray;
 use strum_macros::EnumString;
 
-use crate::Scalar;
 use crate::types::DType;
+use crate::Scalar;
 
 mod binary;
 mod bool;
@@ -47,7 +47,7 @@ pub enum ArrayKind {
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub type ArrowIterator = dyn Iterator<Item=Box<dyn ArrowArray>>;
+pub type ArrowIterator = dyn Iterator<Item = Box<dyn ArrowArray>>;
 
 pub trait Array: dyn_clone::DynClone {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
