@@ -3,9 +3,9 @@ use std::env;
 use std::fmt::{self, Display, Formatter};
 use std::ops::Deref;
 
-use polars_core::error::PolarsError;
+use crate::types::DType;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ErrString(Cow<'static, str>);
 
 impl<T> From<T> for ErrString
@@ -41,23 +41,19 @@ impl Display for ErrString {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub enum EncError {
     #[error("index {0} out of bounds from {1} to {2}")]
     OutOfBounds(usize, usize, usize),
     #[error("arguments have different lengths")]
     LengthMismatch,
+    #[error("{0}")]
+    ComputeError(ErrString),
+    #[error("invalid dtype: {0:?}")]
+    InvalidDType(DType),
 
     #[error("unexpected arrow data type: {0:?}")]
     InvalidArrowDataType(arrow2::datatypes::DataType),
-    #[error("polars error: {0}")]
-    PolarsError(PolarsError),
 }
 
 pub type EncResult<T> = Result<T, EncError>;
-
-impl From<PolarsError> for EncError {
-    fn from(value: PolarsError) -> Self {
-        EncError::PolarsError(value)
-    }
-}

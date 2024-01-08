@@ -1,3 +1,4 @@
+use crate::error::{EncError, EncResult};
 use arrow2::datatypes::DataType;
 
 use super::PType;
@@ -72,9 +73,9 @@ impl From<PType> for DType {
 }
 
 impl TryFrom<&DataType> for DType {
-    type Error = ();
+    type Error = EncError;
 
-    fn try_from(value: &DataType) -> Result<Self, Self::Error> {
+    fn try_from(value: &DataType) -> EncResult<Self> {
         match value {
             DataType::Null => Ok(DType::Null),
             DataType::Boolean => Ok(DType::Bool),
@@ -89,7 +90,7 @@ impl TryFrom<&DataType> for DType {
             DataType::Float16 => Ok(DType::Float(FloatWidth::_16)),
             DataType::Float32 => Ok(DType::Float(FloatWidth::_32)),
             DataType::Float64 => Ok(DType::Float(FloatWidth::_64)),
-            _ => Err(()),
+            _ => Err(EncError::InvalidArrowDataType(value.clone())),
         }
     }
 }
