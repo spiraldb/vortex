@@ -12,7 +12,7 @@ impl<T: NativeType> From<&ArrowPrimitiveArray<T>> for PrimitiveArray {
     }
 }
 
-impl From<&dyn ArrowArray> for Box<dyn Array> {
+impl From<&dyn ArrowArray> for Array {
     // TODO(robert): Wrap in a TypedArray if physical type is different than the logical type, eg. datetime
     fn from(array: &dyn ArrowArray) -> Self {
         match array.data_type().to_physical_type() {
@@ -23,7 +23,7 @@ impl From<&dyn ArrowArray> for Box<dyn Array> {
                         .downcast_ref::<ArrowPrimitiveArray<$T>>()
                         .unwrap()
                         .into();
-                    primitive_array.boxed()
+                    primitive_array.into()
                 })
             }
             _ => panic!("TODO(robert): Implement more"),

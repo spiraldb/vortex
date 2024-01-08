@@ -1,41 +1,38 @@
-use crate::array::{impl_array, Array, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::compat;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct REEArray {
-    ends: Box<dyn Array>,
-    values: Box<dyn Array>,
+    ends: Box<Array>,
+    values: Box<Array>,
     length: usize,
 }
 
-pub const KIND: &str = "enc.ree";
-
 impl REEArray {
-    pub fn new(ends: Box<dyn Array>, values: Box<dyn Array>, length: usize) -> Self {
+    pub fn new(ends: Array, values: Array, length: usize) -> Self {
         Self {
-            ends,
-            values,
+            ends: Box::new(ends),
+            values: Box::new(values),
             length,
         }
     }
 }
 
-impl Array for REEArray {
-    impl_array!();
-
+impl ArrayEncoding for REEArray {
+    #[inline]
     fn len(&self) -> usize {
         self.length
     }
-
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+    #[inline]
     fn dtype(&self) -> &DType {
         self.values.dtype()
-    }
-
-    fn kind(&self) -> &str {
-        KIND
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
@@ -98,8 +95,8 @@ mod test {
     #[test]
     fn new() -> EncResult<()> {
         let arr = REEArray::new(
-            PrimitiveArray::from_vec(vec![2, 5, 10]).boxed(),
-            PrimitiveArray::from_vec(vec![1, 2, 3]).boxed(),
+            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
+            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
             10,
         );
         assert_eq!(arr.len(), 10);

@@ -1,17 +1,15 @@
-use arrow2::array::BooleanArray as ArrowBooleanArray;
+use arrow2::array::{Array, BooleanArray as ArrowBooleanArray};
 
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-use super::{impl_array, Array, ArrowIterator};
+use super::{ArrayEncoding, ArrowIterator};
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BoolArray {
     buffer: ArrowBooleanArray,
 }
-
-pub const KIND: &str = "enc.bool";
 
 impl BoolArray {
     pub fn new(buffer: ArrowBooleanArray) -> Self {
@@ -19,22 +17,20 @@ impl BoolArray {
     }
 }
 
-impl Array for BoolArray {
-    impl_array!();
-
+impl ArrayEncoding for BoolArray {
     #[inline]
     fn len(&self) -> usize {
         self.buffer.len()
     }
 
     #[inline]
-    fn dtype(&self) -> &DType {
-        &DType::Bool
+    fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
     }
 
     #[inline]
-    fn kind(&self) -> &str {
-        KIND
+    fn dtype(&self) -> &DType {
+        &DType::Bool
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {

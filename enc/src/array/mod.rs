@@ -1,9 +1,10 @@
-use std::any::Any;
-use std::str::FromStr;
-
 use arrow2::array::Array as ArrowArray;
-use strum_macros::EnumString;
 
+use crate::array::binary::VarBinViewArray;
+use crate::array::bool::BoolArray;
+use crate::array::constant::ConstantArray;
+use crate::array::primitive::PrimitiveArray;
+use crate::array::ree::REEArray;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -14,31 +15,8 @@ pub mod constant;
 pub mod primitive;
 pub mod ree;
 
+pub mod chunked;
 mod encode;
-
-#[derive(Debug, PartialEq, EnumString)]
-pub enum ArrayKind {
-    #[strum(serialize = "enc.bool")]
-    Bool,
-    #[strum(serialize = "enc.chunked")]
-    Chunked,
-    #[strum(serialize = "enc.constant")]
-    Constant,
-    #[strum(serialize = "enc.dictionary")]
-    Dictionary,
-    #[strum(serialize = "enc.patched")]
-    Patched,
-    #[strum(serialize = "enc.primitive")]
-    Primitive,
-    #[strum(serialize = "enc.roaring_bool")]
-    RoaringBool,
-    #[strum(serialize = "enc.roaring_uint")]
-    RoaringUint,
-    #[strum(serialize = "enc.struct")]
-    Struct,
-    #[strum(serialize = "enc.varbinary")]
-    VarBinary,
-}
 
 /// An Enc Array is the base object representing all arrays in enc.
 ///
@@ -48,64 +26,72 @@ pub enum ArrayKind {
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub type ArrowIterator = dyn Iterator<Item = Box<dyn ArrowArray>>;
+type ArrowIterator<'a> = dyn Iterator<Item = Box<dyn ArrowArray>> + 'a;
 
-pub trait Array: dyn_clone::DynClone + 'static {
-    /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
-    fn as_any(&self) -> &dyn Any;
-
-    /// Converts itself to a mutable reference of [`Any`], which enables mutable downcasting to concrete types.
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-
-    /// Clone a `&dyn Array` to an owned `Box<dyn Array>`.
-    fn boxed(self) -> Box<dyn Array>;
-
-    /// Get the length of the array
+pub trait ArrayEncoding {
     fn len(&self) -> usize;
-
-    /// Check if array is empty
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Get the `DType` of the array
+    fn is_empty(&self) -> bool;
     fn dtype(&self) -> &DType;
-
-    /// Return stable identifier of the array kind.
-    fn kind(&self) -> &str;
-
-    /// Enum variant of kind for builtin array types.
-    #[inline]
-    fn enum_kind(&self) -> Option<ArrayKind> {
-        ArrayKind::from_str(self.kind()).ok()
-    }
-
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
-
-    fn iter_arrow(&self) -> Box<ArrowIterator>;
+    fn iter_arrow(&self) -> Box<ArrowIterator<'_>>;
 }
 
-dyn_clone::clone_trait_object!(Array);
+#[derive(Debug, Clone, PartialEq)]
+pub enum Array {
+    Bool(BoolArray),
+    Constant(ConstantArray),
+    Primitive(PrimitiveArray),
+    REE(REEArray),
+    VarBinView(VarBinViewArray),
+}
 
-macro_rules! impl_array {
-    () => {
-        #[inline]
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-
-        #[inline]
-        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-            self
-        }
-
-        #[inline]
-        /// Moves the array from stack to heap
-        fn boxed(self) -> Box<dyn Array> {
-            Box::new(self)
+macro_rules! impls_for_array {
+    ($variant:tt, $E:ty) => {
+        impl From<$E> for Array {
+            fn from(arr: $E) -> Self {
+                Self::$variant(arr)
+            }
         }
     };
 }
 
-pub(crate) use impl_array;
+impls_for_array!(Bool, BoolArray);
+impls_for_array!(Constant, ConstantArray);
+impls_for_array!(Primitive, PrimitiveArray);
+impls_for_array!(REE, REEArray);
+impls_for_array!(VarBinView, VarBinViewArray);
+
+macro_rules! match_each_encoding {
+    ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
+        macro_rules! __with_enc__ {( $_ $enc:ident ) => ( $($body)* )}
+        match $self {
+            Array::Bool(enc) => __with_enc__! { enc },
+            Array::Constant(enc) => __with_enc__! { enc },
+            Array::Primitive(enc) => __with_enc__! { enc },
+            Array::REE(enc) => __with_enc__! { enc },
+            Array::VarBinView(enc) => __with_enc__! { enc },
+        }
+    })
+}
+
+impl ArrayEncoding for Array {
+    fn len(&self) -> usize {
+        match_each_encoding! { self, |$enc| $enc.len() }
+    }
+
+    fn is_empty(&self) -> bool {
+        match_each_encoding! { self, |$enc| $enc.is_empty() }
+    }
+
+    fn dtype(&self) -> &DType {
+        match_each_encoding! { self, |$enc| $enc.dtype() }
+    }
+
+    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+        match_each_encoding! { self, |$enc| $enc.scalar_at(index) }
+    }
+
+    fn iter_arrow(&self) -> Box<ArrowIterator<'_>> {
+        match_each_encoding! { self, |$enc| $enc.iter_arrow() }
+    }
+}

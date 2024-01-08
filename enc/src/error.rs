@@ -45,6 +45,9 @@ impl Display for ErrString {
 pub enum EncError {
     #[error("index {0} out of bounds from {1} to {2}")]
     OutOfBounds(usize, usize, usize),
+    #[error("arguments have different lengths")]
+    LengthMismatch,
+
     #[error("unexpected arrow data type: {0:?}")]
     InvalidArrowDataType(arrow2::datatypes::DataType),
     #[error("polars error: {0}")]

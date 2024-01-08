@@ -1,39 +1,39 @@
-use crate::array::{impl_array, Array, ArrowIterator};
+use crate::array::{ArrayEncoding, ArrowIterator};
 use crate::arrow;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ConstantArray {
     scalar: Box<dyn Scalar>,
     length: usize,
 }
 
-pub const KIND: &str = "enc.constant";
-
 impl ConstantArray {
-    pub fn new(scalar: &dyn Scalar, length: usize) -> Self {
-        Self {
-            scalar: dyn_clone::clone_box(scalar),
-            length,
-        }
+    pub fn new(scalar: Box<dyn Scalar>, length: usize) -> Self {
+        Self { scalar, length }
+    }
+
+    pub fn value(&self) -> &dyn Scalar {
+        self.scalar.as_ref()
     }
 }
 
-impl Array for ConstantArray {
-    impl_array!();
-
+impl ArrayEncoding for ConstantArray {
+    #[inline]
     fn len(&self) -> usize {
         self.length
     }
 
-    fn dtype(&self) -> &DType {
-        self.scalar.dtype()
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.length == 0
     }
 
-    fn kind(&self) -> &str {
-        KIND
+    #[inline]
+    fn dtype(&self) -> &DType {
+        self.scalar.dtype()
     }
 
     // TODO(robert): Return Result
@@ -46,8 +46,9 @@ impl Array for ConstantArray {
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         let arrow_scalar: Box<dyn arrow2::scalar::Scalar> = self.scalar.as_ref().into();
-        Box::new(std::iter::once(
-            arrow::compute::repeat(arrow_scalar.as_ref(), self.length),
-        ))
+        Box::new(std::iter::once(arrow::compute::repeat(
+            arrow_scalar.as_ref(),
+            self.length,
+        )))
     }
 }

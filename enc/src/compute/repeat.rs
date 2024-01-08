@@ -2,12 +2,13 @@ use crate::array::constant::ConstantArray;
 use crate::array::Array;
 use crate::scalar::Scalar;
 
-pub fn repeat(scalar: &dyn Scalar, n: usize) -> Box<dyn Array> {
-    ConstantArray::new(scalar, n).boxed()
+pub fn repeat(scalar: &dyn Scalar, n: usize) -> Array {
+    ConstantArray::new(dyn_clone::clone_box(scalar), n).into()
 }
 
 #[cfg(test)]
 mod test {
+    use crate::array::ArrayEncoding;
     use crate::scalar::PrimitiveScalar;
 
     use super::*;

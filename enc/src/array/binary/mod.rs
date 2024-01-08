@@ -1,11 +1,11 @@
-use arrow2::array::{PrimitiveArray as ArrowPrimitiveArray, Utf8Array};
+use arrow2::array::{PrimitiveArray as ArrowPrimitiveArray, Utf8Array as ArrowUtf8Array};
 use arrow2::datatypes::{PhysicalType, PrimitiveType};
 
 use crate::error::EncResult;
 use crate::scalar::{Scalar, Utf8Scalar};
 use crate::types::DType;
 
-use super::{impl_array, Array, ArrowIterator};
+use super::{Array, ArrayEncoding, ArrowIterator};
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
@@ -71,18 +71,17 @@ impl BinaryView {
     }
 }
 
-pub const KIND: &str = "enc.varbinary";
 pub const VIEW_SIZE: usize = std::mem::size_of::<BinaryView>();
 
-#[derive(Clone)]
-pub struct VarBinaryArray {
+#[derive(Debug, Clone, PartialEq)]
+pub struct VarBinViewArray {
     views: ArrowPrimitiveArray<u8>,
-    data: Vec<Box<dyn Array>>,
+    data: Vec<Array>,
     dtype: DType,
 }
 
-impl VarBinaryArray {
-    pub fn new(views: ArrowPrimitiveArray<u8>, data: Vec<Box<dyn Array>>) -> Self {
+impl VarBinViewArray {
+    pub fn new(views: ArrowPrimitiveArray<u8>, data: Vec<Array>) -> Self {
         Self {
             views,
             data,
@@ -91,7 +90,7 @@ impl VarBinaryArray {
     }
 
     // TODO(robert): Validate data is utf8
-    pub fn new_utf8(views: ArrowPrimitiveArray<u8>, data: Vec<Box<dyn Array>>) -> Self {
+    pub fn new_utf8(views: ArrowPrimitiveArray<u8>, data: Vec<Array>) -> Self {
         Self {
             views,
             data,
@@ -100,21 +99,18 @@ impl VarBinaryArray {
     }
 }
 
-impl Array for VarBinaryArray {
-    impl_array!();
-
+impl ArrayEncoding for VarBinViewArray {
     fn len(&self) -> usize {
         self.views.len() / std::mem::size_of::<BinaryView>()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.views.values().is_empty()
     }
 
     #[inline]
     fn dtype(&self) -> &DType {
         &self.dtype
-    }
-
-    #[inline]
-    fn kind(&self) -> &str {
-        KIND
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
@@ -125,7 +121,7 @@ impl Array for VarBinaryArray {
             if view.inlined.size > 12 {
                 let data_buffer = self.data.get(view._ref.buffer_index as usize).unwrap();
                 // TODO(robert): Combine arrays if there are many
-                let arrow_data_buffer = data_buffer.as_ref().iter_arrow().next().unwrap();
+                let arrow_data_buffer = data_buffer.iter_arrow().next().unwrap();
 
                 match arrow_data_buffer.as_ref().data_type().to_physical_type() {
                     PhysicalType::Primitive(PrimitiveType::UInt8) => {
@@ -144,7 +140,7 @@ impl Array for VarBinaryArray {
                     PhysicalType::Utf8 => {
                         let utf8_array = arrow_data_buffer
                             .as_any()
-                            .downcast_ref::<Utf8Array<i32>>()
+                            .downcast_ref::<ArrowUtf8Array<i32>>()
                             .unwrap();
                         Ok(
                             arrow2::scalar::new_scalar(utf8_array, view._ref.offset as usize)
@@ -171,12 +167,11 @@ impl Array for VarBinaryArray {
 
 #[cfg(test)]
 mod test {
-    use arrow2::*;
+    use arrow2::array;
 
-    use crate::array::binary::{BinaryView, Inlined, Ref, VarBinaryArray};
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::Array;
-    use crate::scalar::{Scalar, Utf8Scalar};
+
+    use super::*;
 
     #[test]
     pub fn test_varbin() {
@@ -205,7 +200,8 @@ mod test {
                 .flatten()
                 .collect::<Vec<u8>>(),
         );
-        let binary_arr = VarBinaryArray::new(view_arr, vec![values.boxed()]);
+
+        let binary_arr = VarBinViewArray::new(view_arr, vec![values.into()]);
         assert_eq!(binary_arr.len(), 2);
         assert_eq!(
             binary_arr.scalar_at(0).unwrap(),

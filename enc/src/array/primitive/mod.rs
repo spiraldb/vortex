@@ -4,19 +4,17 @@ use arrow2::array::Array as ArrowArray;
 use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
 use arrow2::types::NativeType;
 
-use crate::array::{impl_array, Array, ArrowIterator};
+use crate::array::{ArrayEncoding, ArrowIterator};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::{DType, PType};
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PrimitiveArray {
     buffer: Box<dyn ArrowArray>,
     ptype: PType,
     dtype: DType,
 }
-
-pub const KIND: &str = "enc.primitive";
 
 impl PrimitiveArray {
     pub fn new<T: NativeType>(buffer: &ArrowPrimitiveArray<T>) -> Self {
@@ -33,22 +31,20 @@ impl PrimitiveArray {
     }
 }
 
-impl Array for PrimitiveArray {
-    impl_array!();
-
+impl ArrayEncoding for PrimitiveArray {
     #[inline]
     fn len(&self) -> usize {
         self.buffer.len()
     }
 
     #[inline]
-    fn dtype(&self) -> &DType {
-        &self.dtype
+    fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
     }
 
     #[inline]
-    fn kind(&self) -> &str {
-        KIND
+    fn dtype(&self) -> &DType {
+        &self.dtype
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
