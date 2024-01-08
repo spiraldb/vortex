@@ -77,25 +77,11 @@ pub const VIEW_SIZE: usize = std::mem::size_of::<BinaryView>();
 pub struct VarBinViewArray {
     views: ArrowPrimitiveArray<u8>,
     data: Vec<Array>,
-    dtype: DType,
 }
 
 impl VarBinViewArray {
     pub fn new(views: ArrowPrimitiveArray<u8>, data: Vec<Array>) -> Self {
-        Self {
-            views,
-            data,
-            dtype: DType::Binary,
-        }
-    }
-
-    // TODO(robert): Validate data is utf8
-    pub fn new_utf8(views: ArrowPrimitiveArray<u8>, data: Vec<Array>) -> Self {
-        Self {
-            views,
-            data,
-            dtype: DType::Utf8,
-        }
+        Self { views, data }
     }
 }
 
@@ -110,7 +96,7 @@ impl ArrayEncoding for VarBinViewArray {
 
     #[inline]
     fn dtype(&self) -> &DType {
-        &self.dtype
+        &DType::Utf8
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
@@ -163,6 +149,20 @@ impl ArrayEncoding for VarBinViewArray {
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         todo!()
     }
+
+    fn slice(&self, offset: usize, length: usize) -> Array {
+        let mut cloned = self.clone();
+        cloned.views.slice(offset * VIEW_SIZE, length * VIEW_SIZE);
+        Array::VarBinView(cloned)
+    }
+
+    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
+        let mut cloned = self.clone();
+        cloned
+            .views
+            .slice_unchecked(offset * VIEW_SIZE, length * VIEW_SIZE);
+        Array::VarBinView(cloned)
+    }
 }
 
 #[cfg(test)]
@@ -173,8 +173,7 @@ mod test {
 
     use super::*;
 
-    #[test]
-    pub fn test_varbin() {
+    fn binary_array() -> VarBinViewArray {
         let values = PrimitiveArray::new(&array::PrimitiveArray::<u8>::from_slice(
             "abcdefabcdefabcdef",
         ));
@@ -201,7 +200,12 @@ mod test {
                 .collect::<Vec<u8>>(),
         );
 
-        let binary_arr = VarBinViewArray::new(view_arr, vec![values.into()]);
+        VarBinViewArray::new(view_arr, vec![values.into()])
+    }
+
+    #[test]
+    pub fn test_varbin() {
+        let binary_arr = binary_array();
         assert_eq!(binary_arr.len(), 2);
         assert_eq!(
             binary_arr.scalar_at(0).unwrap(),
@@ -211,5 +215,14 @@ mod test {
             binary_arr.scalar_at(1).unwrap(),
             Utf8Scalar::new("cdefabcdefabc".into()).boxed()
         )
+    }
+
+    #[test]
+    pub fn slice() {
+        let binary_arr = binary_array().slice(1, 1);
+        assert_eq!(
+            binary_arr.scalar_at(0).unwrap(),
+            Utf8Scalar::new("cdefabcdefabc".into()).boxed()
+        );
     }
 }

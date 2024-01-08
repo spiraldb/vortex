@@ -2,7 +2,6 @@ use crate::array::constant::ConstantArray;
 use crate::array::{Array, ArrayEncoding};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
-use crate::types::PrimitiveType;
 
 // TODO(ngates): convert this to arithmetic operations with macro over the kernel.
 pub fn add(lhs: &Array, rhs: &Array) -> EncResult<Array> {

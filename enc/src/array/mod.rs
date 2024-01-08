@@ -2,6 +2,7 @@ use arrow2::array::Array as ArrowArray;
 
 use crate::array::binary::VarBinViewArray;
 use crate::array::bool::BoolArray;
+use crate::array::chunked::ChunkedArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
@@ -18,6 +19,7 @@ pub mod ree;
 pub mod chunked;
 mod encode;
 
+type ArrowIterator<'a> = dyn Iterator<Item = Box<dyn ArrowArray>> + 'a;
 /// An Enc Array is the base object representing all arrays in enc.
 ///
 /// Arrays have a dtype and an encoding. DTypes represent the logical type of the
@@ -26,19 +28,22 @@ mod encode;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-type ArrowIterator<'a> = dyn Iterator<Item = Box<dyn ArrowArray>> + 'a;
-
 pub trait ArrayEncoding {
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
     fn dtype(&self) -> &DType;
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
     fn iter_arrow(&self) -> Box<ArrowIterator<'_>>;
+    fn slice(&self, offset: usize, length: usize) -> Array;
+    /// # Safety
+    /// offset + length <= self.len()
+    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array;
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Array {
     Bool(BoolArray),
+    Chunked(ChunkedArray),
     Constant(ConstantArray),
     Primitive(PrimitiveArray),
     REE(REEArray),
@@ -66,6 +71,7 @@ macro_rules! match_each_encoding {
         macro_rules! __with_enc__ {( $_ $enc:ident ) => ( $($body)* )}
         match $self {
             Array::Bool(enc) => __with_enc__! { enc },
+            Array::Chunked(enc) => __with_enc__! { enc },
             Array::Constant(enc) => __with_enc__! { enc },
             Array::Primitive(enc) => __with_enc__! { enc },
             Array::REE(enc) => __with_enc__! { enc },
@@ -93,5 +99,13 @@ impl ArrayEncoding for Array {
 
     fn iter_arrow(&self) -> Box<ArrowIterator<'_>> {
         match_each_encoding! { self, |$enc| $enc.iter_arrow() }
+    }
+
+    fn slice(&self, offset: usize, length: usize) -> Array {
+        match_each_encoding! { self, |$enc| $enc.slice(offset, length) }
+    }
+
+    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
+        match_each_encoding! { self, |$enc| $enc.slice_unchecked(offset, length) }
     }
 }

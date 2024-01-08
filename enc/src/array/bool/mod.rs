@@ -1,10 +1,10 @@
-use arrow2::array::{Array, BooleanArray as ArrowBooleanArray};
+use arrow2::array::{Array as ArrowArray, BooleanArray as ArrowBooleanArray};
 
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-use super::{ArrayEncoding, ArrowIterator};
+use super::{Array, ArrayEncoding, ArrowIterator};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BoolArray {
@@ -42,5 +42,34 @@ impl ArrayEncoding for BoolArray {
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(std::iter::once(self.buffer.clone().boxed()))
+    }
+
+    fn slice(&self, offset: usize, length: usize) -> Array {
+        let mut cloned = self.clone();
+        cloned.buffer.slice(offset, length);
+        Array::Bool(cloned)
+    }
+
+    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
+        let mut cloned = self.clone();
+        cloned.buffer.slice_unchecked(offset, length);
+        Array::Bool(cloned)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn slice() {
+        let arr = BoolArray::new(ArrowBooleanArray::from_slice([
+            true, true, false, false, true,
+        ]))
+        .slice(1, 3);
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(true));
+        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(false));
+        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(false));
     }
 }

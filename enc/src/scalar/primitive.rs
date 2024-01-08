@@ -127,7 +127,7 @@ mod test {
 
     #[test]
     fn into_from() {
-        let scalar: Box<dyn Scalar> = (10u16).into();
+        let scalar: Box<dyn Scalar> = 10u16.into();
         assert_eq!(scalar.as_ref().try_into(), Ok(10u16));
         // All integers should be convertible to usize
         assert_eq!(scalar.as_ref().try_into(), Ok(10usize));

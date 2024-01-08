@@ -47,6 +47,14 @@ impl ArrayEncoding for ChunkedArray {
     fn iter_arrow(&self) -> Box<ArrowIterator<'_>> {
         Box::new(ChunkedArrowIterator::new(self))
     }
+
+    fn slice(&self, _offset: usize, _length: usize) -> Array {
+        todo!()
+    }
+
+    unsafe fn slice_unchecked(&self, _offset: usize, _length: usize) -> Array {
+        todo!()
+    }
 }
 
 struct ChunkedArrowIterator<'a> {

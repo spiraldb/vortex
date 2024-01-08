@@ -1,5 +1,6 @@
 use crate::error::{EncError, EncResult};
 use arrow2::datatypes::DataType;
+use std::fmt::{Debug, Display, Formatter};
 
 use super::PType;
 
@@ -12,6 +13,18 @@ pub enum IntWidth {
     _64,
 }
 
+impl Display for IntWidth {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IntWidth::Unknown => write!(f, "Unknown"),
+            IntWidth::_8 => write!(f, "8"),
+            IntWidth::_16 => write!(f, "16"),
+            IntWidth::_32 => write!(f, "32"),
+            IntWidth::_64 => write!(f, "64"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FloatWidth {
     Unknown,
@@ -20,12 +33,34 @@ pub enum FloatWidth {
     _64,
 }
 
+impl Display for FloatWidth {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FloatWidth::Unknown => write!(f, "Unknown"),
+            FloatWidth::_16 => write!(f, "16"),
+            FloatWidth::_32 => write!(f, "32"),
+            FloatWidth::_64 => write!(f, "64"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TimeUnit {
     Ns,
     Us,
     Ms,
     S,
+}
+
+impl Display for TimeUnit {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TimeUnit::Ns => write!(f, "ns"),
+            TimeUnit::Us => write!(f, "us"),
+            TimeUnit::Ms => write!(f, "ms"),
+            TimeUnit::S => write!(f, "s"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -51,6 +86,37 @@ pub enum DType {
 impl DType {
     pub fn is_primitive(&self) -> bool {
         matches!(self, DType::Int(_) | DType::UInt(_) | DType::Float(_))
+    }
+}
+
+impl Display for DType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DType::Null => write!(f, "Null"),
+            DType::Nullable(n) => write!(f, "Nullable({})", n),
+            DType::Bool => write!(f, "Bool"),
+            DType::Int(w) => write!(f, "Int({})", w),
+            DType::UInt(w) => write!(f, "UInt({})", w),
+            DType::Decimal(p, s) => write!(f, "Decimal({}, {})", p, s),
+            DType::Float(w) => write!(f, "Float({})", w),
+            DType::Utf8 => write!(f, "Utf8"),
+            DType::Binary => write!(f, "Binary"),
+            DType::LocalTime(u) => write!(f, "LocalTime({})", u),
+            DType::LocalDate => write!(f, "LocalDate"),
+            DType::Instant(u) => write!(f, "Instant({})", u),
+            DType::ZonedDateTime(u) => write!(f, "ZonedDateTime({})", u),
+            DType::Struct(n, fs) => write!(
+                f,
+                "Struct(names=[{}], fields=[{}]",
+                n.join(", "),
+                fs.iter()
+                    .map(|dt| format!("{}", dt))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            DType::List(c) => write!(f, "List({})", c),
+            DType::Map(k, v) => write!(f, "Map({}, {})", k, v),
+        }
     }
 }
 

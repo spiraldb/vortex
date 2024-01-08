@@ -4,7 +4,7 @@ use arrow2::array::Array as ArrowArray;
 use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
 use arrow2::types::NativeType;
 
-use crate::array::{ArrayEncoding, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::{DType, PType};
@@ -56,6 +56,17 @@ impl ArrayEncoding for PrimitiveArray {
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(iter::once(self.buffer.clone()))
     }
+    fn slice(&self, offset: usize, length: usize) -> Array {
+        let mut cloned = self.clone();
+        cloned.buffer.slice(offset, length);
+        Array::Primitive(cloned)
+    }
+
+    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
+        let mut cloned = self.clone();
+        cloned.buffer.slice_unchecked(offset, length);
+        Array::Primitive(cloned)
+    }
 }
 
 #[cfg(test)]
@@ -75,5 +86,14 @@ mod test {
         assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(1));
         assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(2));
         assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(3));
+    }
+
+    #[test]
+    fn slice() {
+        let arr = PrimitiveArray::from_vec(vec![1, 2, 3, 4, 5]).slice(1, 3);
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(2));
+        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(3));
+        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(4));
     }
 }

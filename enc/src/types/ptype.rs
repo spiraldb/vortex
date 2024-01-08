@@ -76,7 +76,6 @@ macro_rules! match_each_pvalue_integer {
     })
 }
 
-pub(crate) use match_each_pvalue;
 pub(crate) use match_each_pvalue_integer;
 
 pub trait PrimitiveType:
@@ -169,7 +168,7 @@ impl TryFrom<&DType> for PType {
     }
 }
 
-impl TryFrom<&arrow2::datatypes::DataType> for PType {
+impl TryFrom<&DataType> for PType {
     type Error = ();
 
     fn try_from(value: &DataType) -> Result<Self, Self::Error> {

@@ -1,7 +1,18 @@
 use arrow2::scalar::Scalar as ArrowScalar;
 
 use crate::scalar::{BoolScalar, NullableScalar, PrimitiveScalar, Scalar};
-use crate::types::{DType, IntWidth};
+use crate::types::{DType, FloatWidth, IntWidth};
+
+macro_rules! convert_primitive_scalar {
+    ($any:expr, $tp:ty, $dtype:expr) => {{
+        if let Some(scalar) = $any.downcast_ref::<scalar::PrimitiveScalar<$tp>>() {
+            return match scalar.value() {
+                Some(v) => PrimitiveScalar::new(*v).boxed(),
+                None => NullableScalar::none($dtype).boxed(),
+            };
+        }
+    }};
+}
 
 impl From<&dyn arrow2::scalar::Scalar> for Box<dyn Scalar> {
     fn from(value: &dyn ArrowScalar) -> Self {
@@ -18,24 +29,16 @@ impl From<&dyn arrow2::scalar::Scalar> for Box<dyn Scalar> {
                     };
                 }
             }
-            Int8 => {}
-            Int16 => {}
-            Int32 => {
-                if let Some(scalar) = any.downcast_ref::<scalar::PrimitiveScalar<i32>>() {
-                    return match scalar.value() {
-                        Some(int) => PrimitiveScalar::new(*int).boxed(),
-                        None => NullableScalar::none(DType::Int(IntWidth::_32)).boxed(),
-                    };
-                }
-            }
-            Int64 => {}
-            UInt8 => {}
-            UInt16 => {}
-            UInt32 => {}
-            UInt64 => {}
-            Float32 => {}
-            Float64 => {}
-            Struct(_) => {}
+            Int8 => convert_primitive_scalar!(any, i8, DType::Int(IntWidth::_8)),
+            Int16 => convert_primitive_scalar!(any, i16, DType::Int(IntWidth::_16)),
+            Int32 => convert_primitive_scalar!(any, i32, DType::Int(IntWidth::_32)),
+            Int64 => convert_primitive_scalar!(any, i64, DType::Int(IntWidth::_64)),
+            UInt8 => convert_primitive_scalar!(any, u8, DType::UInt(IntWidth::_8)),
+            UInt16 => convert_primitive_scalar!(any, u16, DType::UInt(IntWidth::_16)),
+            UInt32 => convert_primitive_scalar!(any, u32, DType::UInt(IntWidth::_32)),
+            UInt64 => convert_primitive_scalar!(any, u64, DType::UInt(IntWidth::_64)),
+            Float32 => convert_primitive_scalar!(any, f32, DType::Float(FloatWidth::_32)),
+            Float64 => convert_primitive_scalar!(any, f64, DType::Float(FloatWidth::_64)),
             _ => {}
         }
 

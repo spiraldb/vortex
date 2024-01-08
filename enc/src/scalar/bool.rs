@@ -47,6 +47,15 @@ impl From<bool> for Box<dyn Scalar> {
     }
 }
 
+impl TryFrom<Box<dyn Scalar>> for bool {
+    type Error = ();
+
+    #[inline]
+    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
+        value.as_ref().try_into()
+    }
+}
+
 impl TryFrom<&dyn Scalar> for bool {
     type Error = ();
 

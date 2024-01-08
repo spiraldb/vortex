@@ -1,4 +1,4 @@
-use crate::array::{ArrayEncoding, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -8,11 +8,16 @@ use crate::types::DType;
 pub struct ConstantArray {
     scalar: Box<dyn Scalar>,
     length: usize,
+    offset: usize,
 }
 
 impl ConstantArray {
     pub fn new(scalar: Box<dyn Scalar>, length: usize) -> Self {
-        Self { scalar, length }
+        Self {
+            scalar,
+            length,
+            offset: 0,
+        }
     }
 
     pub fn value(&self) -> &dyn Scalar {
@@ -36,7 +41,6 @@ impl ArrayEncoding for ConstantArray {
         self.scalar.dtype()
     }
 
-    // TODO(robert): Return Result
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         if index >= self.length {
             return Err(EncError::OutOfBounds(index, 0, self.length));
@@ -50,5 +54,20 @@ impl ArrayEncoding for ConstantArray {
             arrow_scalar.as_ref(),
             self.length,
         )))
+    }
+
+    fn slice(&self, offset: usize, length: usize) -> Array {
+        assert!(
+            offset + length <= self.len(),
+            "offset + length may not exceed length of array"
+        );
+        unsafe { self.slice_unchecked(offset, length) }
+    }
+
+    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
+        let mut cloned = self.clone();
+        cloned.offset += offset;
+        cloned.length = length;
+        Array::Constant(cloned)
     }
 }

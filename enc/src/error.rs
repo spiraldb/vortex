@@ -51,7 +51,8 @@ pub enum EncError {
     ComputeError(ErrString),
     #[error("invalid dtype: {0:?}")]
     InvalidDType(DType),
-
+    #[error("can't convert type {0} into {1}")]
+    TypeMismatch(DType, DType),
     #[error("unexpected arrow data type: {0:?}")]
     InvalidArrowDataType(arrow2::datatypes::DataType),
 }
