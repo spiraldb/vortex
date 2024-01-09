@@ -27,6 +27,11 @@ fn main() {
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| {
+            !e.path()
+                .components()
+                .any(|c| c.as_os_str() == "zig-cache" || c.as_os_str() == "_deprecated_libenc")
+        })
+        .filter(|e| {
             e.path()
                 .extension()
                 .map(|e| e == "zig" || e == "h")
