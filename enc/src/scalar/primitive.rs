@@ -40,8 +40,8 @@ impl Scalar for PrimitiveScalar {
     }
 
     #[inline]
-    fn dtype(&self) -> &DType {
-        &self.dtype
+    fn dtype(&self) -> DType {
+        self.dtype.clone()
     }
 }
 

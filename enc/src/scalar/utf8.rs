@@ -26,7 +26,7 @@ impl Scalar for Utf8Scalar {
         Box::new(self)
     }
     #[inline]
-    fn dtype(&self) -> &DType {
-        &DType::Utf8
+    fn dtype(&self) -> DType {
+        DType::Utf8
     }
 }

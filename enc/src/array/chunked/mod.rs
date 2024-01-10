@@ -67,8 +67,8 @@ impl ArrayEncoding for ChunkedArray {
     }
 
     #[inline]
-    fn dtype(&self) -> &DType {
-        &self.dtype
+    fn dtype(&self) -> DType {
+        self.dtype.clone()
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
@@ -80,59 +80,35 @@ impl ArrayEncoding for ChunkedArray {
         Box::new(ChunkedArrowIterator::new(self))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> Array {
+    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
+        // TODO(ngates): make assertions raise error
         assert!(
             offset + length <= self.len(),
             "offset + length may not exceed length of array"
         );
-        unsafe { self.slice_unchecked(offset, length) }
-    }
-
-    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
         let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(offset);
         let (length_chunk, length_in_last_chunk) = self.find_physical_location(offset + length);
-        let offset_in_first_chunk = if offset_in_first_chunk == 0 {
-            None
-        } else {
-            Some(offset_in_first_chunk)
-        };
-        let length_in_last_chunk = if length_in_last_chunk == self.chunks.last().unwrap().len() {
-            None
-        } else {
-            Some(length_in_last_chunk)
-        };
 
-        if length_chunk == offset_chunk {
-            if let Some(chunk) = self.chunks.get(offset_chunk) {
-                let sliced_chunk = if let Some(off) = offset_in_first_chunk {
-                    chunk.slice(off, length)
-                } else {
-                    chunk.to_owned()
-                };
-                return Array::Chunked(ChunkedArray::new(vec![sliced_chunk], self.dtype.clone()));
-            }
-        }
-
-        let chunks = self
+        let chunks: Vec<Array> = self
             .chunks
             .iter()
             .zip(0..length_chunk)
             .skip(offset_chunk)
             .map(|(chunk, idx)| {
                 if idx == offset_chunk {
-                    offset_in_first_chunk
-                        .map(|off| chunk.slice(off, chunk.len() - off))
-                        .unwrap_or(chunk.to_owned())
+                    chunk.slice(offset_in_first_chunk, chunk.len() - offset_in_first_chunk)
                 } else if idx == length_chunk {
-                    length_in_last_chunk
-                        .map(|len| chunk.slice(0, len))
-                        .unwrap_or(chunk.to_owned())
+                    chunk.slice(0, length_in_last_chunk)
                 } else {
-                    chunk.to_owned()
+                    Ok(chunk.to_owned())
                 }
             })
-            .collect::<Vec<Array>>();
-        Array::Chunked(ChunkedArray::new(chunks, self.dtype.clone()))
+            .try_collect()?;
+
+        Ok(Array::Chunked(ChunkedArray::new(
+            chunks,
+            self.dtype.clone(),
+        )))
     }
 }
 
@@ -219,6 +195,7 @@ mod test {
     pub fn slice_middle() {
         chunked_array()
             .slice(2, 3)
+            .unwrap()
             .iter_arrow()
             .zip(
                 [
@@ -237,10 +214,12 @@ mod test {
                 );
             });
     }
+
     #[test]
     pub fn slice_begin() {
         chunked_array()
             .slice(1, 2)
+            .unwrap()
             .iter_arrow()
             .zip([ArrowPrimitiveArray::<u64>::from_vec(vec![2, 3])].iter())
             .for_each(|(from_iter, orig)| {
@@ -258,6 +237,7 @@ mod test {
     pub fn slice_aligned() {
         chunked_array()
             .slice(3, 3)
+            .unwrap()
             .iter_arrow()
             .zip([ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6])].iter())
             .for_each(|(from_iter, orig)| {
@@ -270,10 +250,12 @@ mod test {
                 );
             });
     }
+
     #[test]
     pub fn slice_end() {
         chunked_array()
             .slice(7, 1)
+            .unwrap()
             .iter_arrow()
             .zip([ArrowPrimitiveArray::<u64>::from_vec(vec![8])].iter())
             .for_each(|(from_iter, orig)| {

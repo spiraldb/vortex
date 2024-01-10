@@ -24,7 +24,7 @@ pub trait Scalar: Debug + dyn_clone::DynClone + 'static {
     fn boxed(self) -> Box<dyn Scalar>;
 
     /// the logical type.
-    fn dtype(&self) -> &DType;
+    fn dtype(&self) -> DType;
 }
 
 dyn_clone::clone_trait_object!(Scalar);

@@ -6,6 +6,7 @@ use crate::array::chunked::ChunkedArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
+use crate::array::struct_::StructArray;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -18,8 +19,10 @@ pub mod ree;
 
 pub mod chunked;
 mod encode;
+pub mod struct_;
 
 type ArrowIterator<'a> = dyn Iterator<Item = Box<dyn ArrowArray>> + 'a;
+
 /// An Enc Array is the base object representing all arrays in enc.
 ///
 /// Arrays have a dtype and an encoding. DTypes represent the logical type of the
@@ -31,13 +34,10 @@ type ArrowIterator<'a> = dyn Iterator<Item = Box<dyn ArrowArray>> + 'a;
 pub trait ArrayEncoding {
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
-    fn dtype(&self) -> &DType;
+    fn dtype(&self) -> DType;
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
     fn iter_arrow(&self) -> Box<ArrowIterator<'_>>;
-    fn slice(&self, offset: usize, length: usize) -> Array;
-    /// # Safety
-    /// offset + length <= self.len()
-    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array;
+    fn slice(&self, offset: usize, length: usize) -> EncResult<Array>;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,6 +47,7 @@ pub enum Array {
     Constant(ConstantArray),
     Primitive(PrimitiveArray),
     REE(REEArray),
+    Struct(StructArray),
     VarBinView(VarBinViewArray),
 }
 
@@ -65,6 +66,7 @@ impls_for_array!(Chunked, ChunkedArray);
 impls_for_array!(Constant, ConstantArray);
 impls_for_array!(Primitive, PrimitiveArray);
 impls_for_array!(REE, REEArray);
+impls_for_array!(Struct, StructArray);
 impls_for_array!(VarBinView, VarBinViewArray);
 
 macro_rules! match_each_encoding {
@@ -76,6 +78,7 @@ macro_rules! match_each_encoding {
             Array::Constant(enc) => __with_enc__! { enc },
             Array::Primitive(enc) => __with_enc__! { enc },
             Array::REE(enc) => __with_enc__! { enc },
+            Array::Struct(enc) => __with_enc__! { enc },
             Array::VarBinView(enc) => __with_enc__! { enc },
         }
     })
@@ -90,7 +93,7 @@ impl ArrayEncoding for Array {
         match_each_encoding! { self, |$enc| $enc.is_empty() }
     }
 
-    fn dtype(&self) -> &DType {
+    fn dtype(&self) -> DType {
         match_each_encoding! { self, |$enc| $enc.dtype() }
     }
 
@@ -102,11 +105,7 @@ impl ArrayEncoding for Array {
         match_each_encoding! { self, |$enc| $enc.iter_arrow() }
     }
 
-    fn slice(&self, offset: usize, length: usize) -> Array {
+    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
         match_each_encoding! { self, |$enc| $enc.slice(offset, length) }
-    }
-
-    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
-        match_each_encoding! { self, |$enc| $enc.slice_unchecked(offset, length) }
     }
 }

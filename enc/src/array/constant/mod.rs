@@ -8,16 +8,11 @@ use crate::types::DType;
 pub struct ConstantArray {
     scalar: Box<dyn Scalar>,
     length: usize,
-    offset: usize,
 }
 
 impl ConstantArray {
     pub fn new(scalar: Box<dyn Scalar>, length: usize) -> Self {
-        Self {
-            scalar,
-            length,
-            offset: 0,
-        }
+        Self { scalar, length }
     }
 
     pub fn value(&self) -> &dyn Scalar {
@@ -37,7 +32,7 @@ impl ArrayEncoding for ConstantArray {
     }
 
     #[inline]
-    fn dtype(&self) -> &DType {
+    fn dtype(&self) -> DType {
         self.scalar.dtype()
     }
 
@@ -56,18 +51,14 @@ impl ArrayEncoding for ConstantArray {
         )))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> Array {
+    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
+        // TODO(ngates): make this a checked operation
         assert!(
             offset + length <= self.len(),
             "offset + length may not exceed length of array"
         );
-        unsafe { self.slice_unchecked(offset, length) }
-    }
-
-    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
         let mut cloned = self.clone();
-        cloned.offset += offset;
-        cloned.length = length;
-        Array::Constant(cloned)
+        cloned.length = length - offset;
+        Ok(Array::Constant(cloned))
     }
 }

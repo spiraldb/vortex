@@ -43,8 +43,8 @@ impl ArrayEncoding for PrimitiveArray {
     }
 
     #[inline]
-    fn dtype(&self) -> &DType {
-        &self.dtype
+    fn dtype(&self) -> DType {
+        self.dtype.clone()
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
@@ -57,16 +57,11 @@ impl ArrayEncoding for PrimitiveArray {
         Box::new(iter::once(self.buffer.clone()))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> Array {
+    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
+        // TODO(ngates): make assertions about offset/length. We should reuse this logic.
         let mut cloned = self.clone();
         cloned.buffer.slice(offset, length);
-        Array::Primitive(cloned)
-    }
-
-    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
-        let mut cloned = self.clone();
-        cloned.buffer.slice_unchecked(offset, length);
-        Array::Primitive(cloned)
+        Ok(Array::Primitive(cloned))
     }
 }
 
@@ -91,7 +86,9 @@ mod test {
 
     #[test]
     fn slice() {
-        let arr = PrimitiveArray::from_vec(vec![1, 2, 3, 4, 5]).slice(1, 3);
+        let arr = PrimitiveArray::from_vec(vec![1, 2, 3, 4, 5])
+            .slice(1, 3)
+            .unwrap();
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(2));
         assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(3));

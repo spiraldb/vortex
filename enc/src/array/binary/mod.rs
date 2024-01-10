@@ -96,8 +96,8 @@ impl ArrayEncoding for VarBinViewArray {
     }
 
     #[inline]
-    fn dtype(&self) -> &DType {
-        &DType::Utf8
+    fn dtype(&self) -> DType {
+        DType::Utf8
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
@@ -151,18 +151,11 @@ impl ArrayEncoding for VarBinViewArray {
         todo!()
     }
 
-    fn slice(&self, offset: usize, length: usize) -> Array {
+    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
+        // TODO(ngates): bounds check
         let mut cloned = self.clone();
         cloned.views.slice(offset * VIEW_SIZE, length * VIEW_SIZE);
-        Array::VarBinView(cloned)
-    }
-
-    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
-        let mut cloned = self.clone();
-        cloned
-            .views
-            .slice_unchecked(offset * VIEW_SIZE, length * VIEW_SIZE);
-        Array::VarBinView(cloned)
+        Ok(Array::VarBinView(cloned))
     }
 }
 
@@ -220,7 +213,7 @@ mod test {
 
     #[test]
     pub fn slice() {
-        let binary_arr = binary_array().slice(1, 1);
+        let binary_arr = binary_array().slice(1, 1).unwrap();
         assert_eq!(
             binary_arr.scalar_at(0).unwrap(),
             Utf8Scalar::new("cdefabcdefabc".into()).boxed()

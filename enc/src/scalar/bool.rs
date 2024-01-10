@@ -28,8 +28,8 @@ impl Scalar for BoolScalar {
     }
 
     #[inline]
-    fn dtype(&self) -> &DType {
-        &DType::Bool
+    fn dtype(&self) -> DType {
+        DType::Bool
     }
 }
 

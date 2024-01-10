@@ -29,8 +29,8 @@ impl ArrayEncoding for BoolArray {
     }
 
     #[inline]
-    fn dtype(&self) -> &DType {
-        &DType::Bool
+    fn dtype(&self) -> DType {
+        DType::Bool
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
@@ -44,16 +44,11 @@ impl ArrayEncoding for BoolArray {
         Box::new(std::iter::once(self.buffer.clone().boxed()))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> Array {
+    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
+        // TODO(ngates): bounds checks
         let mut cloned = self.clone();
         cloned.buffer.slice(offset, length);
-        Array::Bool(cloned)
-    }
-
-    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
-        let mut cloned = self.clone();
-        cloned.buffer.slice_unchecked(offset, length);
-        Array::Bool(cloned)
+        Ok(Array::Bool(cloned))
     }
 }
 
@@ -66,7 +61,8 @@ mod test {
         let arr = BoolArray::new(ArrowBooleanArray::from_slice([
             true, true, false, false, true,
         ]))
-        .slice(1, 3);
+        .slice(1, 3)
+        .unwrap();
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(true));
         assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(false));

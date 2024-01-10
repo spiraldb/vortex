@@ -5,18 +5,14 @@ use crate::types::DType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructScalar {
+    names: Vec<String>,
     values: Vec<Box<dyn Scalar>>,
-    dtype: DType,
 }
 
 impl StructScalar {
     #[inline]
     pub fn new(names: Vec<String>, values: Vec<Box<dyn Scalar>>) -> Self {
-        let dtypes = values.iter().map(|x| x.dtype().clone()).collect();
-        Self {
-            values,
-            dtype: DType::Struct(names, dtypes),
-        }
+        Self { names, values }
     }
 
     #[inline]
@@ -35,7 +31,10 @@ impl Scalar for StructScalar {
         Box::new(self)
     }
     #[inline]
-    fn dtype(&self) -> &DType {
-        &self.dtype
+    fn dtype(&self) -> DType {
+        DType::Struct(
+            self.names.clone(),
+            self.values.iter().map(|x| x.dtype().clone()).collect(),
+        )
     }
 }

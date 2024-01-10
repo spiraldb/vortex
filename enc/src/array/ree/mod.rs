@@ -43,7 +43,7 @@ impl ArrayEncoding for REEArray {
         self.length == 0
     }
     #[inline]
-    fn dtype(&self) -> &DType {
+    fn dtype(&self) -> DType {
         self.values.dtype()
     }
 
@@ -75,16 +75,15 @@ impl ArrayEncoding for REEArray {
         // let values_array = self.values.iter_arrow()
     }
 
-    fn slice(&self, offset: usize, length: usize) -> Array {
-        assert!(
-            offset + length <= self.len(),
-            "offset + length may not exceed length of array"
-        );
-        unsafe { self.slice_unchecked(offset, length) }
-    }
+    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
+        if offset > self.len() {
+            return Err(EncError::OutOfBounds(offset, 0, self.len()));
+        }
+        if offset + length > self.len() {
+            return Err(EncError::OutOfBounds(offset + length, 0, self.len()));
+        }
 
-    // TODO(robert): Make this 0 copy, and move most of this logic to iter arrow
-    unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
+        // TODO(robert): Make this 0 copy, and move most of this logic to iter arrow
         let physical_offset = self
             .find_physical_index(offset)
             .unwrap_or_else(|| panic!("Index {} not found in array", offset));
@@ -136,10 +135,12 @@ impl ArrayEncoding for REEArray {
             left_to_skip -= min(casted.len(), left_to_skip);
         }
 
-        Array::REE(Self::new(
+        Ok(Array::REE(Self::new(
             PrimitiveArray::new(&arrow_ends.into()).into(),
-            self.values.clone().slice(physical_offset, physical_length),
-        ))
+            self.values
+                .clone()
+                .slice(physical_offset, physical_length)?,
+        )))
     }
 }
 
@@ -189,7 +190,7 @@ mod test {
             PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
         );
         assert_eq!(arr.len(), 10);
-        assert_eq!(arr.dtype(), &DType::Int(IntWidth::_32));
+        assert_eq!(arr.dtype(), DType::Int(IntWidth::_32));
 
         // 0, 1 => 1
         // 2, 3, 4 => 2
@@ -206,8 +207,9 @@ mod test {
             PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
             PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
         )
-        .slice(3, 5);
-        assert_eq!(arr.dtype(), &DType::Int(IntWidth::_32));
+        .slice(3, 5)
+        .unwrap();
+        assert_eq!(arr.dtype(), DType::Int(IntWidth::_32));
 
         assert_eq!(arr.len(), 5);
         assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(2));
