@@ -1,4 +1,4 @@
-use crate::array::{Array, ArrayEncoding, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator, IntoArrowIterator};
 use crate::arrow;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -49,6 +49,14 @@ impl ArrayEncoding for ConstantArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
+        let arrow_scalar: Box<dyn arrow2::scalar::Scalar> = self.scalar.as_ref().into();
+        Box::new(std::iter::once(arrow::compute::repeat(
+            arrow_scalar.as_ref(),
+            self.length,
+        )))
+    }
+
+    fn into_iter_arrow(self) -> Box<IntoArrowIterator> {
         let arrow_scalar: Box<dyn arrow2::scalar::Scalar> = self.scalar.as_ref().into();
         Box::new(std::iter::once(arrow::compute::repeat(
             arrow_scalar.as_ref(),

@@ -20,3 +20,4 @@ roaring = "0.10.2"
 strum = { version = "0.25", features = ["derive"] }
 strum_macros = "0.25.3"
 thiserror = "1.0.56"
+itertools = "0.12.0"

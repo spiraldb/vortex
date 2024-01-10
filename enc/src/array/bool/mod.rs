@@ -4,7 +4,7 @@ use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-use super::{Array, ArrayEncoding, ArrowIterator};
+use super::{Array, ArrayEncoding, ArrowIterator, IntoArrowIterator};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BoolArray {
@@ -42,6 +42,10 @@ impl ArrayEncoding for BoolArray {
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(std::iter::once(self.buffer.clone().boxed()))
+    }
+
+    fn into_iter_arrow(self) -> Box<IntoArrowIterator> {
+        Box::new(std::iter::once(self.buffer.boxed()))
     }
 
     fn slice(&self, offset: usize, length: usize) -> Array {
