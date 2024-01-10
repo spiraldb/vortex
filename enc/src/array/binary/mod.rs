@@ -55,6 +55,7 @@ impl BinaryView {
 
     #[inline]
     #[allow(clippy::wrong_self_convention)]
+    #[allow(dead_code)]
     pub fn to_le_bytes(&self) -> [u8; 16] {
         let mut bytes: [u8; 16] = [0; 16];
         unsafe {

@@ -20,11 +20,13 @@ pub mod chunked;
 mod encode;
 
 type ArrowIterator<'a> = dyn Iterator<Item = Box<dyn ArrowArray>> + 'a;
+
 type IntoArrowIterator = dyn Iterator<Item = Box<dyn ArrowArray>>;
+
 /// An Enc Array is the base object representing all arrays in enc.
 ///
 /// Arrays have a dtype and an encoding. DTypes represent the logical type of the
-/// values stored in an enc array. Encodings represent the physical layout of the
+/// values stored in an pyenc array. Encodings represent the physical layout of the
 /// array.
 ///
 /// This differs from Apache Arrow where logical and physical are combined in

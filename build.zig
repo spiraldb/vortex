@@ -1,5 +1,4 @@
 const std = @import("std");
-const py = @import("./pydust.build.zig");
 
 pub fn build(b: *std.Build) void {
     b.reference_trace = 16;
@@ -16,6 +15,7 @@ pub fn build(b: *std.Build) void {
     const arrow = b.addModule("arrow", .{
         .source_file = .{ .path = "zig/arrow/arrow.zig" },
     });
+    _ = arrow;
     const arrow_test = b.addTest(.{
         .root_source_file = .{ .path = "zig/arrow/test.zig" },
         .target = target,
@@ -73,6 +73,7 @@ pub fn build(b: *std.Build) void {
         .source_file = .{ .path = "zig/pretty/pretty.zig" },
         .dependencies = &.{},
     });
+    _ = pretty;
 
     // tracy options
     const tracy = b.option(bool, "tracy", "Enable Tracy integration") orelse true;
@@ -92,36 +93,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "tracy_options", .module = tracyOpts.createModule() },
         },
     });
-
-    // enc
-    const enc = b.addModule("enc", .{
-        .source_file = .{ .path = "zig/enc/enc.zig" },
-        .dependencies = &.{
-            .{ .name = "arrow", .module = arrow },
-            .{ .name = "codecs", .module = codecs },
-            .{ .name = "pretty", .module = pretty },
-            .{ .name = "roaring", .module = roaring },
-            .{ .name = "trazy", .module = trazy },
-        },
-    });
-    const enc_test = b.addTest(.{
-        .root_source_file = .{ .path = "zig/enc/enc.zig" },
-        .target = target,
-        .optimize = optimize,
-        .filter = filter_test,
-    });
-    enc_test.addModule("arrow", arrow);
-    enc_test.addModule("codecs", codecs);
-    enc_test.addModule("pretty", pretty);
-    enc_test.addModule("roaring", roaring);
-    enc_test.addModule("trazy", trazy);
-    dependencyTracy(enc_test);
-    dependencyRoaring(enc_test);
-
-    const enc_test_run = b.addRunArtifact(enc_test);
-    const enc_test_step = b.step("test.enc", "Run enc tests");
-    enc_test_step.dependOn(&enc_test_run.step);
-    test_step.dependOn(enc_test_step);
+    _ = trazy;
 
     const lib_step = b.addStaticLibrary(std.Build.StaticLibraryOptions{
         .name = "zenc",
@@ -138,39 +110,6 @@ pub fn build(b: *std.Build) void {
     lib_step.addModule("zimd", zimd);
     lib_step.bundle_compiler_rt = true;
     b.installArtifact(lib_step);
-
-    // pydust
-    const pydust = py.addPydust(b, .{
-        .test_step = test_step,
-    });
-
-    // Python bindings for enc
-    const pyenc = pydust.addPythonModule(.{
-        .name = "enc._enc",
-        .root_source_file = .{ .path = "zig/pyenc/pyenc.zig" },
-        .main_pkg_path = .{ .path = "zig/pyenc/" },
-        .limited_api = true,
-        .target = target,
-        .optimize = optimize,
-    });
-    pyenc.library_step.addModule("codecs", codecs);
-    pyenc.test_step.addModule("codecs", codecs);
-    pyenc.library_step.addModule("pretty", pretty);
-    pyenc.test_step.addModule("pretty", pretty);
-    pyenc.library_step.addModule("enc", enc);
-    pyenc.test_step.addModule("enc", enc);
-    pyenc.library_step.addModule("arrow", arrow);
-    pyenc.test_step.addModule("arrow", arrow);
-    pyenc.library_step.addModule("roaring", roaring);
-    pyenc.test_step.addModule("roaring", roaring);
-    pyenc.library_step.addModule("zimd", zimd);
-    pyenc.test_step.addModule("zimd", zimd);
-    pyenc.library_step.addModule("trazy", trazy);
-    pyenc.test_step.addModule("trazy", trazy);
-    dependencyTracy(pyenc.library_step);
-    dependencyTracy(pyenc.test_step);
-    dependencyRoaring(pyenc.library_step);
-    dependencyRoaring(pyenc.test_step);
 
     // Option for emitting test binary based on the given root source.
     // This is used for debugging as in .vscode/launch.json.

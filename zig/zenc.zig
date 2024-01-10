@@ -4,7 +4,7 @@ const zimd = @import("zimd");
 
 comptime {
     if (!builtin.link_libc) {
-        @compileError("Must be built with libc to export enc-zig symbols");
+        @compileError("Must be built with libc to export pyenc-zig symbols");
     }
 }
 

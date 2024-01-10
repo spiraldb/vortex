@@ -40,6 +40,7 @@ impl PValue {
     }
 }
 
+#[allow(unused_macros)]
 macro_rules! match_each_pvalue {
     ($self:expr, | $_:tt $pvalue:ident | $($body:tt)*) => ({
         macro_rules! __with_pvalue__ {( $_ $pvalue:ident ) => ( $($body)* )}

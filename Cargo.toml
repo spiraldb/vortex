@@ -1,3 +1,8 @@
 [workspace]
-members = ["rust/enc", "rust/zenc", "rust/zenc-sys"]
+members = [
+    "pyenc",
+    "rust/enc",
+    "rust/zenc",
+    "rust/zenc-sys",
+]
 resolver = "2"
