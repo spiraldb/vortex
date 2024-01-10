@@ -4,7 +4,7 @@ use arrow2::array::Array as ArrowArray;
 use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
 use arrow2::types::NativeType;
 
-use crate::array::{Array, ArrayEncoding, ArrowIterator, IntoArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::{DType, PType};
@@ -55,10 +55,6 @@ impl ArrayEncoding for PrimitiveArray {
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(iter::once(self.buffer.clone()))
-    }
-
-    fn into_iter_arrow(self) -> Box<IntoArrowIterator> {
-        Box::new(iter::once(self.buffer))
     }
 
     fn slice(&self, offset: usize, length: usize) -> Array {

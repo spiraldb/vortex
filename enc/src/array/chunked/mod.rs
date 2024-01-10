@@ -1,9 +1,8 @@
-use std::iter;
-
 use arrow2::array::Array as ArrowArray;
 use itertools::Itertools;
+use std::slice::Iter;
 
-use crate::array::{Array, ArrayEncoding, ArrowIterator, IntoArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -13,8 +12,6 @@ pub struct ChunkedArray {
     chunks: Vec<Array>,
     chunk_ends: Vec<usize>,
     dtype: DType,
-    offset: usize,
-    length: usize,
 }
 
 impl ChunkedArray {
@@ -24,7 +21,6 @@ impl ChunkedArray {
             chunks.iter().map(|chunk| chunk.dtype()).all_equal(),
             "Chunks have differing dtypes"
         );
-        let length = chunks.iter().map(|c| c.len()).sum();
         let mut chunk_ends = Vec::<usize>::with_capacity(chunks.len());
         for chunk in chunks.iter() {
             chunk_ends.push(chunk_ends.last().unwrap_or(&0usize) + chunk.len());
@@ -34,8 +30,6 @@ impl ChunkedArray {
             chunks,
             chunk_ends,
             dtype,
-            offset: 0,
-            length,
         }
     }
 
@@ -44,23 +38,14 @@ impl ChunkedArray {
         &self.chunks
     }
 
-    pub fn iter_chunks(&self) -> ChunkIterator<'_> {
-        ChunkIterator::new(self)
-    }
-
-    pub fn into_iter_chunks(self) -> IntoChunkIterator {
-        IntoChunkIterator::new(self)
-    }
-
     fn find_physical_location(&self, index: usize) -> (usize, usize) {
-        assert!(
-            index <= self.offset + self.length,
-            "Index out of bounds of the array"
-        );
-        let offset_index = index + self.offset;
+        assert!(index <= self.len(), "Index out of bounds of the array");
+        let offset_index = index;
         let index_chunk = self
             .chunk_ends
             .binary_search(&offset_index)
+            // If the result of binary_search is Ok it means we have exact match, since these are chunk ends EXCLUSIVE we have to add one to move to the next one
+            .map(|o| o + 1)
             .unwrap_or_else(|o| o);
         let index_in_chunk = offset_index
             - if index_chunk == 0 {
@@ -72,156 +57,9 @@ impl ChunkedArray {
     }
 }
 
-pub struct IntoChunkIterator {
-    chunks_iter: Box<dyn Iterator<Item = Array>>,
-    num_chunks: usize,
-    offset_in_first_chunk: Option<usize>,
-    length_in_last_chunk: Option<usize>,
-    current_chunk_idx: usize,
-}
-
-impl IntoChunkIterator {
-    fn new(array: ChunkedArray) -> Self {
-        if array.chunks.is_empty() {
-            return Self {
-                chunks_iter: Box::new(iter::empty::<Array>()),
-                num_chunks: 0,
-                offset_in_first_chunk: None,
-                length_in_last_chunk: None,
-                current_chunk_idx: 0,
-            };
-        }
-
-        let array_length = array.len();
-        let (offset_chunk, offset_in_first_chunk) = array.find_physical_location(0);
-        let (length_chunk, length_in_last_chunk) = array.find_physical_location(array.length);
-        Self {
-            chunks_iter: Box::new(array.chunks.into_iter().skip(offset_chunk)),
-            num_chunks: length_chunk - offset_chunk + 1,
-            offset_in_first_chunk: if offset_in_first_chunk == 0 {
-                None
-            } else {
-                Some(offset_in_first_chunk)
-            },
-            length_in_last_chunk: if array.offset + array.length == array_length {
-                None
-            } else {
-                Some(length_in_last_chunk)
-            },
-            current_chunk_idx: 0,
-        }
-    }
-}
-
-impl Iterator for IntoChunkIterator {
-    type Item = Array;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.chunks_iter.next().map(|chunk| {
-            self.current_chunk_idx += 1;
-            if self.num_chunks == 1 {
-                if let Some(off) = self.offset_in_first_chunk {
-                    if let Some(length) = self.length_in_last_chunk {
-                        chunk.slice(off, length)
-                    } else {
-                        chunk.slice(off, chunk.len())
-                    }
-                } else if let Some(length) = self.length_in_last_chunk {
-                    chunk.slice(0, length)
-                } else {
-                    chunk
-                }
-            } else if self.current_chunk_idx == 1 {
-                self.offset_in_first_chunk
-                    .map(|off| chunk.slice(off, chunk.len()))
-                    .unwrap_or(chunk)
-            } else if self.current_chunk_idx == self.num_chunks {
-                self.length_in_last_chunk
-                    .map(|len| chunk.slice(0, len))
-                    .unwrap_or(chunk)
-            } else {
-                chunk
-            }
-        })
-    }
-}
-
-pub struct ChunkIterator<'a> {
-    chunks_iter: Box<dyn Iterator<Item = &'a Array> + 'a>,
-    num_chunks: usize,
-    offset_in_first_chunk: Option<usize>,
-    length_in_last_chunk: Option<usize>,
-    current_chunk_idx: usize,
-}
-
-impl<'a> ChunkIterator<'a> {
-    fn new(array: &'a ChunkedArray) -> Self {
-        if array.chunks.is_empty() {
-            return Self {
-                chunks_iter: Box::new(iter::empty::<&Array>()),
-                num_chunks: 0,
-                offset_in_first_chunk: None,
-                length_in_last_chunk: None,
-                current_chunk_idx: 0,
-            };
-        }
-
-        let (offset_chunk, offset_in_first_chunk) = array.find_physical_location(0);
-        let (length_chunk, length_in_last_chunk) = array.find_physical_location(array.length);
-        Self {
-            chunks_iter: Box::new(array.chunks.iter().skip(offset_chunk)),
-            num_chunks: length_chunk - offset_chunk + 1,
-            offset_in_first_chunk: if offset_in_first_chunk == 0 {
-                None
-            } else {
-                Some(offset_in_first_chunk)
-            },
-            length_in_last_chunk: if array.offset + array.length == array.len() {
-                None
-            } else {
-                Some(length_in_last_chunk)
-            },
-            current_chunk_idx: 0,
-        }
-    }
-}
-
-impl<'a> Iterator for ChunkIterator<'a> {
-    type Item = Array;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.chunks_iter.next().map(|chunk| {
-            self.current_chunk_idx += 1;
-            if self.num_chunks == 1 {
-                if let Some(off) = self.offset_in_first_chunk {
-                    if let Some(length) = self.length_in_last_chunk {
-                        chunk.slice(off, length)
-                    } else {
-                        chunk.slice(off, chunk.len() - off)
-                    }
-                } else if let Some(length) = self.length_in_last_chunk {
-                    chunk.slice(0, length)
-                } else {
-                    chunk.clone()
-                }
-            } else if self.current_chunk_idx == 1 {
-                self.offset_in_first_chunk
-                    .map(|off| chunk.slice(off, chunk.len() - off))
-                    .unwrap_or(chunk.clone())
-            } else if self.current_chunk_idx == self.num_chunks {
-                self.length_in_last_chunk
-                    .map(|len| chunk.slice(0, len))
-                    .unwrap_or(chunk.clone())
-            } else {
-                chunk.clone()
-            }
-        })
-    }
-}
-
 impl ArrayEncoding for ChunkedArray {
     fn len(&self) -> usize {
-        self.length
+        *self.chunk_ends.last().unwrap_or(&0usize)
     }
 
     fn is_empty(&self) -> bool {
@@ -239,11 +77,7 @@ impl ArrayEncoding for ChunkedArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator<'_>> {
-        Box::new(ChunkedArrowIterator::<ChunkIterator<'_>>::new(self))
-    }
-
-    fn into_iter_arrow(self) -> Box<IntoArrowIterator> {
-        Box::new(ChunkedArrowIterator::<IntoChunkIterator>::new(self))
+        Box::new(ChunkedArrowIterator::new(self))
     }
 
     fn slice(&self, offset: usize, length: usize) -> Array {
@@ -255,22 +89,62 @@ impl ArrayEncoding for ChunkedArray {
     }
 
     unsafe fn slice_unchecked(&self, offset: usize, length: usize) -> Array {
-        let mut cloned = self.clone();
-        cloned.offset += offset;
-        cloned.length = length;
-        Array::Chunked(cloned)
+        let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(offset);
+        let (length_chunk, length_in_last_chunk) = self.find_physical_location(offset + length);
+        let offset_in_first_chunk = if offset_in_first_chunk == 0 {
+            None
+        } else {
+            Some(offset_in_first_chunk)
+        };
+        let length_in_last_chunk = if length_in_last_chunk == self.chunks.last().unwrap().len() {
+            None
+        } else {
+            Some(length_in_last_chunk)
+        };
+
+        if length_chunk == offset_chunk {
+            if let Some(chunk) = self.chunks.get(offset_chunk) {
+                let sliced_chunk = if let Some(off) = offset_in_first_chunk {
+                    chunk.slice(off, length)
+                } else {
+                    chunk.to_owned()
+                };
+                return Array::Chunked(ChunkedArray::new(vec![sliced_chunk], self.dtype.clone()));
+            }
+        }
+
+        let chunks = self
+            .chunks
+            .iter()
+            .zip(0..length_chunk)
+            .skip(offset_chunk)
+            .map(|(chunk, idx)| {
+                if idx == offset_chunk {
+                    offset_in_first_chunk
+                        .map(|off| chunk.slice(off, chunk.len() - off))
+                        .unwrap_or(chunk.to_owned())
+                } else if idx == length_chunk {
+                    length_in_last_chunk
+                        .map(|len| chunk.slice(0, len))
+                        .unwrap_or(chunk.to_owned())
+                } else {
+                    chunk.to_owned()
+                }
+            })
+            .collect::<Vec<Array>>();
+        Array::Chunked(ChunkedArray::new(chunks, self.dtype.clone()))
     }
 }
 
-struct ChunkedArrowIterator<T: Iterator<Item = Array>> {
-    chunks_iter: T,
-    arrow_iter: Option<Box<IntoArrowIterator>>,
+struct ChunkedArrowIterator<'a> {
+    chunks_iter: Iter<'a, Array>,
+    arrow_iter: Option<Box<ArrowIterator<'a>>>,
 }
 
-impl<'a> ChunkedArrowIterator<ChunkIterator<'a>> {
+impl<'a> ChunkedArrowIterator<'a> {
     fn new(array: &'a ChunkedArray) -> Self {
-        let mut chunks_iter = array.iter_chunks();
-        let arrow_iter = chunks_iter.next().map(|c| c.into_iter_arrow());
+        let mut chunks_iter = array.chunks.iter();
+        let arrow_iter = chunks_iter.next().map(|c| c.iter_arrow());
         Self {
             chunks_iter,
             arrow_iter,
@@ -278,18 +152,7 @@ impl<'a> ChunkedArrowIterator<ChunkIterator<'a>> {
     }
 }
 
-impl ChunkedArrowIterator<IntoChunkIterator> {
-    fn new(array: ChunkedArray) -> Self {
-        let mut chunks_iter = array.into_iter_chunks();
-        let arrow_iter = chunks_iter.next().map(|c| c.into_iter_arrow());
-        Self {
-            chunks_iter,
-            arrow_iter,
-        }
-    }
-}
-
-impl<T: Iterator<Item = Array>> Iterator for ChunkedArrowIterator<T> {
+impl<'a> Iterator for ChunkedArrowIterator<'a> {
     type Item = Box<dyn ArrowArray>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -298,7 +161,7 @@ impl<T: Iterator<Item = Array>> Iterator for ChunkedArrowIterator<T> {
             .and_then(|iter| iter.next())
             .or_else(|| {
                 self.chunks_iter.next().and_then(|next_chunk| {
-                    self.arrow_iter = Some(next_chunk.into_iter_arrow());
+                    self.arrow_iter = Some(next_chunk.iter_arrow());
                     self.next()
                 })
             })
@@ -313,6 +176,19 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::ArrayEncoding;
     use crate::types::{DType, IntWidth};
+
+    fn chunked_array() -> ChunkedArray {
+        let arrow_chunk1 = ArrowPrimitiveArray::<u64>::from_vec(vec![1, 2, 3]);
+        let arrow_chunk2 = ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6]);
+        let arrow_chunk3 = ArrowPrimitiveArray::<u64>::from_vec(vec![7, 8, 9]);
+        let chunk1: PrimitiveArray = (&arrow_chunk1).into();
+        let chunk2: PrimitiveArray = (&arrow_chunk2).into();
+        let chunk3: PrimitiveArray = (&arrow_chunk3).into();
+        ChunkedArray::new(
+            vec![chunk1.into(), chunk2.into(), chunk3.into()],
+            DType::UInt(IntWidth::_64),
+        )
+    }
 
     #[test]
     pub fn iter() {
@@ -340,26 +216,66 @@ mod test {
     }
 
     #[test]
-    pub fn slice() {
-        let arrow_chunk1 = ArrowPrimitiveArray::<u64>::from_vec(vec![1, 2, 3]);
-        let arrow_chunk2 = ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6]);
-        let chunk1: PrimitiveArray = (&arrow_chunk1).into();
-        let chunk2: PrimitiveArray = (&arrow_chunk2).into();
-        let chunked = ChunkedArray::new(
-            vec![chunk1.into(), chunk2.into()],
-            DType::UInt(IntWidth::_64),
-        )
-        .slice(2, 3);
-
-        chunked
+    pub fn slice_middle() {
+        chunked_array()
+            .slice(2, 3)
             .iter_arrow()
             .zip(
-                vec![
+                [
                     ArrowPrimitiveArray::<u64>::from_vec(vec![3]),
                     ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5]),
                 ]
                 .iter(),
             )
+            .for_each(|(from_iter, orig)| {
+                assert_eq!(
+                    from_iter
+                        .as_any()
+                        .downcast_ref::<ArrowPrimitiveArray<u64>>()
+                        .unwrap(),
+                    orig
+                );
+            });
+    }
+    #[test]
+    pub fn slice_begin() {
+        chunked_array()
+            .slice(1, 2)
+            .iter_arrow()
+            .zip([ArrowPrimitiveArray::<u64>::from_vec(vec![2, 3])].iter())
+            .for_each(|(from_iter, orig)| {
+                assert_eq!(
+                    from_iter
+                        .as_any()
+                        .downcast_ref::<ArrowPrimitiveArray<u64>>()
+                        .unwrap(),
+                    orig
+                );
+            });
+    }
+
+    #[test]
+    pub fn slice_aligned() {
+        chunked_array()
+            .slice(3, 3)
+            .iter_arrow()
+            .zip([ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6])].iter())
+            .for_each(|(from_iter, orig)| {
+                assert_eq!(
+                    from_iter
+                        .as_any()
+                        .downcast_ref::<ArrowPrimitiveArray<u64>>()
+                        .unwrap(),
+                    orig
+                );
+            });
+    }
+    #[test]
+    pub fn slice_end() {
+        chunked_array()
+            .slice(7, 1)
+            .iter_arrow()
+            .zip([ArrowPrimitiveArray::<u64>::from_vec(vec![8])].iter())
             .for_each(|(from_iter, orig)| {
                 assert_eq!(
                     from_iter

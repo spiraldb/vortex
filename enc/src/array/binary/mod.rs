@@ -5,7 +5,7 @@ use crate::error::EncResult;
 use crate::scalar::{Scalar, Utf8Scalar};
 use crate::types::DType;
 
-use super::{Array, ArrayEncoding, ArrowIterator, IntoArrowIterator};
+use super::{Array, ArrayEncoding, ArrowIterator};
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
@@ -148,10 +148,6 @@ impl ArrayEncoding for VarBinViewArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!()
-    }
-
-    fn into_iter_arrow(self) -> Box<IntoArrowIterator> {
         todo!()
     }
 

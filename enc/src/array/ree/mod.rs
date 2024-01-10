@@ -5,7 +5,7 @@ use arrow2::datatypes::DataType;
 use std::cmp::min;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayEncoding, ArrowIterator, IntoArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::compat;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -73,10 +73,6 @@ impl ArrayEncoding for REEArray {
         //         run_length
         //     });
         // let values_array = self.values.iter_arrow()
-    }
-
-    fn into_iter_arrow(self) -> Box<IntoArrowIterator> {
-        todo!()
     }
 
     fn slice(&self, offset: usize, length: usize) -> Array {

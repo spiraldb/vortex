@@ -20,9 +20,6 @@ pub mod chunked;
 mod encode;
 
 type ArrowIterator<'a> = dyn Iterator<Item = Box<dyn ArrowArray>> + 'a;
-
-type IntoArrowIterator = dyn Iterator<Item = Box<dyn ArrowArray>>;
-
 /// An Enc Array is the base object representing all arrays in enc.
 ///
 /// Arrays have a dtype and an encoding. DTypes represent the logical type of the
@@ -37,7 +34,6 @@ pub trait ArrayEncoding {
     fn dtype(&self) -> &DType;
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
     fn iter_arrow(&self) -> Box<ArrowIterator<'_>>;
-    fn into_iter_arrow(self) -> Box<IntoArrowIterator>;
     fn slice(&self, offset: usize, length: usize) -> Array;
     /// # Safety
     /// offset + length <= self.len()
@@ -59,24 +55,6 @@ macro_rules! impls_for_array {
         impl From<$E> for Array {
             fn from(arr: $E) -> Self {
                 Self::$variant(arr)
-            }
-        }
-
-        impl IntoIterator for $E {
-            type Item = Box<dyn ArrowArray>;
-            type IntoIter = Box<IntoArrowIterator>;
-
-            fn into_iter(self) -> Self::IntoIter {
-                self.into_iter_arrow()
-            }
-        }
-
-        impl<'a> IntoIterator for &'a $E {
-            type Item = Box<dyn ArrowArray>;
-            type IntoIter = Box<ArrowIterator<'a>>;
-
-            fn into_iter(self) -> Self::IntoIter {
-                self.iter_arrow()
             }
         }
     };
@@ -122,10 +100,6 @@ impl ArrayEncoding for Array {
 
     fn iter_arrow(&self) -> Box<ArrowIterator<'_>> {
         match_each_encoding! { self, |$enc| $enc.iter_arrow() }
-    }
-
-    fn into_iter_arrow(self) -> Box<IntoArrowIterator> {
-        match_each_encoding! { self, |$enc| $enc.into_iter_arrow() }
     }
 
     fn slice(&self, offset: usize, length: usize) -> Array {
