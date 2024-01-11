@@ -11,27 +11,6 @@ pub fn build(b: *std.Build) void {
     const filter_test = b.option([]const u8, "filter-tests", "Filter tests by name");
     const test_step = b.step("test", "Run library tests");
 
-    // arrow
-    const arrow = b.addModule("arrow", .{
-        .source_file = .{ .path = "zig/arrow/arrow.zig" },
-    });
-    _ = arrow;
-    const arrow_test = b.addTest(.{
-        .root_source_file = .{ .path = "zig/arrow/test.zig" },
-        .target = target,
-        .optimize = optimize,
-        .filter = filter_test,
-    });
-    arrow_test.addIncludePath(.{ .path = "zig/arrow" });
-    const arrow_test_run = b.addRunArtifact(arrow_test);
-    test_step.dependOn(&arrow_test_run.step);
-
-    // roaring
-    const roaring = b.addModule("roaring", .{
-        .source_file = .{ .path = "zig/deps/roaring-zig/src/roaring.zig" },
-        .dependencies = &.{},
-    });
-
     // zimd
     const zimd = b.addModule("zimd", .{
         .source_file = .{ .path = "zig/zimd/zimd.zig" },
@@ -45,35 +24,11 @@ pub fn build(b: *std.Build) void {
     const zimd_test_run = b.addRunArtifact(zimd_test);
     test_step.dependOn(&zimd_test_run.step);
 
-    // codecs
-    const codecs = b.addModule("codecs", .{
-        .source_file = .{ .path = "zig/codecs/codecs.zig" },
-        .dependencies = &.{
-            .{ .name = "zimd", .module = zimd },
-            .{ .name = "roaring", .module = roaring },
-        },
-    });
-
-    const codecs_test = b.addTest(.{
-        .root_source_file = .{ .path = "zig/codecs/codecs.zig" },
-        .target = target,
-        .optimize = optimize,
-        .filter = filter_test,
-    });
-    dependencyRoaring(codecs_test);
-    dependencyStreamvbyte(codecs_test);
-    codecs_test.addModule("codecs", codecs);
-    codecs_test.addModule("roaring", roaring);
-    codecs_test.addModule("zimd", zimd);
-    const codecs_test_run = b.addRunArtifact(codecs_test);
-    test_step.dependOn(&codecs_test_run.step);
-
-    // pretty
-    const pretty = b.addModule("pretty", .{
-        .source_file = .{ .path = "zig/pretty/pretty.zig" },
+    // roaring bitmaps
+    const roaring = b.addModule("roaring", .{
+        .source_file = .{ .path = "zig/deps/roaring-zig/src/roaring.zig" },
         .dependencies = &.{},
     });
-    _ = pretty;
 
     // tracy options
     const tracy = b.option(bool, "tracy", "Enable Tracy integration") orelse true;
@@ -93,8 +48,34 @@ pub fn build(b: *std.Build) void {
             .{ .name = "tracy_options", .module = tracyOpts.createModule() },
         },
     });
-    _ = trazy;
 
+    // codecs
+    const codecs = b.addModule("codecs", .{
+        .source_file = .{ .path = "zig/codecs/codecs.zig" },
+        .dependencies = &.{
+            .{ .name = "zimd", .module = zimd },
+            .{ .name = "roaring", .module = roaring },
+            .{ .name = "trazy", .module = trazy },
+        },
+    });
+
+    const codecs_test = b.addTest(.{
+        .root_source_file = .{ .path = "zig/codecs/codecs.zig" },
+        .target = target,
+        .optimize = optimize,
+        .filter = filter_test,
+    });
+    dependencyRoaring(codecs_test);
+    dependencyStreamvbyte(codecs_test);
+    codecs_test.addModule("codecs", codecs);
+    codecs_test.addModule("roaring", roaring);
+    codecs_test.addModule("trazy", trazy);
+    codecs_test.addModule("zimd", zimd);
+
+    const codecs_test_run = b.addRunArtifact(codecs_test);
+    test_step.dependOn(&codecs_test_run.step);
+
+    // wrap it all up as a static library to call from Rust
     const lib_step = b.addStaticLibrary(std.Build.StaticLibraryOptions{
         .name = "zenc",
         .root_source_file = .{ .path = "zig/zenc.zig" },

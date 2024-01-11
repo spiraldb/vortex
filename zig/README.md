@@ -1,4 +1,21 @@
-## Style Guide
+# Spiral Zig
+
+This contains our lowest-level and most performance sensitive code. It is written in Zig because of several key language features:
+
+1. Ultra-granular management of memory allocation
+2. Comptime is good for producing easy-to-read branchless/specialized code
+3. Excellent cross-compilation support, including relatively portable SIMD via Vector API
+
+It has two logical subprojects: zimd (platform-portable SIMD utilities) and codecz (vectorized encoding functions). These are called
+from Rust via the C ABI.
+
+C headers are defined in zenc.h, and C ABI-friendly function wrappers live in zenc.zig. Rust bindings are generated in the zenc-sys
+crate based on the contents of zenc.h.
+
+Note: zig subprojects with the suffix `-legacy` are not built/compiled and should be deleted in the near future. They are there for
+reference as we port functionality to Rust.
+
+## Zig Style Guide
 
 ### Returned memory: new vs borrowed references
 
