@@ -119,11 +119,11 @@ struct ChunkedArrowIterator {
 
 impl ChunkedArrowIterator {
     fn new(array: &ChunkedArray) -> Self {
-        let chunks_iter = array.chunks.clone().into_iter();
-        // let arrow_iter = chunks_iter.next().map(|c| c.iter_arrow());
+        let mut chunks_iter = array.chunks.clone().into_iter();
+        let arrow_iter = chunks_iter.next().map(|c| c.iter_arrow());
         Self {
             chunks_iter,
-            arrow_iter: None,
+            arrow_iter,
         }
     }
 }

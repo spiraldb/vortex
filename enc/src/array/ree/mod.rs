@@ -1,13 +1,15 @@
 use std::cmp::min;
+use std::vec::IntoIter;
 
-use arrow2::array::MutablePrimitiveArray as ArrowMutablePrimitiveArray;
+use arrow2::array::Array as ArrowArray;
 use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
 use arrow2::compute::cast::CastOptions;
 use arrow2::datatypes::DataType;
+use arrow2::scalar::new_scalar;
 
-use crate::array::primitive::PrimitiveArray;
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::compat;
+use crate::arrow::compute::repeat;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::{DType, IntWidth};
@@ -17,6 +19,7 @@ pub struct REEArray {
     ends: Box<Array>,
     values: Box<Array>,
     length: usize,
+    offset: usize,
 }
 
 impl REEArray {
@@ -26,11 +29,12 @@ impl REEArray {
             ends: Box::new(ends),
             values: Box::new(values),
             length,
+            offset: 0,
         }
     }
 
     pub fn find_physical_index(&self, index: usize) -> Option<usize> {
-        find_physical_index(self.ends.as_ref(), index)
+        find_physical_index(self.ends.as_ref(), index + self.offset)
     }
 }
 
@@ -50,104 +54,118 @@ impl ArrayEncoding for REEArray {
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         self.find_physical_index(index)
-            .ok_or(EncError::OutOfBounds(index, 0, self.length))
+            .ok_or(EncError::OutOfBounds(index, self.offset, self.length))
             .and_then(|run| self.values.scalar_at(run))
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!();
-        // let mut last_offset: u64 = 0;
-        // let ends_arrays = self
-        //     .ends
-        //     .iter_arrow()
-        //     .map(|b| {
-        //         arrow2::compute::cast::cast(b.as_ref(), &DataType::UInt64, CastOptions::default())
-        //             .unwrap()
-        //     })
-        //     .flat_map(|v| {
-        //         let primitive_array = v.as_any().downcast_ref::<PrimitiveArray<u64>>().unwrap();
-        //         primitive_array.values_iter()
-        //     })
-        //     .map(|offset| {
-        //         let run_length = offset - last_offset;
-        //         last_offset = *offset;
-        //         run_length
-        //     });
-        // let values_array = self.values.iter_arrow()
+        let physical_offset = self.find_physical_index(0).unwrap();
+
+        // TODO(robert): Do better? Compute? This is subtract with limiting
+        let mut ends = Vec::<usize>::new();
+        let mut left_to_skip = physical_offset;
+        for c in self.ends.iter_arrow() {
+            let cast_res =
+                arrow2::compute::cast::cast(c.as_ref(), &DataType::UInt64, CastOptions::default())
+                    .unwrap();
+            let casted = cast_res
+                .as_any()
+                .downcast_ref::<ArrowPrimitiveArray<u64>>()
+                .unwrap();
+            casted
+                .values()
+                .iter()
+                .skip(min(casted.len(), left_to_skip))
+                .map(|v| *v as usize)
+                .map(|v| v - (self.offset))
+                .map(|v| min(v, self.length))
+                .take_while(|v| v <= &self.length)
+                .for_each(|v| ends.push(v));
+
+            left_to_skip -= min(casted.len(), left_to_skip);
+        }
+
+        Box::new(REEArrowIterator::new(
+            ends.into_iter(),
+            self.values.iter_arrow(),
+        ))
     }
 
     fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
         self.check_slice_bounds(offset, length)?;
+        let slice_begin = self.find_physical_index(offset).unwrap();
+        let slice_end = self.find_physical_index(offset + length).unwrap();
+        Ok(Array::REE(Self {
+            ends: Box::new(
+                self.ends
+                    .slice(slice_begin, slice_end - slice_begin + 1)
+                    .unwrap(),
+            ),
+            values: Box::new(
+                self.values
+                    .slice(slice_begin, slice_end - slice_begin + 1)
+                    .unwrap(),
+            ),
+            length,
+            offset,
+        }))
+    }
+}
 
-        // TODO(robert): Make this 0 copy, and move most of this logic to iter arrow
-        let physical_offset = self
-            .find_physical_index(offset)
-            .unwrap_or_else(|| panic!("Index {} not found in array", offset));
-        let physical_length = self
-            .find_physical_index(offset + length)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Length {} is larger than the array length {}",
-                    length, self.length
-                )
-            });
+struct REEArrowIterator {
+    ends: IntoIter<usize>,
+    values: Box<ArrowIterator>,
+    current_idx: usize,
+    current_arrow_array: Option<Box<dyn ArrowArray>>,
+    last_end: usize,
+}
 
-        // TODO(robert): Do better? Compute? This is subtract with limiting
-        let mut arrow_ends = ArrowMutablePrimitiveArray::<u64>::new();
-        let mut left_to_skip = physical_offset;
-        let mut current_size: usize = 0;
-        for chunk in self.ends.iter_arrow() {
-            let cast_result = arrow2::compute::cast::cast(
-                chunk.as_ref(),
-                &DataType::UInt64,
-                CastOptions::default(),
-            )
-            .unwrap();
-            let casted = cast_result
-                .as_any()
-                .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                .unwrap();
-            let mut mapped_values = casted
-                .values()
-                .iter()
-                .skip(min(casted.len(), left_to_skip))
-                .map(|v| v - (offset as u64))
-                .take_while(|v| {
-                    let tmp_size = current_size;
-                    current_size += *v as usize;
-                    tmp_size <= length
-                })
-                .collect::<Vec<_>>();
-            if mapped_values.is_empty() {
-                break;
-            }
-            if current_size > length {
-                if let Some(last_end) = mapped_values.last_mut() {
-                    *last_end = length as u64;
-                }
-            }
+impl REEArrowIterator {
+    pub fn new(ends: IntoIter<usize>, values: Box<ArrowIterator>) -> Self {
+        Self {
+            ends,
+            values,
+            current_idx: 0,
+            current_arrow_array: None,
+            last_end: 0,
+        }
+    }
+}
 
-            arrow_ends.extend_trusted_len_values(mapped_values.iter().copied());
-            left_to_skip -= min(casted.len(), left_to_skip);
+impl Iterator for REEArrowIterator {
+    type Item = Box<dyn ArrowArray>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self
+            .current_arrow_array
+            .as_ref()
+            .map(|c| c.len() == self.current_idx)
+            .unwrap_or(true)
+        {
+            self.current_arrow_array = self.values.next();
         }
 
-        Ok(Array::REE(Self::new(
-            PrimitiveArray::new(Box::new(arrow_ends.into())).into(),
-            self.values
-                .clone()
-                .slice(physical_offset, physical_length)?,
-        )))
+        self.current_arrow_array
+            .as_ref()
+            .zip(self.ends.next())
+            .map(|(carr, n)| {
+                let new_scalar = new_scalar(carr.as_ref(), self.current_idx);
+                let repeat_count = n - self.last_end;
+                self.current_idx += 1;
+                self.last_end = n;
+                repeat(new_scalar.as_ref(), repeat_count)
+            })
     }
 }
 
 /// Gets the logical end of ends array of run end encoding.
 fn run_ends_logical_length(ends: &Array) -> usize {
     ends.scalar_at(ends.len() - 1)
-        .and_then(|end| end.as_ref().try_into())
+        .and_then(|end| end.try_into())
         .unwrap_or_else(|_| panic!("Couldn't convert ends to usize"))
 }
 
-pub fn find_physical_index(array: &Array, index: usize) -> Option<usize> {
+fn find_physical_index(array: &Array, index: usize) -> Option<usize> {
     use polars_core::prelude::*;
     use polars_ops::prelude::*;
 
@@ -174,6 +192,8 @@ pub fn find_physical_index(array: &Array, index: usize) -> Option<usize> {
 
 #[cfg(test)]
 mod test {
+    use itertools::Itertools;
+
     use crate::array::primitive::PrimitiveArray;
     use crate::types::IntWidth;
 
@@ -206,12 +226,41 @@ mod test {
         .slice(3, 5)
         .unwrap();
         assert_eq!(arr.dtype(), DType::Int(IntWidth::_32));
-
         assert_eq!(arr.len(), 5);
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(3));
-        assert_eq!(arr.scalar_at(3).unwrap().try_into(), Ok(3));
-        assert_eq!(arr.scalar_at(4).unwrap().try_into(), Ok(3));
+
+        arr.iter_arrow()
+            .zip_eq([vec![2, 2], vec![3, 3, 3]])
+            .for_each(|(from_iter, orig)| {
+                assert_eq!(
+                    from_iter
+                        .as_any()
+                        .downcast_ref::<ArrowPrimitiveArray<i32>>()
+                        .unwrap()
+                        .values()
+                        .as_slice(),
+                    orig
+                );
+            });
+    }
+
+    #[test]
+    fn iter_arrow() {
+        let arr = REEArray::new(
+            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
+            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
+        );
+        arr.iter_arrow()
+            .zip_eq([vec![1, 1], vec![2, 2, 2], vec![3, 3, 3, 3, 3]])
+            .for_each(|(from_iter, orig)| {
+                assert_eq!(
+                    from_iter
+                        .as_any()
+                        .downcast_ref::<ArrowPrimitiveArray<i32>>()
+                        .unwrap()
+                        .values()
+                        .as_slice(),
+                    orig
+                );
+            });
     }
 }

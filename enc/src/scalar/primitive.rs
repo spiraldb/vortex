@@ -100,6 +100,14 @@ primitive_scalar_from!(f16);
 primitive_scalar_from!(f32);
 primitive_scalar_from!(f64);
 
+impl TryFrom<Box<dyn Scalar>> for usize {
+    type Error = EncError;
+
+    fn try_from(value: Box<dyn Scalar>) -> EncResult<Self> {
+        value.as_ref().try_into()
+    }
+}
+
 impl TryFrom<&dyn Scalar> for usize {
     type Error = EncError;
 
