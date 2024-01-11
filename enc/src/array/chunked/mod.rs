@@ -40,14 +40,13 @@ impl ChunkedArray {
 
     fn find_physical_location(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
-        let offset_index = index;
         let index_chunk = self
             .chunk_ends
-            .binary_search(&offset_index)
+            .binary_search(&index)
             // If the result of binary_search is Ok it means we have exact match, since these are chunk ends EXCLUSIVE we have to add one to move to the next one
             .map(|o| o + 1)
             .unwrap_or_else(|o| o);
-        let index_in_chunk = offset_index
+        let index_in_chunk = index
             - if index_chunk == 0 {
                 0
             } else {
@@ -89,21 +88,24 @@ impl ArrayEncoding for ChunkedArray {
         let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(offset);
         let (length_chunk, length_in_last_chunk) = self.find_physical_location(offset + length);
 
-        let chunks: Vec<Array> = self
-            .chunks
-            .iter()
-            .zip(0..length_chunk)
-            .skip(offset_chunk)
-            .map(|(chunk, idx)| {
-                if idx == offset_chunk {
-                    chunk.slice(offset_in_first_chunk, chunk.len() - offset_in_first_chunk)
-                } else if idx == length_chunk {
-                    chunk.slice(0, length_in_last_chunk)
-                } else {
-                    Ok(chunk.to_owned())
-                }
-            })
-            .try_collect()?;
+        if length_chunk == offset_chunk {
+            if let Some(chunk) = self.chunks.get(offset_chunk) {
+                return Ok(Array::Chunked(ChunkedArray::new(
+                    vec![chunk.slice(offset_in_first_chunk, length)?],
+                    self.dtype.clone(),
+                )));
+            }
+        }
+
+        let mut chunks = self.chunks.clone()[offset_chunk..length_chunk + 1].to_vec();
+        if let Some(c) = chunks.first_mut() {
+            *c = c.slice(offset_in_first_chunk, c.len() - offset_in_first_chunk)?;
+        }
+        if length_in_last_chunk == 0 {
+            chunks.pop();
+        } else if let Some(c) = chunks.last_mut() {
+            *c = c.slice(0, length_in_last_chunk)?;
+        }
 
         Ok(Array::Chunked(ChunkedArray::new(
             chunks,
@@ -147,6 +149,7 @@ impl<'a> Iterator for ChunkedArrowIterator<'a> {
 #[cfg(test)]
 mod test {
     use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
+    use itertools::Itertools;
 
     use crate::array::chunked::ChunkedArray;
     use crate::array::primitive::PrimitiveArray;
@@ -154,12 +157,9 @@ mod test {
     use crate::types::{DType, IntWidth};
 
     fn chunked_array() -> ChunkedArray {
-        let arrow_chunk1 = ArrowPrimitiveArray::<u64>::from_vec(vec![1, 2, 3]);
-        let arrow_chunk2 = ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6]);
-        let arrow_chunk3 = ArrowPrimitiveArray::<u64>::from_vec(vec![7, 8, 9]);
-        let chunk1: PrimitiveArray = (&arrow_chunk1).into();
-        let chunk2: PrimitiveArray = (&arrow_chunk2).into();
-        let chunk3: PrimitiveArray = (&arrow_chunk3).into();
+        let chunk1: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![1, 2, 3]).into();
+        let chunk2: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6]).into();
+        let chunk3: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![7, 8, 9]).into();
         ChunkedArray::new(
             vec![chunk1.into(), chunk2.into(), chunk3.into()],
             DType::UInt(IntWidth::_64),
@@ -168,10 +168,8 @@ mod test {
 
     #[test]
     pub fn iter() {
-        let arrow_chunk1 = ArrowPrimitiveArray::<u64>::from_vec(vec![1, 2, 3]);
-        let arrow_chunk2 = ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6]);
-        let chunk1: PrimitiveArray = (&arrow_chunk1).into();
-        let chunk2: PrimitiveArray = (&arrow_chunk2).into();
+        let chunk1: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![1, 2, 3]).into();
+        let chunk2: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6]).into();
         let chunked = ChunkedArray::new(
             vec![chunk1.into(), chunk2.into()],
             DType::UInt(IntWidth::_64),
@@ -179,13 +177,15 @@ mod test {
 
         chunked
             .iter_arrow()
-            .zip(vec![arrow_chunk1, arrow_chunk2].iter())
+            .zip_eq([[1u64, 2, 3], [4, 5, 6]])
             .for_each(|(from_iter, orig)| {
                 assert_eq!(
                     from_iter
                         .as_any()
                         .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap(),
+                        .unwrap()
+                        .values()
+                        .as_slice(),
                     orig
                 );
             });
@@ -197,19 +197,15 @@ mod test {
             .slice(2, 3)
             .unwrap()
             .iter_arrow()
-            .zip(
-                [
-                    ArrowPrimitiveArray::<u64>::from_vec(vec![3]),
-                    ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5]),
-                ]
-                .iter(),
-            )
+            .zip_eq([vec![3], vec![4, 5]])
             .for_each(|(from_iter, orig)| {
                 assert_eq!(
                     from_iter
                         .as_any()
                         .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap(),
+                        .unwrap()
+                        .values()
+                        .as_slice(),
                     orig
                 );
             });
@@ -221,13 +217,15 @@ mod test {
             .slice(1, 2)
             .unwrap()
             .iter_arrow()
-            .zip([ArrowPrimitiveArray::<u64>::from_vec(vec![2, 3])].iter())
+            .zip_eq([[2, 3]])
             .for_each(|(from_iter, orig)| {
                 assert_eq!(
                     from_iter
                         .as_any()
                         .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap(),
+                        .unwrap()
+                        .values()
+                        .as_slice(),
                     orig
                 );
             });
@@ -239,13 +237,35 @@ mod test {
             .slice(3, 3)
             .unwrap()
             .iter_arrow()
-            .zip([ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6])].iter())
+            .zip_eq([[4, 5, 6]])
             .for_each(|(from_iter, orig)| {
                 assert_eq!(
                     from_iter
                         .as_any()
                         .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap(),
+                        .unwrap()
+                        .values()
+                        .as_slice(),
+                    orig
+                );
+            });
+    }
+
+    #[test]
+    pub fn slice_many_aligned() {
+        chunked_array()
+            .slice(0, 6)
+            .unwrap()
+            .iter_arrow()
+            .zip_eq([[1, 2, 3], [4, 5, 6]])
+            .for_each(|(from_iter, orig)| {
+                assert_eq!(
+                    from_iter
+                        .as_any()
+                        .downcast_ref::<ArrowPrimitiveArray<u64>>()
+                        .unwrap()
+                        .values()
+                        .as_slice(),
                     orig
                 );
             });
@@ -257,13 +277,15 @@ mod test {
             .slice(7, 1)
             .unwrap()
             .iter_arrow()
-            .zip([ArrowPrimitiveArray::<u64>::from_vec(vec![8])].iter())
+            .zip_eq([[8]])
             .for_each(|(from_iter, orig)| {
                 assert_eq!(
                     from_iter
                         .as_any()
                         .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap(),
+                        .unwrap()
+                        .values()
+                        .as_slice(),
                     orig
                 );
             });

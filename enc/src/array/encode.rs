@@ -12,6 +12,12 @@ impl<T: NativeType> From<&ArrowPrimitiveArray<T>> for PrimitiveArray {
     }
 }
 
+impl<T: NativeType> From<ArrowPrimitiveArray<T>> for PrimitiveArray {
+    fn from(value: ArrowPrimitiveArray<T>) -> Self {
+        PrimitiveArray::new(&value)
+    }
+}
+
 impl From<&dyn ArrowArray> for Array {
     // TODO(robert): Wrap in a TypedArray if physical type is different than the logical type, eg. datetime
     fn from(array: &dyn ArrowArray) -> Self {
