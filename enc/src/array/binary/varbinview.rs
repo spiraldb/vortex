@@ -1,8 +1,9 @@
+use std::iter;
+
 use arrow2::array::{
     Array as ArrowArray, PrimitiveArray as ArrowPrimitiveArray, Utf8Array as ArrowUtf8Array,
 };
 use arrow2::datatypes::{PhysicalType, PrimitiveType};
-use std::iter;
 
 use crate::error::EncResult;
 use crate::scalar::{Scalar, Utf8Scalar};
@@ -195,9 +196,9 @@ mod test {
     use super::*;
 
     fn binary_array() -> VarBinViewArray {
-        let values = PrimitiveArray::new(&array::PrimitiveArray::<u8>::from_slice(
+        let values = PrimitiveArray::new(Box::new(array::PrimitiveArray::<u8>::from_slice(
             "abcdefabcdefabcdef",
-        ));
+        )));
         let mut view1 = BinaryView {
             inlined: Inlined {
                 size: 8,

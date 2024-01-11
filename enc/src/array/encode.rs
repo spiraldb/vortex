@@ -6,15 +6,15 @@ use arrow2::with_match_primitive_without_interval_type;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::Array;
 
-impl<T: NativeType> From<&ArrowPrimitiveArray<T>> for PrimitiveArray {
-    fn from(value: &ArrowPrimitiveArray<T>) -> Self {
-        PrimitiveArray::new(value)
+impl<T: NativeType> From<ArrowPrimitiveArray<T>> for PrimitiveArray {
+    fn from(value: ArrowPrimitiveArray<T>) -> Self {
+        PrimitiveArray::new(Box::new(value))
     }
 }
 
-impl<T: NativeType> From<ArrowPrimitiveArray<T>> for PrimitiveArray {
-    fn from(value: ArrowPrimitiveArray<T>) -> Self {
-        PrimitiveArray::new(&value)
+impl<T: NativeType> From<&ArrowPrimitiveArray<T>> for PrimitiveArray {
+    fn from(value: &ArrowPrimitiveArray<T>) -> Self {
+        value.clone().into()
     }
 }
 

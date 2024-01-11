@@ -21,3 +21,4 @@ strum = { version = "0.25", features = ["derive"] }
 strum_macros = "0.25.3"
 thiserror = "1.0.56"
 itertools = "0.12.0"
+log = "0.4.20"

@@ -1,5 +1,5 @@
-mod varbinview;
+pub use varbin::*;
 pub use varbinview::*;
 
 mod varbin;
-pub use varbin::*;
+mod varbinview;

@@ -1,4 +1,4 @@
-use std::slice::Iter;
+use std::vec::IntoIter;
 
 use arrow2::array::Array as ArrowArray;
 use itertools::Itertools;
@@ -76,7 +76,7 @@ impl ArrayEncoding for ChunkedArray {
         self.chunks[chunk_index].scalar_at(chunk_offset)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator<'_>> {
+    fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(ChunkedArrowIterator::new(self))
     }
 
@@ -112,23 +112,23 @@ impl ArrayEncoding for ChunkedArray {
     }
 }
 
-struct ChunkedArrowIterator<'a> {
-    chunks_iter: Iter<'a, Array>,
-    arrow_iter: Option<Box<ArrowIterator<'a>>>,
+struct ChunkedArrowIterator {
+    chunks_iter: IntoIter<Array>,
+    arrow_iter: Option<Box<ArrowIterator>>,
 }
 
-impl<'a> ChunkedArrowIterator<'a> {
-    fn new(array: &'a ChunkedArray) -> Self {
-        let mut chunks_iter = array.chunks.iter();
-        let arrow_iter = chunks_iter.next().map(|c| c.iter_arrow());
+impl ChunkedArrowIterator {
+    fn new(array: &ChunkedArray) -> Self {
+        let chunks_iter = array.chunks.clone().into_iter();
+        // let arrow_iter = chunks_iter.next().map(|c| c.iter_arrow());
         Self {
             chunks_iter,
-            arrow_iter,
+            arrow_iter: None,
         }
     }
 }
 
-impl<'a> Iterator for ChunkedArrowIterator<'a> {
+impl Iterator for ChunkedArrowIterator {
     type Item = Box<dyn ArrowArray>;
 
     fn next(&mut self) -> Option<Self::Item> {

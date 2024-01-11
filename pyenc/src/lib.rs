@@ -1,14 +1,118 @@
-use pyo3::prelude::*;
+use std::mem::MaybeUninit;
 
-/// Prints a message.
-#[pyfunction]
-fn hello() -> PyResult<String> {
-    Ok("Hello from pyenc!".into())
-}
+use arrow2::array::Array as ArrowArray;
+use arrow2::datatypes::{DataType as ArrowDataType, Field};
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use pyo3::types::PyList;
+
+use enc::array::{Array, ArrayEncoding};
+use enc::types::DType;
 
 /// A Python module implemented in Rust.
 #[pymodule]
 fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(hello, m)?)?;
+    pyo3_log::init();
+
+    m.add_class::<PyArray>()?;
+    m.add_class::<PyPrimitiveArray>()?;
     Ok(())
+}
+
+#[pyclass(name = "Array", module = "enc", sequence, subclass)]
+struct PyArray {
+    inner: Array,
+}
+
+#[pymethods]
+impl PyArray {
+    fn to_pyarrow(self_: PyRef<'_, Self>) -> PyResult<&PyAny> {
+        // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
+
+        // Export the schema once
+        let data_type: ArrowDataType = self_.inner.dtype().into();
+        let field = Field::new(
+            "array",
+            data_type,
+            matches!(self_.inner.dtype(), DType::Nullable(_)),
+        );
+        let schema_struct = arrow2::ffi::export_field_to_c(&field);
+
+        // Import pyarrow and its Array class
+        let mod_pyarrow = PyModule::import(self_.py(), "pyarrow")?;
+        let cls_array = mod_pyarrow.getattr("Array")?;
+
+        // Iterate each chunk, export it to Arrow FFI, then import as a pyarrow array
+        let chunk_iter: PyResult<Vec<&PyAny>> = self_
+            .inner
+            .iter_arrow()
+            .map(|arrow_array| {
+                let array_struct = arrow2::ffi::export_array_to_c(arrow_array);
+                cls_array.call_method1(
+                    "_import_from_c",
+                    (
+                        (&array_struct as *const arrow2::ffi::ArrowArray) as usize,
+                        (&schema_struct as *const arrow2::ffi::ArrowSchema) as usize,
+                    ),
+                )
+            })
+            .collect();
+
+        // Combine into a chunked array
+        // TODO(ngates): we should pass a PyArrow dtype here
+        mod_pyarrow.call_method1("chunked_array", (PyList::new(self_.py(), chunk_iter?),))
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+}
+
+#[pyclass(name = "PrimitiveArray", module = "enc", extends = PyArray, sequence, subclass)]
+struct PyPrimitiveArray {}
+
+#[pymethods]
+impl PyPrimitiveArray {
+    #[new]
+    unsafe fn new(
+        #[pyo3(from_py_with = "import_arrow_array")] arrow_array: Box<dyn ArrowArray>,
+    ) -> PyResult<(Self, PyArray)> {
+        let array: Array = arrow_array.as_ref().into();
+        let primitive_array = match array {
+            Array::Primitive(a) => Ok(a),
+            _ => Err(PyValueError::new_err("Arrow array is not primitive")),
+        }?;
+
+        Ok((
+            PyPrimitiveArray {},
+            PyArray {
+                inner: Array::Primitive(primitive_array),
+            },
+        ))
+    }
+}
+
+fn import_arrow_array(obj: &PyAny) -> PyResult<Box<dyn ArrowArray>> {
+    // Export the array from the PyArrow object
+    let mut uninit_array: MaybeUninit<arrow2::ffi::ArrowArray> = MaybeUninit::zeroed();
+    let mut uninit_schema: MaybeUninit<arrow2::ffi::ArrowSchema> = MaybeUninit::zeroed();
+    obj.call_method(
+        "_export_to_c",
+        (
+            uninit_array.as_mut_ptr() as usize,
+            uninit_schema.as_mut_ptr() as usize,
+        ),
+        None,
+    )?;
+
+    unsafe {
+        let array_struct = uninit_array.assume_init();
+        let schema_struct = uninit_schema.assume_init();
+
+        // We unwrap here since we know the exported array was a valid Arrow2 array.
+        let schema_field = arrow2::ffi::import_field_from_c(&schema_struct).unwrap();
+        let arrow_array =
+            arrow2::ffi::import_array_from_c(array_struct, schema_field.data_type).unwrap();
+        Ok(arrow_array)
+    }
 }

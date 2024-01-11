@@ -17,17 +17,17 @@ pub struct PrimitiveArray {
 }
 
 impl PrimitiveArray {
-    pub fn new<T: NativeType>(buffer: &ArrowPrimitiveArray<T>) -> Self {
+    pub fn new<T: NativeType>(buffer: Box<ArrowPrimitiveArray<T>>) -> Self {
         let ptype: PType = T::PRIMITIVE.try_into().unwrap();
         Self {
-            buffer: buffer.to_boxed(),
+            buffer,
             ptype,
             dtype: ptype.into(),
         }
     }
 
     pub fn from_vec<T: NativeType>(values: Vec<T>) -> Self {
-        Self::new(&ArrowPrimitiveArray::from_vec(values))
+        Self::new(Box::new(ArrowPrimitiveArray::from_vec(values)))
     }
 }
 

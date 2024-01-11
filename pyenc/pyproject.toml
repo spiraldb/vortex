@@ -15,7 +15,9 @@ build-backend = "maturin"
 
 [tool.rye]
 managed = true
-dev-dependencies = []
+dev-dependencies = [
+    "pyarrow>=14.0.0",
+]
 
 [tool.maturin]
 python-source = "python"

@@ -1,6 +1,9 @@
-use crate::error::{EncError, EncResult};
-use arrow2::datatypes::DataType;
 use std::fmt::{Debug, Display, Formatter};
+use std::iter::zip;
+
+use arrow2::datatypes::{DataType, Field};
+
+use crate::error::{EncError, EncResult};
 
 use super::PType;
 
@@ -158,5 +161,74 @@ impl TryFrom<&DataType> for DType {
             DataType::Float64 => Ok(DType::Float(FloatWidth::_64)),
             _ => Err(EncError::InvalidArrowDataType(value.clone())),
         }
+    }
+}
+
+impl From<DType> for DataType {
+    fn from(value: DType) -> Self {
+        (&value).into()
+    }
+}
+
+impl From<&DType> for DataType {
+    fn from(value: &DType) -> Self {
+        match value {
+            DType::Nullable(inner) => _dtype_to_datatype(inner.as_ref(), true),
+            _ => _dtype_to_datatype(value, false),
+        }
+    }
+}
+
+fn _dtype_to_datatype(dtype: &DType, nullable: bool) -> DataType {
+    match dtype {
+        DType::Null => DataType::Null,
+        DType::Nullable(_) => todo!(),
+        DType::Bool => DataType::Boolean,
+        DType::Int(w) => match w {
+            IntWidth::Unknown => DataType::Int64,
+            IntWidth::_8 => DataType::Int8,
+            IntWidth::_16 => DataType::Int16,
+            IntWidth::_32 => DataType::Int32,
+            IntWidth::_64 => DataType::Int64,
+        },
+        DType::UInt(w) => match w {
+            IntWidth::Unknown => DataType::UInt64,
+            IntWidth::_8 => DataType::UInt8,
+            IntWidth::_16 => DataType::UInt16,
+            IntWidth::_32 => DataType::UInt32,
+            IntWidth::_64 => DataType::UInt64,
+        },
+        DType::Decimal(_, _) => todo!(),
+        DType::Float(w) => match w {
+            FloatWidth::Unknown => DataType::Float64,
+            FloatWidth::_16 => DataType::Float16,
+            FloatWidth::_32 => DataType::Float32,
+            FloatWidth::_64 => DataType::Float64,
+        },
+        DType::Utf8 => todo!(),
+        DType::Binary => todo!(),
+        DType::LocalTime(_) => todo!(),
+        DType::LocalDate => todo!(),
+        DType::Instant(_) => todo!(),
+        DType::ZonedDateTime(_) => todo!(),
+        DType::Struct(names, dtypes) => DataType::Struct(
+            zip(names, dtypes)
+                .map(|(n, dt)| Field::new(n.clone(), dt.into(), nullable))
+                .collect(),
+        ),
+        DType::List(_) => todo!(),
+        DType::Map(_, _) => todo!(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dtype_to_datatype() {
+        let dtype = DType::Int(IntWidth::_32);
+        let data_type: DataType = dtype.into();
+        assert_eq!(data_type, DataType::Int32);
     }
 }

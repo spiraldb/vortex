@@ -1,3 +1,3 @@
-from ._lib import hello
+from ._lib import Array, PrimitiveArray
 
-__all__ = ["hello"]
+__all__ = ["Array", "PrimitiveArray"]

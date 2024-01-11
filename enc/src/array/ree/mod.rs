@@ -1,8 +1,9 @@
+use std::cmp::min;
+
 use arrow2::array::MutablePrimitiveArray as ArrowMutablePrimitiveArray;
 use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
 use arrow2::compute::cast::CastOptions;
 use arrow2::datatypes::DataType;
-use std::cmp::min;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
@@ -131,7 +132,7 @@ impl ArrayEncoding for REEArray {
         }
 
         Ok(Array::REE(Self::new(
-            PrimitiveArray::new(&arrow_ends.into()).into(),
+            PrimitiveArray::new(Box::new(arrow_ends.into())).into(),
             self.values
                 .clone()
                 .slice(physical_offset, physical_length)?,

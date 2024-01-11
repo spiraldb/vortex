@@ -40,7 +40,7 @@ impl ArrayEncoding for VarBinArray {
         }
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator<'_>> {
+    fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(iter::once(self.buffer.clone()))
     }
 

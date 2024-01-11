@@ -21,7 +21,7 @@ pub mod chunked;
 mod encode;
 pub mod struct_;
 
-type ArrowIterator<'a> = dyn Iterator<Item = Box<dyn ArrowArray>> + 'a;
+type ArrowIterator = dyn Iterator<Item = Box<dyn ArrowArray>>;
 
 /// An Enc Array is the base object representing all arrays in enc.
 ///
@@ -36,7 +36,7 @@ pub trait ArrayEncoding {
     fn is_empty(&self) -> bool;
     fn dtype(&self) -> DType;
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
-    fn iter_arrow(&self) -> Box<ArrowIterator<'_>>;
+    fn iter_arrow(&self) -> Box<ArrowIterator>;
     fn slice(&self, offset: usize, length: usize) -> EncResult<Array>;
 
     fn check_slice_bounds(&self, offset: usize, length: usize) -> EncResult<()> {
@@ -114,7 +114,7 @@ impl ArrayEncoding for Array {
         match_each_encoding! { self, |$enc| $enc.scalar_at(index) }
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator<'_>> {
+    fn iter_arrow(&self) -> Box<ArrowIterator> {
         match_each_encoding! { self, |$enc| $enc.iter_arrow() }
     }
 

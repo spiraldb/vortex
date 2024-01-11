@@ -17,7 +17,7 @@ mod primitive;
 mod struct_;
 mod utf8;
 
-pub trait Scalar: Debug + dyn_clone::DynClone + 'static {
+pub trait Scalar: Debug + dyn_clone::DynClone + Send + Sync + 'static {
     /// convert itself to
     fn as_any(&self) -> &dyn Any;
 
