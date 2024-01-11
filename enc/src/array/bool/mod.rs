@@ -1,6 +1,6 @@
 use arrow2::array::{Array as ArrowArray, BooleanArray as ArrowBooleanArray};
 
-use crate::error::EncResult;
+use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
@@ -34,10 +34,11 @@ impl ArrayEncoding for BoolArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        // TODO(ngates): this panics when index OOB
-        Ok(arrow2::scalar::new_scalar(&self.buffer, index)
-            .as_ref()
-            .into())
+        if index >= self.len() {
+            Err(EncError::OutOfBounds(index, 0, self.len()))
+        } else {
+            Ok(arrow2::scalar::new_scalar(&self.buffer, index).into())
+        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -45,9 +46,12 @@ impl ArrayEncoding for BoolArray {
     }
 
     fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        // TODO(ngates): bounds checks
+        self.check_slice_bounds(offset, length)?;
+
         let mut cloned = self.clone();
-        cloned.buffer.slice(offset, length);
+        unsafe {
+            cloned.buffer.slice_unchecked(offset, length);
+        }
         Ok(Array::Bool(cloned))
     }
 }

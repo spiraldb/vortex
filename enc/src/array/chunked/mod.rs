@@ -1,6 +1,7 @@
+use std::slice::Iter;
+
 use arrow2::array::Array as ArrowArray;
 use itertools::Itertools;
-use std::slice::Iter;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::error::EncResult;
@@ -80,11 +81,8 @@ impl ArrayEncoding for ChunkedArray {
     }
 
     fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        // TODO(ngates): make assertions raise error
-        assert!(
-            offset + length <= self.len(),
-            "offset + length may not exceed length of array"
-        );
+        self.check_slice_bounds(offset, length)?;
+
         let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(offset);
         let (length_chunk, length_in_last_chunk) = self.find_physical_location(offset + length);
 

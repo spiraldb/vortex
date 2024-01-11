@@ -54,6 +54,8 @@ impl ArrayEncoding for StructArray {
     }
 
     fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
+        self.check_slice_bounds(offset, length)?;
+
         let fields = self
             .fields
             .iter()

@@ -14,7 +14,13 @@ macro_rules! convert_primitive_scalar {
     }};
 }
 
-impl From<&dyn arrow2::scalar::Scalar> for Box<dyn Scalar> {
+impl From<Box<dyn ArrowScalar>> for Box<dyn Scalar> {
+    fn from(value: Box<dyn ArrowScalar>) -> Self {
+        value.as_ref().into()
+    }
+}
+
+impl From<&dyn ArrowScalar> for Box<dyn Scalar> {
     fn from(value: &dyn ArrowScalar) -> Self {
         use arrow2::datatypes::DataType::*;
         use arrow2::scalar;

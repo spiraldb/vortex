@@ -52,11 +52,8 @@ impl ArrayEncoding for ConstantArray {
     }
 
     fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        // TODO(ngates): make this a checked operation
-        assert!(
-            offset + length <= self.len(),
-            "offset + length may not exceed length of array"
-        );
+        self.check_slice_bounds(offset, length)?;
+
         let mut cloned = self.clone();
         cloned.length = length - offset;
         Ok(Array::Constant(cloned))

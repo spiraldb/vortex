@@ -5,7 +5,7 @@ use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
 use arrow2::types::NativeType;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
-use crate::error::EncResult;
+use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::{DType, PType};
 
@@ -48,9 +48,11 @@ impl ArrayEncoding for PrimitiveArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        Ok(arrow2::scalar::new_scalar(self.buffer.as_ref(), index)
-            .as_ref()
-            .into())
+        if index >= self.len() {
+            Err(EncError::OutOfBounds(index, 0, self.len()))
+        } else {
+            Ok(arrow2::scalar::new_scalar(self.buffer.as_ref(), index).into())
+        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -58,9 +60,12 @@ impl ArrayEncoding for PrimitiveArray {
     }
 
     fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        // TODO(ngates): make assertions about offset/length. We should reuse this logic.
+        self.check_slice_bounds(offset, length)?;
+
         let mut cloned = self.clone();
-        cloned.buffer.slice(offset, length);
+        unsafe {
+            cloned.buffer.slice_unchecked(offset, length);
+        }
         Ok(Array::Primitive(cloned))
     }
 }

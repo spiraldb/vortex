@@ -76,12 +76,7 @@ impl ArrayEncoding for REEArray {
     }
 
     fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        if offset > self.len() {
-            return Err(EncError::OutOfBounds(offset, 0, self.len()));
-        }
-        if offset + length > self.len() {
-            return Err(EncError::OutOfBounds(offset + length, 0, self.len()));
-        }
+        self.check_slice_bounds(offset, length)?;
 
         // TODO(robert): Make this 0 copy, and move most of this logic to iter arrow
         let physical_offset = self

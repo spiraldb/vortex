@@ -1,13 +1,13 @@
 use arrow2::array::Array as ArrowArray;
 
-use crate::array::binary::VarBinViewArray;
+use crate::array::binary::{VarBinArray, VarBinViewArray};
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
 use crate::array::struct_::StructArray;
-use crate::error::EncResult;
+use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
@@ -38,6 +38,16 @@ pub trait ArrayEncoding {
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
     fn iter_arrow(&self) -> Box<ArrowIterator<'_>>;
     fn slice(&self, offset: usize, length: usize) -> EncResult<Array>;
+
+    fn check_slice_bounds(&self, offset: usize, length: usize) -> EncResult<()> {
+        if offset > self.len() {
+            return Err(EncError::OutOfBounds(offset, 0, self.len()));
+        }
+        if offset + length > self.len() {
+            return Err(EncError::OutOfBounds(offset + length, 0, self.len()));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +59,7 @@ pub enum Array {
     REE(REEArray),
     Struct(StructArray),
     VarBinView(VarBinViewArray),
+    VarBin(VarBinArray),
 }
 
 macro_rules! impls_for_array {
@@ -68,6 +79,7 @@ impls_for_array!(Primitive, PrimitiveArray);
 impls_for_array!(REE, REEArray);
 impls_for_array!(Struct, StructArray);
 impls_for_array!(VarBinView, VarBinViewArray);
+impls_for_array!(VarBin, VarBinArray);
 
 macro_rules! match_each_encoding {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
@@ -80,6 +92,7 @@ macro_rules! match_each_encoding {
             Array::REE(enc) => __with_enc__! { enc },
             Array::Struct(enc) => __with_enc__! { enc },
             Array::VarBinView(enc) => __with_enc__! { enc },
+            Array::VarBin(enc) => __with_enc__! { enc },
         }
     })
 }
