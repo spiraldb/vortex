@@ -38,12 +38,9 @@ impl PScalar {
 
     pub fn cast_ptype(&self, ptype: PType) -> EncResult<PScalar> {
         macro_rules! from_unsigned_int {
-            ($ptype:ident , $v:ident, $($body:tt)*) => {
+            ($ptype:ident , $v:ident) => {
                 match $ptype {
-                    PType::U8 => {
-                        $($body)*;
-                        Ok((*$v as u8).into())
-                    }
+                    PType::U8 => Ok((*$v as u8).into()),
                     PType::U16 => Ok((*$v as u16).into()),
                     PType::U32 => Ok((*$v as u32).into()),
                     PType::U64 => Ok((*$v as u64).into()),
@@ -60,11 +57,10 @@ impl PScalar {
 
         macro_rules! from_signed_int {
             ($ptype:ident , $v:ident) => {{
-                from_unsigned_int!($ptype, $v, {
-                    if is_negative(*$v) {
-                        return Err(EncError::ComputeError("required positive integer".into()));
-                    }
-                })
+                if is_negative(*$v) {
+                    return Err(EncError::ComputeError("required positive integer".into()));
+                }
+                from_unsigned_int!($ptype, $v)
             }};
         }
 
@@ -81,10 +77,10 @@ impl PScalar {
         }
 
         match self {
-            PScalar::U8(v) => from_unsigned_int!(ptype, v, {}),
-            PScalar::U16(v) => from_unsigned_int!(ptype, v, {}),
-            PScalar::U32(v) => from_unsigned_int!(ptype, v, {}),
-            PScalar::U64(v) => from_unsigned_int!(ptype, v, {}),
+            PScalar::U8(v) => from_unsigned_int!(ptype, v),
+            PScalar::U16(v) => from_unsigned_int!(ptype, v),
+            PScalar::U32(v) => from_unsigned_int!(ptype, v),
+            PScalar::U64(v) => from_unsigned_int!(ptype, v),
             PScalar::I8(v) => from_signed_int!(ptype, v),
             PScalar::I16(v) => from_signed_int!(ptype, v),
             PScalar::I32(v) => from_signed_int!(ptype, v),

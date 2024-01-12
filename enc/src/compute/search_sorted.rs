@@ -1,7 +1,6 @@
-use arrow2::scalar::Scalar;
-
 use crate::array::Array;
 use crate::error::EncResult;
+use crate::scalar::Scalar;
 
 pub enum SearchSortedSide {
     Left,
