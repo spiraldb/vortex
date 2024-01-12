@@ -1,3 +1,4 @@
+use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
@@ -32,5 +33,9 @@ impl Scalar for NullableScalar {
             Self::Some(scalar) => scalar.dtype(),
             Self::None(dtype) => dtype.clone(),
         }
+    }
+
+    fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+        todo!()
     }
 }

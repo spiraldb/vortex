@@ -1,13 +1,14 @@
-use arrow2::scalar::Scalar as ArrowScalar;
+use arrow2::datatypes::DataType;
+use arrow2::scalar::{PrimitiveScalar, Scalar as ArrowScalar};
 
-use crate::scalar::{BoolScalar, NullableScalar, PrimitiveScalar, Scalar};
+use crate::scalar::{BoolScalar, NullableScalar, PScalar, Scalar};
 use crate::types::{DType, FloatWidth, IntWidth};
 
 macro_rules! convert_primitive_scalar {
     ($any:expr, $tp:ty, $dtype:expr) => {{
         if let Some(scalar) = $any.downcast_ref::<scalar::PrimitiveScalar<$tp>>() {
             return match scalar.value() {
-                Some(v) => PrimitiveScalar::new(*v).boxed(),
+                Some(v) => (*v).into(),
                 None => NullableScalar::none($dtype).boxed(),
             };
         }
@@ -53,7 +54,42 @@ impl From<&dyn ArrowScalar> for Box<dyn Scalar> {
 }
 
 impl From<&dyn Scalar> for Box<dyn ArrowScalar> {
-    fn from(_value: &dyn Scalar) -> Self {
-        todo!()
+    fn from(value: &dyn Scalar) -> Self {
+        if let Some(pscalar) = value.as_any().downcast_ref::<PScalar>() {
+            let dtype: DataType = value.dtype().into();
+            match pscalar {
+                PScalar::U8(v) => return Box::new(PrimitiveScalar::<u8>::new(dtype, Some(*v))),
+                PScalar::U16(v) => {
+                    return Box::new(PrimitiveScalar::<u16>::new(dtype, Some(*v)));
+                }
+                PScalar::U32(v) => {
+                    return Box::new(PrimitiveScalar::<u32>::new(dtype, Some(*v)));
+                }
+                PScalar::U64(v) => {
+                    return Box::new(PrimitiveScalar::<u64>::new(dtype, Some(*v)));
+                }
+                PScalar::I8(v) => return Box::new(PrimitiveScalar::<i8>::new(dtype, Some(*v))),
+                PScalar::I16(v) => {
+                    return Box::new(PrimitiveScalar::<i16>::new(dtype, Some(*v)));
+                }
+                PScalar::I32(v) => {
+                    return Box::new(PrimitiveScalar::<i32>::new(dtype, Some(*v)));
+                }
+                PScalar::I64(v) => {
+                    return Box::new(PrimitiveScalar::<i64>::new(dtype, Some(*v)));
+                }
+                PScalar::F16(_v) => {
+                    todo!("Convert half f16 into arrow f16");
+                }
+                PScalar::F32(v) => {
+                    return Box::new(PrimitiveScalar::<f32>::new(dtype, Some(*v)));
+                }
+                PScalar::F64(v) => {
+                    return Box::new(PrimitiveScalar::<f64>::new(dtype, Some(*v)));
+                }
+            }
+        }
+
+        todo!("implement other scalar types {:?}", value)
     }
 }

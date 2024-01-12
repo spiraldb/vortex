@@ -1,3 +1,4 @@
+use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
@@ -28,5 +29,9 @@ impl Scalar for Utf8Scalar {
     #[inline]
     fn dtype(&self) -> DType {
         DType::Utf8
+    }
+
+    fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+        todo!()
     }
 }

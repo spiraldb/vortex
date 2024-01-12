@@ -6,13 +6,13 @@ use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
 use arrow2::compute::cast::CastOptions;
 use arrow2::datatypes::DataType;
 use arrow2::scalar::new_scalar;
+use arrow2::scalar::Scalar as ArrowScalar;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
-use crate::arrow::compat;
-use crate::arrow::compute::repeat;
+use crate::arrow::compute::{repeat, search_sorted_scalar, SearchSortedSide};
 use crate::error::{EncError, EncResult};
-use crate::scalar::Scalar;
-use crate::types::{DType, IntWidth};
+use crate::scalar::{PScalar, Scalar};
+use crate::types::DType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct REEArray {
@@ -166,28 +166,19 @@ fn run_ends_logical_length(ends: &Array) -> usize {
 }
 
 fn find_physical_index(array: &Array, index: usize) -> Option<usize> {
-    use polars_core::prelude::*;
-    use polars_ops::prelude::*;
+    // Convert index into correctly typed Arrow scalar.
+    let index: Box<dyn Scalar> = Box::new(Into::<PScalar>::into(index));
+    let index = index.cast(&array.dtype()).unwrap();
+    let index: Box<dyn ArrowScalar> = index.as_ref().into();
 
-    let ends_chunks: Vec<ArrayRef> = array
-        .iter_arrow()
-        .map(|chunk| compat::into_polars(chunk.as_ref()))
-        .collect();
-    let ends: Series = ("ends", ends_chunks).try_into().unwrap();
+    let chunks: Vec<Box<dyn ArrowArray>> = array.iter_arrow().collect();
 
-    let search: Series = match array.dtype() {
-        DType::UInt(IntWidth::_32) => [index as u32].iter().collect(),
-        DType::UInt(IntWidth::_64) => [index as u64].iter().collect(),
-        DType::Int(IntWidth::_32) => [index as i32].iter().collect(),
-        DType::Int(IntWidth::_64) => [index as i64].iter().collect(),
-        _ => panic!("Unsupported array type for run ends, array of either u32, u64, i32 or i64 type must be used, found {}", array.dtype()),
-    };
-
-    let maybe_run = search_sorted(&ends, &search, SearchSortedSide::Right, false)
-        .unwrap()
-        .get(0);
-
-    maybe_run.map(|run| run as usize)
+    search_sorted_scalar(
+        chunks.iter().map(|a| a.as_ref()).collect(),
+        index.as_ref(),
+        SearchSortedSide::Right,
+    )
+    .ok()
 }
 
 #[cfg(test)]

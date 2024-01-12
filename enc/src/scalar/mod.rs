@@ -7,6 +7,7 @@ pub use primitive::*;
 pub use struct_::*;
 pub use utf8::*;
 
+use crate::error::EncResult;
 use crate::types::DType;
 
 mod arrow;
@@ -25,6 +26,8 @@ pub trait Scalar: Debug + dyn_clone::DynClone + Send + Sync + 'static {
 
     /// the logical type.
     fn dtype(&self) -> DType;
+
+    fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>>;
 }
 
 dyn_clone::clone_trait_object!(Scalar);

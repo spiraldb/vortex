@@ -1,3 +1,4 @@
+use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
@@ -31,6 +32,13 @@ impl Scalar for BoolScalar {
     fn dtype(&self) -> DType {
         DType::Bool
     }
+
+    fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+        match dtype {
+            DType::Bool => Ok(Box::new(self.clone())),
+            _ => Err(EncError::InvalidDType(dtype.clone())),
+        }
+    }
 }
 
 impl From<bool> for BoolScalar {
@@ -48,21 +56,21 @@ impl From<bool> for Box<dyn Scalar> {
 }
 
 impl TryFrom<Box<dyn Scalar>> for bool {
-    type Error = ();
+    type Error = EncError;
 
     #[inline]
-    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
+    fn try_from(value: Box<dyn Scalar>) -> EncResult<Self> {
         value.as_ref().try_into()
     }
 }
 
 impl TryFrom<&dyn Scalar> for bool {
-    type Error = ();
+    type Error = EncError;
 
-    fn try_from(value: &dyn Scalar) -> Result<Self, Self::Error> {
+    fn try_from(value: &dyn Scalar) -> EncResult<Self> {
         match value.as_any().downcast_ref::<BoolScalar>() {
             Some(bool_scalar) => Ok(bool_scalar.value()),
-            None => Err(()),
+            None => Err(EncError::InvalidDType(value.dtype().clone())),
         }
     }
 }

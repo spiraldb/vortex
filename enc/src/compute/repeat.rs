@@ -9,13 +9,13 @@ pub fn repeat(scalar: &dyn Scalar, n: usize) -> Array {
 #[cfg(test)]
 mod test {
     use crate::array::ArrayEncoding;
-    use crate::scalar::PrimitiveScalar;
 
     use super::*;
 
     #[test]
     fn test_repeat() {
-        let array = repeat(&PrimitiveScalar::new(47), 100);
+        let scalar: Box<dyn Scalar> = 47.into();
+        let array = repeat(scalar.as_ref(), 100);
         assert_eq!(array.len(), 100);
     }
 }

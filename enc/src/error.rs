@@ -55,6 +55,33 @@ pub enum EncError {
     TypeMismatch(DType, DType),
     #[error("unexpected arrow data type: {0:?}")]
     InvalidArrowDataType(arrow2::datatypes::DataType),
+    #[error("polars error: {0:?}")]
+    PolarsError(PolarsError),
 }
 
 pub type EncResult<T> = Result<T, EncError>;
+
+// Wrap up PolarsError so that we can implement a dumb PartialEq
+
+#[derive(Debug)]
+pub struct PolarsError {
+    inner: polars_core::error::PolarsError,
+}
+
+impl PolarsError {
+    pub fn inner(&self) -> &polars_core::error::PolarsError {
+        &self.inner
+    }
+}
+
+impl PartialEq for PolarsError {
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
+}
+
+impl From<polars_core::error::PolarsError> for EncError {
+    fn from(err: polars_core::error::PolarsError) -> Self {
+        EncError::PolarsError(PolarsError { inner: err })
+    }
+}

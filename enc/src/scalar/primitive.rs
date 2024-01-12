@@ -2,38 +2,116 @@ use half::f16;
 
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
-use crate::types::{match_each_pvalue_integer, DType, PType, PValue, PrimitiveType};
+use crate::types::{DType, PType};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PrimitiveScalar {
-    value: PValue,
-    dtype: DType,
+pub enum PScalar {
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+    I8(i8),
+    I16(i16),
+    I32(i32),
+    I64(i64),
+    F16(f16),
+    F32(f32),
+    F64(f64),
 }
 
-impl PrimitiveScalar {
-    #[inline]
-    pub fn new<T: PrimitiveType>(value: T) -> Self {
-        Self {
-            value: value.pvalue(),
-            dtype: T::PTYPE.into(),
+impl PScalar {
+    pub fn ptype(&self) -> PType {
+        match self {
+            PScalar::U8(_) => PType::U8,
+            PScalar::U16(_) => PType::U16,
+            PScalar::U32(_) => PType::U32,
+            PScalar::U64(_) => PType::U64,
+            PScalar::I8(_) => PType::I8,
+            PScalar::I16(_) => PType::I16,
+            PScalar::I32(_) => PType::I32,
+            PScalar::I64(_) => PType::I64,
+            PScalar::F16(_) => PType::F16,
+            PScalar::F32(_) => PType::F32,
+            PScalar::F64(_) => PType::F64,
         }
     }
 
-    #[inline]
-    pub fn value(&self) -> &PValue {
-        &self.value
-    }
+    pub fn cast_ptype(&self, ptype: PType) -> EncResult<PScalar> {
+        macro_rules! from_unsigned_int {
+            ($ptype:ident , $v:ident, $($body:tt)*) => {
+                match $ptype {
+                    PType::U8 => {
+                        $($body)*;
+                        Ok((*$v as u8).into())
+                    }
+                    PType::U16 => Ok((*$v as u16).into()),
+                    PType::U32 => Ok((*$v as u32).into()),
+                    PType::U64 => Ok((*$v as u64).into()),
+                    PType::I8 => Ok((*$v as i8).into()),
+                    PType::I16 => Ok((*$v as i16).into()),
+                    PType::I32 => Ok((*$v as i32).into()),
+                    PType::I64 => Ok((*$v as i64).into()),
+                    PType::F16 => Ok(f16::from_f32(*$v as f32).into()),
+                    PType::F32 => Ok((*$v as f32).into()),
+                    PType::F64 => Ok((*$v as f64).into()),
+                }
+            };
+        }
 
-    pub fn ptype(&self) -> PType {
-        self.value.ptype()
+        macro_rules! from_signed_int {
+            ($ptype:ident , $v:ident) => {{
+                from_unsigned_int!($ptype, $v, {
+                    if is_negative(*$v) {
+                        return Err(EncError::ComputeError("required positive integer".into()));
+                    }
+                })
+            }};
+        }
+
+        macro_rules! from_floating {
+            ($ptype:ident , $v:ident) => {
+                match $ptype {
+                    PType::F16 => Ok((f16::from_f32(*$v as f32)).into()),
+                    PType::F32 => Ok((*$v as f32).into()),
+                    PType::F64 => Ok((*$v as f64).into()),
+                    // TODO(ngates): throw error
+                    _ => Err(EncError::InvalidDType(ptype.into())),
+                }
+            };
+        }
+
+        match self {
+            PScalar::U8(v) => from_unsigned_int!(ptype, v, {}),
+            PScalar::U16(v) => from_unsigned_int!(ptype, v, {}),
+            PScalar::U32(v) => from_unsigned_int!(ptype, v, {}),
+            PScalar::U64(v) => from_unsigned_int!(ptype, v, {}),
+            PScalar::I8(v) => from_signed_int!(ptype, v),
+            PScalar::I16(v) => from_signed_int!(ptype, v),
+            PScalar::I32(v) => from_signed_int!(ptype, v),
+            PScalar::I64(v) => from_signed_int!(ptype, v),
+            PScalar::F16(v) => match ptype {
+                PType::F16 => Ok((*v).into()),
+                PType::F32 => Ok(v.to_f32().into()),
+                PType::F64 => Ok(v.to_f64().into()),
+                _ => Err(EncError::InvalidDType(ptype.into())),
+            },
+            PScalar::F32(v) => from_floating!(ptype, v),
+            PScalar::F64(v) => from_floating!(ptype, v),
+        }
     }
 }
 
-impl Scalar for PrimitiveScalar {
+#[inline]
+fn is_negative<T: Default + PartialOrd>(value: T) -> bool {
+    value < T::default()
+}
+
+impl Scalar for PScalar {
     #[inline]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
     #[inline]
     fn boxed(self) -> Box<dyn Scalar> {
         Box::new(self)
@@ -41,23 +119,28 @@ impl Scalar for PrimitiveScalar {
 
     #[inline]
     fn dtype(&self) -> DType {
-        self.dtype.clone()
+        self.ptype().into()
+    }
+
+    fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+        let ptype = dtype.try_into()?;
+        self.cast_ptype(ptype).map(|v| v.boxed())
     }
 }
 
-macro_rules! primitive_scalar_from {
-    ($T:ty) => {
-        impl From<$T> for PrimitiveScalar {
+macro_rules! pscalar {
+    ($T:ty, $ptype:tt) => {
+        impl From<$T> for PScalar {
             #[inline]
             fn from(value: $T) -> Self {
-                Self::new(value)
+                PScalar::$ptype(value)
             }
         }
 
         impl From<$T> for Box<dyn Scalar> {
             #[inline]
             fn from(value: $T) -> Self {
-                Box::new(PrimitiveScalar::new(value))
+                Box::new(PScalar::$ptype(value))
             }
         }
 
@@ -74,31 +157,44 @@ macro_rules! primitive_scalar_from {
             type Error = EncError;
 
             fn try_from(value: &dyn Scalar) -> EncResult<Self> {
-                match value.as_any().downcast_ref::<PrimitiveScalar>() {
-                    Some(scalar) => {
-                        let v: PValue = scalar.value().clone();
-                        v.try_into()
-                    }
+                match value.as_any().downcast_ref::<PScalar>() {
+                    Some(pscalar) => pscalar.try_into(),
                     None => Err(EncError::InvalidDType(value.dtype().clone())),
+                }
+            }
+        }
+
+        impl TryFrom<&PScalar> for $T {
+            type Error = EncError;
+
+            fn try_from(pscalar: &PScalar) -> EncResult<Self> {
+                match pscalar {
+                    PScalar::$ptype(v) => Ok(*v),
+                    _ => Err(EncError::InvalidDType(pscalar.ptype().into())),
                 }
             }
         }
     };
 }
 
-// TODO(ngates): I'm sure there's a way to write a macro that loops over all ptypes, but that's
-//  beyond me at the moment!
-primitive_scalar_from!(u8);
-primitive_scalar_from!(u16);
-primitive_scalar_from!(u32);
-primitive_scalar_from!(u64);
-primitive_scalar_from!(i8);
-primitive_scalar_from!(i16);
-primitive_scalar_from!(i32);
-primitive_scalar_from!(i64);
-primitive_scalar_from!(f16);
-primitive_scalar_from!(f32);
-primitive_scalar_from!(f64);
+pscalar!(u8, U8);
+pscalar!(u16, U16);
+pscalar!(u32, U32);
+pscalar!(u64, U64);
+pscalar!(i8, I8);
+pscalar!(i16, I16);
+pscalar!(i32, I32);
+pscalar!(i64, I64);
+pscalar!(f16, F16);
+pscalar!(f32, F32);
+pscalar!(f64, F64);
+
+impl From<usize> for PScalar {
+    #[inline]
+    fn from(value: usize) -> Self {
+        PScalar::U64(value as u64)
+    }
+}
 
 impl TryFrom<Box<dyn Scalar>> for usize {
     type Error = EncError;
@@ -112,8 +208,25 @@ impl TryFrom<&dyn Scalar> for usize {
     type Error = EncError;
 
     fn try_from(value: &dyn Scalar) -> EncResult<Self> {
-        match value.as_any().downcast_ref::<PrimitiveScalar>() {
-            Some(scalar) => match_each_pvalue_integer!(scalar.value(), |$V| {
+        macro_rules! match_each_pscalar_integer {
+            ($self:expr, | $_:tt $pscalar:ident | $($body:tt)*) => ({
+                macro_rules! __with_pscalar__ {( $_ $pscalar:ident ) => ( $($body)* )}
+                match $self {
+                    PScalar::U8(v) => __with_pscalar__! { v },
+                    PScalar::U16(v) => __with_pscalar__! { v },
+                    PScalar::U32(v) => __with_pscalar__! { v },
+                    PScalar::U64(v) => __with_pscalar__! { v },
+                    PScalar::I8(v) => __with_pscalar__! { v },
+                    PScalar::I16(v) => __with_pscalar__! { v },
+                    PScalar::I32(v) => __with_pscalar__! { v },
+                    PScalar::I64(v) => __with_pscalar__! { v },
+                    _ => Err(EncError::InvalidDType($self.ptype().into())),
+                }
+            })
+        }
+
+        match value.as_any().downcast_ref::<PScalar>() {
+            Some(pscalar) => match_each_pscalar_integer!(pscalar, |$V| {
                 if is_negative(*$V) {
                     return Err(EncError::ComputeError("required positive integer".into()));
                 }
@@ -124,13 +237,10 @@ impl TryFrom<&dyn Scalar> for usize {
     }
 }
 
-#[inline]
-fn is_negative<T: Default + PartialOrd>(value: T) -> bool {
-    value < T::default()
-}
-
 #[cfg(test)]
 mod test {
+    use crate::types::IntWidth;
+
     use super::*;
 
     #[test]
@@ -145,5 +255,13 @@ mod test {
             scalar.as_ref().try_into(),
             Err::<usize, EncError>(EncError::ComputeError("required positive integer".into()))
         );
+    }
+
+    #[test]
+    fn cast() {
+        let scalar: Box<dyn Scalar> = 10u16.into();
+        let u32_scalar = scalar.cast(&DType::UInt(IntWidth::_32)).unwrap();
+        let u32_scalar_ptype: PType = (&u32_scalar.dtype()).try_into().unwrap();
+        assert_eq!(u32_scalar_ptype, PType::U32);
     }
 }

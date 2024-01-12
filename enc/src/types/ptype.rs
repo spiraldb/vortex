@@ -2,82 +2,9 @@ use std::panic::RefUnwindSafe;
 
 use arrow2::datatypes::DataType;
 use arrow2::datatypes::PrimitiveType as ArrowPrimitiveType;
-use half::f16;
 
 use crate::error::{EncError, EncResult};
 use crate::types::{DType, IntWidth};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum PValue {
-    U8(u8),
-    U16(u16),
-    U32(u32),
-    U64(u64),
-    I8(i8),
-    I16(i16),
-    I32(i32),
-    I64(i64),
-    F16(f16),
-    F32(f32),
-    F64(f64),
-}
-
-impl PValue {
-    pub fn ptype(&self) -> PType {
-        match self {
-            PValue::U8(_) => PType::U8,
-            PValue::U16(_) => PType::U16,
-            PValue::U32(_) => PType::U32,
-            PValue::U64(_) => PType::U64,
-            PValue::I8(_) => PType::I8,
-            PValue::I16(_) => PType::I16,
-            PValue::I32(_) => PType::I32,
-            PValue::I64(_) => PType::I64,
-            PValue::F16(_) => PType::F16,
-            PValue::F32(_) => PType::F32,
-            PValue::F64(_) => PType::F64,
-        }
-    }
-}
-
-#[allow(unused_macros)]
-macro_rules! match_each_pvalue {
-    ($self:expr, | $_:tt $pvalue:ident | $($body:tt)*) => ({
-        macro_rules! __with_pvalue__ {( $_ $pvalue:ident ) => ( $($body)* )}
-        match $self {
-            PValue::U8(v) => __with_pvalue__! { v },
-            PValue::U16(v) => __with_pvalue__! { v },
-            PValue::U32(v) => __with_pvalue__! { v },
-            PValue::U64(v) => __with_pvalue__! { v },
-            PValue::I8(v) => __with_pvalue__! { v },
-            PValue::I16(v) => __with_pvalue__! { v },
-            PValue::I32(v) => __with_pvalue__! { v },
-            PValue::I64(v) => __with_pvalue__! { v },
-            PValue::F16(v) => __with_pvalue__! { v },
-            PValue::F32(v) => __with_pvalue__! { v },
-            PValue::F64(v) => __with_pvalue__! { v },
-        }
-    })
-}
-
-macro_rules! match_each_pvalue_integer {
-    ($self:expr, | $_:tt $pvalue:ident | $($body:tt)*) => ({
-        macro_rules! __with_pvalue__ {( $_ $pvalue:ident ) => ( $($body)* )}
-        match $self {
-            PValue::U8(v) => __with_pvalue__! { v },
-            PValue::U16(v) => __with_pvalue__! { v },
-            PValue::U32(v) => __with_pvalue__! { v },
-            PValue::U64(v) => __with_pvalue__! { v },
-            PValue::I8(v) => __with_pvalue__! { v },
-            PValue::I16(v) => __with_pvalue__! { v },
-            PValue::I32(v) => __with_pvalue__! { v },
-            PValue::I64(v) => __with_pvalue__! { v },
-            _ => Err(EncError::InvalidDType($self.ptype().into())),
-        }
-    })
-}
-
-pub(crate) use match_each_pvalue_integer;
 
 pub trait PrimitiveType:
     Send + Sync + Sized + RefUnwindSafe + std::fmt::Debug + std::fmt::Display + PartialEq + Default
@@ -89,8 +16,6 @@ pub trait PrimitiveType:
         + for<'a> TryFrom<&'a [u8]>
         + std::fmt::Debug
         + Default;
-
-    fn pvalue(self) -> PValue;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -108,47 +33,28 @@ pub enum PType {
     F64,
 }
 
-macro_rules! ptype {
-    ($type:ty, $ptype:tt) => {
-        impl PrimitiveType for $type {
-            const PTYPE: PType = PType::$ptype;
-            type Bytes = [u8; std::mem::size_of::<Self>()];
+impl PType {
+    pub fn is_unsigned_int(self) -> bool {
+        matches!(self, PType::U8 | PType::U16 | PType::U32 | PType::U64)
+    }
 
-            fn pvalue(self) -> PValue {
-                PValue::$ptype(self)
-            }
-        }
+    pub fn is_signed_int(self) -> bool {
+        matches!(self, PType::I8 | PType::I16 | PType::I32 | PType::I64)
+    }
 
-        impl TryFrom<PValue> for $type {
-            type Error = EncError;
+    pub fn is_int(self) -> bool {
+        self.is_unsigned_int() || self.is_signed_int()
+    }
 
-            fn try_from(value: PValue) -> EncResult<Self> {
-                match value {
-                    PValue::$ptype(v) => Ok(v),
-                    _ => Err(EncError::InvalidDType(value.ptype().into())),
-                }
-            }
-        }
-    };
+    pub fn is_float(self) -> bool {
+        matches!(self, PType::F16 | PType::F32 | PType::F64)
+    }
 }
 
-ptype!(u8, U8);
-ptype!(u16, U16);
-ptype!(u32, U32);
-ptype!(u64, U64);
-ptype!(i8, I8);
-ptype!(i16, I16);
-ptype!(i32, I32);
-ptype!(i64, I64);
-// f16 is not a builtin types thus implemented in f16.rs
-ptype!(f16, F16);
-ptype!(f32, F32);
-ptype!(f64, F64);
-
 impl TryFrom<&DType> for PType {
-    type Error = ();
+    type Error = EncError;
 
-    fn try_from(value: &DType) -> Result<Self, Self::Error> {
+    fn try_from(value: &DType) -> EncResult<Self> {
         match value {
             DType::Int(w) => match w {
                 IntWidth::Unknown => Ok(PType::I64),
@@ -164,15 +70,15 @@ impl TryFrom<&DType> for PType {
                 IntWidth::_32 => Ok(PType::U32),
                 IntWidth::_64 => Ok(PType::U64),
             },
-            _ => Err(()),
+            _ => Err(EncError::InvalidDType(value.clone())),
         }
     }
 }
 
 impl TryFrom<&DataType> for PType {
-    type Error = ();
+    type Error = EncError;
 
-    fn try_from(value: &DataType) -> Result<Self, Self::Error> {
+    fn try_from(value: &DataType) -> EncResult<Self> {
         match value {
             DataType::Int8 => Ok(PType::I8),
             DataType::Int16 => Ok(PType::I16),
@@ -185,15 +91,15 @@ impl TryFrom<&DataType> for PType {
             // DataType::Float16 => Ok(PType::F16),
             DataType::Float32 => Ok(PType::F32),
             DataType::Float64 => Ok(PType::F64),
-            _ => Err(()),
+            _ => Err(EncError::InvalidArrowDataType(value.clone())),
         }
     }
 }
 
 impl TryFrom<ArrowPrimitiveType> for PType {
-    type Error = ();
+    type Error = EncError;
 
-    fn try_from(value: ArrowPrimitiveType) -> Result<Self, Self::Error> {
+    fn try_from(value: ArrowPrimitiveType) -> EncResult<Self> {
         match value {
             ArrowPrimitiveType::Int8 => Ok(PType::I8),
             ArrowPrimitiveType::Int16 => Ok(PType::I16),
@@ -206,7 +112,7 @@ impl TryFrom<ArrowPrimitiveType> for PType {
             // ArrowPrimitiveType::Float16 => Ok(PType::F16),
             ArrowPrimitiveType::Float32 => Ok(PType::F32),
             ArrowPrimitiveType::Float64 => Ok(PType::F64),
-            _ => Err(()),
+            _ => Err(EncError::InvalidArrowDataType(value.into())),
         }
     }
 }
