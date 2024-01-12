@@ -7,6 +7,7 @@ use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
 use crate::array::struct_::StructArray;
+use crate::array::utf8::Utf8Array;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -20,6 +21,7 @@ pub mod ree;
 pub mod chunked;
 mod encode;
 pub mod struct_;
+pub mod utf8;
 
 type ArrowIterator = dyn Iterator<Item = Box<dyn ArrowArray>>;
 
@@ -58,8 +60,9 @@ pub enum Array {
     Primitive(PrimitiveArray),
     REE(REEArray),
     Struct(StructArray),
-    VarBinView(VarBinViewArray),
+    Utf8(Utf8Array),
     VarBin(VarBinArray),
+    VarBinView(VarBinViewArray),
 }
 
 macro_rules! impls_for_array {
@@ -78,8 +81,9 @@ impls_for_array!(Constant, ConstantArray);
 impls_for_array!(Primitive, PrimitiveArray);
 impls_for_array!(REE, REEArray);
 impls_for_array!(Struct, StructArray);
-impls_for_array!(VarBinView, VarBinViewArray);
+impls_for_array!(Utf8, Utf8Array);
 impls_for_array!(VarBin, VarBinArray);
+impls_for_array!(VarBinView, VarBinViewArray);
 
 macro_rules! match_each_encoding {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
@@ -91,8 +95,9 @@ macro_rules! match_each_encoding {
             Array::Primitive(enc) => __with_enc__! { enc },
             Array::REE(enc) => __with_enc__! { enc },
             Array::Struct(enc) => __with_enc__! { enc },
-            Array::VarBinView(enc) => __with_enc__! { enc },
+            Array::Utf8(enc) => __with_enc__! { enc },
             Array::VarBin(enc) => __with_enc__! { enc },
+            Array::VarBinView(enc) => __with_enc__! { enc },
         }
     })
 }

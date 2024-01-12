@@ -1,5 +1,8 @@
+use arrow2::array::Array as ArrowArray;
+use arrow2::array::StructArray as ArrowStructArray;
 use itertools::Itertools;
 
+use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
 use crate::error::EncResult;
 use crate::scalar::{Scalar, StructScalar};
 use crate::types::DType;
@@ -14,7 +17,10 @@ pub struct StructArray {
 
 impl StructArray {
     pub fn new(names: Vec<String>, fields: Vec<Array>) -> Self {
-        // TODO(ngates): assert that all fields have the same length
+        assert!(
+            fields.iter().map(|v| v.len()).all_equal(),
+            "Fields didn't have the same length"
+        );
         Self { names, fields }
     }
 }
@@ -49,8 +55,19 @@ impl ArrayEncoding for StructArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        // We probably ought to implement the aligned iterator to zip up the chunks of each field.
-        todo!("struct array iter arrow")
+        let datatype = self.dtype();
+        Box::new(
+            AlignedArrowArrayIterator::new(
+                self.fields
+                    .iter()
+                    .map(|f| f.iter_arrow())
+                    .collect::<Vec<_>>(),
+            )
+            .map(move |items| {
+                Box::new(ArrowStructArray::new(datatype.clone().into(), items, None))
+                    as Box<dyn ArrowArray>
+            }),
+        )
     }
 
     fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
@@ -62,5 +79,41 @@ impl ArrayEncoding for StructArray {
             .map(|field| field.slice(offset, length))
             .try_collect()?;
         Ok(Array::Struct(StructArray::new(self.names.clone(), fields)))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
+    use arrow2::array::StructArray as ArrowStructArray;
+    use arrow2::array::Utf8Array as ArrowUtf8Array;
+
+    use crate::array::struct_::StructArray;
+    use crate::array::utf8::Utf8Array;
+    use crate::array::ArrayEncoding;
+    use crate::prelude::PrimitiveArray;
+
+    #[test]
+    pub fn iter() {
+        let arrow_aas = ArrowPrimitiveArray::<i64>::from_vec(vec![1, 2, 3]);
+        let aas: PrimitiveArray = arrow_aas.clone().into();
+        let arrow_bbs = ArrowUtf8Array::<i32>::from_slice(["a", "b", "c"]);
+        let bbs: Utf8Array = arrow_bbs.clone().into();
+        let array = StructArray::new(vec!["a".into(), "b".into()], vec![aas.into(), bbs.into()]);
+        let arrow_struct = ArrowStructArray::new(
+            array.dtype().into(),
+            vec![Box::new(arrow_aas), Box::new(arrow_bbs)],
+            None,
+        );
+        assert_eq!(
+            array
+                .iter_arrow()
+                .next()
+                .unwrap()
+                .as_any()
+                .downcast_ref::<ArrowStructArray>()
+                .unwrap(),
+            &arrow_struct
+        );
     }
 }

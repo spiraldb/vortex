@@ -1,9 +1,9 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::zip;
 
-use arrow2::datatypes::{DataType, Field};
-
 use crate::error::{EncError, EncResult};
+use arrow2::datatypes::TimeUnit as ArrowTimeUnit;
+use arrow2::datatypes::{DataType, Field};
 
 use super::PType;
 
@@ -182,7 +182,7 @@ impl From<&DType> for DataType {
 fn _dtype_to_datatype(dtype: &DType, nullable: bool) -> DataType {
     match dtype {
         DType::Null => DataType::Null,
-        DType::Nullable(_) => todo!(),
+        DType::Nullable(_) => panic!("Nullable DType should have been handled earlier"),
         DType::Bool => DataType::Boolean,
         DType::Int(w) => match w {
             IntWidth::Unknown => DataType::Int64,
@@ -198,26 +198,56 @@ fn _dtype_to_datatype(dtype: &DType, nullable: bool) -> DataType {
             IntWidth::_32 => DataType::UInt32,
             IntWidth::_64 => DataType::UInt64,
         },
-        DType::Decimal(_, _) => todo!(),
+        // TODO(robert): Decimal256?
+        DType::Decimal(p, w) => DataType::Decimal(*p as usize, *w as usize),
         DType::Float(w) => match w {
             FloatWidth::Unknown => DataType::Float64,
             FloatWidth::_16 => DataType::Float16,
             FloatWidth::_32 => DataType::Float32,
             FloatWidth::_64 => DataType::Float64,
         },
-        DType::Utf8 => todo!(),
-        DType::Binary => todo!(),
-        DType::LocalTime(_) => todo!(),
-        DType::LocalDate => todo!(),
-        DType::Instant(_) => todo!(),
-        DType::ZonedDateTime(_) => todo!(),
+        // TODO(robert): LargeUtf8/LargeBinary?
+        DType::Utf8 => DataType::Utf8,
+        DType::Binary => DataType::Binary,
+        DType::LocalTime(u) => DataType::Time64(match u {
+            TimeUnit::Ns => ArrowTimeUnit::Nanosecond,
+            TimeUnit::Us => ArrowTimeUnit::Microsecond,
+            TimeUnit::Ms => ArrowTimeUnit::Millisecond,
+            TimeUnit::S => ArrowTimeUnit::Second,
+        }),
+        DType::LocalDate => DataType::Date64,
+        DType::Instant(u) => DataType::Timestamp(
+            match u {
+                TimeUnit::Ns => ArrowTimeUnit::Nanosecond,
+                TimeUnit::Us => ArrowTimeUnit::Microsecond,
+                TimeUnit::Ms => ArrowTimeUnit::Millisecond,
+                TimeUnit::S => ArrowTimeUnit::Second,
+            },
+            None,
+        ),
+        DType::ZonedDateTime(_) => {
+            unimplemented!("Converting ZoneDateTime to arrow datatype is not supported")
+        }
         DType::Struct(names, dtypes) => DataType::Struct(
             zip(names, dtypes)
                 .map(|(n, dt)| Field::new(n.clone(), dt.into(), nullable))
                 .collect(),
         ),
-        DType::List(_) => todo!(),
-        DType::Map(_, _) => todo!(),
+        // TODO(robert): LargeList?
+        DType::List(c) => {
+            DataType::List(Box::new(Field::new("element", c.as_ref().into(), nullable)))
+        }
+        DType::Map(k, v) => DataType::Map(
+            Box::new(Field::new(
+                "entries",
+                DataType::Struct(vec![
+                    Field::new("key", k.as_ref().into(), false),
+                    Field::new("value", v.as_ref().into(), nullable),
+                ]),
+                false,
+            )),
+            false,
+        ),
     }
 }
 
