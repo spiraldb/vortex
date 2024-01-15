@@ -1,10 +1,13 @@
+pub mod dtype;
+
+use dtype::PyDType;
 use std::mem::MaybeUninit;
 
 use arrow2::array::Array as ArrowArray;
 use arrow2::datatypes::{DataType as ArrowDataType, Field};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::{IntoPyDict, PyList};
 
 use enc::array::{Array, ArrayEncoding};
 use enc::types::DType;
@@ -28,6 +31,7 @@ struct PyArray {
 impl PyArray {
     fn to_pyarrow(self_: PyRef<'_, Self>) -> PyResult<&PyAny> {
         // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
+        // NOTE(robert): Return RecordBatchStreamReader always?
 
         // Export the schema once
         let data_type: ArrowDataType = self_.inner.dtype().into();
@@ -43,7 +47,7 @@ impl PyArray {
         let cls_array = mod_pyarrow.getattr("Array")?;
 
         // Iterate each chunk, export it to Arrow FFI, then import as a pyarrow array
-        let chunk_iter: PyResult<Vec<&PyAny>> = self_
+        let chunks: PyResult<Vec<&PyAny>> = self_
             .inner
             .iter_arrow()
             .map(|arrow_array| {
@@ -58,13 +62,26 @@ impl PyArray {
             })
             .collect();
 
+        let dtype_array = mod_pyarrow.getattr("DataType")?;
+        let dtype_struct = arrow2::ffi::export_field_to_c(&field);
+        let pa_data_dtype = dtype_array.call_method1(
+            "_import_from_c",
+            ((&dtype_struct as *const arrow2::ffi::ArrowSchema) as usize,),
+        )?;
         // Combine into a chunked array
-        // TODO(ngates): we should pass a PyArrow dtype here
-        mod_pyarrow.call_method1("chunked_array", (PyList::new(self_.py(), chunk_iter?),))
+        mod_pyarrow.call_method(
+            "chunked_array",
+            (PyList::new(self_.py(), chunks?),),
+            Some([("type", pa_data_dtype)].into_py_dict(self_.py())),
+        )
     }
 
     fn __len__(&self) -> usize {
         self.inner.len()
+    }
+
+    fn dtype(&self) -> PyDType {
+        self.inner.dtype().into()
     }
 }
 
