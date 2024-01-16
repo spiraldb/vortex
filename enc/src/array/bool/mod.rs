@@ -8,11 +8,11 @@ use super::{Array, ArrayEncoding, ArrowIterator};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BoolArray {
-    buffer: ArrowBooleanArray,
+    buffer: Box<ArrowBooleanArray>,
 }
 
 impl BoolArray {
-    pub fn new(buffer: ArrowBooleanArray) -> Self {
+    pub fn new(buffer: Box<ArrowBooleanArray>) -> Self {
         Self { buffer }
     }
 }
@@ -37,7 +37,7 @@ impl ArrayEncoding for BoolArray {
         if index >= self.len() {
             Err(EncError::OutOfBounds(index, 0, self.len()))
         } else {
-            Ok(arrow2::scalar::new_scalar(&self.buffer, index).into())
+            Ok(arrow2::scalar::new_scalar(self.buffer.as_ref(), index).into())
         }
     }
 
@@ -62,9 +62,9 @@ mod test {
 
     #[test]
     fn slice() {
-        let arr = BoolArray::new(ArrowBooleanArray::from_slice([
+        let arr = BoolArray::new(Box::new(ArrowBooleanArray::from_slice([
             true, true, false, false, true,
-        ]))
+        ])))
         .slice(1, 3)
         .unwrap();
         assert_eq!(arr.len(), 3);

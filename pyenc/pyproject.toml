@@ -17,6 +17,7 @@ build-backend = "maturin"
 managed = true
 dev-dependencies = [
     "pyarrow>=14.0.0",
+    "pip"
 ]
 
 [tool.maturin]

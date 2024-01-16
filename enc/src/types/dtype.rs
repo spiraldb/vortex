@@ -181,13 +181,13 @@ impl From<DType> for DataType {
 impl From<&DType> for DataType {
     fn from(value: &DType) -> Self {
         match value {
-            DType::Nullable(inner) => _dtype_to_datatype(inner.as_ref(), true),
-            _ => _dtype_to_datatype(value, false),
+            DType::Nullable(inner) => _dtype_to_datatype(inner.as_ref()),
+            _ => _dtype_to_datatype(value),
         }
     }
 }
 
-fn _dtype_to_datatype(dtype: &DType, nullable: bool) -> DataType {
+fn _dtype_to_datatype(dtype: &DType) -> DataType {
     match dtype {
         DType::Null => DataType::Null,
         DType::Nullable(_) => panic!("Nullable DType should have been handled earlier"),
@@ -238,19 +238,25 @@ fn _dtype_to_datatype(dtype: &DType, nullable: bool) -> DataType {
         }
         DType::Struct(names, dtypes) => DataType::Struct(
             zip(names, dtypes)
-                .map(|(n, dt)| Field::new(n.clone(), dt.into(), nullable))
+                .map(|(n, dt)| Field::new(n.clone(), dt.into(), matches!(dt, DType::Nullable(_))))
                 .collect(),
         ),
         // TODO(robert): LargeList?
-        DType::List(c) => {
-            DataType::List(Box::new(Field::new("element", c.as_ref().into(), nullable)))
-        }
+        DType::List(c) => DataType::List(Box::new(Field::new(
+            "element",
+            c.as_ref().into(),
+            matches!(c.as_ref(), DType::Nullable(_)),
+        ))),
         DType::Map(k, v) => DataType::Map(
             Box::new(Field::new(
                 "entries",
                 DataType::Struct(vec![
                     Field::new("key", k.as_ref().into(), false),
-                    Field::new("value", v.as_ref().into(), nullable),
+                    Field::new(
+                        "value",
+                        v.as_ref().into(),
+                        matches!(v.as_ref(), DType::Nullable(_)),
+                    ),
                 ]),
                 false,
             )),
