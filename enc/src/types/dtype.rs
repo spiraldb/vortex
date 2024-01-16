@@ -141,6 +141,14 @@ impl From<PType> for DType {
     }
 }
 
+impl TryFrom<DataType> for DType {
+    type Error = EncError;
+
+    fn try_from(value: DataType) -> Result<Self, Self::Error> {
+        (&value).try_into()
+    }
+}
+
 impl TryFrom<&DataType> for DType {
     type Error = EncError;
 

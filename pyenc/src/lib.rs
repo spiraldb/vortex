@@ -1,6 +1,3 @@
-pub mod dtype;
-
-use dtype::PyDType;
 use std::mem::MaybeUninit;
 
 use arrow2::array::Array as ArrowArray;
@@ -9,8 +6,12 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyList};
 
+use dtype::PyDType;
 use enc::array::{Array, ArrayEncoding};
 use enc::types::DType;
+
+mod dtype;
+mod error;
 
 /// A Python module implemented in Rust.
 #[pymodule]
@@ -19,12 +20,19 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<PyArray>()?;
     m.add_class::<PyPrimitiveArray>()?;
+    m.add_class::<PyDType>()?;
     Ok(())
 }
 
 #[pyclass(name = "Array", module = "enc", sequence, subclass)]
 struct PyArray {
     inner: Array,
+}
+
+impl PyArray {
+    pub fn new(inner: Array) -> Self {
+        Self { inner }
+    }
 }
 
 #[pymethods]
@@ -90,22 +98,20 @@ struct PyPrimitiveArray {}
 
 #[pymethods]
 impl PyPrimitiveArray {
-    #[new]
-    unsafe fn new(
+    #[staticmethod]
+    fn from_arrow(
+        py: Python<'_>,
         #[pyo3(from_py_with = "import_arrow_array")] arrow_array: Box<dyn ArrowArray>,
-    ) -> PyResult<(Self, PyArray)> {
+    ) -> PyResult<PyObject> {
         let array: Array = arrow_array.as_ref().into();
         let primitive_array = match array {
             Array::Primitive(a) => Ok(a),
             _ => Err(PyValueError::new_err("Arrow array is not primitive")),
         }?;
 
-        Ok((
-            PyPrimitiveArray {},
-            PyArray {
-                inner: Array::Primitive(primitive_array),
-            },
-        ))
+        let base = PyClassInitializer::from(PyArray::new(Array::Primitive(primitive_array)));
+        let sub = base.add_subclass(PyPrimitiveArray {});
+        Ok(Py::new(py, sub)?.to_object(py))
     }
 }
 

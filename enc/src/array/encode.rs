@@ -6,8 +6,8 @@ use arrow2::offset::Offset;
 use arrow2::types::NativeType;
 use arrow2::with_match_primitive_without_interval_type;
 
+use crate::array::binary::VarBinArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::utf8::Utf8Array;
 use crate::array::Array;
 
 impl<T: NativeType> From<ArrowPrimitiveArray<T>> for PrimitiveArray {
@@ -22,13 +22,13 @@ impl<T: NativeType> From<&ArrowPrimitiveArray<T>> for PrimitiveArray {
     }
 }
 
-impl<O: Offset> From<ArrowUtf8Array<O>> for Utf8Array {
+impl<O: Offset> From<ArrowUtf8Array<O>> for VarBinArray {
     fn from(value: ArrowUtf8Array<O>) -> Self {
-        Utf8Array::new(Box::new(value))
+        VarBinArray::new(Box::new(value))
     }
 }
 
-impl<O: Offset> From<&ArrowUtf8Array<O>> for Utf8Array {
+impl<O: Offset> From<&ArrowUtf8Array<O>> for VarBinArray {
     fn from(value: &ArrowUtf8Array<O>) -> Self {
         value.clone().into()
     }
@@ -49,7 +49,7 @@ impl From<&dyn ArrowArray> for Array {
                 })
             }
             PhysicalType::Utf8 => {
-                let uf8array: Utf8Array = array
+                let uf8array: VarBinArray = array
                     .as_any()
                     .downcast_ref::<ArrowUtf8Array<i32>>()
                     .unwrap()
@@ -57,7 +57,7 @@ impl From<&dyn ArrowArray> for Array {
                 uf8array.into()
             }
             PhysicalType::LargeUtf8 => {
-                let uf8array: Utf8Array = array
+                let uf8array: VarBinArray = array
                     .as_any()
                     .downcast_ref::<ArrowUtf8Array<i64>>()
                     .unwrap()

@@ -4,5 +4,5 @@ pub mod scalar;
 pub mod types;
 
 pub mod compute;
-mod error;
+pub mod error;
 pub mod prelude;

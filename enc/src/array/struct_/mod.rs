@@ -88,8 +88,8 @@ mod test {
     use arrow2::array::StructArray as ArrowStructArray;
     use arrow2::array::Utf8Array as ArrowUtf8Array;
 
+    use crate::array::binary::VarBinArray;
     use crate::array::struct_::StructArray;
-    use crate::array::utf8::Utf8Array;
     use crate::array::ArrayEncoding;
     use crate::prelude::PrimitiveArray;
 
@@ -98,7 +98,7 @@ mod test {
         let arrow_aas = ArrowPrimitiveArray::<i64>::from_vec(vec![1, 2, 3]);
         let aas: PrimitiveArray = arrow_aas.clone().into();
         let arrow_bbs = ArrowUtf8Array::<i32>::from_slice(["a", "b", "c"]);
-        let bbs: Utf8Array = arrow_bbs.clone().into();
+        let bbs: VarBinArray = arrow_bbs.clone().into();
         let array = StructArray::new(vec!["a".into(), "b".into()], vec![aas.into(), bbs.into()]);
         let arrow_struct = ArrowStructArray::new(
             array.dtype().into(),

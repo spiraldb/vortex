@@ -1,3 +1,3 @@
-from ._lib import Array, PrimitiveArray
+from ._lib import Array, DType, PrimitiveArray
 
-__all__ = ["Array", "PrimitiveArray"]
+__all__ = ["Array", "PrimitiveArray", "DType"]

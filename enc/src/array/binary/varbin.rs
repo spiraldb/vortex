@@ -1,6 +1,7 @@
 use arrow2::array::Array as ArrowArray;
-use arrow2::array::BinaryArray;
-use arrow2::offset::Offset;
+
+use arrow2::datatypes::DataType;
+
 use std::iter;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
@@ -11,11 +12,19 @@ use crate::types::DType;
 #[derive(Debug, Clone, PartialEq)]
 pub struct VarBinArray {
     buffer: Box<dyn ArrowArray>,
+    dtype: DType,
 }
 
 impl VarBinArray {
-    pub fn new<O: Offset>(buffer: Box<BinaryArray<O>>) -> Self {
-        Self { buffer }
+    pub fn new(buffer: Box<dyn ArrowArray>) -> Self {
+        let dtype = match buffer.data_type() {
+            DataType::Binary => DType::Binary,
+            DataType::LargeBinary => DType::Binary,
+            DataType::Utf8 => DType::Utf8,
+            DataType::LargeUtf8 => DType::Utf8,
+            _ => panic!("Unsupported array type"),
+        };
+        Self { buffer, dtype }
     }
 }
 
@@ -29,7 +38,7 @@ impl ArrayEncoding for VarBinArray {
     }
 
     fn dtype(&self) -> DType {
-        DType::Binary
+        self.dtype.clone()
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
