@@ -37,14 +37,14 @@ pub trait ArrayEncoding {
     fn dtype(&self) -> DType;
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
     fn iter_arrow(&self) -> Box<ArrowIterator>;
-    fn slice(&self, offset: usize, length: usize) -> EncResult<Array>;
+    fn slice(&self, start: usize, stop: usize) -> EncResult<Array>;
 
-    fn check_slice_bounds(&self, offset: usize, length: usize) -> EncResult<()> {
-        if offset > self.len() {
-            return Err(EncError::OutOfBounds(offset, 0, self.len()));
+    fn check_slice_bounds(&self, start: usize, stop: usize) -> EncResult<()> {
+        if start > self.len() {
+            return Err(EncError::OutOfBounds(start, 0, self.len()));
         }
-        if offset + length > self.len() {
-            return Err(EncError::OutOfBounds(offset + length, 0, self.len()));
+        if stop > self.len() {
+            return Err(EncError::OutOfBounds(stop, 0, self.len()));
         }
         Ok(())
     }
@@ -118,7 +118,7 @@ impl ArrayEncoding for Array {
         match_each_encoding! { self, |$enc| $enc.iter_arrow() }
     }
 
-    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        match_each_encoding! { self, |$enc| $enc.slice(offset, length) }
+    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+        match_each_encoding! { self, |$enc| $enc.slice(start, stop) }
     }
 }

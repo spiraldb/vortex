@@ -45,12 +45,12 @@ impl ArrayEncoding for BoolArray {
         Box::new(std::iter::once(self.buffer.clone().boxed()))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        self.check_slice_bounds(offset, length)?;
+    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+        self.check_slice_bounds(start, stop)?;
 
         let mut cloned = self.clone();
         unsafe {
-            cloned.buffer.slice_unchecked(offset, length);
+            cloned.buffer.slice_unchecked(start, stop - start);
         }
         Ok(Array::Bool(cloned))
     }
@@ -65,7 +65,7 @@ mod test {
         let arr = BoolArray::new(Box::new(ArrowBooleanArray::from_slice([
             true, true, false, false, true,
         ])))
-        .slice(1, 3)
+        .slice(1, 4)
         .unwrap();
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(true));

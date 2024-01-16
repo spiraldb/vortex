@@ -126,7 +126,10 @@ impl ArrayEncoding for VarBinViewArray {
                 // TODO(robert): Make sure that we consume whole iter_arrow result,
                 //  BUT we are slicing only 16 bytes so this should all be in one chunk
                 let arrow_data_buffer = data_buffer
-                    .slice(view._ref.offset as usize, view._ref.size as usize)?
+                    .slice(
+                        view._ref.offset as usize,
+                        (view._ref.size + view._ref.offset) as usize,
+                    )?
                     .iter_arrow()
                     .next()
                     .unwrap();
@@ -158,8 +161,8 @@ impl ArrayEncoding for VarBinViewArray {
     // TODO(robert): This could be better if we had compute dispatch but for now it's using scalar_at
     // and wraps values needlessly instead of memcopy
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let total_size = self.plain_size();
-        let mut data_buf = arrow2::array::MutableUtf8ValuesArray::<i64>::with_capacity(total_size);
+        let mut data_buf =
+            arrow2::array::MutableUtf8ValuesArray::<i64>::with_capacity(self.plain_size());
         for i in 0..self.views.len() / VIEW_SIZE {
             data_buf.push(
                 self.scalar_at(i)
@@ -174,14 +177,14 @@ impl ArrayEncoding for VarBinViewArray {
         Box::new(iter::once(data_arr))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        self.check_slice_bounds(offset, length)?;
+    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+        self.check_slice_bounds(start, stop)?;
 
         let mut cloned = self.clone();
         unsafe {
             cloned
                 .views
-                .slice_unchecked(offset * VIEW_SIZE, length * VIEW_SIZE);
+                .slice_unchecked(start * VIEW_SIZE, (stop - start) * VIEW_SIZE);
         }
         Ok(Array::VarBinView(cloned))
     }
@@ -241,7 +244,7 @@ mod test {
 
     #[test]
     pub fn slice() {
-        let binary_arr = binary_array().slice(1, 1).unwrap();
+        let binary_arr = binary_array().slice(1, 2).unwrap();
         assert_eq!(
             binary_arr.scalar_at(0).unwrap(),
             Utf8Scalar::new("cdefabcdefabc".into()).boxed()

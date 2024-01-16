@@ -7,6 +7,7 @@ use crate::error::PyEncError;
 use enc::types::DType;
 
 #[pyclass(name = "DType", module = "enc", subclass)]
+#[allow(dead_code)]
 pub struct PyDType {
     inner: DType,
 }

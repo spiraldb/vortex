@@ -8,6 +8,8 @@ use arrow2::datatypes::DataType;
 use arrow2::scalar::new_scalar;
 use arrow2::scalar::Scalar as ArrowScalar;
 
+use polars_arrow::legacy::trusted_len::TrustedLenPush;
+
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::compute::{repeat, search_sorted_scalar, SearchSortedSide};
 use crate::error::{EncError, EncResult};
@@ -18,8 +20,8 @@ use crate::types::DType;
 pub struct REEArray {
     ends: Box<Array>,
     values: Box<Array>,
-    length: usize,
     offset: usize,
+    length: usize,
 }
 
 impl REEArray {
@@ -72,16 +74,17 @@ impl ArrayEncoding for REEArray {
                 .as_any()
                 .downcast_ref::<ArrowPrimitiveArray<u64>>()
                 .unwrap();
-            casted
+            let limited: Vec<usize> = casted
                 .values()
                 .iter()
                 .skip(min(casted.len(), left_to_skip))
                 .map(|v| *v as usize)
                 .map(|v| v - (self.offset))
                 .map(|v| min(v, self.length))
-                .take_while(|v| v <= &self.length)
-                .for_each(|v| ends.push(v));
+                .take_while(|v| *v <= self.length)
+                .collect();
 
+            ends.extend_trusted_len(limited);
             left_to_skip -= min(casted.len(), left_to_skip);
         }
 
@@ -91,23 +94,15 @@ impl ArrayEncoding for REEArray {
         ))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        self.check_slice_bounds(offset, length)?;
-        let slice_begin = self.find_physical_index(offset).unwrap();
-        let slice_end = self.find_physical_index(offset + length).unwrap();
+    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+        self.check_slice_bounds(start, stop)?;
+        let slice_begin = self.find_physical_index(start).unwrap();
+        let slice_end = self.find_physical_index(stop).unwrap();
         Ok(Array::REE(Self {
-            ends: Box::new(
-                self.ends
-                    .slice(slice_begin, slice_end - slice_begin + 1)
-                    .unwrap(),
-            ),
-            values: Box::new(
-                self.values
-                    .slice(slice_begin, slice_end - slice_begin + 1)
-                    .unwrap(),
-            ),
-            length,
-            offset,
+            ends: Box::new(self.ends.slice(slice_begin, slice_end + 1).unwrap()),
+            values: Box::new(self.values.slice(slice_begin, slice_end + 1).unwrap()),
+            offset: start,
+            length: stop - start,
         }))
     }
 }
@@ -214,7 +209,7 @@ mod test {
             PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
             PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
         )
-        .slice(3, 5)
+        .slice(3, 8)
         .unwrap();
         assert_eq!(arr.dtype(), DType::Int(IntWidth::_32));
         assert_eq!(arr.len(), 5);

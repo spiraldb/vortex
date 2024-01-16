@@ -20,21 +20,9 @@ impl<T: NativeType> From<ArrowPrimitiveArray<T>> for PrimitiveArray {
     }
 }
 
-impl<T: NativeType> From<&ArrowPrimitiveArray<T>> for PrimitiveArray {
-    fn from(value: &ArrowPrimitiveArray<T>) -> Self {
-        value.clone().into()
-    }
-}
-
 impl<O: Offset> From<ArrowUtf8Array<O>> for VarBinArray {
     fn from(value: ArrowUtf8Array<O>) -> Self {
         VarBinArray::new(Box::new(value))
-    }
-}
-
-impl<O: Offset> From<&ArrowUtf8Array<O>> for VarBinArray {
-    fn from(value: &ArrowUtf8Array<O>) -> Self {
-        value.clone().into()
     }
 }
 
@@ -44,21 +32,9 @@ impl<O: Offset> From<ArrowBinaryArray<O>> for VarBinArray {
     }
 }
 
-impl<O: Offset> From<&ArrowBinaryArray<O>> for VarBinArray {
-    fn from(value: &ArrowBinaryArray<O>) -> Self {
-        value.clone().into()
-    }
-}
-
 impl From<ArrowBooleanArray> for BoolArray {
     fn from(value: ArrowBooleanArray) -> Self {
         BoolArray::new(Box::new(value))
-    }
-}
-
-impl From<&ArrowBooleanArray> for BoolArray {
-    fn from(value: &ArrowBooleanArray) -> Self {
-        value.clone().into()
     }
 }
 
@@ -74,12 +50,6 @@ impl From<ArrowStructArray> for StructArray {
     }
 }
 
-impl From<&ArrowStructArray> for StructArray {
-    fn from(value: &ArrowStructArray) -> Self {
-        value.clone().into()
-    }
-}
-
 impl From<&dyn ArrowArray> for Array {
     // TODO(robert): Wrap in a TypedArray if physical type is different than the logical type, eg. datetime
     fn from(array: &dyn ArrowArray) -> Self {
@@ -89,6 +59,7 @@ impl From<&dyn ArrowArray> for Array {
                     .as_any()
                     .downcast_ref::<ArrowBooleanArray>()
                     .unwrap()
+                    .clone()
                     .into();
                 bool_array.into()
             }
@@ -98,6 +69,7 @@ impl From<&dyn ArrowArray> for Array {
                         .as_any()
                         .downcast_ref::<ArrowPrimitiveArray<$T>>()
                         .unwrap()
+                        .clone()
                         .into();
                     primitive_array.into()
                 })
@@ -107,6 +79,7 @@ impl From<&dyn ArrowArray> for Array {
                     .as_any()
                     .downcast_ref::<ArrowUtf8Array<i32>>()
                     .unwrap()
+                    .clone()
                     .into();
                 utf8_array.into()
             }
@@ -115,6 +88,7 @@ impl From<&dyn ArrowArray> for Array {
                     .as_any()
                     .downcast_ref::<ArrowUtf8Array<i64>>()
                     .unwrap()
+                    .clone()
                     .into();
                 utf8_array.into()
             }
@@ -123,6 +97,7 @@ impl From<&dyn ArrowArray> for Array {
                     .as_any()
                     .downcast_ref::<ArrowBinaryArray<i32>>()
                     .unwrap()
+                    .clone()
                     .into();
                 binary_array.into()
             }
@@ -131,6 +106,7 @@ impl From<&dyn ArrowArray> for Array {
                     .as_any()
                     .downcast_ref::<ArrowBinaryArray<i64>>()
                     .unwrap()
+                    .clone()
                     .into();
                 binary_array.into()
             }
@@ -139,6 +115,7 @@ impl From<&dyn ArrowArray> for Array {
                     .as_any()
                     .downcast_ref::<ArrowStructArray>()
                     .unwrap()
+                    .clone()
                     .into();
                 struct_array.into()
             }

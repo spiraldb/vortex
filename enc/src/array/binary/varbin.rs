@@ -53,12 +53,12 @@ impl ArrayEncoding for VarBinArray {
         Box::new(iter::once(self.buffer.clone()))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        self.check_slice_bounds(offset, length)?;
+    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+        self.check_slice_bounds(start, stop)?;
 
         let mut cloned = self.clone();
         unsafe {
-            cloned.buffer.slice_unchecked(offset, length);
+            cloned.buffer.slice_unchecked(start, stop - start);
         }
         Ok(Array::VarBin(cloned))
     }

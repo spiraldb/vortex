@@ -70,13 +70,13 @@ impl ArrayEncoding for StructArray {
         )
     }
 
-    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        self.check_slice_bounds(offset, length)?;
+    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+        self.check_slice_bounds(start, stop)?;
 
         let fields = self
             .fields
             .iter()
-            .map(|field| field.slice(offset, length))
+            .map(|field| field.slice(start, stop))
             .try_collect()?;
         Ok(Array::Struct(StructArray::new(self.names.clone(), fields)))
     }

@@ -53,7 +53,7 @@ impl IntoPolarsValue for &dyn arrow2::scalar::Scalar {
             ($scalar:expr, $type:ty, $variant:tt) => {{
                 let scalar = $scalar.as_any().downcast_ref::<$type>().unwrap();
                 match scalar.value() {
-                    Some(v) => AnyValue::$variant(*v),
+                    Some(v) => AnyValue::$variant(v.to_owned()),
                     None => AnyValue::Null,
                 }
             }};
@@ -61,15 +61,7 @@ impl IntoPolarsValue for &dyn arrow2::scalar::Scalar {
 
         match self.data_type() {
             DataType::Null => AnyValue::Null,
-            DataType::Boolean => match self
-                .as_any()
-                .downcast_ref::<BooleanScalar>()
-                .unwrap()
-                .value()
-            {
-                Some(b) => AnyValue::Boolean(b),
-                None => AnyValue::Null,
-            },
+            DataType::Boolean => unwrap_scalar!(self, BooleanScalar, Boolean),
             DataType::Int8 => unwrap_scalar!(self, PrimitiveScalar<i8>, Int8),
             DataType::Int16 => unwrap_scalar!(self, PrimitiveScalar<i16>, Int16),
             DataType::Int32 => unwrap_scalar!(self, PrimitiveScalar<i32>, Int32),

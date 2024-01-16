@@ -59,12 +59,12 @@ impl ArrayEncoding for PrimitiveArray {
         Box::new(iter::once(self.buffer.clone()))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        self.check_slice_bounds(offset, length)?;
+    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+        self.check_slice_bounds(start, stop)?;
 
         let mut cloned = self.clone();
         unsafe {
-            cloned.buffer.slice_unchecked(offset, length);
+            cloned.buffer.slice_unchecked(start, stop - start);
         }
         Ok(Array::Primitive(cloned))
     }
@@ -92,7 +92,7 @@ mod test {
     #[test]
     fn slice() {
         let arr = PrimitiveArray::from_vec(vec![1, 2, 3, 4, 5])
-            .slice(1, 3)
+            .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(2));

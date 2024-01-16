@@ -51,11 +51,11 @@ impl ArrayEncoding for ConstantArray {
         )))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        self.check_slice_bounds(offset, length)?;
+    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+        self.check_slice_bounds(start, stop)?;
 
         let mut cloned = self.clone();
-        cloned.length = length - offset;
+        cloned.length = stop - start;
         Ok(Array::Constant(cloned))
     }
 }

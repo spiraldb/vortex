@@ -80,16 +80,16 @@ impl ArrayEncoding for ChunkedArray {
         Box::new(ChunkedArrowIterator::new(self))
     }
 
-    fn slice(&self, offset: usize, length: usize) -> EncResult<Array> {
-        self.check_slice_bounds(offset, length)?;
+    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+        self.check_slice_bounds(start, stop)?;
 
-        let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(offset);
-        let (length_chunk, length_in_last_chunk) = self.find_physical_location(offset + length);
+        let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(start);
+        let (length_chunk, length_in_last_chunk) = self.find_physical_location(stop);
 
         if length_chunk == offset_chunk {
             if let Some(chunk) = self.chunks.get(offset_chunk) {
                 return Ok(Array::Chunked(ChunkedArray::new(
-                    vec![chunk.slice(offset_in_first_chunk, length)?],
+                    vec![chunk.slice(offset_in_first_chunk, length_in_last_chunk)?],
                     self.dtype.clone(),
                 )));
             }
@@ -97,8 +97,9 @@ impl ArrayEncoding for ChunkedArray {
 
         let mut chunks = self.chunks.clone()[offset_chunk..length_chunk + 1].to_vec();
         if let Some(c) = chunks.first_mut() {
-            *c = c.slice(offset_in_first_chunk, c.len() - offset_in_first_chunk)?;
+            *c = c.slice(offset_in_first_chunk, c.len())?;
         }
+
         if length_in_last_chunk == 0 {
             chunks.pop();
         } else if let Some(c) = chunks.last_mut() {
@@ -146,7 +147,9 @@ impl Iterator for ChunkedArrowIterator {
 
 #[cfg(test)]
 mod test {
+    use arrow2::array::Array as ArrowArray;
     use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
+    use arrow2::types::NativeType;
     use itertools::Itertools;
 
     use crate::array::chunked::ChunkedArray;
@@ -164,6 +167,17 @@ mod test {
         )
     }
 
+    fn assert_equal_slices<T: NativeType>(arr: Box<dyn ArrowArray>, slice: &[T]) {
+        assert_eq!(
+            arr.as_any()
+                .downcast_ref::<ArrowPrimitiveArray<T>>()
+                .unwrap()
+                .values()
+                .as_slice(),
+            slice
+        );
+    }
+
     #[test]
     pub fn iter() {
         let chunk1: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![1, 2, 3]).into();
@@ -176,77 +190,37 @@ mod test {
         chunked
             .iter_arrow()
             .zip_eq([[1u64, 2, 3], [4, 5, 6]])
-            .for_each(|(from_iter, orig)| {
-                assert_eq!(
-                    from_iter
-                        .as_any()
-                        .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap()
-                        .values()
-                        .as_slice(),
-                    orig
-                );
-            });
+            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
     }
 
     #[test]
     pub fn slice_middle() {
         chunked_array()
-            .slice(2, 3)
+            .slice(2, 5)
             .unwrap()
             .iter_arrow()
-            .zip_eq([vec![3], vec![4, 5]])
-            .for_each(|(from_iter, orig)| {
-                assert_eq!(
-                    from_iter
-                        .as_any()
-                        .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap()
-                        .values()
-                        .as_slice(),
-                    orig
-                );
-            });
+            .zip_eq([vec![3u64], vec![4, 5]])
+            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
     }
 
     #[test]
     pub fn slice_begin() {
         chunked_array()
-            .slice(1, 2)
+            .slice(1, 3)
             .unwrap()
             .iter_arrow()
-            .zip_eq([[2, 3]])
-            .for_each(|(from_iter, orig)| {
-                assert_eq!(
-                    from_iter
-                        .as_any()
-                        .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap()
-                        .values()
-                        .as_slice(),
-                    orig
-                );
-            });
+            .zip_eq([[2u64, 3]])
+            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
     }
 
     #[test]
     pub fn slice_aligned() {
         chunked_array()
-            .slice(3, 3)
+            .slice(3, 6)
             .unwrap()
             .iter_arrow()
-            .zip_eq([[4, 5, 6]])
-            .for_each(|(from_iter, orig)| {
-                assert_eq!(
-                    from_iter
-                        .as_any()
-                        .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap()
-                        .values()
-                        .as_slice(),
-                    orig
-                );
-            });
+            .zip_eq([[4u64, 5, 6]])
+            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
     }
 
     #[test]
@@ -255,37 +229,17 @@ mod test {
             .slice(0, 6)
             .unwrap()
             .iter_arrow()
-            .zip_eq([[1, 2, 3], [4, 5, 6]])
-            .for_each(|(from_iter, orig)| {
-                assert_eq!(
-                    from_iter
-                        .as_any()
-                        .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap()
-                        .values()
-                        .as_slice(),
-                    orig
-                );
-            });
+            .zip_eq([[1u64, 2, 3], [4, 5, 6]])
+            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
     }
 
     #[test]
     pub fn slice_end() {
         chunked_array()
-            .slice(7, 1)
+            .slice(7, 8)
             .unwrap()
             .iter_arrow()
-            .zip_eq([[8]])
-            .for_each(|(from_iter, orig)| {
-                assert_eq!(
-                    from_iter
-                        .as_any()
-                        .downcast_ref::<ArrowPrimitiveArray<u64>>()
-                        .unwrap()
-                        .values()
-                        .as_slice(),
-                    orig
-                );
-            });
+            .zip_eq([[8u64]])
+            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
     }
 }
