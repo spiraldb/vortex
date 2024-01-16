@@ -87,19 +87,19 @@ mod test {
     #[test]
     fn test_math() {
         let vec = vec![1.0, 2.0, 3.0];
-        let max = max(&vec);
+        let max = self::max(&vec);
         assert_eq!(max, 3.0);
 
-        let min = min(&vec);
+        let min = self::min(&vec);
         assert_eq!(min, 1.0);
 
-        let is_constant = is_constant(&vec);
+        let is_constant = self::is_constant(&vec);
         assert!(!is_constant);
 
-        let is_sorted = is_sorted(&vec);
+        let is_sorted = self::is_sorted(&vec);
         assert!(is_sorted);
 
-        let run_length_stats = run_length_stats(&vec);
+        let run_length_stats = self::run_length_stats(&vec);
         assert_eq!(run_length_stats.run_count, 0);
         assert_eq!(run_length_stats.run_element_count, 0);
     }

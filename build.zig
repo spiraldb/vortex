@@ -89,8 +89,22 @@ pub fn build(b: *std.Build) void {
     lib_step.addModule("codecs", codecs);
     lib_step.addModule("roaring", roaring);
     lib_step.addModule("zimd", zimd);
+    lib_step.addIncludePath(.{ .path = "zig" });
+    lib_step.c_std = std.Build.CStd.C11;
     lib_step.bundle_compiler_rt = true;
     b.installArtifact(lib_step);
+
+    const lib_test = b.addTest(.{
+        .root_source_file = .{ .path = "zig/test-zenc.zig" },
+        .target = target,
+        .optimize = optimize,
+        .filter = filter_test,
+    });
+    lib_test.addModule("codecs", codecs);
+    lib_test.addModule("zimd", zimd);
+    lib_test.addIncludePath(.{ .path = "zig" });
+    lib_test.linkLibrary(lib_step);
+    test_step.dependOn(&lib_test.step);
 
     // Option for emitting test binary based on the given root source.
     // This is used for debugging as in .vscode/launch.json.

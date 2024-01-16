@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 links = "zenc"
 
+[dependencies]
+allocator-api2 = "0.2.16"
+safe-transmute = "0.11.2"
+
 [build-dependencies]
 bindgen = "0.69.1"
 walkdir = "2.4.0"
