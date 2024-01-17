@@ -1,13 +1,10 @@
 use std::cmp::min;
 use std::vec::IntoIter;
 
-use arrow2::array::Array as ArrowArray;
-use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
-use arrow2::compute::cast::CastOptions;
-use arrow2::datatypes::DataType;
-use arrow2::scalar::new_scalar;
-use arrow2::scalar::Scalar as ArrowScalar;
-
+use arrow::array::types::UInt64Type;
+use arrow::array::{Array as ArrowArray, ArrayRef, Datum};
+use arrow::array::{PrimitiveArray as ArrowPrimitiveArray, Scalar as ArrowScalar};
+use arrow::datatypes::DataType;
 use polars_arrow::legacy::trusted_len::TrustedLenPush;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
@@ -16,7 +13,7 @@ use crate::error::{EncError, EncResult};
 use crate::scalar::{PScalar, Scalar};
 use crate::types::DType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct REEArray {
     ends: Box<Array>,
     values: Box<Array>,
@@ -68,11 +65,10 @@ impl ArrayEncoding for REEArray {
         let mut left_to_skip = physical_offset;
         for c in self.ends.iter_arrow() {
             let cast_res =
-                arrow2::compute::cast::cast(c.as_ref(), &DataType::UInt64, CastOptions::default())
-                    .unwrap();
+                arrow::compute::kernels::cast::cast(c.as_ref(), &DataType::UInt64).unwrap();
             let casted = cast_res
                 .as_any()
-                .downcast_ref::<ArrowPrimitiveArray<u64>>()
+                .downcast_ref::<ArrowPrimitiveArray<UInt64Type>>()
                 .unwrap();
             let limited: Vec<usize> = casted
                 .values()
@@ -111,7 +107,7 @@ struct REEArrowIterator {
     ends: IntoIter<usize>,
     values: Box<ArrowIterator>,
     current_idx: usize,
-    current_arrow_array: Option<Box<dyn ArrowArray>>,
+    current_arrow_array: Option<ArrayRef>,
     last_end: usize,
 }
 
@@ -128,7 +124,7 @@ impl REEArrowIterator {
 }
 
 impl Iterator for REEArrowIterator {
-    type Item = Box<dyn ArrowArray>;
+    type Item = ArrayRef;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self
@@ -144,11 +140,12 @@ impl Iterator for REEArrowIterator {
             .as_ref()
             .zip(self.ends.next())
             .map(|(carr, n)| {
-                let new_scalar = new_scalar(carr.as_ref(), self.current_idx);
+                let new_scalar: ArrowScalar<ArrayRef> =
+                    ArrowScalar::new(carr.as_ref().slice(self.current_idx, 1));
                 let repeat_count = n - self.last_end;
                 self.current_idx += 1;
                 self.last_end = n;
-                repeat(new_scalar.as_ref(), repeat_count)
+                repeat(&new_scalar, repeat_count)
             })
     }
 }
@@ -162,15 +159,14 @@ fn run_ends_logical_length(ends: &Array) -> usize {
 
 fn find_physical_index(array: &Array, index: usize) -> Option<usize> {
     // Convert index into correctly typed Arrow scalar.
-    let index: Box<dyn Scalar> = Box::new(Into::<PScalar>::into(index));
-    let index = index.cast(&array.dtype()).unwrap();
-    let index: Box<dyn ArrowScalar> = index.as_ref().into();
+    let index: Box<dyn Scalar> = Into::<PScalar>::into(index).cast(&array.dtype()).unwrap();
+    let arrow_index: Box<dyn Datum> = index.into();
 
-    let chunks: Vec<Box<dyn ArrowArray>> = array.iter_arrow().collect();
+    let chunks: Vec<ArrayRef> = array.iter_arrow().collect();
 
     search_sorted_scalar(
         chunks.iter().map(|a| a.as_ref()).collect(),
-        index.as_ref(),
+        arrow_index.as_ref(),
         SearchSortedSide::Right,
     )
     .ok()
@@ -178,6 +174,10 @@ fn find_physical_index(array: &Array, index: usize) -> Option<usize> {
 
 #[cfg(test)]
 mod test {
+    use std::ops::Deref;
+
+    use arrow::array::cast::AsArray;
+    use arrow::array::types::Int32Type;
     use itertools::Itertools;
 
     use crate::array::primitive::PrimitiveArray;
@@ -188,8 +188,8 @@ mod test {
     #[test]
     fn new() {
         let arr = REEArray::new(
-            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
-            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
+            PrimitiveArray::from_vec::<Int32Type>(vec![2, 5, 10]).into(),
+            PrimitiveArray::from_vec::<Int32Type>(vec![1, 2, 3]).into(),
         );
         assert_eq!(arr.len(), 10);
         assert_eq!(arr.dtype(), DType::Int(IntWidth::_32));
@@ -206,8 +206,8 @@ mod test {
     #[test]
     fn slice() {
         let arr = REEArray::new(
-            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
-            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
+            PrimitiveArray::from_vec::<Int32Type>(vec![2, 5, 10]).into(),
+            PrimitiveArray::from_vec::<Int32Type>(vec![1, 2, 3]).into(),
         )
         .slice(3, 8)
         .unwrap();
@@ -217,36 +217,20 @@ mod test {
         arr.iter_arrow()
             .zip_eq([vec![2, 2], vec![3, 3, 3]])
             .for_each(|(from_iter, orig)| {
-                assert_eq!(
-                    from_iter
-                        .as_any()
-                        .downcast_ref::<ArrowPrimitiveArray<i32>>()
-                        .unwrap()
-                        .values()
-                        .as_slice(),
-                    orig
-                );
+                assert_eq!(from_iter.as_primitive::<Int32Type>().values().deref(), orig);
             });
     }
 
     #[test]
     fn iter_arrow() {
         let arr = REEArray::new(
-            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
-            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
+            PrimitiveArray::from_vec::<Int32Type>(vec![2, 5, 10]).into(),
+            PrimitiveArray::from_vec::<Int32Type>(vec![1, 2, 3]).into(),
         );
         arr.iter_arrow()
             .zip_eq([vec![1, 1], vec![2, 2, 2], vec![3, 3, 3, 3, 3]])
             .for_each(|(from_iter, orig)| {
-                assert_eq!(
-                    from_iter
-                        .as_any()
-                        .downcast_ref::<ArrowPrimitiveArray<i32>>()
-                        .unwrap()
-                        .values()
-                        .as_slice(),
-                    orig
-                );
+                assert_eq!(from_iter.as_primitive::<Int32Type>().values().deref(), orig);
             });
     }
 }

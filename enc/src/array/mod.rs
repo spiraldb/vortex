@@ -1,4 +1,4 @@
-use arrow2::array::Array as ArrowArray;
+use arrow::array::ArrayRef;
 
 use crate::array::binary::{VarBinArray, VarBinViewArray};
 use crate::array::bool::BoolArray;
@@ -23,7 +23,7 @@ pub mod encode;
 pub mod struct_;
 pub mod typed;
 
-type ArrowIterator = dyn Iterator<Item = Box<dyn ArrowArray>>;
+type ArrowIterator = dyn Iterator<Item = ArrayRef>;
 
 /// An Enc Array is the base object representing all arrays in enc.
 ///
@@ -52,7 +52,7 @@ pub trait ArrayEncoding {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Array {
     Bool(BoolArray),
     Chunked(ChunkedArray),

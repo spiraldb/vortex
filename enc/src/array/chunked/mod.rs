@@ -1,6 +1,6 @@
 use std::vec::IntoIter;
 
-use arrow2::array::Array as ArrowArray;
+use arrow::array::ArrayRef;
 use itertools::Itertools;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
@@ -8,7 +8,7 @@ use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ChunkedArray {
     chunks: Vec<Array>,
     chunk_ends: Vec<usize>,
@@ -130,7 +130,7 @@ impl ChunkedArrowIterator {
 }
 
 impl Iterator for ChunkedArrowIterator {
-    type Item = Box<dyn ArrowArray>;
+    type Item = ArrayRef;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.arrow_iter
@@ -147,9 +147,12 @@ impl Iterator for ChunkedArrowIterator {
 
 #[cfg(test)]
 mod test {
-    use arrow2::array::Array as ArrowArray;
-    use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
-    use arrow2::types::NativeType;
+    use std::ops::Deref;
+
+    use arrow::array::cast::AsArray;
+    use arrow::array::types::UInt64Type;
+    use arrow::array::ArrowPrimitiveType;
+    use arrow::array::{ArrayRef, PrimitiveArray as ArrowPrimitiveArray};
     use itertools::Itertools;
 
     use crate::array::chunked::ChunkedArray;
@@ -158,30 +161,23 @@ mod test {
     use crate::types::{DType, IntWidth};
 
     fn chunked_array() -> ChunkedArray {
-        let chunk1: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![1, 2, 3]).into();
-        let chunk2: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6]).into();
-        let chunk3: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![7, 8, 9]).into();
+        let chunk1: PrimitiveArray = ArrowPrimitiveArray::<UInt64Type>::from(vec![1, 2, 3]).into();
+        let chunk2: PrimitiveArray = ArrowPrimitiveArray::<UInt64Type>::from(vec![4, 5, 6]).into();
+        let chunk3: PrimitiveArray = ArrowPrimitiveArray::<UInt64Type>::from(vec![7, 8, 9]).into();
         ChunkedArray::new(
             vec![chunk1.into(), chunk2.into(), chunk3.into()],
             DType::UInt(IntWidth::_64),
         )
     }
 
-    fn assert_equal_slices<T: NativeType>(arr: Box<dyn ArrowArray>, slice: &[T]) {
-        assert_eq!(
-            arr.as_any()
-                .downcast_ref::<ArrowPrimitiveArray<T>>()
-                .unwrap()
-                .values()
-                .as_slice(),
-            slice
-        );
+    fn assert_equal_slices<T: ArrowPrimitiveType>(arr: ArrayRef, slice: &[T::Native]) {
+        assert_eq!(arr.as_primitive::<T>().values().deref(), slice);
     }
 
     #[test]
     pub fn iter() {
-        let chunk1: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![1, 2, 3]).into();
-        let chunk2: PrimitiveArray = ArrowPrimitiveArray::<u64>::from_vec(vec![4, 5, 6]).into();
+        let chunk1: PrimitiveArray = ArrowPrimitiveArray::<UInt64Type>::from(vec![1, 2, 3]).into();
+        let chunk2: PrimitiveArray = ArrowPrimitiveArray::<UInt64Type>::from(vec![4, 5, 6]).into();
         let chunked = ChunkedArray::new(
             vec![chunk1.into(), chunk2.into()],
             DType::UInt(IntWidth::_64),
@@ -190,7 +186,7 @@ mod test {
         chunked
             .iter_arrow()
             .zip_eq([[1u64, 2, 3], [4, 5, 6]])
-            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
+            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
     }
 
     #[test]
@@ -200,7 +196,7 @@ mod test {
             .unwrap()
             .iter_arrow()
             .zip_eq([vec![3u64], vec![4, 5]])
-            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
+            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
     }
 
     #[test]
@@ -210,7 +206,7 @@ mod test {
             .unwrap()
             .iter_arrow()
             .zip_eq([[2u64, 3]])
-            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
+            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
     }
 
     #[test]
@@ -220,7 +216,7 @@ mod test {
             .unwrap()
             .iter_arrow()
             .zip_eq([[4u64, 5, 6]])
-            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
+            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
     }
 
     #[test]
@@ -230,7 +226,7 @@ mod test {
             .unwrap()
             .iter_arrow()
             .zip_eq([[1u64, 2, 3], [4, 5, 6]])
-            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
+            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
     }
 
     #[test]
@@ -240,6 +236,6 @@ mod test {
             .unwrap()
             .iter_arrow()
             .zip_eq([[8u64]])
-            .for_each(|(arr, slice)| assert_equal_slices(arr, &slice));
+            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
     }
 }

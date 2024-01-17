@@ -1,8 +1,8 @@
-use std::borrow::Borrow;
+use std::sync::Arc;
 
-use arrow2::array::Array as ArrowArray;
-use arrow2::array::StructArray as ArrowStructArray;
-use arrow2::datatypes::DataType;
+use arrow::array::StructArray as ArrowStructArray;
+use arrow::array::{Array as ArrowArray, ArrayRef};
+use arrow::datatypes::Fields;
 use itertools::Itertools;
 
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
@@ -12,7 +12,7 @@ use crate::types::DType;
 
 use super::{Array, ArrayEncoding, ArrowIterator};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct StructArray {
     names: Vec<String>,
     fields: Vec<Array>,
@@ -58,7 +58,7 @@ impl ArrayEncoding for StructArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let datatype: DataType = self.dtype().borrow().into();
+        let fields: Fields = self.dtype().into();
         Box::new(
             AlignedArrowArrayIterator::new(
                 self.fields
@@ -67,8 +67,11 @@ impl ArrayEncoding for StructArray {
                     .collect::<Vec<_>>(),
             )
             .map(move |items| {
-                Box::new(ArrowStructArray::new(datatype.clone(), items, None))
-                    as Box<dyn ArrowArray>
+                Arc::new(ArrowStructArray::new(
+                    fields.clone(),
+                    items.into_iter().map(ArrayRef::from).collect(),
+                    None,
+                )) as Arc<dyn ArrowArray>
             }),
         )
     }
@@ -87,9 +90,12 @@ impl ArrayEncoding for StructArray {
 
 #[cfg(test)]
 mod test {
-    use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
-    use arrow2::array::StructArray as ArrowStructArray;
-    use arrow2::array::Utf8Array as ArrowUtf8Array;
+    use std::sync::Arc;
+
+    use arrow::array::types::UInt64Type;
+    use arrow::array::PrimitiveArray as ArrowPrimitiveArray;
+    use arrow::array::StructArray as ArrowStructArray;
+    use arrow::array::{Array, GenericStringArray as ArrowStringArray};
 
     use crate::array::binary::VarBinArray;
     use crate::array::primitive::PrimitiveArray;
@@ -98,14 +104,14 @@ mod test {
 
     #[test]
     pub fn iter() {
-        let arrow_aas = ArrowPrimitiveArray::<i64>::from_vec(vec![1, 2, 3]);
+        let arrow_aas = ArrowPrimitiveArray::<UInt64Type>::from(vec![1, 2, 3]);
         let aas: PrimitiveArray = arrow_aas.clone().into();
-        let arrow_bbs = ArrowUtf8Array::<i32>::from_slice(["a", "b", "c"]);
+        let arrow_bbs = ArrowStringArray::<i32>::from(vec!["a", "b", "c"]);
         let bbs: VarBinArray = arrow_bbs.clone().into();
         let array = StructArray::new(vec!["a".into(), "b".into()], vec![aas.into(), bbs.into()]);
         let arrow_struct = ArrowStructArray::new(
             array.dtype().into(),
-            vec![Box::new(arrow_aas), Box::new(arrow_bbs)],
+            vec![Arc::new(arrow_aas), Arc::new(arrow_bbs)],
             None,
         );
         assert_eq!(

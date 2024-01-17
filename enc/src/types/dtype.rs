@@ -2,8 +2,7 @@ use std::borrow::Borrow;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::zip;
 
-use arrow2::datatypes::TimeUnit as ArrowTimeUnit;
-use arrow2::datatypes::{DataType, Field};
+use arrow::datatypes::{DataType, Field, FieldRef, Fields, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
 
 use crate::error::{EncError, EncResult};
@@ -232,7 +231,7 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
             IntWidth::_64 => DataType::UInt64,
         },
         // TODO(robert): Decimal256?
-        DType::Decimal(p, w) => DataType::Decimal(*p as usize, *w as usize),
+        DType::Decimal(p, w) => DataType::Decimal128(*p, *w as i8),
         DType::Float(w) => match w {
             FloatWidth::Unknown => DataType::Float64,
             FloatWidth::_16 => DataType::Float16,
@@ -267,26 +266,42 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
                 .collect(),
         ),
         // TODO(robert): LargeList?
-        DType::List(c) => DataType::List(Box::new(Field::new(
+        DType::List(c) => DataType::List(FieldRef::new(Field::new(
             "element",
             c.as_ref().into(),
             matches!(c.as_ref(), DType::Nullable(_)),
         ))),
         DType::Map(k, v) => DataType::Map(
-            Box::new(Field::new(
+            FieldRef::new(Field::new(
                 "entries",
-                DataType::Struct(vec![
+                DataType::Struct(Fields::from(vec![
                     Field::new("key", k.as_ref().into(), false),
                     Field::new(
                         "value",
                         v.as_ref().into(),
                         matches!(v.as_ref(), DType::Nullable(_)),
                     ),
-                ]),
+                ])),
                 false,
             )),
             false,
         ),
+    }
+}
+
+impl From<DType> for Fields {
+    fn from(value: DType) -> Self {
+        match value {
+            DType::Struct(n, f) => Fields::from(
+                n.iter()
+                    .zip(f.iter())
+                    .map(|(name, dtype)| {
+                        Field::new(name, dtype.into(), matches!(dtype, DType::Nullable(_)))
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            _ => panic!("DType was not a struct {}", value),
+        }
     }
 }
 

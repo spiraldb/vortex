@@ -1,13 +1,13 @@
-use arrow2::array::Array as ArrowArray;
+use arrow::array::{Array as ArrowArray, ArrayRef};
 
 pub struct AlignedArray {
-    iter: Box<dyn Iterator<Item = Box<dyn ArrowArray>>>,
-    current_chunk: Option<Box<dyn ArrowArray>>,
+    iter: Box<dyn Iterator<Item = ArrayRef>>,
+    current_chunk: Option<ArrayRef>,
     offset: usize,
 }
 
 impl AlignedArray {
-    pub fn new(mut iter: Box<dyn Iterator<Item = Box<dyn ArrowArray>>>) -> Self {
+    pub fn new(mut iter: Box<dyn Iterator<Item = ArrayRef>>) -> Self {
         let current_chunk = iter.next();
         Self {
             iter,
@@ -26,14 +26,14 @@ pub struct AlignedArrowArrayIterator {
 }
 
 impl AlignedArrowArrayIterator {
-    pub fn new(iterators: Vec<Box<dyn Iterator<Item = Box<dyn ArrowArray>>>>) -> Self {
+    pub fn new(iterators: Vec<Box<dyn Iterator<Item = ArrayRef>>>) -> Self {
         let items = iterators.into_iter().map(AlignedArray::new).collect();
         Self { items }
     }
 }
 
 impl Iterator for AlignedArrowArrayIterator {
-    type Item = Vec<Box<dyn ArrowArray>>;
+    type Item = Vec<ArrayRef>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let missing_chunks: usize = self
@@ -79,7 +79,7 @@ impl Iterator for AlignedArrowArrayIterator {
                         v.current_chunk
                             .as_ref()
                             .unwrap()
-                            .sliced(offset, smallest_chunk)
+                            .slice(offset, smallest_chunk)
                     }
                 })
                 .collect::<Vec<_>>(),

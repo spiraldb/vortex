@@ -1,22 +1,21 @@
-use arrow2::array::Array as ArrowArray;
-
-use arrow2::datatypes::DataType;
-
 use std::iter;
+
+use arrow::array::{Array as ArrowArray, ArrayRef, Scalar as ArrowScalar};
+use arrow::datatypes::DataType;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct VarBinArray {
-    buffer: Box<dyn ArrowArray>,
+    buffer: ArrayRef,
     dtype: DType,
 }
 
 impl VarBinArray {
-    pub fn new(buffer: Box<dyn ArrowArray>) -> Self {
+    pub fn new(buffer: ArrayRef) -> Self {
         let dtype = match buffer.data_type() {
             DataType::Binary => DType::Binary,
             DataType::LargeBinary => DType::Binary,
@@ -45,7 +44,7 @@ impl ArrayEncoding for VarBinArray {
         if index >= self.len() {
             Err(EncError::OutOfBounds(index, 0, self.len()))
         } else {
-            Ok(arrow2::scalar::new_scalar(self.buffer.as_ref(), index).into())
+            Ok(ArrowScalar::new(self.buffer.slice(index, 1)).into())
         }
     }
 
@@ -56,10 +55,9 @@ impl ArrayEncoding for VarBinArray {
     fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
         self.check_slice_bounds(start, stop)?;
 
-        let mut cloned = self.clone();
-        unsafe {
-            cloned.buffer.slice_unchecked(start, stop - start);
-        }
-        Ok(Array::VarBin(cloned))
+        Ok(Array::VarBin(Self {
+            buffer: self.buffer.slice(start, stop - start),
+            dtype: self.dtype.clone(),
+        }))
     }
 }

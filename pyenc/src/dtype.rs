@@ -1,8 +1,7 @@
-use std::mem::MaybeUninit;
-
-use arrow2::datatypes::DataType as ArrowDataType;
-use pyo3::prelude::*;
+use arrow::datatypes::DataType;
+use arrow::pyarrow::FromPyArrow;
 use pyo3::types::PyType;
+use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
 
 use enc::types::DType;
 
@@ -32,22 +31,12 @@ impl PyDType {
     #[classmethod]
     fn from_pyarrow(
         cls: &PyType,
-        #[pyo3(from_py_with = "import_arrow_dtype")] arrow_dtype: ArrowDataType,
+        #[pyo3(from_py_with = "import_arrow_dtype")] arrow_dtype: DataType,
     ) -> PyResult<Py<Self>> {
         PyDType::wrap(cls.py(), arrow_dtype.try_into().map_err(PyEncError::new)?)
     }
 }
 
-fn import_arrow_dtype(obj: &PyAny) -> PyResult<ArrowDataType> {
-    // Export the array from the PyArrow object
-    let mut uninit_schema: MaybeUninit<arrow2::ffi::ArrowSchema> = MaybeUninit::zeroed();
-    obj.call_method("_export_to_c", (uninit_schema.as_mut_ptr() as usize,), None)?;
-
-    unsafe {
-        let schema_struct = uninit_schema.assume_init();
-
-        // We unwrap here since we know the exported array was a valid Arrow2 array.
-        let schema_field = arrow2::ffi::import_field_from_c(&schema_struct).unwrap();
-        Ok(schema_field.data_type)
-    }
+fn import_arrow_dtype(obj: &PyAny) -> PyResult<DataType> {
+    DataType::from_pyarrow(obj)
 }

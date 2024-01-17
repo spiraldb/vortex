@@ -1,5 +1,4 @@
-use arrow2::array::Array;
-use arrow2::scalar::Scalar;
+use arrow::array::{Array, Datum};
 use polars_core::prelude::Series;
 use polars_ops::prelude::search_sorted;
 
@@ -13,7 +12,7 @@ pub enum SearchSortedSide {
 
 pub fn search_sorted_scalar(
     haystack: Vec<&dyn Array>,
-    needle: &dyn Scalar,
+    needle: &dyn Datum,
     side: SearchSortedSide,
 ) -> EncResult<usize> {
     let haystack_series: Series = haystack.into_polars();
@@ -36,19 +35,18 @@ impl From<SearchSortedSide> for polars_ops::prelude::SearchSortedSide {
 
 #[cfg(test)]
 mod test {
-    use arrow2::array::Int32Array;
-    use arrow2::scalar::PrimitiveScalar;
+    use arrow::array::{Int32Array, Scalar};
 
     use super::*;
 
     #[test]
     fn test_searchsorted_scalar() {
-        let haystack = Int32Array::from(&[Some(1), Some(2), Some(3)]);
+        let haystack = Int32Array::from(vec![Some(1), Some(2), Some(3)]);
 
         assert_eq!(
             search_sorted_scalar(
                 vec![&haystack],
-                &PrimitiveScalar::from(Some::<i32>(0)),
+                &Scalar::new(Int32Array::from(vec![0])),
                 SearchSortedSide::Left,
             )
             .unwrap(),
@@ -57,7 +55,7 @@ mod test {
         assert_eq!(
             search_sorted_scalar(
                 vec![&haystack],
-                &PrimitiveScalar::from(Some::<i32>(1)),
+                &Scalar::new(Int32Array::from(vec![1])),
                 SearchSortedSide::Left,
             )
             .unwrap(),
@@ -66,7 +64,7 @@ mod test {
         assert_eq!(
             search_sorted_scalar(
                 vec![&haystack],
-                &PrimitiveScalar::from(Some::<i32>(1)),
+                &Scalar::new(Int32Array::from(vec![1])),
                 SearchSortedSide::Right,
             )
             .unwrap(),
@@ -75,7 +73,7 @@ mod test {
         assert_eq!(
             search_sorted_scalar(
                 vec![&haystack],
-                &PrimitiveScalar::from(Some::<i32>(4)),
+                &Scalar::new(Int32Array::from(vec![4])),
                 SearchSortedSide::Left,
             )
             .unwrap(),

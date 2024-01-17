@@ -6,8 +6,8 @@ use enc::types::DType;
 use crate::array::*;
 
 mod array;
-mod arrow;
 mod dtype;
+mod enc_arrow;
 mod encode;
 mod error;
 

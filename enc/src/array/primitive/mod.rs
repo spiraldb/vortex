@@ -1,24 +1,43 @@
+use std::borrow::Borrow;
 use std::iter;
+use std::sync::Arc;
 
-use arrow2::array::Array as ArrowArray;
-use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
-use arrow2::types::NativeType;
+use arrow::array::types::{
+    Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
+    UInt32Type, UInt64Type, UInt8Type,
+};
+use arrow::array::{Array as ArrowArray, ArrayRef, Scalar as ArrowScalar};
+use arrow::array::{ArrowPrimitiveType, PrimitiveArray as ArrowPrimitiveArray};
+use arrow::datatypes::DataType;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::{DType, PType};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct PrimitiveArray {
-    buffer: Box<dyn ArrowArray>,
+    buffer: ArrayRef,
     ptype: PType,
     dtype: DType,
 }
 
+macro_rules! vec_to_primitive_array {
+    ($arrow_type:ty, $values:expr) => {{
+        unsafe {
+            let casted_values: Vec<<$arrow_type as ArrowPrimitiveType>::Native> =
+                std::mem::transmute($values);
+
+            Self::new(Arc::new(Into::<ArrowPrimitiveArray<$arrow_type>>::into(
+                casted_values,
+            )))
+        }
+    }};
+}
+
 impl PrimitiveArray {
-    pub fn new<T: NativeType>(buffer: Box<ArrowPrimitiveArray<T>>) -> Self {
-        let ptype: PType = T::PRIMITIVE.try_into().unwrap();
+    pub fn new<T: ArrowPrimitiveType>(buffer: Arc<ArrowPrimitiveArray<T>>) -> Self {
+        let ptype: PType = T::DATA_TYPE.borrow().try_into().unwrap();
         Self {
             buffer,
             ptype,
@@ -26,8 +45,30 @@ impl PrimitiveArray {
         }
     }
 
-    pub fn from_vec<T: NativeType>(values: Vec<T>) -> Self {
-        Self::new(Box::new(ArrowPrimitiveArray::from_vec(values)))
+    pub fn from_vec<T: ArrowPrimitiveType>(values: Vec<T::Native>) -> Self {
+        match T::DATA_TYPE {
+            DataType::Int8 => {
+                unsafe {
+                    let casted_values: Vec<<Int8Type as ArrowPrimitiveType>::Native> =
+                        std::mem::transmute(values);
+                    Self::new(Arc::new(Into::<ArrowPrimitiveArray<Int8Type>>::into(
+                        casted_values,
+                    )))
+                }
+                // vec_to_primitive_array!(Int8Type, values)
+            }
+            DataType::Int16 => vec_to_primitive_array!(Int16Type, values),
+            DataType::Int32 => vec_to_primitive_array!(Int32Type, values),
+            DataType::Int64 => vec_to_primitive_array!(Int64Type, values),
+            DataType::UInt8 => vec_to_primitive_array!(UInt8Type, values),
+            DataType::UInt16 => vec_to_primitive_array!(UInt16Type, values),
+            DataType::UInt32 => vec_to_primitive_array!(UInt32Type, values),
+            DataType::UInt64 => vec_to_primitive_array!(UInt64Type, values),
+            DataType::Float16 => vec_to_primitive_array!(Float16Type, values),
+            DataType::Float32 => vec_to_primitive_array!(Float32Type, values),
+            DataType::Float64 => vec_to_primitive_array!(Float64Type, values),
+            _ => panic!("Unsupported primitive array type"),
+        }
     }
 }
 
@@ -51,7 +92,7 @@ impl ArrayEncoding for PrimitiveArray {
         if index >= self.len() {
             Err(EncError::OutOfBounds(index, 0, self.len()))
         } else {
-            Ok(arrow2::scalar::new_scalar(self.buffer.as_ref(), index).into())
+            Ok(ArrowScalar::new(self.buffer.as_ref().slice(index, 1)).into())
         }
     }
 
@@ -62,11 +103,11 @@ impl ArrayEncoding for PrimitiveArray {
     fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
         self.check_slice_bounds(start, stop)?;
 
-        let mut cloned = self.clone();
-        unsafe {
-            cloned.buffer.slice_unchecked(start, stop - start);
-        }
-        Ok(Array::Primitive(cloned))
+        Ok(Array::Primitive(Self {
+            buffer: self.buffer.slice(start, stop - start),
+            ptype: self.ptype,
+            dtype: self.dtype.clone(),
+        }))
     }
 }
 
@@ -78,7 +119,7 @@ mod test {
 
     #[test]
     fn from_arrow() {
-        let arr = PrimitiveArray::from_vec(vec![1, 2, 3]);
+        let arr = PrimitiveArray::from_vec::<Int32Type>(vec![1, 2, 3]);
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.ptype, PType::I32);
         assert_eq!(arr.dtype, DType::Int(IntWidth::_32));
@@ -91,7 +132,7 @@ mod test {
 
     #[test]
     fn slice() {
-        let arr = PrimitiveArray::from_vec(vec![1, 2, 3, 4, 5])
+        let arr = PrimitiveArray::from_vec::<Int32Type>(vec![1, 2, 3, 4, 5])
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);

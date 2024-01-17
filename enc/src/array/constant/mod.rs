@@ -1,5 +1,7 @@
+use arrow::array::Datum;
+
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
-use crate::arrow;
+use crate::arrow::compute::repeat;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -44,11 +46,8 @@ impl ArrayEncoding for ConstantArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let arrow_scalar: Box<dyn arrow2::scalar::Scalar> = self.scalar.as_ref().into();
-        Box::new(std::iter::once(arrow::compute::repeat(
-            arrow_scalar.as_ref(),
-            self.length,
-        )))
+        let arrow_scalar: Box<dyn Datum> = self.scalar.as_ref().into();
+        Box::new(std::iter::once(repeat(arrow_scalar.as_ref(), self.length)))
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {

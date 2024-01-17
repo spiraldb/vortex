@@ -54,7 +54,7 @@ pub enum EncError {
     #[error("can't convert type {0} into {1}")]
     TypeMismatch(DType, DType),
     #[error("unexpected arrow data type: {0:?}")]
-    InvalidArrowDataType(arrow2::datatypes::DataType),
+    InvalidArrowDataType(arrow::datatypes::DataType),
     #[error("polars error: {0:?}")]
     PolarsError(PolarsError),
 }

@@ -1,93 +1,118 @@
-use arrow2::datatypes::DataType;
-use arrow2::scalar::{PrimitiveScalar, Scalar as ArrowScalar};
+use arrow::array::cast::AsArray;
+use arrow::array::types::{
+    Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
+    UInt32Type, UInt64Type, UInt8Type,
+};
+use arrow::array::Scalar as ArrowScalar;
+use arrow::array::{Array, Datum, PrimitiveArray};
+use arrow::datatypes::DataType;
 
 use crate::scalar::{BoolScalar, NullableScalar, PScalar, Scalar};
-use crate::types::{DType, FloatWidth, IntWidth};
 
-macro_rules! convert_primitive_scalar {
-    ($any:expr, $tp:ty, $dtype:expr) => {{
-        if let Some(scalar) = $any.downcast_ref::<scalar::PrimitiveScalar<$tp>>() {
-            return match scalar.value() {
-                Some(v) => (*v).into(),
-                None => NullableScalar::none($dtype).boxed(),
-            };
-        }
-    }};
-}
-
-impl From<Box<dyn ArrowScalar>> for Box<dyn Scalar> {
-    fn from(value: Box<dyn ArrowScalar>) -> Self {
+impl From<Box<dyn Datum>> for Box<dyn Scalar> {
+    fn from(value: Box<dyn Datum>) -> Self {
         value.as_ref().into()
     }
 }
 
-impl From<&dyn ArrowScalar> for Box<dyn Scalar> {
-    fn from(value: &dyn ArrowScalar) -> Self {
-        use arrow2::datatypes::DataType::*;
-        use arrow2::scalar;
-
-        let any = value.as_any();
-        match value.data_type() {
-            Boolean => {
-                if let Some(scalar) = any.downcast_ref::<scalar::BooleanScalar>() {
-                    return match scalar.value() {
-                        Some(bool) => BoolScalar::new(bool).boxed(),
-                        None => NullableScalar::none(DType::Bool).boxed(),
-                    };
-                }
-            }
-            Int8 => convert_primitive_scalar!(any, i8, DType::Int(IntWidth::_8)),
-            Int16 => convert_primitive_scalar!(any, i16, DType::Int(IntWidth::_16)),
-            Int32 => convert_primitive_scalar!(any, i32, DType::Int(IntWidth::_32)),
-            Int64 => convert_primitive_scalar!(any, i64, DType::Int(IntWidth::_64)),
-            UInt8 => convert_primitive_scalar!(any, u8, DType::UInt(IntWidth::_8)),
-            UInt16 => convert_primitive_scalar!(any, u16, DType::UInt(IntWidth::_16)),
-            UInt32 => convert_primitive_scalar!(any, u32, DType::UInt(IntWidth::_32)),
-            UInt64 => convert_primitive_scalar!(any, u64, DType::UInt(IntWidth::_64)),
-            Float32 => convert_primitive_scalar!(any, f32, DType::Float(FloatWidth::_32)),
-            Float64 => convert_primitive_scalar!(any, f64, DType::Float(FloatWidth::_64)),
-            _ => {}
-        }
-
-        todo!("implement other scalar types {:?}", value)
+impl<T: Array> From<ArrowScalar<T>> for Box<dyn Scalar> {
+    fn from(value: ArrowScalar<T>) -> Self {
+        let datum: &dyn Datum = &value;
+        datum.into()
     }
 }
 
-impl From<&dyn Scalar> for Box<dyn ArrowScalar> {
+impl From<&dyn Datum> for Box<dyn Scalar> {
+    fn from(value: &dyn Datum) -> Self {
+        let (arr, is_scalar) = value.get();
+        assert!(is_scalar, "Datum was not a scalar");
+        if arr.is_null(0) {
+            return NullableScalar::None(arr.data_type().try_into().unwrap()).boxed();
+        }
+
+        match arr.data_type() {
+            DataType::Boolean => {
+                let arr = arr.as_boolean();
+                BoolScalar::new(arr.value(0)).boxed()
+            }
+            DataType::Int8 => arr.as_primitive::<Int8Type>().value(0).into(),
+            DataType::Int16 => arr.as_primitive::<Int16Type>().value(0).into(),
+            DataType::Int32 => arr.as_primitive::<Int32Type>().value(0).into(),
+            DataType::Int64 => arr.as_primitive::<Int64Type>().value(0).into(),
+            DataType::UInt8 => arr.as_primitive::<UInt8Type>().value(0).into(),
+            DataType::UInt16 => arr.as_primitive::<UInt16Type>().value(0).into(),
+            DataType::UInt32 => arr.as_primitive::<UInt32Type>().value(0).into(),
+            DataType::UInt64 => arr.as_primitive::<UInt64Type>().value(0).into(),
+            DataType::Float32 => arr.as_primitive::<Float32Type>().value(0).into(),
+            DataType::Float64 => arr.as_primitive::<Float64Type>().value(0).into(),
+            _ => todo!("implement other scalar types {:?}", arr),
+        }
+    }
+}
+impl From<Box<dyn Scalar>> for Box<dyn Datum> {
+    fn from(value: Box<dyn Scalar>) -> Self {
+        value.as_ref().into()
+    }
+}
+
+impl From<&dyn Scalar> for Box<dyn Datum> {
     fn from(value: &dyn Scalar) -> Self {
         if let Some(pscalar) = value.as_any().downcast_ref::<PScalar>() {
-            let dtype: DataType = value.dtype().into();
-            match pscalar {
-                PScalar::U8(v) => return Box::new(PrimitiveScalar::<u8>::new(dtype, Some(*v))),
+            return match pscalar {
+                PScalar::U8(v) => {
+                    Box::new(ArrowScalar::new(PrimitiveArray::<UInt8Type>::from(vec![
+                        *v,
+                    ])))
+                }
                 PScalar::U16(v) => {
-                    return Box::new(PrimitiveScalar::<u16>::new(dtype, Some(*v)));
+                    Box::new(ArrowScalar::new(PrimitiveArray::<UInt16Type>::from(vec![
+                        *v,
+                    ])))
                 }
                 PScalar::U32(v) => {
-                    return Box::new(PrimitiveScalar::<u32>::new(dtype, Some(*v)));
+                    Box::new(ArrowScalar::new(PrimitiveArray::<UInt32Type>::from(vec![
+                        *v,
+                    ])))
                 }
                 PScalar::U64(v) => {
-                    return Box::new(PrimitiveScalar::<u64>::new(dtype, Some(*v)));
+                    Box::new(ArrowScalar::new(PrimitiveArray::<UInt64Type>::from(vec![
+                        *v,
+                    ])))
                 }
-                PScalar::I8(v) => return Box::new(PrimitiveScalar::<i8>::new(dtype, Some(*v))),
+                PScalar::I8(v) => {
+                    Box::new(ArrowScalar::new(PrimitiveArray::<Int8Type>::from(vec![*v])))
+                }
                 PScalar::I16(v) => {
-                    return Box::new(PrimitiveScalar::<i16>::new(dtype, Some(*v)));
+                    Box::new(ArrowScalar::new(PrimitiveArray::<Int16Type>::from(vec![
+                        *v,
+                    ])))
                 }
                 PScalar::I32(v) => {
-                    return Box::new(PrimitiveScalar::<i32>::new(dtype, Some(*v)));
+                    Box::new(ArrowScalar::new(PrimitiveArray::<Int32Type>::from(vec![
+                        *v,
+                    ])))
                 }
                 PScalar::I64(v) => {
-                    return Box::new(PrimitiveScalar::<i64>::new(dtype, Some(*v)));
+                    Box::new(ArrowScalar::new(PrimitiveArray::<Int64Type>::from(vec![
+                        *v,
+                    ])))
                 }
-                PScalar::F16(_v) => {
-                    todo!("Convert half f16 into arrow f16");
+                PScalar::F16(v) => {
+                    Box::new(ArrowScalar::new(PrimitiveArray::<Float16Type>::from(vec![
+                        *v,
+                    ])))
                 }
                 PScalar::F32(v) => {
-                    return Box::new(PrimitiveScalar::<f32>::new(dtype, Some(*v)));
+                    Box::new(ArrowScalar::new(PrimitiveArray::<Float32Type>::from(vec![
+                        *v,
+                    ])))
                 }
                 PScalar::F64(v) => {
-                    return Box::new(PrimitiveScalar::<f64>::new(dtype, Some(*v)));
+                    Box::new(ArrowScalar::new(PrimitiveArray::<Float64Type>::from(vec![
+                        *v,
+                    ])))
                 }
-            }
+            };
         }
 
         todo!("implement other scalar types {:?}", value)

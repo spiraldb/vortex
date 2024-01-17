@@ -11,8 +11,8 @@ use enc::array::struct_::StructArray;
 use enc::array::typed::TypedArray;
 use enc::array::{Array, ArrayEncoding};
 
-use crate::arrow;
 use crate::dtype::PyDType;
+use crate::enc_arrow;
 
 #[pyclass(name = "Array", module = "enc", sequence, subclass)]
 pub struct PyArray {
@@ -73,7 +73,7 @@ impl PyArray {
     fn to_pyarrow(self_: PyRef<'_, Self>) -> PyResult<&PyAny> {
         // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
         // NOTE(robert): Return RecordBatchStreamReader always?
-        arrow::export_array_array(self_.py(), &self_.inner)
+        enc_arrow::export_array_array(self_.py(), &self_.inner)
     }
 
     fn __len__(&self) -> usize {

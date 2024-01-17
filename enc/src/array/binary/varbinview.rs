@@ -1,9 +1,12 @@
 use std::iter;
+use std::ops::Deref;
+use std::sync::Arc;
 
-use arrow2::array::{
-    Array as ArrowArray, PrimitiveArray as ArrowPrimitiveArray, Utf8Array as ArrowUtf8Array,
-};
-use arrow2::datatypes::{PhysicalType, PrimitiveType};
+use arrow::array::builder::LargeStringBuilder;
+use arrow::array::cast::AsArray;
+use arrow::array::types::UInt8Type;
+use arrow::array::{ArrayRef, PrimitiveArray as ArrowPrimitiveArray};
+use arrow::datatypes::DataType;
 
 use crate::error::EncResult;
 use crate::scalar::{Scalar, Utf8Scalar};
@@ -78,14 +81,14 @@ impl BinaryView {
 
 pub const VIEW_SIZE: usize = std::mem::size_of::<BinaryView>();
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct VarBinViewArray {
-    views: ArrowPrimitiveArray<u8>,
+    views: Arc<ArrowPrimitiveArray<UInt8Type>>,
     data: Vec<Array>,
 }
 
 impl VarBinViewArray {
-    pub fn new(views: ArrowPrimitiveArray<u8>, data: Vec<Array>) -> Self {
+    pub fn new(views: Arc<ArrowPrimitiveArray<UInt8Type>>, data: Vec<Array>) -> Self {
         Self { views, data }
     }
 
@@ -98,8 +101,7 @@ impl VarBinViewArray {
 
     #[inline]
     pub(self) fn view_at(&self, index: usize) -> BinaryView {
-        let view_slice: &[u8] =
-            &self.views.values().as_slice()[index * VIEW_SIZE..(index + 1) * VIEW_SIZE];
+        let view_slice: &[u8] = &self.views.values()[index * VIEW_SIZE..(index + 1) * VIEW_SIZE];
         BinaryView::from_le_bytes(view_slice)
     }
 }
@@ -134,15 +136,12 @@ impl ArrayEncoding for VarBinViewArray {
                     .next()
                     .unwrap();
 
-                match arrow_data_buffer.as_ref().data_type().to_physical_type() {
-                    PhysicalType::Primitive(PrimitiveType::UInt8) => {
-                        let primitive_array = arrow_data_buffer
-                            .as_any()
-                            .downcast_ref::<ArrowPrimitiveArray<u8>>()
-                            .unwrap();
+                match arrow_data_buffer.as_ref().data_type() {
+                    DataType::UInt8 => {
+                        let primitive_array = arrow_data_buffer.as_primitive::<UInt8Type>();
 
                         Ok(Utf8Scalar::new(String::from_utf8_unchecked(
-                            primitive_array.values().as_slice().to_vec(),
+                            primitive_array.values().deref().to_vec(),
                         ))
                         .boxed())
                     }
@@ -161,46 +160,46 @@ impl ArrayEncoding for VarBinViewArray {
     // TODO(robert): This could be better if we had compute dispatch but for now it's using scalar_at
     // and wraps values needlessly instead of memcopy
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let mut data_buf =
-            arrow2::array::MutableUtf8ValuesArray::<i64>::with_capacity(self.plain_size());
+        let mut data_buf = LargeStringBuilder::with_capacity(self.len(), self.plain_size());
         for i in 0..self.views.len() / VIEW_SIZE {
-            data_buf.push(
+            data_buf.append_value(
                 self.scalar_at(i)
                     .unwrap()
                     .as_any()
                     .downcast_ref::<Utf8Scalar>()
                     .unwrap()
                     .value(),
-            )
+            );
         }
-        let data_arr: Box<dyn ArrowArray> = Box::<ArrowUtf8Array<i64>>::new(data_buf.into());
+        let data_arr: ArrayRef = Arc::new(data_buf.finish());
         Box::new(iter::once(data_arr))
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
         self.check_slice_bounds(start, stop)?;
 
-        let mut cloned = self.clone();
-        unsafe {
-            cloned
-                .views
-                .slice_unchecked(start * VIEW_SIZE, (stop - start) * VIEW_SIZE);
-        }
-        Ok(Array::VarBinView(cloned))
+        Ok(Array::VarBinView(Self {
+            views: Arc::new(
+                self.views
+                    .slice(start * VIEW_SIZE, (stop - start) * VIEW_SIZE),
+            ),
+            data: self.data.clone(),
+        }))
     }
 }
 
 #[cfg(test)]
 mod test {
-    use arrow2::array;
+    use arrow::array::types::UInt8Type;
+    use arrow::array::GenericStringArray as ArrowStringArray;
 
     use crate::array::primitive::PrimitiveArray;
 
     use super::*;
 
     fn binary_array() -> VarBinViewArray {
-        let values = PrimitiveArray::new(Box::new(array::PrimitiveArray::<u8>::from_slice(
-            "abcdefabcdefabcdef",
+        let values = PrimitiveArray::new(Arc::new(ArrowPrimitiveArray::<UInt8Type>::from(
+            "abcdefabcdefabcdef".as_bytes().to_vec(),
         )));
         let mut view1 = BinaryView {
             inlined: Inlined {
@@ -218,14 +217,14 @@ mod test {
                 offset: 2,
             },
         };
-        let view_arr = array::PrimitiveArray::<u8>::from_slice(
+        let view_arr: ArrowPrimitiveArray<UInt8Type> =
             vec![view1.to_le_bytes(), view2.to_le_bytes()]
                 .into_iter()
                 .flatten()
-                .collect::<Vec<u8>>(),
-        );
+                .collect::<Vec<u8>>()
+                .into();
 
-        VarBinViewArray::new(view_arr, vec![values.into()])
+        VarBinViewArray::new(Arc::new(view_arr), vec![values.into()])
     }
 
     #[test]
@@ -255,16 +254,8 @@ mod test {
     pub fn iter() {
         let binary_array = binary_array();
         assert_eq!(
-            binary_array
-                .iter_arrow()
-                .next()
-                .unwrap()
-                .as_any()
-                .downcast_ref::<ArrowUtf8Array<i64>>()
-                .unwrap(),
-            &ArrowUtf8Array::<i64>::from_trusted_len_values_iter(
-                vec!["abcdefgh", "cdefabcdefabc"].into_iter()
-            )
+            binary_array.iter_arrow().next().unwrap().as_string::<i64>(),
+            &ArrowStringArray::<i64>::from(vec!["abcdefgh", "cdefabcdefabc"])
         );
     }
 }

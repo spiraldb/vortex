@@ -1,7 +1,6 @@
 use std::panic::RefUnwindSafe;
 
-use arrow2::datatypes::DataType;
-use arrow2::datatypes::PrimitiveType as ArrowPrimitiveType;
+use arrow::datatypes::DataType;
 
 use crate::error::{EncError, EncResult};
 use crate::types::{DType, IntWidth};
@@ -92,27 +91,6 @@ impl TryFrom<&DataType> for PType {
             DataType::Float32 => Ok(PType::F32),
             DataType::Float64 => Ok(PType::F64),
             _ => Err(EncError::InvalidArrowDataType(value.clone())),
-        }
-    }
-}
-
-impl TryFrom<ArrowPrimitiveType> for PType {
-    type Error = EncError;
-
-    fn try_from(value: ArrowPrimitiveType) -> EncResult<Self> {
-        match value {
-            ArrowPrimitiveType::Int8 => Ok(PType::I8),
-            ArrowPrimitiveType::Int16 => Ok(PType::I16),
-            ArrowPrimitiveType::Int32 => Ok(PType::I32),
-            ArrowPrimitiveType::Int64 => Ok(PType::I64),
-            ArrowPrimitiveType::UInt8 => Ok(PType::U8),
-            ArrowPrimitiveType::UInt16 => Ok(PType::U16),
-            ArrowPrimitiveType::UInt32 => Ok(PType::U32),
-            ArrowPrimitiveType::UInt64 => Ok(PType::U64),
-            // ArrowPrimitiveType::Float16 => Ok(PType::F16),
-            ArrowPrimitiveType::Float32 => Ok(PType::F32),
-            ArrowPrimitiveType::Float64 => Ok(PType::F64),
-            _ => Err(EncError::InvalidArrowDataType(value.into())),
         }
     }
 }

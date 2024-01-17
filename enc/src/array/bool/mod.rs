@@ -1,4 +1,7 @@
-use arrow2::array::{Array as ArrowArray, BooleanArray as ArrowBooleanArray};
+use std::sync::Arc;
+
+use arrow::array::Scalar as ArrowScalar;
+use arrow::array::{Array as ArrowArray, BooleanArray as ArrowBooleanArray};
 
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -8,11 +11,11 @@ use super::{Array, ArrayEncoding, ArrowIterator};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BoolArray {
-    buffer: Box<ArrowBooleanArray>,
+    buffer: Arc<ArrowBooleanArray>,
 }
 
 impl BoolArray {
-    pub fn new(buffer: Box<ArrowBooleanArray>) -> Self {
+    pub fn new(buffer: Arc<ArrowBooleanArray>) -> Self {
         Self { buffer }
     }
 }
@@ -37,32 +40,32 @@ impl ArrayEncoding for BoolArray {
         if index >= self.len() {
             Err(EncError::OutOfBounds(index, 0, self.len()))
         } else {
-            Ok(arrow2::scalar::new_scalar(self.buffer.as_ref(), index).into())
+            Ok(ArrowScalar::new(self.buffer.slice(index, 1)).into())
         }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        Box::new(std::iter::once(self.buffer.clone().boxed()))
+        Box::new(std::iter::once(self.buffer.clone() as Arc<dyn ArrowArray>))
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
         self.check_slice_bounds(start, stop)?;
 
-        let mut cloned = self.clone();
-        unsafe {
-            cloned.buffer.slice_unchecked(start, stop - start);
-        }
-        Ok(Array::Bool(cloned))
+        Ok(Array::Bool(Self {
+            buffer: Arc::new(self.buffer.slice(start, stop - start)),
+        }))
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
     use super::*;
 
     #[test]
     fn slice() {
-        let arr = BoolArray::new(Box::new(ArrowBooleanArray::from_slice([
+        let arr = BoolArray::new(Arc::new(ArrowBooleanArray::from(vec![
             true, true, false, false, true,
         ])))
         .slice(1, 4)

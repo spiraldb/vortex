@@ -1,16 +1,13 @@
 use std::borrow::Borrow;
 
-use arrow2::array::Array as ArrowArray;
-use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
-use arrow2::datatypes::{DataType, PhysicalType};
-use arrow2::with_match_primitive_without_interval_type;
+use arrow::datatypes::DataType;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TypedArray {
     array: Box<Array>,
     dtype: DType,
@@ -40,24 +37,13 @@ impl ArrayEncoding for TypedArray {
         underlying.as_ref().cast(&self.dtype)
     }
 
+    // TODO(robert): Have cast happen in enc space and not in arrow space
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         let datatype: DataType = self.dtype.borrow().into();
         Box::new(
-            self.array
-                .iter_arrow()
-                .map(move |arr| match arr.data_type().to_physical_type() {
-                    PhysicalType::Primitive(prim) => {
-                        with_match_primitive_without_interval_type!(prim, |$T| {
-                            let primitive_array: ArrowPrimitiveArray<$T> = arr
-                                .as_any()
-                                .downcast_ref::<ArrowPrimitiveArray<$T>>()
-                                .unwrap()
-                                .clone();
-                            Box::new(primitive_array.to(datatype.clone())) as Box<dyn ArrowArray>
-                        })
-                    }
-                    _ => panic!("Underlying typed array was not a primitive array"),
-                }),
+            self.array.iter_arrow().map(move |arr| {
+                arrow::compute::kernels::cast::cast(arr.as_ref(), &datatype).unwrap()
+            }),
         )
     }
 
@@ -71,23 +57,26 @@ impl ArrayEncoding for TypedArray {
 
 #[cfg(test)]
 mod test {
+    use std::iter;
+    use std::ops::Deref;
+
+    use arrow::array::cast::AsArray;
+    use arrow::array::types::{Int64Type, Time64MicrosecondType, UInt64Type};
+    use arrow::array::Time64MicrosecondArray;
+    use itertools::Itertools;
+
     use crate::array::primitive::PrimitiveArray;
     use crate::array::typed::TypedArray;
     use crate::array::{Array, ArrayEncoding};
     use crate::scalar::{LocalTimeScalar, PScalar, Scalar};
     use crate::types::{DType, TimeUnit};
-    use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
-    use arrow2::datatypes::DataType;
-    use itertools::Itertools;
-    use std::iter;
 
     #[test]
     pub fn scalar() {
         let arr = TypedArray::new(
-            Box::new(Array::Primitive(PrimitiveArray::from_vec(vec![
-                64_799_000_000_u64,
-                43_000_000_000,
-            ]))),
+            Box::new(Array::Primitive(PrimitiveArray::from_vec::<UInt64Type>(
+                vec![64_799_000_000_u64, 43_000_000_000],
+            ))),
             DType::LocalTime(TimeUnit::Us),
         );
         assert_eq!(
@@ -103,25 +92,20 @@ mod test {
     #[test]
     pub fn iter() {
         let arr = TypedArray::new(
-            Box::new(Array::Primitive(PrimitiveArray::from_vec(vec![
-                64_799_000_000_i64,
-                43_000_000_000,
-            ]))),
+            Box::new(Array::Primitive(PrimitiveArray::from_vec::<Int64Type>(
+                vec![64_799_000_000_i64, 43_000_000_000],
+            ))),
             DType::LocalTime(TimeUnit::Us),
         );
         arr.iter_arrow()
-            .zip_eq(iter::once(Box::new(
-                ArrowPrimitiveArray::from_vec(vec![64_799_000_000i64, 43_000_000_000])
-                    .to(DataType::Time64(arrow2::datatypes::TimeUnit::Microsecond)),
-            )))
+            .zip_eq(iter::once(Box::new(Time64MicrosecondArray::from(vec![
+                64_799_000_000i64,
+                43_000_000_000,
+            ]))))
             .for_each(|(enc, arrow)| {
                 assert_eq!(
-                    enc.as_any()
-                        .downcast_ref::<ArrowPrimitiveArray<i64>>()
-                        .unwrap()
-                        .values()
-                        .as_slice(),
-                    arrow.values().as_slice()
+                    enc.as_primitive::<Time64MicrosecondType>().values().deref(),
+                    arrow.values().deref()
                 )
             });
     }

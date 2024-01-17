@@ -12,8 +12,8 @@ impl Utf8Scalar {
         Self { value }
     }
 
-    pub fn value(&self) -> &String {
-        &self.value
+    pub fn value(&self) -> &str {
+        self.value.as_str()
     }
 }
 
