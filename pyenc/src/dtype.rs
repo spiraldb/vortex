@@ -1,38 +1,40 @@
 use std::mem::MaybeUninit;
 
 use arrow2::datatypes::DataType as ArrowDataType;
-use pyo3::{pyclass, pymethods, PyAny, PyResult};
+use pyo3::prelude::*;
+use pyo3::types::PyType;
 
-use crate::error::PyEncError;
 use enc::types::DType;
 
+use crate::error::PyEncError;
+
 #[pyclass(name = "DType", module = "enc", subclass)]
-#[allow(dead_code)]
 pub struct PyDType {
     inner: DType,
 }
 
 impl PyDType {
-    pub fn new(inner: DType) -> Self {
-        Self { inner }
+    pub fn wrap(py: Python<'_>, inner: DType) -> PyResult<Py<Self>> {
+        Py::new(py, Self { inner })
     }
-}
 
-impl From<DType> for PyDType {
-    fn from(value: DType) -> Self {
-        Self::new(value)
+    pub fn unwrap(&self) -> &DType {
+        &self.inner
     }
 }
 
 #[pymethods]
 impl PyDType {
-    #[staticmethod]
+    fn __str__(&self) -> String {
+        format!("{}", self.inner)
+    }
+
+    #[classmethod]
     fn from_pyarrow(
+        cls: &PyType,
         #[pyo3(from_py_with = "import_arrow_dtype")] arrow_dtype: ArrowDataType,
-    ) -> PyResult<Self> {
-        Ok(PyDType::new(
-            arrow_dtype.try_into().map_err(PyEncError::new)?,
-        ))
+    ) -> PyResult<Py<Self>> {
+        PyDType::wrap(cls.py(), arrow_dtype.try_into().map_err(PyEncError::new)?)
     }
 }
 

@@ -1,10 +1,12 @@
 use pyo3::prelude::*;
 
 use dtype::PyDType;
+use enc::types::DType;
 
 use crate::array::*;
 
 mod array;
+mod arrow;
 mod dtype;
 mod encode;
 mod error;
@@ -28,5 +30,62 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyVarBinViewArray>()?;
 
     m.add_class::<PyDType>()?;
+
+    m.add_function(wrap_pyfunction!(dtype_int, m)?)?;
+    m.add_function(wrap_pyfunction!(dtype_uint, m)?)?;
+    m.add_function(wrap_pyfunction!(dtype_float, m)?)?;
+    m.add_function(wrap_pyfunction!(dtype_bool, m)?)?;
+    m.add_function(wrap_pyfunction!(dtype_utf8, m)?)?;
+
     Ok(())
+}
+
+#[pyfunction(name = "bool")]
+#[pyo3(signature = (nullable = false))]
+fn dtype_bool(py: Python<'_>, nullable: bool) -> PyResult<Py<PyDType>> {
+    let mut dtype = DType::Bool;
+    if nullable {
+        dtype = DType::Nullable(Box::new(dtype));
+    }
+    PyDType::wrap(py, dtype)
+}
+
+#[pyfunction(name = "int")]
+#[pyo3(signature = (width = None, nullable = false))]
+fn dtype_int(py: Python<'_>, width: Option<i8>, nullable: bool) -> PyResult<Py<PyDType>> {
+    let mut dtype = DType::Int(width.unwrap_or(0).into());
+    if nullable {
+        dtype = DType::Nullable(Box::new(dtype));
+    }
+    PyDType::wrap(py, dtype)
+}
+
+#[pyfunction(name = "uint")]
+#[pyo3(signature = (width = None, nullable = false))]
+fn dtype_uint(py: Python<'_>, width: Option<i8>, nullable: bool) -> PyResult<Py<PyDType>> {
+    let mut dtype = DType::UInt(width.unwrap_or(0).into());
+    if nullable {
+        dtype = DType::Nullable(Box::new(dtype));
+    }
+    PyDType::wrap(py, dtype)
+}
+
+#[pyfunction(name = "float")]
+#[pyo3(signature = (width = None, nullable = false))]
+fn dtype_float(py: Python<'_>, width: Option<i8>, nullable: bool) -> PyResult<Py<PyDType>> {
+    let mut dtype = DType::Float(width.unwrap_or(0).into());
+    if nullable {
+        dtype = DType::Nullable(Box::new(dtype));
+    }
+    PyDType::wrap(py, dtype)
+}
+
+#[pyfunction(name = "utf8")]
+#[pyo3(signature = (nullable = false))]
+fn dtype_utf8(py: Python<'_>, nullable: bool) -> PyResult<Py<PyDType>> {
+    let mut dtype = DType::Utf8;
+    if nullable {
+        dtype = DType::Nullable(Box::new(dtype));
+    }
+    PyDType::wrap(py, dtype)
 }
