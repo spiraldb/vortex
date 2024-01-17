@@ -7,6 +7,7 @@ use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
 use crate::array::struct_::StructArray;
+use crate::array::typed::TypedArray;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -20,6 +21,7 @@ pub mod ree;
 pub mod chunked;
 pub mod encode;
 pub mod struct_;
+pub mod typed;
 
 type ArrowIterator = dyn Iterator<Item = Box<dyn ArrowArray>>;
 
@@ -58,6 +60,7 @@ pub enum Array {
     Primitive(PrimitiveArray),
     REE(REEArray),
     Struct(StructArray),
+    Typed(TypedArray),
     VarBin(VarBinArray),
     VarBinView(VarBinViewArray),
 }
@@ -78,6 +81,7 @@ impls_for_array!(Constant, ConstantArray);
 impls_for_array!(Primitive, PrimitiveArray);
 impls_for_array!(REE, REEArray);
 impls_for_array!(Struct, StructArray);
+impls_for_array!(Typed, TypedArray);
 impls_for_array!(VarBin, VarBinArray);
 impls_for_array!(VarBinView, VarBinViewArray);
 
@@ -91,6 +95,7 @@ macro_rules! match_each_encoding {
             Array::Primitive(enc) => __with_enc__! { enc },
             Array::REE(enc) => __with_enc__! { enc },
             Array::Struct(enc) => __with_enc__! { enc },
+            Array::Typed(enc) => __with_enc__! { enc },
             Array::VarBin(enc) => __with_enc__! { enc },
             Array::VarBinView(enc) => __with_enc__! { enc },
         }

@@ -1,11 +1,12 @@
-use arrow2::array::Array as ArrowArray;
-use arrow2::array::StructArray as ArrowStructArray;
-use itertools::Itertools;
-
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
 use crate::error::EncResult;
 use crate::scalar::{Scalar, StructScalar};
 use crate::types::DType;
+use arrow2::array::Array as ArrowArray;
+use arrow2::array::StructArray as ArrowStructArray;
+use arrow2::datatypes::DataType;
+use itertools::Itertools;
+use std::borrow::Borrow;
 
 use super::{Array, ArrayEncoding, ArrowIterator};
 
@@ -55,7 +56,7 @@ impl ArrayEncoding for StructArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let datatype = self.dtype();
+        let datatype: DataType = self.dtype().borrow().into();
         Box::new(
             AlignedArrowArrayIterator::new(
                 self.fields
@@ -64,7 +65,7 @@ impl ArrayEncoding for StructArray {
                     .collect::<Vec<_>>(),
             )
             .map(move |items| {
-                Box::new(ArrowStructArray::new(datatype.clone().into(), items, None))
+                Box::new(ArrowStructArray::new(datatype.clone(), items, None))
                     as Box<dyn ArrowArray>
             }),
         )

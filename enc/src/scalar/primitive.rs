@@ -1,7 +1,7 @@
 use half::f16;
 
 use crate::error::{EncError, EncResult};
-use crate::scalar::Scalar;
+use crate::scalar::{LocalTimeScalar, Scalar};
 use crate::types::{DType, PType};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -33,6 +33,29 @@ impl PScalar {
             PScalar::F16(_) => PType::F16,
             PScalar::F32(_) => PType::F32,
             PScalar::F64(_) => PType::F64,
+        }
+    }
+
+    // General conversion function that handles casting primitive scalar to non primitive.
+    // If target dtype can be converted to ptype you should use cast_ptype.
+    pub fn cast_dtype(&self, dtype: DType) -> EncResult<Box<dyn Scalar>> {
+        macro_rules! from_int {
+            ($dtype:ident , $ps:ident) => {
+                match $dtype {
+                    DType::LocalTime(w) => {
+                        Ok(Box::new(LocalTimeScalar::new($ps.clone(), w.clone())))
+                    }
+                    _ => Err(EncError::InvalidDType($dtype.clone())),
+                }
+            };
+        }
+
+        match self {
+            p @ PScalar::U32(_)
+            | p @ PScalar::U64(_)
+            | p @ PScalar::I32(_)
+            | p @ PScalar::I64(_) => from_int!(dtype, p),
+            _ => Err(EncError::InvalidDType(dtype.clone())),
         }
     }
 
@@ -70,7 +93,6 @@ impl PScalar {
                     PType::F16 => Ok((f16::from_f32(*$v as f32)).into()),
                     PType::F32 => Ok((*$v as f32).into()),
                     PType::F64 => Ok((*$v as f64).into()),
-                    // TODO(ngates): throw error
                     _ => Err(EncError::InvalidDType(ptype.into())),
                 }
             };
@@ -119,8 +141,11 @@ impl Scalar for PScalar {
     }
 
     fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
-        let ptype = dtype.try_into()?;
-        self.cast_ptype(ptype).map(|v| v.boxed())
+        let ptype: EncResult<PType> = dtype.try_into();
+        ptype
+            .and_then(|p| self.cast_ptype(p))
+            .map(|v| v.boxed())
+            .or_else(|_| self.cast_dtype(dtype.clone()))
     }
 }
 

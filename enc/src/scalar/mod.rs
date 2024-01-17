@@ -1,7 +1,9 @@
 use std::any::Any;
 use std::fmt::Debug;
 
+pub use binary::*;
 pub use bool::*;
+pub use localtime::*;
 pub use nullable::*;
 pub use primitive::*;
 pub use struct_::*;
@@ -11,8 +13,10 @@ use crate::error::EncResult;
 use crate::types::DType;
 
 mod arrow;
+mod binary;
 mod bool;
 mod equal;
+mod localtime;
 mod nullable;
 mod primitive;
 mod struct_;

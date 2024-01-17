@@ -1,4 +1,5 @@
-use crate::types::{FloatWidth, IntWidth};
+use crate::scalar::binary::BinaryScalar;
+use crate::scalar::localtime::LocalTimeScalar;
 
 use super::*;
 
@@ -16,7 +17,7 @@ impl PartialEq for dyn Scalar + '_ {
 
 impl PartialEq<dyn Scalar> for Box<dyn Scalar + '_> {
     fn eq(&self, that: &dyn Scalar) -> bool {
-        equal(&**self, that)
+        equal(self.as_ref(), that)
     }
 }
 
@@ -36,28 +37,13 @@ fn equal(lhs: &dyn Scalar, rhs: &dyn Scalar) -> bool {
     use DType::*;
     match lhs.dtype() {
         Bool => dyn_eq!(BoolScalar, lhs, rhs),
-        Int(width) => match width {
-            IntWidth::_8 => dyn_eq!(PScalar, lhs, rhs),
-            IntWidth::_16 => dyn_eq!(PScalar, lhs, rhs),
-            IntWidth::_32 => dyn_eq!(PScalar, lhs, rhs),
-            IntWidth::_64 => dyn_eq!(PScalar, lhs, rhs),
-            _ => unreachable!(),
-        },
-        UInt(width) => match width {
-            IntWidth::_8 => dyn_eq!(PScalar, lhs, rhs),
-            IntWidth::_16 => dyn_eq!(PScalar, lhs, rhs),
-            IntWidth::_32 => dyn_eq!(PScalar, lhs, rhs),
-            IntWidth::_64 => dyn_eq!(PScalar, lhs, rhs),
-            _ => unreachable!(),
-        },
-        Float(width) => match width {
-            // FloatWidth::_16 => dyn_eq!(PScalar<f16>, lhs, rhs),
-            FloatWidth::_32 => dyn_eq!(PScalar, lhs, rhs),
-            FloatWidth::_64 => dyn_eq!(PScalar, lhs, rhs),
-            _ => unreachable!(),
-        },
+        Int(_) => dyn_eq!(PScalar, lhs, rhs),
+        UInt(_) => dyn_eq!(PScalar, lhs, rhs),
+        Float(_) => dyn_eq!(PScalar, lhs, rhs),
         Struct(..) => dyn_eq!(StructScalar, lhs, rhs),
         Utf8 => dyn_eq!(Utf8Scalar, lhs, rhs),
+        Binary => dyn_eq!(BinaryScalar, lhs, rhs),
+        LocalTime(_) => dyn_eq!(LocalTimeScalar, lhs, rhs),
         _ => todo!("Equal not yet implemented for {:?} {:?}", lhs, rhs),
     }
 }

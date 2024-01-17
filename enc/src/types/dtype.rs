@@ -1,11 +1,11 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::zip;
 
+use super::PType;
 use crate::error::{EncError, EncResult};
 use arrow2::datatypes::TimeUnit as ArrowTimeUnit;
 use arrow2::datatypes::{DataType, Field};
-
-use super::PType;
+use std::borrow::Borrow;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IntWidth {
@@ -145,7 +145,7 @@ impl TryFrom<DataType> for DType {
     type Error = EncError;
 
     fn try_from(value: DataType) -> Result<Self, Self::Error> {
-        (&value).try_into()
+        value.borrow().try_into()
     }
 }
 
@@ -174,7 +174,7 @@ impl TryFrom<&DataType> for DType {
 
 impl From<DType> for DataType {
     fn from(value: DType) -> Self {
-        (&value).into()
+        value.borrow().into()
     }
 }
 
