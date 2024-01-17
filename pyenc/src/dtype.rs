@@ -27,7 +27,7 @@ impl From<DType> for PyDType {
 #[pymethods]
 impl PyDType {
     #[staticmethod]
-    fn from_arrow(
+    fn from_pyarrow(
         #[pyo3(from_py_with = "import_arrow_dtype")] arrow_dtype: ArrowDataType,
     ) -> PyResult<Self> {
         Ok(PyDType::new(

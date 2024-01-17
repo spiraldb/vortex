@@ -1,12 +1,14 @@
-use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
-use crate::error::EncResult;
-use crate::scalar::{Scalar, StructScalar};
-use crate::types::DType;
+use std::borrow::Borrow;
+
 use arrow2::array::Array as ArrowArray;
 use arrow2::array::StructArray as ArrowStructArray;
 use arrow2::datatypes::DataType;
 use itertools::Itertools;
-use std::borrow::Borrow;
+
+use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
+use crate::error::EncResult;
+use crate::scalar::{Scalar, StructScalar};
+use crate::types::DType;
 
 use super::{Array, ArrayEncoding, ArrowIterator};
 
@@ -90,9 +92,9 @@ mod test {
     use arrow2::array::Utf8Array as ArrowUtf8Array;
 
     use crate::array::binary::VarBinArray;
+    use crate::array::primitive::PrimitiveArray;
     use crate::array::struct_::StructArray;
     use crate::array::ArrayEncoding;
-    use crate::prelude::PrimitiveArray;
 
     #[test]
     pub fn iter() {

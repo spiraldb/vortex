@@ -71,15 +71,16 @@ impl ArrayEncoding for TypedArray {
 
 #[cfg(test)]
 mod test {
+    use crate::array::primitive::PrimitiveArray;
     use crate::array::typed::TypedArray;
-    use crate::array::ArrayEncoding;
-    use crate::prelude::{Array, PrimitiveArray};
+    use crate::array::{Array, ArrayEncoding};
     use crate::scalar::{LocalTimeScalar, PScalar, Scalar};
     use crate::types::{DType, TimeUnit};
     use arrow2::array::PrimitiveArray as ArrowPrimitiveArray;
     use arrow2::datatypes::DataType;
     use itertools::Itertools;
     use std::iter;
+
     #[test]
     pub fn scalar() {
         let arr = TypedArray::new(
