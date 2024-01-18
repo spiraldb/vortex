@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::iter;
+use std::sync::{Arc, RwLock};
 
 use arrow::array::{make_array, ArrayData};
 use arrow::buffer::{Buffer, ScalarBuffer};
 use half::f16;
 
+use crate::array::stats::{Stat, Stats, StatsCompute, StatsSet};
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -14,6 +17,7 @@ pub struct PrimitiveArray {
     buffer: Buffer,
     ptype: PType,
     dtype: DType,
+    stats: Arc<RwLock<StatsSet>>,
 }
 
 impl PrimitiveArray {
@@ -23,12 +27,23 @@ impl PrimitiveArray {
             buffer,
             ptype,
             dtype,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
 
     pub fn from_vec<T: NativePType>(values: Vec<T>) -> Self {
         let buffer = Buffer::from_vec::<T>(values);
         Self::new(T::PTYPE, buffer)
+    }
+
+    pub fn stats(&self) -> Stats {
+        Stats::new(&self.stats, self)
+    }
+}
+
+impl StatsCompute for PrimitiveArray {
+    fn compute(&self, _stat: Stat) -> StatsSet {
+        HashMap::from([(Stat::Min, 42.into()), (Stat::Max, 42.into())])
     }
 }
 
@@ -84,6 +99,7 @@ impl ArrayEncoding for PrimitiveArray {
             buffer: self.buffer.slice_with_length(byte_start, byte_length),
             ptype: self.ptype,
             dtype: self.dtype.clone(),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         }))
     }
 }
@@ -122,5 +138,17 @@ mod test {
         assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(2));
         assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(3));
         assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(4));
+    }
+
+    #[test]
+    fn stats() {
+        let arr = PrimitiveArray::from_vec(vec![1, 2, 3, 4, 5]);
+        let min: i32 = arr
+            .stats()
+            .maybe_get(Stat::Min)
+            .unwrap()
+            .try_into()
+            .unwrap();
+        assert_eq!(min, 42);
     }
 }

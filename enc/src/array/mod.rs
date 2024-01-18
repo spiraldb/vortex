@@ -20,6 +20,7 @@ pub mod ree;
 
 pub mod chunked;
 pub mod encode;
+pub mod stats;
 pub mod struct_;
 pub mod typed;
 pub mod varbin;

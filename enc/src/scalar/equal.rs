@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::scalar::binary::BinaryScalar;
 use crate::scalar::localtime::LocalTimeScalar;
 
@@ -9,11 +11,11 @@ impl PartialEq for dyn Scalar + '_ {
     }
 }
 
-// impl PartialEq<dyn Scalar> for Arc<dyn Scalar + '_> {
-//     fn eq(&self, that: &dyn Scalar) -> bool {
-//         equal(&**self, that)
-//     }
-// }
+impl PartialEq<dyn Scalar> for Arc<dyn Scalar + '_> {
+    fn eq(&self, that: &dyn Scalar) -> bool {
+        equal(&**self, that)
+    }
+}
 
 impl PartialEq<dyn Scalar> for Box<dyn Scalar + '_> {
     fn eq(&self, that: &dyn Scalar) -> bool {
