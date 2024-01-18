@@ -4,7 +4,6 @@ use itertools::Itertools;
 
 pub mod aligned_iter;
 pub mod compute;
-pub mod polars;
 
 pub trait CombineChunks {
     fn combine_chunks(self) -> ArrayRef;

@@ -5,3 +5,4 @@ pub mod types;
 
 pub mod compute;
 pub mod error;
+mod polars;

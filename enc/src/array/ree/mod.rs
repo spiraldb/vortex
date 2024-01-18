@@ -2,15 +2,17 @@ use std::cmp::min;
 use std::vec::IntoIter;
 
 use arrow::array::types::UInt64Type;
-use arrow::array::{Array as ArrowArray, ArrayRef, Datum};
+use arrow::array::{Array as ArrowArray, ArrayRef};
 use arrow::array::{PrimitiveArray as ArrowPrimitiveArray, Scalar as ArrowScalar};
 use arrow::datatypes::DataType;
 use polars_arrow::legacy::trusted_len::TrustedLenPush;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
-use crate::arrow::compute::{repeat, search_sorted_scalar, SearchSortedSide};
-use crate::error::{EncError, EncResult};
-use crate::scalar::{PScalar, Scalar};
+use crate::arrow::compute::repeat;
+use crate::compute;
+use crate::compute::search_sorted::SearchSortedSide;
+use crate::error::EncResult;
+use crate::scalar::Scalar;
 use crate::types::DType;
 
 #[derive(Debug, Clone)]
@@ -32,8 +34,12 @@ impl REEArray {
         }
     }
 
-    pub fn find_physical_index(&self, index: usize) -> Option<usize> {
-        find_physical_index(self.ends.as_ref(), index + self.offset)
+    pub fn find_physical_index(&self, index: usize) -> EncResult<usize> {
+        compute::search_sorted::search_sorted_usize(
+            self.ends.as_ref(),
+            index + self.offset,
+            SearchSortedSide::Right,
+        )
     }
 }
 
@@ -52,9 +58,7 @@ impl ArrayEncoding for REEArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        self.find_physical_index(index)
-            .ok_or(EncError::OutOfBounds(index, self.offset, self.length))
-            .and_then(|run| self.values.scalar_at(run))
+        self.values.scalar_at(self.find_physical_index(index)?)
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -157,21 +161,6 @@ fn run_ends_logical_length(ends: &Array) -> usize {
         .unwrap_or_else(|_| panic!("Couldn't convert ends to usize"))
 }
 
-fn find_physical_index(array: &Array, index: usize) -> Option<usize> {
-    // Convert index into correctly typed Arrow scalar.
-    let index: Box<dyn Scalar> = Into::<PScalar>::into(index).cast(&array.dtype()).unwrap();
-    let arrow_index: Box<dyn Datum> = index.into();
-
-    let chunks: Vec<ArrayRef> = array.iter_arrow().collect();
-
-    search_sorted_scalar(
-        chunks.iter().map(|a| a.as_ref()).collect(),
-        arrow_index.as_ref(),
-        SearchSortedSide::Right,
-    )
-    .ok()
-}
-
 #[cfg(test)]
 mod test {
     use std::ops::Deref;
@@ -180,17 +169,13 @@ mod test {
     use arrow::array::types::Int32Type;
     use itertools::Itertools;
 
-    use crate::array::primitive::PrimitiveArray;
     use crate::types::IntWidth;
 
     use super::*;
 
     #[test]
     fn new() {
-        let arr = REEArray::new(
-            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
-            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
-        );
+        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into());
         assert_eq!(arr.len(), 10);
         assert_eq!(arr.dtype(), DType::Int(IntWidth::_32));
 
@@ -205,12 +190,9 @@ mod test {
 
     #[test]
     fn slice() {
-        let arr = REEArray::new(
-            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
-            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
-        )
-        .slice(3, 8)
-        .unwrap();
+        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into())
+            .slice(3, 8)
+            .unwrap();
         assert_eq!(arr.dtype(), DType::Int(IntWidth::_32));
         assert_eq!(arr.len(), 5);
 
@@ -223,10 +205,7 @@ mod test {
 
     #[test]
     fn iter_arrow() {
-        let arr = REEArray::new(
-            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
-            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
-        );
+        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into());
         arr.iter_arrow()
             .zip_eq([vec![1, 1], vec![2, 2, 2], vec![3, 3, 3, 3, 3]])
             .for_each(|(from_iter, orig)| {

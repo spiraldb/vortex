@@ -59,7 +59,7 @@ impl PScalar {
         }
     }
 
-    pub fn cast_ptype(&self, ptype: PType) -> EncResult<PScalar> {
+    pub fn cast_ptype(&self, ptype: PType) -> EncResult<Box<dyn Scalar>> {
         macro_rules! from_unsigned_int {
             ($ptype:ident , $v:ident) => {
                 match $ptype {
@@ -144,20 +144,12 @@ impl Scalar for PScalar {
         let ptype: EncResult<PType> = dtype.try_into();
         ptype
             .and_then(|p| self.cast_ptype(p))
-            .map(|v| v.boxed())
             .or_else(|_| self.cast_dtype(dtype.clone()))
     }
 }
 
 macro_rules! pscalar {
     ($T:ty, $ptype:tt) => {
-        impl From<$T> for PScalar {
-            #[inline]
-            fn from(value: $T) -> Self {
-                PScalar::$ptype(value)
-            }
-        }
-
         impl From<$T> for Box<dyn Scalar> {
             #[inline]
             fn from(value: $T) -> Self {
@@ -179,19 +171,11 @@ macro_rules! pscalar {
 
             fn try_from(value: &dyn Scalar) -> EncResult<Self> {
                 match value.as_any().downcast_ref::<PScalar>() {
-                    Some(pscalar) => pscalar.try_into(),
+                    Some(pscalar) => match pscalar {
+                        PScalar::$ptype(v) => Ok(*v),
+                        _ => Err(EncError::InvalidDType(pscalar.ptype().into())),
+                    },
                     None => Err(EncError::InvalidDType(value.dtype().clone())),
-                }
-            }
-        }
-
-        impl TryFrom<&PScalar> for $T {
-            type Error = EncError;
-
-            fn try_from(pscalar: &PScalar) -> EncResult<Self> {
-                match pscalar {
-                    PScalar::$ptype(v) => Ok(*v),
-                    _ => Err(EncError::InvalidDType(pscalar.ptype().into())),
                 }
             }
         }
@@ -210,10 +194,10 @@ pscalar!(f16, F16);
 pscalar!(f32, F32);
 pscalar!(f64, F64);
 
-impl From<usize> for PScalar {
+impl From<usize> for Box<dyn Scalar> {
     #[inline]
     fn from(value: usize) -> Self {
-        PScalar::U64(value as u64)
+        Box::new(PScalar::U64(value as u64))
     }
 }
 
