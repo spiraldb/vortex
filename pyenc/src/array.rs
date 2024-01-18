@@ -1,7 +1,6 @@
 use paste::paste;
 use pyo3::prelude::*;
 
-use enc::array::binary::{VarBinArray, VarBinViewArray};
 use enc::array::bool::BoolArray;
 use enc::array::chunked::ChunkedArray;
 use enc::array::constant::ConstantArray;
@@ -9,6 +8,8 @@ use enc::array::primitive::PrimitiveArray;
 use enc::array::ree::REEArray;
 use enc::array::struct_::StructArray;
 use enc::array::typed::TypedArray;
+use enc::array::varbin::VarBinArray;
+use enc::array::varbinview::VarBinViewArray;
 use enc::array::{Array, ArrayEncoding};
 
 use crate::dtype::PyDType;

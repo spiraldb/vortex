@@ -9,6 +9,13 @@ def test_primitive_array_round_trip():
     assert arr.to_pyarrow().combine_chunks() == a
 
 
+def test_varbin_array_round_trip():
+    a = pa.array(["a", "b", "c"])
+    arr = enc.encode(a)
+    assert isinstance(arr, enc.VarBinArray)
+    assert arr.to_pyarrow().combine_chunks() == a
+
+
 def test_empty_array():
     a = pa.array([], type=pa.uint8())
     primitive = enc.encode(a)

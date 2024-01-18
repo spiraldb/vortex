@@ -97,23 +97,24 @@ mod test {
     use arrow::array::StructArray as ArrowStructArray;
     use arrow::array::{Array, GenericStringArray as ArrowStringArray};
 
-    use crate::array::binary::VarBinArray;
-    use crate::array::primitive::PrimitiveArray;
     use crate::array::struct_::StructArray;
     use crate::array::ArrayEncoding;
 
     #[test]
     pub fn iter() {
         let arrow_aas = ArrowPrimitiveArray::<UInt64Type>::from(vec![1, 2, 3]);
-        let aas: PrimitiveArray = arrow_aas.clone().into();
         let arrow_bbs = ArrowStringArray::<i32>::from(vec!["a", "b", "c"]);
-        let bbs: VarBinArray = arrow_bbs.clone().into();
-        let array = StructArray::new(vec!["a".into(), "b".into()], vec![aas.into(), bbs.into()]);
+
+        let array = StructArray::new(
+            vec!["a".into(), "b".into()],
+            vec![(&arrow_aas).into(), (&arrow_bbs).into()],
+        );
         let arrow_struct = ArrowStructArray::new(
             array.dtype().into(),
             vec![Arc::new(arrow_aas), Arc::new(arrow_bbs)],
             None,
         );
+
         assert_eq!(
             array
                 .iter_arrow()

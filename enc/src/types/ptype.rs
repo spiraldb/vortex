@@ -1,21 +1,10 @@
-use std::panic::RefUnwindSafe;
+use std::fmt::{Debug, Display};
 
-use arrow::datatypes::DataType;
+use arrow::datatypes::{ArrowNativeType, DataType};
+use half::f16;
 
 use crate::error::{EncError, EncResult};
 use crate::types::{DType, IntWidth};
-
-pub trait PrimitiveType:
-    Send + Sync + Sized + RefUnwindSafe + std::fmt::Debug + std::fmt::Display + PartialEq + Default
-{
-    const PTYPE: PType;
-    type Bytes: AsRef<[u8]>
-        + std::ops::Index<usize, Output = u8>
-        + std::ops::IndexMut<usize, Output = u8>
-        + for<'a> TryFrom<&'a [u8]>
-        + std::fmt::Debug
-        + Default;
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PType {
@@ -32,6 +21,53 @@ pub enum PType {
     F64,
 }
 
+pub trait NativePType:
+    Send + Sync + Sized + Debug + Display + PartialEq + Default + ArrowNativeType
+{
+    const PTYPE: PType;
+}
+
+macro_rules! native_ptype {
+    ($T:ty, $ptype:tt) => {
+        impl NativePType for $T {
+            const PTYPE: PType = PType::$ptype;
+        }
+    };
+}
+
+native_ptype!(u8, U8);
+native_ptype!(u16, U16);
+native_ptype!(u32, U32);
+native_ptype!(u64, U64);
+native_ptype!(i8, I8);
+native_ptype!(i16, I16);
+native_ptype!(i32, I32);
+native_ptype!(i64, I64);
+native_ptype!(f16, F16);
+native_ptype!(f32, F32);
+native_ptype!(f64, F64);
+
+macro_rules! match_each_native_ptype {
+    ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
+        macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
+        match $self {
+            PType::I8 => __with__! { i8 },
+            PType::I16 => __with__! { i16 },
+            PType::I32 => __with__! { i32 },
+            PType::I64 => __with__! { i64 },
+            PType::U8 => __with__! { u8 },
+            PType::U16 => __with__! { u16 },
+            PType::U32 => __with__! { u32 },
+            PType::U64 => __with__! { u64 },
+            PType::F16 => __with__! { f16 },
+            PType::F32 => __with__! { f32 },
+            PType::F64 => __with__! { f64 },
+        }
+    })
+}
+
+pub(crate) use match_each_native_ptype;
+
 impl PType {
     pub fn is_unsigned_int(self) -> bool {
         matches!(self, PType::U8 | PType::U16 | PType::U32 | PType::U64)
@@ -47,6 +83,10 @@ impl PType {
 
     pub fn is_float(self) -> bool {
         matches!(self, PType::F16 | PType::F32 | PType::F64)
+    }
+
+    pub fn byte_width(&self) -> usize {
+        match_each_native_ptype!(self, |$T| std::mem::size_of::<$T>())
     }
 }
 

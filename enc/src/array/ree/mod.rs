@@ -188,8 +188,8 @@ mod test {
     #[test]
     fn new() {
         let arr = REEArray::new(
-            PrimitiveArray::from_vec::<Int32Type>(vec![2, 5, 10]).into(),
-            PrimitiveArray::from_vec::<Int32Type>(vec![1, 2, 3]).into(),
+            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
+            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
         );
         assert_eq!(arr.len(), 10);
         assert_eq!(arr.dtype(), DType::Int(IntWidth::_32));
@@ -206,8 +206,8 @@ mod test {
     #[test]
     fn slice() {
         let arr = REEArray::new(
-            PrimitiveArray::from_vec::<Int32Type>(vec![2, 5, 10]).into(),
-            PrimitiveArray::from_vec::<Int32Type>(vec![1, 2, 3]).into(),
+            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
+            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
         )
         .slice(3, 8)
         .unwrap();
@@ -224,8 +224,8 @@ mod test {
     #[test]
     fn iter_arrow() {
         let arr = REEArray::new(
-            PrimitiveArray::from_vec::<Int32Type>(vec![2, 5, 10]).into(),
-            PrimitiveArray::from_vec::<Int32Type>(vec![1, 2, 3]).into(),
+            PrimitiveArray::from_vec(vec![2, 5, 10]).into(),
+            PrimitiveArray::from_vec(vec![1, 2, 3]).into(),
         );
         arr.iter_arrow()
             .zip_eq([vec![1, 1], vec![2, 2, 2], vec![3, 3, 3, 3, 3]])

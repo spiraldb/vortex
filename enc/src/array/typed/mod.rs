@@ -61,22 +61,19 @@ mod test {
     use std::ops::Deref;
 
     use arrow::array::cast::AsArray;
-    use arrow::array::types::{Int64Type, Time64MicrosecondType, UInt64Type};
+    use arrow::array::types::Time64MicrosecondType;
     use arrow::array::Time64MicrosecondArray;
     use itertools::Itertools;
 
-    use crate::array::primitive::PrimitiveArray;
     use crate::array::typed::TypedArray;
-    use crate::array::{Array, ArrayEncoding};
+    use crate::array::ArrayEncoding;
     use crate::scalar::{LocalTimeScalar, PScalar, Scalar};
     use crate::types::{DType, TimeUnit};
 
     #[test]
     pub fn scalar() {
         let arr = TypedArray::new(
-            Box::new(Array::Primitive(PrimitiveArray::from_vec::<UInt64Type>(
-                vec![64_799_000_000_u64, 43_000_000_000],
-            ))),
+            Box::new(vec![64_799_000_000_u64, 43_000_000_000].into()),
             DType::LocalTime(TimeUnit::Us),
         );
         assert_eq!(
@@ -92,9 +89,7 @@ mod test {
     #[test]
     pub fn iter() {
         let arr = TypedArray::new(
-            Box::new(Array::Primitive(PrimitiveArray::from_vec::<Int64Type>(
-                vec![64_799_000_000_i64, 43_000_000_000],
-            ))),
+            Box::new(vec![64_799_000_000_i64, 43_000_000_000].into()),
             DType::LocalTime(TimeUnit::Us),
         );
         arr.iter_arrow()

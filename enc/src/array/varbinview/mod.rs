@@ -12,7 +12,7 @@ use crate::error::EncResult;
 use crate::scalar::{Scalar, Utf8Scalar};
 use crate::types::DType;
 
-use super::super::{Array, ArrayEncoding, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator};
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
@@ -198,9 +198,7 @@ mod test {
     use super::*;
 
     fn binary_array() -> VarBinViewArray {
-        let values = PrimitiveArray::new(Arc::new(ArrowPrimitiveArray::<UInt8Type>::from(
-            "abcdefabcdefabcdef".as_bytes().to_vec(),
-        )));
+        let values = PrimitiveArray::from_vec("abcdefabcdefabcdef".as_bytes().to_vec());
         let mut view1 = BinaryView {
             inlined: Inlined {
                 size: 8,

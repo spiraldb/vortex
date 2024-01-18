@@ -151,21 +151,21 @@ mod test {
 
     use arrow::array::cast::AsArray;
     use arrow::array::types::UInt64Type;
+    use arrow::array::ArrayRef;
     use arrow::array::ArrowPrimitiveType;
-    use arrow::array::{ArrayRef, PrimitiveArray as ArrowPrimitiveArray};
     use itertools::Itertools;
 
     use crate::array::chunked::ChunkedArray;
-    use crate::array::primitive::PrimitiveArray;
     use crate::array::ArrayEncoding;
     use crate::types::{DType, IntWidth};
 
     fn chunked_array() -> ChunkedArray {
-        let chunk1: PrimitiveArray = ArrowPrimitiveArray::<UInt64Type>::from(vec![1, 2, 3]).into();
-        let chunk2: PrimitiveArray = ArrowPrimitiveArray::<UInt64Type>::from(vec![4, 5, 6]).into();
-        let chunk3: PrimitiveArray = ArrowPrimitiveArray::<UInt64Type>::from(vec![7, 8, 9]).into();
         ChunkedArray::new(
-            vec![chunk1.into(), chunk2.into(), chunk3.into()],
+            vec![
+                vec![1u64, 2, 3].into(),
+                vec![4u64, 5, 6].into(),
+                vec![7u64, 8, 9].into(),
+            ],
             DType::UInt(IntWidth::_64),
         )
     }
@@ -176,10 +176,8 @@ mod test {
 
     #[test]
     pub fn iter() {
-        let chunk1: PrimitiveArray = ArrowPrimitiveArray::<UInt64Type>::from(vec![1, 2, 3]).into();
-        let chunk2: PrimitiveArray = ArrowPrimitiveArray::<UInt64Type>::from(vec![4, 5, 6]).into();
         let chunked = ChunkedArray::new(
-            vec![chunk1.into(), chunk2.into()],
+            vec![vec![1u64, 2, 3].into(), vec![4u64, 5, 6].into()],
             DType::UInt(IntWidth::_64),
         );
 

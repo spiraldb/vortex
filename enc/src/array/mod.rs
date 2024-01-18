@@ -1,6 +1,5 @@
 use arrow::array::ArrayRef;
 
-use crate::array::binary::{VarBinArray, VarBinViewArray};
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
 use crate::array::constant::ConstantArray;
@@ -8,11 +7,12 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
 use crate::array::struct_::StructArray;
 use crate::array::typed::TypedArray;
+use crate::array::varbin::VarBinArray;
+use crate::array::varbinview::VarBinViewArray;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-pub mod binary;
 pub mod bool;
 pub mod constant;
 pub mod primitive;
@@ -22,8 +22,10 @@ pub mod chunked;
 pub mod encode;
 pub mod struct_;
 pub mod typed;
+pub mod varbin;
+pub mod varbinview;
 
-type ArrowIterator = dyn Iterator<Item = ArrayRef>;
+pub type ArrowIterator = dyn Iterator<Item = ArrayRef>;
 
 /// An Enc Array is the base object representing all arrays in enc.
 ///
