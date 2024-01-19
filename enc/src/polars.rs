@@ -3,7 +3,7 @@ use polars_arrow::array::from_data;
 use polars_core::prelude::{AnyValue, Series};
 
 use crate::array::ArrowIterator;
-use crate::scalar::{BoolScalar, NullableScalar, PScalar, Scalar, Utf8Scalar};
+use crate::scalar::{BinaryScalar, BoolScalar, NullableScalar, PScalar, Scalar, Utf8Scalar};
 use crate::types::DType;
 
 pub trait IntoPolarsSeries {
@@ -77,7 +77,13 @@ impl IntoPolarsValue for &dyn Scalar {
                     .value()
                     .into(),
             ),
-            DType::Binary => todo!(),
+            DType::Binary => AnyValue::BinaryOwned(
+                self.as_any()
+                    .downcast_ref::<BinaryScalar>()
+                    .unwrap()
+                    .value()
+                    .clone(),
+            ),
             DType::LocalTime(_) => todo!(),
             DType::LocalDate => todo!(),
             DType::Instant(_) => todo!(),

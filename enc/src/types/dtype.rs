@@ -213,8 +213,46 @@ impl TryFrom<&DataType> for DType {
             DataType::Float32 => Ok(DType::Float(FloatWidth::_32)),
             DataType::Float64 => Ok(DType::Float(FloatWidth::_64)),
             DataType::Utf8 | DataType::LargeUtf8 => Ok(DType::Utf8),
-            DataType::Binary | DataType::LargeBinary => Ok(DType::Binary),
-            _ => Err(EncError::InvalidArrowDataType(value.clone())),
+            DataType::Binary | DataType::LargeBinary | DataType::FixedSizeBinary(_) => {
+                Ok(DType::Binary)
+            }
+            // TODO(robert): what to do about this timezone?
+            DataType::Timestamp(u, _) => Ok(DType::ZonedDateTime(u.into())),
+            DataType::Date32 | DataType::Date64 => Ok(DType::LocalDate),
+            DataType::Time32(u) | DataType::Time64(u) => Ok(DType::LocalTime(u.into())),
+            DataType::List(e) | DataType::FixedSizeList(e, _) | DataType::LargeList(e) => {
+                Ok(DType::List(Box::new(e.data_type().try_into()?)))
+            }
+            DataType::Struct(f) => Ok(DType::Struct(
+                f.iter().map(|f| Arc::new(f.name().clone())).collect(),
+                f.iter()
+                    .map(|f| f.data_type().try_into().unwrap())
+                    .collect(),
+            )),
+            DataType::Dictionary(_, v) => v.as_ref().try_into(),
+            DataType::Decimal128(p, s) | DataType::Decimal256(p, s) => Ok(DType::Decimal(*p, *s)),
+            DataType::Map(e, _) => match e.data_type() {
+                DataType::Struct(f) => Ok(DType::Map(
+                    Box::new(f[0].data_type().try_into().unwrap()),
+                    Box::new(f[1].data_type().try_into().unwrap()),
+                )),
+                _ => Err(EncError::InvalidArrowDataType(e.data_type().clone())),
+            },
+            DataType::RunEndEncoded(_, v) => v.data_type().try_into(),
+            DataType::Duration(_) | DataType::Interval(_) | DataType::Union(_, _) => {
+                Err(EncError::InvalidArrowDataType(value.clone()))
+            }
+        }
+    }
+}
+
+impl From<&ArrowTimeUnit> for TimeUnit {
+    fn from(value: &ArrowTimeUnit) -> Self {
+        match value {
+            ArrowTimeUnit::Second => TimeUnit::S,
+            ArrowTimeUnit::Millisecond => TimeUnit::Ms,
+            ArrowTimeUnit::Microsecond => TimeUnit::Us,
+            ArrowTimeUnit::Nanosecond => TimeUnit::Ns,
         }
     }
 }
@@ -261,9 +299,8 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
             FloatWidth::_32 => DataType::Float32,
             FloatWidth::_64 => DataType::Float64,
         },
-        // TODO(robert): LargeUtf8/LargeBinary?
         DType::Utf8 => DataType::Utf8,
-        DType::Binary => DataType::Binary,
+        DType::Binary => DataType::LargeBinary,
         DType::LocalTime(u) => DataType::Time64(match u {
             TimeUnit::Ns => ArrowTimeUnit::Nanosecond,
             TimeUnit::Us => ArrowTimeUnit::Microsecond,
@@ -290,8 +327,7 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
                 })
                 .collect(),
         ),
-        // TODO(robert): LargeList?
-        DType::List(c) => DataType::List(Arc::new(Field::new(
+        DType::List(c) => DataType::LargeList(Arc::new(Field::new(
             "element",
             c.as_ref().into(),
             matches!(c.as_ref(), DType::Nullable(_)),
