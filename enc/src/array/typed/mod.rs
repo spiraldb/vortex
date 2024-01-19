@@ -1,7 +1,11 @@
+mod stats;
+
 use std::borrow::Borrow;
+use std::sync::{Arc, RwLock};
 
 use arrow::datatypes::DataType;
 
+use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
@@ -11,25 +15,38 @@ use crate::types::DType;
 pub struct TypedArray {
     array: Box<Array>,
     dtype: DType,
+    stats: Arc<RwLock<StatsSet>>,
 }
 
 impl TypedArray {
     pub fn new(array: Box<Array>, dtype: DType) -> Self {
-        Self { array, dtype }
+        Self {
+            array,
+            dtype,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
+        }
     }
 }
 
 impl ArrayEncoding for TypedArray {
+    #[inline]
     fn len(&self) -> usize {
         self.array.len()
     }
 
+    #[inline]
     fn is_empty(&self) -> bool {
         self.array.is_empty()
     }
 
+    #[inline]
     fn dtype(&self) -> &DType {
         &self.dtype
+    }
+
+    #[inline]
+    fn stats(&self) -> Stats {
+        Stats::new(&self.stats, self)
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {

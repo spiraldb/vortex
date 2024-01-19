@@ -1,4 +1,7 @@
+mod stats;
+
 use std::cmp::min;
+use std::sync::{Arc, RwLock};
 use std::vec::IntoIter;
 
 use arrow::array::types::UInt64Type;
@@ -6,6 +9,7 @@ use arrow::array::{Array as ArrowArray, ArrayRef};
 use arrow::array::{PrimitiveArray as ArrowPrimitiveArray, Scalar as ArrowScalar};
 use arrow::datatypes::DataType;
 
+use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::compute::repeat;
 use crate::compute;
@@ -20,6 +24,7 @@ pub struct REEArray {
     values: Box<Array>,
     offset: usize,
     length: usize,
+    stats: Arc<RwLock<StatsSet>>,
 }
 
 impl REEArray {
@@ -30,6 +35,7 @@ impl REEArray {
             values: Box::new(values),
             length,
             offset: 0,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
 
@@ -54,6 +60,11 @@ impl ArrayEncoding for REEArray {
     #[inline]
     fn dtype(&self) -> &DType {
         self.values.dtype()
+    }
+
+    #[inline]
+    fn stats(&self) -> Stats {
+        Stats::new(&self.stats, self)
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
@@ -102,6 +113,7 @@ impl ArrayEncoding for REEArray {
             values: Box::new(self.values.slice(slice_begin, slice_end + 1).unwrap()),
             offset: start,
             length: stop - start,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         }))
     }
 }

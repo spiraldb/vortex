@@ -1,23 +1,30 @@
+mod stats;
+
 use std::iter;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use arrow::array::{ArrayRef, BooleanArray};
 use arrow::buffer::BooleanBuffer;
 
+use crate::array::stats::{Stats, StatsSet};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
 use super::{Array, ArrayEncoding, ArrowIterator};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct BoolArray {
     buffer: BooleanBuffer,
+    stats: Arc<RwLock<StatsSet>>,
 }
 
 impl BoolArray {
     pub fn new(buffer: BooleanBuffer) -> Self {
-        Self { buffer }
+        Self {
+            buffer,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
+        }
     }
 }
 
@@ -35,6 +42,11 @@ impl ArrayEncoding for BoolArray {
     #[inline]
     fn dtype(&self) -> &DType {
         &DType::Bool
+    }
+
+    #[inline]
+    fn stats(&self) -> Stats {
+        Stats::new(&self.stats, self)
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
@@ -60,6 +72,7 @@ impl ArrayEncoding for BoolArray {
 
         Ok(Array::Bool(Self {
             buffer: self.buffer.slice(start, stop - start),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         }))
     }
 }

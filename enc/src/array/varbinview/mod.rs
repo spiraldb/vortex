@@ -1,24 +1,42 @@
 use std::iter;
-use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use arrow::array::builder::LargeStringBuilder;
 use arrow::array::cast::AsArray;
 use arrow::array::types::UInt8Type;
-use arrow::array::{ArrayRef, PrimitiveArray as ArrowPrimitiveArray};
-use arrow::datatypes::DataType;
+use arrow::array::ArrayRef;
 
-use crate::error::EncResult;
-use crate::scalar::{Scalar, Utf8Scalar};
-use crate::types::DType;
-
+use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
+use crate::arrow::CombineChunks;
+use crate::error::EncResult;
+use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
+use crate::types::{DType, IntWidth};
+
+mod stats;
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
 struct Inlined {
     size: u32,
     data: [u8; 12],
+}
+
+impl Inlined {
+    #[allow(dead_code)]
+    pub fn new(value: &str) -> Self {
+        assert!(
+            value.len() < 13,
+            "Inlined strings must be shorter than 13 characters, {} given",
+            value.len()
+        );
+        let mut inlined = Inlined {
+            size: value.len() as u32,
+            data: [0u8; 12],
+        };
+        inlined.data[..value.len()].copy_from_slice(value.as_bytes());
+        inlined
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -83,13 +101,32 @@ pub const VIEW_SIZE: usize = std::mem::size_of::<BinaryView>();
 
 #[derive(Debug, Clone)]
 pub struct VarBinViewArray {
-    views: Arc<ArrowPrimitiveArray<UInt8Type>>,
+    views: Box<Array>,
     data: Vec<Array>,
+    dtype: DType,
+    stats: Arc<RwLock<StatsSet>>,
 }
 
 impl VarBinViewArray {
-    pub fn new(views: Arc<ArrowPrimitiveArray<UInt8Type>>, data: Vec<Array>) -> Self {
-        Self { views, data }
+    pub fn new(views: Box<Array>, data: Vec<Array>, dtype: DType) -> Self {
+        if !matches!(views.dtype(), DType::UInt(IntWidth::_8)) {
+            panic!("Unsupported type for views array {:?}", views.dtype());
+        }
+        data.iter().for_each(|d| {
+            if !matches!(d.dtype(), DType::UInt(IntWidth::_8)) {
+                panic!("Unsupported type for data array {:?}", d.dtype());
+            }
+        });
+        if !matches!(dtype, DType::Binary | DType::Utf8) {
+            panic!("Unsupported dtype for VarBinView array");
+        }
+
+        Self {
+            views,
+            data,
+            dtype,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
+        }
     }
 
     pub fn plain_size(&self) -> usize {
@@ -101,58 +138,65 @@ impl VarBinViewArray {
 
     #[inline]
     pub(self) fn view_at(&self, index: usize) -> BinaryView {
-        let view_slice: &[u8] = &self.views.values()[index * VIEW_SIZE..(index + 1) * VIEW_SIZE];
-        BinaryView::from_le_bytes(view_slice)
+        let view_slice = self
+            .views
+            .slice(index * VIEW_SIZE, (index + 1) * VIEW_SIZE)
+            .unwrap()
+            .iter_arrow()
+            .combine_chunks();
+        let view_vec = view_slice.as_primitive::<UInt8Type>().values().to_vec();
+        BinaryView::from_le_bytes(&view_vec)
     }
 }
 
 impl ArrayEncoding for VarBinViewArray {
+    #[inline]
     fn len(&self) -> usize {
         self.views.len() / std::mem::size_of::<BinaryView>()
     }
 
+    #[inline]
     fn is_empty(&self) -> bool {
-        self.views.values().is_empty()
+        self.views.is_empty()
     }
 
     #[inline]
     fn dtype(&self) -> &DType {
-        &DType::Utf8
+        &self.dtype
+    }
+
+    #[inline]
+    fn stats(&self) -> Stats {
+        Stats::new(&self.stats, self)
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         let view = self.view_at(index);
         unsafe {
-            if view.inlined.size > 12 {
-                let data_buffer = self.data.get(view._ref.buffer_index as usize).unwrap();
-                // TODO(robert): Make sure that we consume whole iter_arrow result,
-                //  BUT we are slicing only 16 bytes so this should all be in one chunk
-                let arrow_data_buffer = data_buffer
+            let value_bytes = if view.inlined.size > 12 {
+                let arrow_data_buffer = self
+                    .data
+                    .get(view._ref.buffer_index as usize)
+                    .unwrap()
                     .slice(
                         view._ref.offset as usize,
                         (view._ref.size + view._ref.offset) as usize,
                     )?
                     .iter_arrow()
-                    .next()
-                    .unwrap();
+                    .combine_chunks();
 
-                match arrow_data_buffer.as_ref().data_type() {
-                    DataType::UInt8 => {
-                        let primitive_array = arrow_data_buffer.as_primitive::<UInt8Type>();
-
-                        Ok(Utf8Scalar::new(String::from_utf8_unchecked(
-                            primitive_array.values().deref().to_vec(),
-                        ))
-                        .boxed())
-                    }
-
-                    _ => panic!("TODO(robert): Implement more"),
-                }
+                arrow_data_buffer
+                    .as_primitive::<UInt8Type>()
+                    .values()
+                    .to_vec()
             } else {
-                Ok(Utf8Scalar::new(String::from_utf8_unchecked(
-                    view.inlined.data[..view.inlined.size as usize].to_vec(),
-                ))
-                .boxed())
+                view.inlined.data[..view.inlined.size as usize].to_vec()
+            };
+
+            if matches!(self.dtype, DType::Utf8) {
+                Ok(Utf8Scalar::new(String::from_utf8_unchecked(value_bytes)).boxed())
+            } else {
+                Ok(BinaryScalar::new(value_bytes).boxed())
             }
         }
     }
@@ -179,18 +223,16 @@ impl ArrayEncoding for VarBinViewArray {
         self.check_slice_bounds(start, stop)?;
 
         Ok(Array::VarBinView(Self {
-            views: Arc::new(
-                self.views
-                    .slice(start * VIEW_SIZE, (stop - start) * VIEW_SIZE),
-            ),
+            views: Box::new(self.views.slice(start * VIEW_SIZE, stop * VIEW_SIZE)?),
             data: self.data.clone(),
+            dtype: self.dtype.clone(),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         }))
     }
 }
 
 #[cfg(test)]
 mod test {
-    use arrow::array::types::UInt8Type;
     use arrow::array::GenericStringArray as ArrowStringArray;
 
     use crate::array::primitive::PrimitiveArray;
@@ -198,31 +240,27 @@ mod test {
     use super::*;
 
     fn binary_array() -> VarBinViewArray {
-        let values = PrimitiveArray::from_vec("abcdefabcdefabcdef".as_bytes().to_vec());
-        let mut view1 = BinaryView {
-            inlined: Inlined {
-                size: 8,
-                data: [0u8; 12],
-            },
+        let values =
+            PrimitiveArray::from_vec("hello world this is a long string".as_bytes().to_vec());
+        let view1 = BinaryView {
+            inlined: Inlined::new("hello world"),
         };
-        let databytes: [u8; 8] = "abcdefgh".as_bytes().try_into().unwrap();
-        unsafe { view1.inlined.data[..databytes.len()].copy_from_slice(&databytes) };
         let view2 = BinaryView {
             _ref: Ref {
-                size: 13,
-                prefix: "cdef".as_bytes().try_into().unwrap(),
+                size: 33,
+                prefix: "hell".as_bytes().try_into().unwrap(),
                 buffer_index: 0,
-                offset: 2,
+                offset: 0,
             },
         };
-        let view_arr: ArrowPrimitiveArray<UInt8Type> =
+        let view_arr = PrimitiveArray::from_vec(
             vec![view1.to_le_bytes(), view2.to_le_bytes()]
                 .into_iter()
                 .flatten()
-                .collect::<Vec<u8>>()
-                .into();
+                .collect::<Vec<u8>>(),
+        );
 
-        VarBinViewArray::new(Arc::new(view_arr), vec![values.into()])
+        VarBinViewArray::new(Box::new(view_arr.into()), vec![values.into()], DType::Utf8)
     }
 
     #[test]
@@ -231,11 +269,11 @@ mod test {
         assert_eq!(binary_arr.len(), 2);
         assert_eq!(
             binary_arr.scalar_at(0).unwrap(),
-            Utf8Scalar::new("abcdefgh".into()).boxed()
+            Utf8Scalar::new("hello world".into()).boxed()
         );
         assert_eq!(
             binary_arr.scalar_at(1).unwrap(),
-            Utf8Scalar::new("cdefabcdefabc".into()).boxed()
+            Utf8Scalar::new("hello world this is a long string".into()).boxed()
         )
     }
 
@@ -244,7 +282,7 @@ mod test {
         let binary_arr = binary_array().slice(1, 2).unwrap();
         assert_eq!(
             binary_arr.scalar_at(0).unwrap(),
-            Utf8Scalar::new("cdefabcdefabc".into()).boxed()
+            Utf8Scalar::new("hello world this is a long string".into()).boxed()
         );
     }
 
@@ -252,8 +290,14 @@ mod test {
     pub fn iter() {
         let binary_array = binary_array();
         assert_eq!(
-            binary_array.iter_arrow().next().unwrap().as_string::<i64>(),
-            &ArrowStringArray::<i64>::from(vec!["abcdefgh", "cdefabcdefabc"])
+            binary_array
+                .iter_arrow()
+                .combine_chunks()
+                .as_string::<i64>(),
+            &ArrowStringArray::<i64>::from(vec![
+                "hello world",
+                "hello world this is a long string"
+            ])
         );
     }
 }

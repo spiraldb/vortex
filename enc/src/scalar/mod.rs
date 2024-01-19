@@ -4,6 +4,7 @@ use std::fmt::Debug;
 
 pub use binary::*;
 pub use bool::*;
+pub use list::*;
 pub use localtime::*;
 pub use nullable::*;
 pub use primitive::*;
@@ -17,6 +18,7 @@ mod arrow;
 mod binary;
 mod bool;
 mod equal;
+mod list;
 mod localtime;
 mod nullable;
 mod primitive;
@@ -26,6 +28,8 @@ mod utf8;
 pub trait Scalar: Debug + dyn_clone::DynClone + Send + Sync + 'static {
     /// convert itself to
     fn as_any(&self) -> &dyn Any;
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any>;
 
     fn boxed(self) -> Box<dyn Scalar>;
 

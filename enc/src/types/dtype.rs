@@ -291,7 +291,6 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
             IntWidth::_32 => DataType::UInt32,
             IntWidth::_64 => DataType::UInt64,
         },
-        // TODO(robert): Decimal256?
         DType::Decimal(p, w) => DataType::Decimal128(*p, *w),
         DType::Float(w) => match w {
             FloatWidth::Unknown => DataType::Float64,
@@ -299,7 +298,7 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
             FloatWidth::_32 => DataType::Float32,
             FloatWidth::_64 => DataType::Float64,
         },
-        DType::Utf8 => DataType::Utf8,
+        DType::Utf8 => DataType::LargeUtf8,
         DType::Binary => DataType::LargeBinary,
         DType::LocalTime(u) => DataType::Time64(match u {
             TimeUnit::Ns => ArrowTimeUnit::Nanosecond,

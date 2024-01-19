@@ -1,6 +1,7 @@
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
+use std::any::Any;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoolScalar {
@@ -19,7 +20,11 @@ impl BoolScalar {
 
 impl Scalar for BoolScalar {
     #[inline]
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    #[inline]
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
 

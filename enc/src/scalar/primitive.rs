@@ -1,4 +1,5 @@
 use half::f16;
+use std::any::Any;
 
 use crate::error::{EncError, EncResult};
 use crate::scalar::{LocalTimeScalar, Scalar};
@@ -126,7 +127,12 @@ fn is_negative<T: Default + PartialOrd>(value: T) -> bool {
 
 impl Scalar for PScalar {
     #[inline]
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    #[inline]
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
 

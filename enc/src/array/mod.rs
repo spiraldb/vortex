@@ -5,6 +5,8 @@ use crate::array::chunked::ChunkedArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
+use crate::array::stats::Stats;
+
 use crate::array::struct_::StructArray;
 use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
@@ -40,6 +42,7 @@ pub trait ArrayEncoding {
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
     fn dtype(&self) -> &DType;
+    fn stats(&self) -> Stats;
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
     fn iter_arrow(&self) -> Box<ArrowIterator>;
     fn slice(&self, start: usize, stop: usize) -> EncResult<Array>;
@@ -116,6 +119,10 @@ impl ArrayEncoding for Array {
 
     fn dtype(&self) -> &DType {
         match_each_encoding! { self, |$enc| $enc.dtype() }
+    }
+
+    fn stats(&self) -> Stats {
+        match_each_encoding! { self, |$enc| $enc.stats() }
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {

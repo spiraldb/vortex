@@ -8,7 +8,7 @@ use arrow::array::{
     PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
 };
 use arrow::array::{ArrowPrimitiveType, OffsetSizeTrait};
-use arrow::buffer::{Buffer, OffsetBuffer};
+use arrow::buffer::{Buffer, OffsetBuffer, ScalarBuffer};
 use arrow::datatypes::{ByteArrayType, DataType};
 
 use crate::array::bool::BoolArray;
@@ -26,8 +26,23 @@ impl From<&Buffer> for Array {
 
 impl<O: OffsetSizeTrait> From<&OffsetBuffer<O>> for Array {
     fn from(value: &OffsetBuffer<O>) -> Self {
-        let ptype = if O::IS_LARGE { PType::I64 } else { PType::I32 };
-        Array::Primitive(PrimitiveArray::new(ptype, value.inner().inner().to_owned()))
+        let buffer = if !O::IS_LARGE {
+            arrow::compute::cast(
+                &arrow::array::PrimitiveArray::<UInt32Type>::new(
+                    ScalarBuffer::<u32>::from(value.inner().inner().to_owned()),
+                    None,
+                ),
+                &DataType::UInt64,
+            )
+            .unwrap()
+            .as_primitive::<UInt64Type>()
+            .values()
+            .inner()
+            .to_owned()
+        } else {
+            value.inner().inner().to_owned()
+        };
+        Array::Primitive(PrimitiveArray::new(PType::I64, buffer))
     }
 }
 

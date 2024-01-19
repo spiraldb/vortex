@@ -1,6 +1,7 @@
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
+use std::any::Any;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Utf8Scalar {
@@ -19,9 +20,14 @@ impl Utf8Scalar {
 
 impl Scalar for Utf8Scalar {
     #[inline]
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
+    #[inline]
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     #[inline]
     fn boxed(self) -> Box<dyn Scalar> {
         Box::new(self)

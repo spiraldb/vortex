@@ -1,20 +1,30 @@
+mod stats;
+
+use std::sync::{Arc, RwLock};
+
 use arrow::array::Datum;
 
+use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::compute::repeat;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ConstantArray {
     scalar: Box<dyn Scalar>,
     length: usize,
+    stats: Arc<RwLock<StatsSet>>,
 }
 
 impl ConstantArray {
     pub fn new(scalar: Box<dyn Scalar>, length: usize) -> Self {
-        Self { scalar, length }
+        Self {
+            scalar,
+            length,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
+        }
     }
 
     pub fn value(&self) -> &dyn Scalar {
@@ -36,6 +46,11 @@ impl ArrayEncoding for ConstantArray {
     #[inline]
     fn dtype(&self) -> &DType {
         self.scalar.dtype()
+    }
+
+    #[inline]
+    fn stats(&self) -> Stats {
+        Stats::new(&self.stats, self)
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {

@@ -1,10 +1,13 @@
-use std::sync::Arc;
+mod stats;
+
+use std::sync::{Arc, RwLock};
 
 use arrow::array::StructArray as ArrowStructArray;
 use arrow::array::{Array as ArrowArray, ArrayRef};
 use arrow::datatypes::Fields;
 use itertools::Itertools;
 
+use crate::array::stats::{Stats, StatsSet};
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
 use crate::error::EncResult;
 use crate::scalar::{Scalar, StructScalar};
@@ -16,6 +19,7 @@ use super::{Array, ArrayEncoding, ArrowIterator};
 pub struct StructArray {
     fields: Vec<Array>,
     dtype: DType,
+    stats: Arc<RwLock<StatsSet>>,
 }
 
 impl StructArray {
@@ -29,7 +33,11 @@ impl StructArray {
             field_names,
             fields.iter().map(|a| a.dtype().clone()).collect(),
         );
-        Self { fields, dtype }
+        Self {
+            fields,
+            dtype,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
+        }
     }
 }
 
@@ -47,6 +55,11 @@ impl ArrayEncoding for StructArray {
     #[inline]
     fn dtype(&self) -> &DType {
         &self.dtype
+    }
+
+    #[inline]
+    fn stats(&self) -> Stats {
+        Stats::new(&self.stats, self)
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
@@ -89,6 +102,7 @@ impl ArrayEncoding for StructArray {
         Ok(Array::Struct(Self {
             fields,
             dtype: self.dtype.clone(),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         }))
     }
 }
@@ -108,7 +122,7 @@ mod test {
     #[test]
     pub fn iter() {
         let arrow_aas = ArrowPrimitiveArray::<UInt64Type>::from(vec![1, 2, 3]);
-        let arrow_bbs = ArrowStringArray::<i32>::from(vec!["a", "b", "c"]);
+        let arrow_bbs = ArrowStringArray::<i64>::from(vec!["a", "b", "c"]);
 
         let array = StructArray::new(
             vec!["a", "b"],

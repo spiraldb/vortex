@@ -1,6 +1,7 @@
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
+use std::any::Any;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NullableScalar {
@@ -20,9 +21,15 @@ impl NullableScalar {
 
 impl Scalar for NullableScalar {
     #[inline]
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
+
+    #[inline]
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        todo!()
+    }
+
     #[inline]
     fn boxed(self) -> Box<dyn Scalar> {
         Box::new(self)

@@ -29,6 +29,12 @@ impl Scalar for StructScalar {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    #[inline]
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     #[inline]
     fn boxed(self) -> Box<dyn Scalar> {
         Box::new(self)

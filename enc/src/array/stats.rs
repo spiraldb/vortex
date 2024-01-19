@@ -1,12 +1,18 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
+use crate::error;
+use crate::error::EncResult;
 use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stat {
-    Min,
+    BitWidthFreq,
+    IsConstant,
+    IsSorted,
     Max,
+    Min,
+    RunCount,
 }
 
 pub type StatsSet = HashMap<Stat, Box<dyn Scalar>>;
@@ -25,11 +31,18 @@ impl<'a> Stats<'a> {
         Self { cache, compute }
     }
 
-    pub fn get_present(&self, stat: Stat) -> Option<Box<dyn Scalar>> {
+    pub fn get(&self, stat: Stat) -> Option<Box<dyn Scalar>> {
         self.cache.read().unwrap().get(&stat).cloned()
     }
 
-    pub fn maybe_get(&self, stat: Stat) -> Option<Box<dyn Scalar>> {
+    pub fn get_as<T: TryFrom<Box<dyn Scalar>, Error = error::EncError>>(
+        &self,
+        stat: Stat,
+    ) -> EncResult<Option<T>> {
+        self.get(stat).map(|v| T::try_from(v)).transpose()
+    }
+
+    pub fn get_or_compute(&self, stat: Stat) -> Option<Box<dyn Scalar>> {
         if let Some(value) = self.cache.read().unwrap().get(&stat) {
             return Some(value.clone());
         }
@@ -38,6 +51,15 @@ impl<'a> Stats<'a> {
             .write()
             .unwrap()
             .extend(self.compute.compute(stat.clone()));
-        self.cache.read().unwrap().get(&stat).cloned()
+        self.get(stat)
+    }
+
+    pub fn get_or_compute_as<T: TryFrom<Box<dyn Scalar>, Error = error::EncError>>(
+        &self,
+        stat: Stat,
+    ) -> EncResult<Option<T>> {
+        self.get_or_compute(stat)
+            .map(|v| T::try_from(v))
+            .transpose()
     }
 }

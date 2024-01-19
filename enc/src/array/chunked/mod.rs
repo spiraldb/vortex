@@ -1,8 +1,12 @@
+mod stats;
+
+use std::sync::{Arc, RwLock};
 use std::vec::IntoIter;
 
 use arrow::array::ArrayRef;
 use itertools::Itertools;
 
+use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
@@ -13,6 +17,7 @@ pub struct ChunkedArray {
     chunks: Vec<Array>,
     chunk_ends: Vec<usize>,
     dtype: DType,
+    stats: Arc<RwLock<StatsSet>>,
 }
 
 impl ChunkedArray {
@@ -31,6 +36,7 @@ impl ChunkedArray {
             chunks,
             chunk_ends,
             dtype,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
 
@@ -69,6 +75,11 @@ impl ArrayEncoding for ChunkedArray {
     #[inline]
     fn dtype(&self) -> &DType {
         &self.dtype
+    }
+
+    #[inline]
+    fn stats(&self) -> Stats {
+        Stats::new(&self.stats, self)
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {

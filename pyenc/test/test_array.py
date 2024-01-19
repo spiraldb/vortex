@@ -13,7 +13,7 @@ def test_varbin_array_round_trip():
     a = pa.array(["a", "b", "c"])
     arr = enc.encode(a)
     assert isinstance(arr, enc.VarBinArray)
-    assert arr.to_pyarrow().combine_chunks() == a
+    assert arr.to_pyarrow().combine_chunks() == a.cast(pa.large_utf8())
 
 
 def test_empty_array():

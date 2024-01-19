@@ -1,6 +1,7 @@
 use crate::error::EncResult;
 use crate::scalar::{PScalar, Scalar};
 use crate::types::{DType, TimeUnit};
+use std::any::Any;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalTimeScalar {
@@ -19,7 +20,12 @@ impl LocalTimeScalar {
 
 impl Scalar for LocalTimeScalar {
     #[inline]
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    #[inline]
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
 
