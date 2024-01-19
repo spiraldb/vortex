@@ -5,7 +5,6 @@ use arrow::array::types::UInt64Type;
 use arrow::array::{Array as ArrowArray, ArrayRef};
 use arrow::array::{PrimitiveArray as ArrowPrimitiveArray, Scalar as ArrowScalar};
 use arrow::datatypes::DataType;
-use polars_arrow::legacy::trusted_len::TrustedLenPush;
 
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::compute::repeat;
@@ -84,7 +83,7 @@ impl ArrayEncoding for REEArray {
                 .take_while(|v| *v <= self.length)
                 .collect();
 
-            ends.extend_trusted_len(limited);
+            ends.extend(limited);
             left_to_skip -= min(casted.len(), left_to_skip);
         }
 

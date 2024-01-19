@@ -1,7 +1,5 @@
-use std::mem;
-
-use arrow::array::ArrayRef;
-use itertools::Itertools;
+use arrow::array::{Array, ArrayRef};
+use polars_arrow::array::from_data;
 use polars_core::prelude::{AnyValue, Series};
 
 use crate::array::ArrowIterator;
@@ -14,7 +12,7 @@ pub trait IntoPolarsSeries {
 
 impl IntoPolarsSeries for ArrayRef {
     fn into_polars(self) -> Series {
-        let polars_array = into_polars_arrow(&self);
+        let polars_array = from_data(&self.to_data());
         ("array", polars_array).try_into().unwrap()
     }
 }
@@ -22,29 +20,16 @@ impl IntoPolarsSeries for ArrayRef {
 impl IntoPolarsSeries for Vec<ArrayRef> {
     fn into_polars(self) -> Series {
         let chunks: Vec<Box<dyn polars_arrow::array::Array>> =
-            self.iter().map(into_polars_arrow).collect();
+            self.iter().map(|a| from_data(&a.to_data())).collect();
         ("array", chunks).try_into().unwrap()
     }
 }
 
 impl IntoPolarsSeries for Box<ArrowIterator> {
     fn into_polars(self) -> Series {
-        self.collect_vec().into_polars()
-    }
-}
-
-fn into_polars_arrow(array: &ArrayRef) -> Box<dyn polars_arrow::array::Array> {
-    let arrow2_array = arrow::ffi::FFI_ArrowArray::new(&array.to_data());
-    let arrow2_schema = arrow::ffi::FFI_ArrowSchema::try_from(array.data_type()).unwrap();
-
-    unsafe {
-        // Transmuate the stable Arrow ABI structs from Arrow2 into Polars.
-        let polars_array: polars_arrow::ffi::ArrowArray = mem::transmute(arrow2_array);
-        let polars_schema: polars_arrow::ffi::ArrowSchema = mem::transmute(arrow2_schema);
-
-        // We unwrap here since we know the exported array was a valid Arrow2 array.
-        let polars_field = polars_arrow::ffi::import_field_from_c(&polars_schema).unwrap();
-        polars_arrow::ffi::import_array_from_c(polars_array, polars_field.data_type).unwrap()
+        let chunks: Vec<Box<dyn polars_arrow::array::Array>> =
+            self.map(|a| from_data(&a.to_data())).collect();
+        ("array", chunks).try_into().unwrap()
     }
 }
 
