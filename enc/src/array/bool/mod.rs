@@ -33,8 +33,8 @@ impl ArrayEncoding for BoolArray {
     }
 
     #[inline]
-    fn dtype(&self) -> DType {
-        DType::Bool
+    fn dtype(&self) -> &DType {
+        &DType::Bool
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {

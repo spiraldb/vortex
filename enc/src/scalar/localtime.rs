@@ -5,12 +5,15 @@ use crate::types::{DType, TimeUnit};
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalTimeScalar {
     value: PScalar,
-    unit: TimeUnit,
+    dtype: DType,
 }
 
 impl LocalTimeScalar {
     pub fn new(value: PScalar, unit: TimeUnit) -> Self {
-        Self { value, unit }
+        Self {
+            value,
+            dtype: DType::LocalTime(unit),
+        }
     }
 }
 
@@ -26,8 +29,8 @@ impl Scalar for LocalTimeScalar {
     }
 
     #[inline]
-    fn dtype(&self) -> DType {
-        DType::LocalTime(self.unit.clone())
+    fn dtype(&self) -> &DType {
+        &self.dtype
     }
 
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {

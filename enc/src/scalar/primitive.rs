@@ -136,7 +136,7 @@ impl Scalar for PScalar {
     }
 
     #[inline]
-    fn dtype(&self) -> DType {
+    fn dtype(&self) -> &DType {
         self.ptype().into()
     }
 
@@ -266,7 +266,7 @@ mod test {
     fn cast() {
         let scalar: Box<dyn Scalar> = 10u16.into();
         let u32_scalar = scalar.cast(&DType::UInt(IntWidth::_32)).unwrap();
-        let u32_scalar_ptype: PType = (&u32_scalar.dtype()).try_into().unwrap();
+        let u32_scalar_ptype: PType = u32_scalar.dtype().try_into().unwrap();
         assert_eq!(u32_scalar_ptype, PType::U32);
     }
 }

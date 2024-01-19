@@ -39,7 +39,7 @@ pub type ArrowIterator = dyn Iterator<Item = ArrayRef>;
 pub trait ArrayEncoding {
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
-    fn dtype(&self) -> DType;
+    fn dtype(&self) -> &DType;
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
     fn iter_arrow(&self) -> Box<ArrowIterator>;
     fn slice(&self, start: usize, stop: usize) -> EncResult<Array>;
@@ -114,7 +114,7 @@ impl ArrayEncoding for Array {
         match_each_encoding! { self, |$enc| $enc.is_empty() }
     }
 
-    fn dtype(&self) -> DType {
+    fn dtype(&self) -> &DType {
         match_each_encoding! { self, |$enc| $enc.dtype() }
     }
 

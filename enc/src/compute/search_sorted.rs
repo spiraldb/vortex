@@ -28,7 +28,7 @@ pub fn search_sorted_usize(
 ) -> EncResult<usize> {
     let enc_scalar: Box<dyn Scalar> = index.into();
     // Convert index into correctly typed Arrow scalar.
-    let enc_scalar = enc_scalar.cast(&indices.dtype())?;
+    let enc_scalar = enc_scalar.cast(indices.dtype())?;
 
     let series: Series = indices.iter_arrow().into_polars();
     Ok(search_sorted(

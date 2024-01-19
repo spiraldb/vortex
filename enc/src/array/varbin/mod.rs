@@ -43,8 +43,8 @@ impl ArrayEncoding for VarBinArray {
         self.offsets.len() <= 1
     }
 
-    fn dtype(&self) -> DType {
-        self.dtype.clone()
+    fn dtype(&self) -> &DType {
+        &self.dtype
     }
 
     fn scalar_at(&self, _index: usize) -> EncResult<Box<dyn Scalar>> {

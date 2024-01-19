@@ -1,4 +1,5 @@
 use std::any::Any;
+
 use std::fmt::Debug;
 
 pub use binary::*;
@@ -29,7 +30,7 @@ pub trait Scalar: Debug + dyn_clone::DynClone + Send + Sync + 'static {
     fn boxed(self) -> Box<dyn Scalar>;
 
     /// the logical type.
-    fn dtype(&self) -> DType;
+    fn dtype(&self) -> &DType;
 
     fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>>;
 }

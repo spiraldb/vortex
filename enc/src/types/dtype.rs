@@ -1,8 +1,9 @@
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::zip;
+use std::sync::Arc;
 
-use arrow::datatypes::{DataType, Field, FieldRef, Fields, TimeUnit as ArrowTimeUnit};
+use arrow::datatypes::{DataType, Field, Fields, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
 
 use crate::error::{EncError, EncResult};
@@ -91,6 +92,8 @@ impl Display for TimeUnit {
     }
 }
 
+pub type FieldNames = Vec<Arc<String>>;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DType {
     Null,
@@ -98,7 +101,7 @@ pub enum DType {
     Bool,
     Int(IntWidth),
     UInt(IntWidth),
-    Decimal(u8, u8),
+    Decimal(u8, i8),
     Float(FloatWidth),
     Utf8,
     Binary,
@@ -106,7 +109,7 @@ pub enum DType {
     LocalDate,
     Instant(TimeUnit),
     ZonedDateTime(TimeUnit),
-    Struct(Vec<String>, Vec<DType>),
+    Struct(FieldNames, Vec<DType>),
     List(Box<DType>),
     Map(Box<DType>, Box<DType>),
 }
@@ -143,6 +146,24 @@ impl Display for DType {
             ),
             DType::List(c) => write!(f, "List({})", c),
             DType::Map(k, v) => write!(f, "Map({}, {})", k, v),
+        }
+    }
+}
+
+impl From<PType> for &DType {
+    fn from(item: PType) -> Self {
+        match item {
+            PType::I8 => &DType::Int(IntWidth::_8),
+            PType::I16 => &DType::Int(IntWidth::_16),
+            PType::I32 => &DType::Int(IntWidth::_32),
+            PType::I64 => &DType::Int(IntWidth::_64),
+            PType::U8 => &DType::UInt(IntWidth::_8),
+            PType::U16 => &DType::UInt(IntWidth::_16),
+            PType::U32 => &DType::UInt(IntWidth::_32),
+            PType::U64 => &DType::UInt(IntWidth::_64),
+            PType::F16 => &DType::Float(FloatWidth::_16),
+            PType::F32 => &DType::Float(FloatWidth::_32),
+            PType::F64 => &DType::Float(FloatWidth::_64),
         }
     }
 }
@@ -191,6 +212,8 @@ impl TryFrom<&DataType> for DType {
             DataType::Float16 => Ok(DType::Float(FloatWidth::_16)),
             DataType::Float32 => Ok(DType::Float(FloatWidth::_32)),
             DataType::Float64 => Ok(DType::Float(FloatWidth::_64)),
+            DataType::Utf8 | DataType::LargeUtf8 => Ok(DType::Utf8),
+            DataType::Binary | DataType::LargeBinary => Ok(DType::Binary),
             _ => Err(EncError::InvalidArrowDataType(value.clone())),
         }
     }
@@ -231,7 +254,7 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
             IntWidth::_64 => DataType::UInt64,
         },
         // TODO(robert): Decimal256?
-        DType::Decimal(p, w) => DataType::Decimal128(*p, *w as i8),
+        DType::Decimal(p, w) => DataType::Decimal128(*p, *w),
         DType::Float(w) => match w {
             FloatWidth::Unknown => DataType::Float64,
             FloatWidth::_16 => DataType::Float16,
@@ -262,17 +285,19 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
         }
         DType::Struct(names, dtypes) => DataType::Struct(
             zip(names, dtypes)
-                .map(|(n, dt)| Field::new(n.clone(), dt.into(), matches!(dt, DType::Nullable(_))))
+                .map(|(n, dt)| {
+                    Field::new((**n).clone(), dt.into(), matches!(dt, DType::Nullable(_)))
+                })
                 .collect(),
         ),
         // TODO(robert): LargeList?
-        DType::List(c) => DataType::List(FieldRef::new(Field::new(
+        DType::List(c) => DataType::List(Arc::new(Field::new(
             "element",
             c.as_ref().into(),
             matches!(c.as_ref(), DType::Nullable(_)),
         ))),
         DType::Map(k, v) => DataType::Map(
-            FieldRef::new(Field::new(
+            Arc::new(Field::new(
                 "entries",
                 DataType::Struct(Fields::from(vec![
                     Field::new("key", k.as_ref().into(), false),
@@ -289,14 +314,18 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
     }
 }
 
-impl From<DType> for Fields {
-    fn from(value: DType) -> Self {
+impl From<&DType> for Fields {
+    fn from(value: &DType) -> Self {
         match value {
             DType::Struct(n, f) => Fields::from(
                 n.iter()
                     .zip(f.iter())
                     .map(|(name, dtype)| {
-                        Field::new(name, dtype.into(), matches!(dtype, DType::Nullable(_)))
+                        Field::new(
+                            (**name).clone(),
+                            dtype.into(),
+                            matches!(dtype, DType::Nullable(_)),
+                        )
                     })
                     .collect::<Vec<_>>(),
             ),

@@ -67,8 +67,8 @@ impl ArrayEncoding for ChunkedArray {
     }
 
     #[inline]
-    fn dtype(&self) -> DType {
-        self.dtype.clone()
+    fn dtype(&self) -> &DType {
+        &self.dtype
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {

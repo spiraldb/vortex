@@ -4,13 +4,12 @@ use arrow::array::types::{
     UInt32Type, UInt64Type, UInt8Type,
 };
 use arrow::array::{
-    Array as ArrowArray, ArrayRef, BooleanArray as ArrowBooleanArray,
-    GenericBinaryArray as ArrowBinaryArray, GenericStringArray as ArrowStringArray,
+    Array as ArrowArray, ArrayRef, BooleanArray as ArrowBooleanArray, GenericByteArray,
     PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
 };
 use arrow::array::{ArrowPrimitiveType, OffsetSizeTrait};
 use arrow::buffer::{Buffer, OffsetBuffer};
-use arrow::datatypes::DataType;
+use arrow::datatypes::{ByteArrayType, DataType};
 
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
@@ -42,22 +41,12 @@ impl<T: ArrowPrimitiveType> From<&ArrowPrimitiveArray<T>> for Array {
     }
 }
 
-impl<O: OffsetSizeTrait> From<&ArrowStringArray<O>> for Array {
-    fn from(value: &ArrowStringArray<O>) -> Self {
+impl<T: ByteArrayType> From<&GenericByteArray<T>> for Array {
+    fn from(value: &GenericByteArray<T>) -> Self {
         Array::VarBin(VarBinArray::new(
             Box::new(value.offsets().into()),
             Box::new(value.values().into()),
-            DType::Utf8,
-        ))
-    }
-}
-
-impl<O: OffsetSizeTrait> From<&ArrowBinaryArray<O>> for Array {
-    fn from(value: &ArrowBinaryArray<O>) -> Self {
-        Array::VarBin(VarBinArray::new(
-            Box::new(value.offsets().into()),
-            Box::new(value.values().into()),
-            DType::Binary,
+            T::DATA_TYPE.try_into().unwrap(),
         ))
     }
 }
@@ -71,15 +60,11 @@ impl From<&ArrowBooleanArray> for Array {
 impl From<&ArrowStructArray> for Array {
     fn from(value: &ArrowStructArray) -> Self {
         Array::Struct(StructArray::new(
-            value
-                .column_names()
-                .iter()
-                .map(|c| (*c).to_owned())
-                .collect(),
+            value.column_names(),
             value
                 .columns()
                 .iter()
-                .map(|c| c.to_owned().into())
+                .map(|c| (*c).to_owned().into())
                 .collect(),
         ))
     }

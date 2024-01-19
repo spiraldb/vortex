@@ -27,8 +27,8 @@ impl Scalar for BinaryScalar {
         Box::new(self)
     }
     #[inline]
-    fn dtype(&self) -> DType {
-        DType::Binary
+    fn dtype(&self) -> &DType {
+        &DType::Binary
     }
 
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {

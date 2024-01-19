@@ -116,8 +116,8 @@ impl ArrayEncoding for VarBinViewArray {
     }
 
     #[inline]
-    fn dtype(&self) -> DType {
-        DType::Utf8
+    fn dtype(&self) -> &DType {
+        &DType::Utf8
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {

@@ -34,7 +34,7 @@ impl ArrayEncoding for ConstantArray {
     }
 
     #[inline]
-    fn dtype(&self) -> DType {
+    fn dtype(&self) -> &DType {
         self.scalar.dtype()
     }
 

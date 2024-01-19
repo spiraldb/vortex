@@ -28,10 +28,10 @@ impl Scalar for NullableScalar {
         Box::new(self)
     }
     #[inline]
-    fn dtype(&self) -> DType {
+    fn dtype(&self) -> &DType {
         match self {
             Self::Some(scalar) => scalar.dtype(),
-            Self::None(dtype) => dtype.clone(),
+            Self::None(dtype) => dtype,
         }
     }
 

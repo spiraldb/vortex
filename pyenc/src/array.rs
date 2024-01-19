@@ -83,6 +83,6 @@ impl PyArray {
 
     #[getter]
     fn dtype(self_: PyRef<Self>) -> PyResult<Py<PyDType>> {
-        PyDType::wrap(self_.py(), self_.inner.dtype())
+        PyDType::wrap(self_.py(), self_.inner.dtype().clone())
     }
 }

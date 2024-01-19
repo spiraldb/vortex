@@ -1,5 +1,6 @@
-use itertools::Itertools;
 use std::any::Any;
+
+use itertools::Itertools;
 
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -7,14 +8,14 @@ use crate::types::DType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructScalar {
-    names: Vec<String>,
+    dtype: DType,
     values: Vec<Box<dyn Scalar>>,
 }
 
 impl StructScalar {
     #[inline]
-    pub fn new(names: Vec<String>, values: Vec<Box<dyn Scalar>>) -> Self {
-        Self { names, values }
+    pub fn new(dtype: DType, values: Vec<Box<dyn Scalar>>) -> Self {
+        Self { dtype, values }
     }
 
     #[inline]
@@ -33,11 +34,8 @@ impl Scalar for StructScalar {
         Box::new(self)
     }
     #[inline]
-    fn dtype(&self) -> DType {
-        DType::Struct(
-            self.names.clone(),
-            self.values.iter().map(|x| x.dtype().clone()).collect(),
-        )
+    fn dtype(&self) -> &DType {
+        &self.dtype
     }
 
     fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
@@ -47,14 +45,18 @@ impl Scalar for StructScalar {
                     return Err(EncError::InvalidDType(dtype.clone()));
                 }
 
-                let new_fields = self
+                let new_fields: Vec<Box<dyn Scalar>> = self
                     .values
                     .iter()
                     .zip_eq(field_dtypes.iter())
                     .map(|(field, field_dtype)| field.cast(field_dtype))
                     .try_collect()?;
 
-                Ok(StructScalar::new(names.clone(), new_fields).boxed())
+                let new_type = DType::Struct(
+                    names.clone(),
+                    new_fields.iter().map(|x| x.dtype().clone()).collect(),
+                );
+                Ok(StructScalar::new(new_type, new_fields).boxed())
             }
             _ => Err(EncError::InvalidDType(dtype.clone())),
         }

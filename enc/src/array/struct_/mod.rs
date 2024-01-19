@@ -8,23 +8,28 @@ use itertools::Itertools;
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
 use crate::error::EncResult;
 use crate::scalar::{Scalar, StructScalar};
-use crate::types::DType;
+use crate::types::{DType, FieldNames};
 
 use super::{Array, ArrayEncoding, ArrowIterator};
 
 #[derive(Debug, Clone)]
 pub struct StructArray {
-    names: Vec<String>,
     fields: Vec<Array>,
+    dtype: DType,
 }
 
 impl StructArray {
-    pub fn new(names: Vec<String>, fields: Vec<Array>) -> Self {
+    pub fn new(names: Vec<&str>, fields: Vec<Array>) -> Self {
         assert!(
             fields.iter().map(|v| v.len()).all_equal(),
             "Fields didn't have the same length"
         );
-        Self { names, fields }
+        let field_names: FieldNames = names.iter().map(|s| Arc::new((*s).to_owned())).collect();
+        let dtype = DType::Struct(
+            field_names,
+            fields.iter().map(|a| a.dtype().clone()).collect(),
+        );
+        Self { fields, dtype }
     }
 }
 
@@ -40,16 +45,13 @@ impl ArrayEncoding for StructArray {
     }
 
     #[inline]
-    fn dtype(&self) -> DType {
-        DType::Struct(
-            self.names.clone(),
-            self.fields.iter().map(|a| a.dtype().clone()).collect(),
-        )
+    fn dtype(&self) -> &DType {
+        &self.dtype
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         Ok(Box::new(StructScalar::new(
-            self.names.clone(),
+            self.dtype.clone(),
             self.fields
                 .iter()
                 .map(|field| field.scalar_at(index))
@@ -84,7 +86,10 @@ impl ArrayEncoding for StructArray {
             .iter()
             .map(|field| field.slice(start, stop))
             .try_collect()?;
-        Ok(Array::Struct(StructArray::new(self.names.clone(), fields)))
+        Ok(Array::Struct(Self {
+            fields,
+            dtype: self.dtype.clone(),
+        }))
     }
 }
 
@@ -106,7 +111,7 @@ mod test {
         let arrow_bbs = ArrowStringArray::<i32>::from(vec!["a", "b", "c"]);
 
         let array = StructArray::new(
-            vec!["a".into(), "b".into()],
+            vec!["a", "b"],
             vec![(&arrow_aas).into(), (&arrow_bbs).into()],
         );
         let arrow_struct = ArrowStructArray::new(

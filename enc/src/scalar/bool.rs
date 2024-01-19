@@ -29,8 +29,8 @@ impl Scalar for BoolScalar {
     }
 
     #[inline]
-    fn dtype(&self) -> DType {
-        DType::Bool
+    fn dtype(&self) -> &DType {
+        &DType::Bool
     }
 
     fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
