@@ -54,7 +54,7 @@ impl IntoPolarsValue for &dyn Scalar {
             DType::Bool => {
                 AnyValue::Boolean(self.as_any().downcast_ref::<BoolScalar>().unwrap().value())
             }
-            DType::Int(_) | DType::UInt(_) | DType::Float(_) => {
+            DType::Int(_, _) | DType::Float(_) => {
                 match self.as_any().downcast_ref::<PScalar>().unwrap() {
                     PScalar::U8(v) => AnyValue::UInt8(*v),
                     PScalar::U16(v) => AnyValue::UInt16(*v),

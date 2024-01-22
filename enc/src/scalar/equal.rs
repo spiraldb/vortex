@@ -39,8 +39,7 @@ fn equal(lhs: &dyn Scalar, rhs: &dyn Scalar) -> bool {
     use DType::*;
     match lhs.dtype() {
         Bool => dyn_eq!(BoolScalar, lhs, rhs),
-        Int(_) => dyn_eq!(PScalar, lhs, rhs),
-        UInt(_) => dyn_eq!(PScalar, lhs, rhs),
+        Int(_, _) => dyn_eq!(PScalar, lhs, rhs),
         Float(_) => dyn_eq!(PScalar, lhs, rhs),
         Struct(..) => dyn_eq!(StructScalar, lhs, rhs),
         Utf8 => dyn_eq!(Utf8Scalar, lhs, rhs),

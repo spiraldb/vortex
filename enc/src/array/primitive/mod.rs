@@ -109,7 +109,7 @@ impl<T: NativePType> From<Vec<T>> for Array {
 
 #[cfg(test)]
 mod test {
-    use crate::types::IntWidth;
+    use crate::types::{IntWidth, Signedness};
 
     use super::*;
 
@@ -118,7 +118,7 @@ mod test {
         let arr = PrimitiveArray::from_vec::<i32>(vec![1, 2, 3]);
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.ptype, PType::I32);
-        assert_eq!(arr.dtype, DType::Int(IntWidth::_32));
+        assert_eq!(arr.dtype, DType::Int(IntWidth::_32, Signedness::Signed));
 
         // Ensure we can fetch the scalar at the given index.
         assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(1));

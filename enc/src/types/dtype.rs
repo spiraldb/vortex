@@ -11,6 +11,33 @@ use crate::error::{EncError, EncResult};
 use super::PType;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Signedness {
+    Unknown,
+    Unsigned,
+    Signed,
+}
+
+impl From<bool> for Signedness {
+    fn from(value: bool) -> Self {
+        if value {
+            Signedness::Signed
+        } else {
+            Signedness::Unsigned
+        }
+    }
+}
+
+impl Display for Signedness {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Signedness::Unknown => write!(f, "unknown"),
+            Signedness::Unsigned => write!(f, "unsigned"),
+            Signedness::Signed => write!(f, "signed"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IntWidth {
     Unknown,
     _8,
@@ -99,8 +126,7 @@ pub enum DType {
     Null,
     Nullable(Box<DType>),
     Bool,
-    Int(IntWidth),
-    UInt(IntWidth),
+    Int(IntWidth, Signedness),
     Decimal(u8, i8),
     Float(FloatWidth),
     Utf8,
@@ -116,18 +142,22 @@ pub enum DType {
 
 impl DType {
     pub fn is_primitive(&self) -> bool {
-        matches!(self, DType::Int(_) | DType::UInt(_) | DType::Float(_))
+        matches!(self, DType::Int(_, _) | DType::Float(_))
     }
 }
 
 impl Display for DType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use Signedness::*;
         match self {
             DType::Null => write!(f, "null"),
             DType::Nullable(n) => write!(f, "{}?", n),
             DType::Bool => write!(f, "bool"),
-            DType::Int(w) => write!(f, "int({})", w),
-            DType::UInt(w) => write!(f, "uint({})", w),
+            DType::Int(w, s) => match s {
+                Unknown => write!(f, "int({})", w),
+                Unsigned => write!(f, "uint({})", w),
+                Signed => write!(f, "sint({})", w),
+            },
             DType::Decimal(p, s) => write!(f, "decimal({}, {})", p, s),
             DType::Float(w) => write!(f, "float({})", w),
             DType::Utf8 => write!(f, "utf8"),
@@ -144,23 +174,24 @@ impl Display for DType {
                     .map(|(n, dt)| format!("{}={}", n, dt))
                     .join(", ")
             ),
-            DType::List(c) => write!(f, "List({})", c),
-            DType::Map(k, v) => write!(f, "Map({}, {})", k, v),
+            DType::List(c) => write!(f, "list({})", c),
+            DType::Map(k, v) => write!(f, "map({}, {})", k, v),
         }
     }
 }
 
 impl From<PType> for &DType {
     fn from(item: PType) -> Self {
+        use Signedness::*;
         match item {
-            PType::I8 => &DType::Int(IntWidth::_8),
-            PType::I16 => &DType::Int(IntWidth::_16),
-            PType::I32 => &DType::Int(IntWidth::_32),
-            PType::I64 => &DType::Int(IntWidth::_64),
-            PType::U8 => &DType::UInt(IntWidth::_8),
-            PType::U16 => &DType::UInt(IntWidth::_16),
-            PType::U32 => &DType::UInt(IntWidth::_32),
-            PType::U64 => &DType::UInt(IntWidth::_64),
+            PType::I8 => &DType::Int(IntWidth::_8, Signed),
+            PType::I16 => &DType::Int(IntWidth::_16, Signed),
+            PType::I32 => &DType::Int(IntWidth::_32, Signed),
+            PType::I64 => &DType::Int(IntWidth::_64, Signed),
+            PType::U8 => &DType::Int(IntWidth::_8, Unsigned),
+            PType::U16 => &DType::Int(IntWidth::_16, Unsigned),
+            PType::U32 => &DType::Int(IntWidth::_32, Unsigned),
+            PType::U64 => &DType::Int(IntWidth::_64, Unsigned),
             PType::F16 => &DType::Float(FloatWidth::_16),
             PType::F32 => &DType::Float(FloatWidth::_32),
             PType::F64 => &DType::Float(FloatWidth::_64),
@@ -170,15 +201,16 @@ impl From<PType> for &DType {
 
 impl From<PType> for DType {
     fn from(item: PType) -> Self {
+        use Signedness::*;
         match item {
-            PType::I8 => DType::Int(IntWidth::_8),
-            PType::I16 => DType::Int(IntWidth::_16),
-            PType::I32 => DType::Int(IntWidth::_32),
-            PType::I64 => DType::Int(IntWidth::_64),
-            PType::U8 => DType::UInt(IntWidth::_8),
-            PType::U16 => DType::UInt(IntWidth::_16),
-            PType::U32 => DType::UInt(IntWidth::_32),
-            PType::U64 => DType::UInt(IntWidth::_64),
+            PType::I8 => DType::Int(IntWidth::_8, Signed),
+            PType::I16 => DType::Int(IntWidth::_16, Signed),
+            PType::I32 => DType::Int(IntWidth::_32, Signed),
+            PType::I64 => DType::Int(IntWidth::_64, Signed),
+            PType::U8 => DType::Int(IntWidth::_8, Unsigned),
+            PType::U16 => DType::Int(IntWidth::_16, Unsigned),
+            PType::U32 => DType::Int(IntWidth::_32, Unsigned),
+            PType::U64 => DType::Int(IntWidth::_64, Unsigned),
             PType::F16 => DType::Float(FloatWidth::_16),
             PType::F32 => DType::Float(FloatWidth::_32),
             PType::F64 => DType::Float(FloatWidth::_64),
@@ -198,17 +230,18 @@ impl TryFrom<&DataType> for DType {
     type Error = EncError;
 
     fn try_from(value: &DataType) -> EncResult<Self> {
+        use Signedness::*;
         match value {
             DataType::Null => Ok(DType::Null),
             DataType::Boolean => Ok(DType::Bool),
-            DataType::Int8 => Ok(DType::Int(IntWidth::_8)),
-            DataType::Int16 => Ok(DType::Int(IntWidth::_16)),
-            DataType::Int32 => Ok(DType::Int(IntWidth::_32)),
-            DataType::Int64 => Ok(DType::Int(IntWidth::_64)),
-            DataType::UInt8 => Ok(DType::UInt(IntWidth::_8)),
-            DataType::UInt16 => Ok(DType::UInt(IntWidth::_16)),
-            DataType::UInt32 => Ok(DType::UInt(IntWidth::_32)),
-            DataType::UInt64 => Ok(DType::UInt(IntWidth::_64)),
+            DataType::Int8 => Ok(DType::Int(IntWidth::_8, Signed)),
+            DataType::Int16 => Ok(DType::Int(IntWidth::_16, Signed)),
+            DataType::Int32 => Ok(DType::Int(IntWidth::_32, Signed)),
+            DataType::Int64 => Ok(DType::Int(IntWidth::_64, Signed)),
+            DataType::UInt8 => Ok(DType::Int(IntWidth::_8, Unsigned)),
+            DataType::UInt16 => Ok(DType::Int(IntWidth::_16, Unsigned)),
+            DataType::UInt32 => Ok(DType::Int(IntWidth::_32, Unsigned)),
+            DataType::UInt64 => Ok(DType::Int(IntWidth::_64, Unsigned)),
             DataType::Float16 => Ok(DType::Float(FloatWidth::_16)),
             DataType::Float32 => Ok(DType::Float(FloatWidth::_32)),
             DataType::Float64 => Ok(DType::Float(FloatWidth::_64)),
@@ -273,23 +306,37 @@ impl From<&DType> for DataType {
 }
 
 fn _dtype_to_datatype(dtype: &DType) -> DataType {
+    use Signedness::*;
     match dtype {
         DType::Null => DataType::Null,
         DType::Nullable(_) => panic!("Nullable DType should have been handled earlier"),
         DType::Bool => DataType::Boolean,
-        DType::Int(w) => match w {
-            IntWidth::Unknown => DataType::Int64,
-            IntWidth::_8 => DataType::Int8,
-            IntWidth::_16 => DataType::Int16,
-            IntWidth::_32 => DataType::Int32,
-            IntWidth::_64 => DataType::Int64,
-        },
-        DType::UInt(w) => match w {
-            IntWidth::Unknown => DataType::UInt64,
-            IntWidth::_8 => DataType::UInt8,
-            IntWidth::_16 => DataType::UInt16,
-            IntWidth::_32 => DataType::UInt32,
-            IntWidth::_64 => DataType::UInt64,
+        DType::Int(w, s) => match w {
+            IntWidth::Unknown => match s {
+                Unknown => DataType::Int64,
+                Unsigned => DataType::UInt64,
+                Signed => DataType::Int64,
+            },
+            IntWidth::_8 => match s {
+                Unknown => DataType::Int8,
+                Unsigned => DataType::UInt8,
+                Signed => DataType::Int8,
+            },
+            IntWidth::_16 => match s {
+                Unknown => DataType::Int16,
+                Unsigned => DataType::UInt16,
+                Signed => DataType::Int16,
+            },
+            IntWidth::_32 => match s {
+                Unknown => DataType::Int32,
+                Unsigned => DataType::UInt32,
+                Signed => DataType::Int32,
+            },
+            IntWidth::_64 => match s {
+                Unknown => DataType::Int64,
+                Unsigned => DataType::UInt64,
+                Signed => DataType::Int64,
+            },
         },
         DType::Decimal(p, w) => DataType::Decimal128(*p, *w),
         DType::Float(w) => match w {
@@ -375,7 +422,7 @@ mod tests {
 
     #[test]
     fn test_dtype_to_datatype() {
-        let dtype = DType::Int(IntWidth::_32);
+        let dtype = DType::Int(IntWidth::_32, Signedness::Signed);
         let data_type: DataType = dtype.into();
         assert_eq!(data_type, DataType::Int32);
     }

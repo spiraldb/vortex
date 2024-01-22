@@ -9,7 +9,7 @@ use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::CombineChunks;
 use crate::error::{EncError, EncResult};
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
-use crate::types::{DType, IntWidth};
+use crate::types::{DType, IntWidth, Signedness};
 
 mod stats;
 
@@ -23,10 +23,13 @@ pub struct VarBinArray {
 
 impl VarBinArray {
     pub fn new(offsets: Box<Array>, bytes: Box<Array>, dtype: DType) -> Self {
-        if !matches!(offsets.dtype(), DType::UInt(_) | DType::Int(_)) {
+        if !matches!(offsets.dtype(), DType::Int(_, _)) {
             panic!("Unsupported type for offsets array");
         }
-        if !matches!(bytes.dtype(), DType::UInt(IntWidth::_8)) {
+        if !matches!(
+            bytes.dtype(),
+            DType::Int(IntWidth::_8, Signedness::Unsigned)
+        ) {
             panic!("Unsupported type for data array {:?}", bytes.dtype());
         }
         if !matches!(dtype, DType::Binary | DType::Utf8) {

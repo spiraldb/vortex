@@ -10,7 +10,7 @@ use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::CombineChunks;
 use crate::error::EncResult;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
-use crate::types::{DType, IntWidth};
+use crate::types::{DType, IntWidth, Signedness};
 
 mod stats;
 
@@ -108,11 +108,14 @@ pub struct VarBinViewArray {
 
 impl VarBinViewArray {
     pub fn new(views: Box<Array>, data: Vec<Array>, dtype: DType) -> Self {
-        if !matches!(views.dtype(), DType::UInt(IntWidth::_8)) {
+        if !matches!(
+            views.dtype(),
+            DType::Int(IntWidth::_8, Signedness::Unsigned)
+        ) {
             panic!("Unsupported type for views array {:?}", views.dtype());
         }
         data.iter().for_each(|d| {
-            if !matches!(d.dtype(), DType::UInt(IntWidth::_8)) {
+            if !matches!(d.dtype(), DType::Int(IntWidth::_8, Signedness::Unsigned)) {
                 panic!("Unsupported type for data array {:?}", d.dtype());
             }
         });

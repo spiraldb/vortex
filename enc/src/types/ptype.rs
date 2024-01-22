@@ -4,7 +4,7 @@ use arrow::datatypes::{ArrowNativeType, DataType};
 use half::f16;
 
 use crate::error::{EncError, EncResult};
-use crate::types::{DType, IntWidth};
+use crate::types::{DType, FloatWidth, IntWidth, Signedness};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PType {
@@ -123,20 +123,40 @@ impl TryFrom<&DType> for PType {
     type Error = EncError;
 
     fn try_from(value: &DType) -> EncResult<Self> {
+        use Signedness::*;
         match value {
-            DType::Int(w) => match w {
-                IntWidth::Unknown => Ok(PType::I64),
-                IntWidth::_8 => Ok(PType::I8),
-                IntWidth::_16 => Ok(PType::I16),
-                IntWidth::_32 => Ok(PType::I32),
-                IntWidth::_64 => Ok(PType::I64),
+            DType::Int(w, s) => match w {
+                IntWidth::Unknown => match s {
+                    Unknown => Ok(PType::I64),
+                    Unsigned => Ok(PType::U64),
+                    Signed => Ok(PType::I64),
+                },
+                IntWidth::_8 => match s {
+                    Unknown => Ok(PType::I8),
+                    Unsigned => Ok(PType::U8),
+                    Signed => Ok(PType::I8),
+                },
+                IntWidth::_16 => match s {
+                    Unknown => Ok(PType::I16),
+                    Unsigned => Ok(PType::U16),
+                    Signed => Ok(PType::I16),
+                },
+                IntWidth::_32 => match s {
+                    Unknown => Ok(PType::I32),
+                    Unsigned => Ok(PType::U32),
+                    Signed => Ok(PType::I32),
+                },
+                IntWidth::_64 => match s {
+                    Unknown => Ok(PType::I64),
+                    Unsigned => Ok(PType::U64),
+                    Signed => Ok(PType::I64),
+                },
             },
-            DType::UInt(w) => match w {
-                IntWidth::Unknown => Ok(PType::U64),
-                IntWidth::_8 => Ok(PType::U8),
-                IntWidth::_16 => Ok(PType::U16),
-                IntWidth::_32 => Ok(PType::U32),
-                IntWidth::_64 => Ok(PType::U64),
+            DType::Float(f) => match f {
+                FloatWidth::Unknown => Ok(PType::F64),
+                FloatWidth::_16 => Ok(PType::F16),
+                FloatWidth::_32 => Ok(PType::F32),
+                FloatWidth::_64 => Ok(PType::F64),
             },
             _ => Err(EncError::InvalidDType(value.clone())),
         }
