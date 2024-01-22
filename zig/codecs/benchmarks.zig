@@ -1,5 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
+const patch = @import("patch.zig");
 
 pub const SignedIntTypes = [_]type{ i8, i16, i32, i64, i128 };
 pub const UnsignedIntTypes = [_]type{ u8, u16, u32, u64, u128 };
@@ -59,7 +60,10 @@ pub fn generatedDecimals(comptime codec_fn: fn (comptime F: type) type, comptime
         });
 
         timer.reset();
-        const decoded = try codec.decode(ally, result);
+        var decoded = try codec.decode(ally, result);
+        if (@hasField(@TypeOf(result), "exceptionPositions")) {
+            try patch.patch(F, values, result.exceptionPositions, decoded[0..decoded.len]);
+        }
         const decode_nanos = timer.lap();
         std.debug.print("{s} DECODE: {} million floats {} per second ({}ms)\n", .{
             name,
@@ -84,6 +88,9 @@ pub fn testFloatsRoundTrip(comptime codec_fn: fn (comptime F: type) type) !void 
 
         const decoded = try codec.decode(ally, encoded);
         defer ally.free(decoded);
+        if (@hasField(@TypeOf(encoded), "exceptionPositions")) {
+            try patch.patch(F, &vals, encoded.exceptionPositions, decoded[0..decoded.len]);
+        }
         try std.testing.expectEqualSlices(F, &vals, decoded);
     }
 }

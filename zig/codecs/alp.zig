@@ -2,20 +2,14 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const codecmath = @import("codecmath.zig");
 const fastlanes = @import("fastlanes.zig");
+const roaring = @import("roaring");
+const patch = @import("patch.zig");
+const CodecError = @import("error.zig").CodecError;
 const Alignment = fastlanes.Alignment;
-
-// comptime {
-//     const exportTypes = [_]type{ f32, f64 };
-//     for (exportTypes) |F| {
-//         const codec = AdaptiveLosslessFloatingPoint(F);
-//         @export(codec.encodeSingle, std.builtin.ExportOptions{ .name = "alp_encode_single_" ++ @typeName(F), .linkage = .Strong });
-//         @export(codec.decodeSingle, std.builtin.ExportOptions{ .name = "alp_decode_single_" ++ @typeName(F), .linkage = .Strong });
-//     }
-// }
 
 // for encoding, we multiply a given element 'n' by 10^e and 10^(-f)
 // for decoding, we do the reverse: n * 10^f * 10^(-e)
-pub const Exponents = extern struct {
+pub const AlpExponents = extern struct {
     e: u8,
     f: u8,
 };
@@ -25,31 +19,35 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
     codecmath.comptimeCheckFloat(F);
     const i_F10 = comptime codecmath.inversePowersOfTen(F);
     const F10 = comptime codecmath.powersOfTen(F);
-    const EncInt = comptime std.meta.Int(.signed, codecmath.coveringIntBits(F));
     const FMask = comptime std.meta.Int(.unsigned, @bitSizeOf(F));
 
     return struct {
+        pub const EncInt = codecmath.coveringIntTypePowerOfTwo(F);
+
         pub const ALPEncoded = struct {
             const Self = @This();
 
             allocator: Allocator,
             encodedValues: []align(Alignment) const EncInt,
-            exponents: Exponents,
-            exceptions: []const F,
-            exceptionPositions: std.bit_set.DynamicBitSet,
+            exponents: AlpExponents,
+            exceptionPositions: std.bit_set.DynamicBitSetUnmanaged,
+            numExceptions: usize,
 
-            pub fn exceptionCount(self: Self) usize {
-                return self.exceptions.len;
+            pub fn exceptionCount(self: *const Self) usize {
+                return self.numExceptions;
             }
 
             pub fn deinit(self: *Self) void {
                 self.allocator.free(self.encodedValues);
-                self.allocator.free(self.exceptions);
-                self.exceptionPositions.deinit();
+                self.exceptionPositions.deinit(self.allocator);
             }
         };
 
-        pub inline fn encodeSingle(val: F, exponents: Exponents) EncInt {
+        pub fn valuesBufferSizeInBytes(len: usize) usize {
+            return @sizeOf(EncInt) * len;
+        }
+
+        pub inline fn encodeSingle(val: F, exponents: AlpExponents) EncInt {
             const rounded: F = codecmath.fastFloatRound(F, val * F10[exponents.e] * i_F10[exponents.f]);
             const inBounds: u1 = @intFromBool(rounded < codecmath.coveringIntMax(F)) & @intFromBool(rounded > codecmath.coveringIntMin(F));
             // mask is all 1s if in bounds, all zeros otherwise
@@ -58,50 +56,70 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             return @intFromFloat(masked);
         }
 
-        pub inline fn decodeSingle(enc: EncInt, exponents: Exponents) F {
+        pub inline fn decodeSingle(enc: EncInt, exponents: AlpExponents) F {
             return @as(F, @floatFromInt(enc)) * F10[exponents.f] * i_F10[exponents.e];
         }
 
-        pub fn encode(allocator: Allocator, elems: []const F) !ALPEncoded {
-            var encoded = try allocator.alignedAlloc(EncInt, Alignment, elems.len);
-            errdefer allocator.free(encoded);
+        pub fn encode(gpa: Allocator, elems: []const F) CodecError!ALPEncoded {
+            const exponents = try sampleFindExponents(elems);
+            const encoded = try gpa.alignedAlloc(EncInt, Alignment, elems.len);
+            errdefer gpa.free(encoded);
 
-            const exponents = try sampleFindExponents(allocator, elems);
-            var numExceptions: u32 = 0;
-            var exceptionPositions = try std.bit_set.DynamicBitSet.initEmpty(allocator, elems.len);
-            errdefer exceptionPositions.deinit();
-            for (elems, 0..) |n, i| {
-                encoded[i] = encodeSingle(n, exponents);
-                const decoded: F = decodeSingle(encoded[i], exponents);
-                const neq = decoded != elems[i];
-                numExceptions += @intFromBool(neq);
-                exceptionPositions.setValue(i, neq);
-            }
+            var excPositions = try std.bit_set.DynamicBitSetUnmanaged.initEmpty(gpa, elems.len);
+            errdefer excPositions.deinit(gpa);
+            const numMasks = std.math.divCeil(usize, excPositions.capacity(), @bitSizeOf(@TypeOf(excPositions).MaskInt)) catch unreachable;
 
-            var exceptions = try allocator.alloc(F, numExceptions);
-            errdefer allocator.free(exceptions);
+            var excPositionsSlice = std.PackedIntSlice(u1){
+                .bytes = std.mem.sliceAsBytes(excPositions.masks[0..numMasks]),
+                .bit_offset = 0,
+                .len = excPositions.capacity(),
+            };
 
-            var positionIterator = exceptionPositions.iterator(.{});
-            var i: usize = 0;
-            while (positionIterator.next()) |pos| : (i += 1) {
-                exceptions[i] = elems[pos];
-            }
-            return .{
-                .allocator = allocator,
+            const numExceptions = try encodeRaw(elems, exponents, encoded, &excPositionsSlice);
+            std.debug.assert(numExceptions == excPositions.count());
+            return ALPEncoded{
+                .allocator = gpa,
                 .encodedValues = encoded,
                 .exponents = exponents,
-                .exceptions = exceptions,
-                .exceptionPositions = exceptionPositions,
+                .exceptionPositions = excPositions,
+                .numExceptions = numExceptions,
             };
         }
 
-        pub fn sampleFindExponents(gpa: std.mem.Allocator, vec: []const F) !Exponents {
-            const sample: []const F = try codecmath.sample(F, gpa, vec);
-            defer gpa.free(sample);
+        pub fn encodeRaw(
+            elems: []const F,
+            exponents: AlpExponents,
+            encoded: []align(Alignment) EncInt,
+            excPositions: *std.PackedIntSlice(u1),
+        ) CodecError!usize {
+            if (encoded.len < elems.len) {
+                return CodecError.OutputBufferTooSmall;
+            }
+
+            var numExceptions: u32 = 0;
+            for (elems, 0..) |n, i| {
+                encoded[i] = encodeSingle(n, exponents);
+                const decoded: F = decodeSingle(encoded[i], exponents);
+                const neq: u1 = @intFromBool(decoded != elems[i]);
+                numExceptions += neq;
+                excPositions.set(i, neq);
+            }
+
+            return numExceptions;
+        }
+
+        pub fn sampleFindExponents(vec: []const F) !AlpExponents {
+            const bufSize = comptime codecmath.defaultSampleBufferSize(F);
+            var buf: [bufSize]u8 = undefined;
+            var fba = std.heap.FixedBufferAllocator.init(&buf);
+            const ally = fba.allocator();
+
+            const sample: []const F = try codecmath.defaultSample(F, ally, vec);
+            defer ally.free(sample);
             return findExponents(sample);
         }
 
-        pub fn findExponents(vec: []const F) !Exponents {
+        pub fn findExponents(vec: []const F) !AlpExponents {
             var bestE: usize = 0;
             var bestF: usize = 0;
             var bestSize: usize = std.math.maxInt(usize);
@@ -110,7 +128,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             // after that, try e's in descending order, with a gap no larger than the original e - f
             for (0..codecmath.maxExponentToTry(F) + 1) |e| {
                 for (0..e) |f| {
-                    const size = estimateSizeWithExponents(vec, Exponents{
+                    const size = estimateSizeWithExponents(vec, AlpExponents{
                         .e = @intCast(e),
                         .f = @intCast(f),
                     });
@@ -130,7 +148,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             return .{ .e = @intCast(bestE), .f = @intCast(bestF) };
         }
 
-        fn estimateSizeWithExponents(sampleSlice: []const F, exponents: Exponents) usize {
+        fn estimateSizeWithExponents(sampleSlice: []const F, exponents: AlpExponents) usize {
             const EncIntBitWidth = comptime @bitSizeOf(EncInt);
             const zz = @import("zigzag.zig").ZigZag(EncInt);
             const maxEncInt: zz.Unsigned = std.math.maxInt(zz.Unsigned);
@@ -212,21 +230,25 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             return size;
         }
 
-        pub fn decode(allocator: Allocator, input: ALPEncoded) ![]const F {
-            var decoded: []F = try allocator.alloc(F, input.encodedValues.len);
+        pub fn decode(allocator: Allocator, input: ALPEncoded) ![]F {
+            const decoded: []F = try allocator.alloc(F, input.encodedValues.len);
             errdefer allocator.free(decoded);
-
-            for (input.encodedValues, 0..) |enc, i| {
-                decoded[i] = decodeSingle(enc, input.exponents);
-            }
-
-            var pos_iter = input.exceptionPositions.iterator(.{});
-            var i: usize = 0;
-            while (pos_iter.next()) |pos| : (i += 1) {
-                decoded[pos] = input.exceptions[i];
-            }
-
+            try decodeRaw(input.encodedValues, input.exponents, decoded);
             return decoded;
+        }
+
+        pub fn decodeRaw(
+            input: []const EncInt,
+            exponents: AlpExponents,
+            out: []F,
+        ) CodecError!void {
+            if (out.len < input.len) {
+                return CodecError.OutputBufferTooSmall;
+            }
+
+            for (input, out) |enc, *o| {
+                o.* = decodeSingle(enc, exponents);
+            }
         }
     };
 }
@@ -238,4 +260,15 @@ test "alp round trip" {
 
 test "alp benchmark" {
     try benchmarks.generatedDecimals(AdaptiveLosslessFloatingPoint, "ALP");
+}
+
+test "values buffer size in bytes" {
+    const types = [_]type{ f32, f64 };
+    inline for (types) |T| {
+        const codec = AdaptiveLosslessFloatingPoint(T);
+        const bufSize = codec.valuesBufferSizeInBytes(10);
+        try std.testing.expect(bufSize == @sizeOf([10]T));
+        try std.testing.expect(bufSize == 10 * @sizeOf(codec.EncInt));
+        try std.testing.expect(@sizeOf(codec.EncInt) == @sizeOf(T));
+    }
 }

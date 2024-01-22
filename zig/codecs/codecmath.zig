@@ -15,6 +15,11 @@ pub fn comptimeCheckInt(comptime T: type) void {
     }
 }
 
+pub fn coveringIntTypePowerOfTwo(comptime F: type) type {
+    // we round up coveringIntBits to next power of 2, since we might as well use every physically allocated bit
+    return std.meta.Int(.signed, std.math.ceilPowerOfTwoAssert(u8, coveringIntBits(F)));
+}
+
 pub fn coveringIntBits(comptime F: type) comptime_int {
     // we should allocate at least fraction size + 1 MSB bit + 1 sign bit. this ensures coverage
     // of the full range of integers where every one is exactly representable in the corresponding float type.
@@ -31,17 +36,15 @@ pub fn coveringIntMin(comptime F: type) comptime_float {
     return @floatFromInt(std.math.minInt(std.meta.Int(.signed, coveringIntBits(F))));
 }
 
-pub fn coveringIntTypePowerOfTwo(comptime F: type) type {
-    // we round up coveringIntBits to next power of 2, since we might as well use every physically allocated bit
-    return std.meta.Int(.signed, std.math.ceilPowerOfTwoAssert(u8, coveringIntBits(F)));
-}
-
 test "covering int bit-width" {
     try std.testing.expectEqual(12, coveringIntBits(f16));
     try std.testing.expectEqual(25, coveringIntBits(f32));
     try std.testing.expectEqual(54, coveringIntBits(f64));
     try std.testing.expectEqual(65, coveringIntBits(f80));
     try std.testing.expectEqual(114, coveringIntBits(f128));
+
+    try std.testing.expectEqual(@sizeOf(i25), @sizeOf(i32));
+    try std.testing.expectEqual(@sizeOf(i54), @sizeOf(i64));
 }
 
 test "covering int type" {
@@ -203,11 +206,22 @@ pub fn toIndexArray(comptime T: type, comptime alignment: u16, bitset: std.bit_s
     return indices;
 }
 
-pub const CompressError = error{
-    TooManySamplesFromSlice,
-};
+pub const DefaultNumSampleSlices = 10;
+pub const DefaultSampleSliceLen = 64;
 
-pub fn sample(comptime T: type, gpa: std.mem.Allocator, vec: []const T) ![]const T {
+pub fn defaultSampleBufferSize(comptime T: type) usize {
+    const sampleSizeInBytes = DefaultNumSampleSlices * DefaultSampleSliceLen * @sizeOf(T);
+    const overheadInBytes = @sizeOf(SampleSliceIterator(T)) + DefaultNumSampleSlices * @sizeOf(ArraySlice);
+    const sizeInBytes = sampleSizeInBytes + overheadInBytes + 128;
+    return (std.math.divCeil(usize, sizeInBytes, 1024) catch unreachable) * 1024;
+}
+
+test "default sample buffer size" {
+    try std.testing.expectEqual(defaultSampleBufferSize(f32), 3072);
+    try std.testing.expectEqual(defaultSampleBufferSize(f64), 6144);
+}
+
+pub fn defaultSample(comptime T: type, gpa: std.mem.Allocator, vec: []const T) ![]const T {
     const numSampleSlices = 10;
     const sampleSliceLen = 64;
     const totalNumSamples = @min(vec.len, numSampleSlices * sampleSliceLen);
@@ -242,9 +256,7 @@ fn stratifiedSlices(gpa: std.mem.Allocator, length: usize, sampleSliceLen: u16, 
     const rand = prng.random();
 
     for (partitions) |partSlice| {
-        if (sampleSliceLen > partSlice.stop - partSlice.start) {
-            return CompressError.TooManySamplesFromSlice;
-        }
+        std.debug.assert(partSlice.stop - partSlice.start >= sampleSliceLen);
         const randomStart = rand.intRangeLessThan(usize, partSlice.start, partSlice.stop - sampleSliceLen);
         try slices.append(ArraySlice{ .start = randomStart, .stop = randomStart + sampleSliceLen });
     }

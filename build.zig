@@ -49,6 +49,11 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // C ABI types
+    const c_abi_types = b.addModule("abi-types", .{
+        .source_file = .{ .path = "zig/c-abi/types.zig" },
+    });
+
     // codecs
     const codecs = b.addModule("codecs", .{
         .source_file = .{ .path = "zig/codecs/codecs.zig" },
@@ -56,6 +61,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "zimd", .module = zimd },
             .{ .name = "roaring", .module = roaring },
             .{ .name = "trazy", .module = trazy },
+            .{ .name = "abi-types", .module = c_abi_types },
         },
     });
 
@@ -78,7 +84,7 @@ pub fn build(b: *std.Build) void {
     // wrap it all up as a static library to call from Rust
     const lib_step = b.addStaticLibrary(std.Build.StaticLibraryOptions{
         .name = "zenc",
-        .root_source_file = .{ .path = "zig/zenc.zig" },
+        .root_source_file = .{ .path = "zig/c-abi/wrapper.zig" },
         .link_libc = true,
         .use_llvm = true,
         .target = target,
@@ -89,22 +95,23 @@ pub fn build(b: *std.Build) void {
     lib_step.addModule("codecs", codecs);
     lib_step.addModule("roaring", roaring);
     lib_step.addModule("zimd", zimd);
-    lib_step.addIncludePath(.{ .path = "zig" });
+    lib_step.addIncludePath(.{ .path = "zig/c-abi" });
     lib_step.c_std = std.Build.CStd.C11;
     lib_step.bundle_compiler_rt = true;
     b.installArtifact(lib_step);
 
+    // test the static library from Zig
     const lib_test = b.addTest(.{
-        .root_source_file = .{ .path = "zig/test-zenc.zig" },
+        .root_source_file = .{ .path = "zig/c-abi/test-wrapper.zig" },
         .target = target,
         .optimize = optimize,
         .filter = filter_test,
     });
-    lib_test.addModule("codecs", codecs);
-    lib_test.addModule("zimd", zimd);
-    lib_test.addIncludePath(.{ .path = "zig" });
+    lib_test.addIncludePath(.{ .path = "zig/c-abi" });
     lib_test.linkLibrary(lib_step);
-    test_step.dependOn(&lib_test.step);
+
+    const lib_test_run = b.addRunArtifact(lib_test);
+    test_step.dependOn(&lib_test_run.step);
 
     // Option for emitting test binary based on the given root source.
     // This is used for debugging as in .vscode/launch.json.

@@ -1,18 +1,13 @@
-#ifndef SPIRAL_ZIG_ENC_H
-#define SPIRAL_ZIG_ENC_H
+#ifndef SPIRAL_ZIMD_H
+#define SPIRAL_ZIMD_H
 
 #include "stdint.h"
 #include "stdbool.h"
 #include "float.h"
-#include "assert.h"
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
-
-static_assert(sizeof(float) == 4, "float type must have 32 bits");
-static_assert(sizeof(double) == 8, "double type must have 64 bits");
-typedef uintptr_t expected_zig_usize_t; // for a comptime check in zig
 
 // max
 uint8_t zimd_max_u8(uint8_t const *const ptr, uintptr_t const len);
@@ -79,64 +74,8 @@ RunLengthStats_t zimd_runLengthStats_i64(int64_t const *const ptr, uintptr_t con
 RunLengthStats_t zimd_runLengthStats_f32(float const *const ptr, uintptr_t const len);
 RunLengthStats_t zimd_runLengthStats_f64(double const *const ptr, uintptr_t const len);
 
-#ifndef SPIRAL_ALIGNMENT
-#define SPIRAL_ALIGNMENT 128
-#endif // SPIRAL_ALIGNMENT
-
-// RunEndEncoding
-typedef struct {
-    uint8_t* ptr;
-    uintptr_t len;
-} ByteBuffer_t;
-
-typedef struct {
-    ByteBuffer_t buffer;
-    uint8_t bitSizePerElement;
-    uint64_t numElements;
-    uint64_t inputBytesUsed;
-} WrittenBuffer_t;
-
-enum ResultStatus_t {
-    Ok,
-    // errors
-    InvalidInput,
-    IncorrectAlignment,
-    EncodingFailed,
-    OutputBufferTooSmall,
-    OutOfMemory,
-    UnknownCodecError, // catch-all, should never happen
-};
-
-typedef struct {
-    enum ResultStatus_t status;
-    WrittenBuffer_t buffer;
-} OneBufferResult_t;
-
-typedef struct {
-    enum ResultStatus_t status;
-    WrittenBuffer_t firstBuffer;
-    WrittenBuffer_t secondBuffer;
-} TwoBufferResult_t;
-
-TwoBufferResult_t codecz_ree_encode_u8_u32(uint8_t const *const ptr, uintptr_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_u16_u32(uint16_t const *const ptr, uintptr_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_u32_u32(uint32_t const *const ptr, uintptr_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_u64_u32(uint64_t const *const ptr, uintptr_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_i8_u32(int8_t const *const ptr, uintptr_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_i16_u32(int16_t const *const ptr, uintptr_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_i32_u32(int32_t const *const ptr, uintptr_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_i64_u32(int64_t const *const ptr, uintptr_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-OneBufferResult_t codecz_ree_decode_u8_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uintptr_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_u16_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uintptr_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_u32_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uintptr_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_u64_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uintptr_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_i8_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uintptr_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_i16_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uintptr_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_i32_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uintptr_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_i64_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uintptr_t const numRuns, ByteBuffer_t out);
-
 #if defined(__cplusplus)
 } // extern "C"
 #endif
 
-#endif // SPIRAL_ZIG_ENC_H
+#endif // SPIRAL_ZIMD_H

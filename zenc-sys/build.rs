@@ -11,9 +11,9 @@ fn main() {
         .canonicalize()
         .expect("Failed to canonicalize root dir");
     let zenc_header = root_dir
-        .join("zig/zenc.h")
+        .join("zig/c-abi/wrapper.h")
         .canonicalize()
-        .expect("Failed to canonicalize zenc.h path");
+        .expect("Failed to canonicalize wrapper.h path");
 
     // Tell cargo to tell rustc to link zenc
     println!(
@@ -34,7 +34,7 @@ fn main() {
         .filter(|e| {
             e.path()
                 .extension()
-                .map(|e| e == "zig" || e == "h")
+                .map(|e| e == "zig" || e == "h" || e == "c")
                 .unwrap_or(false)
         })
     {
