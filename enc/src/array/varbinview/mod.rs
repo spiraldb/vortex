@@ -1,10 +1,9 @@
 use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::builder::LargeStringBuilder;
 use arrow::array::cast::AsArray;
 use arrow::array::types::UInt8Type;
-use arrow::array::ArrayRef;
+use arrow::array::{ArrayRef, StringBuilder};
 
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
@@ -204,7 +203,7 @@ impl ArrayEncoding for VarBinViewArray {
     // TODO(robert): This could be better if we had compute dispatch but for now it's using scalar_at
     // and wraps values needlessly instead of memcopy
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let mut data_buf = LargeStringBuilder::with_capacity(self.len(), self.plain_size());
+        let mut data_buf = StringBuilder::with_capacity(self.len(), self.plain_size());
         for i in 0..self.views.len() / VIEW_SIZE {
             data_buf.append_value(
                 self.scalar_at(i)
@@ -293,8 +292,8 @@ mod test {
             binary_array
                 .iter_arrow()
                 .combine_chunks()
-                .as_string::<i64>(),
-            &ArrowStringArray::<i64>::from(vec![
+                .as_string::<i32>(),
+            &ArrowStringArray::<i32>::from(vec![
                 "hello world",
                 "hello world this is a long string"
             ])

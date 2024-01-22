@@ -122,7 +122,7 @@ mod test {
     #[test]
     pub fn iter() {
         let arrow_aas = ArrowPrimitiveArray::<UInt64Type>::from(vec![1, 2, 3]);
-        let arrow_bbs = ArrowStringArray::<i64>::from(vec!["a", "b", "c"]);
+        let arrow_bbs = ArrowStringArray::<i32>::from(vec!["a", "b", "c"]);
 
         let array = StructArray::new(
             vec!["a", "b"],

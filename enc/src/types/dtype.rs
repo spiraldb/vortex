@@ -298,8 +298,8 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
             FloatWidth::_32 => DataType::Float32,
             FloatWidth::_64 => DataType::Float64,
         },
-        DType::Utf8 => DataType::LargeUtf8,
-        DType::Binary => DataType::LargeBinary,
+        DType::Utf8 => DataType::Utf8,
+        DType::Binary => DataType::Binary,
         DType::LocalTime(u) => DataType::Time64(match u {
             TimeUnit::Ns => ArrowTimeUnit::Nanosecond,
             TimeUnit::Us => ArrowTimeUnit::Microsecond,
@@ -326,7 +326,7 @@ fn _dtype_to_datatype(dtype: &DType) -> DataType {
                 })
                 .collect(),
         ),
-        DType::List(c) => DataType::LargeList(Arc::new(Field::new(
+        DType::List(c) => DataType::List(Arc::new(Field::new(
             "element",
             c.as_ref().into(),
             matches!(c.as_ref(), DType::Nullable(_)),

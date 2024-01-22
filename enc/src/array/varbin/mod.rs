@@ -120,7 +120,7 @@ mod test {
                 .as_bytes()
                 .to_vec(),
         );
-        let offsets = PrimitiveArray::from_vec(vec![0u64, 11, 44]);
+        let offsets = PrimitiveArray::from_vec(vec![0, 11, 44]);
 
         VarBinArray::new(
             Box::new(offsets.into()),
@@ -159,8 +159,8 @@ mod test {
             binary_array
                 .iter_arrow()
                 .combine_chunks()
-                .as_string::<i64>(),
-            &ArrowStringArray::<i64>::from(vec![
+                .as_string::<i32>(),
+            &ArrowStringArray::<i32>::from(vec![
                 "hello world",
                 "hello world this is a long string"
             ])

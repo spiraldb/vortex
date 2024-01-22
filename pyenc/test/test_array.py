@@ -1,5 +1,6 @@
 import enc
 import pyarrow as pa
+import pytest
 
 
 def test_primitive_array_round_trip():
@@ -13,7 +14,15 @@ def test_varbin_array_round_trip():
     a = pa.array(["a", "b", "c"])
     arr = enc.encode(a)
     assert isinstance(arr, enc.VarBinArray)
-    assert arr.to_pyarrow().combine_chunks() == a.cast(pa.large_utf8())
+    assert arr.to_pyarrow().combine_chunks() == a
+
+
+@pytest.mark.xfail(strict=True)
+def test_varbin_array_doesnt_round_trip():
+    a = pa.array(["a", "b", "c"], type=pa.large_utf8())
+    arr = enc.encode(a)
+    assert isinstance(arr, enc.VarBinArray)
+    assert arr.to_pyarrow().combine_chunks() == a
 
 
 def test_empty_array():
