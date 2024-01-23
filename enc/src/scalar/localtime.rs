@@ -2,6 +2,7 @@ use crate::error::EncResult;
 use crate::scalar::{PScalar, Scalar};
 use crate::types::{DType, TimeUnit};
 use std::any::Any;
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalTimeScalar {
@@ -41,5 +42,15 @@ impl Scalar for LocalTimeScalar {
 
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
         todo!()
+    }
+}
+
+impl PartialOrd for LocalTimeScalar {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.dtype != other.dtype {
+            None
+        } else {
+            self.value.partial_cmp(&other.value)
+        }
     }
 }

@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::cmp::Ordering;
 
 use itertools::Itertools;
 
@@ -65,6 +66,16 @@ impl Scalar for StructScalar {
                 Ok(StructScalar::new(new_type, new_fields).boxed())
             }
             _ => Err(EncError::InvalidDType(dtype.clone())),
+        }
+    }
+}
+
+impl PartialOrd for StructScalar {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.dtype != other.dtype {
+            None
+        } else {
+            self.values.partial_cmp(&other.values)
         }
     }
 }

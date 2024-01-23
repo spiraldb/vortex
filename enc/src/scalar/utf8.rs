@@ -1,9 +1,10 @@
-use crate::error::EncResult;
-use crate::scalar::Scalar;
-use crate::types::DType;
 use std::any::Any;
 
-#[derive(Debug, Clone, PartialEq)]
+use crate::error::{EncError, EncResult};
+use crate::scalar::Scalar;
+use crate::types::DType;
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Utf8Scalar {
     value: String,
 }
@@ -39,5 +40,42 @@ impl Scalar for Utf8Scalar {
 
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
         todo!()
+    }
+}
+
+impl From<String> for Box<dyn Scalar> {
+    fn from(value: String) -> Self {
+        Utf8Scalar::new(value).boxed()
+    }
+}
+
+impl From<&str> for Box<dyn Scalar> {
+    fn from(value: &str) -> Self {
+        Utf8Scalar::new(value.to_string()).boxed()
+    }
+}
+
+impl TryFrom<Box<dyn Scalar>> for String {
+    type Error = EncError;
+
+    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
+        let dtype = value.dtype().clone();
+        let scalar = value
+            .into_any()
+            .downcast::<Utf8Scalar>()
+            .map_err(|_| EncError::InvalidDType(dtype))?;
+        Ok(scalar.value)
+    }
+}
+
+impl TryFrom<&dyn Scalar> for String {
+    type Error = EncError;
+
+    fn try_from(value: &dyn Scalar) -> Result<Self, Self::Error> {
+        if let Some(scalar) = value.as_any().downcast_ref::<Utf8Scalar>() {
+            Ok(scalar.value().to_string())
+        } else {
+            Err(EncError::InvalidDType(value.dtype().clone()))
+        }
     }
 }

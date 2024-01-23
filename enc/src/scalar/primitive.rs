@@ -5,7 +5,7 @@ use crate::error::{EncError, EncResult};
 use crate::scalar::{LocalTimeScalar, Scalar};
 use crate::types::{DType, PType};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum PScalar {
     U8(u8),
     U16(u16),

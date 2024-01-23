@@ -1,5 +1,4 @@
 use std::any::Any;
-
 use std::fmt::Debug;
 
 pub use binary::*;
@@ -21,6 +20,7 @@ mod equal;
 mod list;
 mod localtime;
 mod nullable;
+mod ord;
 mod primitive;
 mod struct_;
 mod utf8;

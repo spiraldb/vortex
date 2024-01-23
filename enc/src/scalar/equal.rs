@@ -2,26 +2,27 @@ use std::sync::Arc;
 
 use crate::scalar::binary::BinaryScalar;
 use crate::scalar::localtime::LocalTimeScalar;
+use crate::scalar::{BoolScalar, PScalar, Scalar, StructScalar, Utf8Scalar};
 
-use super::*;
-
-impl PartialEq for dyn Scalar + '_ {
+impl PartialEq for dyn Scalar {
     fn eq(&self, that: &dyn Scalar) -> bool {
         equal(self, that)
     }
 }
 
-impl PartialEq<dyn Scalar> for Arc<dyn Scalar + '_> {
+impl PartialEq<dyn Scalar> for Arc<dyn Scalar> {
     fn eq(&self, that: &dyn Scalar) -> bool {
         equal(&**self, that)
     }
 }
 
-impl PartialEq<dyn Scalar> for Box<dyn Scalar + '_> {
+impl PartialEq<dyn Scalar> for Box<dyn Scalar> {
     fn eq(&self, that: &dyn Scalar) -> bool {
         equal(self.as_ref(), that)
     }
 }
+
+impl Eq for dyn Scalar {}
 
 macro_rules! dyn_eq {
     ($ty:ty, $lhs:expr, $rhs:expr) => {{
@@ -36,7 +37,7 @@ fn equal(lhs: &dyn Scalar, rhs: &dyn Scalar) -> bool {
         return false;
     }
 
-    use DType::*;
+    use crate::types::DType::*;
     match lhs.dtype() {
         Bool => dyn_eq!(BoolScalar, lhs, rhs),
         Int(_, _) => dyn_eq!(PScalar, lhs, rhs),

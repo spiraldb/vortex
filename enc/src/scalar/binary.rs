@@ -1,9 +1,9 @@
-use crate::error::EncResult;
+use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 use std::any::Any;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BinaryScalar {
     value: Vec<u8>,
 }
@@ -39,5 +39,36 @@ impl Scalar for BinaryScalar {
 
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
         todo!()
+    }
+}
+
+impl From<Vec<u8>> for Box<dyn Scalar> {
+    fn from(value: Vec<u8>) -> Self {
+        BinaryScalar::new(value).boxed()
+    }
+}
+
+impl TryFrom<Box<dyn Scalar>> for Vec<u8> {
+    type Error = EncError;
+
+    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
+        let dtype = value.dtype().clone();
+        let scalar = value
+            .into_any()
+            .downcast::<BinaryScalar>()
+            .map_err(|_| EncError::InvalidDType(dtype))?;
+        Ok(scalar.value)
+    }
+}
+
+impl TryFrom<&dyn Scalar> for Vec<u8> {
+    type Error = EncError;
+
+    fn try_from(value: &dyn Scalar) -> Result<Self, Self::Error> {
+        if let Some(scalar) = value.as_any().downcast_ref::<BinaryScalar>() {
+            Ok(scalar.value.clone())
+        } else {
+            Err(EncError::InvalidDType(value.dtype().clone()))
+        }
     }
 }
