@@ -12,6 +12,7 @@ use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 use crate::types::{DType, IntWidth, Signedness};
 
 mod stats;
+pub(crate) use stats::varbin_stats;
 
 #[derive(Debug, Clone)]
 pub struct VarBinArray {

@@ -3,7 +3,7 @@ use crate::scalar::Scalar;
 use crate::types::DType;
 use std::any::Any;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BoolScalar {
     value: bool,
 }

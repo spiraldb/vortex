@@ -1,9 +1,11 @@
+use itertools::Itertools;
+use std::cmp::Ordering;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use crate::error;
-use crate::error::EncResult;
-use crate::scalar::Scalar;
+use crate::error::{EncError, EncResult};
+use crate::scalar::{ListScalarValues, Scalar};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stat {
@@ -13,12 +15,178 @@ pub enum Stat {
     Max,
     Min,
     RunCount,
+    TrueCount,
 }
 
-pub type StatsSet = HashMap<Stat, Box<dyn Scalar>>;
+#[derive(Debug, Clone, Default)]
+pub struct StatsSet(HashMap<Stat, Box<dyn Scalar>>);
+
+impl StatsSet {
+    pub fn from(map: HashMap<Stat, Box<dyn Scalar>>) -> Self {
+        StatsSet(map)
+    }
+
+    pub fn new() -> Self {
+        StatsSet(HashMap::new())
+    }
+
+    fn get_as<T: TryFrom<Box<dyn Scalar>, Error = EncError>>(
+        &self,
+        stat: &Stat,
+    ) -> EncResult<Option<T>> {
+        self.0.get(stat).map(|v| T::try_from(v.clone())).transpose()
+    }
+
+    pub fn merge(&mut self, other: &Self) -> &Self {
+        self.merge_min(other);
+        self.merge_max(other);
+        self.merge_is_constant(other);
+        self.merge_is_sorted(other);
+        self.merge_true_count(other);
+        self.merge_bit_width_freq(other);
+        self.merge_run_count(other);
+
+        self
+    }
+
+    fn merge_min(&mut self, other: &Self) {
+        match self.0.entry(Stat::Min) {
+            Entry::Occupied(mut e) => {
+                if let Some(omin) = other.0.get(&Stat::Min) {
+                    match omin.partial_cmp(e.get().as_ref()) {
+                        None => {
+                            e.remove();
+                        }
+                        Some(Ordering::Less) => {
+                            e.insert(omin.clone());
+                        }
+                        Some(Ordering::Equal) | Some(Ordering::Greater) => {}
+                    }
+                }
+            }
+            Entry::Vacant(e) => {
+                if let Some(min) = other.0.get(&Stat::Min) {
+                    e.insert(min.clone());
+                }
+            }
+        }
+    }
+
+    fn merge_max(&mut self, other: &Self) {
+        match self.0.entry(Stat::Max) {
+            Entry::Occupied(mut e) => {
+                if let Some(omin) = other.0.get(&Stat::Max) {
+                    match omin.partial_cmp(e.get().as_ref()) {
+                        None => {
+                            e.remove();
+                        }
+                        Some(Ordering::Greater) => {
+                            e.insert(omin.clone());
+                        }
+                        Some(Ordering::Equal) | Some(Ordering::Less) => {}
+                    }
+                }
+            }
+            Entry::Vacant(e) => {
+                if let Some(min) = other.0.get(&Stat::Max) {
+                    e.insert(min.clone());
+                }
+            }
+        }
+    }
+
+    fn merge_is_constant(&mut self, other: &Self) {
+        if let Some(is_constant) = self.get_as::<bool>(&Stat::IsConstant).unwrap() {
+            if let Some(other_is_constant) = other.get_as::<bool>(&Stat::IsConstant).unwrap() {
+                if is_constant
+                    && other_is_constant
+                    && self.0.get(&Stat::Min) == other.0.get(&Stat::Min)
+                {
+                    return;
+                }
+            }
+            self.0.insert(Stat::IsConstant, false.into());
+        }
+    }
+
+    fn merge_is_sorted(&mut self, other: &Self) {
+        if let Some(is_sorted) = self.get_as::<bool>(&Stat::IsSorted).unwrap() {
+            if let Some(other_is_sorted) = other.get_as::<bool>(&Stat::IsSorted).unwrap() {
+                if is_sorted && other_is_sorted && self.0.get(&Stat::Max) <= other.0.get(&Stat::Min)
+                {
+                    return;
+                }
+            }
+            self.0.insert(Stat::IsSorted, false.into());
+        }
+    }
+
+    fn merge_true_count(&mut self, other: &Self) {
+        match self.0.entry(Stat::TrueCount) {
+            Entry::Occupied(mut e) => {
+                if let Some(other_value) = other.get_as::<usize>(&Stat::TrueCount).unwrap() {
+                    let self_value: usize = e.get().as_ref().try_into().unwrap();
+                    e.insert((self_value + other_value).into());
+                }
+            }
+            Entry::Vacant(e) => {
+                if let Some(min) = other.0.get(&Stat::TrueCount) {
+                    e.insert(min.clone());
+                }
+            }
+        }
+    }
+
+    fn merge_bit_width_freq(&mut self, other: &Self) {
+        match self.0.entry(Stat::BitWidthFreq) {
+            Entry::Occupied(mut e) => {
+                if let Some(other_value) = other
+                    .get_as::<ListScalarValues<u64>>(&Stat::BitWidthFreq)
+                    .unwrap()
+                {
+                    // TODO(robert): Avoid the copy here. We could e.get_mut() but need to figure out casting
+                    let self_value: ListScalarValues<u64> = e.get().as_ref().try_into().unwrap();
+                    e.insert(
+                        ListScalarValues(
+                            self_value
+                                .0
+                                .iter()
+                                .zip_eq(other_value.0.iter())
+                                .map(|(s, o)| *s + *o)
+                                .collect::<Vec<_>>(),
+                        )
+                        .into(),
+                    );
+                }
+            }
+            Entry::Vacant(e) => {
+                if let Some(min) = other.0.get(&Stat::BitWidthFreq) {
+                    e.insert(min.clone());
+                }
+            }
+        }
+    }
+
+    /// Merged run count is an upper bound where we assume run is interrupted at the boundary
+    fn merge_run_count(&mut self, other: &Self) {
+        match self.0.entry(Stat::RunCount) {
+            Entry::Occupied(mut e) => {
+                if let Some(other_value) = other.get_as::<usize>(&Stat::RunCount).unwrap() {
+                    let self_value: usize = e.get().as_ref().try_into().unwrap();
+                    e.insert((self_value + other_value + 1).into());
+                }
+            }
+            Entry::Vacant(e) => {
+                if let Some(min) = other.0.get(&Stat::RunCount) {
+                    e.insert(min.clone());
+                }
+            }
+        }
+    }
+}
 
 pub trait StatsCompute {
-    fn compute(&self, stat: Stat) -> StatsSet;
+    fn compute(&self, stat: &Stat) -> StatsSet;
 }
 
 pub struct Stats<'a> {
@@ -31,32 +199,37 @@ impl<'a> Stats<'a> {
         Self { cache, compute }
     }
 
-    pub fn get(&self, stat: Stat) -> Option<Box<dyn Scalar>> {
-        self.cache.read().unwrap().get(&stat).cloned()
+    pub fn get_all(&self) -> StatsSet {
+        self.cache.read().unwrap().clone()
     }
 
-    pub fn get_as<T: TryFrom<Box<dyn Scalar>, Error = error::EncError>>(
+    pub fn get(&self, stat: &Stat) -> Option<Box<dyn Scalar>> {
+        self.cache.read().unwrap().0.get(stat).cloned()
+    }
+
+    pub fn get_as<T: TryFrom<Box<dyn Scalar>, Error = EncError>>(
         &self,
-        stat: Stat,
+        stat: &Stat,
     ) -> EncResult<Option<T>> {
         self.get(stat).map(|v| T::try_from(v)).transpose()
     }
 
-    pub fn get_or_compute(&self, stat: Stat) -> Option<Box<dyn Scalar>> {
-        if let Some(value) = self.cache.read().unwrap().get(&stat) {
+    pub fn get_or_compute(&self, stat: &Stat) -> Option<Box<dyn Scalar>> {
+        if let Some(value) = self.cache.read().unwrap().0.get(stat) {
             return Some(value.clone());
         }
 
         self.cache
             .write()
             .unwrap()
-            .extend(self.compute.compute(stat.clone()));
+            .0
+            .extend(self.compute.compute(stat).0);
         self.get(stat)
     }
 
-    pub fn get_or_compute_as<T: TryFrom<Box<dyn Scalar>, Error = error::EncError>>(
+    pub fn get_or_compute_as<T: TryFrom<Box<dyn Scalar>, Error = EncError>>(
         &self,
-        stat: Stat,
+        stat: &Stat,
     ) -> EncResult<Option<T>> {
         self.get_or_compute(stat)
             .map(|v| T::try_from(v))

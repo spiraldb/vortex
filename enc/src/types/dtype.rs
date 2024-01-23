@@ -10,7 +10,7 @@ use crate::error::{EncError, EncResult};
 
 use super::PType;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Signedness {
     Unknown,
     Unsigned,
@@ -37,7 +37,7 @@ impl Display for Signedness {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum IntWidth {
     Unknown,
     _8,
@@ -70,7 +70,7 @@ impl Display for IntWidth {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum FloatWidth {
     Unknown,
     _16,
@@ -100,7 +100,7 @@ impl Display for FloatWidth {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum TimeUnit {
     Ns,
     Us,
@@ -121,7 +121,7 @@ impl Display for TimeUnit {
 
 pub type FieldNames = Vec<Arc<String>>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum DType {
     Null,
     Nullable(Box<DType>),

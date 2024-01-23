@@ -67,36 +67,6 @@ macro_rules! match_each_native_ptype {
 }
 pub(crate) use match_each_native_ptype;
 
-macro_rules! match_each_integral_float_ptype {
-    ($self:expr, | $_1:tt $enc:ident | { $($body:tt)* }, | $_2:tt $enc_f:ident | { $($body_f:tt)* }) => {{
-        macro_rules! __with__i {
-            ( $_1 $enc:ident ) => (
-                { $($body)* }
-            );
-        }
-        macro_rules! __with__f {
-            ( $_2 $enc_f:ident ) => (
-                { $($body_f)* }
-            );
-        }
-        match $self {
-            PType::I8 => __with__i! { i8 },
-            PType::I16 => __with__i! { i16 },
-            PType::I32 => __with__i! { i32 },
-            PType::I64 => __with__i! { i64 },
-            PType::U8 => __with__i! { u8 },
-            PType::U16 => __with__i! { u16 },
-            PType::U32 => __with__i! { u32 },
-            PType::U64 => __with__i! { u64 },
-            PType::F16 => __with__f! { f16 },
-            PType::F32 => __with__f! { f32 },
-            PType::F64 => __with__f! { f64 },
-        }
-    }};
-}
-
-pub(crate) use match_each_integral_float_ptype;
-
 impl PType {
     pub fn is_unsigned_int(self) -> bool {
         matches!(self, PType::U8 | PType::U16 | PType::U32 | PType::U64)

@@ -1,6 +1,5 @@
 use std::any::Any;
 
-use crate::error;
 use itertools::Itertools;
 
 use crate::error::{EncError, EncResult};
@@ -65,32 +64,56 @@ impl Scalar for ListScalar {
     }
 }
 
-impl<I: Into<Box<dyn Scalar>>, T: IntoIterator<Item = I>> From<T> for ListScalar {
-    fn from(value: T) -> Self {
-        let values: Vec<Box<dyn Scalar>> = value.into_iter().map(|v| v.into()).collect();
+impl<T: Into<Box<dyn Scalar>>> From<ListScalarValues<T>> for Box<dyn Scalar> {
+    fn from(value: ListScalarValues<T>) -> Self {
+        let values: Vec<Box<dyn Scalar>> = value.0.into_iter().map(|v| v.into()).collect();
         if values.is_empty() {
             panic!("Can't implicitly convert empty list into ListScalar");
         }
-        ListScalar::new(values[0].dtype().clone(), values)
+        ListScalar::new(values[0].dtype().clone(), values).boxed()
     }
 }
 
-impl<T: TryFrom<Box<dyn Scalar>, Error = error::EncError>> TryFrom<Box<dyn Scalar>> for Vec<T> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListScalarValues<T>(pub Vec<T>);
+
+impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<&dyn Scalar> for ListScalarValues<T> {
     type Error = EncError;
 
-    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
-        let value_dtype = value.dtype().clone();
-        value
-            .into_any()
-            .downcast::<ListScalar>()
-            .map_err(|_| EncError::InvalidDType(value_dtype))
-            .and_then(|list_s| {
+    fn try_from(value: &dyn Scalar) -> Result<Self, Self::Error> {
+        if let Some(list_s) = value.as_any().downcast_ref::<ListScalar>() {
+            Ok(ListScalarValues(
                 list_s
                     .values
                     .clone()
                     .into_iter()
                     .map(|v| v.try_into())
-                    .try_collect()
-            })
+                    .try_collect()?,
+            ))
+        } else {
+            Err(EncError::InvalidDType(value.dtype().clone()))
+        }
+    }
+}
+
+impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<Box<dyn Scalar>>
+    for ListScalarValues<T>
+{
+    type Error = EncError;
+
+    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
+        let value_dtype = value.dtype().clone();
+        let list_s = value
+            .into_any()
+            .downcast::<ListScalar>()
+            .map_err(|_| EncError::InvalidDType(value_dtype))?;
+
+        Ok(ListScalarValues(
+            list_s
+                .values
+                .into_iter()
+                .map(|v| v.try_into())
+                .try_collect()?,
+        ))
     }
 }
