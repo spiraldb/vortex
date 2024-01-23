@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "pyenc",
+    "pyspiral",
     "rust/enc",
     "rust/zenc",
     "rust/zenc-sys",
