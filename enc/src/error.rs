@@ -57,6 +57,8 @@ pub enum EncError {
     InvalidArrowDataType(arrow::datatypes::DataType),
     #[error("polars error: {0:?}")]
     PolarsError(PolarsError),
+    #[error("{0}")]
+    ValueError(ErrString),
 }
 
 pub type EncResult<T> = Result<T, EncError>;

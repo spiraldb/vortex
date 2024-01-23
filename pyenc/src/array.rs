@@ -4,6 +4,7 @@ use pyo3::prelude::*;
 use enc::array::bool::BoolArray;
 use enc::array::chunked::ChunkedArray;
 use enc::array::constant::ConstantArray;
+use enc::array::patched::PatchedArray;
 use enc::array::primitive::PrimitiveArray;
 use enc::array::ree::REEArray;
 use enc::array::struct_::StructArray;
@@ -45,6 +46,7 @@ macro_rules! pyarray {
 
 pyarray!(BoolArray, "BoolArray");
 pyarray!(ChunkedArray, "ChunkedArray");
+pyarray!(PatchedArray, "PatchedArray");
 pyarray!(ConstantArray, "ConstantArray");
 pyarray!(PrimitiveArray, "PrimitiveArray");
 pyarray!(REEArray, "REEArray");
@@ -58,6 +60,7 @@ impl PyArray {
         match inner {
             Array::Bool(a) => PyBoolArray::wrap(py, a)?.extract(py),
             Array::Chunked(a) => PyChunkedArray::wrap(py, a)?.extract(py),
+            Array::Patched(a) => PyPatchedArray::wrap(py, a)?.extract(py),
             Array::Constant(a) => PyConstantArray::wrap(py, a)?.extract(py),
             Array::Primitive(a) => PyPrimitiveArray::wrap(py, a)?.extract(py),
             Array::REE(a) => PyREEArray::wrap(py, a)?.extract(py),

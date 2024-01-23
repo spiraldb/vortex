@@ -3,6 +3,7 @@ use arrow::array::ArrayRef;
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
 use crate::array::constant::ConstantArray;
+use crate::array::patched::PatchedArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
 use crate::array::stats::Stats;
@@ -16,12 +17,12 @@ use crate::scalar::Scalar;
 use crate::types::DType;
 
 pub mod bool;
+pub mod chunked;
 pub mod constant;
+pub mod encode;
+pub mod patched;
 pub mod primitive;
 pub mod ree;
-
-pub mod chunked;
-pub mod encode;
 pub mod stats;
 pub mod struct_;
 pub mod typed;
@@ -62,6 +63,7 @@ pub trait ArrayEncoding {
 pub enum Array {
     Bool(BoolArray),
     Chunked(ChunkedArray),
+    Patched(PatchedArray),
     Constant(ConstantArray),
     Primitive(PrimitiveArray),
     REE(REEArray),
@@ -83,6 +85,7 @@ macro_rules! impls_for_array {
 
 impls_for_array!(Bool, BoolArray);
 impls_for_array!(Chunked, ChunkedArray);
+impls_for_array!(Patched, PatchedArray);
 impls_for_array!(Constant, ConstantArray);
 impls_for_array!(Primitive, PrimitiveArray);
 impls_for_array!(REE, REEArray);
@@ -97,6 +100,7 @@ macro_rules! match_each_encoding {
         match $self {
             Array::Bool(enc) => __with_enc__! { enc },
             Array::Chunked(enc) => __with_enc__! { enc },
+            Array::Patched(enc) => __with_enc__! { enc },
             Array::Constant(enc) => __with_enc__! { enc },
             Array::Primitive(enc) => __with_enc__! { enc },
             Array::REE(enc) => __with_enc__! { enc },
