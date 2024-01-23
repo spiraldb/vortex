@@ -1,59 +1,11 @@
-use arrow::array::cast::AsArray;
 use arrow::array::types::{
     Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
     UInt32Type, UInt64Type, UInt8Type,
 };
 use arrow::array::Scalar as ArrowScalar;
-use arrow::array::{Array, Datum, PrimitiveArray};
-use arrow::datatypes::DataType;
+use arrow::array::{Datum, PrimitiveArray};
 
-use crate::scalar::{BoolScalar, NullableScalar, PScalar, Scalar};
-
-impl From<Box<dyn Datum>> for Box<dyn Scalar> {
-    fn from(value: Box<dyn Datum>) -> Self {
-        value.as_ref().into()
-    }
-}
-
-impl<T: Array> From<ArrowScalar<T>> for Box<dyn Scalar> {
-    fn from(value: ArrowScalar<T>) -> Self {
-        let datum: &dyn Datum = &value;
-        datum.into()
-    }
-}
-
-impl From<&dyn Datum> for Box<dyn Scalar> {
-    fn from(value: &dyn Datum) -> Self {
-        let (arr, is_scalar) = value.get();
-        assert!(is_scalar, "Datum was not a scalar");
-        if arr.is_null(0) {
-            return NullableScalar::None(arr.data_type().try_into().unwrap()).boxed();
-        }
-
-        match arr.data_type() {
-            DataType::Boolean => {
-                let arr = arr.as_boolean();
-                BoolScalar::new(arr.value(0)).boxed()
-            }
-            DataType::Int8 => arr.as_primitive::<Int8Type>().value(0).into(),
-            DataType::Int16 => arr.as_primitive::<Int16Type>().value(0).into(),
-            DataType::Int32 => arr.as_primitive::<Int32Type>().value(0).into(),
-            DataType::Int64 => arr.as_primitive::<Int64Type>().value(0).into(),
-            DataType::UInt8 => arr.as_primitive::<UInt8Type>().value(0).into(),
-            DataType::UInt16 => arr.as_primitive::<UInt16Type>().value(0).into(),
-            DataType::UInt32 => arr.as_primitive::<UInt32Type>().value(0).into(),
-            DataType::UInt64 => arr.as_primitive::<UInt64Type>().value(0).into(),
-            DataType::Float32 => arr.as_primitive::<Float32Type>().value(0).into(),
-            DataType::Float64 => arr.as_primitive::<Float64Type>().value(0).into(),
-            _ => todo!("implement other scalar types {:?}", arr),
-        }
-    }
-}
-impl From<Box<dyn Scalar>> for Box<dyn Datum> {
-    fn from(value: Box<dyn Scalar>) -> Self {
-        value.as_ref().into()
-    }
-}
+use crate::scalar::{PScalar, Scalar};
 
 impl From<&dyn Scalar> for Box<dyn Datum> {
     fn from(value: &dyn Scalar) -> Self {
