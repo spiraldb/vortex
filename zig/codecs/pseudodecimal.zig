@@ -1,6 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const roaring = @import("roaring");
 const codecmath = @import("codecmath.zig");
 
 pub fn PseudoDecimal(comptime F: type) type {
@@ -8,8 +7,7 @@ pub fn PseudoDecimal(comptime F: type) type {
     return struct {
         // for benchmarking against ALP, we use same number of bits per float (in some sense, ALP has a per-float ET of u0)
         const ET = u5;
-        const SDT = std.meta.Int(.signed, codecmath.coveringIntBits(F) - @bitSizeOf(ET));
-        const DT = std.meta.Int(.unsigned, @bitSizeOf(SDT) - 1); // strip off the sign
+        const DT = std.meta.Int(.signed, @bitSizeOf(codecmath.coveringIntTypePowerOfTwo(F)) - @bitSizeOf(ET));
 
         const F10 = codecmath.powersOfTen(F);
         const i_F10 = codecmath.inversePowersOfTen(F);
@@ -18,27 +16,24 @@ pub fn PseudoDecimal(comptime F: type) type {
             const Self = @This();
 
             allocator: Allocator,
-            signs: *roaring.Bitmap,
             fractions_b10: []const DT,
             exponents_b10: []const ET,
             patch_values: []const F,
-            patch_indices: *roaring.Bitmap,
+            patch_indices: std.bit_set.DynamicBitSetUnmanaged,
 
             pub fn exceptionCount(self: Self) usize {
                 return self.patch_values.len;
             }
 
             pub fn deinit(self: Self) void {
-                self.signs.free();
                 self.allocator.free(self.fractions_b10);
                 self.allocator.free(self.exponents_b10);
                 self.allocator.free(self.patch_values);
-                self.patch_indices.free();
+                @constCast(&self.patch_indices).deinit(self.allocator);
             }
         };
 
         const PackedDecimal = packed struct {
-            sign: u1,
             fraction_b10: DT,
             exponent_b10: ET,
         };
@@ -52,31 +47,21 @@ pub fn PseudoDecimal(comptime F: type) type {
             var patches = std.ArrayList(F).init(allocator);
             defer patches.deinit();
 
-            var signs = try roaring.Bitmap.create();
-            errdefer signs.free();
-            var patch_indices = try roaring.Bitmap.create();
-            errdefer patch_indices.free();
+            var patch_indices = try std.bit_set.DynamicBitSetUnmanaged.initEmpty(allocator, elems.len);
+            errdefer patch_indices.deinit(allocator);
 
             for (elems, 0..) |elem, i| {
                 if (findDecimal(elem)) |packedDecimal| {
-                    if (packedDecimal.sign == 1) {
-                        signs.add(@intCast(i));
-                    }
                     fractions_b10[i] = packedDecimal.fraction_b10;
                     exponents_b10[i] = packedDecimal.exponent_b10;
                 } else {
                     try patches.append(elem);
-                    patch_indices.add(@intCast(i));
+                    patch_indices.set(@intCast(i));
                 }
             }
 
-            _ = signs.runOptimize();
-            _ = signs.shrinkToFit();
-            _ = patch_indices.runOptimize();
-            _ = patch_indices.shrinkToFit();
             return .{
                 .allocator = allocator,
-                .signs = signs,
                 .fractions_b10 = fractions_b10,
                 .exponents_b10 = exponents_b10,
                 .patch_values = try patches.toOwnedSlice(),
@@ -91,18 +76,15 @@ pub fn PseudoDecimal(comptime F: type) type {
             }
 
             // strip out the sign & assume non-negative for the comparison loop
-            const sign: u1 = @intFromBool(std.math.signbit(val));
-            const positive_val = if (val < 0.0) -val else val;
             for (0..codecmath.maxExponentToTry(F)) |exp| {
-                const encoded_float: F = @round(positive_val * F10[exp]);
-                if (encoded_float > std.math.maxInt(DT)) {
+                const encoded_float: F = @round(val * F10[exp]);
+                if (encoded_float > std.math.maxInt(DT) or encoded_float < std.math.minInt(DT)) {
                     return null;
                 }
                 const encoded: DT = @intFromFloat(encoded_float);
                 const decoded: F = @as(F, @floatFromInt(encoded)) * i_F10[exp];
-                if (decoded == positive_val) {
+                if (decoded == val) {
                     return .{
-                        .sign = sign,
                         .fraction_b10 = encoded,
                         .exponent_b10 = @intCast(exp),
                     };
@@ -118,15 +100,11 @@ pub fn PseudoDecimal(comptime F: type) type {
 
             var patch_count: u32 = 0;
             for (0..len) |i| {
-                if (encoded.patch_indices.contains(@intCast(i))) {
+                if (encoded.patch_indices.isSet(@intCast(i))) {
                     decoded[i] = encoded.patch_values[patch_count];
                     patch_count += 1;
                 } else {
-                    var signed_fraction: SDT = @intCast(encoded.fractions_b10[i]);
-                    if (encoded.signs.contains(@intCast(i))) {
-                        signed_fraction = try std.math.negate(signed_fraction);
-                    }
-                    decoded[i] = @as(F, @floatFromInt(signed_fraction)) * i_F10[encoded.exponents_b10[i]];
+                    decoded[i] = @as(F, @floatFromInt(encoded.fractions_b10[i])) * i_F10[encoded.exponents_b10[i]];
                 }
             }
 

@@ -24,12 +24,6 @@ pub fn build(b: *std.Build) void {
     const zimd_test_run = b.addRunArtifact(zimd_test);
     test_step.dependOn(&zimd_test_run.step);
 
-    // roaring bitmaps
-    const roaring = b.addModule("roaring", .{
-        .source_file = .{ .path = "zig/deps/roaring-zig/src/roaring.zig" },
-        .dependencies = &.{},
-    });
-
     // tracy options
     const tracy = b.option(bool, "tracy", "Enable Tracy integration") orelse true;
     const tracy_callstack = b.option(bool, "tracy-callstack", "Include callstack information with Tracy data. Does nothing if -Dtracy is not provided") orelse tracy;
@@ -59,7 +53,6 @@ pub fn build(b: *std.Build) void {
         .source_file = .{ .path = "zig/codecs/codecs.zig" },
         .dependencies = &.{
             .{ .name = "zimd", .module = zimd },
-            .{ .name = "roaring", .module = roaring },
             .{ .name = "trazy", .module = trazy },
             .{ .name = "abi-types", .module = c_abi_types },
         },
@@ -71,10 +64,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .filter = filter_test,
     });
-    dependencyRoaring(codecs_test);
-    dependencyStreamvbyte(codecs_test);
     codecs_test.addModule("codecs", codecs);
-    codecs_test.addModule("roaring", roaring);
     codecs_test.addModule("trazy", trazy);
     codecs_test.addModule("zimd", zimd);
 
@@ -90,10 +80,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    dependencyRoaring(lib_step);
-    dependencyStreamvbyte(lib_step);
     lib_step.addModule("codecs", codecs);
-    lib_step.addModule("roaring", roaring);
     lib_step.addModule("zimd", zimd);
     lib_step.addIncludePath(.{ .path = "zig/c-abi" });
     lib_step.c_std = std.Build.CStd.C11;
@@ -124,34 +111,11 @@ pub fn build(b: *std.Build) void {
     }
 }
 
-/// Configure the streamvbyte dependency
-fn dependencyStreamvbyte(lib: *std.Build.Step.Compile) void {
-    lib.linkLibC();
-    lib.addIncludePath(.{ .path = "zig/deps/streamvbyte/include" });
-    lib.addCSourceFiles(.{
-        .files = &.{
-            "zig/deps/streamvbyte/src/streamvbyte_encode.c",
-            "zig/deps/streamvbyte/src/streamvbyte_decode.c",
-        },
-        .flags = &.{ "-fPIC", "-std=c11", "-O3", "-Wall", "-Wextra", "-pedantic", "-Wshadow" },
-    });
-}
-
 fn dependencyTracy(lib: *std.Build.Step.Compile) void {
     lib.linkLibCpp();
     lib.addIncludePath(.{ .path = "zig/deps/tracy/public/tracy" });
     lib.addCSourceFile(.{
         .file = .{ .path = "zig/deps/tracy/public/TracyClient.cpp" },
         .flags = &.{ "-fno-sanitize=undefined", "-DTRACY_ENABLE=1" },
-    });
-}
-
-// Configure the roaring-zig dependency
-fn dependencyRoaring(lib: *std.Build.Step.Compile) void {
-    lib.linkLibC();
-    lib.addIncludePath(.{ .path = "zig/deps/roaring-zig/croaring" });
-    lib.addCSourceFile(.{
-        .file = .{ .path = "zig/deps/roaring-zig/croaring/roaring.c" },
-        .flags = &.{"-fno-sanitize=undefined"},
     });
 }
