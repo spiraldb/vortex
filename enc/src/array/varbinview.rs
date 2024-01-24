@@ -2,11 +2,11 @@ use std::sync::{Arc, RwLock};
 use std::{iter, mem};
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::varbin::BinaryArray;
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::CombineChunks;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
+use crate::stats::binary::BinaryArray;
 use crate::types::{DType, IntWidth, Signedness};
 use arrow::array::cast::AsArray;
 use arrow::array::types::UInt8Type;

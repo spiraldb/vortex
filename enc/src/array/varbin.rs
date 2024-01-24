@@ -5,14 +5,12 @@ use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::datatypes::UInt8Type;
 
 use crate::array::stats::{Stats, StatsSet};
-pub use crate::array::varbin::stats::BinaryArray;
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::CombineChunks;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
+use crate::stats::binary::BinaryArray;
 use crate::types::{DType, IntWidth, Signedness};
-
-mod stats;
 
 #[derive(Debug, Clone)]
 pub struct VarBinArray {

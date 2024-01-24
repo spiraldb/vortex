@@ -12,8 +12,6 @@ use arrow::compute::interleave;
 use std::sync::{Arc, RwLock};
 use std::usize;
 
-mod stats;
-
 #[derive(Debug, Clone)]
 pub struct PatchedArray {
     data: Box<Array>,

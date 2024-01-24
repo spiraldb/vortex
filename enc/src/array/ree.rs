@@ -1,5 +1,3 @@
-mod stats;
-
 use std::cmp::min;
 use std::sync::{Arc, RwLock};
 use std::vec::IntoIter;

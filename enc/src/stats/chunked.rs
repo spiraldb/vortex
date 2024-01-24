@@ -4,7 +4,7 @@ use crate::array::ArrayEncoding;
 
 impl StatsCompute for ChunkedArray {
     fn compute(&self, stat: &Stat) -> StatsSet {
-        self.chunks
+        self.chunks()
             .iter()
             .map(|c| {
                 let s = c.stats();

@@ -12,8 +12,6 @@ use crate::scalar::Scalar;
 use crate::types::{match_each_native_ptype, DType, NativePType, PType};
 use half::f16;
 
-mod stats;
-
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {
     buffer: Buffer,
@@ -36,6 +34,16 @@ impl PrimitiveArray {
     pub fn from_vec<T: NativePType>(values: Vec<T>) -> Self {
         let buffer = Buffer::from_vec::<T>(values);
         Self::new(T::PTYPE, buffer)
+    }
+
+    #[inline]
+    pub fn ptype(&self) -> &PType {
+        &self.ptype
+    }
+
+    #[inline]
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
     }
 }
 
