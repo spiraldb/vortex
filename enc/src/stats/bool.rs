@@ -13,11 +13,11 @@ impl StatsCompute for BoolArray {
             ]));
         }
 
-        let mut prev_bit = self.buffer.value(0);
+        let mut prev_bit = self.buffer().value(0);
         let mut true_count: usize = if prev_bit { 1 } else { 0 };
         let mut run_count: usize = 0;
         for i in 1..self.len() {
-            let bit = self.buffer.value(i);
+            let bit = self.buffer().value(i);
             if bit {
                 true_count += 1
             }

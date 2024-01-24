@@ -46,13 +46,6 @@ impl Scalar for BoolScalar {
     }
 }
 
-impl From<bool> for BoolScalar {
-    #[inline]
-    fn from(value: bool) -> Self {
-        Self::new(value)
-    }
-}
-
 impl From<bool> for Box<dyn Scalar> {
     #[inline]
     fn from(value: bool) -> Self {

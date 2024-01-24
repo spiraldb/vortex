@@ -1,5 +1,3 @@
-mod stats;
-
 use std::borrow::Borrow;
 use std::sync::{Arc, RwLock};
 

@@ -9,8 +9,8 @@ use crate::types::DType;
 impl StatsCompute for ConstantArray {
     fn compute(&self, _stat: &Stat) -> StatsSet {
         let mut m = HashMap::from([
-            (Stat::Max, self.scalar.clone()),
-            (Stat::Min, self.scalar.clone()),
+            (Stat::Max, dyn_clone::clone_box(self.value())),
+            (Stat::Min, dyn_clone::clone_box(self.value())),
             (Stat::IsConstant, true.into()),
             (Stat::IsSorted, true.into()),
             (Stat::RunCount, 1.into()),
@@ -22,7 +22,7 @@ impl StatsCompute for ConstantArray {
                 Box::new(PScalar::U64(
                     self.len() as u64
                         * self
-                            .scalar
+                            .value()
                             .as_any()
                             .downcast_ref::<BoolScalar>()
                             .unwrap()

@@ -1,5 +1,3 @@
-mod stats;
-
 use std::iter;
 use std::sync::{Arc, RwLock};
 
@@ -25,6 +23,11 @@ impl BoolArray {
             buffer,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
+    }
+
+    #[inline]
+    pub fn buffer(&self) -> &BooleanBuffer {
+        &self.buffer
     }
 }
 

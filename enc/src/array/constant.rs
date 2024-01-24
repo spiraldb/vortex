@@ -1,5 +1,3 @@
-mod stats;
-
 use std::sync::{Arc, RwLock};
 
 use arrow::array::Datum;

@@ -18,7 +18,7 @@ use crate::types::{match_each_native_ptype, PType};
 
 impl StatsCompute for PrimitiveArray {
     fn compute(&self, stat: &Stat) -> StatsSet {
-        match_each_native_ptype!(self.ptype, |$P| {
+        match_each_native_ptype!(self.ptype(), |$P| {
             WrappedPrimitive::<$P>::new(self).compute(stat)
         })
     }
@@ -77,7 +77,7 @@ where
     let bitwidth = std::mem::size_of::<u64>() * 8;
     let mut bit_widths: Vec<u64> = vec![0; bitwidth + 1];
 
-    let typed_buf = ScalarBuffer::<T>::from(array.buffer.clone());
+    let typed_buf = ScalarBuffer::<T>::from(array.buffer().clone());
     let mut last_val: T = typed_buf[0];
     let mut run_count: usize = 0;
     for v in &typed_buf {
@@ -109,7 +109,7 @@ where
     let mins: T = s.min().unwrap().unwrap();
     let maxs: T = s.max().unwrap().unwrap();
 
-    let typed_buf = ScalarBuffer::<T>::from(array.buffer.clone());
+    let typed_buf = ScalarBuffer::<T>::from(array.buffer().clone());
     let mut last_val: T = typed_buf[0];
     let mut run_count: usize = 0;
     for v in &typed_buf {
