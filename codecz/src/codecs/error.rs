@@ -18,23 +18,23 @@ pub enum CodecError {
 
 impl CodecError {
     pub fn parse_error(
-        status: zenc_sys::ResultStatus_t,
+        status: codecz_sys::ResultStatus_t,
         codec: Codec,
         func: CodecFunction,
     ) -> Option<CodecError> {
         match status {
-            zenc_sys::ResultStatus_t_Ok => None,
-            zenc_sys::ResultStatus_t_InvalidInput => Some(CodecError::InvalidInput(codec, func)),
-            zenc_sys::ResultStatus_t_IncorrectAlignment => {
+            codecz_sys::ResultStatus_t_Ok => None,
+            codecz_sys::ResultStatus_t_InvalidInput => Some(CodecError::InvalidInput(codec, func)),
+            codecz_sys::ResultStatus_t_IncorrectAlignment => {
                 Some(CodecError::IncorrectAlignment(codec, func))
             }
-            zenc_sys::ResultStatus_t_EncodingFailed => {
+            codecz_sys::ResultStatus_t_EncodingFailed => {
                 Some(CodecError::EncodingFailed(codec, func))
             }
-            zenc_sys::ResultStatus_t_OutputBufferTooSmall => {
+            codecz_sys::ResultStatus_t_OutputBufferTooSmall => {
                 Some(CodecError::OutputBufferTooSmall(codec, func))
             }
-            zenc_sys::ResultStatus_t_OutOfMemory => Some(CodecError::OutOfMemory(codec, func)),
+            codecz_sys::ResultStatus_t_OutOfMemory => Some(CodecError::OutOfMemory(codec, func)),
             _ => Some(CodecError::Unknown(codec, func)),
         }
     }

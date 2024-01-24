@@ -11,19 +11,6 @@ pub fn build(b: *std.Build) void {
     const filter_test = b.option([]const u8, "filter-tests", "Filter tests by name");
     const test_step = b.step("test", "Run library tests");
 
-    // zimd
-    const zimd = b.addModule("zimd", .{
-        .source_file = .{ .path = "zig/zimd/zimd.zig" },
-    });
-    const zimd_test = b.addTest(.{
-        .root_source_file = .{ .path = "zig/zimd/zimd.zig" },
-        .target = target,
-        .optimize = optimize,
-        .filter = filter_test,
-    });
-    const zimd_test_run = b.addRunArtifact(zimd_test);
-    test_step.dependOn(&zimd_test_run.step);
-
     // tracy options
     const tracy = b.option(bool, "tracy", "Enable Tracy integration") orelse true;
     const tracy_callstack = b.option(bool, "tracy-callstack", "Include callstack information with Tracy data. Does nothing if -Dtracy is not provided") orelse tracy;
@@ -43,14 +30,27 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // zimd
+    const zimd = b.addModule("zimd", .{
+        .source_file = .{ .path = "zig/zimd/zimd.zig" },
+    });
+    const zimd_test = b.addTest(.{
+        .root_source_file = .{ .path = "zig/zimd/zimd.zig" },
+        .target = target,
+        .optimize = optimize,
+        .filter = filter_test,
+    });
+    const zimd_test_run = b.addRunArtifact(zimd_test);
+    test_step.dependOn(&zimd_test_run.step);
+
     // C ABI types
     const c_abi_types = b.addModule("abi-types", .{
         .source_file = .{ .path = "zig/c-abi/types.zig" },
     });
 
     // codecs
-    const codecs = b.addModule("codecs", .{
-        .source_file = .{ .path = "zig/codecs/codecs.zig" },
+    const codecz = b.addModule("codecz", .{
+        .source_file = .{ .path = "zig/codecz/codecz.zig" },
         .dependencies = &.{
             .{ .name = "zimd", .module = zimd },
             .{ .name = "trazy", .module = trazy },
@@ -58,30 +58,29 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const codecs_test = b.addTest(.{
-        .root_source_file = .{ .path = "zig/codecs/codecs.zig" },
+    const codecz_test = b.addTest(.{
+        .root_source_file = .{ .path = "zig/codecz/codecz.zig" },
         .target = target,
         .optimize = optimize,
         .filter = filter_test,
     });
-    codecs_test.addModule("codecs", codecs);
-    codecs_test.addModule("trazy", trazy);
-    codecs_test.addModule("zimd", zimd);
+    codecz_test.addModule("codecz", codecz);
+    codecz_test.addModule("trazy", trazy);
+    codecz_test.addModule("zimd", zimd);
 
-    const codecs_test_run = b.addRunArtifact(codecs_test);
-    test_step.dependOn(&codecs_test_run.step);
+    const codecz_test_run = b.addRunArtifact(codecz_test);
+    test_step.dependOn(&codecz_test_run.step);
 
     // wrap it all up as a static library to call from Rust
     const lib_step = b.addStaticLibrary(std.Build.StaticLibraryOptions{
-        .name = "zenc",
+        .name = "codecz",
         .root_source_file = .{ .path = "zig/c-abi/wrapper.zig" },
         .link_libc = true,
         .use_llvm = true,
         .target = target,
         .optimize = optimize,
     });
-    lib_step.addModule("codecs", codecs);
-    lib_step.addModule("zimd", zimd);
+    lib_step.addModule("codecz", codecz);
     lib_step.addIncludePath(.{ .path = "zig/c-abi" });
     lib_step.c_std = std.Build.CStd.C11;
     lib_step.bundle_compiler_rt = true;
@@ -89,7 +88,7 @@ pub fn build(b: *std.Build) void {
 
     // test the static library from Zig
     const lib_test = b.addTest(.{
-        .root_source_file = .{ .path = "zig/c-abi/test-wrapper.zig" },
+        .root_source_file = .{ .path = "zig/c-abi/test_wrapper.zig" },
         .target = target,
         .optimize = optimize,
         .filter = filter_test,
@@ -105,8 +104,8 @@ pub fn build(b: *std.Build) void {
     const test_debug_root = b.option([]const u8, "test-debug-root", "The root path of a file emitted as a binary for use with the debugger");
     if (test_debug_root) |root| {
         // FIXME(ngates): which test task?
-        codecs_test.root_src = .{ .path = root };
-        const test_bin_install = b.addInstallBinFile(codecs_test.getEmittedBin(), "test.bin");
+        codecz_test.root_src = .{ .path = root };
+        const test_bin_install = b.addInstallBinFile(codecz_test.getEmittedBin(), "test.bin");
         b.getInstallStep().dependOn(&test_bin_install.step);
     }
 }

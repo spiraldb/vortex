@@ -1,3 +1,3 @@
 #include "prelude.h"
-#include "zimd.h"
-#include "codecz.h"
+#include "simd_math.h"
+#include "codecs.h"

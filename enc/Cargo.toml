@@ -20,4 +20,4 @@ polars-core = "0.36.2"
 polars-ops = { version = "0.36.2", features = ["search_sorted"] }
 roaring = "0.10.2"
 thiserror = "1.0.56"
-zenc-sys = { path = "../zenc-sys" }
+codecz = { path = "../codecz" }

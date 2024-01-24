@@ -1,5 +1,4 @@
 const std = @import("std");
-const roaring = @import("roaring");
 const CodecError = @import("error.zig").CodecError;
 
 pub fn patch(comptime T: type, orig: []const T, indices: anytype, out: []T) CodecError!void {

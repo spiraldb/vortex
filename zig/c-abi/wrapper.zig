@@ -1,7 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const zimd = @import("zimd");
-const codecs = @import("codecs");
+const codecz = @import("codecz");
+const codecs = codecz.codecs;
+const simd_math = codecz.simd_math;
+const CodecError = codecz.CodecError;
 const c = @cImport({
     @cInclude("wrapper.h");
 });
@@ -10,7 +12,6 @@ const abiTypes = @import("types.zig");
 // aliases
 const Alignment: u29 = c.SPIRAL_ALIGNMENT;
 const AlpExponents = codecs.AlpExponents;
-const CodecError = codecs.CodecError;
 const ByteBuffer = abiTypes.ByteBuffer;
 const ResultStatus = abiTypes.ResultStatus;
 const WrittenBuffer = abiTypes.WrittenBuffer;
@@ -36,40 +37,40 @@ comptime {
 }
 
 //
-// Zimd Math
+// SIMD Math
 //
 comptime {
-    abiTypes.checkABI(zimd.math.RunLengthStats, c.RunLengthStats_t);
+    abiTypes.checkABI(simd_math.RunLengthStats, c.RunLengthStats_t);
     for (NumberTypes) |T| {
         const wrapper = MathWrapper(T);
-        @export(wrapper.max, std.builtin.ExportOptions{ .name = "zimd_max_" ++ @typeName(T), .linkage = .Strong });
-        @export(wrapper.min, std.builtin.ExportOptions{ .name = "zimd_min_" ++ @typeName(T), .linkage = .Strong });
-        @export(wrapper.isSorted, std.builtin.ExportOptions{ .name = "zimd_isSorted_" ++ @typeName(T), .linkage = .Strong });
-        @export(wrapper.isConstant, std.builtin.ExportOptions{ .name = "zimd_isConstant_" ++ @typeName(T), .linkage = .Strong });
-        @export(wrapper.runLengthStats, std.builtin.ExportOptions{ .name = "zimd_runLengthStats_" ++ @typeName(T), .linkage = .Strong });
+        @export(wrapper.max, std.builtin.ExportOptions{ .name = "codecz_math_max_" ++ @typeName(T), .linkage = .Strong });
+        @export(wrapper.min, std.builtin.ExportOptions{ .name = "codecz_math_min_" ++ @typeName(T), .linkage = .Strong });
+        @export(wrapper.isSorted, std.builtin.ExportOptions{ .name = "codecz_math_isSorted_" ++ @typeName(T), .linkage = .Strong });
+        @export(wrapper.isConstant, std.builtin.ExportOptions{ .name = "codecz_math_isConstant_" ++ @typeName(T), .linkage = .Strong });
+        @export(wrapper.runLengthStats, std.builtin.ExportOptions{ .name = "codecz_math_runLengthStats_" ++ @typeName(T), .linkage = .Strong });
     }
 }
 
 fn MathWrapper(comptime T: type) type {
     return struct {
         pub fn max(elems: [*c]const T, len: usize) callconv(.C) T {
-            return zimd.math.max(T, elems[0..len]);
+            return simd_math.max(T, elems[0..len]);
         }
 
         pub fn min(elems: [*c]const T, len: usize) callconv(.C) T {
-            return zimd.math.min(T, elems[0..len]);
+            return simd_math.min(T, elems[0..len]);
         }
 
         pub fn isSorted(elems: [*c]const T, len: usize) callconv(.C) bool {
-            return zimd.math.isSorted(T, elems[0..len]);
+            return simd_math.isSorted(T, elems[0..len]);
         }
 
         pub fn isConstant(elems: [*c]const T, len: usize) callconv(.C) bool {
-            return zimd.math.isConstant(T, elems[0..len]);
+            return simd_math.isConstant(T, elems[0..len]);
         }
 
-        pub fn runLengthStats(elems: [*c]const T, len: usize) callconv(.C) zimd.math.RunLengthStats {
-            return zimd.math.runLengthStats(T, elems[0..len]);
+        pub fn runLengthStats(elems: [*c]const T, len: usize) callconv(.C) simd_math.RunLengthStats {
+            return simd_math.runLengthStats(T, elems[0..len]);
         }
     };
 }
@@ -174,7 +175,7 @@ fn RunEndWrapper(comptime V: type, comptime E: type) type {
 // Adaptive Lossless Floating Point Encoding
 //
 comptime {
-    abiTypes.checkABI(codecs.AlpExponents, c.AlpExponents_t);
+    abiTypes.checkABI(AlpExponents, c.AlpExponents_t);
     for (FloatTypes) |F| {
         const wrapper = ALPWrapper(F);
         @export(wrapper.sampleFindExponents, std.builtin.ExportOptions{
@@ -205,7 +206,7 @@ fn ALPWrapper(comptime F: type) type {
             } else |err| {
                 return AlpExponentsResult{
                     .status = ResultStatus.fromCodecError(err),
-                    .exponents = codecs.AlpExponents{ .e = std.math.maxInt(u8), .f = std.math.maxInt(u8) },
+                    .exponents = AlpExponents{ .e = std.math.maxInt(u8), .f = std.math.maxInt(u8) },
                 };
             }
         }
