@@ -5,14 +5,14 @@ use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::datatypes::UInt8Type;
 
 use crate::array::stats::{Stats, StatsSet};
+pub use crate::array::varbin::stats::BinaryArray;
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::CombineChunks;
 use crate::error::{EncError, EncResult};
-use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
+use crate::scalar::Scalar;
 use crate::types::{DType, IntWidth, Signedness};
 
 mod stats;
-pub(crate) use stats::varbin_stats;
 
 #[derive(Debug, Clone)]
 pub struct VarBinArray {
@@ -45,6 +45,20 @@ impl VarBinArray {
     }
 }
 
+impl BinaryArray for VarBinArray {
+    fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+        if index > self.len() {
+            return Err(EncError::OutOfBounds(index, 0, self.len()));
+        }
+
+        let offset_start: usize = self.offsets.scalar_at(index)?.try_into()?;
+        let offset_end: usize = self.offsets.scalar_at(index + 1)?.try_into()?;
+        let sliced = self.bytes.slice(offset_start, offset_end)?;
+        let arr_ref = sliced.iter_arrow().combine_chunks();
+        Ok(arr_ref.as_primitive::<UInt8Type>().values().to_vec())
+    }
+}
+
 impl ArrayEncoding for VarBinArray {
     #[inline]
     fn len(&self) -> usize {
@@ -67,20 +81,13 @@ impl ArrayEncoding for VarBinArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        if index > self.len() {
-            return Err(EncError::OutOfBounds(index, 0, self.len()));
-        }
-
-        let offset_start: usize = self.offsets.scalar_at(index)?.try_into()?;
-        let offset_end: usize = self.offsets.scalar_at(index + 1)?.try_into()?;
-        let sliced = self.bytes.slice(offset_start, offset_end)?;
-        let arrow_arr = sliced.iter_arrow().combine_chunks();
-        let values_vec = arrow_arr.as_primitive::<UInt8Type>().values().to_vec();
-        if matches!(self.dtype, DType::Utf8) {
-            unsafe { Ok(Utf8Scalar::new(String::from_utf8_unchecked(values_vec)).boxed()) }
-        } else {
-            Ok(BinaryScalar::new(values_vec).boxed())
-        }
+        self.bytes_at(index).map(|bytes| {
+            if matches!(self.dtype, DType::Utf8) {
+                unsafe { String::from_utf8_unchecked(bytes) }.into()
+            } else {
+                bytes.into()
+            }
+        })
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -115,6 +122,7 @@ mod test {
     use arrow::array::GenericStringArray as ArrowStringArray;
 
     use crate::array::primitive::PrimitiveArray;
+    use crate::scalar::Utf8Scalar;
 
     use super::*;
 

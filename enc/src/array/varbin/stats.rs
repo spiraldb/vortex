@@ -2,30 +2,34 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::array::stats::{Stat, StatsCompute, StatsSet};
-use crate::array::varbin::VarBinArray;
 use crate::array::ArrayEncoding;
-use crate::scalar::{BinaryScalar, Utf8Scalar};
+use crate::error::EncResult;
 use crate::types::DType;
 
-//TODO(robert): This could be better if we could get a view over underlying array. Taking scalars leads to unnecessary copies
-macro_rules! varbin_stats {
-    ($accessor:expr, $arr:expr) => {{
-        let mut min = ($accessor)($arr, 0);
-        let mut max = min.clone();
+pub trait BinaryArray {
+    fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>>;
+}
+
+impl<T> StatsCompute for T
+where
+    T: BinaryArray + ArrayEncoding,
+{
+    fn compute(&self, _stat: &Stat) -> StatsSet {
+        let mut min = vec![0xFF];
+        let mut max = vec![0x00];
         let mut is_constant = true;
         let mut is_sorted = true;
-        let mut last_value = min.clone();
+        let mut last_value = vec![0x00];
         let mut runs: usize = 0;
-        for i in 1..$arr.len() {
-            let next_val = ($accessor)($arr, i);
+        for i in 0..self.len() {
+            let next_val = self.bytes_at(i).unwrap();
             if next_val < min {
                 min = next_val.clone();
             }
             if next_val > max {
                 max = next_val.clone();
             }
-            let cmp = next_val.cmp(&last_value);
-            match cmp {
+            match next_val.cmp(&last_value) {
                 Ordering::Less => is_sorted = false,
                 Ordering::Equal => continue,
                 Ordering::Greater => {}
@@ -34,52 +38,29 @@ macro_rules! varbin_stats {
             last_value = next_val;
             runs += 1;
         }
-        runs += 1;
 
         StatsSet::from(HashMap::from([
-            (Stat::Min, min.into()),
-            (Stat::Max, max.into()),
+            (
+                Stat::Min,
+                if matches!(self.dtype(), DType::Utf8) {
+                    unsafe { String::from_utf8_unchecked(min.to_vec()) }.into()
+                } else {
+                    min.into()
+                },
+            ),
+            (
+                Stat::Max,
+                if matches!(self.dtype(), DType::Utf8) {
+                    unsafe { String::from_utf8_unchecked(max.to_vec()) }.into()
+                } else {
+                    max.into()
+                },
+            ),
             (Stat::RunCount, runs.into()),
             (Stat::IsSorted, is_sorted.into()),
             (Stat::IsConstant, is_constant.into()),
         ]))
-    }};
-}
-
-pub(crate) use varbin_stats;
-
-impl StatsCompute for VarBinArray {
-    fn compute(&self, _stat: &Stat) -> StatsSet {
-        if self.len() == 0 {
-            return StatsSet::new();
-        }
-
-        match self.dtype {
-            DType::Utf8 => varbin_stats!(string_at, self),
-            DType::Binary => varbin_stats!(binary_at, self),
-            _ => panic!("Unexpected array dtype"),
-        }
     }
-}
-
-fn string_at(arr: &VarBinArray, index: usize) -> String {
-    arr.scalar_at(index)
-        .unwrap()
-        .into_any()
-        .downcast::<Utf8Scalar>()
-        .unwrap()
-        .value()
-        .to_string()
-}
-
-fn binary_at(arr: &VarBinArray, index: usize) -> Vec<u8> {
-    arr.scalar_at(index)
-        .unwrap()
-        .into_any()
-        .downcast::<BinaryScalar>()
-        .unwrap()
-        .value()
-        .clone()
 }
 
 #[cfg(test)]
