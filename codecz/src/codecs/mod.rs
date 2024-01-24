@@ -1,5 +1,5 @@
+use codecz_sys::alloc::AlignedAllocator;
 use enum_display::EnumDisplay;
-use zenc_sys::alloc::AlignedAllocator;
 
 mod error;
 pub use error::CodecError;

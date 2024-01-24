@@ -2,8 +2,8 @@
 members = [
     "pyenc",
     "pyspiral",
+    "rust/codecz",
+    "rust/codecz-sys",
     "rust/enc",
-    "rust/zenc",
-    "rust/zenc-sys",
 ]
 resolver = "2"

@@ -1,6 +1,4 @@
 const std = @import("std");
-const testing = std.testing;
-const patch = @import("patch.zig");
 
 pub const SignedIntTypes = [_]type{ i8, i16, i32, i64, i128 };
 pub const UnsignedIntTypes = [_]type{ u8, u16, u32, u64, u128 };
@@ -61,8 +59,8 @@ pub fn generatedDecimals(comptime codec_fn: fn (comptime F: type) type, comptime
 
         timer.reset();
         var decoded = try codec.decode(ally, result);
-        if (@hasField(@TypeOf(result), "exceptionPositions")) {
-            try patch.patch(F, values, result.exceptionPositions, decoded[0..decoded.len]);
+        if (@hasDecl(codec, "patch")) {
+            try codec.patch(F, values, result.exceptionPositions, decoded[0..decoded.len]);
         }
         const decode_nanos = timer.lap();
         std.debug.print("{s} DECODE: {} million floats {} per second ({}ms)\n", .{
@@ -88,51 +86,9 @@ pub fn testFloatsRoundTrip(comptime codec_fn: fn (comptime F: type) type) !void 
 
         const decoded = try codec.decode(ally, encoded);
         defer ally.free(decoded);
-        if (@hasField(@TypeOf(encoded), "exceptionPositions")) {
-            try patch.patch(F, &vals, encoded.exceptionPositions, decoded[0..decoded.len]);
+        if (@hasDecl(codec, "patch")) {
+            try codec.patch(F, &vals, encoded.exceptionPositions, decoded[0..decoded.len]);
         }
         try std.testing.expectEqualSlices(F, &vals, decoded);
     }
-}
-
-pub fn bitpackingIntegers(comptime name: []const u8, comptime codec_fn: fn (comptime T: u8, comptime W: u8) type, comptime T: u8, comptime W: u8, N: usize, comptime value: comptime_int) !void {
-    const ally = std.testing.allocator;
-    const ints = codec_fn(T, W);
-
-    // Setup N values. Can be constant, has no impact on performance.
-    const values = try ally.alignedAlloc(ints.V, 128, N);
-    defer ally.free(values);
-    @memset(values, value);
-
-    // Encode the ints
-    var timer = try std.time.Timer.start();
-    var encoded = try ints.encode(values, ally);
-    defer encoded.deinit();
-    const encode_ns = timer.lap();
-    std.debug.print("FL {s} ENCODE u{} -> u{}: {} ints in {}ms, {} million ints per second\n", .{
-        name,
-        T,
-        W,
-        N,
-        encode_ns / 1_000_000,
-        1000 * N / encode_ns,
-    });
-
-    // no patches in the benchmark
-    try std.testing.expect(encoded.exception_indices == null and encoded.exceptions == null);
-
-    timer.reset();
-    const result = try ints.decode(encoded, ally);
-    defer ally.free(result);
-    const decode_ns = timer.lap();
-    std.debug.print("FL {s} DECODE u{} -> u{}: {} ints in {}ms, {} million ints per second\n", .{
-        name,
-        T,
-        W,
-        N,
-        decode_ns / 1_000_000,
-        1000 * N / decode_ns,
-    });
-
-    try std.testing.expectEqualSlices(ints.V, values, result);
 }

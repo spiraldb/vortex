@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const CodecError = @import("error.zig").CodecError;
+const CodecError = @import("../error.zig").CodecError;
 
 pub fn RunEnd(comptime V: type, comptime E: type, comptime A: u29) type {
     return struct {

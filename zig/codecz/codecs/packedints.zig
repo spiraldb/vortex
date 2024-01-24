@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const zimd = @import("zimd");
+const simd_math = @import("../simd_math.zig");
 const fastlanes = @import("fastlanes.zig");
 const Alignment = fastlanes.Alignment;
 const FLVec = fastlanes.FLVec;
@@ -85,7 +86,7 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
             var out: []FLVec(UV) = @alignCast(std.mem.bytesAsSlice(FLVec(UV), encoded[0 .. ntranches * bytesPerTranche]));
             var num_exceptions: usize = 0;
 
-            const minVal: ?V = if (codec == .ffor) zimd.math.min(V, elems) else null;
+            const minVal: ?V = if (codec == .ffor) simd_math.min(V, elems) else null;
             for (0..ntranches) |i| {
                 num_exceptions += encode_tranche(in[T * i ..][0..T], minVal, out[W * i ..][0..W]);
             }
@@ -432,15 +433,56 @@ fn testPackedInts(comptime signedness: std.builtin.Signedness, comptime codec: C
     }
 }
 
-const benchmarks = @import("benchmarks.zig");
 test "simple packed int benchmark" {
-    try benchmarks.bitpackingIntegers("Packed Ints", PackedInts, 32, 1, 10_000_000, 1);
+    try bitpackingIntegers("Packed Ints", PackedInts, 32, 1, 10_000_000, 1);
 }
 
 test "simple signed ffor benchmark" {
-    try benchmarks.bitpackingIntegers("Signed FFOR", SignedFFOR, 32, 1, 10_000_000, -100);
+    try bitpackingIntegers("Signed FFOR", SignedFFOR, 32, 1, 10_000_000, -100);
 }
 
 test "simple unsigned ffor benchmark" {
-    try benchmarks.bitpackingIntegers("Unsigned FFOR", UnsignedFFOR, 32, 1, 10_000_000, 100);
+    try bitpackingIntegers("Unsigned FFOR", UnsignedFFOR, 32, 1, 10_000_000, 100);
+}
+
+pub fn bitpackingIntegers(comptime name: []const u8, comptime codec_fn: fn (comptime T: u8, comptime W: u8) type, comptime T: u8, comptime W: u8, N: usize, comptime value: comptime_int) !void {
+    const ally = std.testing.allocator;
+    const ints = codec_fn(T, W);
+
+    // Setup N values. Can be constant, has no impact on performance.
+    const values = try ally.alignedAlloc(ints.V, 128, N);
+    defer ally.free(values);
+    @memset(values, value);
+
+    // Encode the ints
+    var timer = try std.time.Timer.start();
+    var encoded = try ints.encode(values, ally);
+    defer encoded.deinit();
+    const encode_ns = timer.lap();
+    std.debug.print("FL {s} ENCODE u{} -> u{}: {} ints in {}ms, {} million ints per second\n", .{
+        name,
+        T,
+        W,
+        N,
+        encode_ns / 1_000_000,
+        1000 * N / encode_ns,
+    });
+
+    // no patches in the benchmark
+    try std.testing.expect(encoded.exception_indices == null and encoded.exceptions == null);
+
+    timer.reset();
+    const result = try ints.decode(encoded, ally);
+    defer ally.free(result);
+    const decode_ns = timer.lap();
+    std.debug.print("FL {s} DECODE u{} -> u{}: {} ints in {}ms, {} million ints per second\n", .{
+        name,
+        T,
+        W,
+        N,
+        decode_ns / 1_000_000,
+        1000 * N / decode_ns,
+    });
+
+    try std.testing.expectEqualSlices(ints.V, values, result);
 }

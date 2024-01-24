@@ -1,8 +1,8 @@
 [package]
-name = "zenc-sys"
+name = "codecz-sys"
 version = "0.1.0"
 edition = "2021"
-links = "zenc"
+links = "codecz"
 
 [dependencies]
 allocator-api2 = "0.2.16"

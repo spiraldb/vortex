@@ -10,17 +10,17 @@ fn main() {
         .join("../../")
         .canonicalize()
         .expect("Failed to canonicalize root dir");
-    let zenc_header = root_dir
+    let codecz_header = root_dir
         .join("zig/c-abi/wrapper.h")
         .canonicalize()
         .expect("Failed to canonicalize wrapper.h path");
 
-    // Tell cargo to tell rustc to link zenc
+    // Tell cargo to tell rustc to link codecz
     println!(
         "cargo:rustc-link-search={}",
         root_dir.join("zig-out/lib").to_str().unwrap()
     );
-    println!("cargo:rustc-link-lib=zenc");
+    println!("cargo:rustc-link-lib=codecz");
 
     rerun_if_changed(&buildrs_dir.join("build.rs"));
     for entry in WalkDir::new(root_dir.join("zig"))
@@ -71,7 +71,7 @@ fn main() {
     let bindings = bindgen::Builder::default()
         // The input header we would like to generate
         // bindings for.
-        .header(zenc_header.to_str().unwrap())
+        .header(codecz_header.to_str().unwrap())
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))

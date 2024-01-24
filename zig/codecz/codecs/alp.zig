@@ -1,10 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const codecmath = @import("codecmath.zig");
+const codecmath = @import("../codecmath.zig");
+const sampling = @import("../sampling.zig");
+const CodecError = @import("../error.zig").CodecError;
 const fastlanes = @import("fastlanes.zig");
-const roaring = @import("roaring");
-const patch = @import("patch.zig");
-const CodecError = @import("error.zig").CodecError;
 const Alignment = fastlanes.Alignment;
 
 // for encoding, we multiply a given element 'n' by 10^e and 10^(-f)
@@ -23,6 +22,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
 
     return struct {
         pub const EncInt = codecmath.coveringIntTypePowerOfTwo(F);
+        pub usingnamespace @import("../patch.zig");
 
         pub const ALPEncoded = struct {
             const Self = @This();
@@ -108,18 +108,18 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             return numExceptions;
         }
 
-        pub fn sampleFindExponents(vec: []const F) !AlpExponents {
-            const bufSize = comptime codecmath.defaultSampleBufferSize(F);
+        pub fn sampleFindExponents(vec: []const F) CodecError!AlpExponents {
+            const bufSize = comptime sampling.defaultSampleBufferSize(F);
             var buf: [bufSize]u8 = undefined;
             var fba = std.heap.FixedBufferAllocator.init(&buf);
             const ally = fba.allocator();
 
-            const sample: []const F = try codecmath.defaultSample(F, ally, vec);
+            const sample: []const F = try sampling.defaultSample(F, ally, vec);
             defer ally.free(sample);
             return findExponents(sample);
         }
 
-        pub fn findExponents(vec: []const F) !AlpExponents {
+        pub fn findExponents(vec: []const F) CodecError!AlpExponents {
             var bestE: usize = 0;
             var bestF: usize = 0;
             var bestSize: usize = std.math.maxInt(usize);
@@ -230,7 +230,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             return size;
         }
 
-        pub fn decode(allocator: Allocator, input: ALPEncoded) ![]F {
+        pub fn decode(allocator: Allocator, input: ALPEncoded) CodecError![]F {
             const decoded: []F = try allocator.alloc(F, input.encodedValues.len);
             errdefer allocator.free(decoded);
             try decodeRaw(input.encodedValues, input.exponents, decoded);
@@ -253,7 +253,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
     };
 }
 
-const benchmarks = @import("benchmarks.zig");
+const benchmarks = @import("../benchmarks.zig");
 test "alp round trip" {
     try benchmarks.testFloatsRoundTrip(AdaptiveLosslessFloatingPoint);
 }

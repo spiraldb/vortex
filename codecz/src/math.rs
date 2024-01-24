@@ -1,6 +1,6 @@
+use codecz_sys::*;
 use num_traits::Num;
 use paste;
-use zenc_sys::*;
 
 pub struct RunLengthStats {
     pub run_count: u64,
@@ -39,25 +39,25 @@ mod private {
     pub struct Sealed;
 }
 
-macro_rules! impl_zimd_num {
+macro_rules! impl_codecz_math_num {
     ($t:ty) => {
         paste::item! {
             impl PrimitiveNumber for $t {
                 fn max(elems: &[Self], _token: private::Sealed) -> Self {
-                    unsafe { [<zimd_max_ $t>](elems.as_ptr(), elems.len()) as $t }
+                    unsafe { [<codecz_math_max_ $t>](elems.as_ptr(), elems.len()) as $t }
                 }
                 fn min(elems: &[Self], _token: private::Sealed) -> Self {
-                    unsafe { [<zimd_min_ $t>](elems.as_ptr(), elems.len()) as $t }
+                    unsafe { [<codecz_math_min_ $t>](elems.as_ptr(), elems.len()) as $t }
                 }
                 fn is_constant(elems: &[Self], _token: private::Sealed) -> bool {
-                    unsafe { [<zimd_isConstant_ $t>](elems.as_ptr(), elems.len()) }
+                    unsafe { [<codecz_math_isConstant_ $t>](elems.as_ptr(), elems.len()) }
                 }
                 fn is_sorted(elems: &[Self], _token: private::Sealed) -> bool {
-                    unsafe { [<zimd_isSorted_ $t>](elems.as_ptr(), elems.len()) }
+                    unsafe { [<codecz_math_isSorted_ $t>](elems.as_ptr(), elems.len()) }
                 }
                 fn run_length_stats(elems: &[Self], _token: private::Sealed) -> RunLengthStats {
                     let stats = unsafe {
-                        [<zimd_runLengthStats_ $t>](
+                        [<codecz_math_runLengthStats_ $t>](
                             elems.as_ptr(),
                             elems.len(),
                         )
@@ -69,16 +69,16 @@ macro_rules! impl_zimd_num {
     };
 }
 
-impl_zimd_num!(f32);
-impl_zimd_num!(f64);
-impl_zimd_num!(u8);
-impl_zimd_num!(u16);
-impl_zimd_num!(u32);
-impl_zimd_num!(u64);
-impl_zimd_num!(i8);
-impl_zimd_num!(i16);
-impl_zimd_num!(i32);
-impl_zimd_num!(i64);
+impl_codecz_math_num!(f32);
+impl_codecz_math_num!(f64);
+impl_codecz_math_num!(u8);
+impl_codecz_math_num!(u16);
+impl_codecz_math_num!(u32);
+impl_codecz_math_num!(u64);
+impl_codecz_math_num!(i8);
+impl_codecz_math_num!(i16);
+impl_codecz_math_num!(i32);
+impl_codecz_math_num!(i64);
 
 #[cfg(test)]
 mod test {

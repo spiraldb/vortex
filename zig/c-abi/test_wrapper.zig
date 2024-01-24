@@ -7,12 +7,12 @@ const c = @cImport({
 
 test "math" {
     const ints = [_]i32{ 1, 2, 3, 4, 5 };
-    try std.testing.expectEqual(c.zimd_max_i32(@ptrCast(&ints), ints.len), 5);
-    try std.testing.expectEqual(c.zimd_min_i32(@ptrCast(&ints), ints.len), 1);
-    try std.testing.expectEqual(c.zimd_isConstant_i32(@ptrCast(&ints), ints.len), false);
-    try std.testing.expectEqual(c.zimd_isSorted_i32(@ptrCast(&ints), ints.len), true);
+    try std.testing.expectEqual(c.codecz_math_max_i32(@ptrCast(&ints), ints.len), 5);
+    try std.testing.expectEqual(c.codecz_math_min_i32(@ptrCast(&ints), ints.len), 1);
+    try std.testing.expectEqual(c.codecz_math_isConstant_i32(@ptrCast(&ints), ints.len), false);
+    try std.testing.expectEqual(c.codecz_math_isSorted_i32(@ptrCast(&ints), ints.len), true);
 
-    const runstats = c.zimd_runLengthStats_i32(@ptrCast(&ints), ints.len);
+    const runstats = c.codecz_math_runLengthStats_i32(@ptrCast(&ints), ints.len);
     try std.testing.expectEqual(runstats.runCount, 0);
     try std.testing.expectEqual(runstats.runElementCount, 0);
 }

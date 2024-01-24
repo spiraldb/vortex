@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const codecz = @import("codecs");
+const codecz = @import("codecz");
+const AlpExponents = codecz.codecs.AlpExponents;
 const CodecError = codecz.CodecError;
 
 const c = @cImport({
@@ -101,7 +102,7 @@ pub const TwoBufferResult = extern struct {
 
 pub const AlpExponentsResult = extern struct {
     status: ResultStatus,
-    exponents: codecz.AlpExponents,
+    exponents: AlpExponents,
 };
 
 comptime {

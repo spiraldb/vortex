@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const codecmath = @import("codecmath.zig");
+const codecmath = @import("../codecmath.zig");
 
 pub fn PseudoDecimal(comptime F: type) type {
     codecmath.comptimeCheckFloat(F);
@@ -113,7 +113,7 @@ pub fn PseudoDecimal(comptime F: type) type {
     };
 }
 
-const benchmarks = @import("benchmarks.zig");
+const benchmarks = @import("../benchmarks.zig");
 
 test "pde round trip" {
     try benchmarks.testFloatsRoundTrip(PseudoDecimal);

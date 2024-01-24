@@ -1,8 +1,7 @@
-use super::{Codec, CodecError, CodecFunction};
-use crate::codecz::ALIGNED_ALLOCATOR;
+use super::{Codec, CodecError, CodecFunction, ALIGNED_ALLOCATOR};
+use codecz_sys::alloc::AlignedVec;
+use codecz_sys::*;
 use safe_transmute::TriviallyTransmutable;
-use zenc_sys::alloc::AlignedVec;
-use zenc_sys::*;
 
 pub fn encode<T: SupportsREE>(elems: &[T]) -> Result<(AlignedVec<T>, AlignedVec<u32>), CodecError> {
     // TODO: can use smaller buffers if we have stats wired through
