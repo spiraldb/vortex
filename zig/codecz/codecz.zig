@@ -1,7 +1,7 @@
 pub usingnamespace @import("error.zig");
 
 // the codecs themselves
-pub const codecs = @import("codecs/codecs.zig");
+pub const encodings = @import("encodings/encodings.zig");
 pub const simd_math = @import("simd_math.zig");
 
 comptime {

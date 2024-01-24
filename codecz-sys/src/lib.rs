@@ -12,7 +12,7 @@ impl ByteBuffer_t {
     pub fn new(buf: &mut AlignedVec<u8>) -> Self {
         Self {
             ptr: buf.as_mut_ptr(),
-            len: buf.capacity(),
+            len: buf.capacity() as u64,
         }
     }
 }
@@ -24,7 +24,7 @@ where
     fn from(vec: &mut AlignedVec<T>) -> Self {
         Self {
             ptr: vec.as_mut_ptr() as *mut u8,
-            len: vec.capacity() * std::mem::size_of::<T>(),
+            len: (vec.capacity() * std::mem::size_of::<T>()) as u64,
         }
     }
 }
@@ -36,7 +36,7 @@ where
     fn from(slice: &[T]) -> Self {
         Self {
             ptr: slice.as_ptr() as *mut u8,
-            len: std::mem::size_of_val(slice),
+            len: std::mem::size_of_val(slice) as u64,
         }
     }
 }

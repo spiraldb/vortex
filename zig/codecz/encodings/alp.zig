@@ -2,16 +2,14 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const codecmath = @import("../codecmath.zig");
 const sampling = @import("../sampling.zig");
-const CodecError = @import("../error.zig").CodecError;
 const fastlanes = @import("fastlanes.zig");
 const Alignment = fastlanes.Alignment;
+const abi = @import("abi");
+const CodecError = abi.CodecError;
 
 // for encoding, we multiply a given element 'n' by 10^e and 10^(-f)
 // for decoding, we do the reverse: n * 10^f * 10^(-e)
-pub const AlpExponents = extern struct {
-    e: u8,
-    f: u8,
-};
+pub const AlpExponents = abi.AlpExponents;
 
 // based on https://ir.cwi.nl/pub/33334/33334.pdf
 pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
@@ -21,9 +19,9 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
     const FMask = comptime std.meta.Int(.unsigned, @bitSizeOf(F));
 
     return struct {
-        pub const EncInt = codecmath.coveringIntTypePowerOfTwo(F);
-        pub usingnamespace @import("../patch.zig");
+        pub usingnamespace @import("../patch.zig").PatchMixin;
 
+        pub const EncInt = codecmath.coveringIntTypePowerOfTwo(F);
         pub const ALPEncoded = struct {
             const Self = @This();
 
@@ -69,11 +67,10 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             errdefer excPositions.deinit(gpa);
             const numMasks = std.math.divCeil(usize, excPositions.capacity(), @bitSizeOf(@TypeOf(excPositions).MaskInt)) catch unreachable;
 
-            var excPositionsSlice = std.PackedIntSlice(u1){
-                .bytes = std.mem.sliceAsBytes(excPositions.masks[0..numMasks]),
-                .bit_offset = 0,
-                .len = excPositions.capacity(),
-            };
+            var excPositionsSlice = std.PackedIntSlice(u1).init(
+                std.mem.sliceAsBytes(excPositions.masks[0..numMasks]),
+                excPositions.capacity(),
+            );
 
             const numExceptions = try encodeRaw(elems, exponents, encoded, &excPositionsSlice);
             std.debug.assert(numExceptions == excPositions.count());
@@ -92,8 +89,13 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             encoded: []align(Alignment) EncInt,
             excPositions: *std.PackedIntSlice(u1),
         ) CodecError!usize {
-            if (encoded.len < elems.len) {
+            if (encoded.len < elems.len or excPositions.len < elems.len) {
+                std.debug.print("ALP.encodeRaw: encoded.len = {}, excPositions.len = {}, elems.len = {}\n", .{ encoded.len, excPositions.len, elems.len });
                 return CodecError.OutputBufferTooSmall;
+            }
+            if (exponents.e < exponents.f or exponents.e > codecmath.maxExponentToTry(F)) {
+                std.debug.print("ALP.encodeRaw: exponents.e = {}, exponents.f = {}, maxExponentToTry = {}\n", .{ exponents.e, exponents.f, codecmath.maxExponentToTry(F) });
+                return CodecError.InvalidInput;
             }
 
             var numExceptions: u32 = 0;
@@ -262,13 +264,14 @@ test "alp benchmark" {
     try benchmarks.generatedDecimals(AdaptiveLosslessFloatingPoint, "ALP");
 }
 
-test "values buffer size in bytes" {
+test "encoded int size & alignment match input float size & alignment" {
     const types = [_]type{ f32, f64 };
     inline for (types) |T| {
         const codec = AdaptiveLosslessFloatingPoint(T);
         const bufSize = codec.valuesBufferSizeInBytes(10);
         try std.testing.expect(bufSize == @sizeOf([10]T));
         try std.testing.expect(bufSize == 10 * @sizeOf(codec.EncInt));
+        try std.testing.expect(@alignOf(codec.EncInt) == @alignOf(T));
         try std.testing.expect(@sizeOf(codec.EncInt) == @sizeOf(T));
     }
 }

@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const abi = @import("abi");
 
 fn vecLen(comptime E: type) u16 {
     // force vectorization of at least 8 elements for now
@@ -155,10 +156,7 @@ inline fn scalarPairwise(comptime op: PairwiseOp, comptime E: type, elems: []con
     return true;
 }
 
-pub const RunLengthStats = extern struct {
-    runCount: u64,
-    runElementCount: u64,
-};
+pub const RunLengthStats = abi.RunLengthStats;
 
 pub fn runLengthStats(comptime E: type, elems: []const E) RunLengthStats {
     const vlen: u16 = comptime vecLen(E);

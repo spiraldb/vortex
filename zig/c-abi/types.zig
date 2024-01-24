@@ -1,14 +1,18 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const codecz = @import("codecz");
-const AlpExponents = codecz.codecs.AlpExponents;
-const CodecError = codecz.CodecError;
 
 const c = @cImport({
     @cInclude("wrapper.h");
 });
 
 pub const Alignment: u29 = c.SPIRAL_ALIGNMENT;
+
+pub const CodecError = error{
+    InvalidInput,
+    IncorrectAlignment,
+    EncodingFailed,
+    OutputBufferTooSmall,
+} || std.mem.Allocator.Error;
 
 //
 // Codecz
@@ -52,13 +56,17 @@ test "result status" {
 
 pub const ByteBuffer = extern struct {
     ptr: [*c]align(Alignment) u8,
-    len: usize,
+    len: u64,
 
-    pub fn cast(cbb: *c.ByteBuffer_t) CodecError!*ByteBuffer {
+    pub fn from(cbb: c.ByteBuffer_t) CodecError!ByteBuffer {
         if (!std.mem.isAligned(cbb.ptr, Alignment)) {
             return CodecError.IncorrectAlignment;
         }
-        return @ptrCast(cbb);
+        return @bitCast(cbb);
+    }
+
+    pub fn into(self: ByteBuffer) c.ByteBuffer_t {
+        return @bitCast(self);
     }
 
     pub fn bytes(self: *const ByteBuffer) []u8 {
@@ -72,9 +80,13 @@ pub const WrittenBuffer = extern struct {
     numElements: u64,
     inputBytesUsed: u64,
 
-    pub fn cast(cwb: *c.WrittenBuffer_t) CodecError!*WrittenBuffer {
+    pub fn from(cwb: c.WrittenBuffer_t) CodecError!WrittenBuffer {
         _ = try ByteBuffer.cast(&cwb.buffer);
-        return @ptrCast(cwb);
+        return @bitCast(cwb);
+    }
+
+    pub fn into(self: WrittenBuffer) c.WrittenBuffer_t {
+        return @bitCast(self);
     }
 };
 
@@ -82,9 +94,13 @@ pub const OneBufferResult = extern struct {
     status: ResultStatus,
     buffer: WrittenBuffer,
 
-    pub fn cast(cobr: *c.OneBufferResult_t) CodecError!*OneBufferResult {
+    pub fn from(cobr: c.OneBufferResult_t) CodecError!OneBufferResult {
         _ = try WrittenBuffer.cast(&cobr.buffer);
-        return @ptrCast(cobr);
+        return @bitCast(cobr);
+    }
+
+    pub fn into(self: OneBufferResult) c.OneBufferResult_t {
+        return @bitCast(self);
     }
 };
 
@@ -93,69 +109,176 @@ pub const TwoBufferResult = extern struct {
     firstBuffer: WrittenBuffer,
     secondBuffer: WrittenBuffer,
 
-    pub fn cast(ctbr: *c.TwoBufferResult_t) CodecError!*TwoBufferResult {
+    pub fn from(ctbr: c.TwoBufferResult_t) CodecError!TwoBufferResult {
         _ = try WrittenBuffer.cast(&ctbr.firstBuffer);
         _ = try WrittenBuffer.cast(&ctbr.secondBuffer);
-        return @ptrCast(ctbr);
+        return @bitCast(ctbr);
+    }
+
+    pub fn into(self: TwoBufferResult) c.TwoBufferResult_t {
+        return @bitCast(self);
     }
 };
+
+pub const AlpExponents = c.AlpExponents_t;
 
 pub const AlpExponentsResult = extern struct {
     status: ResultStatus,
     exponents: AlpExponents,
+
+    pub fn from(caer: c.AlpExponentsResult_t) AlpExponentsResult {
+        return @bitCast(caer);
+    }
+
+    pub fn into(self: AlpExponentsResult) c.AlpExponentsResult_t {
+        return @bitCast(self);
+    }
 };
 
+pub const RunLengthStats = c.RunLengthStats_t;
+
 comptime {
-    checkABI(ByteBuffer, c.ByteBuffer_t);
-    checkABI(WrittenBuffer, c.WrittenBuffer_t);
-    checkABI(OneBufferResult, c.OneBufferResult_t);
-    checkABI(TwoBufferResult, c.TwoBufferResult_t);
-    checkABI(AlpExponentsResult, c.AlpExponentsResult_t);
+    checkStructABI(ByteBuffer, c.ByteBuffer_t);
+    checkStructABI(WrittenBuffer, c.WrittenBuffer_t);
+    checkStructABI(OneBufferResult, c.OneBufferResult_t);
+    checkStructABI(TwoBufferResult, c.TwoBufferResult_t);
+    checkStructABI(AlpExponents, c.AlpExponents_t);
+    checkStructABI(AlpExponentsResult, c.AlpExponentsResult_t);
+    checkStructABI(RunLengthStats, c.RunLengthStats_t);
 }
 
-pub fn checkABI(comptime zigType: type, comptime cType: type) void {
-    if (@sizeOf(zigType) != @sizeOf(cType)) {
+pub fn checkStructABI(comptime zigType: type, comptime cType: type) void {
+    if (@bitSizeOf(zigType) != @bitSizeOf(cType)) {
         @compileError(std.fmt.comptimePrint(
-            "Mismatch between zig type {s} ({} bytes) and C type {s} ({} bytes)",
-            .{ @typeName(zigType), @sizeOf(zigType), @typeName(cType), @sizeOf(cType) },
+            "Mismatched size between zig type {s} ({} bits) and C type {s} ({} bits)",
+            .{ @typeName(zigType), @bitSizeOf(zigType), @typeName(cType), @bitSizeOf(cType) },
         ));
     }
-    for (@typeInfo(zigType).Struct.fields, @typeInfo(cType).Struct.fields) |zf, cf| {
-        if (!std.mem.eql(u8, zf.name, cf.name)) {
+
+    const zigTypeInfo = @typeInfo(zigType);
+    const cTypeInfo = @typeInfo(cType);
+    if (zigTypeInfo == .Struct and cTypeInfo == .Struct) {
+        for (zigTypeInfo.Struct.fields, cTypeInfo.Struct.fields) |zf, cf| {
+            if (!std.mem.eql(u8, zf.name, cf.name)) {
+                @compileError(std.fmt.comptimePrint(
+                    "Mismatch between zig field {s} and C field {s}",
+                    .{ zf.name, cf.name },
+                ));
+            }
+            if (zf.alignment != cf.alignment) {
+                @compileError(std.fmt.comptimePrint(
+                    "Mismatch between zig field {s} (alignment {}) and C field of the same name (alignment {})",
+                    .{ zf.name, zf.alignment, cf.alignment },
+                ));
+            }
+            if (zf.is_comptime != cf.is_comptime) {
+                @compileError(std.fmt.comptimePrint(
+                    "Mismatch between zig field {s} (is_comptime {}) and C field of the same name (is_comptime {})",
+                    .{ zf.name, zf.is_comptime, cf.is_comptime },
+                ));
+            }
+            @setEvalBranchQuota(1_000_000);
+            checkABI(zf.name, zf.type, cf.type);
+        }
+    } else {
+        @compileError(std.fmt.comptimePrint(
+            "Called checkStructABI on zig type {s} and C type {s} (at least one is not a Struct)",
+            .{ @typeName(zigType), @typeName(cType) },
+        ));
+    }
+}
+
+fn checkABI(comptime name: []const u8, comptime zigType: type, comptime cType: type) void {
+    if (zigType == cType) {
+        return;
+    }
+
+    const zigTypeInfo = @typeInfo(zigType);
+    const cTypeInfo = @typeInfo(cType);
+    if (zigTypeInfo == .Struct and cTypeInfo == .Struct) {
+        checkStructABI(zigType, cType);
+        return;
+    }
+
+    if (@bitSizeOf(zigType) != @bitSizeOf(cType)) {
+        @compileError(std.fmt.comptimePrint(
+            "Mismatched size between {s} with zig type {s} ({} bits) and C type {s} ({} bits)",
+            .{ name, @typeName(zigType), @bitSizeOf(zigType), @typeName(cType), @bitSizeOf(cType) },
+        ));
+    }
+    if (zigTypeInfo == .Enum) {
+        if (zigTypeInfo.Enum.tag_type != cType) {
             @compileError(std.fmt.comptimePrint(
-                "Mismatch between zig field {s} and C field {s}",
-                .{ zf.name, cf.name },
+                "Mismatch between zig extern enum {s} (type {s}) and C field of the same name (type {s})",
+                .{ name, @typeName(zigType), @typeName(cType) },
             ));
         }
-        if (@typeInfo(zf.type) == .Pointer and @typeInfo(cf.type) == .Pointer) {
-            if (@typeInfo(zf.type).Pointer.child != @typeInfo(cf.type).Pointer.child) {
+    } else if (zigTypeInfo == .Pointer) {
+        if (zigTypeInfo.Pointer.child != cTypeInfo.Pointer.child) {
+            @compileError(std.fmt.comptimePrint(
+                "Mismatch between {s} with zig type {s} and C type {s}",
+                .{ name, @typeName(zigType), @typeName(cType) },
+            ));
+        }
+        if (!std.mem.eql(u8, name, "param") and !std.mem.eql(u8, name, "return_type")) {
+            if (zigTypeInfo.Pointer.alignment != Alignment) {
                 @compileError(std.fmt.comptimePrint(
-                    "Mismatch between zig field {s} (type {s}) and C field of the same name (type {s})",
-                    .{ zf.name, @typeName(zf.type), @typeName(cf.type) },
+                    "Zig {s} with type {s} is a pointer with alignment {}, should have alignment {}",
+                    .{ name, @typeName(zigType), zigTypeInfo.Pointer.alignment, Alignment },
                 ));
             }
-            if (@typeInfo(zf.type).Pointer.alignment != Alignment) {
-                @compileError(std.fmt.comptimePrint(
-                    "Zig field {s} on type {s} is a pointer with alignment {}, should have alignment {}",
-                    .{ zf.name, @typeName(zigType), zf.alignment, Alignment },
-                ));
-            }
-        } else if (zf.type != cf.type) {
-            if (@typeInfo(zf.type) == .Struct and @typeInfo(cf.type) == .Struct) {
-                checkABI(zf.type, cf.type);
-            } else if (@typeInfo(zf.type) == .Enum) {
-                if (@typeInfo(zf.type).Enum.tag_type != cf.type) {
-                    @compileError(std.fmt.comptimePrint(
-                        "Mismatch between zig extern enum {s} (type {s}) and C field of the same name (type {s})",
-                        .{ zf.name, @typeName(zf.type), @typeName(cf.type) },
-                    ));
-                }
-            } else {
-                @compileError(std.fmt.comptimePrint(
-                    "Mismatch between zig field {s} (type {s}) and C field of the same name (type {s})",
-                    .{ zf.name, @typeName(zf.type), @typeName(cf.type) },
-                ));
-            }
+        }
+    } else if (zigTypeInfo == .Int) {
+        if (zigTypeInfo.Int.signedness != cTypeInfo.Int.signedness or zigTypeInfo.Int.bits != cTypeInfo.Int.bits) {
+            @compileError(std.fmt.comptimePrint(
+                "Mismatch between zig {s} (type {s}) and C field of the same name (type {s})",
+                .{ name, @typeName(zigType), @typeName(cType) },
+            ));
+        }
+    } else {
+        @compileError(std.fmt.comptimePrint(
+            "Mismatch between zig {s} (type {s}) and C field of the same name (type {s})",
+            .{ name, @typeName(zigType), @typeName(cType) },
+        ));
+    }
+}
+
+pub fn checkFnSignature(zfunc: anytype, cfunc: anytype) void {
+    const zfn = @typeInfo(@TypeOf(zfunc)).Fn;
+    const cfn = @typeInfo(@TypeOf(cfunc)).Fn;
+    if (zfn.alignment != cfn.alignment) {
+        @compileError(std.fmt.comptimePrint(
+            "Mismatch between zig function {s} (alignment {}) and C function of the same name (alignment {})",
+            .{ @typeName(zfunc), zfn.alignment, cfn.alignment },
+        ));
+    }
+    if (zfn.calling_convention != cfn.calling_convention) {
+        @compileError(std.fmt.comptimePrint(
+            "Mismatch between zig function {s} (calling convention {}) and C function of the same name (calling convention {})",
+            .{ @typeName(zfunc), zfn.calling_convention, cfn.calling_convention },
+        ));
+    }
+    if (zfn.is_generic != cfn.is_generic) {
+        @compileError(std.fmt.comptimePrint(
+            "Mismatch between zig function {s} (is_generic {}) and C function of the same name (is_generic {})",
+            .{ @typeName(zfunc), zfn.is_generic, cfn.is_generic },
+        ));
+    }
+    if (zfn.is_var_args != cfn.is_var_args) {
+        @compileError(std.fmt.comptimePrint(
+            "Mismatch between zig function {s} (is_var_args {}) and C function of the same name (is_var_args {})",
+            .{ @typeName(zfunc), zfn.is_var_args, cfn.is_var_args },
+        ));
+    }
+
+    if (zfn.return_type != cfn.return_type) {
+        @setEvalBranchQuota(1_000_000);
+        checkABI("return_type", zfn.return_type.?, cfn.return_type.?);
+    }
+    for (zfn.params, cfn.params) |zparam, cparam| {
+        if (zparam.type != cparam.type) {
+            @setEvalBranchQuota(1_000_000);
+            checkABI("param", zparam.type.?, cparam.type.?);
         }
     }
 }

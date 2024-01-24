@@ -44,7 +44,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&zimd_test_run.step);
 
     // C ABI types
-    const c_abi_types = b.addModule("abi-types", .{
+    const c_abi_types = b.addModule("abi", .{
         .source_file = .{ .path = "zig/c-abi/types.zig" },
     });
 
@@ -52,9 +52,9 @@ pub fn build(b: *std.Build) void {
     const codecz = b.addModule("codecz", .{
         .source_file = .{ .path = "zig/codecz/codecz.zig" },
         .dependencies = &.{
+            .{ .name = "abi", .module = c_abi_types },
             .{ .name = "zimd", .module = zimd },
             .{ .name = "trazy", .module = trazy },
-            .{ .name = "abi-types", .module = c_abi_types },
         },
     });
 
@@ -65,8 +65,11 @@ pub fn build(b: *std.Build) void {
         .filter = filter_test,
     });
     codecz_test.addModule("codecz", codecz);
+    codecz_test.addModule("abi", c_abi_types);
     codecz_test.addModule("trazy", trazy);
     codecz_test.addModule("zimd", zimd);
+    codecz_test.addIncludePath(.{ .path = "zig/c-abi" });
+    dependencyTracy(codecz_test);
 
     const codecz_test_run = b.addRunArtifact(codecz_test);
     test_step.dependOn(&codecz_test_run.step);
@@ -79,8 +82,13 @@ pub fn build(b: *std.Build) void {
         .use_llvm = true,
         .target = target,
         .optimize = optimize,
+        .single_threaded = false,
     });
     lib_step.addModule("codecz", codecz);
+    lib_step.addModule("abi", c_abi_types);
+    lib_step.addModule("zimd", zimd);
+    //lib_step.addModule("trazy", trazy);
+    //dependencyTracy(lib_step);
     lib_step.addIncludePath(.{ .path = "zig/c-abi" });
     lib_step.c_std = std.Build.CStd.C11;
     lib_step.bundle_compiler_rt = true;
