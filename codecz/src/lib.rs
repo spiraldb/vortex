@@ -1,2 +1,2 @@
-pub mod codecs;
+pub mod encodings;
 pub mod math;

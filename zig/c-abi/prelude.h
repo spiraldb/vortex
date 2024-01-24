@@ -15,7 +15,8 @@ extern "C" {
 
 static_assert(sizeof(float) == 4, "float type must have 32 bits");
 static_assert(sizeof(double) == 8, "double type must have 64 bits");
-typedef uintptr_t expected_zig_usize_t; // for a comptime check in zig
+static_assert(sizeof(uintptr_t) == sizeof(uint64_t), "uintptr_t must be 64 bits");
+typedef uint64_t expected_zig_usize_t; // for a comptime check in zig
 
 // 
 #if defined(__cplusplus)

@@ -1,32 +1,32 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const codecz = @import("codecz");
-const codecs = codecz.codecs;
+const encodings = codecz.encodings;
 const simd_math = codecz.simd_math;
 const CodecError = codecz.CodecError;
 const c = @cImport({
     @cInclude("wrapper.h");
 });
-const abiTypes = @import("types.zig");
+const abi = @import("abi");
 
 // aliases
 const Alignment: u29 = c.SPIRAL_ALIGNMENT;
-const AlpExponents = codecs.AlpExponents;
-const ByteBuffer = abiTypes.ByteBuffer;
-const ResultStatus = abiTypes.ResultStatus;
-const WrittenBuffer = abiTypes.WrittenBuffer;
-const OneBufferResult = abiTypes.OneBufferResult;
-const TwoBufferResult = abiTypes.TwoBufferResult;
-const AlpExponentsResult = abiTypes.AlpExponentsResult;
+const AlpExponents = abi.AlpExponents;
+const ByteBuffer = abi.ByteBuffer;
+const ResultStatus = abi.ResultStatus;
+const WrittenBuffer = abi.WrittenBuffer;
+const OneBufferResult = abi.OneBufferResult;
+const TwoBufferResult = abi.TwoBufferResult;
+const AlpExponentsResult = abi.AlpExponentsResult;
 
 const IntegerTypes = [_]type{ u8, u16, u32, u64, i8, i16, i32, i64 };
-const SizeTypes = [_]type{ u32, u64 };
+const SizeTypes = [_]type{u32};
 const FloatTypes = [_]type{ f32, f64 };
 const NumberTypes = IntegerTypes ++ FloatTypes;
 
 comptime {
     if (!builtin.link_libc) {
-        @compileError("Must be built with libc in order for zenc-sys (rust) to call zenc (zig) via the C ABI");
+        @compileError("Must be built with libc in order for codecz-sys (rust) to call codecz (zig) via the C ABI");
     }
     if (@bitSizeOf(usize) != @bitSizeOf(c.expected_zig_usize_t)) {
         @compileError(std.fmt.comptimePrint(
@@ -40,7 +40,7 @@ comptime {
 // SIMD Math
 //
 comptime {
-    abiTypes.checkABI(simd_math.RunLengthStats, c.RunLengthStats_t);
+    abi.checkStructABI(simd_math.RunLengthStats, c.RunLengthStats_t);
     for (NumberTypes) |T| {
         const wrapper = MathWrapper(T);
         @export(wrapper.max, std.builtin.ExportOptions{ .name = "codecz_math_max_" ++ @typeName(T), .linkage = .Strong });
@@ -48,29 +48,98 @@ comptime {
         @export(wrapper.isSorted, std.builtin.ExportOptions{ .name = "codecz_math_isSorted_" ++ @typeName(T), .linkage = .Strong });
         @export(wrapper.isConstant, std.builtin.ExportOptions{ .name = "codecz_math_isConstant_" ++ @typeName(T), .linkage = .Strong });
         @export(wrapper.runLengthStats, std.builtin.ExportOptions{ .name = "codecz_math_runLengthStats_" ++ @typeName(T), .linkage = .Strong });
+        wrapper.checkFnSignatures();
     }
 }
 
 fn MathWrapper(comptime T: type) type {
     return struct {
-        pub fn max(elems: [*c]const T, len: usize) callconv(.C) T {
+        const Self = @This();
+
+        pub fn max(elems: [*c]const T, len: u64) callconv(.C) T {
             return simd_math.max(T, elems[0..len]);
         }
 
-        pub fn min(elems: [*c]const T, len: usize) callconv(.C) T {
+        pub fn min(elems: [*c]const T, len: u64) callconv(.C) T {
             return simd_math.min(T, elems[0..len]);
         }
 
-        pub fn isSorted(elems: [*c]const T, len: usize) callconv(.C) bool {
+        pub fn isSorted(elems: [*c]const T, len: u64) callconv(.C) bool {
             return simd_math.isSorted(T, elems[0..len]);
         }
 
-        pub fn isConstant(elems: [*c]const T, len: usize) callconv(.C) bool {
+        pub fn isConstant(elems: [*c]const T, len: u64) callconv(.C) bool {
             return simd_math.isConstant(T, elems[0..len]);
         }
 
-        pub fn runLengthStats(elems: [*c]const T, len: usize) callconv(.C) simd_math.RunLengthStats {
+        pub fn runLengthStats(elems: [*c]const T, len: u64) callconv(.C) simd_math.RunLengthStats {
             return simd_math.runLengthStats(T, elems[0..len]);
+        }
+
+        pub fn checkFnSignatures() void {
+            if (T == u8) {
+                abi.checkFnSignature(Self.max, c.codecz_math_max_u8);
+                abi.checkFnSignature(Self.min, c.codecz_math_min_u8);
+                abi.checkFnSignature(Self.isSorted, c.codecz_math_isSorted_u8);
+                abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_u8);
+                abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_u8);
+            } else if (T == u16) {
+                abi.checkFnSignature(Self.max, c.codecz_math_max_u16);
+                abi.checkFnSignature(Self.min, c.codecz_math_min_u16);
+                abi.checkFnSignature(Self.isSorted, c.codecz_math_isSorted_u16);
+                abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_u16);
+                abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_u16);
+            } else if (T == u32) {
+                abi.checkFnSignature(Self.max, c.codecz_math_max_u32);
+                abi.checkFnSignature(Self.min, c.codecz_math_min_u32);
+                abi.checkFnSignature(Self.isSorted, c.codecz_math_isSorted_u32);
+                abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_u32);
+                abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_u32);
+            } else if (T == u64) {
+                abi.checkFnSignature(Self.max, c.codecz_math_max_u64);
+                abi.checkFnSignature(Self.min, c.codecz_math_min_u64);
+                abi.checkFnSignature(Self.isSorted, c.codecz_math_isSorted_u64);
+                abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_u64);
+                abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_u64);
+            } else if (T == i8) {
+                abi.checkFnSignature(Self.max, c.codecz_math_max_i8);
+                abi.checkFnSignature(Self.min, c.codecz_math_min_i8);
+                abi.checkFnSignature(Self.isSorted, c.codecz_math_isSorted_i8);
+                abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_i8);
+                abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_i8);
+            } else if (T == i16) {
+                abi.checkFnSignature(Self.max, c.codecz_math_max_i16);
+                abi.checkFnSignature(Self.min, c.codecz_math_min_i16);
+                abi.checkFnSignature(Self.isSorted, c.codecz_math_isSorted_i16);
+                abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_i16);
+                abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_i16);
+            } else if (T == i32) {
+                abi.checkFnSignature(Self.max, c.codecz_math_max_i32);
+                abi.checkFnSignature(Self.min, c.codecz_math_min_i32);
+                abi.checkFnSignature(Self.isSorted, c.codecz_math_isSorted_i32);
+                abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_i32);
+                abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_i32);
+            } else if (T == i64) {
+                abi.checkFnSignature(Self.max, c.codecz_math_max_i64);
+                abi.checkFnSignature(Self.min, c.codecz_math_min_i64);
+                abi.checkFnSignature(Self.isSorted, c.codecz_math_isSorted_i64);
+                abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_i64);
+                abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_i64);
+            } else if (T == f32) {
+                abi.checkFnSignature(Self.max, c.codecz_math_max_f32);
+                abi.checkFnSignature(Self.min, c.codecz_math_min_f32);
+                abi.checkFnSignature(Self.isSorted, c.codecz_math_isSorted_f32);
+                abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_f32);
+                abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_f32);
+            } else if (T == f64) {
+                abi.checkFnSignature(Self.max, c.codecz_math_max_f64);
+                abi.checkFnSignature(Self.min, c.codecz_math_min_f64);
+                abi.checkFnSignature(Self.isSorted, c.codecz_math_isSorted_f64);
+                abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_f64);
+                abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_f64);
+            } else {
+                @compileError(std.fmt.comptimePrint("SIMD Math: Unsupported type {}", .{@typeName(T)}));
+            }
         }
     };
 }
@@ -91,13 +160,15 @@ comptime {
                 .name = "codecz_ree_decode_" ++ @typeName(V) ++ "_" ++ @typeName(E),
                 .linkage = .Strong,
             });
+            wrapper.checkFnSignatures();
         }
     }
 }
 
 fn RunEndWrapper(comptime V: type, comptime E: type) type {
     return struct {
-        const codec = codecs.RunEnd(V, E, Alignment);
+        const Self = @This();
+        const codec = encodings.RunEnd(V, E, Alignment);
 
         pub fn encode(elems: [*c]V, elems_len: usize, values_buf: ByteBuffer, runends_buf: ByteBuffer) callconv(.C) TwoBufferResult {
             const values: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, values_buf.bytes()));
@@ -168,6 +239,36 @@ fn RunEndWrapper(comptime V: type, comptime E: type) type {
                 };
             }
         }
+
+        pub fn checkFnSignatures() void {
+            if (V == u8 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_u8_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_u8_u32);
+            } else if (V == u16 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_u16_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_u16_u32);
+            } else if (V == u32 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_u32_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_u32_u32);
+            } else if (V == u64 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_u64_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_u64_u32);
+            } else if (V == i8 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_i8_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_i8_u32);
+            } else if (V == i16 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_i16_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_i16_u32);
+            } else if (V == i32 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_i32_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_i32_u32);
+            } else if (V == i64 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_i64_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_i64_u32);
+            } else {
+                @compileError(std.fmt.comptimePrint("REE: Unsupported type pair {s} and {s}", .{ @typeName(V), @typeName(E) }));
+            }
+        }
     };
 }
 
@@ -175,7 +276,7 @@ fn RunEndWrapper(comptime V: type, comptime E: type) type {
 // Adaptive Lossless Floating Point Encoding
 //
 comptime {
-    abiTypes.checkABI(AlpExponents, c.AlpExponents_t);
+    abi.checkStructABI(AlpExponents, c.AlpExponents_t);
     for (FloatTypes) |F| {
         const wrapper = ALPWrapper(F);
         @export(wrapper.sampleFindExponents, std.builtin.ExportOptions{
@@ -190,12 +291,14 @@ comptime {
             .name = "codecz_alp_decode_" ++ @typeName(F),
             .linkage = .Strong,
         });
+        wrapper.checkFnSignatures();
     }
 }
 
 fn ALPWrapper(comptime F: type) type {
     return struct {
-        const codec = codecs.AdaptiveLosslessFloatingPoint(F);
+        const Self = @This();
+        const codec = encodings.AdaptiveLosslessFloatingPoint(F);
 
         pub fn sampleFindExponents(elems: [*c]F, elems_len: usize) callconv(.C) AlpExponentsResult {
             if (codec.sampleFindExponents(elems[0..elems_len])) |exponents| {
@@ -218,6 +321,7 @@ fn ALPWrapper(comptime F: type) type {
             enc_buf: ByteBuffer,
             exc_idx_buf: ByteBuffer,
         ) callconv(.C) TwoBufferResult {
+            std.debug.print("wrapper.encode: elems_len = {}, exp.e = {}, exp.f = {}\n", .{ elems_len, exp.e, exp.f });
             const values: []align(Alignment) codec.EncInt = @alignCast(std.mem.bytesAsSlice(codec.EncInt, enc_buf.bytes()));
             var exc_idx = std.PackedIntSlice(u1){
                 .bytes = exc_idx_buf.bytes(),
@@ -284,5 +388,46 @@ fn ALPWrapper(comptime F: type) type {
                 };
             }
         }
+
+        pub fn checkFnSignatures() void {
+            if (F == f32) {
+                abi.checkFnSignature(Self.sampleFindExponents, c.codecz_alp_sampleFindExponents_f32);
+                abi.checkFnSignature(Self.encode, c.codecz_alp_encode_f32);
+                abi.checkFnSignature(Self.decode, c.codecz_alp_decode_f32);
+            } else if (F == f64) {
+                abi.checkFnSignature(Self.sampleFindExponents, c.codecz_alp_sampleFindExponents_f64);
+                abi.checkFnSignature(Self.encode, c.codecz_alp_encode_f64);
+                abi.checkFnSignature(Self.decode, c.codecz_alp_decode_f64);
+            } else {
+                @compileError(std.fmt.comptimePrint("ALP: unsupported type {}", .{@typeName(F)}));
+            }
+        }
     };
+}
+
+const stack_trace_frames = 10;
+var stack_address: [stack_trace_frames]usize = [_]usize{0} ** stack_trace_frames;
+
+pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
+    const stderr = std.io.getStdErr().writer();
+    if (error_return_trace) |trace| {
+        stderr.print("\nError return trace:\n", .{}) catch {};
+        std.debug.dumpStackTrace(trace.*);
+    }
+
+    stderr.print("\nCurrent stack trace:\n", .{}) catch {};
+    std.debug.dumpCurrentStackTrace(ret_addr);
+
+    stderr.print("\nManually collected stack trace:\n", .{}) catch {};
+    @memset(&stack_address, 0);
+    const first_trace_addr = ret_addr orelse @returnAddress();
+    var stack_trace = std.builtin.StackTrace{
+        .instruction_addresses = &stack_address,
+        .index = 0,
+    };
+    std.debug.captureStackTrace(first_trace_addr, &stack_trace);
+    std.debug.dumpStackTrace(stack_trace);
+
+    stderr.print("\nDelegating to std.debug.panicImpl with message: {s}\n", .{msg}) catch {};
+    std.debug.panicImpl(error_return_trace, ret_addr, msg);
 }

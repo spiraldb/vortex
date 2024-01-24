@@ -100,16 +100,13 @@ test "alp encoding" {
     try std.testing.expectEqual(encoded.secondBuffer.inputBytesUsed, bitsetOut.len * @sizeOf(u8));
     try std.testing.expectEqual(encoded.secondBuffer.numElements, 1); // in this case, this is num exceptions
 
-    const values = [_]i64{
-        1_000_000,
-        1_100_000,
-        1_110_000,
-        2_730_000,
-        3_141_590,
-        42_000_001,
-        400_000_120_000,
-        -1_234_560,
-        4_123_458,
+    const values = blk: {
+        var values_: [floats.len]i64 = undefined;
+        const pow: f64 = @floatFromInt(std.math.pow(usize, 10, exponents.e - exponents.f));
+        for (0..floats.len) |i| {
+            values_[i] = @intFromFloat(@round(floats[i] * pow));
+        }
+        break :blk values_;
     };
     try std.testing.expectEqualSlices(i64, &values, valuesOut);
 
@@ -136,4 +133,6 @@ test "alp encoding" {
     try std.testing.expectEqual(decoded.buffer.inputBytesUsed, decodeOut.len * @sizeOf(f64));
     try std.testing.expectEqual(decoded.buffer.numElements, floats.len);
     try std.testing.expectEqualSlices(f64, floats[0 .. floats.len - 1], decodeOut[0 .. decodeOut.len - 1]);
+    // last one doesn't round trip, but it's close
+    try std.testing.expectApproxEqAbs(floats[floats.len - 1], decodeOut[decodeOut.len - 1], 1e-6);
 }
