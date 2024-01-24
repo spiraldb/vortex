@@ -1,18 +1,16 @@
-use std::iter;
 use std::sync::{Arc, RwLock};
-
-use arrow::array::cast::AsArray;
-use arrow::array::types::UInt8Type;
-use arrow::array::{ArrayRef, StringBuilder};
+use std::{iter, mem};
 
 use crate::array::stats::{Stats, StatsSet};
+use crate::array::varbin::BinaryArray;
 use crate::array::{Array, ArrayEncoding, ArrowIterator};
 use crate::arrow::CombineChunks;
 use crate::error::EncResult;
-use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
+use crate::scalar::Scalar;
 use crate::types::{DType, IntWidth, Signedness};
-
-mod stats;
+use arrow::array::cast::AsArray;
+use arrow::array::types::UInt8Type;
+use arrow::array::{ArrayRef, BinaryBuilder, StringBuilder};
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
@@ -56,43 +54,14 @@ union BinaryView {
 
 impl BinaryView {
     #[inline]
-    pub fn from_le_bytes(bytes: &[u8]) -> BinaryView {
-        let size = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
-        if size > 12 {
-            BinaryView {
-                _ref: Ref {
-                    size,
-                    prefix: bytes[4..8].try_into().unwrap(),
-                    buffer_index: u32::from_le_bytes(bytes[8..12].try_into().unwrap()),
-                    offset: u32::from_le_bytes(bytes[12..16].try_into().unwrap()),
-                },
-            }
-        } else {
-            BinaryView {
-                inlined: Inlined {
-                    size,
-                    data: bytes[4..16].try_into().unwrap(),
-                },
-            }
-        }
+    pub fn from_le_bytes(bytes: [u8; 16]) -> BinaryView {
+        unsafe { mem::transmute(bytes) }
     }
 
     #[inline]
-    #[allow(clippy::wrong_self_convention)]
     #[allow(dead_code)]
-    pub fn to_le_bytes(&self) -> [u8; 16] {
-        let mut bytes: [u8; 16] = [0; 16];
-        unsafe {
-            bytes[0..4].copy_from_slice(&self.inlined.size.to_le_bytes());
-            if self.inlined.size > 12 {
-                bytes[4..8].copy_from_slice(&self._ref.prefix);
-                bytes[8..12].copy_from_slice(&self._ref.buffer_index.to_le_bytes());
-                bytes[12..16].copy_from_slice(&self._ref.offset.to_le_bytes());
-            } else {
-                bytes[4..16].copy_from_slice(&self.inlined.data);
-            }
-        }
-        bytes
+    pub fn to_le_bytes(self) -> [u8; 16] {
+        unsafe { mem::transmute(self) }
     }
 }
 
@@ -145,9 +114,37 @@ impl VarBinViewArray {
             .slice(index * VIEW_SIZE, (index + 1) * VIEW_SIZE)
             .unwrap()
             .iter_arrow()
-            .combine_chunks();
-        let view_vec = view_slice.as_primitive::<UInt8Type>().values().to_vec();
-        BinaryView::from_le_bytes(&view_vec)
+            .next()
+            .unwrap();
+        let view_vec: &[u8] = view_slice.as_primitive::<UInt8Type>().values();
+        BinaryView::from_le_bytes(view_vec.try_into().unwrap())
+    }
+}
+
+impl BinaryArray for VarBinViewArray {
+    fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+        let view = self.view_at(index);
+        unsafe {
+            if view.inlined.size > 12 {
+                let arrow_data_buffer = self
+                    .data
+                    .get(view._ref.buffer_index as usize)
+                    .unwrap()
+                    .slice(
+                        view._ref.offset as usize,
+                        (view._ref.size + view._ref.offset) as usize,
+                    )?
+                    .iter_arrow()
+                    .combine_chunks();
+
+                Ok(arrow_data_buffer
+                    .as_primitive::<UInt8Type>()
+                    .values()
+                    .to_vec())
+            } else {
+                Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
+            }
+        }
     }
 }
 
@@ -173,51 +170,35 @@ impl ArrayEncoding for VarBinViewArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        let view = self.view_at(index);
-        unsafe {
-            let value_bytes = if view.inlined.size > 12 {
-                let arrow_data_buffer = self
-                    .data
-                    .get(view._ref.buffer_index as usize)
-                    .unwrap()
-                    .slice(
-                        view._ref.offset as usize,
-                        (view._ref.size + view._ref.offset) as usize,
-                    )?
-                    .iter_arrow()
-                    .combine_chunks();
-
-                arrow_data_buffer
-                    .as_primitive::<UInt8Type>()
-                    .values()
-                    .to_vec()
-            } else {
-                view.inlined.data[..view.inlined.size as usize].to_vec()
-            };
-
+        self.bytes_at(index).map(|bytes| {
             if matches!(self.dtype, DType::Utf8) {
-                Ok(Utf8Scalar::new(String::from_utf8_unchecked(value_bytes)).boxed())
+                unsafe { String::from_utf8_unchecked(bytes) }.into()
             } else {
-                Ok(BinaryScalar::new(value_bytes).boxed())
+                bytes.into()
             }
-        }
+        })
     }
 
     // TODO(robert): This could be better if we had compute dispatch but for now it's using scalar_at
     // and wraps values needlessly instead of memcopy
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let mut data_buf = StringBuilder::with_capacity(self.len(), self.plain_size());
-        for i in 0..self.views.len() / VIEW_SIZE {
-            data_buf.append_value(
-                self.scalar_at(i)
-                    .unwrap()
-                    .as_any()
-                    .downcast_ref::<Utf8Scalar>()
-                    .unwrap()
-                    .value(),
-            );
-        }
-        let data_arr: ArrayRef = Arc::new(data_buf.finish());
+        let data_arr: ArrayRef = if matches!(self.dtype, DType::Utf8) {
+            let mut data_buf = StringBuilder::with_capacity(self.len(), self.plain_size());
+            for i in 0..self.views.len() / VIEW_SIZE {
+                unsafe {
+                    data_buf.append_value(std::str::from_utf8_unchecked(
+                        self.bytes_at(i).unwrap().as_slice(),
+                    ));
+                }
+            }
+            Arc::new(data_buf.finish())
+        } else {
+            let mut data_buf = BinaryBuilder::with_capacity(self.len(), self.plain_size());
+            for i in 0..self.views.len() / VIEW_SIZE {
+                data_buf.append_value(self.bytes_at(i).unwrap())
+            }
+            Arc::new(data_buf.finish())
+        };
         Box::new(iter::once(data_arr))
     }
 
@@ -238,6 +219,7 @@ mod test {
     use arrow::array::GenericStringArray as ArrowStringArray;
 
     use crate::array::primitive::PrimitiveArray;
+    use crate::scalar::Utf8Scalar;
 
     use super::*;
 
