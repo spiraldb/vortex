@@ -34,12 +34,15 @@ pub fn build(b: *std.Build) void {
     const zimd = b.addModule("zimd", .{
         .source_file = .{ .path = "zig/zimd/zimd.zig" },
     });
+
+    // test zimd
     const zimd_test = b.addTest(.{
         .root_source_file = .{ .path = "zig/zimd/zimd.zig" },
         .target = target,
         .optimize = optimize,
         .filter = filter_test,
     });
+    zimd_test.addModule("zimd", zimd);
     const zimd_test_run = b.addRunArtifact(zimd_test);
     test_step.dependOn(&zimd_test_run.step);
 
@@ -58,6 +61,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // test codecs
     const codecz_test = b.addTest(.{
         .root_source_file = .{ .path = "zig/codecz/codecz.zig" },
         .target = target,
@@ -70,7 +74,6 @@ pub fn build(b: *std.Build) void {
     codecz_test.addModule("zimd", zimd);
     codecz_test.addIncludePath(.{ .path = "zig/c-abi" });
     dependencyTracy(codecz_test);
-
     const codecz_test_run = b.addRunArtifact(codecz_test);
     test_step.dependOn(&codecz_test_run.step);
 
@@ -94,13 +97,14 @@ pub fn build(b: *std.Build) void {
     lib_step.bundle_compiler_rt = true;
     b.installArtifact(lib_step);
 
-    // test the static library from Zig
+    // but also test invoking the static library from Zig
     const lib_test = b.addTest(.{
         .root_source_file = .{ .path = "zig/c-abi/test_wrapper.zig" },
         .target = target,
         .optimize = optimize,
         .filter = filter_test,
     });
+    lib_test.addModule("abi", c_abi_types);
     lib_test.addIncludePath(.{ .path = "zig/c-abi" });
     lib_test.linkLibrary(lib_step);
 

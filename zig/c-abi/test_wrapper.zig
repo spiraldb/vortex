@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const abi = @import("abi");
 
 const c = @cImport({
     @cInclude("wrapper.h");
@@ -73,11 +74,17 @@ test "alp encoding" {
 
     const valuesOut: []align(128) i64 = try gpa.alignedAlloc(i64, c.SPIRAL_ALIGNMENT, floats.len);
     defer gpa.free(valuesOut);
-    const valuesBuf = c.ByteBuffer_t{ .ptr = @ptrCast(valuesOut.ptr), .len = valuesOut.len * @sizeOf(i64) };
+    const valuesBuf = blk: {
+        const buf = c.ByteBuffer_t{ .ptr = @ptrCast(valuesOut.ptr), .len = valuesOut.len * @sizeOf(i64) };
+        break :blk try abi.ByteBuffer.from(buf);
+    };
 
     const bitsetOut: []align(128) u8 = try gpa.alignedAlloc(u8, c.SPIRAL_ALIGNMENT, (floats.len + 7) / 8);
     defer gpa.free(bitsetOut);
-    const bitsetBuf = c.ByteBuffer_t{ .ptr = @ptrCast(bitsetOut.ptr), .len = bitsetOut.len * @sizeOf(u8) };
+    const bitsetBuf = blk: {
+        const buf = c.ByteBuffer_t{ .ptr = @ptrCast(bitsetOut.ptr), .len = bitsetOut.len * @sizeOf(u8) };
+        break :blk try abi.ByteBuffer.from(buf);
+    };
 
     const expResult = c.codecz_alp_sampleFindExponents_f64(@ptrCast(&floats), floats.len);
     try std.testing.expect(expResult.status == c.Ok);
@@ -85,8 +92,14 @@ test "alp encoding" {
     try std.testing.expectEqual(exponents.e, 8);
     try std.testing.expectEqual(exponents.f, 2);
 
-    const encoded = c.codecz_alp_encode_f64(@ptrCast(&floats), floats.len, exponents, valuesBuf, bitsetBuf);
-    try std.testing.expectEqual(encoded.status, c.Ok);
+    const encoded = try abi.TwoBufferResult.from(c.codecz_alp_encode_f64(
+        @ptrCast(&floats),
+        floats.len,
+        exponents,
+        valuesBuf.into(),
+        bitsetBuf.into(),
+    ));
+    try std.testing.expectEqual(encoded.status, abi.ResultStatus.Ok);
 
     try std.testing.expectEqualDeep(encoded.firstBuffer.buffer, valuesBuf);
     try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.firstBuffer.buffer.ptr), 128));
@@ -122,10 +135,18 @@ test "alp encoding" {
 
     const decodeOut: []align(128) f64 = try gpa.alignedAlloc(f64, c.SPIRAL_ALIGNMENT, floats.len);
     defer gpa.free(decodeOut);
-    const decodeBuf = c.ByteBuffer_t{ .ptr = @ptrCast(decodeOut.ptr), .len = decodeOut.len * @sizeOf(f64) };
+    const decodeBuf = blk: {
+        const buf = c.ByteBuffer_t{ .ptr = @ptrCast(decodeOut.ptr), .len = decodeOut.len * @sizeOf(f64) };
+        break :blk try abi.ByteBuffer.from(buf);
+    };
 
-    const decoded = c.codecz_alp_decode_f64(@ptrCast(valuesOut.ptr), valuesOut.len, exponents, decodeBuf);
-    try std.testing.expectEqual(decoded.status, c.Ok);
+    const decoded = try abi.OneBufferResult.from(c.codecz_alp_decode_f64(
+        @ptrCast(valuesOut.ptr),
+        valuesOut.len,
+        exponents,
+        decodeBuf.into(),
+    ));
+    try std.testing.expectEqual(decoded.status, abi.ResultStatus.Ok);
 
     try std.testing.expectEqualDeep(decoded.buffer.buffer, decodeBuf);
     try std.testing.expect(std.mem.isAligned(@intFromPtr(decoded.buffer.buffer.ptr), 128));
