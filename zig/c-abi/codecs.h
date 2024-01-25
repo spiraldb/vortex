@@ -81,6 +81,16 @@ TwoBufferResult_t codecz_alp_encode_f64(double const *const ptr, uint64_t const 
 OneBufferResult_t codecz_alp_decode_f32(int32_t const *const ptr, uint64_t const len, AlpExponents_t exponents, ByteBuffer_t out);
 OneBufferResult_t codecz_alp_decode_f64(int64_t const *const ptr, uint64_t const len, AlpExponents_t exponents, ByteBuffer_t out);
 
+// ZigZag Encoding
+OneBufferResult_t codecz_zz_encode_i8(int8_t const *const ptr, uint64_t const len, ByteBuffer_t out);
+OneBufferResult_t codecz_zz_encode_i16(int16_t const *const ptr, uint64_t const len, ByteBuffer_t out);
+OneBufferResult_t codecz_zz_encode_i32(int32_t const *const ptr, uint64_t const len, ByteBuffer_t out);
+OneBufferResult_t codecz_zz_encode_i64(int64_t const *const ptr, uint64_t const len, ByteBuffer_t out);
+OneBufferResult_t codecz_zz_decode_i8(uint8_t const *const ptr, uint64_t const len, ByteBuffer_t out);
+OneBufferResult_t codecz_zz_decode_i16(uint16_t const *const ptr, uint64_t const len, ByteBuffer_t out);
+OneBufferResult_t codecz_zz_decode_i32(uint32_t const *const ptr, uint64_t const len, ByteBuffer_t out);
+OneBufferResult_t codecz_zz_decode_i64(uint64_t const *const ptr, uint64_t const len, ByteBuffer_t out);
+
 #if defined(__cplusplus)
 } // extern "C"
 #endif

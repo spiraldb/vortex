@@ -19,7 +19,9 @@ const OneBufferResult = abi.OneBufferResult;
 const TwoBufferResult = abi.TwoBufferResult;
 const AlpExponentsResult = abi.AlpExponentsResult;
 
-const IntegerTypes = [_]type{ u8, u16, u32, u64, i8, i16, i32, i64 };
+const UnsignedIntegerTypes = [_]type{ u8, u16, u32, u64 };
+const SignedIntegerTypes = [_]type{ i8, i16, i32, i64 };
+const IntegerTypes = UnsignedIntegerTypes ++ SignedIntegerTypes;
 const SizeTypes = [_]type{u32};
 const FloatTypes = [_]type{ f32, f64 };
 const NumberTypes = IntegerTypes ++ FloatTypes;
@@ -405,6 +407,103 @@ fn ALPWrapper(comptime F: type) type {
     };
 }
 
+//
+// ZigZag Encoding
+//
+comptime {
+    for (SignedIntegerTypes) |V| {
+        const wrapper = ZigZagWrapper(V);
+        @export(wrapper.encode, std.builtin.ExportOptions{
+            .name = "codecz_zz_encode_" ++ @typeName(V),
+            .linkage = .Strong,
+        });
+        @export(wrapper.decode, std.builtin.ExportOptions{
+            .name = "codecz_zz_decode_" ++ @typeName(V),
+            .linkage = .Strong,
+        });
+        wrapper.checkFnSignatures();
+    }
+}
+
+fn ZigZagWrapper(comptime V: type) type {
+    return struct {
+        const Self = @This();
+        const codec = encodings.ZigZag(V);
+        const U = codec.Unsigned;
+
+        pub fn encode(elems: [*c]V, elems_len: usize, out: ByteBuffer) callconv(.C) OneBufferResult {
+            const outSlice: []align(Alignment) U = @alignCast(std.mem.bytesAsSlice(U, out.bytes()));
+            if (codec.encode(elems[0..elems_len], outSlice)) {
+                return OneBufferResult{
+                    .status = ResultStatus.Ok,
+                    .buffer = WrittenBuffer{
+                        .buffer = out,
+                        .bitSizePerElement = @bitSizeOf(U),
+                        .inputBytesUsed = std.mem.sliceAsBytes(outSlice[0..elems_len]).len,
+                        .numElements = elems_len,
+                    },
+                };
+            } else |err| {
+                return OneBufferResult{
+                    .status = ResultStatus.fromCodecError(err),
+                    .buffer = WrittenBuffer{
+                        .buffer = out,
+                        .bitSizePerElement = @bitSizeOf(U),
+                        .inputBytesUsed = 0,
+                        .numElements = 0,
+                    },
+                };
+            }
+        }
+
+        pub fn decode(input: [*c]U, input_len: usize, out: ByteBuffer) callconv(.C) OneBufferResult {
+            const outSlice: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, out.bytes()));
+            if (codec.decode(input[0..input_len], outSlice)) {
+                return OneBufferResult{
+                    .status = ResultStatus.Ok,
+                    .buffer = WrittenBuffer{
+                        .buffer = out,
+                        .bitSizePerElement = @bitSizeOf(V),
+                        .inputBytesUsed = std.mem.sliceAsBytes(outSlice[0..input_len]).len,
+                        .numElements = input_len,
+                    },
+                };
+            } else |err| {
+                return OneBufferResult{
+                    .status = ResultStatus.fromCodecError(err),
+                    .buffer = WrittenBuffer{
+                        .buffer = out,
+                        .bitSizePerElement = @bitSizeOf(V),
+                        .inputBytesUsed = 0,
+                        .numElements = 0,
+                    },
+                };
+            }
+        }
+
+        pub fn checkFnSignatures() void {
+            if (V == i8) {
+                abi.checkFnSignature(Self.encode, c.codecz_zz_encode_i8);
+                abi.checkFnSignature(Self.decode, c.codecz_zz_decode_i8);
+            } else if (V == i16) {
+                abi.checkFnSignature(Self.encode, c.codecz_zz_encode_i16);
+                abi.checkFnSignature(Self.decode, c.codecz_zz_decode_i16);
+            } else if (V == i32) {
+                abi.checkFnSignature(Self.encode, c.codecz_zz_encode_i32);
+                abi.checkFnSignature(Self.decode, c.codecz_zz_decode_i32);
+            } else if (V == i64) {
+                abi.checkFnSignature(Self.encode, c.codecz_zz_encode_i64);
+                abi.checkFnSignature(Self.decode, c.codecz_zz_decode_i64);
+            } else {
+                @compileError(std.fmt.comptimePrint("ZigZag: unsupported type {}", .{@typeName(V)}));
+            }
+        }
+    };
+}
+
+//
+// custom panic handler
+//
 const stack_trace_frames = 10;
 var stack_address: [stack_trace_frames]usize = [_]usize{0} ** stack_trace_frames;
 

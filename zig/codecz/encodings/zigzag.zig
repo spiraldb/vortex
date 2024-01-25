@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const CodecError = @import("abi").CodecError;
 
 pub fn ZigZag(comptime V: type) type {
     if (@typeInfo(V) != .Int or @typeInfo(V).Int.signedness != .signed) {
@@ -13,15 +14,18 @@ pub fn ZigZag(comptime V: type) type {
 
         const shift_for_sign_bit = @bitSizeOf(V) - 1;
 
-        pub fn encode(elems: []const V, out: []U) void {
+        pub fn encode(elems: []const V, out: []U) CodecError!void {
+            if (out.len < elems.len) {
+                return CodecError.OutputBufferTooSmall;
+            }
             for (elems, out) |elem, *o| {
                 o.* = encode_single(elem);
             }
         }
 
-        pub fn encodeAlloc(allocator: std.mem.Allocator, elems: []const V) ![]const U {
+        pub fn encodeAlloc(allocator: std.mem.Allocator, elems: []const V) CodecError![]const U {
             const out = try allocator.alloc(U, elems.len);
-            encode(elems, out);
+            try encode(elems, out);
             return out;
         }
 
@@ -29,15 +33,18 @@ pub fn ZigZag(comptime V: type) type {
             return @bitCast((val +% val) ^ (val >> shift_for_sign_bit));
         }
 
-        pub fn decode(encoded: []const U, out: []V) void {
+        pub fn decode(encoded: []const U, out: []V) CodecError!void {
+            if (out.len < encoded.len) {
+                return CodecError.OutputBufferTooSmall;
+            }
             for (encoded, out) |elem, *o| {
                 o.* = decode_single(elem);
             }
         }
 
-        pub fn decodeAlloc(allocator: std.mem.Allocator, encoded: []const U) ![]const V {
+        pub fn decodeAlloc(allocator: std.mem.Allocator, encoded: []const U) CodecError![]const V {
             const out = try allocator.alloc(V, encoded.len);
-            decode(encoded, out);
+            try decode(encoded, out);
             return out;
         }
 
@@ -84,7 +91,7 @@ test "zigzag benchmark" {
         defer ally.free(encoded);
 
         var timer = try std.time.Timer.start();
-        zz.encode(values, encoded);
+        try zz.encode(values, encoded);
         const encode_ns = timer.lap();
         std.debug.print("ZIGZAG ENCODE: {} million ints per second ({}ms)\n", .{ 1000 * N / (encode_ns + 1), encode_ns / 1_000_000 });
 
@@ -92,7 +99,7 @@ test "zigzag benchmark" {
         defer ally.free(decoded);
 
         timer.reset();
-        zz.decode(encoded, decoded);
+        try zz.decode(encoded, decoded);
         const decode_ns = timer.lap();
         std.debug.print("ZIGZAG DECODE: {} million ints per second ({}ms)\n", .{ 1000 * N / (decode_ns + 1), decode_ns / 1_000_000 });
 
