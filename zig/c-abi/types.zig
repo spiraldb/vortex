@@ -59,7 +59,7 @@ pub const ByteBuffer = extern struct {
     len: u64,
 
     pub fn from(cbb: c.ByteBuffer_t) CodecError!ByteBuffer {
-        if (!std.mem.isAligned(cbb.ptr, Alignment)) {
+        if (!std.mem.isAligned(@intFromPtr(cbb.ptr), Alignment)) {
             return CodecError.IncorrectAlignment;
         }
         return @bitCast(cbb);
@@ -81,7 +81,7 @@ pub const WrittenBuffer = extern struct {
     inputBytesUsed: u64,
 
     pub fn from(cwb: c.WrittenBuffer_t) CodecError!WrittenBuffer {
-        _ = try ByteBuffer.cast(&cwb.buffer);
+        _ = try ByteBuffer.from(cwb.buffer);
         return @bitCast(cwb);
     }
 
@@ -95,7 +95,7 @@ pub const OneBufferResult = extern struct {
     buffer: WrittenBuffer,
 
     pub fn from(cobr: c.OneBufferResult_t) CodecError!OneBufferResult {
-        _ = try WrittenBuffer.cast(&cobr.buffer);
+        _ = try WrittenBuffer.from(cobr.buffer);
         return @bitCast(cobr);
     }
 
@@ -110,8 +110,8 @@ pub const TwoBufferResult = extern struct {
     secondBuffer: WrittenBuffer,
 
     pub fn from(ctbr: c.TwoBufferResult_t) CodecError!TwoBufferResult {
-        _ = try WrittenBuffer.cast(&ctbr.firstBuffer);
-        _ = try WrittenBuffer.cast(&ctbr.secondBuffer);
+        _ = try WrittenBuffer.from(ctbr.firstBuffer);
+        _ = try WrittenBuffer.from(ctbr.secondBuffer);
         return @bitCast(ctbr);
     }
 
@@ -126,8 +126,8 @@ pub const AlpExponentsResult = extern struct {
     status: ResultStatus,
     exponents: AlpExponents,
 
-    pub fn from(caer: c.AlpExponentsResult_t) AlpExponentsResult {
-        return @bitCast(caer);
+    pub fn from(exp: c.AlpExponentsResult_t) AlpExponentsResult {
+        return @bitCast(exp);
     }
 
     pub fn into(self: AlpExponentsResult) c.AlpExponentsResult_t {
