@@ -32,7 +32,7 @@ comptime {
     }
     if (@bitSizeOf(usize) != @bitSizeOf(c.expected_zig_usize_t)) {
         @compileError(std.fmt.comptimePrint(
-            "Mismatch between usize ({} bits) and the C ABI's uintptr_t ({} bits)",
+            "Mismatch between zig's usize ({} bits) and the C ABI's expected size type ({} bits)",
             .{ @bitSizeOf(usize), @bitSizeOf(c.expected_zig_usize_t) },
         ));
     }

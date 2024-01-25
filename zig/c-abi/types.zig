@@ -42,9 +42,21 @@ pub const ResultStatus = enum(c.ResultStatus_t) {
             return ResultStatus.UnknownCodecError;
         }
     }
+
+    pub fn from(crs: c.ResultStatus_t) ResultStatus {
+        return @enumFromInt(crs);
+    }
 };
 
 test "result status" {
+    try std.testing.expectEqual(ResultStatus.Ok, ResultStatus.from(c.Ok));
+    try std.testing.expectEqual(ResultStatus.InvalidInput, ResultStatus.from(c.InvalidInput));
+    try std.testing.expectEqual(ResultStatus.IncorrectAlignment, ResultStatus.from(c.IncorrectAlignment));
+    try std.testing.expectEqual(ResultStatus.EncodingFailed, ResultStatus.from(c.EncodingFailed));
+    try std.testing.expectEqual(ResultStatus.OutputBufferTooSmall, ResultStatus.from(c.OutputBufferTooSmall));
+    try std.testing.expectEqual(ResultStatus.OutOfMemory, ResultStatus.from(c.OutOfMemory));
+    try std.testing.expectEqual(ResultStatus.UnknownCodecError, ResultStatus.from(c.UnknownCodecError));
+
     try std.testing.expectEqual(c.Ok, @intFromEnum(ResultStatus.Ok));
     try std.testing.expectEqual(c.InvalidInput, @intFromEnum(ResultStatus.InvalidInput));
     try std.testing.expectEqual(c.IncorrectAlignment, @intFromEnum(ResultStatus.IncorrectAlignment));
@@ -52,11 +64,32 @@ test "result status" {
     try std.testing.expectEqual(c.OutputBufferTooSmall, @intFromEnum(ResultStatus.OutputBufferTooSmall));
     try std.testing.expectEqual(c.OutOfMemory, @intFromEnum(ResultStatus.OutOfMemory));
     try std.testing.expectEqual(c.UnknownCodecError, @intFromEnum(ResultStatus.UnknownCodecError));
+
+    try std.testing.expectEqual(ResultStatus.InvalidInput, ResultStatus.fromCodecError(CodecError.InvalidInput));
+    try std.testing.expectEqual(ResultStatus.IncorrectAlignment, ResultStatus.fromCodecError(CodecError.IncorrectAlignment));
+    try std.testing.expectEqual(ResultStatus.EncodingFailed, ResultStatus.fromCodecError(CodecError.EncodingFailed));
+    try std.testing.expectEqual(ResultStatus.OutputBufferTooSmall, ResultStatus.fromCodecError(CodecError.OutputBufferTooSmall));
+    try std.testing.expectEqual(ResultStatus.OutOfMemory, ResultStatus.fromCodecError(CodecError.OutOfMemory));
 }
 
 pub const ByteBuffer = extern struct {
     ptr: [*c]align(Alignment) u8,
     len: u64,
+
+    pub fn initFromSlice(slice: anytype) ByteBuffer {
+        const sliceBytes = std.mem.sliceAsBytes(slice);
+        if (@typeInfo(@TypeOf(sliceBytes)).Pointer.alignment != Alignment) {
+            @compileError(std.fmt.comptimePrint("ByteBuffer.initFromSlice called with slice that is not aligned to {}", .{Alignment}));
+        }
+        return initFromBytes(sliceBytes);
+    }
+
+    pub fn initFromBytes(sliceBytes: []align(Alignment) u8) ByteBuffer {
+        return ByteBuffer{
+            .ptr = @ptrCast(sliceBytes.ptr),
+            .len = @intCast(sliceBytes.len),
+        };
+    }
 
     pub fn from(cbb: c.ByteBuffer_t) CodecError!ByteBuffer {
         if (!std.mem.isAligned(@intFromPtr(cbb.ptr), Alignment)) {
@@ -69,7 +102,7 @@ pub const ByteBuffer = extern struct {
         return @bitCast(self);
     }
 
-    pub fn bytes(self: *const ByteBuffer) []u8 {
+    pub fn bytes(self: *const ByteBuffer) []align(Alignment) u8 {
         return self.ptr[0..self.len];
     }
 };
@@ -79,6 +112,15 @@ pub const WrittenBuffer = extern struct {
     bitSizePerElement: u8,
     numElements: u64,
     inputBytesUsed: u64,
+
+    pub fn init(comptime T: type, buffer: ByteBuffer, numElements: usize, inputBytesUsed: usize) WrittenBuffer {
+        return WrittenBuffer{
+            .buffer = buffer,
+            .bitSizePerElement = @bitSizeOf(T),
+            .numElements = @intCast(numElements),
+            .inputBytesUsed = @intCast(inputBytesUsed),
+        };
+    }
 
     pub fn from(cwb: c.WrittenBuffer_t) CodecError!WrittenBuffer {
         _ = try ByteBuffer.from(cwb.buffer);
@@ -102,6 +144,20 @@ pub const OneBufferResult = extern struct {
     pub fn into(self: OneBufferResult) c.OneBufferResult_t {
         return @bitCast(self);
     }
+
+    pub fn ok(buffer: WrittenBuffer) OneBufferResult {
+        return OneBufferResult{
+            .status = ResultStatus.Ok,
+            .buffer = buffer,
+        };
+    }
+
+    pub fn err(err_: CodecError, buffer: WrittenBuffer) OneBufferResult {
+        return OneBufferResult{
+            .status = ResultStatus.fromCodecError(err_),
+            .buffer = buffer,
+        };
+    }
 };
 
 pub const TwoBufferResult = extern struct {
@@ -118,9 +174,36 @@ pub const TwoBufferResult = extern struct {
     pub fn into(self: TwoBufferResult) c.TwoBufferResult_t {
         return @bitCast(self);
     }
+
+    pub fn ok(first: WrittenBuffer, second: WrittenBuffer) TwoBufferResult {
+        return TwoBufferResult{
+            .status = ResultStatus.Ok,
+            .firstBuffer = first,
+            .secondBuffer = second,
+        };
+    }
+
+    pub fn err(err_: CodecError, first: WrittenBuffer, second: WrittenBuffer) TwoBufferResult {
+        return TwoBufferResult{
+            .status = ResultStatus.fromCodecError(err_),
+            .firstBuffer = first,
+            .secondBuffer = second,
+        };
+    }
 };
 
-pub const AlpExponents = c.AlpExponents_t;
+pub const AlpExponents = extern struct {
+    e: u8 = 0,
+    f: u8 = 0,
+
+    pub fn from(exp: c.AlpExponents_t) AlpExponents {
+        return @bitCast(exp);
+    }
+
+    pub fn into(self: AlpExponents) c.AlpExponents_t {
+        return @bitCast(self);
+    }
+};
 
 pub const AlpExponentsResult = extern struct {
     status: ResultStatus,
@@ -132,6 +215,20 @@ pub const AlpExponentsResult = extern struct {
 
     pub fn into(self: AlpExponentsResult) c.AlpExponentsResult_t {
         return @bitCast(self);
+    }
+
+    pub fn ok(e: u8, f: u8) AlpExponentsResult {
+        return AlpExponentsResult{
+            .status = ResultStatus.Ok,
+            .exponents = AlpExponents{ .e = e, .f = f },
+        };
+    }
+
+    pub fn err(err_: CodecError) AlpExponentsResult {
+        return AlpExponentsResult{
+            .status = ResultStatus.fromCodecError(err_),
+            .exponents = AlpExponents{ .e = std.math.maxInt(u8), .f = std.math.maxInt(u8) },
+        };
     }
 };
 
@@ -227,6 +324,18 @@ fn checkABI(comptime name: []const u8, comptime zigType: type, comptime cType: t
                     .{ name, @typeName(zigType), zigTypeInfo.Pointer.alignment, Alignment },
                 ));
             }
+        }
+        if (zigTypeInfo.Pointer.size != cTypeInfo.Pointer.size) {
+            @compileError(std.fmt.comptimePrint(
+                "Mismatched size between zig {s} (type {s}, size {}) and C field of the same name (type {s}, size {})",
+                .{ name, @typeName(zigType), zigTypeInfo.Pointer.size, @typeName(cType), cTypeInfo.Pointer.size },
+            ));
+        }
+        if (zigTypeInfo.Pointer.address_space != cTypeInfo.Pointer.address_space) {
+            @compileError(std.fmt.comptimePrint(
+                "Mismatched address space between zig {s} (type {}, address_space {s}) and C field of the same name (type {s}, address_space {})",
+                .{ name, @typeName(zigType), zigTypeInfo.Pointer.address_space, @typeName(cType), cTypeInfo.Pointer.address_space },
+            ));
         }
     } else if (zigTypeInfo == .Int) {
         if (zigTypeInfo.Int.signedness != cTypeInfo.Int.signedness or zigTypeInfo.Int.bits != cTypeInfo.Int.bits) {
