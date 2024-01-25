@@ -24,38 +24,53 @@ test "alignment 128" {
 
 test "run end encoding" {
     const gpa = std.testing.allocator;
-    const ints = [_]i32{ 1, 1, 1, 2, 3, 4, 4, 5 };
+    const V = i32;
+    const ints = [_]V{ 1, 1, 1, 2, 3, 4, 4, 5 };
     const numRuns = 5;
 
-    const valuesOut: []align(128) i32 = try gpa.alignedAlloc(i32, c.SPIRAL_ALIGNMENT, 5);
+    const valuesOut: []align(128) V = try gpa.alignedAlloc(V, c.SPIRAL_ALIGNMENT, 5);
     defer gpa.free(valuesOut);
-    const valuesBuf = c.ByteBuffer_t{ .ptr = @ptrCast(valuesOut.ptr), .len = valuesOut.len * @sizeOf(i32) };
+    const valuesBuf = abi.ByteBuffer.initFromSlice(valuesOut);
 
     const runEndsOut: []align(128) u32 = try gpa.alignedAlloc(u32, c.SPIRAL_ALIGNMENT, 5);
     defer gpa.free(runEndsOut);
-    const runEndsBuf = c.ByteBuffer_t{ .ptr = @ptrCast(runEndsOut.ptr), .len = runEndsOut.len * @sizeOf(u32) };
+    const runEndsBuf = abi.ByteBuffer.initFromSlice(runEndsOut);
 
-    const result = c.codecz_ree_encode_i32_u32(@ptrCast(&ints), ints.len, valuesBuf, runEndsBuf);
+    const encoded = try abi.TwoBufferResult.from(c.codecz_ree_encode_i32_u32(@ptrCast(&ints), ints.len, valuesBuf.into(), runEndsBuf.into()));
 
-    try std.testing.expectEqual(result.status, c.Ok);
+    try std.testing.expectEqual(encoded.status, abi.ResultStatus.Ok);
 
-    try std.testing.expectEqualDeep(result.firstBuffer.buffer, valuesBuf);
-    try std.testing.expect(std.mem.isAligned(@intFromPtr(result.firstBuffer.buffer.ptr), 128));
-    try std.testing.expectEqual(result.firstBuffer.numElements, numRuns);
-    try std.testing.expectEqual(result.firstBuffer.bitSizePerElement, 32);
-    try std.testing.expectEqual(result.firstBuffer.inputBytesUsed, valuesOut.len * @sizeOf(i32));
+    try std.testing.expectEqualDeep(encoded.firstBuffer.buffer, valuesBuf);
+    try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.firstBuffer.buffer.ptr), 128));
+    try std.testing.expectEqual(encoded.firstBuffer.numElements, numRuns);
+    try std.testing.expectEqual(encoded.firstBuffer.bitSizePerElement, @bitSizeOf(V));
+    try std.testing.expectEqual(encoded.firstBuffer.inputBytesUsed, valuesOut.len * @sizeOf(V));
 
-    try std.testing.expectEqualDeep(result.secondBuffer.buffer, runEndsBuf);
-    try std.testing.expect(std.mem.isAligned(@intFromPtr(result.secondBuffer.buffer.ptr), 128));
-    try std.testing.expectEqual(result.secondBuffer.numElements, numRuns);
-    try std.testing.expectEqual(result.secondBuffer.bitSizePerElement, 32);
-    try std.testing.expectEqual(result.secondBuffer.inputBytesUsed, runEndsOut.len * @sizeOf(u32));
+    try std.testing.expectEqualDeep(encoded.secondBuffer.buffer, runEndsBuf);
+    try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.secondBuffer.buffer.ptr), 128));
+    try std.testing.expectEqual(encoded.secondBuffer.numElements, numRuns);
+    try std.testing.expectEqual(encoded.secondBuffer.bitSizePerElement, @bitSizeOf(V));
+    try std.testing.expectEqual(encoded.secondBuffer.inputBytesUsed, runEndsOut.len * @sizeOf(V));
 
-    const values = [_]i32{ 1, 2, 3, 4, 5 };
-    try std.testing.expectEqualSlices(i32, &values, valuesOut);
+    const values = [_]V{ 1, 2, 3, 4, 5 };
+    try std.testing.expectEqualSlices(V, &values, valuesOut);
 
     const runEnds = [_]u32{ 3, 4, 5, 7, 8 };
     try std.testing.expectEqualSlices(u32, &runEnds, runEndsOut);
+
+    const decodeOut: []align(128) V = try gpa.alignedAlloc(V, c.SPIRAL_ALIGNMENT, ints.len);
+    defer gpa.free(decodeOut);
+    const decodeBuf = abi.ByteBuffer.initFromSlice(decodeOut);
+
+    const decoded = try abi.OneBufferResult.from(c.codecz_ree_decode_i32_u32(valuesBuf.into(), runEndsBuf.into(), runEnds.len, decodeBuf.into()));
+    try std.testing.expectEqual(decoded.status, abi.ResultStatus.Ok);
+
+    try std.testing.expectEqualDeep(decoded.buffer.buffer, decodeBuf);
+    try std.testing.expect(std.mem.isAligned(@intFromPtr(decoded.buffer.buffer.ptr), 128));
+    try std.testing.expectEqual(decoded.buffer.numElements, ints.len);
+    try std.testing.expectEqual(decoded.buffer.bitSizePerElement, @bitSizeOf(V));
+    try std.testing.expectEqual(decoded.buffer.inputBytesUsed, decodeOut.len * @sizeOf(V));
+    try std.testing.expectEqualSlices(V, &ints, decodeOut);
 }
 
 test "alp encoding" {
@@ -74,20 +89,14 @@ test "alp encoding" {
 
     const valuesOut: []align(128) i64 = try gpa.alignedAlloc(i64, c.SPIRAL_ALIGNMENT, floats.len);
     defer gpa.free(valuesOut);
-    const valuesBuf = blk: {
-        const buf = c.ByteBuffer_t{ .ptr = @ptrCast(valuesOut.ptr), .len = valuesOut.len * @sizeOf(i64) };
-        break :blk try abi.ByteBuffer.from(buf);
-    };
+    const valuesBuf = abi.ByteBuffer.initFromSlice(valuesOut);
 
     const bitsetOut: []align(128) u8 = try gpa.alignedAlloc(u8, c.SPIRAL_ALIGNMENT, (floats.len + 7) / 8);
     defer gpa.free(bitsetOut);
-    const bitsetBuf = blk: {
-        const buf = c.ByteBuffer_t{ .ptr = @ptrCast(bitsetOut.ptr), .len = bitsetOut.len * @sizeOf(u8) };
-        break :blk try abi.ByteBuffer.from(buf);
-    };
+    const bitsetBuf = abi.ByteBuffer.initFromSlice(bitsetOut);
 
-    const expResult = c.codecz_alp_sampleFindExponents_f64(@ptrCast(&floats), floats.len);
-    try std.testing.expect(expResult.status == c.Ok);
+    const expResult = abi.AlpExponentsResult.from(c.codecz_alp_sampleFindExponents_f64(@ptrCast(&floats), floats.len));
+    try std.testing.expect(expResult.status == abi.ResultStatus.Ok);
     const exponents = expResult.exponents;
     try std.testing.expectEqual(exponents.e, 8);
     try std.testing.expectEqual(exponents.f, 2);
@@ -95,7 +104,7 @@ test "alp encoding" {
     const encoded = try abi.TwoBufferResult.from(c.codecz_alp_encode_f64(
         @ptrCast(&floats),
         floats.len,
-        exponents,
+        exponents.into(),
         valuesBuf.into(),
         bitsetBuf.into(),
     ));
@@ -135,15 +144,12 @@ test "alp encoding" {
 
     const decodeOut: []align(128) f64 = try gpa.alignedAlloc(f64, c.SPIRAL_ALIGNMENT, floats.len);
     defer gpa.free(decodeOut);
-    const decodeBuf = blk: {
-        const buf = c.ByteBuffer_t{ .ptr = @ptrCast(decodeOut.ptr), .len = decodeOut.len * @sizeOf(f64) };
-        break :blk try abi.ByteBuffer.from(buf);
-    };
+    const decodeBuf = abi.ByteBuffer.initFromSlice(decodeOut);
 
     const decoded = try abi.OneBufferResult.from(c.codecz_alp_decode_f64(
         @ptrCast(valuesOut.ptr),
         valuesOut.len,
-        exponents,
+        exponents.into(),
         decodeBuf.into(),
     ));
     try std.testing.expectEqual(decoded.status, abi.ResultStatus.Ok);
