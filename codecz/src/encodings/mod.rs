@@ -4,6 +4,7 @@ mod error;
 pub use error::CodecError;
 pub mod alp;
 pub mod ree;
+pub mod zigzag;
 
 pub type AlignedAllocator = codecz_sys::alloc::AlignedAllocator;
 pub type AlignedVec<T> = codecz_sys::alloc::AlignedVec<T>;
@@ -16,6 +17,7 @@ pub(crate) type ByteBuffer = codecz_sys::ByteBuffer_t;
 pub enum Codec {
     REE,
     ALP,
+    ZigZag,
 }
 
 #[derive(Debug, PartialEq, EnumDisplay)]
