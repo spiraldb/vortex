@@ -62,6 +62,10 @@ impl Scalar for ListScalar {
             _ => Err(EncError::InvalidDType(dtype.clone())),
         }
     }
+
+    fn nbytes(&self) -> usize {
+        self.values.iter().map(|s| s.nbytes()).sum()
+    }
 }
 
 impl<T: Into<Box<dyn Scalar>>> From<ListScalarValues<T>> for Box<dyn Scalar> {

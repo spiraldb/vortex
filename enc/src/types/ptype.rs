@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Display};
+use std::panic::RefUnwindSafe;
 
 use arrow::datatypes::{ArrowNativeType, DataType};
 use half::f16;
@@ -22,7 +23,7 @@ pub enum PType {
 }
 
 pub trait NativePType:
-    Send + Sync + Sized + Debug + Display + PartialEq + Default + ArrowNativeType
+    Send + Sync + Sized + Debug + Display + PartialEq + Default + ArrowNativeType + RefUnwindSafe
 {
     const PTYPE: PType;
 }

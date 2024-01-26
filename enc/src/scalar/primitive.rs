@@ -1,5 +1,6 @@
 use half::f16;
 use std::any::Any;
+use std::mem::size_of;
 
 use crate::error::{EncError, EncResult};
 use crate::scalar::{LocalTimeScalar, Scalar};
@@ -151,6 +152,10 @@ impl Scalar for PScalar {
         ptype
             .and_then(|p| self.cast_ptype(p))
             .or_else(|_| self.cast_dtype(dtype.clone()))
+    }
+
+    fn nbytes(&self) -> usize {
+        size_of::<Self>()
     }
 }
 

@@ -44,6 +44,10 @@ impl Scalar for BoolScalar {
             _ => Err(EncError::InvalidDType(dtype.clone())),
         }
     }
+
+    fn nbytes(&self) -> usize {
+        1
+    }
 }
 
 impl From<bool> for Box<dyn Scalar> {

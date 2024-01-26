@@ -1,16 +1,18 @@
+use std::str::from_utf8_unchecked;
 use std::sync::{Arc, RwLock};
 use std::{iter, mem};
 
+use arrow::array::cast::AsArray;
+use arrow::array::types::UInt8Type;
+use arrow::array::{ArrayRef, BinaryBuilder, StringBuilder};
+
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
 use crate::arrow::CombineChunks;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::stats::binary::BinaryArray;
 use crate::types::{DType, IntWidth, Signedness};
-use arrow::array::cast::AsArray;
-use arrow::array::types::UInt8Type;
-use arrow::array::{ArrayRef, BinaryBuilder, StringBuilder};
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
@@ -149,6 +151,8 @@ impl BinaryArray for VarBinViewArray {
 }
 
 impl ArrayEncoding for VarBinViewArray {
+    const KIND: ArrayKind = ArrayKind::VarBinView;
+
     #[inline]
     fn len(&self) -> usize {
         self.views.len() / std::mem::size_of::<BinaryView>()
@@ -179,16 +183,13 @@ impl ArrayEncoding for VarBinViewArray {
         })
     }
 
-    // TODO(robert): This could be better if we had compute dispatch but for now it's using scalar_at
-    // and wraps values needlessly instead of memcopy
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         let data_arr: ArrayRef = if matches!(self.dtype, DType::Utf8) {
             let mut data_buf = StringBuilder::with_capacity(self.len(), self.plain_size());
             for i in 0..self.views.len() / VIEW_SIZE {
                 unsafe {
-                    data_buf.append_value(std::str::from_utf8_unchecked(
-                        self.bytes_at(i).unwrap().as_slice(),
-                    ));
+                    data_buf
+                        .append_value(from_utf8_unchecked(self.bytes_at(i).unwrap().as_slice()));
                 }
             }
             Arc::new(data_buf.finish())
@@ -211,6 +212,14 @@ impl ArrayEncoding for VarBinViewArray {
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }))
+    }
+
+    fn kind(&self) -> ArrayKind {
+        VarBinViewArray::KIND
+    }
+
+    fn nbytes(&self) -> usize {
+        self.views.nbytes() + self.data.iter().map(|arr| arr.nbytes()).sum::<usize>()
     }
 }
 

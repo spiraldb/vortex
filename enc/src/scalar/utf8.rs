@@ -41,6 +41,10 @@ impl Scalar for Utf8Scalar {
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
         todo!()
     }
+
+    fn nbytes(&self) -> usize {
+        self.value.len()
+    }
 }
 
 impl From<String> for Box<dyn Scalar> {

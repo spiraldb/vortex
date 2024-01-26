@@ -140,7 +140,7 @@ fn MathWrapper(comptime T: type) type {
                 abi.checkFnSignature(Self.isConstant, c.codecz_math_isConstant_f64);
                 abi.checkFnSignature(Self.runLengthStats, c.codecz_math_runLengthStats_f64);
             } else {
-                @compileError(std.fmt.comptimePrint("SIMD Math: Unsupported type {}", .{@typeName(T)}));
+                @compileError(std.fmt.comptimePrint("SIMD Math: Unsupported type {s}", .{@typeName(T)}));
             }
         }
     };
@@ -150,7 +150,7 @@ fn MathWrapper(comptime T: type) type {
 // Run End Encoding
 //
 comptime {
-    const REE_TYPES = IntegerTypes;
+    const REE_TYPES = NumberTypes ++ .{f16};
     for (REE_TYPES) |V| {
         for (SizeTypes) |E| {
             const wrapper = RunEndWrapper(V, E);
@@ -267,6 +267,15 @@ fn RunEndWrapper(comptime V: type, comptime E: type) type {
             } else if (V == i64 and E == u32) {
                 abi.checkFnSignature(Self.encode, c.codecz_ree_encode_i64_u32);
                 abi.checkFnSignature(Self.decode, c.codecz_ree_decode_i64_u32);
+            } else if (V == f16 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_f16_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_f16_u32);
+            } else if (V == f32 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_f32_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_f32_u32);
+            } else if (V == f64 and E == u32) {
+                abi.checkFnSignature(Self.encode, c.codecz_ree_encode_f64_u32);
+                abi.checkFnSignature(Self.decode, c.codecz_ree_decode_f64_u32);
             } else {
                 @compileError(std.fmt.comptimePrint("REE: Unsupported type pair {s} and {s}", .{ @typeName(V), @typeName(E) }));
             }
@@ -401,7 +410,7 @@ fn ALPWrapper(comptime F: type) type {
                 abi.checkFnSignature(Self.encode, c.codecz_alp_encode_f64);
                 abi.checkFnSignature(Self.decode, c.codecz_alp_decode_f64);
             } else {
-                @compileError(std.fmt.comptimePrint("ALP: unsupported type {}", .{@typeName(F)}));
+                @compileError(std.fmt.comptimePrint("ALP: unsupported type {s}", .{@typeName(F)}));
             }
         }
     };

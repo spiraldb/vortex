@@ -311,7 +311,12 @@ fn checkABI(comptime name: []const u8, comptime zigType: type, comptime cType: t
             ));
         }
     } else if (zigTypeInfo == .Pointer) {
-        if (zigTypeInfo.Pointer.child != cTypeInfo.Pointer.child) {
+        if (zigTypeInfo.Pointer.child == f16) {
+            const cChildTypeInfo = @typeInfo(cTypeInfo.Pointer.child);
+            if (cChildTypeInfo != .Int or cChildTypeInfo.Int.bits != 16 and cChildTypeInfo.Int.signedness != .Signed) {
+                @compileError(std.fmt.comptimePrint("Expected *i16 pointer for f16 type for {s} but got {s} and {s}", .{ name, @typeName(zigType), @typeName(cType) }));
+            }
+        } else if (zigTypeInfo.Pointer.child != cTypeInfo.Pointer.child) {
             @compileError(std.fmt.comptimePrint(
                 "Mismatch between {s} with zig type {s} and C type {s}",
                 .{ name, @typeName(zigType), @typeName(cType) },

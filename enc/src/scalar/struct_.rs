@@ -68,6 +68,10 @@ impl Scalar for StructScalar {
             _ => Err(EncError::InvalidDType(dtype.clone())),
         }
     }
+
+    fn nbytes(&self) -> usize {
+        self.values.iter().map(|s| s.nbytes()).sum()
+    }
 }
 
 impl PartialOrd for StructScalar {

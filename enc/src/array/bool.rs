@@ -9,7 +9,7 @@ use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-use super::{Array, ArrayEncoding, ArrowIterator};
+use super::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
 
 #[derive(Debug, Clone)]
 pub struct BoolArray {
@@ -32,6 +32,8 @@ impl BoolArray {
 }
 
 impl ArrayEncoding for BoolArray {
+    const KIND: ArrayKind = ArrayKind::Bool;
+
     #[inline]
     fn len(&self) -> usize {
         self.buffer.len()
@@ -78,6 +80,14 @@ impl ArrayEncoding for BoolArray {
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }))
     }
+
+    fn kind(&self) -> ArrayKind {
+        BoolArray::KIND
+    }
+
+    fn nbytes(&self) -> usize {
+        (self.len() + 7) / 8
+    }
 }
 
 #[cfg(test)]
@@ -93,5 +103,13 @@ mod test {
         assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(true));
         assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(false));
         assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(false));
+    }
+
+    #[test]
+    fn nbytes() {
+        assert_eq!(
+            BoolArray::new(BooleanBuffer::from(vec![true, true, false, false, true])).nbytes(),
+            1
+        );
     }
 }

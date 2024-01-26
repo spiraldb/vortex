@@ -1,0 +1,96 @@
+use std::cmp::min;
+
+use rand::Rng;
+
+pub fn default_sample<T: Clone>(values: &[T], sample_size: u16, sample_count: u16) -> Vec<T> {
+    let total_num_samples = min(values.len(), (sample_size * sample_count) as usize);
+
+    if values.len() <= total_num_samples {
+        values.to_vec()
+    } else {
+        let sample_slices = stratified_slices(values.len(), sample_size, sample_count);
+        let mut samples = Vec::with_capacity(
+            sample_slices
+                .iter()
+                .fold(0, |acc, (start, stop)| acc + stop - start),
+        );
+        sample_slices.into_iter().for_each(|(start, stop)| {
+            assert!(
+                stop > start && start < values.len() && stop < values.len(),
+                "Generated slices are out of array bounds"
+            );
+            samples.extend_from_slice(&values[start..stop])
+        });
+        samples
+    }
+}
+
+pub fn stratified_slices(
+    length: usize,
+    sample_size: u16,
+    sample_count: u16,
+) -> Vec<(usize, usize)> {
+    let total_num_samples: usize = (sample_count * sample_size) as usize;
+    if total_num_samples >= length {
+        return vec![(0usize, length)];
+    }
+
+    let partitions = partition_indices(length, sample_count);
+    let num_samples_per_partition: Vec<usize> = partition_indices(total_num_samples, sample_count)
+        .into_iter()
+        .map(|(start, stop)| stop - start)
+        .collect();
+
+    partitions
+        .into_iter()
+        .zip(num_samples_per_partition)
+        .map(|((start, stop), size)| {
+            assert!(
+                stop - start >= size,
+                "Slices must be bigger than their sampled size"
+            );
+            let random_start = rand::thread_rng().gen_range(start..=(stop - size));
+            (random_start, random_start + size)
+        })
+        .collect()
+}
+
+/// Split a range of array indices into as-equal-as-possible slices. If the provided `num_partitions` doesn't
+/// evenly divide into `length`, then the first `(length % num_partitions)` slices will have an extra element.
+pub fn partition_indices(length: usize, num_partitions: u16) -> Vec<(usize, usize)> {
+    let num_long_parts = length % num_partitions as usize;
+    let short_step = length / num_partitions as usize;
+    let long_step = short_step + 1;
+    let long_stop = num_long_parts * long_step;
+
+    (0..long_stop)
+        .step_by(long_step)
+        .map(|off| (off, off + long_step))
+        .chain(
+            (long_stop..length)
+                .step_by(short_step)
+                .map(|off| (off, off + short_step)),
+        )
+        .collect()
+}
+
+#[cfg(test)]
+mod test {
+    use crate::sampling::partition_indices;
+
+    #[test]
+    pub fn partitioning_non_even() {
+        assert_eq!(
+            partition_indices(25, 4),
+            vec![(0, 7), (7, 13), (13, 19), (19, 25)]
+        );
+    }
+
+    #[test]
+    pub fn partitioning_even() {
+        assert_eq!(
+            partition_indices(25, 5),
+            vec![(0, 5), (5, 10), (10, 15), (15, 20), (20, 25)]
+        );
+    }
+}

@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use arrow::datatypes::DataType;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -27,6 +27,8 @@ impl TypedArray {
 }
 
 impl ArrayEncoding for TypedArray {
+    const KIND: ArrayKind = ArrayKind::Typed;
+
     #[inline]
     fn len(&self) -> usize {
         self.array.len()
@@ -67,6 +69,14 @@ impl ArrayEncoding for TypedArray {
             Box::new(self.array.as_ref().slice(start, stop)?),
             self.dtype.clone(),
         )))
+    }
+
+    fn kind(&self) -> ArrayKind {
+        TypedArray::KIND
+    }
+
+    fn nbytes(&self) -> usize {
+        self.array.nbytes()
     }
 }
 

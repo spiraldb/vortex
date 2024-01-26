@@ -40,6 +40,10 @@ impl Scalar for BinaryScalar {
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
         todo!()
     }
+
+    fn nbytes(&self) -> usize {
+        self.value.len()
+    }
 }
 
 impl From<Vec<u8>> for Box<dyn Scalar> {

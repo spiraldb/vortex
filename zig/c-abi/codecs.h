@@ -54,6 +54,9 @@ TwoBufferResult_t codecz_ree_encode_i8_u32(int8_t const *const ptr, uint64_t con
 TwoBufferResult_t codecz_ree_encode_i16_u32(int16_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
 TwoBufferResult_t codecz_ree_encode_i32_u32(int32_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
 TwoBufferResult_t codecz_ree_encode_i64_u32(int64_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
+TwoBufferResult_t codecz_ree_encode_f16_u32(int16_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
+TwoBufferResult_t codecz_ree_encode_f32_u32(float const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
+TwoBufferResult_t codecz_ree_encode_f64_u32(double const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
 OneBufferResult_t codecz_ree_decode_u8_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
 OneBufferResult_t codecz_ree_decode_u16_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
 OneBufferResult_t codecz_ree_decode_u32_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
@@ -62,6 +65,10 @@ OneBufferResult_t codecz_ree_decode_i8_u32(const ByteBuffer_t values, const Byte
 OneBufferResult_t codecz_ree_decode_i16_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
 OneBufferResult_t codecz_ree_decode_i32_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
 OneBufferResult_t codecz_ree_decode_i64_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
+OneBufferResult_t codecz_ree_decode_f16_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
+OneBufferResult_t codecz_ree_decode_f32_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
+OneBufferResult_t codecz_ree_decode_f64_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
+
 
 // Adaptive Lossless Floating Point (ALP) Encoding
 typedef struct {
