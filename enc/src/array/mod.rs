@@ -7,7 +7,6 @@ use crate::array::patched::PatchedArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
 use crate::array::stats::Stats;
-
 use crate::array::struct_::StructArray;
 use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
@@ -40,13 +39,28 @@ pub type ArrowIterator = dyn Iterator<Item = ArrayRef>;
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
 pub trait ArrayEncoding {
+    const KIND: ArrayKind;
+
+    /// Get the length of the array
     fn len(&self) -> usize;
+    /// Check whether the array is empty
     fn is_empty(&self) -> bool;
+    /// Get the dtype of the array
     fn dtype(&self) -> &DType;
+    /// Get statistics for the array
     fn stats(&self) -> Stats;
+    /// Get scalar value at given index
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
+    /// Produce arrow batches from the encoding
     fn iter_arrow(&self) -> Box<ArrowIterator>;
+    /// Limit array to start..stop range
     fn slice(&self, start: usize, stop: usize) -> EncResult<Array>;
+
+    /// Encoding kind of the array
+    fn kind(&self) -> ArrayKind;
+
+    /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
+    fn nbytes(&self) -> usize;
 
     fn check_slice_bounds(&self, start: usize, stop: usize) -> EncResult<()> {
         if start > self.len() {
@@ -57,6 +71,20 @@ pub trait ArrayEncoding {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Eq, Ord, PartialOrd, PartialEq, Hash)]
+pub enum ArrayKind {
+    Bool,
+    Chunked,
+    Patched,
+    Constant,
+    Primitive,
+    REE,
+    Struct,
+    Typed,
+    VarBin,
+    VarBinView,
 }
 
 #[derive(Debug, Clone)]
@@ -113,6 +141,9 @@ macro_rules! match_each_encoding {
 }
 
 impl ArrayEncoding for Array {
+    // TODO(robert): This is impossible to implement
+    const KIND: ArrayKind = ArrayKind::Chunked;
+
     fn len(&self) -> usize {
         match_each_encoding! { self, |$enc| $enc.len() }
     }
@@ -139,5 +170,13 @@ impl ArrayEncoding for Array {
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
         match_each_encoding! { self, |$enc| $enc.slice(start, stop) }
+    }
+
+    fn kind(&self) -> ArrayKind {
+        match_each_encoding! { self, |$enc| $enc.kind() }
+    }
+
+    fn nbytes(&self) -> usize {
+        match_each_encoding! { self, |$enc| $enc.nbytes() }
     }
 }

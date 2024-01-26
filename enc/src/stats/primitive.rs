@@ -131,24 +131,23 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::error::EncResult;
     use crate::scalar::ListScalarValues;
 
     use super::*;
 
     #[test]
-    fn stats() -> EncResult<()> {
+    fn stats() {
         let arr = PrimitiveArray::from_vec(vec![1, 2, 3, 4, 5]);
-        let min: i32 = arr.stats().get_or_compute_as(&Stat::Min)?.unwrap();
-        let max: i32 = arr.stats().get_or_compute_as(&Stat::Max)?.unwrap();
-        let is_sorted: bool = arr.stats().get_or_compute_as(&Stat::IsSorted)?.unwrap();
-        let is_constant: bool = arr.stats().get_or_compute_as(&Stat::IsConstant)?.unwrap();
+        let min: i32 = arr.stats().get_or_compute_as(&Stat::Min).unwrap();
+        let max: i32 = arr.stats().get_or_compute_as(&Stat::Max).unwrap();
+        let is_sorted: bool = arr.stats().get_or_compute_as(&Stat::IsSorted).unwrap();
+        let is_constant: bool = arr.stats().get_or_compute_as(&Stat::IsConstant).unwrap();
         let bit_width_freq: Vec<u64> = arr
             .stats()
-            .get_or_compute_as::<ListScalarValues<u64>>(&Stat::BitWidthFreq)?
+            .get_or_compute_as::<ListScalarValues<u64>>(&Stat::BitWidthFreq)
             .unwrap()
             .0;
-        let run_count: u64 = arr.stats().get_or_compute_as(&Stat::RunCount)?.unwrap();
+        let run_count: u64 = arr.stats().get_or_compute_as(&Stat::RunCount).unwrap();
         assert_eq!(min, 1);
         assert_eq!(max, 5);
         assert!(is_sorted);
@@ -162,6 +161,5 @@ mod test {
             ]
         );
         assert_eq!(run_count, 5);
-        Ok(())
     }
 }

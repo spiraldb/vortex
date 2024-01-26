@@ -2,14 +2,16 @@ use super::{
     AlignedVec, ByteBuffer, Codec, CodecError, CodecFunction, WrittenBuffer, ALIGNED_ALLOCATOR,
 };
 use codecz_sys::{
+    codecz_ree_decode_f16_u32, codecz_ree_decode_f32_u32, codecz_ree_decode_f64_u32,
     codecz_ree_decode_i16_u32, codecz_ree_decode_i32_u32, codecz_ree_decode_i64_u32,
     codecz_ree_decode_i8_u32, codecz_ree_decode_u16_u32, codecz_ree_decode_u32_u32,
-    codecz_ree_decode_u64_u32, codecz_ree_decode_u8_u32, codecz_ree_encode_i16_u32,
+    codecz_ree_decode_u64_u32, codecz_ree_decode_u8_u32, codecz_ree_encode_f16_u32,
+    codecz_ree_encode_f32_u32, codecz_ree_encode_f64_u32, codecz_ree_encode_i16_u32,
     codecz_ree_encode_i32_u32, codecz_ree_encode_i64_u32, codecz_ree_encode_i8_u32,
     codecz_ree_encode_u16_u32, codecz_ree_encode_u32_u32, codecz_ree_encode_u64_u32,
     codecz_ree_encode_u8_u32,
 };
-use safe_transmute::TriviallyTransmutable;
+use half::f16;
 
 pub fn encode<T: SupportsREE>(elems: &[T]) -> Result<(AlignedVec<T>, AlignedVec<u32>), CodecError> {
     // TODO: can use smaller buffers if we have stats wired through
@@ -57,7 +59,7 @@ pub fn decode<T: SupportsREE>(values: &[T], run_ends: &[u32]) -> Result<AlignedV
     Ok(decoded)
 }
 
-pub trait SupportsREE: Sized + TriviallyTransmutable {
+pub trait SupportsREE: Sized {
     fn encode_impl(
         elems: &[Self],
         values_buf: ByteBuffer,
@@ -113,6 +115,42 @@ impl_ree!(i8);
 impl_ree!(i16);
 impl_ree!(i32);
 impl_ree!(i64);
+impl_ree!(f32);
+impl_ree!(f64);
+
+impl SupportsREE for f16 {
+    fn encode_impl(
+        elems: &[Self],
+        values_buf: ByteBuffer,
+        runends_buf: ByteBuffer,
+    ) -> Result<(WrittenBuffer, WrittenBuffer), CodecError> {
+        let result = unsafe {
+            codecz_ree_encode_f16_u32(
+                elems.as_ptr() as *const i16,
+                elems.len() as u64,
+                values_buf,
+                runends_buf,
+            )
+        };
+        if let Some(e) = CodecError::parse_error(result.status, Codec::REE, CodecFunction::Encode) {
+            return Err(e);
+        }
+        Ok((result.firstBuffer, result.secondBuffer))
+    }
+
+    fn decode_impl(
+        values: ByteBuffer,
+        runends: ByteBuffer,
+        num_runs: usize,
+        out: ByteBuffer,
+    ) -> Result<WrittenBuffer, CodecError> {
+        let result = unsafe { codecz_ree_decode_f16_u32(values, runends, num_runs as u64, out) };
+        if let Some(e) = CodecError::parse_error(result.status, Codec::REE, CodecFunction::Decode) {
+            return Err(e);
+        }
+        Ok(result.buffer)
+    }
+}
 
 #[cfg(test)]
 mod test {

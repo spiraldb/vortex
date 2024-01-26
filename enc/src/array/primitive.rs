@@ -1,4 +1,8 @@
+use allocator_api2::alloc::Allocator;
 use std::iter;
+use std::mem::size_of;
+use std::panic::RefUnwindSafe;
+use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
 use arrow::array::{make_array, ArrayData};
@@ -6,7 +10,7 @@ use arrow::buffer::Buffer;
 use arrow::buffer::ScalarBuffer;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::{match_each_native_ptype, DType, NativePType, PType};
@@ -36,6 +40,21 @@ impl PrimitiveArray {
         Self::new(T::PTYPE, buffer)
     }
 
+    /// Allocate buffer from allocator-api2 vector. This would be easier when arrow gets https://github.com/apache/arrow-rs/issues/3960
+    pub fn from_vec_in<T: NativePType, A: Allocator + RefUnwindSafe + Send + Sync + 'static>(
+        values: allocator_api2::vec::Vec<T, A>,
+    ) -> Self {
+        let ptr = values.as_ptr();
+        let buffer = unsafe {
+            Buffer::from_custom_allocation(
+                NonNull::new(ptr as _).unwrap(),
+                values.len() * size_of::<T>(),
+                Arc::new(values),
+            )
+        };
+        Self::new(T::PTYPE, buffer)
+    }
+
     #[inline]
     pub fn ptype(&self) -> &PType {
         &self.ptype
@@ -48,6 +67,8 @@ impl PrimitiveArray {
 }
 
 impl ArrayEncoding for PrimitiveArray {
+    const KIND: ArrayKind = ArrayKind::Primitive;
+
     #[inline]
     fn len(&self) -> usize {
         self.buffer.len() / self.ptype.byte_width()
@@ -106,6 +127,14 @@ impl ArrayEncoding for PrimitiveArray {
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }))
+    }
+
+    fn kind(&self) -> ArrayKind {
+        PrimitiveArray::KIND
+    }
+
+    fn nbytes(&self) -> usize {
+        self.buffer.len() * self.ptype.byte_width()
     }
 }
 

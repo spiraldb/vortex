@@ -19,7 +19,7 @@ impl ByteBuffer_t {
 
 impl<T> From<&mut AlignedVec<T>> for ByteBuffer_t
 where
-    T: Sized + safe_transmute::TriviallyTransmutable,
+    T: Sized,
 {
     fn from(vec: &mut AlignedVec<T>) -> Self {
         Self {
@@ -31,7 +31,7 @@ where
 
 impl<T> From<&[T]> for ByteBuffer_t
 where
-    T: Sized + safe_transmute::TriviallyTransmutable,
+    T: Sized,
 {
     fn from(slice: &[T]) -> Self {
         Self {

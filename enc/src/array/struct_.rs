@@ -11,7 +11,7 @@ use crate::error::EncResult;
 use crate::scalar::{Scalar, StructScalar};
 use crate::types::{DType, FieldNames};
 
-use super::{Array, ArrayEncoding, ArrowIterator};
+use super::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
 
 #[derive(Debug, Clone)]
 pub struct StructArray {
@@ -40,6 +40,8 @@ impl StructArray {
 }
 
 impl ArrayEncoding for StructArray {
+    const KIND: ArrayKind = ArrayKind::Struct;
+
     #[inline]
     fn len(&self) -> usize {
         self.fields.first().map_or(0, |a| a.len())
@@ -102,6 +104,14 @@ impl ArrayEncoding for StructArray {
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }))
+    }
+
+    fn kind(&self) -> ArrayKind {
+        StructArray::KIND
+    }
+
+    fn nbytes(&self) -> usize {
+        self.fields.iter().map(|arr| arr.nbytes()).sum()
     }
 }
 

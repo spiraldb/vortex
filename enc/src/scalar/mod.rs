@@ -37,6 +37,8 @@ pub trait Scalar: Debug + dyn_clone::DynClone + Send + Sync + 'static {
     fn dtype(&self) -> &DType;
 
     fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>>;
+
+    fn nbytes(&self) -> usize;
 }
 
 dyn_clone::clone_trait_object!(Scalar);

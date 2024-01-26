@@ -43,6 +43,10 @@ impl Scalar for LocalTimeScalar {
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
         todo!()
     }
+
+    fn nbytes(&self) -> usize {
+        self.value.nbytes()
+    }
 }
 
 impl PartialOrd for LocalTimeScalar {

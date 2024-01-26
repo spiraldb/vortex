@@ -86,35 +86,26 @@ mod test {
     fn utf8_stats() {
         let arr = array(DType::Utf8);
         assert_eq!(
-            arr.stats()
-                .get_or_compute_as::<String>(&Stat::Min)
-                .unwrap()
-                .unwrap(),
+            arr.stats().get_or_compute_as::<String>(&Stat::Min).unwrap(),
             String::from("hello world")
         );
         assert_eq!(
-            arr.stats()
-                .get_or_compute_as::<String>(&Stat::Max)
-                .unwrap()
-                .unwrap(),
+            arr.stats().get_or_compute_as::<String>(&Stat::Max).unwrap(),
             String::from("hello world this is a long string")
         );
         assert_eq!(
             arr.stats()
                 .get_or_compute_as::<usize>(&Stat::RunCount)
-                .unwrap()
                 .unwrap(),
             2
         );
         assert!(!arr
             .stats()
             .get_or_compute_as::<bool>(&Stat::IsConstant)
-            .unwrap()
             .unwrap());
         assert!(arr
             .stats()
             .get_or_compute_as::<bool>(&Stat::IsSorted)
-            .unwrap()
             .unwrap());
     }
 
@@ -124,33 +115,28 @@ mod test {
         assert_eq!(
             arr.stats()
                 .get_or_compute_as::<Vec<u8>>(&Stat::Min)
-                .unwrap()
                 .unwrap(),
             "hello world".as_bytes().to_vec()
         );
         assert_eq!(
             arr.stats()
                 .get_or_compute_as::<Vec<u8>>(&Stat::Max)
-                .unwrap()
                 .unwrap(),
             "hello world this is a long string".as_bytes().to_vec()
         );
         assert_eq!(
             arr.stats()
                 .get_or_compute_as::<usize>(&Stat::RunCount)
-                .unwrap()
                 .unwrap(),
             2
         );
         assert!(!arr
             .stats()
             .get_or_compute_as::<bool>(&Stat::IsConstant)
-            .unwrap()
             .unwrap());
         assert!(arr
             .stats()
             .get_or_compute_as::<bool>(&Stat::IsSorted)
-            .unwrap()
             .unwrap());
     }
 }

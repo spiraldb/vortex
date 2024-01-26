@@ -207,11 +207,8 @@ impl<'a> Stats<'a> {
         self.cache.read().unwrap().0.get(stat).cloned()
     }
 
-    pub fn get_as<T: TryFrom<Box<dyn Scalar>, Error = EncError>>(
-        &self,
-        stat: &Stat,
-    ) -> EncResult<Option<T>> {
-        self.get(stat).map(|v| T::try_from(v)).transpose()
+    pub fn get_as<T: TryFrom<Box<dyn Scalar>, Error = EncError>>(&self, stat: &Stat) -> Option<T> {
+        self.get(stat).map(|v| T::try_from(v).unwrap())
     }
 
     pub fn get_or_compute(&self, stat: &Stat) -> Option<Box<dyn Scalar>> {
@@ -230,9 +227,16 @@ impl<'a> Stats<'a> {
     pub fn get_or_compute_as<T: TryFrom<Box<dyn Scalar>, Error = EncError>>(
         &self,
         stat: &Stat,
-    ) -> EncResult<Option<T>> {
+    ) -> Option<T> {
+        self.get_or_compute(stat).map(|v| T::try_from(v).unwrap())
+    }
+
+    pub fn get_or_compute_or<T: TryFrom<Box<dyn Scalar>, Error = EncError>>(
+        &self,
+        default: T,
+        stat: &Stat,
+    ) -> T {
         self.get_or_compute(stat)
-            .map(|v| T::try_from(v))
-            .transpose()
+            .map_or(default, |v| T::try_from(v).unwrap())
     }
 }

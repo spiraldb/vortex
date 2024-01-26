@@ -2,6 +2,7 @@ use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 use std::any::Any;
+use std::mem::size_of;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NullableScalar {
@@ -44,5 +45,12 @@ impl Scalar for NullableScalar {
 
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
         todo!()
+    }
+
+    fn nbytes(&self) -> usize {
+        match self {
+            NullableScalar::Some(s) => s.nbytes(),
+            NullableScalar::None(_) => size_of::<DType>(),
+        }
     }
 }
