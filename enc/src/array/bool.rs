@@ -9,7 +9,7 @@ use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-use super::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
+use super::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
 
 #[derive(Debug, Clone)]
 pub struct BoolArray {
@@ -32,8 +32,6 @@ impl BoolArray {
 }
 
 impl ArrayEncoding for BoolArray {
-    const KIND: ArrayKind = ArrayKind::Bool;
-
     #[inline]
     fn len(&self) -> usize {
         self.buffer.len()
@@ -81,12 +79,21 @@ impl ArrayEncoding for BoolArray {
         }))
     }
 
-    fn kind(&self) -> ArrayKind {
-        BoolArray::KIND
+    fn encoding(&self) -> &'static dyn Encoding {
+        &BoolEncoding
     }
 
     fn nbytes(&self) -> usize {
         (self.len() + 7) / 8
+    }
+}
+
+#[derive(Debug)]
+struct BoolEncoding;
+
+impl Encoding for BoolEncoding {
+    fn id(&self) -> &EncodingId {
+        &EncodingId("bool")
     }
 }
 

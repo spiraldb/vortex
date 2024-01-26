@@ -8,7 +8,7 @@ use arrow::array::{PrimitiveArray as ArrowPrimitiveArray, Scalar as ArrowScalar}
 use arrow::datatypes::DataType;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
 use crate::arrow::compute::repeat;
 use crate::compute;
 use crate::compute::search_sorted::SearchSortedSide;
@@ -47,8 +47,6 @@ impl REEArray {
 }
 
 impl ArrayEncoding for REEArray {
-    const KIND: ArrayKind = ArrayKind::REE;
-
     #[inline]
     fn len(&self) -> usize {
         self.length
@@ -117,13 +115,22 @@ impl ArrayEncoding for REEArray {
         }))
     }
 
-    fn kind(&self) -> ArrayKind {
-        REEArray::KIND
-    }
-
     // Values and ends have been sliced to the nearest run end value so the size in bytes is accurate
     fn nbytes(&self) -> usize {
         self.values.nbytes() + self.ends.nbytes()
+    }
+
+    fn encoding(&self) -> &'static dyn Encoding {
+        &REEEncoding
+    }
+}
+
+#[derive(Debug)]
+pub struct REEEncoding;
+
+impl Encoding for REEEncoding {
+    fn id(&self) -> &EncodingId {
+        &EncodingId("ree")
     }
 }
 

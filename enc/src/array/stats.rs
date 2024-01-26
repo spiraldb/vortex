@@ -236,7 +236,6 @@ impl<'a> Stats<'a> {
         default: T,
         stat: &Stat,
     ) -> T {
-        self.get_or_compute(stat)
-            .map_or(default, |v| T::try_from(v).unwrap())
+        self.get_or_compute_as(stat).unwrap_or(default)
     }
 }

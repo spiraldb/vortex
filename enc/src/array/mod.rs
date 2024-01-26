@@ -1,4 +1,5 @@
 use arrow::array::ArrayRef;
+use std::fmt::Debug;
 
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
@@ -39,8 +40,6 @@ pub type ArrowIterator = dyn Iterator<Item = ArrayRef>;
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
 pub trait ArrayEncoding {
-    const KIND: ArrayKind;
-
     /// Get the length of the array
     fn len(&self) -> usize;
     /// Check whether the array is empty
@@ -57,7 +56,7 @@ pub trait ArrayEncoding {
     fn slice(&self, start: usize, stop: usize) -> EncResult<Array>;
 
     /// Encoding kind of the array
-    fn kind(&self) -> ArrayKind;
+    fn encoding(&self) -> &'static dyn Encoding;
 
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
@@ -73,18 +72,11 @@ pub trait ArrayEncoding {
     }
 }
 
-#[derive(Debug, Clone, Eq, Ord, PartialOrd, PartialEq, Hash)]
-pub enum ArrayKind {
-    Bool,
-    Chunked,
-    Patched,
-    Constant,
-    Primitive,
-    REE,
-    Struct,
-    Typed,
-    VarBin,
-    VarBinView,
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub struct EncodingId(&'static str);
+
+pub trait Encoding: Debug + Send + Sync + 'static {
+    fn id(&self) -> &EncodingId;
 }
 
 #[derive(Debug, Clone)]
@@ -141,9 +133,6 @@ macro_rules! match_each_encoding {
 }
 
 impl ArrayEncoding for Array {
-    // TODO(robert): This is impossible to implement
-    const KIND: ArrayKind = ArrayKind::Chunked;
-
     fn len(&self) -> usize {
         match_each_encoding! { self, |$enc| $enc.len() }
     }
@@ -172,8 +161,8 @@ impl ArrayEncoding for Array {
         match_each_encoding! { self, |$enc| $enc.slice(start, stop) }
     }
 
-    fn kind(&self) -> ArrayKind {
-        match_each_encoding! { self, |$enc| $enc.kind() }
+    fn encoding(&self) -> &'static dyn Encoding {
+        match_each_encoding! { self, |$enc| $enc.encoding() }
     }
 
     fn nbytes(&self) -> usize {
