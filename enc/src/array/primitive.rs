@@ -10,7 +10,7 @@ use arrow::buffer::Buffer;
 use arrow::buffer::ScalarBuffer;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::{match_each_native_ptype, DType, NativePType, PType};
@@ -67,8 +67,6 @@ impl PrimitiveArray {
 }
 
 impl ArrayEncoding for PrimitiveArray {
-    const KIND: ArrayKind = ArrayKind::Primitive;
-
     #[inline]
     fn len(&self) -> usize {
         self.buffer.len() / self.ptype.byte_width()
@@ -129,12 +127,21 @@ impl ArrayEncoding for PrimitiveArray {
         }))
     }
 
-    fn kind(&self) -> ArrayKind {
-        PrimitiveArray::KIND
+    fn encoding(&self) -> &'static dyn Encoding {
+        &PrimitiveEncoding
     }
 
     fn nbytes(&self) -> usize {
         self.buffer.len() * self.ptype.byte_width()
+    }
+}
+
+#[derive(Debug)]
+pub struct PrimitiveEncoding;
+
+impl Encoding for PrimitiveEncoding {
+    fn id(&self) -> &EncodingId {
+        &EncodingId("primitive")
     }
 }
 

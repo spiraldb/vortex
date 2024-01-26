@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use arrow::array::Datum;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
 use crate::arrow::compute::repeat;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -31,8 +31,6 @@ impl ConstantArray {
 }
 
 impl ArrayEncoding for ConstantArray {
-    const KIND: ArrayKind = ArrayKind::Constant;
-
     #[inline]
     fn len(&self) -> usize {
         self.length
@@ -73,11 +71,20 @@ impl ArrayEncoding for ConstantArray {
         Ok(Array::Constant(cloned))
     }
 
-    fn kind(&self) -> ArrayKind {
-        ConstantArray::KIND
-    }
-
     fn nbytes(&self) -> usize {
         self.scalar.nbytes()
+    }
+
+    fn encoding(&self) -> &'static dyn Encoding {
+        &ConstantEncoding
+    }
+}
+
+#[derive(Debug)]
+pub struct ConstantEncoding;
+
+impl Encoding for ConstantEncoding {
+    fn id(&self) -> &EncodingId {
+        &EncodingId("constant")
     }
 }

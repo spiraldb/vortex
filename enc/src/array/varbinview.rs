@@ -7,7 +7,7 @@ use arrow::array::types::UInt8Type;
 use arrow::array::{ArrayRef, BinaryBuilder, StringBuilder};
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
 use crate::arrow::CombineChunks;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
@@ -151,8 +151,6 @@ impl BinaryArray for VarBinViewArray {
 }
 
 impl ArrayEncoding for VarBinViewArray {
-    const KIND: ArrayKind = ArrayKind::VarBinView;
-
     #[inline]
     fn len(&self) -> usize {
         self.views.len() / std::mem::size_of::<BinaryView>()
@@ -214,12 +212,21 @@ impl ArrayEncoding for VarBinViewArray {
         }))
     }
 
-    fn kind(&self) -> ArrayKind {
-        VarBinViewArray::KIND
+    fn encoding(&self) -> &'static dyn Encoding {
+        &VarBinViewEncoding
     }
 
     fn nbytes(&self) -> usize {
         self.views.nbytes() + self.data.iter().map(|arr| arr.nbytes()).sum::<usize>()
+    }
+}
+
+#[derive(Debug)]
+struct VarBinViewEncoding;
+
+impl Encoding for VarBinViewEncoding {
+    fn id(&self) -> &EncodingId {
+        &EncodingId("varbinview")
     }
 }
 

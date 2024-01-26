@@ -1,7 +1,7 @@
 use crate::array::primitive::PrimitiveArray;
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::Array::Patched;
-use crate::array::{Array, ArrayEncoding, ArrayKind, ArrowIterator};
+use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
 use crate::arrow::CombineChunks;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::error::{EncError, EncResult, ErrString};
@@ -49,8 +49,6 @@ impl PatchedArray {
 }
 
 impl ArrayEncoding for PatchedArray {
-    const KIND: ArrayKind = ArrayKind::Patched;
-
     #[inline]
     fn len(&self) -> usize {
         self.length
@@ -121,13 +119,22 @@ impl ArrayEncoding for PatchedArray {
         }))
     }
 
-    fn kind(&self) -> ArrayKind {
-        PatchedArray::KIND
-    }
-
     fn nbytes(&self) -> usize {
         // TODO(robert): Take into account offsets
         self.data.nbytes() + self.patch_indices.nbytes() + self.patch_values.nbytes()
+    }
+
+    fn encoding(&self) -> &'static dyn Encoding {
+        &PatchedEncoding
+    }
+}
+
+#[derive(Debug)]
+pub struct PatchedEncoding;
+
+impl Encoding for PatchedEncoding {
+    fn id(&self) -> &EncodingId {
+        &EncodingId("patched")
     }
 }
 

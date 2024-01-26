@@ -1,12 +1,12 @@
-use crate::array::constant::ConstantArray;
+use crate::array::constant::{ConstantArray, ConstantEncoding};
 use crate::array::primitive::PrimitiveArray;
 use crate::array::stats::Stat;
-use crate::array::{Array, ArrayEncoding};
+use crate::array::{Array, ArrayEncoding, Encoding};
 use crate::compute::compress::{CompressConfig, CompressCtx, CompressedEncoding, Compressor};
 
-impl CompressedEncoding for ConstantArray {
-    fn compressor(array: &Array, config: &CompressConfig) -> Option<&'static Compressor> {
-        if !config.is_enabled(&Self::KIND) {
+impl CompressedEncoding for ConstantEncoding {
+    fn compressor(&self, array: &Array, config: &CompressConfig) -> Option<&'static Compressor> {
+        if !config.is_enabled(self.id()) {
             return None;
         }
 

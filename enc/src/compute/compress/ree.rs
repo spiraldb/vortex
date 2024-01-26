@@ -4,16 +4,17 @@ use codecz::AlignedAllocator;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
+use crate::array::ree::REEEncoding;
 use crate::array::stats::Stat;
-use crate::array::{Array, ArrayEncoding};
+use crate::array::{Array, ArrayEncoding, Encoding};
 use crate::compute::compress::{
     compress, CompressConfig, CompressCtx, CompressedEncoding, Compressor,
 };
 use crate::types::{match_each_native_ptype, PType};
 
-impl CompressedEncoding for REEArray {
-    fn compressor(array: &Array, config: &CompressConfig) -> Option<&'static Compressor> {
-        if !config.is_enabled(&Self::KIND) {
+impl CompressedEncoding for REEEncoding {
+    fn compressor(&self, array: &Array, config: &CompressConfig) -> Option<&'static Compressor> {
+        if !config.is_enabled(self.id()) {
             return None;
         }
 
@@ -39,7 +40,6 @@ fn ree_compress(array: &Array, opts: CompressCtx) -> Array {
         _ => unimplemented!(),
     }
 }
-
 fn ree_compress_primitive_array(array: &PrimitiveArray, ctx: CompressCtx) -> Array {
     match_each_native_ptype!(array.ptype(), |$P| {
         let (values, runs) = codecz::ree::encode(array.buffer().typed_data::<$P>()).unwrap();

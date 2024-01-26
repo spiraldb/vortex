@@ -3,9 +3,7 @@ use std::fmt::Debug;
 
 use once_cell::sync::Lazy;
 
-use crate::array::constant::ConstantArray;
-use crate::array::ree::REEArray;
-use crate::array::{Array, ArrayEncoding, ArrayKind};
+use crate::array::{Array, ArrayEncoding, Encoding, EncodingId};
 
 mod constant;
 mod primitive;
@@ -18,8 +16,8 @@ pub struct CompressConfig {
     pub sample_count: u16,
     pub max_depth: u8,
     pub ree_average_run_threshold: f32,
-    encodings: HashSet<ArrayKind>,
-    skip_encodings: HashSet<ArrayKind>,
+    encodings: HashSet<&'static EncodingId>,
+    disabled_encodings: HashSet<&'static EncodingId>,
 }
 
 impl Default for CompressConfig {
@@ -31,15 +29,26 @@ impl Default for CompressConfig {
             max_depth: 3,
             ree_average_run_threshold: 2.0,
             encodings: HashSet::new(),
-            skip_encodings: HashSet::new(),
+            disabled_encodings: HashSet::new(),
         }
     }
 }
 
 impl CompressConfig {
-    pub fn is_enabled(&self, kind: &ArrayKind) -> bool {
+    pub fn new(
+        encodings: &[&'static dyn CompressedEncoding],
+        disabled_encodings: &[&'static dyn CompressedEncoding],
+    ) -> Self {
+        Self {
+            encodings: encodings.iter().map(|e| e.id()).collect(),
+            disabled_encodings: disabled_encodings.iter().map(|e| e.id()).collect(),
+            ..CompressConfig::default()
+        }
+    }
+
+    pub fn is_enabled(&self, kind: &EncodingId) -> bool {
         (self.encodings.is_empty() || self.encodings.contains(kind))
-            && !self.skip_encodings.contains(kind)
+            && !self.disabled_encodings.contains(kind)
     }
 }
 
@@ -82,18 +91,8 @@ pub trait Compressible {
 
 pub type Compressor = fn(&Array, CompressCtx) -> Array;
 
-pub trait CompressedEncoding: 'static {
-    fn compressor(array: &Array, config: &CompressConfig) -> Option<&'static Compressor>;
-}
-
-impl ArrayKind {
-    fn compressor(&self, array: &Array, config: &CompressConfig) -> Option<&'static Compressor> {
-        match self {
-            ArrayKind::Constant => ConstantArray::compressor(array, config),
-            ArrayKind::REE => REEArray::compressor(array, config),
-            _ => None,
-        }
-    }
+pub trait CompressedEncoding: Encoding + 'static {
+    fn compressor(&self, array: &Array, config: &CompressConfig) -> Option<&'static Compressor>;
 }
 
 pub fn compress(arr: &Array, opts: CompressCtx) -> Array {

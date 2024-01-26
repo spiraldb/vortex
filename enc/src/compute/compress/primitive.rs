@@ -1,9 +1,10 @@
 use arrow::buffer::Buffer;
 use half::f16;
 
-use crate::array::constant::ConstantArray;
+use crate::array::constant::ConstantEncoding;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayEncoding, ArrayKind};
+use crate::array::ree::REEEncoding;
+use crate::array::{Array, ArrayEncoding};
 use crate::compute::compress::{CompressCtx, CompressedEncoding, Compressible, Compressor};
 use crate::sampling::default_sample;
 use crate::types::match_each_native_ptype;
@@ -14,7 +15,7 @@ impl Compressible for PrimitiveArray {
         let array = Array::Primitive(self.clone());
 
         // First, we try constant compression
-        if let Some(compressor) = ConstantArray::compressor(&array, ctx.options) {
+        if let Some(compressor) = ConstantEncoding.compressor(&array, ctx.options) {
             return compressor(&array, ctx);
         }
 
@@ -75,21 +76,21 @@ impl Compressible for PrimitiveArray {
 }
 
 // TODO(robert): Add more
-fn compressors(_ptype: &PType) -> Vec<ArrayKind> {
-    vec![ArrayKind::Constant, ArrayKind::REE]
+fn compressors(_ptype: &PType) -> Vec<&'static dyn CompressedEncoding> {
+    vec![&ConstantEncoding, &REEEncoding]
 }
 
 #[cfg(test)]
 mod test {
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::{ArrayEncoding, ArrayKind};
+    use crate::array::{Array, ArrayEncoding};
     use crate::compute::compress::{CompressCtx, Compressible};
 
     #[test]
     pub fn compress_ree() {
         let arr = PrimitiveArray::from_vec(vec![1, 1, 1, 2, 3, 4, 4, 4, 4, 2, 2, 3, 3]);
         let res = arr.compress(CompressCtx::default());
-        assert_eq!(res.kind(), ArrayKind::REE);
+        assert!(matches!(res, Array::REE(_)));
         assert_eq!(res.len(), 13);
         assert_eq!(res.scalar_at(5).unwrap().try_into(), Ok(4));
     }
@@ -98,7 +99,7 @@ mod test {
     pub fn compress_constant() {
         let arr = PrimitiveArray::from_vec(vec![1, 1, 1, 1]);
         let res = arr.compress(CompressCtx::default());
-        assert_eq!(res.kind(), ArrayKind::Constant);
+        assert!(matches!(res, Array::Constant(_)));
         assert_eq!(res.scalar_at(3).unwrap().try_into(), Ok(1));
     }
 }
