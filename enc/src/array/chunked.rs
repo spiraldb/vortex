@@ -6,7 +6,7 @@ use arrow::array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -138,10 +138,6 @@ impl Array for ChunkedArray {
     fn nbytes(&self) -> usize {
         self.chunks().iter().map(|arr| arr.nbytes()).sum()
     }
-
-    fn kind(&self) -> ArrayKind {
-        ArrayKind::Chunked(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for ChunkedArray {
@@ -153,9 +149,11 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ChunkedArray {
 #[derive(Debug)]
 struct ChunkedEncoding;
 
+pub const CHUNKED_ENCODING: EncodingId = EncodingId("enc.chunked");
+
 impl Encoding for ChunkedEncoding {
     fn id(&self) -> &EncodingId {
-        &EncodingId("chunked")
+        &CHUNKED_ENCODING
     }
 }
 

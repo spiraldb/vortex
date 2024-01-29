@@ -23,7 +23,7 @@ impl CompressedEncoding for ConstantEncoding {
 }
 
 fn compress(array: &dyn Array, opts: CompressCtx) -> ArrayRef {
-    match array.kind() {
+    match ArrayKind::from(array) {
         ArrayKind::Primitive(p) => compress_primitive_array(p, opts),
         _ => unimplemented!("Compress more arrays!"),
     }

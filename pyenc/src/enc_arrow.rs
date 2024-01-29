@@ -7,10 +7,7 @@ use pyo3::{PyAny, PyResult};
 
 use enc::array::Array;
 
-pub fn export_array_array<'py, T: AsRef<dyn Array>>(
-    py: Python<'py>,
-    array: &T,
-) -> PyResult<&'py PyAny> {
+pub fn export_array<'py, T: AsRef<dyn Array>>(py: Python<'py>, array: &T) -> PyResult<&'py PyAny> {
     // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
     // NOTE(robert): Return RecordBatchStreamReader always?
 

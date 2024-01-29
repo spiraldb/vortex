@@ -8,7 +8,7 @@ use arrow::array::types::UInt8Type;
 use arrow::array::{ArrayRef as ArrowArrayRef, BinaryBuilder, StringBuilder};
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::CombineChunks;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
@@ -233,10 +233,6 @@ impl Array for VarBinViewArray {
     fn nbytes(&self) -> usize {
         self.views.nbytes() + self.data.iter().map(|arr| arr.nbytes()).sum::<usize>()
     }
-
-    fn kind(&self) -> ArrayKind {
-        ArrayKind::VarBinView(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for VarBinViewArray {
@@ -248,9 +244,11 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for VarBinViewArray {
 #[derive(Debug)]
 struct VarBinViewEncoding;
 
+pub const VARBINVIEW_ENCODING: EncodingId = EncodingId("enc.varbinview");
+
 impl Encoding for VarBinViewEncoding {
     fn id(&self) -> &EncodingId {
-        &EncodingId("varbinview")
+        &VARBINVIEW_ENCODING
     }
 }
 

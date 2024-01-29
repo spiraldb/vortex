@@ -58,7 +58,7 @@ pyarray!(VarBinViewArray, "VarBinViewArray");
 impl PyArray {
     pub fn wrap(py: Python<'_>, inner: ArrayRef) -> PyResult<Py<Self>> {
         // This is the one place where we'd want to have owned kind enum but there's no other place this is used
-        match inner.kind() {
+        match ArrayKind::from(inner.as_ref()) {
             ArrayKind::Bool(_) => {
                 PyBoolArray::wrap(py, inner.into_any().downcast::<BoolArray>().unwrap())?
                     .extract(py)
@@ -107,7 +107,7 @@ impl PyArray {
 #[pymethods]
 impl PyArray {
     fn to_pyarrow(self_: PyRef<'_, Self>) -> PyResult<&PyAny> {
-        enc_arrow::export_array_array(self_.py(), &self_.inner)
+        enc_arrow::export_array(self_.py(), &self_.inner)
     }
 
     fn __len__(&self) -> usize {
