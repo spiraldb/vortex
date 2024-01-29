@@ -6,7 +6,7 @@ use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::datatypes::UInt8Type;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::CombineChunks;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -59,6 +59,18 @@ impl BinaryArray for VarBinArray {
 }
 
 impl Array for VarBinArray {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     #[inline]
     fn len(&self) -> usize {
         self.offsets.len() - 1
@@ -116,28 +128,12 @@ impl Array for VarBinArray {
         .boxed())
     }
 
-    fn nbytes(&self) -> usize {
-        self.bytes.nbytes() + self.offsets.nbytes()
-    }
-
     fn encoding(&self) -> EncodingRef {
         &VarBinEncoding
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn boxed(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
-
-    fn kind(&self) -> ArrayKind {
-        ArrayKind::VarBin(self)
+    fn nbytes(&self) -> usize {
+        self.bytes.nbytes() + self.offsets.nbytes()
     }
 }
 
@@ -150,9 +146,11 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for VarBinArray {
 #[derive(Debug)]
 struct VarBinEncoding;
 
+pub const VARBIN_ENCODING: EncodingId = EncodingId("enc.varbin");
+
 impl Encoding for VarBinEncoding {
     fn id(&self) -> &EncodingId {
-        &EncodingId("varbin")
+        &VARBIN_ENCODING
     }
 }
 

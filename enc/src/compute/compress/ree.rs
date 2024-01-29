@@ -38,7 +38,7 @@ impl CompressedEncoding for REEEncoding {
 }
 
 fn ree_compress(array: &dyn Array, opts: CompressCtx) -> ArrayRef {
-    match array.kind() {
+    match ArrayKind::from(array) {
         ArrayKind::Primitive(p) => ree_compress_primitive_array(p, opts),
         _ => panic!("Compress more arrays"),
     }

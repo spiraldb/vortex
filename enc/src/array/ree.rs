@@ -9,7 +9,7 @@ use arrow::array::{PrimitiveArray as ArrowPrimitiveArray, Scalar as ArrowScalar}
 use arrow::datatypes::DataType;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::compute::repeat;
 use crate::compute;
 use crate::compute::search_sorted::SearchSortedSide;
@@ -137,10 +137,6 @@ impl Array for REEArray {
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
-
-    fn kind(&self) -> ArrayKind {
-        ArrayKind::REE(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
@@ -152,9 +148,11 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
 #[derive(Debug)]
 pub struct REEEncoding;
 
+pub const REE_ENCODING: EncodingId = EncodingId("enc.ree");
+
 impl Encoding for REEEncoding {
     fn id(&self) -> &EncodingId {
-        &EncodingId("ree")
+        &REE_ENCODING
     }
 }
 

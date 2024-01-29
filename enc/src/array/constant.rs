@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use arrow::array::Datum;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::compute::repeat;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -91,10 +91,6 @@ impl Array for ConstantArray {
     fn nbytes(&self) -> usize {
         self.scalar.nbytes()
     }
-
-    fn kind(&self) -> ArrayKind {
-        ArrayKind::Constant(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for ConstantArray {
@@ -106,8 +102,10 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ConstantArray {
 #[derive(Debug)]
 pub struct ConstantEncoding;
 
+pub const CONSTANT_ENCODING: EncodingId = EncodingId("enc.constant");
+
 impl Encoding for ConstantEncoding {
     fn id(&self) -> &EncodingId {
-        &EncodingId("constant")
+        &CONSTANT_ENCODING
     }
 }

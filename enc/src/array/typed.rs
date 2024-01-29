@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use arrow::datatypes::DataType;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -86,10 +86,6 @@ impl Array for TypedArray {
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
-
-    fn kind(&self) -> ArrayKind {
-        ArrayKind::Typed(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for TypedArray {
@@ -101,9 +97,11 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for TypedArray {
 #[derive(Debug)]
 struct TypedEncoding;
 
+pub const TYPED_ENCODING: EncodingId = EncodingId("enc.typed");
+
 impl Encoding for TypedEncoding {
     fn id(&self) -> &EncodingId {
-        &EncodingId("typed")
+        &TYPED_ENCODING
     }
 }
 

@@ -12,7 +12,7 @@ use crate::error::EncResult;
 use crate::scalar::{Scalar, StructScalar};
 use crate::types::{DType, FieldNames};
 
-use super::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use super::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 
 #[derive(Debug, Clone)]
 pub struct StructArray {
@@ -124,10 +124,6 @@ impl Array for StructArray {
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
-
-    fn kind(&self) -> ArrayKind {
-        ArrayKind::Struct(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for StructArray {
@@ -139,9 +135,11 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for StructArray {
 #[derive(Debug)]
 pub struct StructEncoding;
 
+pub const STRUCT_ENCODING: EncodingId = EncodingId("enc.struct");
+
 impl Encoding for StructEncoding {
     fn id(&self) -> &EncodingId {
-        &EncodingId("struct")
+        &STRUCT_ENCODING
     }
 }
 

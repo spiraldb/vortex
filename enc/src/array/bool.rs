@@ -10,7 +10,7 @@ use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-use super::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use super::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 
 #[derive(Debug, Clone)]
 pub struct BoolArray {
@@ -100,18 +100,16 @@ impl Array for BoolArray {
     fn nbytes(&self) -> usize {
         (self.len() + 7) / 8
     }
-
-    fn kind(&self) -> ArrayKind {
-        ArrayKind::Bool(self)
-    }
 }
 
 #[derive(Debug)]
 struct BoolEncoding;
 
+pub const BOOL_ENCODING: EncodingId = EncodingId("enc.bool");
+
 impl Encoding for BoolEncoding {
     fn id(&self) -> &EncodingId {
-        &EncodingId("bool")
+        &BOOL_ENCODING
     }
 }
 

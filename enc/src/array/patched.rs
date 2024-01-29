@@ -1,5 +1,5 @@
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::CombineChunks;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::error::{EncError, EncResult, ErrString};
@@ -136,10 +136,6 @@ impl Array for PatchedArray {
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
-
-    fn kind(&self) -> ArrayKind {
-        ArrayKind::Patched(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for PatchedArray {
@@ -151,9 +147,11 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for PatchedArray {
 #[derive(Debug)]
 pub struct PatchedEncoding;
 
+pub const PATCHED_ENCODING: EncodingId = EncodingId("enc.patched");
+
 impl Encoding for PatchedEncoding {
     fn id(&self) -> &EncodingId {
-        &EncodingId("patched")
+        &PATCHED_ENCODING
     }
 }
 

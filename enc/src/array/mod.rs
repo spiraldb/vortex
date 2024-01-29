@@ -3,17 +3,17 @@ use std::fmt::Debug;
 
 use arrow::array::ArrayRef as ArrowArrayRef;
 
-use crate::array::bool::BoolArray;
-use crate::array::chunked::ChunkedArray;
-use crate::array::constant::ConstantArray;
-use crate::array::patched::PatchedArray;
-use crate::array::primitive::PrimitiveArray;
-use crate::array::ree::REEArray;
+use crate::array::bool::{BoolArray, BOOL_ENCODING};
+use crate::array::chunked::{ChunkedArray, CHUNKED_ENCODING};
+use crate::array::constant::{ConstantArray, CONSTANT_ENCODING};
+use crate::array::patched::{PatchedArray, PATCHED_ENCODING};
+use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
+use crate::array::ree::{REEArray, REE_ENCODING};
 use crate::array::stats::Stats;
-use crate::array::struct_::StructArray;
-use crate::array::typed::TypedArray;
-use crate::array::varbin::VarBinArray;
-use crate::array::varbinview::VarBinViewArray;
+use crate::array::struct_::{StructArray, STRUCT_ENCODING};
+use crate::array::typed::{TypedArray, TYPED_ENCODING};
+use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
+use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -67,10 +67,6 @@ pub trait Array: Debug + Send + Sync + dyn_clone::DynClone + 'static {
     fn encoding(&self) -> &'static dyn Encoding;
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
-    /// Wrap array into corresponding array kind enum. Useful for dispatching functions over arrays
-    fn kind(&self) -> ArrayKind;
-    // /// Convert array into corresponding array kind enum. Useful for dispatching functions over arrays
-    // fn into_kind(self) -> ArrayKind;
 
     fn check_slice_bounds(&self, start: usize, stop: usize) -> EncResult<()> {
         if start > self.len() {
@@ -113,4 +109,38 @@ pub enum ArrayKind<'a> {
     VarBin(&'a VarBinArray),
     VarBinView(&'a VarBinViewArray),
     Other(&'a dyn Array),
+}
+
+impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
+    fn from(value: &'a dyn Array) -> Self {
+        match *value.encoding().id() {
+            BOOL_ENCODING => ArrayKind::Bool(value.as_any().downcast_ref::<BoolArray>().unwrap()),
+            CHUNKED_ENCODING => {
+                ArrayKind::Chunked(value.as_any().downcast_ref::<ChunkedArray>().unwrap())
+            }
+            CONSTANT_ENCODING => {
+                ArrayKind::Constant(value.as_any().downcast_ref::<ConstantArray>().unwrap())
+            }
+            PATCHED_ENCODING => {
+                ArrayKind::Patched(value.as_any().downcast_ref::<PatchedArray>().unwrap())
+            }
+            PRIMITIVE_ENCODING => {
+                ArrayKind::Primitive(value.as_any().downcast_ref::<PrimitiveArray>().unwrap())
+            }
+            REE_ENCODING => ArrayKind::REE(value.as_any().downcast_ref::<REEArray>().unwrap()),
+            STRUCT_ENCODING => {
+                ArrayKind::Struct(value.as_any().downcast_ref::<StructArray>().unwrap())
+            }
+            TYPED_ENCODING => {
+                ArrayKind::Typed(value.as_any().downcast_ref::<TypedArray>().unwrap())
+            }
+            VARBIN_ENCODING => {
+                ArrayKind::VarBin(value.as_any().downcast_ref::<VarBinArray>().unwrap())
+            }
+            VARBINVIEW_ENCODING => {
+                ArrayKind::VarBinView(value.as_any().downcast_ref::<VarBinViewArray>().unwrap())
+            }
+            _ => ArrayKind::Other(value),
+        }
+    }
 }

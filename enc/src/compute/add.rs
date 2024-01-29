@@ -4,33 +4,29 @@ use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 
 // TODO(ngates): convert this to arithmetic operations with macro over the kernel.
-pub fn add<T: AsRef<dyn Array>>(lhs: &T, rhs: &T) -> EncResult<ArrayRef> {
+pub fn add(lhs: &dyn Array, rhs: &dyn Array) -> EncResult<ArrayRef> {
     // Check that the arrays are the same length.
-    let length = lhs.as_ref().len();
-    if rhs.as_ref().len() != length {
+    let length = lhs.len();
+    if rhs.len() != length {
         return Err(EncError::LengthMismatch);
     }
 
-    match (lhs.as_ref().kind(), rhs.as_ref().kind()) {
+    match (ArrayKind::from(lhs), ArrayKind::from(rhs)) {
         (ArrayKind::Constant(lhs), ArrayKind::Constant(rhs)) => {
             Ok(ConstantArray::new(add_scalars(lhs.value(), rhs.value())?, length).boxed())
         }
         (ArrayKind::Constant(lhs), _) => add_scalar(rhs, lhs.value()),
         (_, ArrayKind::Constant(rhs)) => add_scalar(lhs, rhs.value()),
-        _ => {
-            todo!("Implement default addition")
-        }
+        _ => todo!("Implement default addition"),
     }
 }
 
-pub fn add_scalar<T: AsRef<dyn Array>>(lhs: &T, rhs: &dyn Scalar) -> EncResult<ArrayRef> {
-    match lhs.as_ref().kind() {
+pub fn add_scalar(lhs: &dyn Array, rhs: &dyn Scalar) -> EncResult<ArrayRef> {
+    match ArrayKind::from(lhs) {
         ArrayKind::Constant(lhs) => {
-            Ok(ConstantArray::new(add_scalars(lhs.value(), rhs)?, lhs.as_ref().len()).boxed())
+            Ok(ConstantArray::new(add_scalars(lhs.value(), rhs)?, lhs.len()).boxed())
         }
-        _ => {
-            todo!("Implement default addition")
-        }
+        _ => todo!("Implement default addition"),
     }
 }
 
