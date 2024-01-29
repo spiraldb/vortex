@@ -1,6 +1,5 @@
 use crate::array::chunked::ChunkedArray;
 use crate::array::stats::{Stat, StatsCompute, StatsSet};
-use crate::array::ArrayEncoding;
 
 impl StatsCompute for ChunkedArray {
     fn compute(&self, stat: &Stat) -> StatsSet {

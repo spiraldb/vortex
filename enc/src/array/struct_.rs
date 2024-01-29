@@ -1,7 +1,8 @@
+use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use arrow::array::StructArray as ArrowStructArray;
-use arrow::array::{Array as ArrowArray, ArrayRef};
+use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
 use arrow::datatypes::Fields;
 use itertools::Itertools;
 
@@ -11,17 +12,17 @@ use crate::error::EncResult;
 use crate::scalar::{Scalar, StructScalar};
 use crate::types::{DType, FieldNames};
 
-use super::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
+use super::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 
 #[derive(Debug, Clone)]
 pub struct StructArray {
-    fields: Vec<Array>,
+    fields: Vec<ArrayRef>,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl StructArray {
-    pub fn new(names: Vec<&str>, fields: Vec<Array>) -> Self {
+    pub fn new(names: Vec<&str>, fields: Vec<ArrayRef>) -> Self {
         assert!(
             fields.iter().map(|v| v.len()).all_equal(),
             "Fields didn't have the same length"
@@ -39,7 +40,7 @@ impl StructArray {
     }
 }
 
-impl ArrayEncoding for StructArray {
+impl Array for StructArray {
     #[inline]
     fn len(&self) -> usize {
         self.fields.first().map_or(0, |a| a.len())
@@ -82,14 +83,14 @@ impl ArrayEncoding for StructArray {
             .map(move |items| {
                 Arc::new(ArrowStructArray::new(
                     fields.clone(),
-                    items.into_iter().map(ArrayRef::from).collect(),
+                    items.into_iter().map(ArrowArrayRef::from).collect(),
                     None,
                 )) as Arc<dyn ArrowArray>
             }),
         )
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         self.check_slice_bounds(start, stop)?;
 
         let fields = self
@@ -97,7 +98,7 @@ impl ArrayEncoding for StructArray {
             .iter()
             .map(|field| field.slice(start, stop))
             .try_collect()?;
-        Ok(Array::Struct(Self {
+        Ok(Box::new(Self {
             fields,
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
@@ -108,8 +109,30 @@ impl ArrayEncoding for StructArray {
         self.fields.iter().map(|arr| arr.nbytes()).sum()
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
+    fn encoding(&self) -> EncodingRef {
         &StructEncoding
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
+    fn kind(&self) -> ArrayKind {
+        ArrayKind::Struct(self)
+    }
+}
+
+impl<'arr> AsRef<(dyn Array + 'arr)> for StructArray {
+    fn as_ref(&self) -> &(dyn Array + 'arr) {
+        self
     }
 }
 
@@ -129,10 +152,10 @@ mod test {
     use arrow::array::types::UInt64Type;
     use arrow::array::PrimitiveArray as ArrowPrimitiveArray;
     use arrow::array::StructArray as ArrowStructArray;
-    use arrow::array::{Array, GenericStringArray as ArrowStringArray};
+    use arrow::array::{Array as ArrowArray, GenericStringArray as ArrowStringArray};
 
     use crate::array::struct_::StructArray;
-    use crate::array::ArrayEncoding;
+    use crate::array::Array;
 
     #[test]
     pub fn iter() {

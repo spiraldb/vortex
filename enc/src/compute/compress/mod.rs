@@ -3,7 +3,7 @@ use std::fmt::Debug;
 
 use once_cell::sync::Lazy;
 
-use crate::array::{Array, ArrayEncoding, Encoding, EncodingId};
+use crate::array::{Array, ArrayRef, Encoding, EncodingId};
 
 mod constant;
 mod primitive;
@@ -86,27 +86,28 @@ impl Default for CompressCtx<'_> {
 }
 
 pub trait Compressible {
-    fn compress(&self, opts: CompressCtx) -> Array;
+    fn compress(&self, opts: CompressCtx) -> ArrayRef;
 }
 
-pub type Compressor = fn(&Array, CompressCtx) -> Array;
+pub trait CompressorFor<T: Array> {
+    fn compress(array: &T) -> ArrayRef;
+}
+
+pub type Compressor = fn(&dyn Array, CompressCtx) -> ArrayRef;
 
 pub trait CompressedEncoding: Encoding + 'static {
-    fn compressor(&self, array: &Array, config: &CompressConfig) -> Option<&'static Compressor>;
+    fn compressor(&self, array: &dyn Array, config: &CompressConfig)
+        -> Option<&'static Compressor>;
 }
 
-pub fn compress(arr: &Array, opts: CompressCtx) -> Array {
-    if arr.is_empty() {
-        return arr.clone();
+pub fn compress<T: AsRef<dyn Array> + Compressible>(arr: &T, opts: CompressCtx) -> ArrayRef {
+    if arr.as_ref().is_empty() {
+        return dyn_clone::clone_box(arr.as_ref());
     }
 
     if opts.depth == opts.options.max_depth {
-        return arr.clone();
+        return dyn_clone::clone_box(arr.as_ref());
     }
 
-    // Otherwise, we invoke the compression strategy for the array.
-    match arr {
-        Array::Primitive(a) => a.compress(opts.clone()),
-        _ => unimplemented!(),
-    }
+    arr.compress(opts)
 }

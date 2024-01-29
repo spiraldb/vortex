@@ -1,4 +1,4 @@
-use crate::array::ArrayEncoding;
+use crate::array::Array;
 use std::collections::HashMap;
 
 use crate::array::constant::ConstantArray;

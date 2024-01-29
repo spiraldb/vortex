@@ -1,14 +1,15 @@
+use std::any::Any;
 use std::cmp::min;
 use std::sync::{Arc, RwLock};
 use std::vec::IntoIter;
 
 use arrow::array::types::UInt64Type;
-use arrow::array::{Array as ArrowArray, ArrayRef};
+use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
 use arrow::array::{PrimitiveArray as ArrowPrimitiveArray, Scalar as ArrowScalar};
 use arrow::datatypes::DataType;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
+use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::compute::repeat;
 use crate::compute;
 use crate::compute::search_sorted::SearchSortedSide;
@@ -18,19 +19,19 @@ use crate::types::DType;
 
 #[derive(Debug, Clone)]
 pub struct REEArray {
-    ends: Box<Array>,
-    values: Box<Array>,
+    ends: ArrayRef,
+    values: ArrayRef,
     offset: usize,
     length: usize,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl REEArray {
-    pub fn new(ends: Array, values: Array) -> Self {
+    pub fn new(ends: ArrayRef, values: ArrayRef) -> Self {
         let length = run_ends_logical_length(&ends);
         Self {
-            ends: Box::new(ends),
-            values: Box::new(values),
+            ends,
+            values,
             length,
             offset: 0,
             stats: Arc::new(RwLock::new(StatsSet::new())),
@@ -39,14 +40,14 @@ impl REEArray {
 
     pub fn find_physical_index(&self, index: usize) -> EncResult<usize> {
         compute::search_sorted::search_sorted_usize(
-            self.ends.as_ref(),
+            &self.ends,
             index + self.offset,
             SearchSortedSide::Right,
         )
     }
 }
 
-impl ArrayEncoding for REEArray {
+impl Array for REEArray {
     #[inline]
     fn len(&self) -> usize {
         self.length
@@ -102,17 +103,18 @@ impl ArrayEncoding for REEArray {
         ))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         self.check_slice_bounds(start, stop)?;
         let slice_begin = self.find_physical_index(start).unwrap();
         let slice_end = self.find_physical_index(stop).unwrap();
-        Ok(Array::REE(Self {
-            ends: Box::new(self.ends.slice(slice_begin, slice_end + 1).unwrap()),
-            values: Box::new(self.values.slice(slice_begin, slice_end + 1).unwrap()),
+        Ok(Self {
+            ends: self.ends.slice(slice_begin, slice_end + 1).unwrap(),
+            values: self.values.slice(slice_begin, slice_end + 1).unwrap(),
             offset: start,
             length: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }))
+        }
+        .boxed())
     }
 
     // Values and ends have been sliced to the nearest run end value so the size in bytes is accurate
@@ -120,8 +122,30 @@ impl ArrayEncoding for REEArray {
         self.values.nbytes() + self.ends.nbytes()
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
+    fn encoding(&self) -> EncodingRef {
         &REEEncoding
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
+    fn kind(&self) -> ArrayKind {
+        ArrayKind::REE(self)
+    }
+}
+
+impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
+    fn as_ref(&self) -> &(dyn Array + 'arr) {
+        self
     }
 }
 
@@ -138,7 +162,7 @@ struct REEArrowIterator {
     ends: IntoIter<usize>,
     values: Box<ArrowIterator>,
     current_idx: usize,
-    current_arrow_array: Option<ArrayRef>,
+    current_arrow_array: Option<ArrowArrayRef>,
     last_end: usize,
 }
 
@@ -155,7 +179,7 @@ impl REEArrowIterator {
 }
 
 impl Iterator for REEArrowIterator {
-    type Item = ArrayRef;
+    type Item = ArrowArrayRef;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self
@@ -171,7 +195,7 @@ impl Iterator for REEArrowIterator {
             .as_ref()
             .zip(self.ends.next())
             .map(|(carr, n)| {
-                let new_scalar: ArrowScalar<ArrayRef> =
+                let new_scalar: ArrowScalar<ArrowArrayRef> =
                     ArrowScalar::new(carr.as_ref().slice(self.current_idx, 1));
                 let repeat_count = n - self.last_end;
                 self.current_idx += 1;
@@ -182,8 +206,9 @@ impl Iterator for REEArrowIterator {
 }
 
 /// Gets the logical end of ends array of run end encoding.
-fn run_ends_logical_length(ends: &Array) -> usize {
-    ends.scalar_at(ends.len() - 1)
+fn run_ends_logical_length<T: AsRef<dyn Array>>(ends: &T) -> usize {
+    ends.as_ref()
+        .scalar_at(ends.as_ref().len() - 1)
         .and_then(|end| end.try_into())
         .unwrap_or_else(|_| panic!("Couldn't convert ends to usize"))
 }

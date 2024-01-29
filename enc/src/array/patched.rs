@@ -1,34 +1,33 @@
-use crate::array::primitive::PrimitiveArray;
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::Array::Patched;
-use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
+use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::CombineChunks;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::error::{EncError, EncResult, ErrString};
 use crate::scalar::Scalar;
 use crate::types::DType;
-use arrow::array::ArrayRef;
+use arrow::array::ArrayRef as ArrowArrayRef;
 use arrow::compute::interleave;
+use std::any::Any;
 use std::sync::{Arc, RwLock};
 use std::usize;
 
 #[derive(Debug, Clone)]
 pub struct PatchedArray {
-    data: Box<Array>,
+    data: ArrayRef,
     // used internally to track the starting index of the array in case of slicing
     offset: usize,
     // used internally to track the length of the array in case of slicing
     length: usize,
-    patch_indices: Box<PrimitiveArray>,
-    patch_values: Box<Array>,
+    patch_indices: ArrayRef,
+    patch_values: ArrayRef,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl PatchedArray {
     pub fn try_new(
-        data: Array,
-        patch_indices: PrimitiveArray,
-        patch_values: Array,
+        data: ArrayRef,
+        patch_indices: ArrayRef,
+        patch_values: ArrayRef,
     ) -> EncResult<Self> {
         if data.dtype() != patch_values.dtype() {
             return Err(EncError::ValueError(ErrString::from(
@@ -38,17 +37,17 @@ impl PatchedArray {
         let length = data.len();
         // TODO(jjiang): check path_indices is an unsigned int array type
         Ok(Self {
-            data: Box::new(data),
+            data,
             offset: 0,
             length,
-            patch_indices: Box::new(patch_indices),
-            patch_values: Box::new(patch_values),
+            patch_indices,
+            patch_values,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
 }
 
-impl ArrayEncoding for PatchedArray {
+impl Array for PatchedArray {
     #[inline]
     fn len(&self) -> usize {
         self.length
@@ -78,13 +77,10 @@ impl ArrayEncoding for PatchedArray {
             // Check whether `true_index` exists in the patch index array
             // First, get the index of the patch index array that is the first index
             // greater than or equal to the true index
-            let index_in_patch_indices = search_sorted_usize(
-                &Array::Primitive(*(self.patch_indices.clone())),
-                true_index,
-                SearchSortedSide::Left,
-            )
-            .ok()
-            .unwrap_or(self.patch_indices.len());
+            let index_in_patch_indices =
+                search_sorted_usize(&self.patch_indices, true_index, SearchSortedSide::Left)
+                    .ok()
+                    .unwrap_or(self.patch_indices.len());
             // If the value at this index is equal to the true index, then it exists in the patch index array
             // and we should return the value at the corresponding index in the patch values array
             if index_in_patch_indices < self.patch_indices.len() {
@@ -106,17 +102,18 @@ impl ArrayEncoding for PatchedArray {
         ))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         self.check_slice_bounds(start, stop)?;
 
-        Ok(Patched(PatchedArray {
-            data: Box::new(*self.data.clone()),
+        Ok(PatchedArray {
+            data: self.data.clone(),
             offset: self.offset + start,
             length: stop - start,
-            patch_indices: Box::new(*self.patch_indices.clone()),
-            patch_values: Box::new(*self.patch_values.clone()),
+            patch_indices: self.patch_indices.clone(),
+            patch_values: self.patch_values.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }))
+        }
+        .boxed())
     }
 
     fn nbytes(&self) -> usize {
@@ -124,8 +121,30 @@ impl ArrayEncoding for PatchedArray {
         self.data.nbytes() + self.patch_indices.nbytes() + self.patch_values.nbytes()
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
+    fn encoding(&self) -> EncodingRef {
         &PatchedEncoding
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
+    fn kind(&self) -> ArrayKind {
+        ArrayKind::Patched(self)
+    }
+}
+
+impl<'arr> AsRef<(dyn Array + 'arr)> for PatchedArray {
+    fn as_ref(&self) -> &(dyn Array + 'arr) {
+        self
     }
 }
 
@@ -139,24 +158,25 @@ impl Encoding for PatchedEncoding {
 }
 
 struct PatchedArrowIterator {
-    data: Box<Array>,
+    data: ArrayRef,
     length: usize,
-    patch_indices: Box<Array>,
-    patch_values: Box<Array>,
+    patch_indices: ArrayRef,
+    patch_values: ArrayRef,
     // Used for sliced arrays to track the offset of the patch values array
     // When an array is sliced, the patch_values should be shifted by this offset
     patch_value_offset: usize,
 }
 
 impl PatchedArrowIterator {
-    fn next_patch_index(
-        patch_indices: &Array,
+    fn next_patch_index<T: AsRef<dyn Array>>(
+        patch_indices: &T,
         index: usize,
         array_starting_offset: usize,
     ) -> Option<usize> {
-        if index < patch_indices.len() {
+        if index < patch_indices.as_ref().len() {
             Some(
-                usize::try_from(patch_indices.scalar_at(index).ok()?).ok()? - array_starting_offset,
+                usize::try_from(patch_indices.as_ref().scalar_at(index).ok()?).ok()?
+                    - array_starting_offset,
             )
         } else {
             None
@@ -166,23 +186,18 @@ impl PatchedArrowIterator {
     fn new(array: &PatchedArray) -> Self {
         // Slice the data array to get the data that is relevant to this array
         // unwrap directly because the start and length are already checked in .slice()
-        let data: Box<Array> = Box::new(
-            array
-                .data
-                .slice(array.offset, array.offset + array.length)
-                .unwrap(),
-        );
+        let data = array
+            .data
+            .slice(array.offset, array.offset + array.length)
+            .unwrap();
 
         // Find the index of the first patch index that is greater than or equal to the offset of this array
-        let patch_index_start_index = search_sorted_usize(
-            &Array::Primitive(*array.patch_indices.clone()),
-            array.offset,
-            SearchSortedSide::Left,
-        )
-        .unwrap();
+        let patch_index_start_index =
+            search_sorted_usize(&array.patch_indices, array.offset, SearchSortedSide::Left)
+                .unwrap();
 
         // Slice the patch indices array to get the data that is relevant to this array
-        let patch_indices: Array = array
+        let patch_indices: ArrayRef = array
             .patch_indices
             .slice(patch_index_start_index, array.patch_indices.len())
             .unwrap();
@@ -196,13 +211,13 @@ impl PatchedArrowIterator {
         Self {
             data,
             length: array.length,
-            patch_indices: Box::new(patch_indices),
-            patch_values: Box::new(patch_values),
+            patch_indices,
+            patch_values,
             patch_value_offset: array.offset,
         }
     }
 
-    fn get_array_ref(&mut self) -> ArrayRef {
+    fn get_array_ref(&mut self) -> ArrowArrayRef {
         let mut indices: Vec<(usize, usize)> = vec![Default::default(); self.length];
 
         let mut patch_indices_index: usize = 0;
@@ -246,7 +261,7 @@ impl PatchedArrowIterator {
 mod test {
     use crate::array::patched::PatchedArray;
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::{Array, ArrayEncoding};
+    use crate::array::{Array, ArrayRef};
     use crate::error::EncError;
     use arrow::array::AsArray;
     use arrow::datatypes::Int32Type;
@@ -257,7 +272,7 @@ mod test {
         // merged array: [0, 1, 100, 3, 4, 200, 6, 7, 300, 9]
         PatchedArray::try_new(
             vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9].into(),
-            PrimitiveArray::from_vec(vec![2, 5, 8]),
+            PrimitiveArray::from_vec(vec![2, 5, 8]).boxed(),
             vec![100, 200, 300].into(),
         )
         .unwrap()
@@ -277,15 +292,15 @@ mod test {
     pub fn iter_no_patch() {
         let data_vec = vec![0, 1, 2, 3, 4, 4, 6, 7, 8, 9];
         let empty_patch_indices: PrimitiveArray = PrimitiveArray::from_vec(Vec::<i32>::new());
-        let empty_path_values: Array = Array::from(Vec::<i32>::new());
+        let empty_path_values: ArrayRef = Vec::<i32>::new().into();
         PatchedArray::try_new(
-            Array::from(data_vec.clone()),
-            empty_patch_indices,
+            data_vec.clone().into(),
+            empty_patch_indices.boxed(),
             empty_path_values.clone(),
         )
         .unwrap()
         .iter_arrow()
-        .zip_eq([data_vec.clone()])
+        .zip_eq([data_vec])
         .for_each(|(from_iter, orig)| {
             assert_eq!(from_iter.as_primitive::<Int32Type>().values().deref(), orig);
         });

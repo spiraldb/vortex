@@ -1,4 +1,5 @@
 use allocator_api2::alloc::Allocator;
+use std::any::Any;
 use std::iter;
 use std::mem::size_of;
 use std::panic::RefUnwindSafe;
@@ -10,7 +11,7 @@ use arrow::buffer::Buffer;
 use arrow::buffer::ScalarBuffer;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
+use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::{match_each_native_ptype, DType, NativePType, PType};
@@ -66,7 +67,19 @@ impl PrimitiveArray {
     }
 }
 
-impl ArrayEncoding for PrimitiveArray {
+impl Array for PrimitiveArray {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     #[inline]
     fn len(&self) -> usize {
         self.buffer.len() / self.ptype.byte_width()
@@ -113,13 +126,13 @@ impl ArrayEncoding for PrimitiveArray {
         )))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         self.check_slice_bounds(start, stop)?;
 
         let byte_start = start * self.ptype.byte_width();
         let byte_length = (stop - start) * self.ptype.byte_width();
 
-        Ok(Array::Primitive(Self {
+        Ok(Box::new(Self {
             buffer: self.buffer.slice_with_length(byte_start, byte_length),
             ptype: self.ptype,
             dtype: self.dtype.clone(),
@@ -127,12 +140,22 @@ impl ArrayEncoding for PrimitiveArray {
         }))
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
+    fn encoding(&self) -> EncodingRef {
         &PrimitiveEncoding
     }
 
     fn nbytes(&self) -> usize {
         self.buffer.len() * self.ptype.byte_width()
+    }
+
+    fn kind(&self) -> ArrayKind {
+        ArrayKind::Primitive(self)
+    }
+}
+
+impl<'arr> AsRef<(dyn Array + 'arr)> for PrimitiveArray {
+    fn as_ref(&self) -> &(dyn Array + 'arr) {
+        self
     }
 }
 
@@ -145,9 +168,9 @@ impl Encoding for PrimitiveEncoding {
     }
 }
 
-impl<T: NativePType> From<Vec<T>> for Array {
+impl<T: NativePType> From<Vec<T>> for ArrayRef {
     fn from(values: Vec<T>) -> Self {
-        Array::Primitive(PrimitiveArray::from_vec(values))
+        Box::new(PrimitiveArray::from_vec(values))
     }
 }
 

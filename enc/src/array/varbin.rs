@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
@@ -5,7 +6,7 @@ use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::datatypes::UInt8Type;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
+use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::CombineChunks;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -14,14 +15,14 @@ use crate::types::{DType, IntWidth, Signedness};
 
 #[derive(Debug, Clone)]
 pub struct VarBinArray {
-    offsets: Box<Array>,
-    bytes: Box<Array>,
+    offsets: ArrayRef,
+    bytes: ArrayRef,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl VarBinArray {
-    pub fn new(offsets: Box<Array>, bytes: Box<Array>, dtype: DType) -> Self {
+    pub fn new(offsets: ArrayRef, bytes: ArrayRef, dtype: DType) -> Self {
         if !matches!(offsets.dtype(), DType::Int(_, _)) {
             panic!("Unsupported type for offsets array");
         }
@@ -57,7 +58,7 @@ impl BinaryArray for VarBinArray {
     }
 }
 
-impl ArrayEncoding for VarBinArray {
+impl Array for VarBinArray {
     #[inline]
     fn len(&self) -> usize {
         self.offsets.len() - 1
@@ -104,22 +105,45 @@ impl ArrayEncoding for VarBinArray {
         Box::new(iter::once(arr))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         self.check_slice_bounds(start, stop)?;
 
-        Ok(Array::VarBin(VarBinArray::new(
-            Box::new(self.offsets.slice(start, stop + 1)?),
+        Ok(VarBinArray::new(
+            self.offsets.slice(start, stop + 1)?,
             self.bytes.clone(),
             self.dtype.clone(),
-        )))
+        )
+        .boxed())
     }
 
     fn nbytes(&self) -> usize {
         self.bytes.nbytes() + self.offsets.nbytes()
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
+    fn encoding(&self) -> EncodingRef {
         &VarBinEncoding
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
+    fn kind(&self) -> ArrayKind {
+        ArrayKind::VarBin(self)
+    }
+}
+
+impl<'arr> AsRef<(dyn Array + 'arr)> for VarBinArray {
+    fn as_ref(&self) -> &(dyn Array + 'arr) {
+        self
     }
 }
 
@@ -149,11 +173,7 @@ mod test {
         );
         let offsets = PrimitiveArray::from_vec(vec![0, 11, 44]);
 
-        VarBinArray::new(
-            Box::new(offsets.into()),
-            Box::new(values.into()),
-            DType::Utf8,
-        )
+        VarBinArray::new(offsets.boxed(), values.boxed(), DType::Utf8)
     }
 
     #[test]

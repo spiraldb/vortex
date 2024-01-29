@@ -1,13 +1,14 @@
+use std::any::Any;
 use std::str::from_utf8_unchecked;
 use std::sync::{Arc, RwLock};
 use std::{iter, mem};
 
 use arrow::array::cast::AsArray;
 use arrow::array::types::UInt8Type;
-use arrow::array::{ArrayRef, BinaryBuilder, StringBuilder};
+use arrow::array::{ArrayRef as ArrowArrayRef, BinaryBuilder, StringBuilder};
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
+use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::CombineChunks;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
@@ -71,14 +72,14 @@ pub const VIEW_SIZE: usize = std::mem::size_of::<BinaryView>();
 
 #[derive(Debug, Clone)]
 pub struct VarBinViewArray {
-    views: Box<Array>,
-    data: Vec<Array>,
+    views: ArrayRef,
+    data: Vec<ArrayRef>,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl VarBinViewArray {
-    pub fn new(views: Box<Array>, data: Vec<Array>, dtype: DType) -> Self {
+    pub fn new(views: ArrayRef, data: Vec<ArrayRef>, dtype: DType) -> Self {
         if !matches!(
             views.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned)
@@ -150,7 +151,19 @@ impl BinaryArray for VarBinViewArray {
     }
 }
 
-impl ArrayEncoding for VarBinViewArray {
+impl Array for VarBinViewArray {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     #[inline]
     fn len(&self) -> usize {
         self.views.len() / std::mem::size_of::<BinaryView>()
@@ -182,7 +195,7 @@ impl ArrayEncoding for VarBinViewArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let data_arr: ArrayRef = if matches!(self.dtype, DType::Utf8) {
+        let data_arr: ArrowArrayRef = if matches!(self.dtype, DType::Utf8) {
             let mut data_buf = StringBuilder::with_capacity(self.len(), self.plain_size());
             for i in 0..self.views.len() / VIEW_SIZE {
                 unsafe {
@@ -201,23 +214,34 @@ impl ArrayEncoding for VarBinViewArray {
         Box::new(iter::once(data_arr))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         self.check_slice_bounds(start, stop)?;
 
-        Ok(Array::VarBinView(Self {
-            views: Box::new(self.views.slice(start * VIEW_SIZE, stop * VIEW_SIZE)?),
+        Ok(Self {
+            views: self.views.slice(start * VIEW_SIZE, stop * VIEW_SIZE)?,
             data: self.data.clone(),
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }))
+        }
+        .boxed())
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
+    fn encoding(&self) -> EncodingRef {
         &VarBinViewEncoding
     }
 
     fn nbytes(&self) -> usize {
         self.views.nbytes() + self.data.iter().map(|arr| arr.nbytes()).sum::<usize>()
+    }
+
+    fn kind(&self) -> ArrayKind {
+        ArrayKind::VarBinView(self)
+    }
+}
+
+impl<'arr> AsRef<(dyn Array + 'arr)> for VarBinViewArray {
+    fn as_ref(&self) -> &(dyn Array + 'arr) {
+        self
     }
 }
 
@@ -260,7 +284,7 @@ mod test {
                 .collect::<Vec<u8>>(),
         );
 
-        VarBinViewArray::new(Box::new(view_arr.into()), vec![values.into()], DType::Utf8)
+        VarBinViewArray::new(view_arr.boxed(), vec![values.boxed()], DType::Utf8)
     }
 
     #[test]
@@ -296,7 +320,7 @@ mod test {
                 .as_string::<i32>(),
             &ArrowStringArray::<i32>::from(vec![
                 "hello world",
-                "hello world this is a long string"
+                "hello world this is a long string",
             ])
         );
     }

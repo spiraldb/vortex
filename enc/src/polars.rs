@@ -1,4 +1,4 @@
-use arrow::array::{Array, ArrayRef};
+use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
 use polars_arrow::array::from_data;
 use polars_core::prelude::{AnyValue, Series};
 
@@ -10,14 +10,14 @@ pub trait IntoPolarsSeries {
     fn into_polars(self) -> Series;
 }
 
-impl IntoPolarsSeries for ArrayRef {
+impl IntoPolarsSeries for ArrowArrayRef {
     fn into_polars(self) -> Series {
         let polars_array = from_data(&self.to_data());
         ("array", polars_array).try_into().unwrap()
     }
 }
 
-impl IntoPolarsSeries for Vec<ArrayRef> {
+impl IntoPolarsSeries for Vec<ArrowArrayRef> {
     fn into_polars(self) -> Series {
         let chunks: Vec<Box<dyn polars_arrow::array::Array>> =
             self.iter().map(|a| from_data(&a.to_data())).collect();

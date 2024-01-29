@@ -1,23 +1,24 @@
+use std::any::Any;
 use std::borrow::Borrow;
 use std::sync::{Arc, RwLock};
 
 use arrow::datatypes::DataType;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
+use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
 #[derive(Debug, Clone)]
 pub struct TypedArray {
-    array: Box<Array>,
+    array: ArrayRef,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl TypedArray {
-    pub fn new(array: Box<Array>, dtype: DType) -> Self {
+    pub fn new(array: ArrayRef, dtype: DType) -> Self {
         Self {
             array,
             dtype,
@@ -26,7 +27,7 @@ impl TypedArray {
     }
 }
 
-impl ArrayEncoding for TypedArray {
+impl Array for TypedArray {
     #[inline]
     fn len(&self) -> usize {
         self.array.len()
@@ -62,19 +63,38 @@ impl ArrayEncoding for TypedArray {
         )
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
-        Ok(Array::Typed(Self::new(
-            Box::new(self.array.as_ref().slice(start, stop)?),
-            self.dtype.clone(),
-        )))
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+        Ok(Self::new(self.array.slice(start, stop)?, self.dtype.clone()).boxed())
     }
 
     fn nbytes(&self) -> usize {
         self.array.nbytes()
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
+    fn encoding(&self) -> EncodingRef {
         &TypedEncoding
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
+    fn kind(&self) -> ArrayKind {
+        ArrayKind::Typed(self)
+    }
+}
+
+impl<'arr> AsRef<(dyn Array + 'arr)> for TypedArray {
+    fn as_ref(&self) -> &(dyn Array + 'arr) {
+        self
     }
 }
 
@@ -98,14 +118,14 @@ mod test {
     use itertools::Itertools;
 
     use crate::array::typed::TypedArray;
-    use crate::array::ArrayEncoding;
+    use crate::array::Array;
     use crate::scalar::{LocalTimeScalar, PScalar, Scalar};
     use crate::types::{DType, TimeUnit};
 
     #[test]
     pub fn scalar() {
         let arr = TypedArray::new(
-            Box::new(vec![64_799_000_000_u64, 43_000_000_000].into()),
+            vec![64_799_000_000_u64, 43_000_000_000].into(),
             DType::LocalTime(TimeUnit::Us),
         );
         assert_eq!(
@@ -121,7 +141,7 @@ mod test {
     #[test]
     pub fn iter() {
         let arr = TypedArray::new(
-            Box::new(vec![64_799_000_000_i64, 43_000_000_000].into()),
+            vec![64_799_000_000_i64, 43_000_000_000].into(),
             DType::LocalTime(TimeUnit::Us),
         );
         arr.iter_arrow()
