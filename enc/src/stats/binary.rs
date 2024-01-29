@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::array::stats::{Stat, StatsCompute, StatsSet};
-use crate::array::ArrayEncoding;
+use crate::array::Array;
 use crate::error::EncResult;
 use crate::types::DType;
 
@@ -12,7 +12,7 @@ pub trait BinaryArray {
 
 impl<T> StatsCompute for T
 where
-    T: BinaryArray + ArrayEncoding,
+    T: BinaryArray + Array,
 {
     fn compute(&self, _stat: &Stat) -> StatsSet {
         let mut min = vec![0xFF];
@@ -68,7 +68,7 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::stats::Stat;
     use crate::array::varbin::VarBinArray;
-    use crate::array::ArrayEncoding;
+    use crate::array::Array;
     use crate::types::DType;
 
     fn array(dtype: DType) -> VarBinArray {
@@ -79,7 +79,7 @@ mod test {
         );
         let offsets = PrimitiveArray::from_vec(vec![0, 11, 44]);
 
-        VarBinArray::new(Box::new(offsets.into()), Box::new(values.into()), dtype)
+        VarBinArray::new(offsets.boxed(), values.boxed(), dtype)
     }
 
     #[test]

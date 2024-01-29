@@ -4,8 +4,8 @@ use arrow::array::types::{
     UInt32Type, UInt64Type, UInt8Type,
 };
 use arrow::array::{
-    Array as ArrowArray, ArrayRef, BooleanArray as ArrowBooleanArray, GenericByteArray,
-    PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
+    Array as ArrowArray, ArrayRef as ArrowArrayRef, BooleanArray as ArrowBooleanArray,
+    GenericByteArray, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
 };
 use arrow::array::{ArrowPrimitiveType, OffsetSizeTrait};
 use arrow::buffer::{Buffer, OffsetBuffer};
@@ -15,64 +15,67 @@ use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
-use crate::array::Array;
+use crate::array::{Array, ArrayRef};
 use crate::types::{DType, PType};
 
-impl From<&Buffer> for Array {
+impl From<&Buffer> for ArrayRef {
     fn from(value: &Buffer) -> Self {
-        Array::Primitive(PrimitiveArray::new(PType::U8, value.to_owned()))
+        Box::new(PrimitiveArray::new(PType::U8, value.to_owned()))
     }
 }
 
-impl<O: OffsetSizeTrait> From<&OffsetBuffer<O>> for Array {
+impl<O: OffsetSizeTrait> From<&OffsetBuffer<O>> for ArrayRef {
     fn from(value: &OffsetBuffer<O>) -> Self {
         let ptype = if O::IS_LARGE { PType::I64 } else { PType::I32 };
-        Array::Primitive(PrimitiveArray::new(ptype, value.inner().inner().to_owned()))
+        PrimitiveArray::new(ptype, value.inner().inner().to_owned()).boxed()
     }
 }
 
-impl<T: ArrowPrimitiveType> From<&ArrowPrimitiveArray<T>> for Array {
+impl<T: ArrowPrimitiveType> From<&ArrowPrimitiveArray<T>> for ArrayRef {
     fn from(value: &ArrowPrimitiveArray<T>) -> Self {
         let dtype: DType = T::DATA_TYPE.try_into().unwrap();
-        Array::Primitive(PrimitiveArray::new(
+        PrimitiveArray::new(
             (&dtype).try_into().unwrap(),
             value.values().inner().to_owned(),
-        ))
+        )
+        .boxed()
     }
 }
 
-impl<T: ByteArrayType> From<&GenericByteArray<T>> for Array {
+impl<T: ByteArrayType> From<&GenericByteArray<T>> for ArrayRef {
     fn from(value: &GenericByteArray<T>) -> Self {
-        Array::VarBin(VarBinArray::new(
-            Box::new(value.offsets().into()),
-            Box::new(value.values().into()),
+        VarBinArray::new(
+            value.offsets().into(),
+            value.values().into(),
             T::DATA_TYPE.try_into().unwrap(),
-        ))
+        )
+        .boxed()
     }
 }
 
-impl From<&ArrowBooleanArray> for Array {
+impl From<&ArrowBooleanArray> for ArrayRef {
     fn from(value: &ArrowBooleanArray) -> Self {
-        Array::Bool(BoolArray::new(value.values().to_owned()))
+        BoolArray::new(value.values().to_owned()).boxed()
     }
 }
 
-impl From<&ArrowStructArray> for Array {
+impl From<&ArrowStructArray> for ArrayRef {
     fn from(value: &ArrowStructArray) -> Self {
-        Array::Struct(StructArray::new(
+        StructArray::new(
             value.column_names(),
             value
                 .columns()
                 .iter()
                 .map(|c| (*c).to_owned().into())
                 .collect(),
-        ))
+        )
+        .boxed()
     }
 }
 
-impl From<ArrayRef> for Array {
+impl From<ArrowArrayRef> for ArrayRef {
     // TODO(robert): Wrap in a TypedArray if physical type is different than the logical type, eg. datetime
-    fn from(array: ArrayRef) -> Self {
+    fn from(array: ArrowArrayRef) -> Self {
         match array.data_type() {
             DataType::Boolean => array.as_boolean().into(),
             DataType::UInt8 => array.as_primitive::<UInt8Type>().into(),

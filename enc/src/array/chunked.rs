@@ -1,18 +1,19 @@
+use std::any::Any;
 use std::sync::{Arc, RwLock};
 use std::vec::IntoIter;
 
-use arrow::array::ArrayRef;
+use arrow::array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
+use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
 #[derive(Debug, Clone)]
 pub struct ChunkedArray {
-    chunks: Vec<Array>,
+    chunks: Vec<ArrayRef>,
     chunk_ends: Vec<usize>,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
@@ -20,7 +21,7 @@ pub struct ChunkedArray {
 
 impl ChunkedArray {
     #[inline]
-    pub fn new(chunks: Vec<Array>, dtype: DType) -> Self {
+    pub fn new(chunks: Vec<ArrayRef>, dtype: DType) -> Self {
         assert!(
             chunks.iter().map(|chunk| chunk.dtype()).all_equal(),
             "Chunks have differing dtypes"
@@ -39,7 +40,7 @@ impl ChunkedArray {
     }
 
     #[inline]
-    pub fn chunks(&self) -> &[Array] {
+    pub fn chunks(&self) -> &[ArrayRef] {
         &self.chunks
     }
 
@@ -61,7 +62,19 @@ impl ChunkedArray {
     }
 }
 
-impl ArrayEncoding for ChunkedArray {
+impl Array for ChunkedArray {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     fn len(&self) -> usize {
         *self.chunk_ends.last().unwrap_or(&0usize)
     }
@@ -89,7 +102,7 @@ impl ArrayEncoding for ChunkedArray {
         Box::new(ChunkedArrowIterator::new(self))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         self.check_slice_bounds(start, stop)?;
 
         let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(start);
@@ -97,7 +110,7 @@ impl ArrayEncoding for ChunkedArray {
 
         if length_chunk == offset_chunk {
             if let Some(chunk) = self.chunks.get(offset_chunk) {
-                return Ok(Array::Chunked(ChunkedArray::new(
+                return Ok(Box::new(ChunkedArray::new(
                     vec![chunk.slice(offset_in_first_chunk, length_in_last_chunk)?],
                     self.dtype.clone(),
                 )));
@@ -115,18 +128,25 @@ impl ArrayEncoding for ChunkedArray {
             *c = c.slice(0, length_in_last_chunk)?;
         }
 
-        Ok(Array::Chunked(ChunkedArray::new(
-            chunks,
-            self.dtype.clone(),
-        )))
+        Ok(Box::new(ChunkedArray::new(chunks, self.dtype.clone())))
+    }
+
+    fn encoding(&self) -> EncodingRef {
+        &ChunkedEncoding
     }
 
     fn nbytes(&self) -> usize {
         self.chunks().iter().map(|arr| arr.nbytes()).sum()
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
-        &ChunkedEncoding
+    fn kind(&self) -> ArrayKind {
+        ArrayKind::Chunked(self)
+    }
+}
+
+impl<'arr> AsRef<(dyn Array + 'arr)> for ChunkedArray {
+    fn as_ref(&self) -> &(dyn Array + 'arr) {
+        self
     }
 }
 
@@ -140,7 +160,7 @@ impl Encoding for ChunkedEncoding {
 }
 
 struct ChunkedArrowIterator {
-    chunks_iter: IntoIter<Array>,
+    chunks_iter: IntoIter<ArrayRef>,
     arrow_iter: Option<Box<ArrowIterator>>,
 }
 
@@ -156,7 +176,7 @@ impl ChunkedArrowIterator {
 }
 
 impl Iterator for ChunkedArrowIterator {
-    type Item = ArrayRef;
+    type Item = ArrowArrayRef;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.arrow_iter
@@ -177,12 +197,12 @@ mod test {
 
     use arrow::array::cast::AsArray;
     use arrow::array::types::UInt64Type;
-    use arrow::array::ArrayRef;
+    use arrow::array::ArrayRef as ArrowArrayRef;
     use arrow::array::ArrowPrimitiveType;
     use itertools::Itertools;
 
     use crate::array::chunked::ChunkedArray;
-    use crate::array::ArrayEncoding;
+    use crate::array::Array;
     use crate::types::{DType, IntWidth, Signedness};
 
     fn chunked_array() -> ChunkedArray {
@@ -196,7 +216,7 @@ mod test {
         )
     }
 
-    fn assert_equal_slices<T: ArrowPrimitiveType>(arr: ArrayRef, slice: &[T::Native]) {
+    fn assert_equal_slices<T: ArrowPrimitiveType>(arr: ArrowArrayRef, slice: &[T::Native]) {
         assert_eq!(arr.as_primitive::<T>().values().deref(), slice);
     }
 

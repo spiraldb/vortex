@@ -10,7 +10,7 @@ use polars_ops::prelude::SeriesMethods;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::stats::{Stat, StatsCompute, StatsSet};
-use crate::array::ArrayEncoding;
+use crate::array::Array;
 use crate::polars::IntoPolarsSeries;
 use crate::scalar::ListScalarValues;
 use crate::scalar::Scalar;

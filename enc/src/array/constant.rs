@@ -1,9 +1,10 @@
+use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use arrow::array::Datum;
 
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
+use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::compute::repeat;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -30,7 +31,19 @@ impl ConstantArray {
     }
 }
 
-impl ArrayEncoding for ConstantArray {
+impl Array for ConstantArray {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     #[inline]
     fn len(&self) -> usize {
         self.length
@@ -63,20 +76,30 @@ impl ArrayEncoding for ConstantArray {
         Box::new(std::iter::once(repeat(arrow_scalar.as_ref(), self.length)))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         self.check_slice_bounds(start, stop)?;
 
         let mut cloned = self.clone();
         cloned.length = stop - start;
-        Ok(Array::Constant(cloned))
+        Ok(Box::new(cloned))
+    }
+
+    fn encoding(&self) -> EncodingRef {
+        &ConstantEncoding
     }
 
     fn nbytes(&self) -> usize {
         self.scalar.nbytes()
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
-        &ConstantEncoding
+    fn kind(&self) -> ArrayKind {
+        ArrayKind::Constant(self)
+    }
+}
+
+impl<'arr> AsRef<(dyn Array + 'arr)> for ConstantArray {
+    fn as_ref(&self) -> &(dyn Array + 'arr) {
+        self
     }
 }
 

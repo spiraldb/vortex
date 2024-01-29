@@ -5,14 +5,17 @@ use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyList};
 use pyo3::{PyAny, PyResult};
 
-use enc::array::{Array, ArrayEncoding};
+use enc::array::Array;
 
-pub fn export_array_array<'py>(py: Python<'py>, array: &Array) -> PyResult<&'py PyAny> {
+pub fn export_array_array<'py, T: AsRef<dyn Array>>(
+    py: Python<'py>,
+    array: &T,
+) -> PyResult<&'py PyAny> {
     // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
     // NOTE(robert): Return RecordBatchStreamReader always?
 
     // Export the schema once
-    let data_type: DataType = array.dtype().into();
+    let data_type: DataType = array.as_ref().dtype().into();
     let pa_data_type = data_type.to_pyarrow(py)?;
 
     // Import pyarrow and its Array class
@@ -20,6 +23,7 @@ pub fn export_array_array<'py>(py: Python<'py>, array: &Array) -> PyResult<&'py 
 
     // Iterate each chunk, export it to Arrow FFI, then import as a pyarrow array
     let chunks: PyResult<Vec<PyObject>> = array
+        .as_ref()
         .iter_arrow()
         .map(|arrow_array| arrow_array.into_data().to_pyarrow(py))
         .collect();

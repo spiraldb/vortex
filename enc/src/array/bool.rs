@@ -1,7 +1,8 @@
+use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::{ArrayRef, BooleanArray};
+use arrow::array::{ArrayRef as ArrowArrayRef, BooleanArray};
 use arrow::buffer::BooleanBuffer;
 
 use crate::array::stats::{Stats, StatsSet};
@@ -9,7 +10,7 @@ use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 
-use super::{Array, ArrayEncoding, ArrowIterator, Encoding, EncodingId};
+use super::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 
 #[derive(Debug, Clone)]
 pub struct BoolArray {
@@ -31,7 +32,19 @@ impl BoolArray {
     }
 }
 
-impl ArrayEncoding for BoolArray {
+impl Array for BoolArray {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     #[inline]
     fn len(&self) -> usize {
         self.buffer.len()
@@ -66,25 +79,30 @@ impl ArrayEncoding for BoolArray {
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(iter::once(
-            Arc::new(BooleanArray::from(self.buffer.clone())) as ArrayRef,
+            Arc::new(BooleanArray::from(self.buffer.clone())) as ArrowArrayRef,
         ))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<Array> {
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         self.check_slice_bounds(start, stop)?;
 
-        Ok(Array::Bool(Self {
+        Ok(Self {
             buffer: self.buffer.slice(start, stop - start),
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }))
+        }
+        .boxed())
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
+    fn encoding(&self) -> EncodingRef {
         &BoolEncoding
     }
 
     fn nbytes(&self) -> usize {
         (self.len() + 7) / 8
+    }
+
+    fn kind(&self) -> ArrayKind {
+        ArrayKind::Bool(self)
     }
 }
 
@@ -94,6 +112,12 @@ struct BoolEncoding;
 impl Encoding for BoolEncoding {
     fn id(&self) -> &EncodingId {
         &EncodingId("bool")
+    }
+}
+
+impl<'a> AsRef<(dyn Array + 'a)> for BoolArray {
+    fn as_ref(&self) -> &(dyn Array + 'a) {
+        self
     }
 }
 

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::array::bool::BoolArray;
 use crate::array::stats::{Stat, StatsCompute, StatsSet};
-use crate::array::ArrayEncoding;
+use crate::array::Array;
 
 impl StatsCompute for BoolArray {
     fn compute(&self, _stat: &Stat) -> StatsSet {
