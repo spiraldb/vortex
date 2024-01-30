@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 
@@ -119,5 +120,11 @@ impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<Box<dyn Scalar>>
                 .map(|v| v.try_into())
                 .try_collect()?,
         ))
+    }
+}
+
+impl Display for ListScalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.values.iter().format(", "))
     }
 }

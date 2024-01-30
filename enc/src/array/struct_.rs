@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use arrow::array::StructArray as ArrowStructArray;
 use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
 use arrow::datatypes::Fields;
@@ -38,10 +39,29 @@ impl StructArray {
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
+
+    #[inline]
+    pub fn fields(&self) -> &[ArrayRef] {
+        &self.fields
+    }
 }
 
 impl Array for StructArray {
     #[inline]
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    #[inline]
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    #[inline]
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     fn len(&self) -> usize {
         self.fields.first().map_or(0, |a| a.len())
     }
@@ -105,24 +125,13 @@ impl Array for StructArray {
         }))
     }
 
-    fn nbytes(&self) -> usize {
-        self.fields.iter().map(|arr| arr.nbytes()).sum()
-    }
-
+    #[inline]
     fn encoding(&self) -> EncodingRef {
         &StructEncoding
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn boxed(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
+    fn nbytes(&self) -> usize {
+        self.fields.iter().map(|arr| arr.nbytes()).sum()
     }
 }
 
@@ -140,6 +149,19 @@ pub const STRUCT_ENCODING: EncodingId = EncodingId("enc.struct");
 impl Encoding for StructEncoding {
     fn id(&self) -> &EncodingId {
         &STRUCT_ENCODING
+    }
+}
+
+impl ArrayDisplay for StructArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        let DType::Struct(n, _) = self.dtype() else {
+            unreachable!()
+        };
+        for (name, field) in n.iter().zip(self.fields()) {
+            f.writeln(format!("{}:", &**name))?;
+            f.indent(|indented| indented.array(field.as_ref()))?;
+        }
+        Ok(())
     }
 }
 

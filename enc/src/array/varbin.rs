@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::datatypes::UInt8Type;
 
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::CombineChunks;
@@ -42,6 +43,16 @@ impl VarBinArray {
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
+
+    #[inline]
+    pub fn offsets(&self) -> &dyn Array {
+        self.offsets.as_ref()
+    }
+
+    #[inline]
+    pub fn bytes(&self) -> &dyn Array {
+        self.bytes.as_ref()
+    }
 }
 
 impl BinaryArray for VarBinArray {
@@ -59,14 +70,17 @@ impl BinaryArray for VarBinArray {
 }
 
 impl Array for VarBinArray {
+    #[inline]
     fn as_any(&self) -> &dyn Any {
         self
     }
 
+    #[inline]
     fn boxed(self) -> ArrayRef {
         Box::new(self)
     }
 
+    #[inline]
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
@@ -128,10 +142,12 @@ impl Array for VarBinArray {
         .boxed())
     }
 
+    #[inline]
     fn encoding(&self) -> EncodingRef {
         &VarBinEncoding
     }
 
+    #[inline]
     fn nbytes(&self) -> usize {
         self.bytes.nbytes() + self.offsets.nbytes()
     }
@@ -151,6 +167,15 @@ pub const VARBIN_ENCODING: EncodingId = EncodingId("enc.varbin");
 impl Encoding for VarBinEncoding {
     fn id(&self) -> &EncodingId {
         &VARBIN_ENCODING
+    }
+}
+
+impl ArrayDisplay for VarBinArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        f.writeln("offsets:")?;
+        f.indent(|ind| ind.array(self.offsets()))?;
+        f.writeln("bytes:")?;
+        f.indent(|ind| ind.array(self.bytes()))
     }
 }
 

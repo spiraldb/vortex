@@ -2,6 +2,7 @@ use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 use std::any::Any;
+use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +52,15 @@ impl Scalar for NullableScalar {
         match self {
             NullableScalar::Some(s) => s.nbytes(),
             NullableScalar::None(_) => size_of::<DType>(),
+        }
+    }
+}
+
+impl Display for NullableScalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NullableScalar::Some(p) => write!(f, "{}", p),
+            NullableScalar::None(_) => write!(f, "null"),
         }
     }
 }

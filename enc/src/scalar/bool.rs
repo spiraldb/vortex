@@ -2,6 +2,7 @@ use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 use std::any::Any;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BoolScalar {
@@ -74,6 +75,12 @@ impl TryFrom<&dyn Scalar> for bool {
             Some(bool_scalar) => Ok(bool_scalar.value()),
             None => Err(EncError::InvalidDType(value.dtype().clone())),
         }
+    }
+}
+
+impl Display for BoolScalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
     }
 }
 

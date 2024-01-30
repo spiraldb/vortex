@@ -100,7 +100,7 @@ pub trait CompressedEncoding: Encoding + 'static {
         -> Option<&'static Compressor>;
 }
 
-pub fn compress<T: AsRef<dyn Array> + Compressible>(arr: &T, opts: CompressCtx) -> ArrayRef {
+pub fn compress<T: AsRef<dyn Array> + Compressible>(arr: T, opts: CompressCtx) -> ArrayRef {
     if arr.as_ref().is_empty() {
         return dyn_clone::clone_box(arr.as_ref());
     }

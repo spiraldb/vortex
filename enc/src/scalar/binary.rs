@@ -2,6 +2,7 @@ use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
 use std::any::Any;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BinaryScalar {
@@ -74,5 +75,11 @@ impl TryFrom<&dyn Scalar> for Vec<u8> {
         } else {
             Err(EncError::InvalidDType(value.dtype().clone()))
         }
+    }
+}
+
+impl Display for BinaryScalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "bytes[{}]", self.value.len())
     }
 }

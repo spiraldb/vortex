@@ -36,6 +36,7 @@ impl StatsCompute for BoolArray {
                 (true_count == self.len() || true_count == 0).into(),
             ),
             (Stat::RunCount, run_count.into()),
+            (Stat::TrueCount, true_count.into()),
         ]))
     }
 }

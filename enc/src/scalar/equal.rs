@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use crate::scalar::binary::BinaryScalar;
 use crate::scalar::localtime::LocalTimeScalar;
-use crate::scalar::{BoolScalar, PScalar, Scalar, StructScalar, Utf8Scalar};
+use crate::scalar::{BinaryScalar, BoolScalar, PScalar, Scalar, StructScalar, Utf8Scalar};
 
 impl PartialEq for dyn Scalar {
     fn eq(&self, that: &dyn Scalar) -> bool {

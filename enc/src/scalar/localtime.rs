@@ -3,6 +3,7 @@ use crate::scalar::{PScalar, Scalar};
 use crate::types::{DType, TimeUnit};
 use std::any::Any;
 use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalTimeScalar {
@@ -56,5 +57,14 @@ impl PartialOrd for LocalTimeScalar {
         } else {
             self.value.partial_cmp(&other.value)
         }
+    }
+}
+
+impl Display for LocalTimeScalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let DType::LocalTime(u) = self.dtype() else {
+            unreachable!()
+        };
+        write!(f, "localtime[{}, unit={}]", self.value, u)
     }
 }

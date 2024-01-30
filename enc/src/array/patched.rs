@@ -1,3 +1,4 @@
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::CombineChunks;
@@ -45,9 +46,44 @@ impl PatchedArray {
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
+
+    #[inline]
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    #[inline]
+    pub fn patch_values(&self) -> &dyn Array {
+        self.patch_values.as_ref()
+    }
+
+    #[inline]
+    pub fn patch_indices(&self) -> &dyn Array {
+        self.patch_indices.as_ref()
+    }
+
+    #[inline]
+    pub fn data(&self) -> &dyn Array {
+        self.data.as_ref()
+    }
 }
 
 impl Array for PatchedArray {
+    #[inline]
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    #[inline]
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    #[inline]
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     #[inline]
     fn len(&self) -> usize {
         self.length
@@ -116,31 +152,33 @@ impl Array for PatchedArray {
         .boxed())
     }
 
-    fn nbytes(&self) -> usize {
-        // TODO(robert): Take into account offsets
-        self.data.nbytes() + self.patch_indices.nbytes() + self.patch_values.nbytes()
-    }
-
+    #[inline]
     fn encoding(&self) -> EncodingRef {
         &PatchedEncoding
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn boxed(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
+    #[inline]
+    fn nbytes(&self) -> usize {
+        // TODO(robert): Take into account offsets
+        self.data.nbytes() + self.patch_indices.nbytes() + self.patch_values.nbytes()
     }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for PatchedArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self
+    }
+}
+
+impl ArrayDisplay for PatchedArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        f.writeln(format!("offset: {}", self.offset()))?;
+        f.writeln("patch indices:")?;
+        f.indent(|indented| indented.array(self.patch_indices()))?;
+        f.writeln("patches:")?;
+        f.indent(|indented| indented.array(self.patch_values()))?;
+        f.writeln("patches:")?;
+        f.indent(|indented| indented.array(self.data()))
     }
 }
 
@@ -167,7 +205,7 @@ struct PatchedArrowIterator {
 
 impl PatchedArrowIterator {
     fn next_patch_index<T: AsRef<dyn Array>>(
-        patch_indices: &T,
+        patch_indices: T,
         index: usize,
         array_starting_offset: usize,
     ) -> Option<usize> {

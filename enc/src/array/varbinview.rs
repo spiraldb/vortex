@@ -7,6 +7,7 @@ use arrow::array::cast::AsArray;
 use arrow::array::types::UInt8Type;
 use arrow::array::{ArrayRef as ArrowArrayRef, BinaryBuilder, StringBuilder};
 
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::CombineChunks;
@@ -122,6 +123,16 @@ impl VarBinViewArray {
         let view_vec: &[u8] = view_slice.as_primitive::<UInt8Type>().values();
         BinaryView::from_le_bytes(view_vec.try_into().unwrap())
     }
+
+    #[inline]
+    pub fn views(&self) -> &dyn Array {
+        self.views.as_ref()
+    }
+
+    #[inline]
+    pub fn data(&self) -> &[ArrayRef] {
+        &self.data
+    }
 }
 
 impl BinaryArray for VarBinViewArray {
@@ -152,14 +163,17 @@ impl BinaryArray for VarBinViewArray {
 }
 
 impl Array for VarBinViewArray {
+    #[inline]
     fn as_any(&self) -> &dyn Any {
         self
     }
 
+    #[inline]
     fn boxed(self) -> ArrayRef {
         Box::new(self)
     }
 
+    #[inline]
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
@@ -226,6 +240,7 @@ impl Array for VarBinViewArray {
         .boxed())
     }
 
+    #[inline]
     fn encoding(&self) -> EncodingRef {
         &VarBinViewEncoding
     }
@@ -249,6 +264,20 @@ pub const VARBINVIEW_ENCODING: EncodingId = EncodingId("enc.varbinview");
 impl Encoding for VarBinViewEncoding {
     fn id(&self) -> &EncodingId {
         &VARBINVIEW_ENCODING
+    }
+}
+
+impl ArrayDisplay for VarBinViewArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        f.writeln("views:")?;
+        f.indent(|ind| ind.array(self.views()))?;
+        f.writeln("data:")?;
+        f.indent(|ind| {
+            for d in self.data() {
+                ind.array(d.as_ref())?;
+            }
+            Ok(())
+        })
     }
 }
 

@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::fmt::{Display, Formatter};
 
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
@@ -81,5 +82,11 @@ impl TryFrom<&dyn Scalar> for String {
         } else {
             Err(EncError::InvalidDType(value.dtype().clone()))
         }
+    }
+}
+
+impl Display for Utf8Scalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
     }
 }
