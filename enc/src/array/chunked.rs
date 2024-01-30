@@ -5,6 +5,7 @@ use std::vec::IntoIter;
 use arrow::array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
 
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::error::EncResult;
@@ -63,14 +64,17 @@ impl ChunkedArray {
 }
 
 impl Array for ChunkedArray {
+    #[inline]
     fn as_any(&self) -> &dyn Any {
         self
     }
 
+    #[inline]
     fn boxed(self) -> ArrayRef {
         Box::new(self)
     }
 
+    #[inline]
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
@@ -79,6 +83,7 @@ impl Array for ChunkedArray {
         *self.chunk_ends.last().unwrap_or(&0usize)
     }
 
+    #[inline]
     fn is_empty(&self) -> bool {
         self.chunks.is_empty() || self.len() == 0
     }
@@ -131,6 +136,7 @@ impl Array for ChunkedArray {
         Ok(Box::new(ChunkedArray::new(chunks, self.dtype.clone())))
     }
 
+    #[inline]
     fn encoding(&self) -> EncodingRef {
         &ChunkedEncoding
     }
@@ -143,6 +149,18 @@ impl Array for ChunkedArray {
 impl<'arr> AsRef<(dyn Array + 'arr)> for ChunkedArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self
+    }
+}
+
+impl ArrayDisplay for ChunkedArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        f.writeln("chunks:")?;
+        f.indent(|indent| {
+            for chunk in self.chunks() {
+                indent.array(chunk.as_ref())?;
+            }
+            Ok(())
+        })
     }
 }
 

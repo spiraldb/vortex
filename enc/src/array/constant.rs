@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 
 use arrow::array::Datum;
 
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::compute::repeat;
@@ -32,14 +33,17 @@ impl ConstantArray {
 }
 
 impl Array for ConstantArray {
+    #[inline]
     fn as_any(&self) -> &dyn Any {
         self
     }
 
+    #[inline]
     fn boxed(self) -> ArrayRef {
         Box::new(self)
     }
 
+    #[inline]
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
@@ -84,10 +88,12 @@ impl Array for ConstantArray {
         Ok(Box::new(cloned))
     }
 
+    #[inline]
     fn encoding(&self) -> EncodingRef {
         &ConstantEncoding
     }
 
+    #[inline]
     fn nbytes(&self) -> usize {
         self.scalar.nbytes()
     }
@@ -96,6 +102,12 @@ impl Array for ConstantArray {
 impl<'arr> AsRef<(dyn Array + 'arr)> for ConstantArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self
+    }
+}
+
+impl ArrayDisplay for ConstantArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        f.writeln(format!("{}", self.value()))
     }
 }
 

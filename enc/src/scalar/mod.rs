@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 pub use binary::*;
 pub use bool::*;
@@ -25,7 +25,7 @@ mod primitive;
 mod struct_;
 mod utf8;
 
-pub trait Scalar: Debug + dyn_clone::DynClone + Send + Sync + 'static {
+pub trait Scalar: Display + Debug + dyn_clone::DynClone + Send + Sync + 'static {
     /// convert itself to
     fn as_any(&self) -> &dyn Any;
 

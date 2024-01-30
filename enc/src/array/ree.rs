@@ -8,6 +8,7 @@ use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
 use arrow::array::{PrimitiveArray as ArrowPrimitiveArray, Scalar as ArrowScalar};
 use arrow::datatypes::DataType;
 
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::arrow::compute::repeat;
@@ -45,17 +46,44 @@ impl REEArray {
             SearchSortedSide::Right,
         )
     }
+
+    #[inline]
+    pub fn ends(&self) -> &dyn Array {
+        self.ends.as_ref()
+    }
+
+    #[inline]
+    pub fn values(&self) -> &dyn Array {
+        self.values.as_ref()
+    }
 }
 
 impl Array for REEArray {
     #[inline]
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    #[inline]
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    #[inline]
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
+    #[inline]
     fn len(&self) -> usize {
         self.length
     }
+
     #[inline]
     fn is_empty(&self) -> bool {
         self.length == 0
     }
+
     #[inline]
     fn dtype(&self) -> &DType {
         self.values.dtype()
@@ -117,25 +145,15 @@ impl Array for REEArray {
         .boxed())
     }
 
-    // Values and ends have been sliced to the nearest run end value so the size in bytes is accurate
-    fn nbytes(&self) -> usize {
-        self.values.nbytes() + self.ends.nbytes()
-    }
-
+    #[inline]
     fn encoding(&self) -> EncodingRef {
         &REEEncoding
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn boxed(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
+    #[inline]
+    // Values and ends have been sliced to the nearest run end value so the size in bytes is accurate
+    fn nbytes(&self) -> usize {
+        self.values.nbytes() + self.ends.nbytes()
     }
 }
 
@@ -153,6 +171,15 @@ pub const REE_ENCODING: EncodingId = EncodingId("enc.ree");
 impl Encoding for REEEncoding {
     fn id(&self) -> &EncodingId {
         &REE_ENCODING
+    }
+}
+
+impl ArrayDisplay for REEArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        f.writeln("values:")?;
+        f.indent(|indented| indented.array(self.values()))?;
+        f.writeln("ends:")?;
+        f.indent(|indented| indented.array(self.ends()))
     }
 }
 

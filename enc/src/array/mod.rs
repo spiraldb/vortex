@@ -1,11 +1,12 @@
 use std::any::Any;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
 
 use arrow::array::ArrayRef as ArrowArrayRef;
 
 use crate::array::bool::{BoolArray, BOOL_ENCODING};
 use crate::array::chunked::{ChunkedArray, CHUNKED_ENCODING};
 use crate::array::constant::{ConstantArray, CONSTANT_ENCODING};
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::patched::{PatchedArray, PATCHED_ENCODING};
 use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use crate::array::ree::{REEArray, REE_ENCODING};
@@ -22,6 +23,7 @@ pub mod bool;
 pub mod chunked;
 pub mod constant;
 pub mod encode;
+mod formatter;
 pub mod patched;
 pub mod primitive;
 pub mod ree;
@@ -42,7 +44,7 @@ pub type ArrayRef = Box<dyn Array>;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub trait Array: Debug + Send + Sync + dyn_clone::DynClone + 'static {
+pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'static {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
     /// Move an owned array to `ArrayRef`
@@ -89,6 +91,12 @@ impl<'a> AsRef<(dyn Array + 'a)> for dyn Array {
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub struct EncodingId(&'static str);
+
+impl Display for EncodingId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 pub trait Encoding: Debug + Send + Sync + 'static {
     fn id(&self) -> &EncodingId;
@@ -142,5 +150,11 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
             }
             _ => ArrayKind::Other(value),
         }
+    }
+}
+
+impl Display for dyn Array {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        ArrayFormatter::new(f, "".to_string(), self.nbytes()).array(self)
     }
 }

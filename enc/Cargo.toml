@@ -24,3 +24,4 @@ codecz = { path = "../codecz" }
 rand = { version = "0.8.5", features = [] }
 once_cell = "1.19.0"
 allocator-api2 = "0.2.16"
+humansize = "2.1.3"

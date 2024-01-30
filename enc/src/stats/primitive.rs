@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use arrow::buffer::ScalarBuffer;
 use arrow::datatypes::ArrowNativeType;
 use half::f16;
 use num_traits::{NumCast, PrimInt};
@@ -77,10 +76,10 @@ where
     let bitwidth = std::mem::size_of::<u64>() * 8;
     let mut bit_widths: Vec<u64> = vec![0; bitwidth + 1];
 
-    let typed_buf = ScalarBuffer::<T>::from(array.buffer().clone());
-    let mut last_val: T = typed_buf[0];
+    let typed_buf: &[T] = array.buffer().typed_data();
+    let mut last_val = typed_buf[0];
     let mut run_count: usize = 0;
-    for v in &typed_buf {
+    for v in typed_buf {
         bit_widths[bitwidth - v.leading_zeros() as usize] += 1;
         if last_val != *v {
             run_count += 1;
@@ -109,10 +108,10 @@ where
     let mins: T = s.min().unwrap().unwrap();
     let maxs: T = s.max().unwrap().unwrap();
 
-    let typed_buf = ScalarBuffer::<T>::from(array.buffer().clone());
+    let typed_buf: &[T] = array.buffer().typed_data();
     let mut last_val: T = typed_buf[0];
     let mut run_count: usize = 0;
-    for v in &typed_buf {
+    for v in typed_buf {
         if last_val != *v {
             run_count += 1;
         }

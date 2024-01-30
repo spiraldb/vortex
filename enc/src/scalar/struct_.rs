@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 
@@ -81,5 +82,17 @@ impl PartialOrd for StructScalar {
         } else {
             self.values.partial_cmp(&other.values)
         }
+    }
+}
+
+impl Display for StructScalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let DType::Struct(names, _) = self.dtype() else {
+            unreachable!()
+        };
+        for (n, v) in names.iter().zip(self.values.iter()) {
+            write!(f, "{} = {}", n, v)?;
+        }
+        Ok(())
     }
 }

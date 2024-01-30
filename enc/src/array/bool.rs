@@ -2,10 +2,11 @@ use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use arrow::array::{ArrayRef as ArrowArrayRef, BooleanArray};
 use arrow::buffer::BooleanBuffer;
 
-use crate::array::stats::{Stats, StatsSet};
+use crate::array::stats::{Stat, Stats, StatsSet};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -33,14 +34,17 @@ impl BoolArray {
 }
 
 impl Array for BoolArray {
+    #[inline]
     fn as_any(&self) -> &dyn Any {
         self
     }
 
+    #[inline]
     fn boxed(self) -> ArrayRef {
         Box::new(self)
     }
 
+    #[inline]
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
@@ -93,10 +97,12 @@ impl Array for BoolArray {
         .boxed())
     }
 
+    #[inline]
     fn encoding(&self) -> EncodingRef {
         &BoolEncoding
     }
 
+    #[inline]
     fn nbytes(&self) -> usize {
         (self.len() + 7) / 8
     }
@@ -116,6 +122,14 @@ impl Encoding for BoolEncoding {
 impl<'a> AsRef<(dyn Array + 'a)> for BoolArray {
     fn as_ref(&self) -> &(dyn Array + 'a) {
         self
+    }
+}
+
+impl ArrayDisplay for BoolArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        let true_count = self.stats().get_or_compute_or(0usize, &Stat::TrueCount);
+        let false_count = self.len() - true_count;
+        f.writeln(format!("n_true: {}, n_false: {}", true_count, false_count))
     }
 }
 

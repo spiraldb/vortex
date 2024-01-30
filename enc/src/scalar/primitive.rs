@@ -1,5 +1,6 @@
 use half::f16;
 use std::any::Any;
+use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use crate::error::{EncError, EncResult};
@@ -249,6 +250,24 @@ impl TryFrom<&dyn Scalar> for usize {
                 Ok(*$V as usize)
             }),
             None => Err(EncError::InvalidDType(value.dtype().clone())),
+        }
+    }
+}
+
+impl Display for PScalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PScalar::U8(p) => write!(f, "{}", p),
+            PScalar::U16(p) => write!(f, "{}", p),
+            PScalar::U32(p) => write!(f, "{}", p),
+            PScalar::U64(p) => write!(f, "{}", p),
+            PScalar::I8(p) => write!(f, "{}", p),
+            PScalar::I16(p) => write!(f, "{}", p),
+            PScalar::I32(p) => write!(f, "{}", p),
+            PScalar::I64(p) => write!(f, "{}", p),
+            PScalar::F16(p) => write!(f, "{}", p),
+            PScalar::F32(p) => write!(f, "{}", p),
+            PScalar::F64(p) => write!(f, "{}", p),
         }
     }
 }

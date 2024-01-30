@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use arrow::datatypes::DataType;
 
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::error::EncResult;
@@ -25,9 +26,29 @@ impl TypedArray {
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
+
+    #[inline]
+    pub fn untyped_array(&self) -> &dyn Array {
+        self.array.as_ref()
+    }
 }
 
 impl Array for TypedArray {
+    #[inline]
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    #[inline]
+    fn boxed(self) -> ArrayRef {
+        Box::new(self)
+    }
+
+    #[inline]
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     #[inline]
     fn len(&self) -> usize {
         self.array.len()
@@ -67,24 +88,14 @@ impl Array for TypedArray {
         Ok(Self::new(self.array.slice(start, stop)?, self.dtype.clone()).boxed())
     }
 
-    fn nbytes(&self) -> usize {
-        self.array.nbytes()
-    }
-
+    #[inline]
     fn encoding(&self) -> EncodingRef {
         &TypedEncoding
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn boxed(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
+    #[inline]
+    fn nbytes(&self) -> usize {
+        self.array.nbytes()
     }
 }
 
@@ -102,6 +113,12 @@ pub const TYPED_ENCODING: EncodingId = EncodingId("enc.typed");
 impl Encoding for TypedEncoding {
     fn id(&self) -> &EncodingId {
         &TYPED_ENCODING
+    }
+}
+
+impl ArrayDisplay for TypedArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        f.indent(|indented| indented.array(self.untyped_array()))
     }
 }
 

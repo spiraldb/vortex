@@ -1,4 +1,8 @@
 use allocator_api2::alloc::Allocator;
+use arrow::array::{make_array, ArrayData};
+use arrow::buffer::Buffer;
+use core::cmp::min;
+use half::f16;
 use std::any::Any;
 use std::iter;
 use std::mem::size_of;
@@ -6,16 +10,12 @@ use std::panic::RefUnwindSafe;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::{make_array, ArrayData};
-use arrow::buffer::Buffer;
-use arrow::buffer::ScalarBuffer;
-
+use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::{match_each_native_ptype, DType, NativePType, PType};
-use half::f16;
 
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {
@@ -68,14 +68,17 @@ impl PrimitiveArray {
 }
 
 impl Array for PrimitiveArray {
+    #[inline]
     fn as_any(&self) -> &dyn Any {
         self
     }
 
+    #[inline]
     fn boxed(self) -> ArrayRef {
         Box::new(self)
     }
 
+    #[inline]
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
@@ -106,7 +109,7 @@ impl Array for PrimitiveArray {
         }
 
         Ok(
-            match_each_native_ptype!(self.ptype, |$T| ScalarBuffer::<$T>::from(self.buffer.clone())
+            match_each_native_ptype!(self.ptype, |$T| self.buffer.typed_data::<$T>()
                 .get(index)
                 .unwrap()
                 .clone()
@@ -140,10 +143,12 @@ impl Array for PrimitiveArray {
         }))
     }
 
+    #[inline]
     fn encoding(&self) -> EncodingRef {
         &PrimitiveEncoding
     }
 
+    #[inline]
     fn nbytes(&self) -> usize {
         self.buffer.len() * self.ptype.byte_width()
     }
@@ -168,7 +173,17 @@ impl Encoding for PrimitiveEncoding {
 
 impl<T: NativePType> From<Vec<T>> for ArrayRef {
     fn from(values: Vec<T>) -> Self {
-        Box::new(PrimitiveArray::from_vec(values))
+        PrimitiveArray::from_vec(values).boxed()
+    }
+}
+
+impl ArrayDisplay for PrimitiveArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        match_each_native_ptype!(self.ptype(), |$P| {
+            f.writeln(format!("{:?}{}",
+                &self.buffer().typed_data::<$P>()[..min(10, self.len())],
+                if self.len() > 10 { "..." } else { "" }))
+        })
     }
 }
 

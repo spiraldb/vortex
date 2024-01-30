@@ -47,8 +47,8 @@ fn ree_compress(array: &dyn Array, opts: CompressCtx) -> ArrayRef {
 fn ree_compress_primitive_array(array: &PrimitiveArray, ctx: CompressCtx) -> ArrayRef {
     match_each_native_ptype!(array.ptype(), |$P| {
         let (values, runs) = codecz::ree::encode(array.buffer().typed_data::<$P>()).unwrap();
-        let compressed_values = compress(&PrimitiveArray::from_vec_in::<$P, AlignedAllocator>(values), ctx.next_level());
-        let compressed_ends = compress(&PrimitiveArray::from_vec_in::<u32, AlignedAllocator>(runs), ctx.next_level());
+        let compressed_values = compress(PrimitiveArray::from_vec_in::<$P, AlignedAllocator>(values), ctx.next_level());
+        let compressed_ends = compress(PrimitiveArray::from_vec_in::<u32, AlignedAllocator>(runs), ctx.next_level());
         REEArray::new(compressed_ends, compressed_values).boxed()
     })
 }
