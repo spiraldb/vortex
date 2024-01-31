@@ -11,7 +11,7 @@ fn main() {
         .canonicalize()
         .expect("Failed to canonicalize root dir");
     let codecz_header = root_dir
-        .join("zig/c-abi/wrapper.h")
+        .join("zig/c-abi/include/wrapper.h")
         .canonicalize()
         .expect("Failed to canonicalize wrapper.h path");
 
