@@ -4,23 +4,32 @@ use arrow::array::types::{
     UInt32Type, UInt64Type, UInt8Type,
 };
 use arrow::array::{
-    Array as ArrowArray, ArrayRef as ArrowArrayRef, BooleanArray as ArrowBooleanArray,
-    GenericByteArray, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
+    as_null_array, Array as ArrowArray, ArrayRef as ArrowArrayRef,
+    BooleanArray as ArrowBooleanArray, GenericByteArray, NullArray as ArrowNullArray,
+    PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
 };
 use arrow::array::{ArrowPrimitiveType, OffsetSizeTrait};
 use arrow::buffer::{Buffer, OffsetBuffer};
-use arrow::datatypes::{ByteArrayType, DataType};
+use arrow::datatypes::{
+    ByteArrayType, DataType, Date32Type, Date64Type, DurationMicrosecondType,
+    DurationMillisecondType, DurationNanosecondType, DurationSecondType, Time32MillisecondType,
+    Time32SecondType, Time64MicrosecondType, Time64NanosecondType, TimeUnit,
+    TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
+    TimestampSecondType,
+};
 
 use crate::array::bool::BoolArray;
+use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
+use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
-use crate::types::{DType, PType};
+use crate::types::PType;
 
 impl From<&Buffer> for ArrayRef {
     fn from(value: &Buffer) -> Self {
-        Box::new(PrimitiveArray::new(PType::U8, value.to_owned()))
+        PrimitiveArray::new(PType::U8, value.to_owned()).boxed()
     }
 }
 
@@ -33,12 +42,13 @@ impl<O: OffsetSizeTrait> From<&OffsetBuffer<O>> for ArrayRef {
 
 impl<T: ArrowPrimitiveType> From<&ArrowPrimitiveArray<T>> for ArrayRef {
     fn from(value: &ArrowPrimitiveArray<T>) -> Self {
-        let dtype: DType = T::DATA_TYPE.try_into().unwrap();
-        PrimitiveArray::new(
-            (&dtype).try_into().unwrap(),
-            value.values().inner().to_owned(),
-        )
-        .boxed()
+        let ptype: PType = (&T::DATA_TYPE).try_into().unwrap();
+        let arr = PrimitiveArray::new(ptype, value.values().inner().to_owned()).boxed();
+        if T::DATA_TYPE.is_numeric() {
+            arr
+        } else {
+            TypedArray::new(arr, T::DATA_TYPE.try_into().unwrap()).boxed()
+        }
     }
 }
 
@@ -73,8 +83,13 @@ impl From<&ArrowStructArray> for ArrayRef {
     }
 }
 
+impl From<&ArrowNullArray> for ArrayRef {
+    fn from(value: &ArrowNullArray) -> Self {
+        NullArray::new(value.len()).boxed()
+    }
+}
+
 impl From<ArrowArrayRef> for ArrayRef {
-    // TODO(robert): Wrap in a TypedArray if physical type is different than the logical type, eg. datetime
     fn from(array: ArrowArrayRef) -> Self {
         match array.data_type() {
             DataType::Boolean => array.as_boolean().into(),
@@ -94,7 +109,35 @@ impl From<ArrowArrayRef> for ArrayRef {
             DataType::Binary => array.as_binary::<i32>().into(),
             DataType::LargeBinary => array.as_binary::<i64>().into(),
             DataType::Struct(_) => array.as_struct().into(),
-            _ => panic!("TODO(robert): Implement more"),
+            DataType::Null => as_null_array(array.as_ref()).into(),
+            DataType::Timestamp(u, _) => match u {
+                TimeUnit::Second => array.as_primitive::<TimestampSecondType>().into(),
+                TimeUnit::Millisecond => array.as_primitive::<TimestampMillisecondType>().into(),
+                TimeUnit::Microsecond => array.as_primitive::<TimestampMicrosecondType>().into(),
+                TimeUnit::Nanosecond => array.as_primitive::<TimestampNanosecondType>().into(),
+            },
+            DataType::Date32 => array.as_primitive::<Date32Type>().into(),
+            DataType::Date64 => array.as_primitive::<Date64Type>().into(),
+            DataType::Time32(u) => match u {
+                TimeUnit::Second => array.as_primitive::<Time32SecondType>().into(),
+                TimeUnit::Millisecond => array.as_primitive::<Time32MillisecondType>().into(),
+                _ => unreachable!(),
+            },
+            DataType::Time64(u) => match u {
+                TimeUnit::Microsecond => array.as_primitive::<Time64MicrosecondType>().into(),
+                TimeUnit::Nanosecond => array.as_primitive::<Time64NanosecondType>().into(),
+                _ => unreachable!(),
+            },
+            DataType::Duration(u) => match u {
+                TimeUnit::Second => array.as_primitive::<DurationSecondType>().into(),
+                TimeUnit::Millisecond => array.as_primitive::<DurationMillisecondType>().into(),
+                TimeUnit::Microsecond => array.as_primitive::<DurationMicrosecondType>().into(),
+                TimeUnit::Nanosecond => array.as_primitive::<DurationNanosecondType>().into(),
+            },
+            _ => panic!(
+                "TODO(robert): Missing array encoding for dtype {}",
+                array.data_type().clone()
+            ),
         }
     }
 }

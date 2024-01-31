@@ -45,9 +45,7 @@ impl PScalar {
         macro_rules! from_int {
             ($dtype:ident , $ps:ident) => {
                 match $dtype {
-                    DType::LocalTime(w) => {
-                        Ok(Box::new(LocalTimeScalar::new($ps.clone(), w.clone())))
-                    }
+                    DType::LocalTime(w) => Ok(LocalTimeScalar::new($ps.clone(), w.clone()).boxed()),
                     _ => Err(EncError::InvalidDType($dtype.clone())),
                 }
             };
@@ -165,7 +163,7 @@ macro_rules! pscalar {
         impl From<$T> for Box<dyn Scalar> {
             #[inline]
             fn from(value: $T) -> Self {
-                Box::new(PScalar::$ptype(value))
+                PScalar::$ptype(value).boxed()
             }
         }
 
@@ -209,7 +207,7 @@ pscalar!(f64, F64);
 impl From<usize> for Box<dyn Scalar> {
     #[inline]
     fn from(value: usize) -> Self {
-        Box::new(PScalar::U64(value as u64))
+        PScalar::U64(value as u64).boxed()
     }
 }
 

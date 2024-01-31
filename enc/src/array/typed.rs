@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::borrow::Borrow;
 use std::sync::{Arc, RwLock};
 
 use arrow::datatypes::DataType;
@@ -71,12 +70,12 @@ impl Array for TypedArray {
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         let underlying = self.array.scalar_at(index)?;
-        underlying.as_ref().cast(&self.dtype)
+        underlying.as_ref().cast(self.dtype())
     }
 
     // TODO(robert): Have cast happen in enc space and not in arrow space
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let datatype: DataType = self.dtype.borrow().into();
+        let datatype: DataType = self.dtype().into();
         Box::new(
             self.array.iter_arrow().map(move |arr| {
                 arrow::compute::kernels::cast::cast(arr.as_ref(), &datatype).unwrap()

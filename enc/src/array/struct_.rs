@@ -82,13 +82,14 @@ impl Array for StructArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        Ok(Box::new(StructScalar::new(
+        Ok(StructScalar::new(
             self.dtype.clone(),
             self.fields
                 .iter()
                 .map(|field| field.scalar_at(index))
                 .try_collect()?,
-        )))
+        )
+        .boxed())
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -118,11 +119,12 @@ impl Array for StructArray {
             .iter()
             .map(|field| field.slice(start, stop))
             .try_collect()?;
-        Ok(Box::new(Self {
+        Ok(Self {
             fields,
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }))
+        }
+        .boxed())
     }
 
     #[inline]

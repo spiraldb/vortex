@@ -222,7 +222,7 @@ impl TryFrom<DataType> for DType {
     type Error = EncError;
 
     fn try_from(value: DataType) -> Result<Self, Self::Error> {
-        value.borrow().try_into()
+        (&value).try_into()
     }
 }
 
@@ -266,8 +266,8 @@ impl TryFrom<&DataType> for DType {
             DataType::Decimal128(p, s) | DataType::Decimal256(p, s) => Ok(DType::Decimal(*p, *s)),
             DataType::Map(e, _) => match e.data_type() {
                 DataType::Struct(f) => Ok(DType::Map(
-                    Box::new(f[0].data_type().try_into().unwrap()),
-                    Box::new(f[1].data_type().try_into().unwrap()),
+                    Box::new(f[0].data_type().try_into()?),
+                    Box::new(f[1].data_type().try_into()?),
                 )),
                 _ => Err(EncError::InvalidArrowDataType(e.data_type().clone())),
             },

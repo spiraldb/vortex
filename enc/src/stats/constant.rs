@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::array::constant::ConstantArray;
 use crate::array::stats::{Stat, StatsCompute, StatsSet};
-use crate::scalar::{BoolScalar, PScalar};
+use crate::scalar::{BoolScalar, PScalar, Scalar};
 use crate::types::DType;
 
 impl StatsCompute for ConstantArray {
@@ -19,7 +19,7 @@ impl StatsCompute for ConstantArray {
         if self.dtype() == &DType::Bool {
             m.insert(
                 Stat::TrueCount,
-                Box::new(PScalar::U64(
+                PScalar::U64(
                     self.len() as u64
                         * self
                             .value()
@@ -27,7 +27,8 @@ impl StatsCompute for ConstantArray {
                             .downcast_ref::<BoolScalar>()
                             .unwrap()
                             .value() as u64,
-                )),
+                )
+                .boxed(),
             );
         }
         StatsSet::from(m)

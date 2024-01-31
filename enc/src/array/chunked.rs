@@ -115,10 +115,11 @@ impl Array for ChunkedArray {
 
         if length_chunk == offset_chunk {
             if let Some(chunk) = self.chunks.get(offset_chunk) {
-                return Ok(Box::new(ChunkedArray::new(
+                return Ok(ChunkedArray::new(
                     vec![chunk.slice(offset_in_first_chunk, length_in_last_chunk)?],
                     self.dtype.clone(),
-                )));
+                )
+                .boxed());
             }
         }
 
@@ -133,7 +134,7 @@ impl Array for ChunkedArray {
             *c = c.slice(0, length_in_last_chunk)?;
         }
 
-        Ok(Box::new(ChunkedArray::new(chunks, self.dtype.clone())))
+        Ok(ChunkedArray::new(chunks, self.dtype.clone()).boxed())
     }
 
     #[inline]

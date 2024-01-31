@@ -41,7 +41,7 @@ impl Scalar for BoolScalar {
 
     fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
         match dtype {
-            DType::Bool => Ok(Box::new(self.clone())),
+            DType::Bool => Ok(self.clone().boxed()),
             _ => Err(EncError::InvalidDType(dtype.clone())),
         }
     }
@@ -54,7 +54,7 @@ impl Scalar for BoolScalar {
 impl From<bool> for Box<dyn Scalar> {
     #[inline]
     fn from(value: bool) -> Self {
-        Box::new(BoolScalar::new(value))
+        BoolScalar::new(value).boxed()
     }
 }
 

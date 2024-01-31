@@ -1,38 +1,32 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::Datum;
+use arrow::array::Array as ArrowArray;
+use arrow::array::NullArray as ArrowNullArray;
 
 use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
-use crate::arrow::compute::repeat;
-use crate::error::{EncError, EncResult};
-use crate::scalar::Scalar;
+use crate::error::EncResult;
+use crate::scalar::{NullScalar, Scalar};
 use crate::types::DType;
 
 #[derive(Debug, Clone)]
-pub struct ConstantArray {
-    scalar: Box<dyn Scalar>,
+pub struct NullArray {
     length: usize,
     stats: Arc<RwLock<StatsSet>>,
 }
 
-impl ConstantArray {
-    pub fn new(scalar: Box<dyn Scalar>, length: usize) -> Self {
+impl NullArray {
+    pub fn new(length: usize) -> Self {
         Self {
-            scalar,
             length,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
-
-    pub fn value(&self) -> &dyn Scalar {
-        self.scalar.as_ref()
-    }
 }
 
-impl Array for ConstantArray {
+impl Array for NullArray {
     #[inline]
     fn as_any(&self) -> &dyn Any {
         self
@@ -60,7 +54,7 @@ impl Array for ConstantArray {
 
     #[inline]
     fn dtype(&self) -> &DType {
-        self.scalar.dtype()
+        &DType::Null
     }
 
     #[inline]
@@ -68,16 +62,14 @@ impl Array for ConstantArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        if index >= self.length {
-            return Err(EncError::OutOfBounds(index, 0, self.length));
-        }
-        Ok(self.scalar.clone())
+    fn scalar_at(&self, _index: usize) -> EncResult<Box<dyn Scalar>> {
+        Ok(NullScalar::new().boxed())
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let arrow_scalar: Box<dyn Datum> = self.scalar.as_ref().into();
-        Box::new(std::iter::once(repeat(arrow_scalar.as_ref(), self.length)))
+        Box::new(std::iter::once(
+            Arc::new(ArrowNullArray::new(self.length)) as Arc<dyn ArrowArray>
+        ))
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
@@ -90,34 +82,34 @@ impl Array for ConstantArray {
 
     #[inline]
     fn encoding(&self) -> EncodingRef {
-        &ConstantEncoding
+        &NullEncoding
     }
 
     #[inline]
     fn nbytes(&self) -> usize {
-        self.scalar.nbytes()
+        8
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for ConstantArray {
+impl<'arr> AsRef<(dyn Array + 'arr)> for NullArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self
     }
 }
 
-impl ArrayDisplay for ConstantArray {
+impl ArrayDisplay for NullArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("{}", self.value()))
+        f.writeln("(null)")
     }
 }
 
 #[derive(Debug)]
-pub struct ConstantEncoding;
+pub struct NullEncoding;
 
-pub const CONSTANT_ENCODING: EncodingId = EncodingId("enc.constant");
+pub const NULL_ENCODING: EncodingId = EncodingId("enc.null");
 
-impl Encoding for ConstantEncoding {
+impl Encoding for NullEncoding {
     fn id(&self) -> &EncodingId {
-        &CONSTANT_ENCODING
+        &NULL_ENCODING
     }
 }
