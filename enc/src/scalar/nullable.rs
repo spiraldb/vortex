@@ -29,7 +29,7 @@ impl Scalar for NullableScalar {
 
     #[inline]
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        todo!()
+        self
     }
 
     #[inline]

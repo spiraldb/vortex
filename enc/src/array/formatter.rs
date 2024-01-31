@@ -29,7 +29,7 @@ impl<'a, 'b: 'a> ArrayFormatter<'a, 'b> {
 
     pub fn array(&mut self, array: &dyn Array) -> std::fmt::Result {
         self.writeln(format!(
-            "{}({}), len={}, nbytes={} ({})",
+            "{}({}), len={}, nbytes={} ({}%)",
             array.encoding().id(),
             array.dtype(),
             array.len(),
@@ -52,5 +52,17 @@ impl<'a, 'b: 'a> ArrayFormatter<'a, 'b> {
         let res = indented(self);
         self.indent = original_ident;
         res
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::array::primitive::PrimitiveArray;
+    use crate::array::Array;
+
+    #[test]
+    fn primitive_array() {
+        let arr = PrimitiveArray::from_vec((0..100).collect()).boxed();
+        assert_eq!(format!("{}", arr), "enc.primitive(sint(32)), len=100, nbytes=400 B (100%)\n[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]...\n")
     }
 }

@@ -1,7 +1,6 @@
 use crate::array::constant::{ConstantArray, ConstantEncoding};
-use crate::array::primitive::PrimitiveArray;
 use crate::array::stats::Stat;
-use crate::array::{Array, ArrayKind, ArrayRef, Encoding};
+use crate::array::{Array, ArrayRef, Encoding};
 use crate::compute::compress::{CompressConfig, CompressCtx, CompressedEncoding, Compressor};
 
 impl CompressedEncoding for ConstantEncoding {
@@ -22,13 +21,6 @@ impl CompressedEncoding for ConstantEncoding {
     }
 }
 
-fn compress(array: &dyn Array, opts: CompressCtx) -> ArrayRef {
-    match ArrayKind::from(array) {
-        ArrayKind::Primitive(p) => compress_primitive_array(p, opts),
-        _ => unimplemented!("Compress more arrays!"),
-    }
-}
-
-fn compress_primitive_array(array: &PrimitiveArray, _opts: CompressCtx) -> ArrayRef {
+fn compress(array: &dyn Array, _opts: CompressCtx) -> ArrayRef {
     ConstantArray::new(array.scalar_at(0).unwrap(), array.len()).boxed()
 }

@@ -11,7 +11,7 @@ use enc::array::struct_::StructArray;
 use enc::array::typed::TypedArray;
 use enc::array::varbin::VarBinArray;
 use enc::array::varbinview::VarBinViewArray;
-use enc::array::{ArrayKind, ArrayRef};
+use enc::array::{Array, ArrayKind, ArrayRef};
 
 use crate::dtype::PyDType;
 use crate::enc_arrow;
@@ -102,6 +102,10 @@ impl PyArray {
             ArrayKind::Other(_) => panic!("Can't convert array to python"),
         }
     }
+
+    pub fn unwrap(&self) -> &dyn Array {
+        self.inner.as_ref()
+    }
 }
 
 #[pymethods]
@@ -112,6 +116,15 @@ impl PyArray {
 
     fn __len__(&self) -> usize {
         self.inner.len()
+    }
+
+    fn __str__(&self) -> String {
+        format!("{}", self.inner)
+    }
+
+    #[getter]
+    fn nbytes(&self) -> usize {
+        self.inner.nbytes()
     }
 
     #[getter]

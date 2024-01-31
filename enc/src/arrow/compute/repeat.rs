@@ -1,16 +1,13 @@
-use std::iter;
 use std::sync::Arc;
 
-use arrow::array::builder::{BooleanBuilder, PrimitiveBuilder};
 use arrow::array::cast::AsArray;
 use arrow::array::types::{
     Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
     UInt32Type, UInt64Type, UInt8Type,
 };
-use arrow::array::{ArrayRef, ArrowPrimitiveType, Datum, NullArray, PrimitiveArray};
+use arrow::array::{ArrayRef, ArrowPrimitiveType, BooleanArray, Datum, NullArray, PrimitiveArray};
+use arrow::buffer::BooleanBuffer;
 use arrow::datatypes::DataType;
-
-use crate::array::bool;
 
 macro_rules! repeat_primitive {
     ($arrow_type:ty, $arr:expr, $n:expr) => {{
@@ -29,18 +26,15 @@ pub fn repeat(scalar: &dyn Datum, n: usize) -> ArrayRef {
     match arr.data_type() {
         DataType::Null => Arc::new(NullArray::new(n)),
         DataType::Boolean => {
-            let mut boolbuilder = BooleanBuilder::with_capacity(n);
             if arr.is_valid(0) {
-                boolbuilder.append_slice(
-                    iter::repeat(arr.as_boolean().value(0))
-                        .take(n)
-                        .collect::<Vec<bool>>()
-                        .as_slice(),
-                );
+                if arr.as_boolean().value(0) {
+                    Arc::new(BooleanArray::from(BooleanBuffer::new_set(n)))
+                } else {
+                    Arc::new(BooleanArray::from(BooleanBuffer::new_unset(n)))
+                }
             } else {
-                boolbuilder.append_nulls(n);
+                Arc::new(BooleanArray::new_null(n))
             }
-            Arc::new(boolbuilder.finish())
         }
         DataType::UInt8 => repeat_primitive!(UInt8Type, arr, n),
         DataType::UInt16 => repeat_primitive!(UInt16Type, arr, n),
@@ -61,15 +55,11 @@ fn repeat_primitive<T: ArrowPrimitiveType>(
     value: Option<T::Native>,
     n: usize,
 ) -> Arc<PrimitiveArray<T>> {
-    let mut arr = PrimitiveBuilder::<T>::with_capacity(n);
-    if let Some(v) = value {
-        unsafe {
-            arr.append_trusted_len_iter(iter::repeat(v).take(n));
-        }
-    } else {
-        arr.append_nulls(n);
-    }
-    Arc::new(arr.finish())
+    Arc::new(
+        value
+            .map(|v| PrimitiveArray::from_value(v, n))
+            .unwrap_or_else(|| PrimitiveArray::new_null(n)),
+    )
 }
 
 #[cfg(test)]

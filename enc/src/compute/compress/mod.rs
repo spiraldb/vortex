@@ -3,7 +3,7 @@ use std::fmt::Debug;
 
 use once_cell::sync::Lazy;
 
-use crate::array::{Array, ArrayRef, Encoding, EncodingId};
+use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId};
 
 mod constant;
 mod primitive;
@@ -36,14 +36,24 @@ impl Default for CompressConfig {
 
 impl CompressConfig {
     pub fn new(
+        encodings: HashSet<&'static EncodingId>,
+        disabled_encodings: HashSet<&'static EncodingId>,
+    ) -> Self {
+        Self {
+            encodings,
+            disabled_encodings,
+            ..CompressConfig::default()
+        }
+    }
+
+    pub fn from_encodings(
         encodings: &[&'static dyn CompressedEncoding],
         disabled_encodings: &[&'static dyn CompressedEncoding],
     ) -> Self {
-        Self {
-            encodings: encodings.iter().map(|e| e.id()).collect(),
-            disabled_encodings: disabled_encodings.iter().map(|e| e.id()).collect(),
-            ..CompressConfig::default()
-        }
+        Self::new(
+            encodings.iter().map(|e| e.id()).collect(),
+            disabled_encodings.iter().map(|e| e.id()).collect(),
+        )
     }
 
     pub fn is_enabled(&self, kind: &EncodingId) -> bool {
@@ -61,7 +71,15 @@ pub struct CompressCtx<'a> {
     is_sample: bool,
 }
 
-impl CompressCtx<'_> {
+impl<'a> CompressCtx<'a> {
+    pub fn new(options: &'a CompressConfig) -> Self {
+        Self {
+            options,
+            depth: 0,
+            is_sample: false,
+        }
+    }
+
     pub fn for_sample(&self) -> Self {
         let mut cloned = self.clone();
         cloned.is_sample = true;
@@ -77,16 +95,21 @@ impl CompressCtx<'_> {
 
 impl Default for CompressCtx<'_> {
     fn default() -> Self {
-        Self {
-            options: &DEFAULT_COMPRESS_CONFIG,
-            depth: 0,
-            is_sample: false,
-        }
+        Self::new(&DEFAULT_COMPRESS_CONFIG)
     }
 }
 
 pub trait Compressible {
     fn compress(&self, opts: CompressCtx) -> ArrayRef;
+}
+
+impl<T> Compressible for &T
+where
+    T: Compressible,
+{
+    fn compress(&self, opts: CompressCtx) -> ArrayRef {
+        (*self).compress(opts)
+    }
 }
 
 pub trait CompressorFor<T: Array> {
@@ -100,7 +123,14 @@ pub trait CompressedEncoding: Encoding + 'static {
         -> Option<&'static Compressor>;
 }
 
-pub fn compress<T: AsRef<dyn Array> + Compressible>(arr: T, opts: CompressCtx) -> ArrayRef {
+pub fn compress(arr: &dyn Array, opts: CompressCtx) -> ArrayRef {
+    match ArrayKind::from(arr) {
+        ArrayKind::Primitive(p) => compress_typed(p, opts),
+        _ => dyn_clone::clone_box(arr),
+    }
+}
+
+pub fn compress_typed<T: AsRef<dyn Array> + Compressible>(arr: T, opts: CompressCtx) -> ArrayRef {
     if arr.as_ref().is_empty() {
         return dyn_clone::clone_box(arr.as_ref());
     }

@@ -4,8 +4,10 @@ use dtype::PyDType;
 use enc::types::DType;
 
 use crate::array::*;
+use crate::compress::PyCompressConfig;
 
 mod array;
+mod compress;
 mod dtype;
 mod enc_arrow;
 mod encode;
@@ -17,11 +19,13 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
 
     m.add_function(wrap_pyfunction!(encode::encode, m)?)?;
+    m.add_function(wrap_pyfunction!(compress::compress, m)?)?;
 
     m.add_class::<PyArray>()?;
     m.add_class::<PyBoolArray>()?;
     m.add_class::<PyChunkedArray>()?;
     m.add_class::<PyConstantArray>()?;
+    m.add_class::<PyPatchedArray>()?;
     m.add_class::<PyPrimitiveArray>()?;
     m.add_class::<PyREEArray>()?;
     m.add_class::<PyStructArray>()?;
@@ -30,6 +34,8 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyVarBinViewArray>()?;
 
     m.add_class::<PyDType>()?;
+
+    m.add_class::<PyCompressConfig>()?;
 
     m.add_function(wrap_pyfunction!(dtype_int, m)?)?;
     m.add_function(wrap_pyfunction!(dtype_float, m)?)?;

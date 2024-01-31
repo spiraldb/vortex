@@ -147,9 +147,15 @@ impl TryFrom<&DataType> for PType {
             DataType::UInt16 => Ok(PType::U16),
             DataType::UInt32 => Ok(PType::U32),
             DataType::UInt64 => Ok(PType::U64),
-            // DataType::Float16 => Ok(PType::F16),
+            DataType::Float16 => Ok(PType::F16),
             DataType::Float32 => Ok(PType::F32),
             DataType::Float64 => Ok(PType::F64),
+            DataType::Time32(_) => Ok(PType::I32),
+            DataType::Time64(_) => Ok(PType::I64),
+            DataType::Timestamp(_, _) => Ok(PType::I64),
+            DataType::Date32 => Ok(PType::I32),
+            DataType::Date64 => Ok(PType::I64),
+            DataType::Duration(_) => Ok(PType::I64),
             _ => Err(EncError::InvalidArrowDataType(value.clone())),
         }
     }
