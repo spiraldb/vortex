@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const abi = @import("abi");
+const abi = @import("types.zig");
 
 const c = @cImport({
     @cInclude("wrapper.h");

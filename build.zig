@@ -1,4 +1,7 @@
 const std = @import("std");
+const CreateOptions = std.Build.Module.CreateOptions;
+const TestOptions = std.Build.TestOptions;
+const StaticLibraryOptions = std.Build.StaticLibraryOptions;
 
 pub fn build(b: *std.Build) void {
     b.reference_trace = 16;
@@ -23,62 +26,73 @@ pub fn build(b: *std.Build) void {
     tracyOpts.addOption(u16, "callstack_depth", callstack_depth);
 
     // trazy
-    const trazy = b.addModule("trazy", .{
-        .source_file = .{ .path = "zig/trazy/trazy.zig" },
-        .dependencies = &.{
-            .{ .name = "tracy_options", .module = tracyOpts.createModule() },
-        },
+    const trazy = b.addModule("trazy", CreateOptions{
+        .root_source_file = .{ .path = "zig/trazy/trazy.zig" },
+        .target = target,
+        .optimize = optimize,
     });
+    trazy.addImport("tracy_options", tracyOpts.createModule());
 
     // zimd
-    const zimd = b.addModule("zimd", .{
-        .source_file = .{ .path = "zig/zimd/zimd.zig" },
+    const zimd = b.addModule("zimd", CreateOptions{
+        .root_source_file = .{ .path = "zig/zimd/zimd.zig" },
+        .target = target,
+        .optimize = optimize,
     });
 
     // test zimd
-    const zimd_test = b.addTest(.{
+    const zimd_test = b.addTest(TestOptions{
         .root_source_file = .{ .path = "zig/zimd/zimd.zig" },
         .target = target,
         .optimize = optimize,
         .filter = filter_test,
     });
-    zimd_test.addModule("zimd", zimd);
+    zimd_test.root_module.addImport("zimd", zimd);
     const zimd_test_run = b.addRunArtifact(zimd_test);
     test_step.dependOn(&zimd_test_run.step);
 
     // C ABI types
-    const c_abi_types = b.addModule("abi", .{
-        .source_file = .{ .path = "zig/c-abi/types.zig" },
-    });
+    const c_abi_options = CreateOptions{
+        .root_source_file = .{ .path = "zig/c-abi/types.zig" },
+        .target = target,
+        .optimize = optimize,
+        .c_std = std.Build.CStd.C11,
+        .link_libc = true,
+    };
+    const c_abi_types = b.addModule("abi", c_abi_options);
+    c_abi_types.addIncludePath(.{ .path = "zig/c-abi/include" });
 
     // codecs
-    const codecz = b.addModule("codecz", .{
-        .source_file = .{ .path = "zig/codecz/codecz.zig" },
-        .dependencies = &.{
-            .{ .name = "abi", .module = c_abi_types },
-            .{ .name = "zimd", .module = zimd },
-            .{ .name = "trazy", .module = trazy },
-        },
+    const codecz = b.addModule("codecz", CreateOptions{
+        .root_source_file = .{ .path = "zig/codecz/codecz.zig" },
+        .target = target,
+        .optimize = optimize,
+        .c_std = std.Build.CStd.C11,
+        .link_libc = true,
     });
+    codecz.addImport("abi", c_abi_types);
+    // codecz.addImport("trazy", trazy);
+    codecz.addImport("zimd", zimd);
 
     // test codecs
-    const codecz_test = b.addTest(.{
+    const codecz_test = b.addTest(TestOptions{
         .root_source_file = .{ .path = "zig/codecz/codecz.zig" },
         .target = target,
         .optimize = optimize,
         .filter = filter_test,
+        .link_libc = true,
     });
-    codecz_test.addModule("codecz", codecz);
-    codecz_test.addModule("abi", c_abi_types);
-    codecz_test.addModule("trazy", trazy);
-    codecz_test.addModule("zimd", zimd);
-    codecz_test.addIncludePath(.{ .path = "zig/c-abi" });
-    dependencyTracy(codecz_test);
+    codecz_test.root_module.addImport("codecz", codecz);
+    codecz_test.root_module.addImport("abi", c_abi_types);
+    codecz_test.root_module.addImport("zimd", zimd);
+    // codecz_test.root_module.addImport("trazy", trazy);
+    // dependencyTracy(codecz_test);
+    codecz_test.addIncludePath(.{ .path = "zig/c-abi/include" });
     const codecz_test_run = b.addRunArtifact(codecz_test);
     test_step.dependOn(&codecz_test_run.step);
 
     // wrap it all up as a static library to call from Rust
-    const lib_step = b.addStaticLibrary(std.Build.StaticLibraryOptions{
+    const lib_step = b.addStaticLibrary(StaticLibraryOptions{
         .name = "codecz",
         .root_source_file = .{ .path = "zig/c-abi/wrapper.zig" },
         .link_libc = true,
@@ -86,26 +100,27 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .single_threaded = false,
+        .unwind_tables = true,
     });
-    lib_step.addModule("codecz", codecz);
-    lib_step.addModule("abi", c_abi_types);
-    lib_step.addModule("zimd", zimd);
-    //lib_step.addModule("trazy", trazy);
+    lib_step.root_module.addImport("codecz", codecz);
+    lib_step.root_module.addImport("abi", c_abi_types);
+    lib_step.root_module.addImport("zimd", zimd);
+    //lib_step.root_module.addImport("trazy", trazy);
     //dependencyTracy(lib_step);
-    lib_step.addIncludePath(.{ .path = "zig/c-abi" });
-    lib_step.c_std = std.Build.CStd.C11;
+    lib_step.addIncludePath(.{ .path = "zig/c-abi/include" });
+    lib_step.root_module.c_std = std.Build.CStd.C11;
     lib_step.bundle_compiler_rt = true;
+    lib_step.formatted_panics = true;
     b.installArtifact(lib_step);
 
-    // but also test invoking the static library from Zig
-    const lib_test = b.addTest(.{
+    // also test invoking the static library from Zig
+    const lib_test = b.addTest(TestOptions{
         .root_source_file = .{ .path = "zig/c-abi/test_wrapper.zig" },
         .target = target,
         .optimize = optimize,
         .filter = filter_test,
     });
-    lib_test.addModule("abi", c_abi_types);
-    lib_test.addIncludePath(.{ .path = "zig/c-abi" });
+    lib_test.addIncludePath(.{ .path = "zig/c-abi/include" });
     lib_test.linkLibrary(lib_step);
 
     const lib_test_run = b.addRunArtifact(lib_test);
@@ -116,7 +131,7 @@ pub fn build(b: *std.Build) void {
     const test_debug_root = b.option([]const u8, "test-debug-root", "The root path of a file emitted as a binary for use with the debugger");
     if (test_debug_root) |root| {
         // FIXME(ngates): which test task?
-        codecz_test.root_src = .{ .path = root };
+        codecz_test.root_module.root_source_file = .{ .path = root };
         const test_bin_install = b.addInstallBinFile(codecz_test.getEmittedBin(), "test.bin");
         b.getInstallStep().dependOn(&test_bin_install.step);
     }
