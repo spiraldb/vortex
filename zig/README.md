@@ -10,13 +10,7 @@ There are two main subprojects: zimd (platform-portable SIMD utilities) and code
 Codecz depends on zimd, and is wrapped up in a static library that is then called from Rust via the C ABI.
 
 The C headers and C ABI-friendly function wrappers live in the `c-abi` subproject. Rust bindings are generated in the codecz-sys
-crate based on the contents of `c-abi/wrapper.h`.
-
-Note: zig subprojects with the suffix `-legacy` are not built/compiled and should be deleted in the near future. They are there for
-reference as we port functionality to Rust.
-
-Note: there is also a currently-unused subproject called `trazy`, which wraps up tracing utilities. We are not currently using it, 
-but should do so in the future.
+crate based on the contents of `c-abi/include/wrapper.h`.
 
 ## Zig Tips
 
