@@ -3,6 +3,7 @@
 #![allow(non_snake_case)]
 
 use alloc::AlignedVec;
+use core::mem::size_of;
 
 pub mod alloc;
 
@@ -37,6 +38,54 @@ where
         Self {
             ptr: slice.as_ptr() as *mut u8,
             len: std::mem::size_of_val(slice) as u64,
+        }
+    }
+}
+
+impl WrittenBuffer_t {
+    pub fn new<T>(buf: &mut AlignedVec<T>) -> Self {
+        Self {
+            buffer: buf.into(),
+            bitSizePerElement: (size_of::<T>() * 8) as u8,
+            numElements: 0,
+            inputBytesUsed: 0,
+        }
+    }
+}
+
+impl OneBufferResult_t {
+    pub fn new<T>(buf: &mut AlignedVec<T>) -> Self {
+        Self {
+            status: ResultStatus_t_UnknownCodecError,
+            buf: WrittenBuffer_t::new(buf),
+        }
+    }
+}
+
+impl TwoBufferResult_t {
+    pub fn new<T1, T2>(first: &mut AlignedVec<T1>, second: &mut AlignedVec<T2>) -> Self {
+        Self {
+            status: ResultStatus_t_UnknownCodecError,
+            first: WrittenBuffer_t::new(first),
+            second: WrittenBuffer_t::new(second),
+        }
+    }
+}
+
+impl Default for AlpExponentsResult_t {
+    fn default() -> Self {
+        Self {
+            status: ResultStatus_t_UnknownCodecError,
+            exponents: Default::default(),
+        }
+    }
+}
+
+impl Default for AlpExponents_t {
+    fn default() -> Self {
+        Self {
+            e: u8::MAX,
+            f: u8::MAX,
         }
     }
 }

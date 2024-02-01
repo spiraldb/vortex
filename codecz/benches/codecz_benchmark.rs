@@ -57,52 +57,50 @@ fn zigzag_benchmark(c: &mut Criterion) {
     });
 }
 
-// fn alp_benchmark(c: &mut Criterion) {
-//     let mut rng = ChaCha8Rng::seed_from_u64(0);
-//     let range = Uniform::new(i32::MIN, i32::MAX);
-//     let exp_range = Uniform::new(-14, 0);
-//     let data = (0..100000)
-//         .map(|_| {
-//             let mantissa = range.sample(&mut rng) as f64;
-//             let exponent = exp_range.sample(&mut rng);
-//             mantissa * 10_f64.powi(exponent)
-//         })
-//         .collect::<Vec<f64>>();
+fn alp_benchmark(c: &mut Criterion) {
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+    let range = Uniform::new(i32::MIN, i32::MAX);
+    let exp_range = Uniform::new(-4, 0);
+    let data = (0..100000)
+        .map(|_| {
+            let mantissa = range.sample(&mut rng) as f64;
+            let exponent = exp_range.sample(&mut rng);
+            mantissa * 10_f64.powi(exponent)
+        })
+        .collect::<Vec<f64>>();
 
-//     c.bench_function("alp encode", |b| {
-//         b.iter(|| {
-//             let encoded = codecz::alp::encode(black_box(&data)).unwrap();
-//             black_box(encoded);
-//         })
-//     });
+    c.bench_function("alp prelude", |b| {
+        b.iter(|| {
+            let exponents = codecz::alp::find_exponents(black_box(&data)).unwrap();
+            black_box(exponents);
+        })
+    });
 
-//     let encoded = codecz::alp::encode(&data).unwrap();
-//     println!(
-//         "num_exceptions: {}, exponents: {:?}",
-//         encoded
-//             .exceptions_idx
-//             .iter()
-//             .map(|b| b.count_ones() as u64)
-//             .sum::<u64>(),
-//         encoded.exponents
-//     );
+    let exp = codecz::alp::find_exponents(&data).unwrap();
+    c.bench_function("alp encode", |b| {
+        b.iter(|| {
+            let encoded = codecz::alp::encode_with(black_box(&data), exp).unwrap();
+            black_box(encoded);
+        })
+    });
 
-//     c.bench_function("alp decode", |b| {
-//         b.iter(|| {
-//             let decoded = codecz::alp::decode::<f64>(
-//                 black_box(&encoded.values),
-//                 black_box(encoded.exponents),
-//             )
-//             .unwrap();
-//             black_box(decoded);
-//         })
-//     });
-// }
+    let (values, exceptions_idx) = codecz::alp::encode_with(&data, exp).unwrap();
+    println!(
+        "num_exceptions: {}, exponents: {:?}",
+        exceptions_idx
+            .iter()
+            .map(|b| b.count_ones() as u64)
+            .sum::<u64>(),
+        exp
+    );
 
-criterion_group!(
-    benches,
-    ree_benchmark,
-    zigzag_benchmark,
-    /* alp_benchmark */
-);
+    c.bench_function("alp decode", |b| {
+        b.iter(|| {
+            let decoded = codecz::alp::decode::<f64>(black_box(&values), black_box(exp)).unwrap();
+            black_box(decoded);
+        })
+    });
+}
+
+criterion_group!(benches, ree_benchmark, zigzag_benchmark, alp_benchmark);
 criterion_main!(benches);

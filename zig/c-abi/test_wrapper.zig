@@ -6,6 +6,69 @@ const c = @cImport({
     @cInclude("wrapper.h");
 });
 
+test "alignment 128" {
+    try std.testing.expectEqual(c.SPIRAL_ALIGNMENT, 128);
+}
+
+test "result status" {
+    const ResultStatus = abi.ResultStatus;
+    const CodecError = abi.CodecError;
+
+    try std.testing.expectEqual(ResultStatus.Ok, ResultStatus.from(c.Ok));
+    try std.testing.expectEqual(ResultStatus.InvalidInput, ResultStatus.from(c.InvalidInput));
+    try std.testing.expectEqual(ResultStatus.IncorrectAlignment, ResultStatus.from(c.IncorrectAlignment));
+    try std.testing.expectEqual(ResultStatus.EncodingFailed, ResultStatus.from(c.EncodingFailed));
+    try std.testing.expectEqual(ResultStatus.OutputBufferTooSmall, ResultStatus.from(c.OutputBufferTooSmall));
+    try std.testing.expectEqual(ResultStatus.OutOfMemory, ResultStatus.from(c.OutOfMemory));
+    try std.testing.expectEqual(ResultStatus.UnknownCodecError, ResultStatus.from(c.UnknownCodecError));
+
+    try std.testing.expectEqual(c.Ok, @intFromEnum(ResultStatus.Ok));
+    try std.testing.expectEqual(c.InvalidInput, @intFromEnum(ResultStatus.InvalidInput));
+    try std.testing.expectEqual(c.IncorrectAlignment, @intFromEnum(ResultStatus.IncorrectAlignment));
+    try std.testing.expectEqual(c.EncodingFailed, @intFromEnum(ResultStatus.EncodingFailed));
+    try std.testing.expectEqual(c.OutputBufferTooSmall, @intFromEnum(ResultStatus.OutputBufferTooSmall));
+    try std.testing.expectEqual(c.OutOfMemory, @intFromEnum(ResultStatus.OutOfMemory));
+    try std.testing.expectEqual(c.UnknownCodecError, @intFromEnum(ResultStatus.UnknownCodecError));
+
+    try std.testing.expectEqual(ResultStatus.InvalidInput, ResultStatus.fromCodecError(CodecError.InvalidInput));
+    try std.testing.expectEqual(ResultStatus.IncorrectAlignment, ResultStatus.fromCodecError(CodecError.IncorrectAlignment));
+    try std.testing.expectEqual(ResultStatus.EncodingFailed, ResultStatus.fromCodecError(CodecError.EncodingFailed));
+    try std.testing.expectEqual(ResultStatus.OutputBufferTooSmall, ResultStatus.fromCodecError(CodecError.OutputBufferTooSmall));
+    try std.testing.expectEqual(ResultStatus.OutOfMemory, ResultStatus.fromCodecError(CodecError.OutOfMemory));
+}
+
+test "struct field offsets" {
+    try checkStructFieldOffsets(abi.ByteBuffer, c.ByteBuffer_t);
+    try checkStructFieldOffsets(abi.WrittenBuffer, c.WrittenBuffer_t);
+    try checkStructFieldOffsets(abi.OneBufferResult, c.OneBufferResult_t);
+    try checkStructFieldOffsets(abi.TwoBufferResult, c.TwoBufferResult_t);
+    try checkStructFieldOffsets(abi.AlpExponents, c.AlpExponents_t);
+    try checkStructFieldOffsets(abi.AlpExponentsResult, c.AlpExponentsResult_t);
+    try checkStructFieldOffsets(abi.RunLengthStats, c.RunLengthStats_t);
+}
+
+fn checkStructFieldOffsets(zigType: type, cType: type) !void {
+    comptime abi.checkStructABI(zigType, cType);
+    const zigTypeInfo = @typeInfo(zigType);
+    const cTypeInfo = @typeInfo(cType);
+
+    const ztZero = std.mem.zeroes(zigType);
+    const ztZeroPtr = @intFromPtr(&ztZero);
+    const ctZero = std.mem.zeroes(cType);
+    const ctZeroPtr = @intFromPtr(&ctZero);
+    if (zigTypeInfo == .Struct and cTypeInfo == .Struct) {
+        inline for (zigTypeInfo.Struct.fields, cTypeInfo.Struct.fields) |zf, cf| {
+            const zfOffset = @intFromPtr(@fieldParentPtr(zigType, zf.name, &@field(ztZero, zf.name))) - ztZeroPtr;
+            const cfOffset = @intFromPtr(@fieldParentPtr(cType, cf.name, &@field(ctZero, cf.name))) - ctZeroPtr;
+            try std.testing.expectEqual(zfOffset, cfOffset);
+
+            if (@typeInfo(zf.type) == .Struct and @typeInfo(cf.type) == .Struct) {
+                try checkStructFieldOffsets(zf.type, cf.type);
+            }
+        }
+    }
+}
+
 test "math" {
     const ints = [_]i32{ 1, 2, 3, 4, 5 };
     try std.testing.expectEqual(c.codecz_math_max_i32(@ptrCast(&ints), ints.len), 5);
@@ -13,13 +76,10 @@ test "math" {
     try std.testing.expectEqual(c.codecz_math_isConstant_i32(@ptrCast(&ints), ints.len), false);
     try std.testing.expectEqual(c.codecz_math_isSorted_i32(@ptrCast(&ints), ints.len), true);
 
-    const runstats = c.codecz_math_runLengthStats_i32(@ptrCast(&ints), ints.len);
+    var runstats: c.RunLengthStats_t = undefined;
+    c.codecz_math_runLengthStats_i32(@ptrCast(&ints), ints.len, @ptrCast(&runstats));
     try std.testing.expectEqual(runstats.runCount, 0);
     try std.testing.expectEqual(runstats.runElementCount, 0);
-}
-
-test "alignment 128" {
-    try std.testing.expectEqual(c.SPIRAL_ALIGNMENT, 128);
 }
 
 test "run end encoding" {
@@ -36,21 +96,22 @@ test "run end encoding" {
     defer gpa.free(runEndsOut);
     const runEndsBuf = abi.ByteBuffer.initFromSlice(runEndsOut);
 
-    const encoded = try abi.TwoBufferResult.from(c.codecz_ree_encode_i32_u32(@ptrCast(&ints), ints.len, valuesBuf.into(), runEndsBuf.into()));
+    var encoded = abi.TwoBufferResult.empty(valuesBuf, runEndsBuf);
+    c.codecz_ree_encode_i32_u32(@ptrCast(&ints), ints.len, @ptrCast(&encoded));
 
     try std.testing.expectEqual(encoded.status, abi.ResultStatus.Ok);
 
-    try std.testing.expectEqualDeep(encoded.firstBuffer.buffer, valuesBuf);
-    try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.firstBuffer.buffer.ptr), 128));
-    try std.testing.expectEqual(encoded.firstBuffer.numElements, numRuns);
-    try std.testing.expectEqual(encoded.firstBuffer.bitSizePerElement, @bitSizeOf(V));
-    try std.testing.expectEqual(encoded.firstBuffer.inputBytesUsed, valuesOut.len * @sizeOf(V));
+    try std.testing.expectEqualDeep(encoded.first.buffer, valuesBuf);
+    try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.first.buffer.ptr), 128));
+    try std.testing.expectEqual(encoded.first.numElements, numRuns);
+    try std.testing.expectEqual(encoded.first.bitSizePerElement, @bitSizeOf(V));
+    try std.testing.expectEqual(encoded.first.inputBytesUsed, valuesOut.len * @sizeOf(V));
 
-    try std.testing.expectEqualDeep(encoded.secondBuffer.buffer, runEndsBuf);
-    try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.secondBuffer.buffer.ptr), 128));
-    try std.testing.expectEqual(encoded.secondBuffer.numElements, numRuns);
-    try std.testing.expectEqual(encoded.secondBuffer.bitSizePerElement, @bitSizeOf(V));
-    try std.testing.expectEqual(encoded.secondBuffer.inputBytesUsed, runEndsOut.len * @sizeOf(V));
+    try std.testing.expectEqualDeep(encoded.second.buffer, runEndsBuf);
+    try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.second.buffer.ptr), 128));
+    try std.testing.expectEqual(encoded.second.numElements, numRuns);
+    try std.testing.expectEqual(encoded.second.bitSizePerElement, @bitSizeOf(V));
+    try std.testing.expectEqual(encoded.second.inputBytesUsed, runEndsOut.len * @sizeOf(V));
 
     const values = [_]V{ 1, 2, 3, 4, 5 };
     try std.testing.expectEqualSlices(V, &values, valuesOut);
@@ -62,14 +123,15 @@ test "run end encoding" {
     defer gpa.free(decodeOut);
     const decodeBuf = abi.ByteBuffer.initFromSlice(decodeOut);
 
-    const decoded = try abi.OneBufferResult.from(c.codecz_ree_decode_i32_u32(valuesBuf.into(), runEndsBuf.into(), runEnds.len, decodeBuf.into()));
+    var decoded = abi.OneBufferResult.empty(decodeBuf);
+    c.codecz_ree_decode_i32_u32(@ptrCast(&values), @ptrCast(&runEnds), runEnds.len, @ptrCast(&decoded));
     try std.testing.expectEqual(decoded.status, abi.ResultStatus.Ok);
 
-    try std.testing.expectEqualDeep(decoded.buffer.buffer, decodeBuf);
-    try std.testing.expect(std.mem.isAligned(@intFromPtr(decoded.buffer.buffer.ptr), 128));
-    try std.testing.expectEqual(decoded.buffer.numElements, ints.len);
-    try std.testing.expectEqual(decoded.buffer.bitSizePerElement, @bitSizeOf(V));
-    try std.testing.expectEqual(decoded.buffer.inputBytesUsed, decodeOut.len * @sizeOf(V));
+    try std.testing.expectEqualDeep(decoded.buf.buffer, decodeBuf);
+    try std.testing.expect(std.mem.isAligned(@intFromPtr(decoded.buf.buffer.ptr), 128));
+    try std.testing.expectEqual(decoded.buf.numElements, ints.len);
+    try std.testing.expectEqual(decoded.buf.bitSizePerElement, @bitSizeOf(V));
+    try std.testing.expectEqual(decoded.buf.inputBytesUsed, decodeOut.len * @sizeOf(V));
     try std.testing.expectEqualSlices(V, &ints, decodeOut);
 }
 
@@ -95,32 +157,33 @@ test "alp encoding" {
     defer gpa.free(bitsetOut);
     const bitsetBuf = abi.ByteBuffer.initFromSlice(bitsetOut);
 
-    const expResult = abi.AlpExponentsResult.from(c.codecz_alp_sampleFindExponents_f64(@ptrCast(&floats), floats.len));
+    var expResult = abi.AlpExponentsResult.empty();
+    c.codecz_alp_sampleFindExponents_f64(@ptrCast(&floats), floats.len, @ptrCast(&expResult));
     try std.testing.expect(expResult.status == abi.ResultStatus.Ok);
     const exponents = expResult.exponents;
     try std.testing.expectEqual(exponents.e, 8);
     try std.testing.expectEqual(exponents.f, 2);
 
-    const encoded = try abi.TwoBufferResult.from(c.codecz_alp_encode_f64(
+    var encoded = abi.TwoBufferResult.empty(valuesBuf, bitsetBuf);
+    c.codecz_alp_encode_f64(
         @ptrCast(&floats),
         floats.len,
-        exponents.into(),
-        valuesBuf.into(),
-        bitsetBuf.into(),
-    ));
+        @ptrCast(&exponents),
+        @ptrCast(&encoded),
+    );
     try std.testing.expectEqual(encoded.status, abi.ResultStatus.Ok);
 
-    try std.testing.expectEqualDeep(encoded.firstBuffer.buffer, valuesBuf);
-    try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.firstBuffer.buffer.ptr), 128));
-    try std.testing.expectEqual(encoded.firstBuffer.bitSizePerElement, @bitSizeOf(i64));
-    try std.testing.expectEqual(encoded.firstBuffer.inputBytesUsed, valuesOut.len * @sizeOf(i64));
-    try std.testing.expectEqual(encoded.firstBuffer.numElements, floats.len);
+    try std.testing.expectEqualDeep(encoded.first.buffer, valuesBuf);
+    try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.first.buffer.ptr), 128));
+    try std.testing.expectEqual(encoded.first.bitSizePerElement, @bitSizeOf(i64));
+    try std.testing.expectEqual(encoded.first.inputBytesUsed, valuesOut.len * @sizeOf(i64));
+    try std.testing.expectEqual(encoded.first.numElements, floats.len);
 
-    try std.testing.expectEqualDeep(encoded.secondBuffer.buffer, bitsetBuf);
-    try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.secondBuffer.buffer.ptr), 128));
-    try std.testing.expectEqual(encoded.secondBuffer.bitSizePerElement, 1);
-    try std.testing.expectEqual(encoded.secondBuffer.inputBytesUsed, bitsetOut.len * @sizeOf(u8));
-    try std.testing.expectEqual(encoded.secondBuffer.numElements, 1); // in this case, this is num exceptions
+    try std.testing.expectEqualDeep(encoded.second.buffer, bitsetBuf);
+    try std.testing.expect(std.mem.isAligned(@intFromPtr(encoded.second.buffer.ptr), 128));
+    try std.testing.expectEqual(encoded.second.bitSizePerElement, 1);
+    try std.testing.expectEqual(encoded.second.inputBytesUsed, bitsetOut.len * @sizeOf(u8));
+    try std.testing.expectEqual(encoded.second.numElements, 1); // in this case, this is num exceptions
 
     const values = blk: {
         var values_: [floats.len]i64 = undefined;
@@ -132,11 +195,7 @@ test "alp encoding" {
     };
     try std.testing.expectEqualSlices(i64, &values, valuesOut);
 
-    const bitset = std.PackedIntSlice(u1){
-        .bytes = bitsetOut,
-        .bit_offset = 0,
-        .len = floats.len,
-    };
+    const bitset = bitsetBuf.bits();
     for (0..floats.len - 1) |i| {
         try std.testing.expectEqual(bitset.get(i), 0);
     }
@@ -146,19 +205,20 @@ test "alp encoding" {
     defer gpa.free(decodeOut);
     const decodeBuf = abi.ByteBuffer.initFromSlice(decodeOut);
 
-    const decoded = try abi.OneBufferResult.from(c.codecz_alp_decode_f64(
+    var decoded = abi.OneBufferResult.empty(decodeBuf);
+    c.codecz_alp_decode_f64(
         @ptrCast(valuesOut.ptr),
         valuesOut.len,
-        exponents.into(),
-        decodeBuf.into(),
-    ));
+        @ptrCast(&exponents),
+        @ptrCast(&decoded),
+    );
     try std.testing.expectEqual(decoded.status, abi.ResultStatus.Ok);
 
-    try std.testing.expectEqualDeep(decoded.buffer.buffer, decodeBuf);
-    try std.testing.expect(std.mem.isAligned(@intFromPtr(decoded.buffer.buffer.ptr), 128));
-    try std.testing.expectEqual(decoded.buffer.bitSizePerElement, @bitSizeOf(f64));
-    try std.testing.expectEqual(decoded.buffer.inputBytesUsed, decodeOut.len * @sizeOf(f64));
-    try std.testing.expectEqual(decoded.buffer.numElements, floats.len);
+    try std.testing.expectEqualDeep(decoded.buf.buffer, decodeBuf);
+    try std.testing.expect(std.mem.isAligned(@intFromPtr(decoded.buf.buffer.ptr), 128));
+    try std.testing.expectEqual(decoded.buf.bitSizePerElement, @bitSizeOf(f64));
+    try std.testing.expectEqual(decoded.buf.inputBytesUsed, decodeOut.len * @sizeOf(f64));
+    try std.testing.expectEqual(decoded.buf.numElements, floats.len);
     try std.testing.expectEqualSlices(f64, floats[0 .. floats.len - 1], decodeOut[0 .. decodeOut.len - 1]);
     // last one doesn't round trip, but it's close
     try std.testing.expectApproxEqAbs(floats[floats.len - 1], decodeOut[decodeOut.len - 1], 1e-6);

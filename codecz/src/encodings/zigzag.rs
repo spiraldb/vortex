@@ -1,5 +1,5 @@
 use super::{
-    AlignedVec, ByteBuffer, Codec, CodecError, CodecFunction, WrittenBuffer, ALIGNED_ALLOCATOR,
+    AlignedVec, Codec, CodecError, CodecFunction, OneBufferResult, WrittenBuffer, ALIGNED_ALLOCATOR,
 };
 use codecz_sys::{
     codecz_zz_decode_i16, codecz_zz_decode_i32, codecz_zz_decode_i64, codecz_zz_decode_i8,
@@ -12,7 +12,7 @@ pub fn encode<T: SupportsZigZag>(elems: &[T]) -> Result<AlignedVec<T::Unsigned>,
     let mut unsigned: AlignedVec<T::Unsigned> =
         AlignedVec::with_capacity_in(elems.len(), ALIGNED_ALLOCATOR);
 
-    let unsigned_buf = T::encode_impl(elems, (&mut unsigned).into())?;
+    let unsigned_buf = T::encode_impl(elems, &mut unsigned)?;
     assert_eq!(
         unsigned_buf.numElements,
         elems.len() as u64,
@@ -32,7 +32,7 @@ pub fn decode<T: SupportsZigZag>(unsigned: &[T::Unsigned]) -> Result<AlignedVec<
     let mut decoded: AlignedVec<T> =
         AlignedVec::with_capacity_in(unsigned.len(), ALIGNED_ALLOCATOR);
 
-    let decoded_buf = T::decode_impl(unsigned, (&mut decoded).into())?;
+    let decoded_buf = T::decode_impl(unsigned, &mut decoded)?;
     assert_eq!(
         decoded_buf.numElements,
         unsigned.len() as u64,
@@ -51,11 +51,14 @@ pub fn decode<T: SupportsZigZag>(unsigned: &[T::Unsigned]) -> Result<AlignedVec<
 pub trait SupportsZigZag: Sized + TriviallyTransmutable + PrimInt {
     type Unsigned: Sized + TriviallyTransmutable + PrimInt;
 
-    fn encode_impl(elems: &[Self], out_buf: ByteBuffer) -> Result<WrittenBuffer, CodecError>;
+    fn encode_impl(
+        elems: &[Self],
+        out: &mut AlignedVec<Self::Unsigned>,
+    ) -> Result<WrittenBuffer, CodecError>;
 
     fn decode_impl(
         encoded: &[Self::Unsigned],
-        out: ByteBuffer,
+        out: &mut AlignedVec<Self>,
     ) -> Result<WrittenBuffer, CodecError>;
 }
 
@@ -65,23 +68,37 @@ macro_rules! impl_zz {
             impl SupportsZigZag for $t {
                 type Unsigned = $u;
 
-                fn encode_impl(elems: &[Self], out: ByteBuffer) -> Result<WrittenBuffer, CodecError>{
-                    let result = unsafe { [<codecz_zz_encode_ $t>](elems.as_ptr(), elems.len() as u64, out) };
+                fn encode_impl(elems: &[Self], out: &mut AlignedVec<Self::Unsigned>) -> Result<WrittenBuffer, CodecError>{
+                    let mut result = OneBufferResult::new(out);
+                    unsafe {
+                        [<codecz_zz_encode_ $t>](
+                            elems.as_ptr(),
+                            elems.len() as u64,
+                            &mut result as *mut OneBufferResult
+                        );
+                    }
                     if let Some(e) = CodecError::parse_error(result.status, Codec::ZigZag, CodecFunction::Encode) {
                         return Err(e);
                     }
-                    Ok(result.buffer)
+                    Ok(result.buf)
                 }
 
                 fn decode_impl(
                     encoded: &[Self::Unsigned],
-                    out: ByteBuffer,
+                    out: &mut AlignedVec<Self>,
                 ) -> Result<WrittenBuffer, CodecError> {
-                    let result = unsafe { [<codecz_zz_decode_ $t>](encoded.as_ptr(), encoded.len() as u64, out) };
+                    let mut result = OneBufferResult::new(out);
+                    unsafe {
+                        [<codecz_zz_decode_ $t>](
+                            encoded.as_ptr(),
+                            encoded.len() as u64,
+                            &mut result as *mut OneBufferResult
+                        );
+                    }
                     if let Some(e) = CodecError::parse_error(result.status, Codec::ZigZag, CodecFunction::Decode) {
                         return Err(e);
                     }
-                    Ok(result.buffer)
+                    Ok(result.buf)
                 }
             }
         }

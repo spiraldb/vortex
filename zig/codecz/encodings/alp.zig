@@ -146,7 +146,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
                 }
             }
 
-            std.debug.print("BEST EXPONENTS: type = {}, e = {}, f = {}\n", .{ F, bestE, bestF });
+            //std.debug.print("BEST EXPONENTS: type = {}, e = {}, f = {}\n", .{ F, bestE, bestF });
             return .{ .e = @intCast(bestE), .f = @intCast(bestF) };
         }
 

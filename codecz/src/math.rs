@@ -1,10 +1,36 @@
-use codecz_sys::*;
+use codecz_sys::{
+    codecz_math_isConstant_f32, codecz_math_isConstant_f64, codecz_math_isConstant_i16,
+    codecz_math_isConstant_i32, codecz_math_isConstant_i64, codecz_math_isConstant_i8,
+    codecz_math_isConstant_u16, codecz_math_isConstant_u32, codecz_math_isConstant_u64,
+    codecz_math_isConstant_u8, codecz_math_isSorted_f32, codecz_math_isSorted_f64,
+    codecz_math_isSorted_i16, codecz_math_isSorted_i32, codecz_math_isSorted_i64,
+    codecz_math_isSorted_i8, codecz_math_isSorted_u16, codecz_math_isSorted_u32,
+    codecz_math_isSorted_u64, codecz_math_isSorted_u8, codecz_math_max_f32, codecz_math_max_f64,
+    codecz_math_max_i16, codecz_math_max_i32, codecz_math_max_i64, codecz_math_max_i8,
+    codecz_math_max_u16, codecz_math_max_u32, codecz_math_max_u64, codecz_math_max_u8,
+    codecz_math_min_f32, codecz_math_min_f64, codecz_math_min_i16, codecz_math_min_i32,
+    codecz_math_min_i64, codecz_math_min_i8, codecz_math_min_u16, codecz_math_min_u32,
+    codecz_math_min_u64, codecz_math_min_u8, codecz_math_runLengthStats_f32,
+    codecz_math_runLengthStats_f64, codecz_math_runLengthStats_i16, codecz_math_runLengthStats_i32,
+    codecz_math_runLengthStats_i64, codecz_math_runLengthStats_i8, codecz_math_runLengthStats_u16,
+    codecz_math_runLengthStats_u32, codecz_math_runLengthStats_u64, codecz_math_runLengthStats_u8,
+    RunLengthStats_t,
+};
 use num_traits::Num;
 use paste;
 
 pub struct RunLengthStats {
-    pub run_count: u64,
-    pub run_element_count: u64,
+    run_count: u64,
+    run_element_count: u64,
+}
+
+impl From<RunLengthStats_t> for RunLengthStats {
+    fn from(value: RunLengthStats_t) -> Self {
+        Self {
+            run_count: value.runCount,
+            run_element_count: value.runElementCount,
+        }
+    }
 }
 
 pub fn max<T: PrimitiveNumber>(elems: &[T]) -> T {
@@ -56,13 +82,15 @@ macro_rules! impl_codecz_math_num {
                     unsafe { [<codecz_math_isSorted_ $t>](elems.as_ptr(), elems.len()) }
                 }
                 fn run_length_stats(elems: &[Self], _token: private::Sealed) -> RunLengthStats {
-                    let stats = unsafe {
+                    let mut out = RunLengthStats_t{ runCount: 0, runElementCount: 0 };
+                    unsafe {
                         [<codecz_math_runLengthStats_ $t>](
                             elems.as_ptr(),
                             elems.len(),
+                            &mut out as *mut RunLengthStats_t
                         )
                     };
-                    RunLengthStats{ run_count: stats.runCount, run_element_count: stats.runElementCount }
+                    out.into()
                 }
             }
         }

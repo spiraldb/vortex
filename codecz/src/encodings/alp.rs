@@ -1,5 +1,6 @@
 use super::{
-    AlignedVec, ByteBuffer, Codec, CodecError, CodecFunction, WrittenBuffer, ALIGNED_ALLOCATOR,
+    AlignedVec, Codec, CodecError, CodecFunction, OneBufferResult, TwoBufferResult, WrittenBuffer,
+    ALIGNED_ALLOCATOR,
 };
 use codecz_sys::{
     codecz_alp_decode_f32, codecz_alp_decode_f64, codecz_alp_encode_f32, codecz_alp_encode_f64,
@@ -8,10 +9,12 @@ use codecz_sys::{
 use safe_transmute::TriviallyTransmutable;
 
 pub type ALPExponents = codecz_sys::AlpExponents_t;
+type ALPExponentsResult = codecz_sys::AlpExponentsResult_t;
+
 pub struct ALPEncoded<EncInt> {
     pub values: AlignedVec<EncInt>,
     pub exponents: ALPExponents,
-    pub exceptions_idx: AlignedVec<u8>,
+    pub exceptions_idx: AlignedVec<u8>, // this is a raw bitset, should change the type
 }
 
 pub fn encode<T: SupportsALP>(elems: &[T]) -> Result<ALPEncoded<T::EncInt>, CodecError> {
@@ -22,6 +25,10 @@ pub fn encode<T: SupportsALP>(elems: &[T]) -> Result<ALPEncoded<T::EncInt>, Code
         exponents,
         exceptions_idx,
     })
+}
+
+pub fn find_exponents<T: SupportsALP>(elems: &[T]) -> Result<ALPExponents, CodecError> {
+    T::find_exponents_impl(elems)
 }
 
 pub fn encode_with<T: SupportsALP>(
@@ -35,12 +42,8 @@ pub fn encode_with<T: SupportsALP>(
     let mut exceptions_idx: AlignedVec<u8> =
         AlignedVec::with_capacity_in(bitset_size_in_bytes, ALIGNED_ALLOCATOR);
 
-    let (values_buf, exceptions_idx_buf) = T::encode_impl(
-        elems,
-        exponents,
-        (&mut values).into(),
-        (&mut exceptions_idx).into(),
-    )?;
+    let (values_buf, exceptions_idx_buf) =
+        T::encode_impl(elems, exponents, &mut values, &mut exceptions_idx)?;
 
     assert_eq!(
         values_buf.numElements,
@@ -73,7 +76,7 @@ pub fn decode<T: SupportsALP>(
 ) -> Result<AlignedVec<T>, CodecError> {
     let mut decoded: AlignedVec<T> = AlignedVec::with_capacity_in(values.len(), ALIGNED_ALLOCATOR);
 
-    let decoded_buf = T::decode_impl(values, exponents, (&mut decoded).into())?;
+    let decoded_buf = T::decode_impl(values, exponents, &mut decoded)?;
     assert_eq!(
         decoded_buf.numElements,
         values.len() as u64,
@@ -96,14 +99,14 @@ pub trait SupportsALP: Sized + TriviallyTransmutable {
     fn encode_impl(
         elems: &[Self],
         exponents: ALPExponents,
-        values_buf: ByteBuffer,
-        exceptions_idx_buf: ByteBuffer,
+        values: &mut AlignedVec<Self::EncInt>,
+        exceptions_idx: &mut AlignedVec<u8>,
     ) -> Result<(WrittenBuffer, WrittenBuffer), CodecError>;
 
     fn decode_impl(
         encoded: &[Self::EncInt],
         exponents: ALPExponents,
-        out: ByteBuffer,
+        out: &mut AlignedVec<Self>,
     ) -> Result<WrittenBuffer, CodecError>;
 }
 
@@ -114,7 +117,14 @@ macro_rules! impl_alp {
                 type EncInt = $e;
 
                 fn find_exponents_impl(elems: &[Self]) -> Result<ALPExponents, CodecError> {
-                    let result = unsafe { [<codecz_alp_sampleFindExponents_ $t>](elems.as_ptr(), elems.len() as u64) };
+                    let mut result = ALPExponentsResult::default();
+                    unsafe {
+                        [<codecz_alp_sampleFindExponents_ $t>](
+                            elems.as_ptr(),
+                            elems.len() as u64,
+                            &mut result as *mut ALPExponentsResult
+                        )
+                    };
                     if let Some(e) = CodecError::parse_error(result.status, Codec::ALP, CodecFunction::Prelude) {
                         return Err(e);
                     }
@@ -124,26 +134,42 @@ macro_rules! impl_alp {
                 fn encode_impl(
                     elems: &[Self],
                     exponents: ALPExponents,
-                    values_buf: ByteBuffer,
-                    exceptions_idx_buf: ByteBuffer,
+                    values: &mut AlignedVec<Self::EncInt>,
+                    exceptions_idx: &mut AlignedVec<u8>,
                 ) -> Result<(WrittenBuffer, WrittenBuffer), CodecError> {
-                    let result = unsafe { [<codecz_alp_encode_ $t>](elems.as_ptr(), elems.len() as u64, exponents, values_buf, exceptions_idx_buf) };
+                    let mut result = TwoBufferResult::new(values, exceptions_idx);
+                    unsafe {
+                        [<codecz_alp_encode_ $t>](
+                            elems.as_ptr(),
+                            elems.len() as u64,
+                            &exponents as *const ALPExponents,
+                            &mut result as *mut TwoBufferResult
+                        )
+                    };
                     if let Some(e) = CodecError::parse_error(result.status, Codec::ALP, CodecFunction::Encode) {
                         return Err(e);
                     }
-                    Ok((result.firstBuffer, result.secondBuffer))
+                    Ok((result.first, result.second))
                 }
 
                 fn decode_impl(
                     encoded: &[Self::EncInt],
                     exponents: ALPExponents,
-                    out: ByteBuffer,
+                    out: &mut AlignedVec<Self>,
                 ) -> Result<WrittenBuffer, CodecError> {
-                    let result = unsafe { [<codecz_alp_decode_ $t>](encoded.as_ptr(), encoded.len() as u64, exponents, out) };
+                    let mut result = OneBufferResult::new(out);
+                    unsafe {
+                        [<codecz_alp_decode_ $t>](
+                            encoded.as_ptr(),
+                            encoded.len() as u64,
+                            &exponents as *const ALPExponents,
+                            &mut result as *mut OneBufferResult
+                        )
+                    };
                     if let Some(e) = CodecError::parse_error(result.status, Codec::ALP, CodecFunction::Decode) {
                         return Err(e);
                     }
-                    Ok(result.buffer)
+                    Ok(result.buf)
                 }
             }
         }

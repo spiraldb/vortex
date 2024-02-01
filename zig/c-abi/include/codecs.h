@@ -36,39 +36,38 @@ enum ResultStatus_t {
 
 typedef struct {
     enum ResultStatus_t status;
-    WrittenBuffer_t buffer;
+    WrittenBuffer_t buf;
 } OneBufferResult_t;
 
 typedef struct {
     enum ResultStatus_t status;
-    WrittenBuffer_t firstBuffer;
-    WrittenBuffer_t secondBuffer;
+    WrittenBuffer_t first;
+    WrittenBuffer_t second;
 } TwoBufferResult_t;
 
 // Run End Encoding
-TwoBufferResult_t codecz_ree_encode_u8_u32(uint8_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_u16_u32(uint16_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_u32_u32(uint32_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_u64_u32(uint64_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_i8_u32(int8_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_i16_u32(int16_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_i32_u32(int32_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_i64_u32(int64_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_f16_u32(int16_t const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_f32_u32(float const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-TwoBufferResult_t codecz_ree_encode_f64_u32(double const *const ptr, uint64_t const len, ByteBuffer_t values_buf, ByteBuffer_t runends_buf);
-OneBufferResult_t codecz_ree_decode_u8_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_u16_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_u32_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_u64_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_i8_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_i16_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_i32_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_i64_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_f16_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_f32_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-OneBufferResult_t codecz_ree_decode_f64_u32(const ByteBuffer_t values, const ByteBuffer_t runends, uint64_t const numRuns, ByteBuffer_t out);
-
+void codecz_ree_encode_u8_u32(uint8_t const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_encode_u16_u32(uint16_t const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_encode_u32_u32(uint32_t const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_encode_u64_u32(uint64_t const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_encode_i8_u32(int8_t const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_encode_i16_u32(int16_t const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_encode_i32_u32(int32_t const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_encode_i64_u32(int64_t const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_encode_f16_u32(int16_t const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_encode_f32_u32(float const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_encode_f64_u32(double const *const ptr, uint64_t const len, TwoBufferResult_t *const out);
+void codecz_ree_decode_u8_u32(uint8_t const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
+void codecz_ree_decode_u16_u32(uint16_t const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
+void codecz_ree_decode_u32_u32(uint32_t const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
+void codecz_ree_decode_u64_u32(uint64_t const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
+void codecz_ree_decode_i8_u32(int8_t const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
+void codecz_ree_decode_i16_u32(int16_t const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
+void codecz_ree_decode_i32_u32(int32_t const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
+void codecz_ree_decode_i64_u32(int64_t const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
+void codecz_ree_decode_f16_u32(int16_t const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
+void codecz_ree_decode_f32_u32(float const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
+void codecz_ree_decode_f64_u32(double const *const values, uint32_t const *const runends, uint64_t const len, OneBufferResult_t *const out);
 
 // Adaptive Lossless Floating Point (ALP) Encoding
 typedef struct {
@@ -81,22 +80,22 @@ typedef struct {
     AlpExponents_t exponents;
 } AlpExponentsResult_t;
 
-AlpExponentsResult_t codecz_alp_sampleFindExponents_f32(float const *const ptr, uint64_t const len);
-AlpExponentsResult_t codecz_alp_sampleFindExponents_f64(double const *const ptr, uint64_t const len);
-TwoBufferResult_t codecz_alp_encode_f32(float const *const ptr, uint64_t const len, AlpExponents_t exponents, ByteBuffer_t enc_buf, ByteBuffer_t exc_idx_buf);
-TwoBufferResult_t codecz_alp_encode_f64(double const *const ptr, uint64_t const len, AlpExponents_t exponents, ByteBuffer_t enc_buf, ByteBuffer_t exc_idx_buf);
-OneBufferResult_t codecz_alp_decode_f32(int32_t const *const ptr, uint64_t const len, AlpExponents_t exponents, ByteBuffer_t out);
-OneBufferResult_t codecz_alp_decode_f64(int64_t const *const ptr, uint64_t const len, AlpExponents_t exponents, ByteBuffer_t out);
+void codecz_alp_sampleFindExponents_f32(float const *const ptr, uint64_t const len, AlpExponentsResult_t *const out);
+void codecz_alp_sampleFindExponents_f64(double const *const ptr, uint64_t const len, AlpExponentsResult_t *const out);
+void codecz_alp_encode_f32(float const *const ptr, uint64_t const len, AlpExponents_t const *const exponents, TwoBufferResult_t *const out);
+void codecz_alp_encode_f64(double const *const ptr, uint64_t const len, AlpExponents_t const *const exponents, TwoBufferResult_t *const out);
+void codecz_alp_decode_f32(int32_t const *const ptr, uint64_t const len, AlpExponents_t const *const exponents, OneBufferResult_t *const out);
+void codecz_alp_decode_f64(int64_t const *const ptr, uint64_t const len, AlpExponents_t const *const exponents, OneBufferResult_t *const out);
 
 // ZigZag Encoding
-OneBufferResult_t codecz_zz_encode_i8(int8_t const *const ptr, uint64_t const len, ByteBuffer_t out);
-OneBufferResult_t codecz_zz_encode_i16(int16_t const *const ptr, uint64_t const len, ByteBuffer_t out);
-OneBufferResult_t codecz_zz_encode_i32(int32_t const *const ptr, uint64_t const len, ByteBuffer_t out);
-OneBufferResult_t codecz_zz_encode_i64(int64_t const *const ptr, uint64_t const len, ByteBuffer_t out);
-OneBufferResult_t codecz_zz_decode_i8(uint8_t const *const ptr, uint64_t const len, ByteBuffer_t out);
-OneBufferResult_t codecz_zz_decode_i16(uint16_t const *const ptr, uint64_t const len, ByteBuffer_t out);
-OneBufferResult_t codecz_zz_decode_i32(uint32_t const *const ptr, uint64_t const len, ByteBuffer_t out);
-OneBufferResult_t codecz_zz_decode_i64(uint64_t const *const ptr, uint64_t const len, ByteBuffer_t out);
+void codecz_zz_encode_i8(int8_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
+void codecz_zz_encode_i16(int16_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
+void codecz_zz_encode_i32(int32_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
+void codecz_zz_encode_i64(int64_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
+void codecz_zz_decode_i8(uint8_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
+void codecz_zz_decode_i16(uint16_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
+void codecz_zz_decode_i32(uint32_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
+void codecz_zz_decode_i64(uint64_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
 
 #if defined(__cplusplus)
 } // extern "C"

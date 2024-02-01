@@ -74,8 +74,8 @@ fn MathWrapper(comptime T: type) type {
             return simd_math.isConstant(T, elems[0..len]);
         }
 
-        pub fn runLengthStats(elems: [*c]const T, len: u64) callconv(.C) simd_math.RunLengthStats {
-            return simd_math.runLengthStats(T, elems[0..len]);
+        pub fn runLengthStats(elems: [*c]const T, len: u64, out: [*c]c.RunLengthStats_t) callconv(.C) void {
+            out.* = simd_math.runLengthStats(T, elems[0..len]);
         }
 
         pub fn checkFnSignatures() void {
@@ -170,75 +170,55 @@ comptime {
 fn RunEndWrapper(comptime V: type, comptime E: type) type {
     return struct {
         const Self = @This();
-        const codec = encodings.RunEnd(V, E, Alignment);
+        // we want bitwise equality rather than float equality (where e.g., NaN equality is not reflexive) for FP types
+        const V2 = switch (@typeInfo(V)) {
+            .Int => V,
+            .Float => std.meta.Int(.unsigned, @bitSizeOf(V)),
+            else => @compileError("REE: Unsupported type " ++ @typeName(V)),
+        };
+        comptime {
+            if (@bitSizeOf(V) != @bitSizeOf(V2)) {
+                @compileError(std.fmt.comptimePrint(
+                    "REE: programmer error trying to encode {s} with {s} (bit sizes don't match)",
+                    .{ @typeName(V), @typeName(E) },
+                ));
+            }
+        }
+        const codec = encodings.RunEnd(V2, E, Alignment);
 
-        pub fn encode(elems: [*c]V, elems_len: usize, values_buf: ByteBuffer, runends_buf: ByteBuffer) callconv(.C) TwoBufferResult {
-            const values: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, values_buf.bytes()));
-            const runends: []align(Alignment) E = @alignCast(std.mem.bytesAsSlice(E, runends_buf.bytes()));
+        pub fn encode(elems: [*c]V, len: usize, out: [*c]c.TwoBufferResult_t) callconv(.C) void {
+            // this verifies alignment and returns an error result if the buffer is not properly aligned
+            const zigOut = TwoBufferResult.from(out.*) catch |err| return TwoBufferResult.errOut(err, V, E, out);
+            const valuesBuf = zigOut.first.buffer.check() catch |err| return TwoBufferResult.errOut(err, V, E, out);
+            const runEndsBuf = zigOut.second.buffer.check() catch |err| return TwoBufferResult.errOut(err, V, E, out);
 
-            if (codec.encode(elems[0..elems_len], values, runends)) |enc| {
-                return TwoBufferResult{
-                    .status = ResultStatus.Ok,
-                    .firstBuffer = WrittenBuffer{
-                        .buffer = values_buf,
-                        .bitSizePerElement = @bitSizeOf(V),
-                        .numElements = enc.numRuns,
-                        .inputBytesUsed = std.mem.sliceAsBytes(values[0..enc.numRuns]).len,
-                    },
-                    .secondBuffer = WrittenBuffer{
-                        .buffer = runends_buf,
-                        .bitSizePerElement = @bitSizeOf(E),
-                        .numElements = enc.numRuns,
-                        .inputBytesUsed = std.mem.sliceAsBytes(runends[0..enc.numRuns]).len,
-                    },
-                };
+            const values: []align(Alignment) V2 = @alignCast(std.mem.bytesAsSlice(V2, valuesBuf.bytes()));
+            const runEnds: []align(Alignment) E = @alignCast(std.mem.bytesAsSlice(E, runEndsBuf.bytes()));
+            const elemsSlice = std.mem.bytesAsSlice(V2, std.mem.sliceAsBytes(elems[0..len]));
+
+            if (codec.encode(elemsSlice, values, runEnds)) |numRuns| {
+                const first = WrittenBuffer.initFromSlice(V2, valuesBuf, values[0..numRuns]);
+                const second = WrittenBuffer.initFromSlice(E, runEndsBuf, runEnds[0..numRuns]);
+                const result = TwoBufferResult.ok(first, second);
+                out.* = result.into();
             } else |err| {
-                return TwoBufferResult{
-                    .status = ResultStatus.fromCodecError(err),
-                    .firstBuffer = WrittenBuffer{
-                        .buffer = values_buf,
-                        .bitSizePerElement = @bitSizeOf(V),
-                        .inputBytesUsed = 0,
-                        .numElements = 0,
-                    },
-                    .secondBuffer = WrittenBuffer{
-                        .buffer = runends_buf,
-                        .bitSizePerElement = @bitSizeOf(E),
-                        .inputBytesUsed = 0,
-                        .numElements = 0,
-                    },
-                };
+                TwoBufferResult.errOut(err, V, E, out);
             }
         }
 
-        pub fn decode(values: ByteBuffer, runends: ByteBuffer, numRuns: usize, out: ByteBuffer) callconv(.C) OneBufferResult {
-            const encoded = codec.Encoded{
-                .values = @alignCast(std.mem.bytesAsSlice(V, values.bytes())),
-                .runends = @alignCast(std.mem.bytesAsSlice(E, runends.bytes())),
-                .numRuns = numRuns,
-            };
+        pub fn decode(values_: [*c]V, runEnds_: [*c]E, numRuns: usize, out: [*c]c.OneBufferResult_t) callconv(.C) void {
+            const values: []const V2 = std.mem.bytesAsSlice(V2, std.mem.sliceAsBytes(values_[0..numRuns]));
+            const runEnds: []const E = runEnds_[0..numRuns];
 
-            const outSlice: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, out.bytes()));
-            if (codec.decode(encoded, outSlice)) {
-                return OneBufferResult{
-                    .status = ResultStatus.Ok,
-                    .buffer = WrittenBuffer{
-                        .buffer = out,
-                        .bitSizePerElement = @bitSizeOf(V),
-                        .inputBytesUsed = std.mem.sliceAsBytes(outSlice).len,
-                        .numElements = outSlice.len,
-                    },
-                };
+            const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
+            const outBuf = zigOut.buf.buffer.check() catch |err| return OneBufferResult.errOut(err, V, out);
+            const decoded: []align(Alignment) V2 = @alignCast(std.mem.bytesAsSlice(V2, outBuf.bytes()));
+
+            if (codec.decode(values, runEnds, decoded)) {
+                const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(V2, outBuf, decoded));
+                out.* = result.into();
             } else |err| {
-                return OneBufferResult{
-                    .status = ResultStatus.fromCodecError(err),
-                    .buffer = WrittenBuffer{
-                        .buffer = out,
-                        .bitSizePerElement = @bitSizeOf(V),
-                        .inputBytesUsed = 0,
-                        .numElements = 0,
-                    },
-                };
+                OneBufferResult.errOut(err, V2, out);
             }
         }
 
@@ -311,92 +291,50 @@ fn ALPWrapper(comptime F: type) type {
         const Self = @This();
         const codec = encodings.AdaptiveLosslessFloatingPoint(F);
 
-        pub fn sampleFindExponents(elems: [*c]F, elems_len: usize) callconv(.C) AlpExponentsResult {
-            if (codec.sampleFindExponents(elems[0..elems_len])) |exponents| {
-                return AlpExponentsResult{
-                    .status = ResultStatus.Ok,
-                    .exponents = exponents,
-                };
+        pub fn sampleFindExponents(elems: [*c]F, len: usize, out: [*c]c.AlpExponentsResult_t) callconv(.C) void {
+            if (codec.sampleFindExponents(elems[0..len])) |exp| {
+                const result = AlpExponentsResult.ok(exp);
+                out.* = result.into();
             } else |err| {
-                return AlpExponentsResult{
-                    .status = ResultStatus.fromCodecError(err),
-                    .exponents = AlpExponents{ .e = std.math.maxInt(u8), .f = std.math.maxInt(u8) },
-                };
+                const result = AlpExponentsResult.err(err);
+                out.* = result.into();
             }
         }
 
         pub fn encode(
             elems: [*c]F,
             elems_len: usize,
-            exp: AlpExponents,
-            enc_buf: ByteBuffer,
-            exc_idx_buf: ByteBuffer,
-        ) callconv(.C) TwoBufferResult {
-            std.debug.print("wrapper.encode: elems_len = {}, exp.e = {}, exp.f = {}\n", .{ elems_len, exp.e, exp.f });
-            const values: []align(Alignment) codec.EncInt = @alignCast(std.mem.bytesAsSlice(codec.EncInt, enc_buf.bytes()));
-            var exc_idx = std.PackedIntSlice(u1){
-                .bytes = exc_idx_buf.bytes(),
-                .bit_offset = 0,
-                .len = exc_idx_buf.len * 8,
-            };
+            exp_: [*c]c.AlpExponents_t,
+            out: [*c]c.TwoBufferResult_t,
+        ) callconv(.C) void {
+            const exp: AlpExponents = AlpExponents.from(exp_.*);
+            const zigOut = TwoBufferResult.from(out.*) catch |err| return TwoBufferResult.errOut(err, codec.EncInt, u1, out);
+            const encBuf = zigOut.first.buffer.check() catch |err| return TwoBufferResult.errOut(err, codec.EncInt, u1, out);
+            const excPosBuf = zigOut.second.buffer.check() catch |err| return TwoBufferResult.errOut(err, codec.EncInt, u1, out);
 
-            if (codec.encodeRaw(elems[0..elems_len], exp, values, &exc_idx)) |numExceptions| {
-                return TwoBufferResult{
-                    .status = ResultStatus.Ok,
-                    .firstBuffer = WrittenBuffer{
-                        .buffer = enc_buf,
-                        .bitSizePerElement = @bitSizeOf(codec.EncInt),
-                        .inputBytesUsed = codec.valuesBufferSizeInBytes(elems_len),
-                        .numElements = elems_len,
-                    },
-                    .secondBuffer = WrittenBuffer{
-                        .buffer = exc_idx_buf,
-                        .bitSizePerElement = @bitSizeOf(u1),
-                        .inputBytesUsed = std.math.divCeil(usize, elems_len, 8) catch unreachable,
-                        .numElements = numExceptions,
-                    },
-                };
+            const values: []align(Alignment) codec.EncInt = @alignCast(std.mem.bytesAsSlice(codec.EncInt, encBuf.bytes()));
+            var excPositions = excPosBuf.bits();
+
+            if (codec.encodeRaw(elems[0..elems_len], exp, values, &excPositions)) |numExceptions| {
+                const first = WrittenBuffer.initFromSlice(codec.EncInt, encBuf, values[0..elems_len]);
+                const second = WrittenBuffer.initFromBitSlice(excPosBuf, excPositions, numExceptions);
+                const result = TwoBufferResult.ok(first, second);
+                out.* = result.into();
             } else |err| {
-                return TwoBufferResult{
-                    .status = ResultStatus.fromCodecError(err),
-                    .firstBuffer = WrittenBuffer{
-                        .buffer = enc_buf,
-                        .bitSizePerElement = @bitSizeOf(codec.EncInt),
-                        .inputBytesUsed = 0,
-                        .numElements = 0,
-                    },
-                    .secondBuffer = WrittenBuffer{
-                        .buffer = exc_idx_buf,
-                        .bitSizePerElement = @bitSizeOf(u1),
-                        .inputBytesUsed = 0,
-                        .numElements = 0,
-                    },
-                };
+                TwoBufferResult.errOut(err, codec.EncInt, u1, out);
             }
         }
 
-        pub fn decode(input: [*c]codec.EncInt, input_len: usize, exp: AlpExponents, out: ByteBuffer) callconv(.C) OneBufferResult {
-            const outSlice: []align(Alignment) F = @alignCast(std.mem.bytesAsSlice(F, out.bytes()));
-            if (codec.decodeRaw(input[0..input_len], exp, outSlice)) {
-                return OneBufferResult{
-                    .status = ResultStatus.Ok,
-                    .buffer = WrittenBuffer{
-                        .buffer = out,
-                        .bitSizePerElement = @bitSizeOf(F),
-                        .inputBytesUsed = std.mem.sliceAsBytes(outSlice[0..input_len]).len,
-                        .numElements = input_len,
-                    },
-                };
+        pub fn decode(input: [*c]codec.EncInt, len: usize, exp_: [*c]c.AlpExponents_t, out: [*c]c.OneBufferResult_t) callconv(.C) void {
+            const exp: AlpExponents = AlpExponents.from(exp_.*);
+            const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, F, out);
+            const outSlice: []align(Alignment) F = @alignCast(std.mem.bytesAsSlice(F, zigOut.buf.buffer.bytes()));
+            if (codec.decodeRaw(input[0..len], exp, outSlice)) {
+                const buf = WrittenBuffer.initFromSlice(F, zigOut.buf.buffer, outSlice[0..len]);
+                const result = OneBufferResult.ok(buf);
+                out.* = result.into();
             } else |err| {
-                return OneBufferResult{
-                    .status = ResultStatus.fromCodecError(err),
-                    .buffer = WrittenBuffer{
-                        .buffer = out,
-                        .bitSizePerElement = @bitSizeOf(F),
-                        .inputBytesUsed = 0,
-                        .numElements = 0,
-                    },
-                };
+                OneBufferResult.errOut(err, F, out);
             }
         }
 
@@ -438,55 +376,29 @@ fn ZigZagWrapper(comptime V: type) type {
     return struct {
         const Self = @This();
         const codec = encodings.ZigZag(V);
-        const U = codec.Unsigned;
+        const U: type = codec.Unsigned;
 
-        pub fn encode(elems: [*c]V, elems_len: usize, out: ByteBuffer) callconv(.C) OneBufferResult {
-            const outSlice: []align(Alignment) U = @alignCast(std.mem.bytesAsSlice(U, out.bytes()));
-            if (codec.encode(elems[0..elems_len], outSlice)) {
-                return OneBufferResult{
-                    .status = ResultStatus.Ok,
-                    .buffer = WrittenBuffer{
-                        .buffer = out,
-                        .bitSizePerElement = @bitSizeOf(U),
-                        .inputBytesUsed = std.mem.sliceAsBytes(outSlice[0..elems_len]).len,
-                        .numElements = elems_len,
-                    },
-                };
+        pub fn encode(elems: [*c]V, len: usize, out: [*c]c.OneBufferResult_t) callconv(.C) void {
+            const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
+            const encodedBuf = zigOut.buf.buffer.check() catch |err| return OneBufferResult.errOut(err, V, out);
+            const encoded: []align(Alignment) U = @alignCast(std.mem.bytesAsSlice(U, encodedBuf.bytes()));
+            if (codec.encode(elems[0..len], encoded)) {
+                const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(U, encodedBuf, encoded[0..len]));
+                out.* = result.into();
             } else |err| {
-                return OneBufferResult{
-                    .status = ResultStatus.fromCodecError(err),
-                    .buffer = WrittenBuffer{
-                        .buffer = out,
-                        .bitSizePerElement = @bitSizeOf(U),
-                        .inputBytesUsed = 0,
-                        .numElements = 0,
-                    },
-                };
+                return OneBufferResult.errOut(err, U, out);
             }
         }
 
-        pub fn decode(input: [*c]U, input_len: usize, out: ByteBuffer) callconv(.C) OneBufferResult {
-            const outSlice: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, out.bytes()));
-            if (codec.decode(input[0..input_len], outSlice)) {
-                return OneBufferResult{
-                    .status = ResultStatus.Ok,
-                    .buffer = WrittenBuffer{
-                        .buffer = out,
-                        .bitSizePerElement = @bitSizeOf(V),
-                        .inputBytesUsed = std.mem.sliceAsBytes(outSlice[0..input_len]).len,
-                        .numElements = input_len,
-                    },
-                };
+        pub fn decode(encoded: [*c]U, len: usize, out: [*c]c.OneBufferResult_t) callconv(.C) void {
+            const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
+            const outBuf = zigOut.buf.buffer.check() catch |err| return OneBufferResult.errOut(err, V, out);
+            const decoded: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, outBuf.bytes()));
+            if (codec.decode(encoded[0..len], decoded)) {
+                const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(V, outBuf, decoded[0..len]));
+                out.* = result.into();
             } else |err| {
-                return OneBufferResult{
-                    .status = ResultStatus.fromCodecError(err),
-                    .buffer = WrittenBuffer{
-                        .buffer = out,
-                        .bitSizePerElement = @bitSizeOf(V),
-                        .inputBytesUsed = 0,
-                        .numElements = 0,
-                    },
-                };
+                OneBufferResult.errOut(err, V, out);
             }
         }
 
