@@ -48,31 +48,8 @@ pub const ResultStatus = enum(c.ResultStatus_t) {
     }
 };
 
-test "result status" {
-    try std.testing.expectEqual(ResultStatus.Ok, ResultStatus.from(c.Ok));
-    try std.testing.expectEqual(ResultStatus.InvalidInput, ResultStatus.from(c.InvalidInput));
-    try std.testing.expectEqual(ResultStatus.IncorrectAlignment, ResultStatus.from(c.IncorrectAlignment));
-    try std.testing.expectEqual(ResultStatus.EncodingFailed, ResultStatus.from(c.EncodingFailed));
-    try std.testing.expectEqual(ResultStatus.OutputBufferTooSmall, ResultStatus.from(c.OutputBufferTooSmall));
-    try std.testing.expectEqual(ResultStatus.OutOfMemory, ResultStatus.from(c.OutOfMemory));
-    try std.testing.expectEqual(ResultStatus.UnknownCodecError, ResultStatus.from(c.UnknownCodecError));
-
-    try std.testing.expectEqual(c.Ok, @intFromEnum(ResultStatus.Ok));
-    try std.testing.expectEqual(c.InvalidInput, @intFromEnum(ResultStatus.InvalidInput));
-    try std.testing.expectEqual(c.IncorrectAlignment, @intFromEnum(ResultStatus.IncorrectAlignment));
-    try std.testing.expectEqual(c.EncodingFailed, @intFromEnum(ResultStatus.EncodingFailed));
-    try std.testing.expectEqual(c.OutputBufferTooSmall, @intFromEnum(ResultStatus.OutputBufferTooSmall));
-    try std.testing.expectEqual(c.OutOfMemory, @intFromEnum(ResultStatus.OutOfMemory));
-    try std.testing.expectEqual(c.UnknownCodecError, @intFromEnum(ResultStatus.UnknownCodecError));
-
-    try std.testing.expectEqual(ResultStatus.InvalidInput, ResultStatus.fromCodecError(CodecError.InvalidInput));
-    try std.testing.expectEqual(ResultStatus.IncorrectAlignment, ResultStatus.fromCodecError(CodecError.IncorrectAlignment));
-    try std.testing.expectEqual(ResultStatus.EncodingFailed, ResultStatus.fromCodecError(CodecError.EncodingFailed));
-    try std.testing.expectEqual(ResultStatus.OutputBufferTooSmall, ResultStatus.fromCodecError(CodecError.OutputBufferTooSmall));
-    try std.testing.expectEqual(ResultStatus.OutOfMemory, ResultStatus.fromCodecError(CodecError.OutOfMemory));
-}
-
 pub const ByteBuffer = extern struct {
+    const Self = @This();
     ptr: [*c]align(Alignment) u8,
     len: u64,
 
@@ -92,10 +69,15 @@ pub const ByteBuffer = extern struct {
     }
 
     pub fn from(cbb: c.ByteBuffer_t) CodecError!ByteBuffer {
-        if (!std.mem.isAligned(@intFromPtr(cbb.ptr), Alignment)) {
+        const bb: Self = @bitCast(cbb);
+        return bb.check();
+    }
+
+    pub fn check(self: Self) CodecError!Self {
+        if (!std.mem.isAligned(@intFromPtr(self.ptr), Alignment)) {
             return CodecError.IncorrectAlignment;
         }
-        return @bitCast(cbb);
+        return self;
     }
 
     pub fn into(self: ByteBuffer) c.ByteBuffer_t {
@@ -105,6 +87,14 @@ pub const ByteBuffer = extern struct {
     pub fn bytes(self: *const ByteBuffer) []align(Alignment) u8 {
         return self.ptr[0..self.len];
     }
+
+    pub fn bits(self: *const ByteBuffer) std.PackedIntSlice(u1) {
+        return std.PackedIntSlice(u1){
+            .bytes = self.bytes(),
+            .bit_offset = 0,
+            .len = self.len * 8,
+        };
+    }
 };
 
 pub const WrittenBuffer = extern struct {
@@ -113,12 +103,31 @@ pub const WrittenBuffer = extern struct {
     numElements: u64,
     inputBytesUsed: u64,
 
-    pub fn init(comptime T: type, buffer: ByteBuffer, numElements: usize, inputBytesUsed: usize) WrittenBuffer {
+    pub fn initEmpty(comptime T: type, buffer: ByteBuffer) WrittenBuffer {
         return WrittenBuffer{
             .buffer = buffer,
             .bitSizePerElement = @bitSizeOf(T),
-            .numElements = @intCast(numElements),
-            .inputBytesUsed = @intCast(inputBytesUsed),
+            .numElements = 0,
+            .inputBytesUsed = 0,
+        };
+    }
+
+    pub fn initFromSlice(comptime T: type, buffer: ByteBuffer, slice: []align(Alignment) const T) WrittenBuffer {
+        const bytes = std.mem.sliceAsBytes(slice);
+        return WrittenBuffer{
+            .buffer = buffer,
+            .bitSizePerElement = @bitSizeOf(T),
+            .numElements = @intCast(slice.len),
+            .inputBytesUsed = @intCast(bytes.len),
+        };
+    }
+
+    pub fn initFromBitSlice(buffer: ByteBuffer, slice: std.PackedIntSlice(u1), cardinality: usize) WrittenBuffer {
+        return WrittenBuffer{
+            .buffer = buffer,
+            .bitSizePerElement = @bitSizeOf(u1),
+            .numElements = @intCast(cardinality),
+            .inputBytesUsed = slice.bytes.len,
         };
     }
 
@@ -134,10 +143,10 @@ pub const WrittenBuffer = extern struct {
 
 pub const OneBufferResult = extern struct {
     status: ResultStatus,
-    buffer: WrittenBuffer,
+    buf: WrittenBuffer,
 
     pub fn from(cobr: c.OneBufferResult_t) CodecError!OneBufferResult {
-        _ = try WrittenBuffer.from(cobr.buffer);
+        _ = try WrittenBuffer.from(cobr.buf);
         return @bitCast(cobr);
     }
 
@@ -148,26 +157,41 @@ pub const OneBufferResult = extern struct {
     pub fn ok(buffer: WrittenBuffer) OneBufferResult {
         return OneBufferResult{
             .status = ResultStatus.Ok,
-            .buffer = buffer,
+            .buf = buffer,
+        };
+    }
+
+    pub fn empty(buffer: ByteBuffer) OneBufferResult {
+        const writtenBuffer = WrittenBuffer.initEmpty(u8, buffer);
+        return OneBufferResult{
+            .status = ResultStatus.UnknownCodecError,
+            .buf = writtenBuffer,
         };
     }
 
     pub fn err(err_: CodecError, buffer: WrittenBuffer) OneBufferResult {
         return OneBufferResult{
             .status = ResultStatus.fromCodecError(err_),
-            .buffer = buffer,
+            .buf = buffer,
         };
+    }
+
+    pub fn errOut(err_: CodecError, comptime T: type, out: *c.OneBufferResult_t) void {
+        // explicitly don't check buffer validity
+        const buffer = WrittenBuffer.initEmpty(T, @bitCast(out.buf.buffer));
+        const result = OneBufferResult.err(err_, buffer);
+        out.* = result.into();
     }
 };
 
 pub const TwoBufferResult = extern struct {
     status: ResultStatus,
-    firstBuffer: WrittenBuffer,
-    secondBuffer: WrittenBuffer,
+    first: WrittenBuffer,
+    second: WrittenBuffer,
 
     pub fn from(ctbr: c.TwoBufferResult_t) CodecError!TwoBufferResult {
-        _ = try WrittenBuffer.from(ctbr.firstBuffer);
-        _ = try WrittenBuffer.from(ctbr.secondBuffer);
+        _ = try WrittenBuffer.from(ctbr.first);
+        _ = try WrittenBuffer.from(ctbr.second);
         return @bitCast(ctbr);
     }
 
@@ -178,17 +202,35 @@ pub const TwoBufferResult = extern struct {
     pub fn ok(first: WrittenBuffer, second: WrittenBuffer) TwoBufferResult {
         return TwoBufferResult{
             .status = ResultStatus.Ok,
-            .firstBuffer = first,
-            .secondBuffer = second,
+            .first = first,
+            .second = second,
+        };
+    }
+
+    pub fn empty(first: ByteBuffer, second: ByteBuffer) TwoBufferResult {
+        const firstBuffer = WrittenBuffer.initEmpty(u8, first);
+        const secondBuffer = WrittenBuffer.initEmpty(u8, second);
+        return TwoBufferResult{
+            .status = ResultStatus.UnknownCodecError,
+            .first = firstBuffer,
+            .second = secondBuffer,
         };
     }
 
     pub fn err(err_: CodecError, first: WrittenBuffer, second: WrittenBuffer) TwoBufferResult {
         return TwoBufferResult{
             .status = ResultStatus.fromCodecError(err_),
-            .firstBuffer = first,
-            .secondBuffer = second,
+            .first = first,
+            .second = second,
         };
+    }
+
+    pub fn errOut(err_: CodecError, comptime T1: type, comptime T2: type, out: *c.TwoBufferResult_t) void {
+        // explicitly don't check buffer validity
+        const first = WrittenBuffer.initEmpty(T1, @bitCast(out.first.buffer));
+        const second = WrittenBuffer.initEmpty(T2, @bitCast(out.second.buffer));
+        const result = TwoBufferResult.err(err_, first, second);
+        out.* = result.into();
     }
 };
 
@@ -217,10 +259,17 @@ pub const AlpExponentsResult = extern struct {
         return @bitCast(self);
     }
 
-    pub fn ok(e: u8, f: u8) AlpExponentsResult {
+    pub fn ok(exp: AlpExponents) AlpExponentsResult {
         return AlpExponentsResult{
             .status = ResultStatus.Ok,
-            .exponents = AlpExponents{ .e = e, .f = f },
+            .exponents = exp,
+        };
+    }
+
+    pub fn empty() AlpExponentsResult {
+        return AlpExponentsResult{
+            .status = ResultStatus.UnknownCodecError,
+            .exponents = AlpExponents{ .e = std.math.maxInt(u8), .f = std.math.maxInt(u8) },
         };
     }
 

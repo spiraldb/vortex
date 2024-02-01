@@ -4,20 +4,6 @@ const CodecError = @import("../error.zig").CodecError;
 
 pub fn RunEnd(comptime V: type, comptime E: type, comptime A: u29) type {
     return struct {
-        pub const Encoded = struct {
-            const Self = @This();
-            values: []align(A) const V,
-            runends: []align(A) const E,
-            numRuns: usize = 0,
-
-            pub fn numElements(self: *const Self) usize {
-                if (self.runends.len == 0) {
-                    return 0;
-                }
-                return self.runends[self.runends.len - 1];
-            }
-        };
-
         pub fn valuesBufferSizeInBytes(maxNumRuns: usize) usize {
             return maxNumRuns * @sizeOf(V);
         }
@@ -26,12 +12,12 @@ pub fn RunEnd(comptime V: type, comptime E: type, comptime A: u29) type {
             return maxNumRuns * @sizeOf(E);
         }
 
-        pub fn encode(elems: []const V, values: []align(A) V, runends: []align(A) E) CodecError!Encoded {
+        pub fn encode(elems: []const V, outValues: []align(A) V, outRunEnds: []align(A) E) CodecError!usize {
             if (elems.len == 0) {
                 return CodecError.InvalidInput;
             }
 
-            const maxNumRuns: usize = @min(values.len, runends.len);
+            const maxNumRuns: usize = @min(outValues.len, outRunEnds.len);
             if (maxNumRuns == 0) {
                 return CodecError.OutputBufferTooSmall;
             }
@@ -46,36 +32,41 @@ pub fn RunEnd(comptime V: type, comptime E: type, comptime A: u29) type {
                     return CodecError.OutputBufferTooSmall;
                 }
 
-                values[runCount] = current;
-                runends[runCount] = @intCast(i);
+                outValues[runCount] = current;
+                outRunEnds[runCount] = @intCast(i);
 
                 runCount += 1;
                 current = elem;
             }
 
             std.debug.assert(runCount < maxNumRuns);
-            values[runCount] = current;
-            runends[runCount] = @intCast(elems.len);
+            outValues[runCount] = current;
+            outRunEnds[runCount] = @intCast(elems.len);
             runCount += 1;
 
-            return Encoded{ .values = values[0..runCount], .runends = runends[0..runCount], .numRuns = runCount };
+            return runCount;
         }
 
-        pub fn decode(encoded: Encoded, out: []align(A) V) CodecError!void {
-            if (encoded.runends.len < encoded.numRuns or encoded.values.len < encoded.numRuns) {
+        pub fn decode(values: []const V, runEnds: []const E, out: []align(A) V) CodecError!void {
+            if (values.len != runEnds.len) {
                 return CodecError.InvalidInput;
             }
-            if (encoded.numElements() > out.len) {
+            if (numDecodedElements(runEnds) > out.len) {
                 return CodecError.OutputBufferTooSmall;
             }
 
-            const values = encoded.values[0..encoded.numRuns];
-            const runends = encoded.runends[0..encoded.numRuns];
             var prevEnd: E = 0;
-            for (values, runends) |v, end| {
+            for (values, runEnds) |v, end| {
                 @memset(out[prevEnd..end], v);
                 prevEnd = end;
             }
+        }
+
+        pub fn numDecodedElements(runEnds: []const E) usize {
+            if (runEnds.len == 0) {
+                return 0;
+            }
+            return runEnds[runEnds.len - 1];
         }
     };
 }

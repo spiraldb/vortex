@@ -63,16 +63,16 @@ typedef struct {
     uint64_t runElementCount;
 } RunLengthStats_t;
 
-RunLengthStats_t codecz_math_runLengthStats_u8(uint8_t const *const ptr, uintptr_t const len);
-RunLengthStats_t codecz_math_runLengthStats_u16(uint16_t const *const ptr, uintptr_t const len);
-RunLengthStats_t codecz_math_runLengthStats_u32(uint32_t const *const ptr, uintptr_t const len);
-RunLengthStats_t codecz_math_runLengthStats_u64(uint64_t const *const ptr, uintptr_t const len);
-RunLengthStats_t codecz_math_runLengthStats_i8(int8_t const *const ptr, uintptr_t const len);
-RunLengthStats_t codecz_math_runLengthStats_i16(int16_t const *const ptr, uintptr_t const len);
-RunLengthStats_t codecz_math_runLengthStats_i32(int32_t const *const ptr, uintptr_t const len);
-RunLengthStats_t codecz_math_runLengthStats_i64(int64_t const *const ptr, uintptr_t const len);
-RunLengthStats_t codecz_math_runLengthStats_f32(float const *const ptr, uintptr_t const len);
-RunLengthStats_t codecz_math_runLengthStats_f64(double const *const ptr, uintptr_t const len);
+void codecz_math_runLengthStats_u8(uint8_t const *const ptr, uintptr_t const len, RunLengthStats_t *const out);
+void codecz_math_runLengthStats_u16(uint16_t const *const ptr, uintptr_t const len, RunLengthStats_t *const out);
+void codecz_math_runLengthStats_u32(uint32_t const *const ptr, uintptr_t const len, RunLengthStats_t *const out);
+void codecz_math_runLengthStats_u64(uint64_t const *const ptr, uintptr_t const len, RunLengthStats_t *const out);
+void codecz_math_runLengthStats_i8(int8_t const *const ptr, uintptr_t const len, RunLengthStats_t *const out);
+void codecz_math_runLengthStats_i16(int16_t const *const ptr, uintptr_t const len, RunLengthStats_t *const out);
+void codecz_math_runLengthStats_i32(int32_t const *const ptr, uintptr_t const len, RunLengthStats_t *const out);
+void codecz_math_runLengthStats_i64(int64_t const *const ptr, uintptr_t const len, RunLengthStats_t *const out);
+void codecz_math_runLengthStats_f32(float const *const ptr, uintptr_t const len, RunLengthStats_t *const out);
+void codecz_math_runLengthStats_f64(double const *const ptr, uintptr_t const len, RunLengthStats_t *const out);
 
 #if defined(__cplusplus)
 } // extern "C"

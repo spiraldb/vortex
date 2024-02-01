@@ -1,5 +1,6 @@
 use super::{
-    AlignedVec, ByteBuffer, Codec, CodecError, CodecFunction, WrittenBuffer, ALIGNED_ALLOCATOR,
+    AlignedVec, Codec, CodecError, CodecFunction, OneBufferResult, TwoBufferResult, WrittenBuffer,
+    ALIGNED_ALLOCATOR,
 };
 use codecz_sys::{
     codecz_ree_decode_f16_u32, codecz_ree_decode_f32_u32, codecz_ree_decode_f64_u32,
@@ -19,8 +20,7 @@ pub fn encode<T: SupportsREE>(elems: &[T]) -> Result<(AlignedVec<T>, AlignedVec<
     let mut run_ends: AlignedVec<u32> =
         AlignedVec::with_capacity_in(elems.len(), ALIGNED_ALLOCATOR);
 
-    let (values_buf, run_ends_buf) =
-        T::encode_impl(elems, (&mut values).into(), (&mut run_ends).into())?;
+    let (values_buf, run_ends_buf) = T::encode_impl(elems, &mut values, &mut run_ends)?;
     assert_eq!(
         values_buf.numElements, run_ends_buf.numElements,
         "REE: values and run ends have different lengths of {} and {}, respectively",
@@ -38,15 +38,14 @@ pub fn encode<T: SupportsREE>(elems: &[T]) -> Result<(AlignedVec<T>, AlignedVec<
 }
 
 pub fn decode<T: SupportsREE>(values: &[T], run_ends: &[u32]) -> Result<AlignedVec<T>, CodecError> {
+    if values.len() != run_ends.len() {
+        return Err(CodecError::InvalidInput(Codec::REE, CodecFunction::Decode));
+    }
+
     let capacity = run_ends.last().map(|x| *x as usize).unwrap_or(0_usize);
     let mut decoded: AlignedVec<T> = AlignedVec::with_capacity_in(capacity, ALIGNED_ALLOCATOR);
 
-    let decoded_buf = T::decode_impl(
-        values.into(),
-        run_ends.into(),
-        run_ends.len(),
-        (&mut decoded).into(),
-    )?;
+    let decoded_buf = T::decode_impl(values, run_ends, &mut decoded)?;
     unsafe {
         decoded.set_len(capacity);
     }
@@ -62,15 +61,14 @@ pub fn decode<T: SupportsREE>(values: &[T], run_ends: &[u32]) -> Result<AlignedV
 pub trait SupportsREE: Sized {
     fn encode_impl(
         elems: &[Self],
-        values_buf: ByteBuffer,
-        runends_buf: ByteBuffer,
+        values: &mut AlignedVec<Self>,
+        run_ends: &mut AlignedVec<u32>,
     ) -> Result<(WrittenBuffer, WrittenBuffer), CodecError>;
 
     fn decode_impl(
-        values: ByteBuffer,
-        runends: ByteBuffer,
-        num_runs: usize,
-        out: ByteBuffer,
+        values: &[Self],
+        run_ends: &[u32],
+        decoded: &mut AlignedVec<Self>,
     ) -> Result<WrittenBuffer, CodecError>;
 }
 
@@ -80,27 +78,36 @@ macro_rules! impl_ree {
             impl SupportsREE for $t {
                 fn encode_impl(
                     elems: &[Self],
-                    values_buf: ByteBuffer,
-                    runends_buf: ByteBuffer,
+                    values: &mut AlignedVec<Self>,
+                    run_ends: &mut AlignedVec<u32>,
                 ) -> Result<(WrittenBuffer, WrittenBuffer), CodecError> {
-                    let result = unsafe { [<codecz_ree_encode_ $t _u32>](elems.as_ptr(), elems.len() as u64, values_buf, runends_buf) };
+                    let mut result = TwoBufferResult::new(values, run_ends);
+                    unsafe { [<codecz_ree_encode_ $t _u32>](elems.as_ptr(), elems.len() as u64, &mut result as *mut TwoBufferResult); };
                     if let Some(e) = CodecError::parse_error(result.status, Codec::REE, CodecFunction::Encode) {
                         return Err(e);
                     }
-                    Ok((result.firstBuffer, result.secondBuffer))
+                    Ok((result.first, result.second))
                 }
 
                 fn decode_impl(
-                    values: ByteBuffer,
-                    runends: ByteBuffer,
-                    num_runs: usize,
-                    out: ByteBuffer,
+                    values: &[Self],
+                    run_ends: &[u32],
+                    decoded: &mut AlignedVec<Self>,
                 ) -> Result<WrittenBuffer, CodecError>{
-                    let result = unsafe { [<codecz_ree_decode_ $t _u32>](values, runends, num_runs as u64, out) };
+                    let mut result = OneBufferResult::new(decoded);
+                    assert_eq!(values.len(), run_ends.len());
+                    unsafe {
+                        [<codecz_ree_decode_ $t _u32>](
+                            values.as_ptr(),
+                            run_ends.as_ptr(),
+                            values.len() as u64,
+                            &mut result as *mut OneBufferResult
+                        );
+                    };
                     if let Some(e) = CodecError::parse_error(result.status, Codec::REE, CodecFunction::Decode) {
                         return Err(e);
                     }
-                    Ok(result.buffer)
+                    Ok(result.buf)
                 }
             }
         }
@@ -121,34 +128,42 @@ impl_ree!(f64);
 impl SupportsREE for f16 {
     fn encode_impl(
         elems: &[Self],
-        values_buf: ByteBuffer,
-        runends_buf: ByteBuffer,
+        values: &mut AlignedVec<Self>,
+        run_ends: &mut AlignedVec<u32>,
     ) -> Result<(WrittenBuffer, WrittenBuffer), CodecError> {
-        let result = unsafe {
+        let mut result = TwoBufferResult::new(values, run_ends);
+        unsafe {
             codecz_ree_encode_f16_u32(
                 elems.as_ptr() as *const i16,
                 elems.len() as u64,
-                values_buf,
-                runends_buf,
-            )
+                &mut result as *mut TwoBufferResult,
+            );
         };
+
         if let Some(e) = CodecError::parse_error(result.status, Codec::REE, CodecFunction::Encode) {
             return Err(e);
         }
-        Ok((result.firstBuffer, result.secondBuffer))
+        Ok((result.first, result.second))
     }
 
     fn decode_impl(
-        values: ByteBuffer,
-        runends: ByteBuffer,
-        num_runs: usize,
-        out: ByteBuffer,
+        values: &[Self],
+        run_ends: &[u32],
+        decoded: &mut AlignedVec<Self>,
     ) -> Result<WrittenBuffer, CodecError> {
-        let result = unsafe { codecz_ree_decode_f16_u32(values, runends, num_runs as u64, out) };
+        let mut result = OneBufferResult::new(decoded);
+        unsafe {
+            codecz_ree_decode_f16_u32(
+                values.as_ptr() as *const i16,
+                run_ends.as_ptr(),
+                values.len() as u64,
+                &mut result as *mut OneBufferResult,
+            )
+        };
         if let Some(e) = CodecError::parse_error(result.status, Codec::REE, CodecFunction::Decode) {
             return Err(e);
         }
-        Ok(result.buffer)
+        Ok(result.buf)
     }
 }
 
