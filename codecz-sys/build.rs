@@ -41,7 +41,8 @@ fn main() {
         rerun_if_changed(entry.path());
     }
 
-    let zig_opt = "-Doptimize=ReleaseSafe";
+    let zig_opt = get_zig_opt();
+    println!("cargo:warning=invoking `zig build` with {}", zig_opt);
     if !std::process::Command::new("zig")
         .arg("build")
         .arg(zig_opt)
@@ -90,4 +91,29 @@ fn rerun_if_changed(path: &Path) {
             .to_str()
             .unwrap()
     );
+}
+
+fn get_zig_opt() -> &'static str {
+    let profile_env = env::var("PROFILE").unwrap();
+    let opt_level_zero = env::var("OPT_LEVEL").unwrap() == "0";
+
+    // based on https://doc.rust-lang.org/cargo/reference/environment-variables.html
+    //
+    // confusingly, the PROFILE env var will be either "debug" or "release" depending on whether the cargo profile
+    // derives from the "dev" or "release" profile, respectively. *facepalm*
+    // so `cargo build` and `cargo test` will be "debug"; `cargo build --release` and `cargo bench` will be "release"
+    //
+    // we also check whether debug_assertions are enabled (to pick a sane value for custom profiles)
+    if profile_env == "debug" || cfg!(debug_assertions) {
+        "-Doptimize=Debug"
+    } else if profile_env == "release" || !opt_level_zero {
+        "-Doptimize=ReleaseSafe"
+    } else {
+        // we're in a custom profile, the opt_level is 0, but debug assertions aren't enabled
+        // pretty weird case, let's default to debug
+        println!(
+            "cargo:warning=unrecognized cargo profile {}, defaulting to `zig build -Doptimize=Debug`", profile_env
+        );
+        "-Doptimize=Debug"
+    }
 }
