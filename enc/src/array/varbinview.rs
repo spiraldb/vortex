@@ -15,7 +15,6 @@ use crate::array::{
 use crate::arrow::CombineChunks;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
-use crate::stats::binary::BinaryArray;
 use crate::types::{DType, IntWidth, Nullability, Signedness};
 
 #[derive(Clone, Copy)]
@@ -115,7 +114,31 @@ impl VarBinViewArray {
         })
     }
 
-    #[inline]
+    pub fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+        let view = self.view_at(index);
+        unsafe {
+            if view.inlined.size > 12 {
+                let arrow_data_buffer = self
+                    .data
+                    .get(view._ref.buffer_index as usize)
+                    .unwrap()
+                    .slice(
+                        view._ref.offset as usize,
+                        (view._ref.size + view._ref.offset) as usize,
+                    )?
+                    .iter_arrow()
+                    .combine_chunks();
+
+                Ok(arrow_data_buffer
+                    .as_primitive::<UInt8Type>()
+                    .values()
+                    .to_vec())
+            } else {
+                Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
+            }
+        }
+    }
+
     pub(self) fn view_at(&self, index: usize) -> BinaryView {
         let view_slice = self
             .views
@@ -141,33 +164,6 @@ impl VarBinViewArray {
     #[inline]
     pub fn validity(&self) -> Option<&ArrayRef> {
         self.validity.as_ref()
-    }
-}
-
-impl BinaryArray for VarBinViewArray {
-    fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
-        let view = self.view_at(index);
-        unsafe {
-            if view.inlined.size > 12 {
-                let arrow_data_buffer = self
-                    .data
-                    .get(view._ref.buffer_index as usize)
-                    .unwrap()
-                    .slice(
-                        view._ref.offset as usize,
-                        (view._ref.size + view._ref.offset) as usize,
-                    )?
-                    .iter_arrow()
-                    .combine_chunks();
-
-                Ok(arrow_data_buffer
-                    .as_primitive::<UInt8Type>()
-                    .values()
-                    .to_vec())
-            } else {
-                Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
-            }
-        }
     }
 }
 
