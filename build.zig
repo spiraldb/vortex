@@ -19,6 +19,10 @@ pub fn build(b: *std.Build) void {
         .root_source_file = .{ .path = "zig/zimd/zimd.zig" },
         .target = target,
         .optimize = optimize,
+        .omit_frame_pointer = false,
+        .error_tracing = true,
+        .unwind_tables = true,
+        .strip = false,
     });
 
     // test zimd
@@ -27,6 +31,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .filter = filter_test,
+        .omit_frame_pointer = false,
+        .error_tracing = true,
+        .unwind_tables = true,
+        .strip = false,
     });
     zimd_test.root_module.addImport("zimd", zimd);
     const zimd_test_run = b.addRunArtifact(zimd_test);
@@ -39,6 +47,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .c_std = std.Build.CStd.C11,
         .link_libc = true,
+        .omit_frame_pointer = false,
+        .error_tracing = true,
+        .unwind_tables = true,
+        .strip = false,
     };
     const c_abi_types = b.addModule("abi", c_abi_options);
     c_abi_types.addIncludePath(.{ .path = "zig/c-abi/include" });
@@ -50,6 +62,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .c_std = std.Build.CStd.C11,
         .link_libc = true,
+        .omit_frame_pointer = false,
+        .error_tracing = true,
+        .unwind_tables = true,
+        .strip = false,
     });
     codecz.addImport("abi", c_abi_types);
     codecz.addImport("zimd", zimd);
@@ -61,6 +77,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .filter = filter_test,
         .link_libc = true,
+        .omit_frame_pointer = false,
+        .error_tracing = true,
+        .unwind_tables = true,
+        .strip = false,
     });
     codecz_test.root_module.addImport("codecz", codecz);
     codecz_test.root_module.addImport("abi", c_abi_types);
@@ -78,7 +98,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .single_threaded = false,
+        .omit_frame_pointer = false,
+        .error_tracing = true,
         .unwind_tables = true,
+        .strip = false,
     });
     lib_step.root_module.addImport("codecz", codecz);
     lib_step.root_module.addImport("abi", c_abi_types);
@@ -95,6 +118,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .filter = filter_test,
+        .omit_frame_pointer = false,
+        .error_tracing = true,
+        .unwind_tables = true,
+        .strip = false,
     });
     lib_test.addIncludePath(.{ .path = "zig/c-abi/include" });
     lib_test.linkLibrary(lib_step);

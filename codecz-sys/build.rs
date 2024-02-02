@@ -41,13 +41,7 @@ fn main() {
         rerun_if_changed(entry.path());
     }
 
-    let is_dev = env::var_os("OPT_LEVEL").unwrap() == "0";
-    let zig_opt = if is_dev {
-        println!("building zig in debug mode");
-        "-Doptimize=Debug"
-    } else {
-        "-Doptimize=ReleaseSafe"
-    };
+    let zig_opt = "-Doptimize=ReleaseSafe";
     if !std::process::Command::new("zig")
         .arg("build")
         .arg(zig_opt)

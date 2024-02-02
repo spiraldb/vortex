@@ -14,11 +14,13 @@ pub fn RunEnd(comptime V: type, comptime E: type, comptime A: u29) type {
 
         pub fn encode(elems: []const V, outValues: []align(A) V, outRunEnds: []align(A) E) CodecError!usize {
             if (elems.len == 0) {
+                std.debug.print("RunEnd.encode: elems.len = 0\n", .{});
                 return CodecError.InvalidInput;
             }
 
             const maxNumRuns: usize = @min(outValues.len, outRunEnds.len);
             if (maxNumRuns == 0) {
+                std.debug.print("RunEnd.encode: maxNumRuns = 0\n", .{});
                 return CodecError.OutputBufferTooSmall;
             }
 
@@ -29,6 +31,7 @@ pub fn RunEnd(comptime V: type, comptime E: type, comptime A: u29) type {
                     continue;
                 } else if (runCount + 1 == maxNumRuns) {
                     // this isn't the last run, but it will fill the last slot, so bail "early"
+                    std.debug.print("RunEnd.encode: elems.len = {}, maxNumRuns = {}\n", .{ elems.len, maxNumRuns });
                     return CodecError.OutputBufferTooSmall;
                 }
 
@@ -49,9 +52,11 @@ pub fn RunEnd(comptime V: type, comptime E: type, comptime A: u29) type {
 
         pub fn decode(values: []const V, runEnds: []const E, out: []align(A) V) CodecError!void {
             if (values.len != runEnds.len) {
+                std.debug.print("RunEnd.decode: values.len = {}, runEnds.len = {}\n", .{ values.len, runEnds.len });
                 return CodecError.InvalidInput;
             }
             if (numDecodedElements(runEnds) > out.len) {
+                std.debug.print("RunEnd.decode: numDecodedElements = {}, out.len = {}\n", .{ numDecodedElements(runEnds), out.len });
                 return CodecError.OutputBufferTooSmall;
             }
 

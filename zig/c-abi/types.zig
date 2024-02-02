@@ -48,6 +48,8 @@ pub const ResultStatus = enum(c.ResultStatus_t) {
     }
 };
 
+pub const RunLengthStats = c.RunLengthStats_t;
+
 pub const ByteBuffer = extern struct {
     const Self = @This();
     ptr: [*c]align(Alignment) u8,
@@ -80,6 +82,10 @@ pub const ByteBuffer = extern struct {
         return self;
     }
 
+    pub fn fillZeroes(self: *Self) void {
+        @memset(self.bytes(), 0);
+    }
+
     pub fn into(self: ByteBuffer) c.ByteBuffer_t {
         return @bitCast(self);
     }
@@ -88,11 +94,14 @@ pub const ByteBuffer = extern struct {
         return self.ptr[0..self.len];
     }
 
-    pub fn bits(self: *const ByteBuffer) std.PackedIntSlice(u1) {
+    pub fn bits(self: *const ByteBuffer, len: usize) CodecError!std.PackedIntSlice(u1) {
+        if (self.len * 8 < len) {
+            return CodecError.OutputBufferTooSmall;
+        }
         return std.PackedIntSlice(u1){
             .bytes = self.bytes(),
             .bit_offset = 0,
-            .len = self.len * 8,
+            .len = len,
         };
     }
 };
@@ -281,16 +290,118 @@ pub const AlpExponentsResult = extern struct {
     }
 };
 
-pub const RunLengthStats = c.RunLengthStats_t;
+pub const PackedIntsResult = extern struct {
+    const Self = @This();
+
+    status: ResultStatus,
+    encoded: WrittenBuffer,
+    num_exceptions: u64,
+
+    pub fn from(cresult: c.PackedIntsResult_t) CodecError!Self {
+        _ = try WrittenBuffer.from(cresult.encoded);
+        return @bitCast(cresult);
+    }
+
+    pub fn into(self: Self) c.PackedIntsResult_t {
+        return @bitCast(self);
+    }
+
+    pub fn ok(buffer: WrittenBuffer, num_exceptions: usize) Self {
+        return Self{
+            .status = ResultStatus.Ok,
+            .encoded = buffer,
+            .num_exceptions = @intCast(num_exceptions),
+        };
+    }
+
+    pub fn empty(buffer: ByteBuffer) Self {
+        const writtenBuffer = WrittenBuffer.initEmpty(u8, buffer);
+        return Self{
+            .status = ResultStatus.UnknownCodecError,
+            .encoded = writtenBuffer,
+            .num_exceptions = 0,
+        };
+    }
+
+    pub fn err(err_: CodecError, buffer: WrittenBuffer) Self {
+        return Self{
+            .status = ResultStatus.fromCodecError(err_),
+            .encoded = buffer,
+            .num_exceptions = 0,
+        };
+    }
+
+    pub fn errOut(err_: CodecError, comptime T: type, out: *c.PackedIntsResult_t) void {
+        // explicitly don't check buffer validity
+        const buffer = WrittenBuffer.initEmpty(T, @bitCast(out.encoded.buffer));
+        const result = Self.err(err_, buffer);
+        out.* = result.into();
+    }
+};
+
+pub const FforResult = extern struct {
+    const Self = @This();
+
+    status: ResultStatus,
+    encoded: WrittenBuffer,
+    min_val: i64,
+    num_exceptions: u64,
+
+    pub fn from(cresult: c.FforResult_t) CodecError!Self {
+        _ = try WrittenBuffer.from(cresult.encoded);
+        return @bitCast(cresult);
+    }
+
+    pub fn into(self: Self) c.FforResult_t {
+        return @bitCast(self);
+    }
+
+    pub fn ok(buffer: WrittenBuffer, min_val: i64, num_exceptions: usize) Self {
+        return Self{
+            .status = ResultStatus.Ok,
+            .encoded = buffer,
+            .min_val = min_val,
+            .num_exceptions = @intCast(num_exceptions),
+        };
+    }
+
+    pub fn empty(buffer: ByteBuffer) Self {
+        const writtenBuffer = WrittenBuffer.initEmpty(u8, buffer);
+        return Self{
+            .status = ResultStatus.UnknownCodecError,
+            .encoded = writtenBuffer,
+            .min_val = 0,
+            .num_exceptions = 0,
+        };
+    }
+
+    pub fn err(err_: CodecError, buffer: WrittenBuffer) Self {
+        return Self{
+            .status = ResultStatus.fromCodecError(err_),
+            .encoded = buffer,
+            .min_val = 0,
+            .num_exceptions = 0,
+        };
+    }
+
+    pub fn errOut(err_: CodecError, comptime T: type, out: *c.FforResult_t) void {
+        // explicitly don't check buffer validity
+        const buffer = WrittenBuffer.initEmpty(T, @bitCast(out.encoded.buffer));
+        const result = Self.err(err_, buffer);
+        out.* = result.into();
+    }
+};
 
 comptime {
+    checkStructABI(RunLengthStats, c.RunLengthStats_t);
     checkStructABI(ByteBuffer, c.ByteBuffer_t);
     checkStructABI(WrittenBuffer, c.WrittenBuffer_t);
     checkStructABI(OneBufferResult, c.OneBufferResult_t);
     checkStructABI(TwoBufferResult, c.TwoBufferResult_t);
     checkStructABI(AlpExponents, c.AlpExponents_t);
     checkStructABI(AlpExponentsResult, c.AlpExponentsResult_t);
-    checkStructABI(RunLengthStats, c.RunLengthStats_t);
+    checkStructABI(PackedIntsResult, c.PackedIntsResult_t);
+    checkStructABI(FforResult, c.FforResult_t);
 }
 
 pub fn checkStructABI(comptime zigType: type, comptime cType: type) void {

@@ -1,10 +1,14 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const zimd = @import("zimd");
+const codecmath = @import("../codecmath.zig");
 const simd_math = @import("../simd_math.zig");
 const fastlanes = @import("fastlanes.zig");
 const Alignment = fastlanes.Alignment;
 const FLVec = fastlanes.FLVec;
+const abi = @import("abi");
+const CodecError = abi.CodecError;
+const patch = @import("../patch.zig");
+const ScatterPatches = patch.ScatterPatchesMixin;
 
 const Codec = enum {
     packed_ints, // bitpacking only
@@ -13,6 +17,12 @@ const Codec = enum {
 
 pub fn PackedInts(comptime T: u8, comptime W: u8) type {
     return PackedIntsImpl(.unsigned, T, W, .packed_ints);
+}
+
+pub fn FFOR(comptime V: type, comptime W: u8) type {
+    codecmath.comptimeCheckInt(V);
+    const vti = @typeInfo(V).Int;
+    return PackedIntsImpl(vti.signedness, vti.bits, W, .ffor);
 }
 
 pub fn UnsignedFFOR(comptime T: u8, comptime W: u8) type {
@@ -27,22 +37,22 @@ fn EncodedImpl(comptime V: type) type {
     return struct {
         const Self = @This();
 
-        allocator: ?Allocator = null,
+        allocator: Allocator,
         bytes: []align(Alignment) const u8,
         elems_len: usize,
-        min_val: ?V = null,
-        exception_indices: ?std.bit_set.DynamicBitSet = null,
+        min_val: ?V,
+        num_exceptions: usize = 0,
+
         exceptions: ?[]align(Alignment) const V = null,
+        exception_indices: ?std.bit_set.DynamicBitSetUnmanaged = null,
 
         pub fn deinit(self: *Self) void {
-            if (self.allocator) |ally| {
-                ally.free(self.bytes);
-                if (self.exceptions) |ex| {
-                    ally.free(ex);
-                }
-                if (self.exception_indices) |expos| {
-                    @constCast(&expos).deinit();
-                }
+            self.allocator.free(self.bytes);
+            if (self.exceptions) |ex| {
+                self.allocator.free(ex);
+            }
+            if (self.exception_indices) |_| {
+                self.exception_indices.?.deinit(self.allocator);
             }
         }
     };
@@ -63,38 +73,96 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
         pub const Encoded = EncodedImpl(V);
 
         const vlen = fastlanes.vecLen(V);
+        const BitVec = @Vector(vlen, u1);
         const TminusW = @as(@Vector(vlen, @TypeOf(T)), @splat(T - W));
         const elemsPerTranche = fastlanes.FLWidth;
         const bytesPerTranche = @as(usize, W) * @sizeOf(FLVec(V));
 
         /// The number of bytes required to encode the given elements.
-        fn encodedSize(length: usize) usize {
+        pub fn encodedSizeInBytes(length: usize) usize {
             const ntranches = length / elemsPerTranche;
             const remainder = length % elemsPerTranche;
             const remainderBytes = ((W * remainder) + 7) / 8;
             return (ntranches * bytesPerTranche) + remainderBytes;
         }
 
-        pub fn encode(elems: []const V, allocator: Allocator) !Encoded {
+        pub fn encode(elems: []const V, allocator: Allocator) CodecError!Encoded {
+            const out = try allocator.alignedAlloc(u8, Alignment, encodedSizeInBytes(elems.len));
+            errdefer allocator.free(out);
+
+            // when calling encodeRaw over FFI, we'll generally have this as a precomputed stat
+            const minVal: ?V = if (codec == .ffor) simd_math.min(V, elems) else null;
+
+            // first pass
+            const numExceptions = try encodeRaw(elems, minVal, out);
+            var encoded = Encoded{
+                .allocator = allocator,
+                .bytes = out,
+                .elems_len = elems.len,
+                .min_val = minVal,
+                .num_exceptions = numExceptions,
+            };
+            // errdefer encoded.deinit();
+            // we don't want this^, since we handle partial deinit via individual errdefers in this function
+
+            // second pass to gather exceptions, if necessary
+            if (encoded.num_exceptions > 0) {
+                var excPositionsBitset = try std.bit_set.DynamicBitSetUnmanaged.initEmpty(allocator, elems.len);
+                errdefer excPositionsBitset.deinit(allocator);
+                var excPositions = patch.toPackedSlice(excPositionsBitset); // a view on the bitset
+
+                const exceptions = try allocator.alignedAlloc(V, Alignment, encoded.num_exceptions);
+                errdefer allocator.free(exceptions);
+
+                try collectExceptions(
+                    elems,
+                    encoded.min_val,
+                    numExceptions,
+                    exceptions,
+                    &excPositions,
+                );
+                encoded.exception_indices = excPositionsBitset;
+                encoded.exceptions = exceptions;
+            }
+            return encoded;
+        }
+
+        pub fn encodeRaw(
+            elems: []const V,
+            minVal: ?V,
+            encoded: []align(Alignment) u8,
+        ) CodecError!usize {
+            if (encoded.len < encodedSizeInBytes(elems.len)) {
+                std.debug.print("PackedIntsImpl.encodeRaw: out.len = {}, elems.len = {}\n", .{ encoded.len, elems.len });
+                return CodecError.OutputBufferTooSmall;
+            }
+            if (comptime codec == .ffor) {
+                if (minVal == null and elems.len > 0) {
+                    std.debug.print("PackedIntsImpl.encodeRaw: codec == .ffor and minVal == null, elems.len = {}\n", .{elems.len});
+                    return CodecError.InvalidInput;
+                }
+            } else {
+                if (minVal != null) {
+                    std.debug.print("PackedIntsImpl.encodeRaw: codec == .packed_ints and minVal != null, elems.len = {}\n", .{elems.len});
+                    return CodecError.InvalidInput;
+                }
+            }
+
             // Encode as many tranches as we can, and then fallback to scalar?
             const ntranches = elems.len / elemsPerTranche;
-
-            var encoded = try allocator.alignedAlloc(u8, Alignment, encodedSize(elems.len));
-            errdefer allocator.free(encoded);
 
             const in: []const FLVec(V) = @alignCast(std.mem.bytesAsSlice(FLVec(V), std.mem.sliceAsBytes(elems[0 .. ntranches * elemsPerTranche])));
             var out: []FLVec(UV) = @alignCast(std.mem.bytesAsSlice(FLVec(UV), encoded[0 .. ntranches * bytesPerTranche]));
             var num_exceptions: usize = 0;
 
-            const minVal: ?V = if (codec == .ffor) simd_math.min(V, elems) else null;
             for (0..ntranches) |i| {
-                num_exceptions += encode_tranche(in[T * i ..][0..T], minVal, out[W * i ..][0..W]);
+                num_exceptions += encodeTranche(in[T * i ..][0..T], minVal, out[W * i ..][0..W]);
             }
 
             // Is there a nicer fallback to have?
             const remaining = elems[ntranches * elemsPerTranche ..];
             if (remaining.len > 0) {
-                num_exceptions += count_remaining_exceptions(remaining, minVal);
+                num_exceptions += countRemainingExceptions(remaining, minVal);
                 var packedInts = std.PackedIntSlice(P){
                     .bytes = encoded[ntranches * bytesPerTranche ..],
                     .bit_offset = 0,
@@ -105,36 +173,12 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
                 }
             }
 
-            if (num_exceptions == 0) {
-                return Encoded{
-                    .allocator = allocator,
-                    .bytes = encoded,
-                    .elems_len = elems.len,
-                    .min_val = minVal,
-                    .exceptions = null,
-                    .exception_indices = null,
-                };
-            }
-
-            const exceptions = try allocator.alignedAlloc(V, Alignment, num_exceptions);
-            errdefer allocator.free(exceptions);
-            var exception_indices = try std.bit_set.DynamicBitSet.initEmpty(allocator, elems.len);
-            errdefer exception_indices.deinit();
-            try collect_exceptions(elems, &exception_indices, exceptions, minVal);
-
-            return Encoded{
-                .allocator = allocator,
-                .bytes = encoded,
-                .elems_len = elems.len,
-                .min_val = minVal,
-                .exceptions = exceptions,
-                .exception_indices = exception_indices,
-            };
+            return num_exceptions;
         }
 
         /// A single tranche takes T input vectors and produces W output vectors.
         /// Returns the number of elements unable to be encoded in W bits.
-        fn encode_tranche(in: *const [T]FLVec(V), minVal: ?V, out: *[W]FLVec(UV)) usize {
+        fn encodeTranche(in: *const [T]FLVec(V), minVal: ?V, out: *[W]FLVec(UV)) usize {
             comptime var bitIdx = 0;
             comptime var outIdx = 0;
             const ones = @as(@Vector(vlen, u1), @splat(1));
@@ -184,70 +228,95 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
             return @reduce(.Add, num_exceptions);
         }
 
-        pub fn decode(encoded: Encoded, allocator: Allocator) ![]align(Alignment) V {
-            var elems = try allocator.alignedAlloc(V, Alignment, encoded.elems_len);
-            errdefer allocator.free(elems);
+        pub usingnamespace ScatterPatches;
 
-            const ntranches = encoded.elems_len / elemsPerTranche;
+        pub fn decode(encoded: Encoded, allocator: Allocator) CodecError![]align(Alignment) V {
+            const decoded = try allocator.alignedAlloc(V, Alignment, encoded.elems_len);
+            errdefer allocator.free(decoded);
 
-            if (comptime codec == .ffor) {
-                if (encoded.min_val == null and encoded.elems_len > 0) {
-                    return error.MismatchedCodecs;
+            try decodeRaw(encoded.bytes, encoded.elems_len, encoded.min_val, decoded);
+
+            // check if we have exceptions/patches to overlay
+            const num_exceptions: usize = if (encoded.exceptions) |ex| ex.len else 0;
+            if (num_exceptions == 0) {
+                return decoded;
+            }
+
+            // we have exceptions! patch them
+            if (encoded.exception_indices) |idx| {
+                if (idx.count() != num_exceptions) {
+                    std.debug.print("PackedIntsImpl.decode: idx.capacity: {}, idx.count: {}, num_exceptions: {}\n", .{
+                        idx.capacity(),
+                        idx.count(),
+                        num_exceptions,
+                    });
+                    return CodecError.InvalidInput;
+                }
+
+                if (encoded.exceptions == null) {
+                    std.debug.print("PackedIntsImpl.decode: encoded.exceptions == null, num_exceptions: {}\n", .{num_exceptions});
+                    return CodecError.InvalidInput;
+                } else if (encoded.exceptions.?.len != num_exceptions) {
+                    std.debug.print("PackedIntsImpl.decode: encoded.exceptions.len: {}, num_exceptions: {}\n", .{
+                        encoded.exceptions.?.len,
+                        num_exceptions,
+                    });
+                    return CodecError.InvalidInput;
                 }
             } else {
-                if (encoded.min_val != null) {
-                    return error.MismatchedCodecs;
+                std.debug.print("PackedIntsImpl.decode: encoded.exception_indices == null, num_exceptions: {}\n", .{num_exceptions});
+                return CodecError.InvalidInput;
+            }
+
+            try ScatterPatches.patch(V, encoded.exception_indices.?, encoded.exceptions.?, decoded);
+            return decoded;
+        }
+
+        pub fn decodeRaw(
+            encoded_bytes: []align(Alignment) const u8,
+            elems_len: usize,
+            minVal: ?V,
+            decoded: []align(Alignment) V,
+        ) CodecError!void {
+            const ntranches = elems_len / elemsPerTranche;
+
+            if (decoded.len < elems_len) {
+                std.debug.print("PackedIntsImpl.decodeRaw: out.len = {}, input.len = {}\n", .{ decoded.len, elems_len });
+                return CodecError.OutputBufferTooSmall;
+            }
+            if (comptime codec == .ffor) {
+                if (minVal == null and elems_len > 0) {
+                    std.debug.print("PackedIntsImpl.decodeRaw: codec == .ffor and minVal == null, elems_len = {}\n", .{elems_len});
+                    return CodecError.InvalidInput;
+                }
+            } else {
+                if (minVal != null) {
+                    std.debug.print("PackedIntsImpl.decodeRaw: codec == .packed_ints and minVal != null, elems_len = {}\n", .{elems_len});
+                    return CodecError.InvalidInput;
                 }
             }
 
             // vectorized decoding for most of the data (except very small arrays)
-            const in: []const FLVec(UV) = @alignCast(std.mem.bytesAsSlice(FLVec(UV), encoded.bytes[0 .. ntranches * bytesPerTranche]));
-            var out: []FLVec(V) = @alignCast(std.mem.bytesAsSlice(FLVec(V), std.mem.sliceAsBytes(elems[0 .. ntranches * elemsPerTranche])));
+            const in: []const FLVec(UV) = @alignCast(std.mem.bytesAsSlice(FLVec(UV), encoded_bytes[0 .. ntranches * bytesPerTranche]));
+            var out: []FLVec(V) = @alignCast(std.mem.bytesAsSlice(FLVec(V), std.mem.sliceAsBytes(decoded[0 .. ntranches * elemsPerTranche])));
             for (0..ntranches) |i| {
-                decode_tranche(in[W * i ..][0..W], encoded.min_val, out[T * i ..][0..T]);
+                decodeTranche(in[W * i ..][0..W], minVal, out[T * i ..][0..T]);
             }
 
             // fallback logic to unpack the tail
-            const remaining = elems[ntranches * elemsPerTranche ..];
+            const remaining = decoded[ntranches * elemsPerTranche ..];
             const packedInts = std.PackedIntSlice(P){
-                .bytes = @constCast(encoded.bytes[ntranches * bytesPerTranche ..]),
+                .bytes = @constCast(encoded_bytes[ntranches * bytesPerTranche ..]),
                 .bit_offset = 0,
                 .len = remaining.len,
             };
             for (0..remaining.len) |i| {
                 const val: UV = @intCast(packedInts.get(i));
-                remaining[i] = maybe_frame_decode(V, val, encoded.min_val);
+                remaining[i] = maybe_frame_decode(V, val, minVal);
             }
-
-            // check if we have exceptions/patches to overlay
-            const num_exceptions: usize = if (encoded.exceptions) |ex| ex.len else 0;
-            if (num_exceptions == 0) {
-                return elems;
-            }
-            if (encoded.exception_indices) |idx| {
-                if (idx.count() != num_exceptions) {
-                    std.debug.print("idx.capacity: {}, idx.count: {}, num_exceptions: {}\n", .{
-                        idx.capacity(),
-                        idx.count(),
-                        num_exceptions,
-                    });
-                    return error.MisalignedCodecPatches;
-                }
-            } else {
-                return error.MisalignedCodecPatches;
-            }
-
-            // unpack the patches
-            var pos_iter = encoded.exception_indices.?.iterator(.{});
-            var i: usize = 0;
-            while (pos_iter.next()) |pos| {
-                elems[pos] = encoded.exceptions.?[i];
-                i += 1;
-            }
-            return elems;
         }
 
-        fn decode_tranche(in: *const [W]FLVec(UV), minVal: ?V, out: *[T]FLVec(V)) void {
+        fn decodeTranche(in: *const [W]FLVec(UV), minVal: ?V, out: *[T]FLVec(V)) void {
             if (comptime codec == .ffor) {
                 std.debug.assert(minVal != null);
             } else {
@@ -291,7 +360,7 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
         }
 
         // not vectorized since this is only used on the tail
-        fn count_remaining_exceptions(elems: []const V, minVal: ?V) usize {
+        fn countRemainingExceptions(elems: []const V, minVal: ?V) usize {
             var count: usize = 0;
             for (elems) |elem| {
                 const value = maybe_frame_encode(UV, elem, minVal);
@@ -300,14 +369,28 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
             return count;
         }
 
-        fn collect_exceptions(elems: []const V, exception_indices: *std.bit_set.DynamicBitSet, exceptions: []V, minVal: ?V) !void {
+        pub fn collectExceptions(elems: []const V, minVal: ?V, numExceptions: usize, exceptions: []V, excPositions: *std.PackedIntSlice(u1)) CodecError!void {
             if (comptime codec == .ffor) {
-                std.debug.assert(minVal != null);
+                if (minVal == null and elems.len > 0) {
+                    std.debug.print("PackedIntsImpl.collectExceptions: codec == .ffor and minVal == null, elems.len = {}\n", .{elems.len});
+                    return CodecError.InvalidInput;
+                }
             } else {
-                std.debug.assert(minVal == null);
+                if (minVal != null) {
+                    std.debug.print("PackedIntsImpl.collectExceptions: codec == .packed_ints and minVal != null, elems.len = {}\n", .{elems.len});
+                    return CodecError.InvalidInput;
+                }
+            }
+            if (exceptions.len < numExceptions or excPositions.len < elems.len) {
+                std.debug.print(
+                    "PackedIntsImpl.collectExceptions: exceptions.len = {}, numExceptions = {}, excPositions.len = {}, elems.len = {}\n",
+                    .{ exceptions.len, numExceptions, excPositions.len, elems.len },
+                );
+                return CodecError.OutputBufferTooSmall;
             }
 
             const ntranches = elems.len / elemsPerTranche;
+            var excCount: usize = 0;
             if (ntranches > 0) {
                 const vecs: []const FLVec(V) = @alignCast(std.mem.bytesAsSlice(FLVec(V), std.mem.sliceAsBytes(elems[0 .. ntranches * elemsPerTranche])));
                 const minVec: ?FLVec(V) = if (codec == .ffor) @as(FLVec(V), @splat(minVal.?)) else null;
@@ -315,9 +398,11 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
                 var offset: usize = 0;
                 for (0..ntranches) |tranche_idx| {
                     inline for (vecs[T * tranche_idx ..][0..T]) |vec| {
-                        const is_exception_vec: @Vector(vlen, bool) = @clz(maybe_frame_encode(FLVec(UV), vec, minVec)) < TminusW;
+                        const is_exception_vec = @clz(maybe_frame_encode(FLVec(UV), vec, minVec)) < TminusW;
                         inline for (0..vlen) |i| {
-                            exception_indices.setValue(offset + i, is_exception_vec[i]);
+                            excPositions.set(offset + i, @intFromBool(is_exception_vec[i]));
+                            exceptions[excCount] = vec[i];
+                            excCount += @intFromBool(is_exception_vec[i]);
                         }
                         offset += vlen;
                     }
@@ -328,14 +413,10 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
             const remaining = elems[offset..];
             for (remaining, offset..) |elem, idx| {
                 const value = maybe_frame_encode(UV, elem, minVal);
-                exception_indices.setValue(idx, @clz(value) < T - W);
-            }
-
-            var pos_iter = exception_indices.iterator(.{});
-            var i: usize = 0;
-            while (pos_iter.next()) |pos| {
-                exceptions[i] = elems[pos];
-                i += 1;
+                const is_exception = @clz(value) < T - W;
+                excPositions.set(idx, @intFromBool(is_exception));
+                exceptions[excCount] = elem;
+                excCount += @intFromBool(is_exception);
             }
         }
 
@@ -379,10 +460,10 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
 
 test "fastlanes packedints encodedSize" {
     // Pack 8 bit ints into 2 bit ints.
-    try std.testing.expectEqual(@as(usize, 256), PackedInts(8, 2).encodedSize(1024));
+    try std.testing.expectEqual(@as(usize, 256), PackedInts(8, 2).encodedSizeInBytes(1024));
 
     // Pack 8 bit ints into 6 bit ints
-    try std.testing.expectEqual(@as(usize, 768), PackedInts(8, 6).encodedSize(1024));
+    try std.testing.expectEqual(@as(usize, 768), PackedInts(8, 6).encodedSizeInBytes(1024));
 }
 
 test "packed ints round trips" {
@@ -445,7 +526,7 @@ test "simple unsigned ffor benchmark" {
     try bitpackingIntegers("Unsigned FFOR", UnsignedFFOR, 32, 1, 10_000_000, 100);
 }
 
-pub fn bitpackingIntegers(comptime name: []const u8, comptime codec_fn: fn (comptime T: u8, comptime W: u8) type, comptime T: u8, comptime W: u8, N: usize, comptime value: comptime_int) !void {
+fn bitpackingIntegers(comptime name: []const u8, comptime codec_fn: fn (comptime T: u8, comptime W: u8) type, comptime T: u8, comptime W: u8, N: usize, comptime value: comptime_int) !void {
     const ally = std.testing.allocator;
     const ints = codec_fn(T, W);
 
