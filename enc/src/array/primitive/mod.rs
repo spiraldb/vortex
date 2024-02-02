@@ -7,19 +7,21 @@ use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
 use allocator_api2::alloc::Allocator;
-use arrow::array::{make_array, ArrayData};
-use arrow::buffer::Buffer;
+use arrow::array::{make_array, ArrayData, AsArray};
+use arrow::buffer::{Buffer, NullBuffer};
 use half::f16;
 
+use crate::array::bool::BoolArray;
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef,
+    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
+    Encoding, EncodingId, EncodingRef,
 };
+use crate::arrow::CombineChunks;
 use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
-use crate::scalar::Scalar;
+use crate::scalar::{NullableScalar, Scalar};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
@@ -35,20 +37,25 @@ pub struct PrimitiveArray {
 }
 
 impl PrimitiveArray {
-    pub fn new(ptype: PType, buffer: Buffer) -> Self {
-        let dtype: DType = ptype.into();
+    pub fn new(ptype: PType, buffer: Buffer, validity: Option<ArrayRef>) -> Self {
+        check_validity_buffer(validity.as_ref());
+        let dtype = if validity.is_some() {
+            DType::from(ptype).as_nullable()
+        } else {
+            DType::from(ptype)
+        };
         Self {
             buffer,
             ptype,
             dtype,
-            validity: None,
+            validity,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
 
     pub fn from_vec<T: NativePType>(values: Vec<T>) -> Self {
         let buffer = Buffer::from_vec::<T>(values);
-        Self::new(T::PTYPE, buffer)
+        Self::new(T::PTYPE, buffer, None)
     }
 
     /// Allocate buffer from allocator-api2 vector. This would be easier when arrow gets https://github.com/apache/arrow-rs/issues/3960
@@ -63,7 +70,14 @@ impl PrimitiveArray {
                 Arc::new(values),
             )
         };
-        Self::new(T::PTYPE, buffer)
+        Self::new(T::PTYPE, buffer, None)
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity
+            .as_ref()
+            .map(|v| v.scalar_at(index).unwrap().try_into().unwrap())
+            .unwrap_or(true)
     }
 
     #[inline]
@@ -121,21 +135,33 @@ impl Array for PrimitiveArray {
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
 
-        Ok(
-            match_each_native_ptype!(self.ptype, |$T| self.buffer.typed_data::<$T>()
-                .get(index)
-                .unwrap()
-                .clone()
-                .into()
-            ),
-        )
+        if self.is_valid(index) {
+            Ok(
+                match_each_native_ptype!(self.ptype, |$T| self.buffer.typed_data::<$T>()
+                    .get(index)
+                    .unwrap()
+                    .clone()
+                    .into()
+                ),
+            )
+        } else {
+            Ok(NullableScalar::none(self.dtype().clone()).boxed())
+        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(iter::once(make_array(
             ArrayData::builder(self.dtype().into())
                 .len(self.len())
-                .nulls(None)
+                .nulls(self.validity().map(|v| {
+                    NullBuffer::new(
+                        v.iter_arrow()
+                            .combine_chunks()
+                            .as_boolean()
+                            .values()
+                            .clone(),
+                    )
+                }))
                 .add_buffer(self.buffer.clone())
                 .build()
                 .unwrap(),
@@ -151,7 +177,11 @@ impl Array for PrimitiveArray {
         Ok(Self {
             buffer: self.buffer.slice_with_length(byte_start, byte_length),
             ptype: self.ptype,
-            validity: self.validity.clone(),
+            validity: self
+                .validity
+                .as_ref()
+                .map(|v| v.slice(start, stop))
+                .transpose()?,
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
@@ -186,9 +216,48 @@ impl Encoding for PrimitiveEncoding {
     }
 }
 
+/// Wrapper struct to create primitive array from Vec<Option<T>>, this would conflict with Vec<T>
+pub struct NullableVec<T>(Vec<Option<T>>);
+
+impl<T: NativePType> From<NullableVec<T>> for ArrayRef {
+    fn from(value: NullableVec<T>) -> Self {
+        PrimitiveArray::from_iter(value.0).boxed()
+    }
+}
+
 impl<T: NativePType> From<Vec<T>> for ArrayRef {
     fn from(values: Vec<T>) -> Self {
         PrimitiveArray::from_vec(values).boxed()
+    }
+}
+
+impl<T: NativePType> FromIterator<Option<T>> for PrimitiveArray {
+    fn from_iter<I: IntoIterator<Item = Option<T>>>(iter: I) -> Self {
+        let iter = iter.into_iter();
+        let (lower, _) = iter.size_hint();
+
+        let mut validity: Vec<bool> = Vec::with_capacity(lower);
+        let values: Vec<T> = iter
+            .map(|i| {
+                if let Some(v) = i {
+                    validity.push(true);
+                    v
+                } else {
+                    validity.push(false);
+                    T::default()
+                }
+            })
+            .collect::<Vec<_>>();
+
+        if validity.is_empty() {
+            PrimitiveArray::from_vec(values)
+        } else {
+            PrimitiveArray::new(
+                T::PTYPE,
+                Buffer::from_vec(values),
+                Some(BoolArray::from(validity).boxed()),
+            )
+        }
     }
 }
 

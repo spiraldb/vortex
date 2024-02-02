@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use crate::scalar::localtime::LocalTimeScalar;
-use crate::scalar::{BinaryScalar, BoolScalar, PScalar, Scalar, StructScalar, Utf8Scalar};
+use crate::scalar::{
+    BinaryScalar, BoolScalar, NullableScalar, PScalar, Scalar, StructScalar, Utf8Scalar,
+};
 
 impl PartialEq for dyn Scalar {
     fn eq(&self, that: &dyn Scalar) -> bool {
@@ -34,6 +36,13 @@ macro_rules! dyn_eq {
 fn equal(lhs: &dyn Scalar, rhs: &dyn Scalar) -> bool {
     if lhs.dtype() != rhs.dtype() {
         return false;
+    }
+
+    // If the dtypes are the same then both of the scalars are either nullable or plain scalar
+    if let Some(ls) = lhs.as_any().downcast_ref::<NullableScalar>() {
+        if let Some(rs) = rhs.as_any().downcast_ref::<NullableScalar>() {
+            return dyn_eq!(NullableScalar, ls, rs);
+        }
     }
 
     use crate::dtype::DType::*;

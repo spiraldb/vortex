@@ -2,18 +2,19 @@ use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::{ArrayRef as ArrowArrayRef, BooleanArray};
-use arrow::buffer::BooleanBuffer;
+use arrow::array::{ArrayRef as ArrowArrayRef, AsArray, BooleanArray};
+use arrow::buffer::{BooleanBuffer, NullBuffer};
 
+use crate::arrow::CombineChunks;
 use crate::dtype::{DType, Nullability};
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::Scalar;
+use crate::scalar::{NullableScalar, Scalar};
 use crate::stats::{Stat, Stats, StatsSet};
 
 use super::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef,
+    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
+    Encoding, EncodingId, EncodingRef,
 };
 
 mod stats;
@@ -26,12 +27,20 @@ pub struct BoolArray {
 }
 
 impl BoolArray {
-    pub fn new(buffer: BooleanBuffer) -> Self {
+    pub fn new(buffer: BooleanBuffer, validity: Option<ArrayRef>) -> Self {
+        check_validity_buffer(validity.as_ref());
         Self {
             buffer,
             stats: Arc::new(RwLock::new(StatsSet::new())),
-            validity: None,
+            validity,
         }
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity
+            .as_ref()
+            .map(|v| v.scalar_at(index).unwrap().try_into().unwrap())
+            .unwrap_or(true)
     }
 
     #[inline]
@@ -88,17 +97,26 @@ impl Array for BoolArray {
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
 
-        if self.buffer.value(index) {
-            Ok(true.into())
+        if self.is_valid(index) {
+            Ok(self.buffer.value(index).into())
         } else {
-            Ok(false.into())
+            Ok(NullableScalar::none(self.dtype().clone()).boxed())
         }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        Box::new(iter::once(
-            Arc::new(BooleanArray::from(self.buffer.clone())) as ArrowArrayRef,
-        ))
+        Box::new(iter::once(Arc::new(BooleanArray::new(
+            self.buffer.clone(),
+            self.validity().map(|v| {
+                NullBuffer::new(
+                    v.iter_arrow()
+                        .combine_chunks()
+                        .as_boolean()
+                        .values()
+                        .clone(),
+                )
+            }),
+        )) as ArrowArrayRef))
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
@@ -107,7 +125,11 @@ impl Array for BoolArray {
         Ok(Self {
             buffer: self.buffer.slice(start, stop - start),
             stats: Arc::new(RwLock::new(StatsSet::new())),
-            validity: self.validity.clone(),
+            validity: self
+                .validity
+                .as_ref()
+                .map(|v| v.slice(start, stop))
+                .transpose()?,
         }
         .boxed())
     }
@@ -150,7 +172,36 @@ impl ArrayDisplay for BoolArray {
 
 impl From<Vec<bool>> for BoolArray {
     fn from(value: Vec<bool>) -> Self {
-        BoolArray::new(BooleanBuffer::from(value))
+        BoolArray::new(BooleanBuffer::from(value), None)
+    }
+}
+
+impl FromIterator<Option<bool>> for BoolArray {
+    fn from_iter<I: IntoIterator<Item = Option<bool>>>(iter: I) -> Self {
+        let iter = iter.into_iter();
+        let (lower, _) = iter.size_hint();
+
+        let mut validity: Vec<bool> = Vec::with_capacity(lower);
+        let values: Vec<bool> = iter
+            .map(|i| {
+                if let Some(v) = i {
+                    validity.push(true);
+                    v
+                } else {
+                    validity.push(false);
+                    false
+                }
+            })
+            .collect::<Vec<_>>();
+
+        if validity.is_empty() {
+            BoolArray::from(values)
+        } else {
+            BoolArray::new(
+                BooleanBuffer::from(values),
+                Some(BoolArray::from(validity).boxed()),
+            )
+        }
     }
 }
 
@@ -160,7 +211,7 @@ mod test {
 
     #[test]
     fn slice() {
-        let arr = BoolArray::new(BooleanBuffer::from(vec![true, true, false, false, true]))
+        let arr = BoolArray::from(vec![true, true, false, false, true])
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
@@ -172,7 +223,7 @@ mod test {
     #[test]
     fn nbytes() {
         assert_eq!(
-            BoolArray::new(BooleanBuffer::from(vec![true, true, false, false, true])).nbytes(),
+            BoolArray::from(vec![true, true, false, false, true]).nbytes(),
             1
         );
     }

@@ -129,13 +129,13 @@ pub trait CompressedEncoding: Encoding + 'static {
 
 pub fn compress(arr: &dyn Array, opts: CompressCtx) -> ArrayRef {
     match ArrayKind::from(arr) {
-        ArrayKind::Primitive(p) => compress_typed(p, opts),
-        ArrayKind::ZigZag(p) => compress_typed(p, opts),
+        ArrayKind::Primitive(p) => compress_array(p, opts),
+        ArrayKind::ZigZag(p) => compress_array(p, opts),
         _ => dyn_clone::clone_box(arr),
     }
 }
 
-pub fn compress_typed<T: AsRef<dyn Array> + Compressible>(arr: T, opts: CompressCtx) -> ArrayRef {
+pub fn compress_array<T: AsRef<dyn Array> + Compressible>(arr: T, opts: CompressCtx) -> ArrayRef {
     if arr.as_ref().is_empty() {
         return dyn_clone::clone_box(arr.as_ref());
     }

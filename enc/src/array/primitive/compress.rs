@@ -51,6 +51,7 @@ impl Compressible for PrimitiveArray {
                     ctx.options().sample_size,
                     ctx.options().sample_count,
                 )),
+                None,
             )
         });
 
