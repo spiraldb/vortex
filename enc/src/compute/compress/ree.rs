@@ -5,11 +5,11 @@ use codecz::AlignedAllocator;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
 use crate::array::ree::REEEncoding;
-use crate::array::stats::Stat;
 use crate::array::{Array, ArrayKind, ArrayRef, Encoding};
 use crate::compute::compress::{
     compress_typed, CompressConfig, CompressCtx, CompressedEncoding, Compressor,
 };
+use crate::stats::Stat;
 use crate::types::{match_each_native_ptype, PType};
 
 impl CompressedEncoding for REEEncoding {

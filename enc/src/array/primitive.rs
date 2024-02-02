@@ -11,14 +11,14 @@ use arrow::array::{make_array, ArrayData};
 use arrow::buffer::Buffer;
 use half::f16;
 
-use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::array::stats::{Stats, StatsSet};
 use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
 use crate::error::EncResult;
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
+use crate::stats::{Stats, StatsSet};
 use crate::types::{match_each_native_ptype, DType, NativePType, PType};
 
 #[derive(Debug, Clone)]

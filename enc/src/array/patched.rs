@@ -5,8 +5,6 @@ use std::usize;
 use arrow::array::ArrayRef as ArrowArrayRef;
 use arrow::compute::interleave;
 
-use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::array::stats::{Stats, StatsSet};
 use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
@@ -14,7 +12,9 @@ use crate::array::{
 use crate::arrow::CombineChunks;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::error::{EncError, EncResult};
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
+use crate::stats::{Stats, StatsSet};
 use crate::types::DType;
 
 #[derive(Debug, Clone)]

@@ -1,11 +1,11 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use crate::array::stats::{Stat, StatsCompute, StatsSet};
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::array::Array;
 use crate::error::EncResult;
+use crate::stats::{Stat, StatsCompute, StatsSet};
 use crate::types::DType;
 
 pub trait BinaryArray {
@@ -80,9 +80,9 @@ impl BinaryArray for VarBinViewArray {
 #[cfg(test)]
 mod test {
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::stats::Stat;
     use crate::array::varbin::VarBinArray;
     use crate::array::Array;
+    use crate::stats::Stat;
     use crate::types::{DType, Nullability};
 
     fn array(dtype: DType) -> VarBinArray {

@@ -5,14 +5,14 @@ use std::sync::{Arc, RwLock};
 use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::datatypes::UInt8Type;
 
-use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::array::stats::{Stats, StatsSet};
 use crate::array::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 use crate::arrow::CombineChunks;
 use crate::error::{EncError, EncResult};
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
+use crate::stats::{Stats, StatsSet};
 use crate::types::{DType, IntWidth, Nullability, Signedness};
 
 #[derive(Debug, Clone)]

@@ -1,16 +1,16 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use arrow::array::StructArray as ArrowStructArray;
 use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
 use arrow::datatypes::Fields;
 use itertools::Itertools;
 
-use crate::array::stats::{Stats, StatsSet};
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
 use crate::error::EncResult;
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::{Scalar, StructScalar};
+use crate::stats::{Stats, StatsSet};
 use crate::types::{DType, FieldNames};
 
 use super::{

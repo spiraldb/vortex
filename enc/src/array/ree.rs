@@ -8,8 +8,6 @@ use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
 use arrow::array::{PrimitiveArray as ArrowPrimitiveArray, Scalar as ArrowScalar};
 use arrow::datatypes::DataType;
 
-use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::array::stats::{Stats, StatsSet};
 use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
@@ -18,7 +16,9 @@ use crate::arrow::compute::repeat;
 use crate::compute;
 use crate::compute::search_sorted::SearchSortedSide;
 use crate::error::EncResult;
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
+use crate::stats::{Stats, StatsSet};
 use crate::types::DType;
 
 #[derive(Debug, Clone)]

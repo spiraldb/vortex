@@ -2,13 +2,13 @@ use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
-use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use arrow::array::{ArrayRef as ArrowArrayRef, BooleanArray};
 use arrow::buffer::BooleanBuffer;
 
-use crate::array::stats::{Stat, Stats, StatsSet};
 use crate::error::EncResult;
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
+use crate::stats::{Stat, Stats, StatsSet};
 use crate::types::{DType, Nullability};
 
 use super::{

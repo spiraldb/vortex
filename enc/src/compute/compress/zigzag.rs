@@ -2,12 +2,12 @@ use polars_arrow::legacy::trusted_len::TrustedLenPush;
 use zigzag::ZigZag;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::stats::Stat;
 use crate::array::zigzag::{ZigZagArray, ZigZagEncoding};
 use crate::array::{Array, ArrayKind, ArrayRef, Encoding};
 use crate::compute::compress::{
     compress, CompressConfig, CompressCtx, CompressedEncoding, Compressible, Compressor,
 };
+use crate::stats::Stat;
 use crate::types::{NativePType, PType};
 
 impl Compressible for ZigZagArray {

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use crate::array::constant::ConstantArray;
-use crate::array::stats::{Stat, StatsCompute, StatsSet};
 use crate::array::Array;
 use crate::scalar::{BoolScalar, PScalar, Scalar};
+use crate::stats::{Stat, StatsCompute, StatsSet};
 use crate::types::{DType, Nullability};
 
 impl StatsCompute for ConstantArray {

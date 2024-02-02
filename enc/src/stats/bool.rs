@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::array::bool::BoolArray;
-use crate::array::stats::{Stat, StatsCompute, StatsSet};
 use crate::array::Array;
+use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for BoolArray {
     fn compute(&self, _stat: &Stat) -> StatsSet {
