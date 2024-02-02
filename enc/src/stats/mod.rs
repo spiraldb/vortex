@@ -1,9 +1,10 @@
 pub mod binary;
-pub mod bool;
-pub mod chunked;
-pub mod constant;
-pub mod patched;
-pub mod primitive;
-pub mod ree;
-pub mod struct_;
-pub mod typed;
+mod bool;
+mod chunked;
+mod constant;
+mod patched;
+mod primitive;
+mod ree;
+mod struct_;
+mod typed;
+mod zigzag;

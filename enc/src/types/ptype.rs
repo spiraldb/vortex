@@ -23,7 +23,16 @@ pub enum PType {
 }
 
 pub trait NativePType:
-    Send + Sync + Sized + Debug + Display + PartialEq + Default + ArrowNativeType + RefUnwindSafe
+    Send
+    + Sync
+    + Sized
+    + Debug
+    + Display
+    + PartialEq
+    + Default
+    + ArrowNativeType
+    + RefUnwindSafe
+    + TryFrom<Box<dyn Scalar>, Error = EncError>
 {
     const PTYPE: PType;
 }
@@ -66,6 +75,7 @@ macro_rules! match_each_native_ptype {
         }
     })
 }
+use crate::scalar::Scalar;
 pub(crate) use match_each_native_ptype;
 
 impl PType {

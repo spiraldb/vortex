@@ -9,6 +9,10 @@ impl PyEncError {
     pub fn new(error: EncError) -> Self {
         Self(error)
     }
+
+    pub fn map_err(error: EncError) -> PyErr {
+        PyEncError::new(error).into()
+    }
 }
 
 impl From<PyEncError> for PyErr {
@@ -18,6 +22,7 @@ impl From<PyEncError> for PyErr {
             EncError::LengthMismatch => PyValueError::new_err(value.0.to_string()),
             EncError::ComputeError(_) => PyValueError::new_err(value.0.to_string()),
             EncError::InvalidDType(_) => PyTypeError::new_err(value.0.to_string()),
+            EncError::InvalidEncoding(_) => PyTypeError::new_err(value.0.to_string()),
             EncError::IncompatibleTypes(_, _) => PyTypeError::new_err(value.0.to_string()),
             EncError::InvalidArrowDataType(_) => PyTypeError::new_err(value.0.to_string()),
             EncError::PolarsError(_) => PyValueError::new_err(value.0.to_string()),

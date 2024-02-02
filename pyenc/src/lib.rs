@@ -32,6 +32,7 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyTypedArray>()?;
     m.add_class::<PyVarBinArray>()?;
     m.add_class::<PyVarBinViewArray>()?;
+    m.add_class::<PyZigZagArray>()?;
 
     m.add_class::<PyDType>()?;
 

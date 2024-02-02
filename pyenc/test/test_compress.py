@@ -7,3 +7,10 @@ def test_primitive_compress():
     arr_compressed = enc.compress(enc.encode(a))
     assert isinstance(arr_compressed, enc.REEArray)
     assert arr_compressed.to_pyarrow().combine_chunks() == a
+
+
+def test_zigzag_compress():
+    a = enc.encode(pa.array([-1, -1, 0, -1, 1, -1]))
+    zarr = enc.ZigZagArray.encode(a)
+    assert isinstance(zarr, enc.ZigZagArray)
+    # TODO(ngates): support decoding once we have decompressor.

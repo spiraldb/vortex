@@ -1,3 +1,4 @@
+use crate::array::EncodingId;
 use std::borrow::Cow;
 use std::env;
 use std::fmt::{self, Display, Formatter};
@@ -51,6 +52,8 @@ pub enum EncError {
     ComputeError(ErrString),
     #[error("invalid dtype: {0}")]
     InvalidDType(DType),
+    #[error("invalid array encoding: {0:?}")]
+    InvalidEncoding(EncodingId),
     #[error("can't convert type {0} into {1}")]
     IncompatibleTypes(DType, DType),
     #[error("Expected both arrays to have the same type, found {0} and {1}")]
