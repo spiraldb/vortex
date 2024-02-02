@@ -8,13 +8,14 @@ use arrow::array::types::UInt8Type;
 use arrow::array::{ArrayRef as ArrowArrayRef, BinaryBuilder, StringBuilder};
 
 use crate::array::{
-    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
+    EncodingId, EncodingRef,
 };
 use crate::arrow::CombineChunks;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::Scalar;
+use crate::scalar::{NullableScalar, Scalar};
 use crate::stats::{Stats, StatsSet};
 
 #[derive(Clone, Copy)]
@@ -82,7 +83,12 @@ pub struct VarBinViewArray {
 }
 
 impl VarBinViewArray {
-    pub fn new(views: ArrayRef, data: Vec<ArrayRef>, dtype: DType) -> Self {
+    pub fn new(
+        views: ArrayRef,
+        data: Vec<ArrayRef>,
+        dtype: DType,
+        validity: Option<ArrayRef>,
+    ) -> Self {
         if !matches!(
             views.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
@@ -97,14 +103,22 @@ impl VarBinViewArray {
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
             panic!("Unsupported dtype for VarBinView array");
         }
+        check_validity_buffer(validity.as_ref());
 
         Self {
             views,
             data,
             dtype,
-            validity: None,
+            validity,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity
+            .as_ref()
+            .map(|v| v.scalar_at(index).unwrap().try_into().unwrap())
+            .unwrap_or(true)
     }
 
     pub fn plain_size(&self) -> usize {
@@ -204,29 +218,42 @@ impl Array for VarBinViewArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        self.bytes_at(index).map(|bytes| {
-            if matches!(self.dtype, DType::Utf8(_)) {
-                unsafe { String::from_utf8_unchecked(bytes) }.into()
-            } else {
-                bytes.into()
-            }
-        })
+        if self.is_valid(index) {
+            self.bytes_at(index).map(|bytes| {
+                if matches!(self.dtype, DType::Utf8(_)) {
+                    unsafe { String::from_utf8_unchecked(bytes) }.into()
+                } else {
+                    bytes.into()
+                }
+            })
+        } else {
+            Ok(NullableScalar::none(self.dtype.clone()).boxed())
+        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         let data_arr: ArrowArrayRef = if matches!(self.dtype, DType::Utf8(_)) {
             let mut data_buf = StringBuilder::with_capacity(self.len(), self.plain_size());
             for i in 0..self.views.len() / VIEW_SIZE {
-                unsafe {
-                    data_buf
-                        .append_value(from_utf8_unchecked(self.bytes_at(i).unwrap().as_slice()));
+                if !self.is_valid(i) {
+                    data_buf.append_null()
+                } else {
+                    unsafe {
+                        data_buf.append_value(from_utf8_unchecked(
+                            self.bytes_at(i).unwrap().as_slice(),
+                        ));
+                    }
                 }
             }
             Arc::new(data_buf.finish())
         } else {
             let mut data_buf = BinaryBuilder::with_capacity(self.len(), self.plain_size());
             for i in 0..self.views.len() / VIEW_SIZE {
-                data_buf.append_value(self.bytes_at(i).unwrap())
+                if !self.is_valid(i) {
+                    data_buf.append_null()
+                } else {
+                    data_buf.append_value(self.bytes_at(i).unwrap())
+                }
             }
             Arc::new(data_buf.finish())
         };
@@ -240,7 +267,11 @@ impl Array for VarBinViewArray {
             views: self.views.slice(start * VIEW_SIZE, stop * VIEW_SIZE)?,
             data: self.data.clone(),
             dtype: self.dtype.clone(),
-            validity: self.validity.clone(),
+            validity: self
+                .validity
+                .as_ref()
+                .map(|v| v.slice(start, stop))
+                .transpose()?,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
         .boxed())
@@ -320,6 +351,7 @@ mod test {
             view_arr.boxed(),
             vec![values.boxed()],
             DType::Utf8(Nullability::NonNullable),
+            None,
         )
     }
 

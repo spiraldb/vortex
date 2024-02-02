@@ -1,5 +1,6 @@
 use crate::scalar::{
-    BinaryScalar, BoolScalar, LocalTimeScalar, PScalar, Scalar, StructScalar, Utf8Scalar,
+    BinaryScalar, BoolScalar, LocalTimeScalar, NullableScalar, PScalar, Scalar, StructScalar,
+    Utf8Scalar,
 };
 use std::cmp::Ordering;
 use std::sync::Arc;
@@ -20,6 +21,13 @@ macro_rules! dyn_ord {
 fn cmp(lhs: &dyn Scalar, rhs: &dyn Scalar) -> Option<Ordering> {
     if lhs.dtype() != rhs.dtype() {
         return None;
+    }
+
+    // If the dtypes are the same then both of the scalars are either nullable or plain scalar
+    if let Some(ls) = lhs.as_any().downcast_ref::<NullableScalar>() {
+        if let Some(rs) = rhs.as_any().downcast_ref::<NullableScalar>() {
+            return Some(dyn_ord!(NullableScalar, ls, rs));
+        }
     }
 
     use crate::dtype::DType::*;

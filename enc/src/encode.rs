@@ -9,7 +9,7 @@ use arrow::array::{
     PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
 };
 use arrow::array::{ArrowPrimitiveType, OffsetSizeTrait};
-use arrow::buffer::{Buffer, OffsetBuffer};
+use arrow::buffer::{Buffer, NullBuffer, OffsetBuffer};
 use arrow::datatypes::{
     ByteArrayType, DataType, Date32Type, Date64Type, DurationMicrosecondType,
     DurationMillisecondType, DurationNanosecondType, DurationSecondType, Time32MillisecondType,
@@ -30,21 +30,32 @@ use crate::scalar::{NullScalar, Scalar};
 
 impl From<&Buffer> for ArrayRef {
     fn from(value: &Buffer) -> Self {
-        PrimitiveArray::new(PType::U8, value.to_owned()).boxed()
+        PrimitiveArray::new(PType::U8, value.to_owned(), None).boxed()
     }
 }
 
 impl<O: OffsetSizeTrait> From<&OffsetBuffer<O>> for ArrayRef {
     fn from(value: &OffsetBuffer<O>) -> Self {
         let ptype = if O::IS_LARGE { PType::I64 } else { PType::I32 };
-        PrimitiveArray::new(ptype, value.inner().inner().to_owned()).boxed()
+        PrimitiveArray::new(ptype, value.inner().inner().to_owned(), None).boxed()
+    }
+}
+
+impl From<&NullBuffer> for ArrayRef {
+    fn from(value: &NullBuffer) -> Self {
+        BoolArray::new(value.inner().to_owned(), None).boxed()
     }
 }
 
 impl<T: ArrowPrimitiveType> From<&ArrowPrimitiveArray<T>> for ArrayRef {
     fn from(value: &ArrowPrimitiveArray<T>) -> Self {
         let ptype: PType = (&T::DATA_TYPE).try_into().unwrap();
-        let arr = PrimitiveArray::new(ptype, value.values().inner().to_owned()).boxed();
+        let arr = PrimitiveArray::new(
+            ptype,
+            value.values().inner().to_owned(),
+            value.nulls().map(|b| b.into()),
+        )
+        .boxed();
         if T::DATA_TYPE.is_numeric() {
             arr
         } else {
@@ -59,6 +70,7 @@ impl<T: ByteArrayType> From<&GenericByteArray<T>> for ArrayRef {
             value.offsets().into(),
             value.values().into(),
             T::DATA_TYPE.try_into().unwrap(),
+            value.nulls().map(|b| b.into()),
         )
         .boxed()
     }
@@ -66,7 +78,7 @@ impl<T: ByteArrayType> From<&GenericByteArray<T>> for ArrayRef {
 
 impl From<&ArrowBooleanArray> for ArrayRef {
     fn from(value: &ArrowBooleanArray) -> Self {
-        BoolArray::new(value.values().to_owned()).boxed()
+        BoolArray::new(value.values().to_owned(), value.nulls().map(|b| b.into())).boxed()
     }
 }
 

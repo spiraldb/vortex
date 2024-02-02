@@ -5,10 +5,10 @@ use std::any::Any;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum NullableScalar {
-    Some(Box<dyn Scalar>),
     None(DType),
+    Some(Box<dyn Scalar>),
 }
 
 impl NullableScalar {

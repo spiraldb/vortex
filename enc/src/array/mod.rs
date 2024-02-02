@@ -14,7 +14,7 @@ use crate::array::typed::{TypedArray, TYPED_ENCODING};
 use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
 use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
 use crate::array::zigzag::{ZigZagArray, ZIGZAG_ENCODING};
-use crate::dtype::DType;
+use crate::dtype::{DType, Nullability};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
@@ -87,6 +87,15 @@ pub(crate) fn check_index_bounds(array: &dyn Array, index: usize) -> EncResult<(
         return Err(EncError::OutOfBounds(index, 0, array.len()));
     }
     Ok(())
+}
+
+pub(crate) fn check_validity_buffer(validity: Option<&ArrayRef>) {
+    assert!(
+        validity
+            .map(|v| matches!(v.dtype(), DType::Bool(Nullability::NonNullable)))
+            .unwrap_or(true),
+        "validity buffer has to be of non nullable boolean type"
+    );
 }
 
 impl<'a> AsRef<(dyn Array + 'a)> for dyn Array {

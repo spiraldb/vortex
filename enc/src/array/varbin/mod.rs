@@ -5,16 +5,18 @@ use std::iter;
 use std::sync::{Arc, RwLock};
 
 use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
+use arrow::buffer::NullBuffer;
 use arrow::datatypes::UInt8Type;
 
 use crate::array::{
-    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
+    EncodingId, EncodingRef,
 };
 use crate::arrow::CombineChunks;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::Scalar;
+use crate::scalar::{NullableScalar, Scalar};
 use crate::stats::{Stats, StatsSet};
 
 #[derive(Debug, Clone)]
@@ -27,7 +29,12 @@ pub struct VarBinArray {
 }
 
 impl VarBinArray {
-    pub fn new(offsets: ArrayRef, bytes: ArrayRef, dtype: DType) -> Self {
+    pub fn new(
+        offsets: ArrayRef,
+        bytes: ArrayRef,
+        dtype: DType,
+        validity: Option<ArrayRef>,
+    ) -> Self {
         if !matches!(offsets.dtype(), DType::Int(_, _, Nullability::NonNullable)) {
             panic!("Unsupported type for offsets array");
         }
@@ -40,13 +47,22 @@ impl VarBinArray {
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
             panic!("Unsupported dtype for varbin array");
         }
+        check_validity_buffer(validity.as_ref());
+
         Self {
             offsets,
             bytes,
             dtype,
-            validity: None,
+            validity,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity
+            .as_ref()
+            .map(|v| v.scalar_at(index).unwrap().try_into().unwrap())
+            .unwrap_or(true)
     }
 
     #[inline]
@@ -114,13 +130,17 @@ impl Array for VarBinArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        self.bytes_at(index).map(|bytes| {
-            if matches!(self.dtype, DType::Utf8(_)) {
-                unsafe { String::from_utf8_unchecked(bytes) }.into()
-            } else {
-                bytes.into()
-            }
-        })
+        if self.is_valid(index) {
+            self.bytes_at(index).map(|bytes| {
+                if matches!(self.dtype, DType::Utf8(_)) {
+                    unsafe { String::from_utf8_unchecked(bytes) }.into()
+                } else {
+                    bytes.into()
+                }
+            })
+        } else {
+            Ok(NullableScalar::none(self.dtype.clone()).boxed())
+        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -129,14 +149,21 @@ impl Array for VarBinArray {
 
         let data = ArrayData::builder(self.dtype.clone().into())
             .len(self.len())
-            .nulls(None)
+            .nulls(self.validity().map(|v| {
+                NullBuffer::new(
+                    v.iter_arrow()
+                        .combine_chunks()
+                        .as_boolean()
+                        .values()
+                        .clone(),
+                )
+            }))
             .add_buffer(offsets_data.buffers()[0].to_owned())
             .add_buffer(bytes_data.buffers()[0].to_owned())
             .build()
             .unwrap();
 
-        let arr = make_array(data);
-        Box::new(iter::once(arr))
+        Box::new(iter::once(make_array(data)))
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
@@ -146,6 +173,10 @@ impl Array for VarBinArray {
             self.offsets.slice(start, stop + 1)?,
             self.bytes.clone(),
             self.dtype.clone(),
+            self.validity
+                .as_ref()
+                .map(|v| v.slice(start, stop + 1))
+                .transpose()?,
         )
         .boxed())
     }
@@ -207,6 +238,7 @@ mod test {
             offsets.boxed(),
             values.boxed(),
             DType::Utf8(Nullability::NonNullable),
+            None,
         )
     }
 
