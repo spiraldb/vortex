@@ -48,11 +48,7 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
 #[pyfunction(name = "bool")]
 #[pyo3(signature = (nullable = false))]
 fn dtype_bool(py: Python<'_>, nullable: bool) -> PyResult<Py<PyDType>> {
-    let mut dtype = DType::Bool;
-    if nullable {
-        dtype = DType::Nullable(Box::new(dtype));
-    }
-    PyDType::wrap(py, dtype)
+    PyDType::wrap(py, DType::Bool(nullable.into()))
 }
 
 #[pyfunction(name = "int")]
@@ -63,29 +59,20 @@ fn dtype_int(
     signed: bool,
     nullable: bool,
 ) -> PyResult<Py<PyDType>> {
-    let mut dtype = DType::Int(width.unwrap_or(0).into(), signed.into());
-    if nullable {
-        dtype = DType::Nullable(Box::new(dtype));
-    }
-    PyDType::wrap(py, dtype)
+    PyDType::wrap(
+        py,
+        DType::Int(width.unwrap_or(0).into(), signed.into(), nullable.into()),
+    )
 }
 
 #[pyfunction(name = "float")]
 #[pyo3(signature = (width = None, nullable = false))]
 fn dtype_float(py: Python<'_>, width: Option<i8>, nullable: bool) -> PyResult<Py<PyDType>> {
-    let mut dtype = DType::Float(width.unwrap_or(0).into());
-    if nullable {
-        dtype = DType::Nullable(Box::new(dtype));
-    }
-    PyDType::wrap(py, dtype)
+    PyDType::wrap(py, DType::Float(width.unwrap_or(0).into(), nullable.into()))
 }
 
 #[pyfunction(name = "utf8")]
 #[pyo3(signature = (nullable = false))]
 fn dtype_utf8(py: Python<'_>, nullable: bool) -> PyResult<Py<PyDType>> {
-    let mut dtype = DType::Utf8;
-    if nullable {
-        dtype = DType::Nullable(Box::new(dtype));
-    }
-    PyDType::wrap(py, dtype)
+    PyDType::wrap(py, DType::Utf8(nullable.into()))
 }

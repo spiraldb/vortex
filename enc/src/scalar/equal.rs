@@ -38,13 +38,13 @@ fn equal(lhs: &dyn Scalar, rhs: &dyn Scalar) -> bool {
 
     use crate::types::DType::*;
     match lhs.dtype() {
-        Bool => dyn_eq!(BoolScalar, lhs, rhs),
-        Int(_, _) => dyn_eq!(PScalar, lhs, rhs),
-        Float(_) => dyn_eq!(PScalar, lhs, rhs),
+        Bool(_) => dyn_eq!(BoolScalar, lhs, rhs),
+        Int(_, _, _) => dyn_eq!(PScalar, lhs, rhs),
+        Float(_, _) => dyn_eq!(PScalar, lhs, rhs),
         Struct(..) => dyn_eq!(StructScalar, lhs, rhs),
-        Utf8 => dyn_eq!(Utf8Scalar, lhs, rhs),
-        Binary => dyn_eq!(BinaryScalar, lhs, rhs),
-        LocalTime(_) => dyn_eq!(LocalTimeScalar, lhs, rhs),
+        Utf8(_) => dyn_eq!(Utf8Scalar, lhs, rhs),
+        Binary(_) => dyn_eq!(BinaryScalar, lhs, rhs),
+        LocalTime(_, _) => dyn_eq!(LocalTimeScalar, lhs, rhs),
         _ => todo!("Equal not yet implemented for {:?} {:?}", lhs, rhs),
     }
 }

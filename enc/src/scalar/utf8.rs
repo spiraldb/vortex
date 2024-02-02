@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
-use crate::types::DType;
+use crate::types::{DType, Nullability};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Utf8Scalar {
@@ -36,7 +36,7 @@ impl Scalar for Utf8Scalar {
     }
     #[inline]
     fn dtype(&self) -> &DType {
-        &DType::Utf8
+        &DType::Utf8(Nullability::NonNullable)
     }
 
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {

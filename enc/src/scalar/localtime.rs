@@ -1,6 +1,6 @@
 use crate::error::EncResult;
 use crate::scalar::{PScalar, Scalar};
-use crate::types::{DType, TimeUnit};
+use crate::types::{DType, Nullability, TimeUnit};
 use std::any::Any;
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
@@ -15,7 +15,7 @@ impl LocalTimeScalar {
     pub fn new(value: PScalar, unit: TimeUnit) -> Self {
         Self {
             value,
-            dtype: DType::LocalTime(unit),
+            dtype: DType::LocalTime(unit, Nullability::NonNullable),
         }
     }
 }
@@ -52,7 +52,7 @@ impl Scalar for LocalTimeScalar {
 
 impl PartialOrd for LocalTimeScalar {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.dtype != other.dtype {
+        if self.dtype() != other.dtype() {
             None
         } else {
             self.value.partial_cmp(&other.value)
@@ -62,7 +62,7 @@ impl PartialOrd for LocalTimeScalar {
 
 impl Display for LocalTimeScalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let DType::LocalTime(u) = self.dtype() else {
+        let DType::LocalTime(u, _) = self.dtype() else {
             unreachable!()
         };
         write!(f, "localtime[{}, unit={}]", self.value, u)

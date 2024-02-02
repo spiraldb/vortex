@@ -19,6 +19,7 @@ use codecz_sys::{
 use num_traits::Num;
 use paste;
 
+#[allow(dead_code)]
 pub struct RunLengthStats {
     run_count: u64,
     run_element_count: u64,

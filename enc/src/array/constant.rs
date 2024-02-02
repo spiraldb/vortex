@@ -83,9 +83,7 @@ impl Array for ConstantArray {
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         self.check_slice_bounds(start, stop)?;
 
-        let mut cloned = self.clone();
-        cloned.length = stop - start;
-        Ok(cloned.boxed())
+        Ok(ConstantArray::new(self.scalar.clone(), stop - start).boxed())
     }
 
     #[inline]

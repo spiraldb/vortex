@@ -19,12 +19,13 @@ use arrow::datatypes::{
 };
 
 use crate::array::bool::BoolArray;
-use crate::array::null::NullArray;
+use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
 use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
+use crate::scalar::{NullScalar, Scalar};
 use crate::types::PType;
 
 impl From<&Buffer> for ArrayRef {
@@ -85,7 +86,7 @@ impl From<&ArrowStructArray> for ArrayRef {
 
 impl From<&ArrowNullArray> for ArrayRef {
     fn from(value: &ArrowNullArray) -> Self {
-        NullArray::new(value.len()).boxed()
+        ConstantArray::new(NullScalar::new().boxed(), value.len()).boxed()
     }
 }
 

@@ -4,8 +4,8 @@ use std::fmt::{Display, Formatter};
 use itertools::Itertools;
 
 use crate::error::{EncError, EncResult};
-use crate::scalar::Scalar;
-use crate::types::DType;
+use crate::scalar::{NullableScalar, Scalar};
+use crate::types::{DType, Nullability};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ListScalar {
@@ -46,7 +46,7 @@ impl Scalar for ListScalar {
 
     fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
         match dtype {
-            DType::List(field_dtype) => {
+            DType::List(field_dtype, n) => {
                 let new_fields: Vec<Box<dyn Scalar>> = self
                     .values
                     .iter()
@@ -56,9 +56,13 @@ impl Scalar for ListScalar {
                 let new_type = if new_fields.is_empty() {
                     dtype.clone()
                 } else {
-                    DType::List(Box::new(new_fields[0].dtype().clone()))
+                    DType::List(Box::new(new_fields[0].dtype().clone()), n.clone())
                 };
-                Ok(ListScalar::new(new_type, new_fields).boxed())
+                let list_scalar = ListScalar::new(new_type, new_fields).boxed();
+                match n {
+                    Nullability::NonNullable => Ok(list_scalar),
+                    Nullability::Nullable => Ok(NullableScalar::some(list_scalar).boxed()),
+                }
             }
             _ => Err(EncError::InvalidDType(dtype.clone())),
         }

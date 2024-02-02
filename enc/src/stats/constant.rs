@@ -1,10 +1,10 @@
-use crate::array::Array;
 use std::collections::HashMap;
 
 use crate::array::constant::ConstantArray;
 use crate::array::stats::{Stat, StatsCompute, StatsSet};
+use crate::array::Array;
 use crate::scalar::{BoolScalar, PScalar, Scalar};
-use crate::types::DType;
+use crate::types::{DType, Nullability};
 
 impl StatsCompute for ConstantArray {
     fn compute(&self, _stat: &Stat) -> StatsSet {
@@ -16,7 +16,7 @@ impl StatsCompute for ConstantArray {
             (Stat::RunCount, 1.into()),
         ]);
 
-        if self.dtype() == &DType::Bool {
+        if matches!(self.dtype(), &DType::Bool(Nullability::NonNullable)) {
             m.insert(
                 Stat::TrueCount,
                 PScalar::U64(

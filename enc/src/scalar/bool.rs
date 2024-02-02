@@ -1,6 +1,6 @@
 use crate::error::{EncError, EncResult};
-use crate::scalar::Scalar;
-use crate::types::DType;
+use crate::scalar::{NullableScalar, Scalar};
+use crate::types::{DType, Nullability};
 use std::any::Any;
 use std::fmt::{Display, Formatter};
 
@@ -36,12 +36,15 @@ impl Scalar for BoolScalar {
 
     #[inline]
     fn dtype(&self) -> &DType {
-        &DType::Bool
+        &DType::Bool(Nullability::NonNullable)
     }
 
     fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
         match dtype {
-            DType::Bool => Ok(self.clone().boxed()),
+            DType::Bool(Nullability::NonNullable) => Ok(self.clone().boxed()),
+            DType::Bool(Nullability::Nullable) => {
+                Ok(NullableScalar::some(self.clone().boxed()).boxed())
+            }
             _ => Err(EncError::InvalidDType(dtype.clone())),
         }
     }

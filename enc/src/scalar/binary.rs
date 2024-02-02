@@ -1,6 +1,6 @@
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
-use crate::types::DType;
+use crate::types::{DType, Nullability};
 use std::any::Any;
 use std::fmt::{Display, Formatter};
 
@@ -35,7 +35,7 @@ impl Scalar for BinaryScalar {
     }
     #[inline]
     fn dtype(&self) -> &DType {
-        &DType::Binary
+        &DType::Binary(Nullability::NonNullable)
     }
 
     fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {

@@ -16,6 +16,7 @@ pub enum Stat {
     Min,
     RunCount,
     TrueCount,
+    NullCount,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -43,6 +44,7 @@ impl StatsSet {
         self.merge_is_constant(other);
         self.merge_is_sorted(other);
         self.merge_true_count(other);
+        self.merge_null_count(other);
         self.merge_bit_width_freq(other);
         self.merge_run_count(other);
 
@@ -122,15 +124,23 @@ impl StatsSet {
     }
 
     fn merge_true_count(&mut self, other: &Self) {
-        match self.0.entry(Stat::TrueCount) {
+        self.merge_scalar_stat(other, &Stat::TrueCount)
+    }
+
+    fn merge_null_count(&mut self, other: &Self) {
+        self.merge_scalar_stat(other, &Stat::NullCount)
+    }
+
+    fn merge_scalar_stat(&mut self, other: &Self, stat: &Stat) {
+        match self.0.entry(stat.clone()) {
             Entry::Occupied(mut e) => {
-                if let Some(other_value) = other.get_as::<usize>(&Stat::TrueCount).unwrap() {
+                if let Some(other_value) = other.get_as::<usize>(stat).unwrap() {
                     let self_value: usize = e.get().as_ref().try_into().unwrap();
                     e.insert((self_value + other_value).into());
                 }
             }
             Entry::Vacant(e) => {
-                if let Some(min) = other.0.get(&Stat::TrueCount) {
+                if let Some(min) = other.0.get(stat) {
                     e.insert(min.clone());
                 }
             }

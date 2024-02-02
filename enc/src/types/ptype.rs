@@ -7,7 +7,7 @@ use half::f16;
 use crate::error::{EncError, EncResult};
 use crate::types::{DType, FloatWidth, IntWidth, Signedness};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub enum PType {
     U8,
     U16,
@@ -96,7 +96,7 @@ impl TryFrom<&DType> for PType {
     fn try_from(value: &DType) -> EncResult<Self> {
         use Signedness::*;
         match value {
-            DType::Int(w, s) => match w {
+            DType::Int(w, s, _) => match w {
                 IntWidth::Unknown => match s {
                     Unknown => Ok(PType::I64),
                     Unsigned => Ok(PType::U64),
@@ -123,7 +123,7 @@ impl TryFrom<&DType> for PType {
                     Signed => Ok(PType::I64),
                 },
             },
-            DType::Float(f) => match f {
+            DType::Float(f, _) => match f {
                 FloatWidth::Unknown => Ok(PType::F64),
                 FloatWidth::_16 => Ok(PType::F16),
                 FloatWidth::_32 => Ok(PType::F32),

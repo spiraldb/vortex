@@ -246,7 +246,7 @@ mod test {
     use arrow::array::types::Int32Type;
     use itertools::Itertools;
 
-    use crate::types::{IntWidth, Signedness};
+    use crate::types::{IntWidth, Nullability, Signedness};
 
     use super::*;
 
@@ -254,7 +254,10 @@ mod test {
     fn new() {
         let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into());
         assert_eq!(arr.len(), 10);
-        assert_eq!(arr.dtype(), &DType::Int(IntWidth::_32, Signedness::Signed));
+        assert_eq!(
+            arr.dtype(),
+            &DType::Int(IntWidth::_32, Signedness::Signed, Nullability::NonNullable)
+        );
 
         // 0, 1 => 1
         // 2, 3, 4 => 2
@@ -270,7 +273,10 @@ mod test {
         let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into())
             .slice(3, 8)
             .unwrap();
-        assert_eq!(arr.dtype(), &DType::Int(IntWidth::_32, Signedness::Signed));
+        assert_eq!(
+            arr.dtype(),
+            &DType::Int(IntWidth::_32, Signedness::Signed, Nullability::NonNullable)
+        );
         assert_eq!(arr.len(), 5);
 
         arr.iter_arrow()

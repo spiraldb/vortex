@@ -12,34 +12,36 @@ use crate::arrow::CombineChunks;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::stats::binary::BinaryArray;
-use crate::types::{DType, IntWidth, Signedness};
+use crate::types::{DType, IntWidth, Nullability, Signedness};
 
 #[derive(Debug, Clone)]
 pub struct VarBinArray {
     offsets: ArrayRef,
     bytes: ArrayRef,
     dtype: DType,
+    validity: Option<ArrayRef>,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl VarBinArray {
     pub fn new(offsets: ArrayRef, bytes: ArrayRef, dtype: DType) -> Self {
-        if !matches!(offsets.dtype(), DType::Int(_, _)) {
+        if !matches!(offsets.dtype(), DType::Int(_, _, Nullability::NonNullable)) {
             panic!("Unsupported type for offsets array");
         }
         if !matches!(
             bytes.dtype(),
-            DType::Int(IntWidth::_8, Signedness::Unsigned)
+            DType::Int(IntWidth::_8, Signedness::Unsigned, _)
         ) {
             panic!("Unsupported type for data array {:?}", bytes.dtype());
         }
-        if !matches!(dtype, DType::Binary | DType::Utf8) {
+        if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
             panic!("Unsupported dtype for varbin array");
         }
         Self {
             offsets,
             bytes,
             dtype,
+            validity: None,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
@@ -52,6 +54,11 @@ impl VarBinArray {
     #[inline]
     pub fn bytes(&self) -> &dyn Array {
         self.bytes.as_ref()
+    }
+
+    #[inline]
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
     }
 }
 
@@ -107,7 +114,7 @@ impl Array for VarBinArray {
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         self.bytes_at(index).map(|bytes| {
-            if matches!(self.dtype, DType::Utf8) {
+            if matches!(self.dtype, DType::Utf8(_)) {
                 unsafe { String::from_utf8_unchecked(bytes) }.into()
             } else {
                 bytes.into()
@@ -184,7 +191,6 @@ mod test {
     use arrow::array::GenericStringArray as ArrowStringArray;
 
     use crate::array::primitive::PrimitiveArray;
-    use crate::scalar::Utf8Scalar;
 
     use super::*;
 
@@ -196,20 +202,21 @@ mod test {
         );
         let offsets = PrimitiveArray::from_vec(vec![0, 11, 44]);
 
-        VarBinArray::new(offsets.boxed(), values.boxed(), DType::Utf8)
+        VarBinArray::new(
+            offsets.boxed(),
+            values.boxed(),
+            DType::Utf8(Nullability::NonNullable),
+        )
     }
 
     #[test]
     pub fn scalar_at() {
         let binary_arr = binary_array();
         assert_eq!(binary_arr.len(), 2);
+        assert_eq!(binary_arr.scalar_at(0), Ok("hello world".into()));
         assert_eq!(
-            binary_arr.scalar_at(0).unwrap(),
-            Utf8Scalar::new("hello world".into()).boxed()
-        );
-        assert_eq!(
-            binary_arr.scalar_at(1).unwrap(),
-            Utf8Scalar::new("hello world this is a long string".into()).boxed()
+            binary_arr.scalar_at(1),
+            Ok("hello world this is a long string".into())
         )
     }
 
@@ -217,8 +224,8 @@ mod test {
     pub fn slice() {
         let binary_arr = binary_array().slice(1, 2).unwrap();
         assert_eq!(
-            binary_arr.scalar_at(0).unwrap(),
-            Utf8Scalar::new("hello world this is a long string".into()).boxed()
+            binary_arr.scalar_at(0),
+            Ok("hello world this is a long string".into())
         );
     }
 
