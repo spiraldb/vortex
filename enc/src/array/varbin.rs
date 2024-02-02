@@ -13,7 +13,6 @@ use crate::array::{
 use crate::arrow::CombineChunks;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
-use crate::stats::binary::BinaryArray;
 use crate::types::{DType, IntWidth, Nullability, Signedness};
 
 #[derive(Debug, Clone)]
@@ -62,17 +61,15 @@ impl VarBinArray {
     pub fn validity(&self) -> Option<&ArrayRef> {
         self.validity.as_ref()
     }
-}
 
-impl BinaryArray for VarBinArray {
-    fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+    pub fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
         if index > self.len() {
             return Err(EncError::OutOfBounds(index, 0, self.len()));
         }
 
-        let offset_start: usize = self.offsets.scalar_at(index)?.try_into()?;
-        let offset_end: usize = self.offsets.scalar_at(index + 1)?.try_into()?;
-        let sliced = self.bytes.slice(offset_start, offset_end)?;
+        let offset_start: usize = self.offsets().scalar_at(index)?.try_into()?;
+        let offset_end: usize = self.offsets().scalar_at(index + 1)?.try_into()?;
+        let sliced = self.bytes().slice(offset_start, offset_end)?;
         let arr_ref = sliced.iter_arrow().combine_chunks();
         Ok(arr_ref.as_primitive::<UInt8Type>().values().to_vec())
     }
@@ -241,7 +238,7 @@ mod test {
                 .as_string::<i32>(),
             &ArrowStringArray::<i32>::from(vec![
                 "hello world",
-                "hello world this is a long string"
+                "hello world this is a long string",
             ])
         );
     }

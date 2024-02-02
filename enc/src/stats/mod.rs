@@ -1,4 +1,4 @@
-pub mod binary;
+mod binary;
 mod bool;
 mod chunked;
 mod constant;

@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::array::stats::{Stat, StatsCompute, StatsSet};
+use crate::array::varbin::VarBinArray;
+use crate::array::varbinview::VarBinViewArray;
 use crate::array::Array;
 use crate::error::EncResult;
 use crate::types::DType;
@@ -60,6 +62,18 @@ where
             (Stat::IsSorted, is_sorted.into()),
             (Stat::IsConstant, is_constant.into()),
         ]))
+    }
+}
+
+impl BinaryArray for VarBinArray {
+    fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+        VarBinArray::bytes_at(self, index)
+    }
+}
+
+impl BinaryArray for VarBinViewArray {
+    fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+        VarBinViewArray::bytes_at(self, index)
     }
 }
 
