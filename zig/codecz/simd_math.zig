@@ -475,3 +475,7 @@ fn run_vector_math_integer_benchmark(
     //const fast_enough = vec_nanos * 4 / 5 < scalar_nanos;
     //try std.testing.expect(fast_enough);
 }
+
+test "ref all decls" {
+    std.testing.refAllDeclsRecursive(@This());
+}

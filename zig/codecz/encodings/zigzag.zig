@@ -14,41 +14,43 @@ pub fn ZigZag(comptime V: type) type {
 
         const shift_for_sign_bit = @bitSizeOf(V) - 1;
 
-        pub fn encode(elems: []const V, out: []U) CodecError!void {
+        pub fn encodeRaw(elems: []const V, out: []U) CodecError!void {
             if (out.len < elems.len) {
+                std.debug.print("ZigZag.encode: out.len = {}, elems.len = {}\n", .{ out.len, elems.len });
                 return CodecError.OutputBufferTooSmall;
             }
             for (elems, out) |elem, *o| {
-                o.* = encode_single(elem);
+                o.* = encodeSingle(elem);
             }
         }
 
-        pub fn encodeAlloc(allocator: std.mem.Allocator, elems: []const V) CodecError![]const U {
+        pub fn encode(allocator: std.mem.Allocator, elems: []const V) CodecError![]const U {
             const out = try allocator.alloc(U, elems.len);
-            try encode(elems, out);
+            try encodeRaw(elems, out);
             return out;
         }
 
-        pub inline fn encode_single(val: V) U {
+        pub inline fn encodeSingle(val: V) U {
             return @bitCast((val +% val) ^ (val >> shift_for_sign_bit));
         }
 
-        pub fn decode(encoded: []const U, out: []V) CodecError!void {
+        pub fn decodeRaw(encoded: []const U, out: []V) CodecError!void {
             if (out.len < encoded.len) {
+                std.debug.print("ZigZag.decode: out.len = {}, encoded.len = {}\n", .{ out.len, encoded.len });
                 return CodecError.OutputBufferTooSmall;
             }
             for (encoded, out) |elem, *o| {
-                o.* = decode_single(elem);
+                o.* = decodeSingle(elem);
             }
         }
 
-        pub fn decodeAlloc(allocator: std.mem.Allocator, encoded: []const U) CodecError![]const V {
+        pub fn decode(allocator: std.mem.Allocator, encoded: []const U) CodecError![]const V {
             const out = try allocator.alloc(V, encoded.len);
-            try decode(encoded, out);
+            try decodeRaw(encoded, out);
             return out;
         }
 
-        pub inline fn decode_single(val: U) V {
+        pub inline fn decodeSingle(val: U) V {
             return @bitCast((val >> 1) ^ (0 -% (val & 1)));
         }
     };
@@ -62,11 +64,11 @@ test "zigzag encode yields small ints" {
     const vals = [_]i32{ 0, -1, 1, -2, 2, std.math.maxInt(i32), std.math.minInt(i32) };
     const expected_enc = [_]u32{ 0, 1, 2, 3, 4, std.math.maxInt(u32) - 1, std.math.maxInt(u32) };
 
-    const encoded = try zz.encodeAlloc(ally, &vals);
+    const encoded = try zz.encode(ally, &vals);
     defer ally.free(encoded);
     try std.testing.expectEqualSlices(u32, &expected_enc, encoded);
 
-    const decoded = try zz.decodeAlloc(ally, encoded);
+    const decoded = try zz.decode(ally, encoded);
     defer ally.free(decoded);
     try std.testing.expectEqualSlices(i32, &vals, decoded);
 }
@@ -91,7 +93,7 @@ test "zigzag benchmark" {
         defer ally.free(encoded);
 
         var timer = try std.time.Timer.start();
-        try zz.encode(values, encoded);
+        try zz.encodeRaw(values, encoded);
         const encode_ns = timer.lap();
         std.debug.print("ZIGZAG ENCODE: {} million ints per second ({}ms)\n", .{ 1000 * N / (encode_ns + 1), encode_ns / 1_000_000 });
 
@@ -99,7 +101,7 @@ test "zigzag benchmark" {
         defer ally.free(decoded);
 
         timer.reset();
-        try zz.decode(encoded, decoded);
+        try zz.decodeRaw(encoded, decoded);
         const decode_ns = timer.lap();
         std.debug.print("ZIGZAG DECODE: {} million ints per second ({}ms)\n", .{ 1000 * N / (decode_ns + 1), decode_ns / 1_000_000 });
 

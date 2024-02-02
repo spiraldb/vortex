@@ -6,6 +6,7 @@ const fastlanes = @import("fastlanes.zig");
 const Alignment = fastlanes.Alignment;
 const abi = @import("abi");
 const CodecError = abi.CodecError;
+const patch = @import("../patch.zig");
 
 // for encoding, we multiply a given element 'n' by 10^e and 10^(-f)
 // for decoding, we do the reverse: n * 10^f * 10^(-e)
@@ -19,7 +20,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
     const FMask = comptime std.meta.Int(.unsigned, @bitSizeOf(F));
 
     return struct {
-        pub usingnamespace @import("../patch.zig").PatchMixin;
+        pub usingnamespace patch.CopyPatchesMixin;
 
         pub const EncInt = codecmath.coveringIntTypePowerOfTwo(F);
         pub const ALPEncoded = struct {
@@ -63,22 +64,17 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             const encoded = try gpa.alignedAlloc(EncInt, Alignment, elems.len);
             errdefer gpa.free(encoded);
 
-            var excPositions = try std.bit_set.DynamicBitSetUnmanaged.initEmpty(gpa, elems.len);
-            errdefer excPositions.deinit(gpa);
-            const numMasks = std.math.divCeil(usize, excPositions.capacity(), @bitSizeOf(@TypeOf(excPositions).MaskInt)) catch unreachable;
+            var excPositionsBitSet = try std.bit_set.DynamicBitSetUnmanaged.initEmpty(gpa, elems.len);
+            errdefer excPositionsBitSet.deinit(gpa);
+            var excPositions = patch.toPackedSlice(excPositionsBitSet);
 
-            var excPositionsSlice = std.PackedIntSlice(u1).init(
-                std.mem.sliceAsBytes(excPositions.masks[0..numMasks]),
-                excPositions.capacity(),
-            );
-
-            const numExceptions = try encodeRaw(elems, exponents, encoded, &excPositionsSlice);
-            std.debug.assert(numExceptions == excPositions.count());
+            const numExceptions = try encodeRaw(elems, exponents, encoded, &excPositions);
+            std.debug.assert(numExceptions == excPositionsBitSet.count());
             return ALPEncoded{
                 .allocator = gpa,
                 .encodedValues = encoded,
                 .exponents = exponents,
-                .exceptionPositions = excPositions,
+                .exceptionPositions = excPositionsBitSet,
                 .numExceptions = numExceptions,
             };
         }
@@ -102,7 +98,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             for (elems, 0..) |n, i| {
                 encoded[i] = encodeSingle(n, exponents);
                 const decoded: F = decodeSingle(encoded[i], exponents);
-                const neq: u1 = @intFromBool(decoded != elems[i]);
+                const neq = @intFromBool(decoded != elems[i]);
                 numExceptions += neq;
                 excPositions.set(i, neq);
             }
@@ -168,7 +164,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
                 // if encoding is a success, count number of leading zeroes to estimate bitpacking efficacy
                 // see comment below for why we zigzag before counting clz
                 // NB: if encoding failed, encoded/zzEncoded are both 0.
-                const zzEncoded = zz.encode_single(encoded);
+                const zzEncoded = zz.encodeSingle(encoded);
                 const encodedClz = @clz(zzEncoded);
 
                 // element count of elements of bit width i
@@ -245,6 +241,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             out: []F,
         ) CodecError!void {
             if (out.len < input.len) {
+                std.debug.print("ALP.decodeRaw: out.len = {}, input.len = {}\n", .{ out.len, input.len });
                 return CodecError.OutputBufferTooSmall;
             }
 
