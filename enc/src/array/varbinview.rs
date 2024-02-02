@@ -14,7 +14,7 @@ use crate::arrow::CombineChunks;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::stats::binary::BinaryArray;
-use crate::types::{DType, IntWidth, Signedness};
+use crate::types::{DType, IntWidth, Nullability, Signedness};
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
@@ -76,6 +76,7 @@ pub struct VarBinViewArray {
     views: ArrayRef,
     data: Vec<ArrayRef>,
     dtype: DType,
+    validity: Option<ArrayRef>,
     stats: Arc<RwLock<StatsSet>>,
 }
 
@@ -83,16 +84,16 @@ impl VarBinViewArray {
     pub fn new(views: ArrayRef, data: Vec<ArrayRef>, dtype: DType) -> Self {
         if !matches!(
             views.dtype(),
-            DType::Int(IntWidth::_8, Signedness::Unsigned)
+            DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
             panic!("Unsupported type for views array {:?}", views.dtype());
         }
         data.iter().for_each(|d| {
-            if !matches!(d.dtype(), DType::Int(IntWidth::_8, Signedness::Unsigned)) {
+            if !matches!(d.dtype(), DType::Int(IntWidth::_8, Signedness::Unsigned, _)) {
                 panic!("Unsupported type for data array {:?}", d.dtype());
             }
         });
-        if !matches!(dtype, DType::Binary | DType::Utf8) {
+        if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
             panic!("Unsupported dtype for VarBinView array");
         }
 
@@ -100,6 +101,7 @@ impl VarBinViewArray {
             views,
             data,
             dtype,
+            validity: None,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
@@ -132,6 +134,11 @@ impl VarBinViewArray {
     #[inline]
     pub fn data(&self) -> &[ArrayRef] {
         &self.data
+    }
+
+    #[inline]
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
     }
 }
 
@@ -200,7 +207,7 @@ impl Array for VarBinViewArray {
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         self.bytes_at(index).map(|bytes| {
-            if matches!(self.dtype, DType::Utf8) {
+            if matches!(self.dtype, DType::Utf8(_)) {
                 unsafe { String::from_utf8_unchecked(bytes) }.into()
             } else {
                 bytes.into()
@@ -209,7 +216,7 @@ impl Array for VarBinViewArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let data_arr: ArrowArrayRef = if matches!(self.dtype, DType::Utf8) {
+        let data_arr: ArrowArrayRef = if matches!(self.dtype, DType::Utf8(_)) {
             let mut data_buf = StringBuilder::with_capacity(self.len(), self.plain_size());
             for i in 0..self.views.len() / VIEW_SIZE {
                 unsafe {
@@ -235,6 +242,7 @@ impl Array for VarBinViewArray {
             views: self.views.slice(start * VIEW_SIZE, stop * VIEW_SIZE)?,
             data: self.data.clone(),
             dtype: self.dtype.clone(),
+            validity: self.validity.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
         .boxed())
@@ -286,7 +294,6 @@ mod test {
     use arrow::array::GenericStringArray as ArrowStringArray;
 
     use crate::array::primitive::PrimitiveArray;
-    use crate::scalar::Utf8Scalar;
 
     use super::*;
 
@@ -311,20 +318,21 @@ mod test {
                 .collect::<Vec<u8>>(),
         );
 
-        VarBinViewArray::new(view_arr.boxed(), vec![values.boxed()], DType::Utf8)
+        VarBinViewArray::new(
+            view_arr.boxed(),
+            vec![values.boxed()],
+            DType::Utf8(Nullability::NonNullable),
+        )
     }
 
     #[test]
     pub fn varbin_view() {
         let binary_arr = binary_array();
         assert_eq!(binary_arr.len(), 2);
+        assert_eq!(binary_arr.scalar_at(0), Ok("hello world".into()));
         assert_eq!(
-            binary_arr.scalar_at(0).unwrap(),
-            Utf8Scalar::new("hello world".into()).boxed()
-        );
-        assert_eq!(
-            binary_arr.scalar_at(1).unwrap(),
-            Utf8Scalar::new("hello world this is a long string".into()).boxed()
+            binary_arr.scalar_at(1),
+            Ok("hello world this is a long string".into())
         )
     }
 
@@ -332,8 +340,8 @@ mod test {
     pub fn slice() {
         let binary_arr = binary_array().slice(1, 2).unwrap();
         assert_eq!(
-            binary_arr.scalar_at(0).unwrap(),
-            Utf8Scalar::new("hello world this is a long string".into()).boxed()
+            binary_arr.scalar_at(0),
+            Ok("hello world this is a long string".into())
         );
     }
 

@@ -21,14 +21,19 @@ use crate::types::{match_each_native_ptype, DType, NativePType, PType};
 pub struct PrimitiveArray {
     buffer: Buffer,
     ptype: PType,
+    dtype: DType,
+    validity: Option<ArrayRef>,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl PrimitiveArray {
     pub fn new(ptype: PType, buffer: Buffer) -> Self {
+        let dtype: DType = ptype.into();
         Self {
             buffer,
             ptype,
+            dtype,
+            validity: None,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
@@ -62,6 +67,11 @@ impl PrimitiveArray {
     pub fn buffer(&self) -> &Buffer {
         &self.buffer
     }
+
+    #[inline]
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
+    }
 }
 
 impl Array for PrimitiveArray {
@@ -92,7 +102,7 @@ impl Array for PrimitiveArray {
 
     #[inline]
     fn dtype(&self) -> &DType {
-        self.ptype.into()
+        &self.dtype
     }
 
     #[inline]
@@ -135,6 +145,8 @@ impl Array for PrimitiveArray {
         Ok(Self {
             buffer: self.buffer.slice_with_length(byte_start, byte_length),
             ptype: self.ptype,
+            validity: self.validity.clone(),
+            dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
         .boxed())
@@ -186,7 +198,7 @@ impl ArrayDisplay for PrimitiveArray {
 
 #[cfg(test)]
 mod test {
-    use crate::types::{IntWidth, Signedness};
+    use crate::types::{IntWidth, Nullability, Signedness};
 
     use super::*;
 
@@ -195,7 +207,10 @@ mod test {
         let arr = PrimitiveArray::from_vec::<i32>(vec![1, 2, 3]);
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.ptype, PType::I32);
-        assert_eq!(arr.dtype(), &DType::Int(IntWidth::_32, Signedness::Signed));
+        assert_eq!(
+            arr.dtype(),
+            &DType::Int(IntWidth::_32, Signedness::Signed, Nullability::NonNullable)
+        );
 
         // Ensure we can fetch the scalar at the given index.
         assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(1));

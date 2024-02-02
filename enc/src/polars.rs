@@ -3,7 +3,7 @@ use polars_arrow::array::from_data;
 use polars_core::prelude::{AnyValue, Series};
 
 use crate::array::ArrowIterator;
-use crate::scalar::{BinaryScalar, BoolScalar, NullableScalar, PScalar, Scalar, Utf8Scalar};
+use crate::scalar::{BinaryScalar, BoolScalar, PScalar, Scalar, Utf8Scalar};
 use crate::types::DType;
 
 pub trait IntoPolarsSeries {
@@ -47,14 +47,10 @@ impl IntoPolarsValue for &dyn Scalar {
     fn into_polars<'a>(self) -> AnyValue<'a> {
         match self.dtype() {
             DType::Null => AnyValue::Null,
-            DType::Nullable(_) => match self.as_any().downcast_ref::<NullableScalar>().unwrap() {
-                NullableScalar::Some(value) => value.as_ref().into_polars(),
-                NullableScalar::None(_dtype) => AnyValue::Null,
-            },
-            DType::Bool => {
+            DType::Bool(_) => {
                 AnyValue::Boolean(self.as_any().downcast_ref::<BoolScalar>().unwrap().value())
             }
-            DType::Int(_, _) | DType::Float(_) => {
+            DType::Int(_, _, _) | DType::Float(_, _) => {
                 match self.as_any().downcast_ref::<PScalar>().unwrap() {
                     PScalar::U8(v) => AnyValue::UInt8(*v),
                     PScalar::U16(v) => AnyValue::UInt16(*v),
@@ -69,28 +65,28 @@ impl IntoPolarsValue for &dyn Scalar {
                     PScalar::F64(v) => AnyValue::Float64(*v),
                 }
             }
-            DType::Decimal(_, _) => todo!(),
-            DType::Utf8 => AnyValue::StringOwned(
+            DType::Decimal(_, _, _) => todo!(),
+            DType::Utf8(_) => AnyValue::StringOwned(
                 self.as_any()
                     .downcast_ref::<Utf8Scalar>()
                     .unwrap()
                     .value()
                     .into(),
             ),
-            DType::Binary => AnyValue::BinaryOwned(
+            DType::Binary(_) => AnyValue::BinaryOwned(
                 self.as_any()
                     .downcast_ref::<BinaryScalar>()
                     .unwrap()
                     .value()
                     .clone(),
             ),
-            DType::LocalTime(_) => todo!(),
-            DType::LocalDate => todo!(),
-            DType::Instant(_) => todo!(),
-            DType::ZonedDateTime(_) => todo!(),
+            DType::LocalTime(_, _) => todo!(),
+            DType::LocalDate(_) => todo!(),
+            DType::Instant(_, _) => todo!(),
+            DType::ZonedDateTime(_, _) => todo!(),
             DType::Struct(_, _) => todo!(),
-            DType::List(_) => todo!(),
-            DType::Map(_, _) => todo!(),
+            DType::List(_, _) => todo!(),
+            DType::Map(_, _, _) => todo!(),
         }
     }
 }

@@ -42,7 +42,7 @@ where
         StatsSet::from(HashMap::from([
             (
                 Stat::Min,
-                if matches!(self.dtype(), DType::Utf8) {
+                if matches!(self.dtype(), DType::Utf8(_)) {
                     unsafe { String::from_utf8_unchecked(min.to_vec()) }.into()
                 } else {
                     min.into()
@@ -50,7 +50,7 @@ where
             ),
             (
                 Stat::Max,
-                if matches!(self.dtype(), DType::Utf8) {
+                if matches!(self.dtype(), DType::Utf8(_)) {
                     unsafe { String::from_utf8_unchecked(max.to_vec()) }.into()
                 } else {
                     max.into()
@@ -69,7 +69,7 @@ mod test {
     use crate::array::stats::Stat;
     use crate::array::varbin::VarBinArray;
     use crate::array::Array;
-    use crate::types::DType;
+    use crate::types::{DType, Nullability};
 
     fn array(dtype: DType) -> VarBinArray {
         let values = PrimitiveArray::from_vec(
@@ -84,7 +84,7 @@ mod test {
 
     #[test]
     fn utf8_stats() {
-        let arr = array(DType::Utf8);
+        let arr = array(DType::Utf8(Nullability::NonNullable));
         assert_eq!(
             arr.stats().get_or_compute_as::<String>(&Stat::Min).unwrap(),
             String::from("hello world")
@@ -111,7 +111,7 @@ mod test {
 
     #[test]
     fn binary_stats() {
-        let arr = array(DType::Binary);
+        let arr = array(DType::Binary(Nullability::NonNullable));
         assert_eq!(
             arr.stats()
                 .get_or_compute_as::<Vec<u8>>(&Stat::Min)

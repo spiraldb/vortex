@@ -115,7 +115,6 @@ impl Array for PatchedArray {
             // greater than or equal to the true index
             let index_in_patch_indices =
                 search_sorted_usize(&self.patch_indices, true_index, SearchSortedSide::Left)
-                    .ok()
                     .unwrap_or(self.patch_indices.len());
             // If the value at this index is equal to the true index, then it exists in the patch index array
             // and we should return the value at the corresponding index in the patch values array
@@ -128,7 +127,7 @@ impl Array for PatchedArray {
                 }
             }
             // Otherwise, we should return the value at the corresponding index in the data array
-            self.data.as_ref().scalar_at(true_index)
+            self.data.scalar_at(true_index)
         }
     }
 
@@ -177,7 +176,7 @@ impl ArrayDisplay for PatchedArray {
         f.indent(|indented| indented.array(self.patch_indices()))?;
         f.writeln("patches:")?;
         f.indent(|indented| indented.array(self.patch_values()))?;
-        f.writeln("patches:")?;
+        f.writeln("data:")?;
         f.indent(|indented| indented.array(self.data()))
     }
 }

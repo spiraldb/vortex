@@ -220,7 +220,7 @@ mod test {
 
     use crate::array::chunked::ChunkedArray;
     use crate::array::Array;
-    use crate::types::{DType, IntWidth, Signedness};
+    use crate::types::{DType, IntWidth, Nullability, Signedness};
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::new(
@@ -229,7 +229,11 @@ mod test {
                 vec![4u64, 5, 6].into(),
                 vec![7u64, 8, 9].into(),
             ],
-            DType::Int(IntWidth::_64, Signedness::Unsigned),
+            DType::Int(
+                IntWidth::_64,
+                Signedness::Unsigned,
+                Nullability::NonNullable,
+            ),
         )
     }
 
@@ -241,7 +245,11 @@ mod test {
     pub fn iter() {
         let chunked = ChunkedArray::new(
             vec![vec![1u64, 2, 3].into(), vec![4u64, 5, 6].into()],
-            DType::Int(IntWidth::_64, Signedness::Unsigned),
+            DType::Int(
+                IntWidth::_64,
+                Signedness::Unsigned,
+                Nullability::NonNullable,
+            ),
         );
 
         chunked

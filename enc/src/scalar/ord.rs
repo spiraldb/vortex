@@ -24,13 +24,13 @@ fn cmp(lhs: &dyn Scalar, rhs: &dyn Scalar) -> Option<Ordering> {
 
     use crate::types::DType::*;
     Some(match lhs.dtype() {
-        Bool => dyn_ord!(BoolScalar, lhs, rhs),
-        Int(_, _) => dyn_ord!(PScalar, lhs, rhs),
-        Float(_) => dyn_ord!(PScalar, lhs, rhs),
+        Bool(_) => dyn_ord!(BoolScalar, lhs, rhs),
+        Int(_, _, _) => dyn_ord!(PScalar, lhs, rhs),
+        Float(_, _) => dyn_ord!(PScalar, lhs, rhs),
         Struct(..) => dyn_ord!(StructScalar, lhs, rhs),
-        Utf8 => dyn_ord!(Utf8Scalar, lhs, rhs),
-        Binary => dyn_ord!(BinaryScalar, lhs, rhs),
-        LocalTime(_) => dyn_ord!(LocalTimeScalar, lhs, rhs),
+        Utf8(_) => dyn_ord!(Utf8Scalar, lhs, rhs),
+        Binary(_) => dyn_ord!(BinaryScalar, lhs, rhs),
+        LocalTime(_, _) => dyn_ord!(LocalTimeScalar, lhs, rhs),
         _ => todo!("Cmp not yet implemented for {:?} {:?}", lhs, rhs),
     })
 }

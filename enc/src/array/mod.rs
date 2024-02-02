@@ -24,7 +24,6 @@ pub mod chunked;
 pub mod constant;
 pub mod encode;
 mod formatter;
-pub mod null;
 pub mod patched;
 pub mod primitive;
 pub mod ree;

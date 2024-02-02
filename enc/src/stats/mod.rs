@@ -2,7 +2,6 @@ pub mod binary;
 pub mod bool;
 pub mod chunked;
 pub mod constant;
-pub mod null;
 pub mod patched;
 pub mod primitive;
 pub mod ree;

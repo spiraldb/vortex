@@ -5,7 +5,7 @@ use std::mem::size_of;
 
 use crate::error::{EncError, EncResult};
 use crate::scalar::{LocalTimeScalar, Scalar};
-use crate::types::{DType, PType};
+use crate::types::{DType, Nullability, PType};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum PScalar {
@@ -45,7 +45,9 @@ impl PScalar {
         macro_rules! from_int {
             ($dtype:ident , $ps:ident) => {
                 match $dtype {
-                    DType::LocalTime(w) => Ok(LocalTimeScalar::new($ps.clone(), w.clone()).boxed()),
+                    DType::LocalTime(w, Nullability::NonNullable) => {
+                        Ok(LocalTimeScalar::new($ps.clone(), w.clone()).boxed())
+                    }
                     _ => Err(EncError::InvalidDType($dtype.clone())),
                 }
             };
@@ -272,7 +274,7 @@ impl Display for PScalar {
 
 #[cfg(test)]
 mod test {
-    use crate::types::{IntWidth, Signedness};
+    use crate::types::{IntWidth, Nullability, Signedness};
 
     use super::*;
 
@@ -294,7 +296,11 @@ mod test {
     fn cast() {
         let scalar: Box<dyn Scalar> = 10u16.into();
         let u32_scalar = scalar
-            .cast(&DType::Int(IntWidth::_32, Signedness::Unsigned))
+            .cast(&DType::Int(
+                IntWidth::_32,
+                Signedness::Unsigned,
+                Nullability::NonNullable,
+            ))
             .unwrap();
         let u32_scalar_ptype: PType = u32_scalar.dtype().try_into().unwrap();
         assert_eq!(u32_scalar_ptype, PType::U32);

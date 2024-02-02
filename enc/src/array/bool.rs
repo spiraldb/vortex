@@ -9,7 +9,7 @@ use arrow::buffer::BooleanBuffer;
 use crate::array::stats::{Stat, Stats, StatsSet};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
-use crate::types::DType;
+use crate::types::{DType, Nullability};
 
 use super::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 
@@ -17,6 +17,7 @@ use super::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 pub struct BoolArray {
     buffer: BooleanBuffer,
     stats: Arc<RwLock<StatsSet>>,
+    validity: Option<ArrayRef>,
 }
 
 impl BoolArray {
@@ -24,12 +25,18 @@ impl BoolArray {
         Self {
             buffer,
             stats: Arc::new(RwLock::new(StatsSet::new())),
+            validity: None,
         }
     }
 
     #[inline]
     pub fn buffer(&self) -> &BooleanBuffer {
         &self.buffer
+    }
+
+    #[inline]
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
     }
 }
 
@@ -61,7 +68,11 @@ impl Array for BoolArray {
 
     #[inline]
     fn dtype(&self) -> &DType {
-        &DType::Bool
+        if self.validity.is_some() {
+            &DType::Bool(Nullability::Nullable)
+        } else {
+            &DType::Bool(Nullability::NonNullable)
+        }
     }
 
     #[inline]
@@ -93,6 +104,7 @@ impl Array for BoolArray {
         Ok(Self {
             buffer: self.buffer.slice(start, stop - start),
             stats: Arc::new(RwLock::new(StatsSet::new())),
+            validity: self.validity.clone(),
         }
         .boxed())
     }

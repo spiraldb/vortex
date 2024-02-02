@@ -134,13 +134,13 @@ mod test {
     use crate::array::typed::TypedArray;
     use crate::array::Array;
     use crate::scalar::{LocalTimeScalar, PScalar, Scalar};
-    use crate::types::{DType, TimeUnit};
+    use crate::types::{DType, Nullability, TimeUnit};
 
     #[test]
     pub fn scalar() {
         let arr = TypedArray::new(
             vec![64_799_000_000_u64, 43_000_000_000].into(),
-            DType::LocalTime(TimeUnit::Us),
+            DType::LocalTime(TimeUnit::Us, Nullability::NonNullable),
         );
         assert_eq!(
             arr.scalar_at(0).unwrap().as_ref(),
@@ -156,7 +156,7 @@ mod test {
     pub fn iter() {
         let arr = TypedArray::new(
             vec![64_799_000_000_i64, 43_000_000_000].into(),
-            DType::LocalTime(TimeUnit::Us),
+            DType::LocalTime(TimeUnit::Us, Nullability::NonNullable),
         );
         arr.iter_arrow()
             .zip_eq(iter::once(Box::new(Time64MicrosecondArray::from(vec![
