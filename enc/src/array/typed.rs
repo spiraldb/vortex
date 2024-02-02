@@ -3,11 +3,11 @@ use std::sync::{Arc, RwLock};
 
 use arrow::datatypes::DataType;
 
-use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::array::stats::{Stats, StatsSet};
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use crate::error::EncResult;
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
+use crate::stats::{Stats, StatsSet};
 use crate::types::DType;
 
 #[derive(Debug, Clone)]

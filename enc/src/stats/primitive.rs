@@ -8,11 +8,11 @@ use polars_core::prelude::{Series, SortOptions};
 use polars_ops::prelude::SeriesMethods;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::stats::{Stat, StatsCompute, StatsSet};
 use crate::array::Array;
 use crate::polars::IntoPolarsSeries;
 use crate::scalar::ListScalarValues;
 use crate::scalar::Scalar;
+use crate::stats::{Stat, StatsCompute, StatsSet};
 use crate::types::{match_each_native_ptype, PType};
 
 impl StatsCompute for PrimitiveArray {
@@ -156,7 +156,7 @@ mod test {
             vec![
                 0u64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             ]
         );
         assert_eq!(run_count, 5);
