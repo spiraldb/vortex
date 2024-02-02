@@ -8,6 +8,7 @@ use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId};
 mod constant;
 mod primitive;
 mod ree;
+pub mod zigzag;
 
 #[derive(Debug, Clone)]
 pub struct CompressConfig {
@@ -126,6 +127,7 @@ pub trait CompressedEncoding: Encoding + 'static {
 pub fn compress(arr: &dyn Array, opts: CompressCtx) -> ArrayRef {
     match ArrayKind::from(arr) {
         ArrayKind::Primitive(p) => compress_typed(p, opts),
+        ArrayKind::ZigZag(p) => compress_typed(p, opts),
         _ => dyn_clone::clone_box(arr),
     }
 }

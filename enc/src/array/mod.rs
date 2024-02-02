@@ -15,6 +15,7 @@ use crate::array::struct_::{StructArray, STRUCT_ENCODING};
 use crate::array::typed::{TypedArray, TYPED_ENCODING};
 use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
 use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
+use crate::array::zigzag::{ZigZagArray, ZIGZAG_ENCODING};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -32,6 +33,7 @@ pub mod struct_;
 pub mod typed;
 pub mod varbin;
 pub mod varbinview;
+pub mod zigzag;
 
 pub type ArrowIterator = dyn Iterator<Item = ArrowArrayRef>;
 pub type ArrayRef = Box<dyn Array>;
@@ -96,7 +98,7 @@ impl<'a> AsRef<(dyn Array + 'a)> for dyn Array {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct EncodingId(&'static str);
 
 impl Display for EncodingId {
@@ -123,6 +125,7 @@ pub enum ArrayKind<'a> {
     Typed(&'a TypedArray),
     VarBin(&'a VarBinArray),
     VarBinView(&'a VarBinViewArray),
+    ZigZag(&'a ZigZagArray),
     Other(&'a dyn Array),
 }
 
@@ -154,6 +157,9 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
             }
             VARBINVIEW_ENCODING => {
                 ArrayKind::VarBinView(value.as_any().downcast_ref::<VarBinViewArray>().unwrap())
+            }
+            ZIGZAG_ENCODING => {
+                ArrayKind::ZigZag(value.as_any().downcast_ref::<ZigZagArray>().unwrap())
             }
             _ => ArrayKind::Other(value),
         }

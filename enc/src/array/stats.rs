@@ -1,11 +1,13 @@
-use itertools::Itertools;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::RwLock;
 
+use itertools::Itertools;
+
 use crate::error::{EncError, EncResult};
 use crate::scalar::{ListScalarValues, Scalar};
+use crate::types::NativePType;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stat {
@@ -232,6 +234,11 @@ impl<'a> Stats<'a> {
             .0
             .extend(self.compute.compute(stat).0);
         self.get(stat)
+    }
+
+    pub fn get_or_compute_cast<T: NativePType>(&self, stat: &Stat) -> Option<T> {
+        self.get_or_compute(stat)
+            .map(|v| T::try_from(v.cast(T::PTYPE.into()).unwrap()).unwrap())
     }
 
     pub fn get_or_compute_as<T: TryFrom<Box<dyn Scalar>, Error = EncError>>(

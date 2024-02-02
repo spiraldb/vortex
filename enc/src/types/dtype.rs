@@ -6,10 +6,11 @@ use std::sync::Arc;
 use arrow::datatypes::{DataType, Field, Fields, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
 
+use DType::*;
+
 use crate::error::{EncError, EncResult};
 
 use super::PType;
-use DType::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Nullability {
@@ -216,8 +217,8 @@ impl Display for DType {
             Bool(n) => write!(f, "bool{}", n),
             Int(w, s, n) => match s {
                 Unknown => write!(f, "int({}){}", w, n),
-                Unsigned => write!(f, "uint({}){}", w, n),
-                Signed => write!(f, "sint({}){}", w, n),
+                Unsigned => write!(f, "unsigned_int({})", w),
+                Signed => write!(f, "signed_int({})", w),
             },
             Decimal(p, s, n) => write!(f, "decimal({}, {}){}", p, s, n),
             Float(w, n) => write!(f, "float({}){}", w, n),

@@ -63,6 +63,6 @@ mod test {
     #[test]
     fn primitive_array() {
         let arr = PrimitiveArray::from_vec((0..100).collect()).boxed();
-        assert_eq!(format!("{}", arr), "enc.primitive(sint(32)), len=100, nbytes=400 B (100%)\n[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]...\n")
+        assert_eq!(format!("{}", arr), "enc.primitive(signed_int(32)), len=100, nbytes=400 B (100%)\n[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]...\n")
     }
 }

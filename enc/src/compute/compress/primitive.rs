@@ -4,6 +4,7 @@ use half::f16;
 use crate::array::constant::ConstantEncoding;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEEncoding;
+use crate::array::zigzag::ZigZagEncoding;
 use crate::array::{Array, ArrayRef};
 use crate::compute::compress::{CompressCtx, CompressedEncoding, Compressible, Compressor};
 use crate::sampling::default_sample;
@@ -75,7 +76,7 @@ impl Compressible for PrimitiveArray {
 
 // TODO(robert): Add more
 fn compressors(_ptype: &PType) -> Vec<&'static dyn CompressedEncoding> {
-    vec![&ConstantEncoding, &REEEncoding]
+    vec![&ZigZagEncoding, &ConstantEncoding, &REEEncoding]
 }
 
 #[cfg(test)]

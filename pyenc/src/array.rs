@@ -1,4 +1,5 @@
 use paste::paste;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use enc::array::bool::BoolArray;
@@ -11,10 +12,12 @@ use enc::array::struct_::StructArray;
 use enc::array::typed::TypedArray;
 use enc::array::varbin::VarBinArray;
 use enc::array::varbinview::VarBinViewArray;
+use enc::array::zigzag::ZigZagArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
 
 use crate::dtype::PyDType;
 use crate::enc_arrow;
+use crate::error::PyEncError;
 
 #[pyclass(name = "Array", module = "enc", sequence, subclass)]
 pub struct PyArray {
@@ -54,6 +57,7 @@ pyarray!(StructArray, "StructArray");
 pyarray!(TypedArray, "TypedArray");
 pyarray!(VarBinArray, "VarBinArray");
 pyarray!(VarBinViewArray, "VarBinViewArray");
+pyarray!(ZigZagArray, "ZigZagArray");
 
 impl PyArray {
     pub fn wrap(py: Python<'_>, inner: ArrayRef) -> PyResult<Py<Self>> {
@@ -99,7 +103,14 @@ impl PyArray {
                 inner.into_any().downcast::<VarBinViewArray>().unwrap(),
             )?
             .extract(py),
-            ArrayKind::Other(_) => panic!("Can't convert array to python"),
+            ArrayKind::ZigZag(_) => {
+                PyZigZagArray::wrap(py, inner.into_any().downcast::<ZigZagArray>().unwrap())?
+                    .extract(py)
+            }
+            ArrayKind::Other(_) => Err(PyValueError::new_err(format!(
+                "Cannot convert {:?} to enc array",
+                inner
+            ))),
         }
     }
 
@@ -130,5 +141,15 @@ impl PyArray {
     #[getter]
     fn dtype(self_: PyRef<Self>) -> PyResult<Py<PyDType>> {
         PyDType::wrap(self_.py(), self_.inner.dtype().clone())
+    }
+}
+
+#[pymethods]
+impl PyZigZagArray {
+    #[staticmethod]
+    fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
+        ZigZagArray::encode(array.unwrap())
+            .map_err(PyEncError::map_err)
+            .and_then(|zarray| PyArray::wrap(array.py(), zarray))
     }
 }
