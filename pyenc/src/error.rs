@@ -17,11 +17,12 @@ impl From<PyEncError> for PyErr {
             EncError::OutOfBounds(_, _, _) => PyValueError::new_err(value.0.to_string()),
             EncError::LengthMismatch => PyValueError::new_err(value.0.to_string()),
             EncError::ComputeError(_) => PyValueError::new_err(value.0.to_string()),
-            EncError::ValueError(_) => PyValueError::new_err(value.0.to_string()),
             EncError::InvalidDType(_) => PyTypeError::new_err(value.0.to_string()),
-            EncError::TypeMismatch(_, _) => PyTypeError::new_err(value.0.to_string()),
+            EncError::IncompatibleTypes(_, _) => PyTypeError::new_err(value.0.to_string()),
             EncError::InvalidArrowDataType(_) => PyTypeError::new_err(value.0.to_string()),
             EncError::PolarsError(_) => PyValueError::new_err(value.0.to_string()),
+            EncError::MalformedPatches(_) => PyValueError::new_err(value.0.to_string()),
+            EncError::MismatchedTypes(_, _) => PyTypeError::new_err(value.0.to_string()),
         }
     }
 }

@@ -7,7 +7,10 @@ use itertools::Itertools;
 
 use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{
+    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    EncodingRef,
+};
 use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
@@ -99,6 +102,7 @@ impl Array for ChunkedArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+        check_index_bounds(self, index)?;
         let (chunk_index, chunk_offset) = self.find_physical_location(index);
         self.chunks[chunk_index].scalar_at(chunk_offset)
     }
@@ -108,7 +112,7 @@ impl Array for ChunkedArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
-        self.check_slice_bounds(start, stop)?;
+        check_slice_bounds(self, start, stop)?;
 
         let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(start);
         let (length_chunk, length_in_last_chunk) = self.find_physical_location(stop);

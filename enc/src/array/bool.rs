@@ -7,11 +7,14 @@ use arrow::array::{ArrayRef as ArrowArrayRef, BooleanArray};
 use arrow::buffer::BooleanBuffer;
 
 use crate::array::stats::{Stat, Stats, StatsSet};
-use crate::error::{EncError, EncResult};
+use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::{DType, Nullability};
 
-use super::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use super::{
+    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    EncodingRef,
+};
 
 #[derive(Debug, Clone)]
 pub struct BoolArray {
@@ -81,9 +84,7 @@ impl Array for BoolArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        if index >= self.len() {
-            return Err(EncError::OutOfBounds(index, 0, self.len()));
-        }
+        check_index_bounds(self, index)?;
 
         if self.buffer.value(index) {
             Ok(true.into())
@@ -99,7 +100,7 @@ impl Array for BoolArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
-        self.check_slice_bounds(start, stop)?;
+        check_slice_bounds(self, start, stop)?;
 
         Ok(Self {
             buffer: self.buffer.slice(start, stop - start),
@@ -142,6 +143,12 @@ impl ArrayDisplay for BoolArray {
         let true_count = self.stats().get_or_compute_or(0usize, &Stat::TrueCount);
         let false_count = self.len() - true_count;
         f.writeln(format!("n_true: {}, n_false: {}", true_count, false_count))
+    }
+}
+
+impl From<Vec<bool>> for BoolArray {
+    fn from(value: Vec<bool>) -> Self {
+        BoolArray::new(BooleanBuffer::from(value))
     }
 }
 

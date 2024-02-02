@@ -49,16 +49,18 @@ pub enum EncError {
     LengthMismatch,
     #[error("{0}")]
     ComputeError(ErrString),
-    #[error("invalid dtype: {0:?}")]
+    #[error("invalid dtype: {0}")]
     InvalidDType(DType),
     #[error("can't convert type {0} into {1}")]
-    TypeMismatch(DType, DType),
+    IncompatibleTypes(DType, DType),
+    #[error("Expected both arrays to have the same type, found {0} and {1}")]
+    MismatchedTypes(DType, DType),
     #[error("unexpected arrow data type: {0:?}")]
     InvalidArrowDataType(arrow::datatypes::DataType),
     #[error("polars error: {0:?}")]
     PolarsError(PolarsError),
-    #[error("{0}")]
-    ValueError(ErrString),
+    #[error("Malformed patch values, patch index had entry for index {0} but there was no corresponding patch value")]
+    MalformedPatches(usize),
 }
 
 pub type EncResult<T> = Result<T, EncError>;

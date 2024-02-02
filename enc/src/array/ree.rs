@@ -10,7 +10,10 @@ use arrow::datatypes::DataType;
 
 use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{
+    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    EncodingRef,
+};
 use crate::arrow::compute::repeat;
 use crate::compute;
 use crate::compute::search_sorted::SearchSortedSide;
@@ -95,6 +98,7 @@ impl Array for REEArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+        check_index_bounds(self, index)?;
         self.values.scalar_at(self.find_physical_index(index)?)
     }
 
@@ -132,7 +136,7 @@ impl Array for REEArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
-        self.check_slice_bounds(start, stop)?;
+        check_slice_bounds(self, start, stop)?;
         let slice_begin = self.find_physical_index(start).unwrap();
         let slice_end = self.find_physical_index(stop).unwrap();
         Ok(Self {

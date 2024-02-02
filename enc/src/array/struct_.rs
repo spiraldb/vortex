@@ -13,7 +13,9 @@ use crate::error::EncResult;
 use crate::scalar::{Scalar, StructScalar};
 use crate::types::{DType, FieldNames};
 
-use super::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use super::{
+    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
+};
 
 #[derive(Debug, Clone)]
 pub struct StructArray {
@@ -112,7 +114,7 @@ impl Array for StructArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
-        self.check_slice_bounds(start, stop)?;
+        check_slice_bounds(self, start, stop)?;
 
         let fields = self
             .fields
