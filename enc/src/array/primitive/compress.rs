@@ -6,28 +6,28 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEEncoding;
 use crate::array::zigzag::ZigZagEncoding;
 use crate::array::{Array, ArrayRef};
-use crate::compute::compress::{CompressCtx, CompressedEncoding, Compressible, Compressor};
+use crate::compress::{CompressCtx, CompressedEncoding, Compressible, Compressor};
+use crate::ptype::match_each_native_ptype;
+use crate::ptype::PType;
 use crate::sampling::default_sample;
-use crate::types::match_each_native_ptype;
-use crate::types::PType;
 
 impl Compressible for PrimitiveArray {
     fn compress(&self, ctx: CompressCtx) -> ArrayRef {
         // First, we try constant compression
-        if let Some(compressor) = ConstantEncoding.compressor(self, ctx.options) {
+        if let Some(compressor) = ConstantEncoding.compressor(self, ctx.options()) {
             return compressor(self, ctx);
         }
 
         let candidate_compressors: Vec<&Compressor> = compressors(self.ptype())
             .into_iter()
-            .flat_map(|kind| kind.compressor(self, ctx.options))
+            .flat_map(|kind| kind.compressor(self, ctx.options()))
             .collect();
 
         if candidate_compressors.is_empty() {
             return dyn_clone::clone_box(self);
         }
 
-        if ctx.is_sample {
+        if ctx.is_sample() {
             let (_, compressed_sample) = candidate_compressors.iter().fold(
                 (self.nbytes(), None),
                 |(compressed_bytes, curr_best), compressor| {
@@ -48,8 +48,8 @@ impl Compressible for PrimitiveArray {
                 self.ptype().clone(),
                 Buffer::from_vec(default_sample(
                     self.buffer().typed_data::<$P>(),
-                    ctx.options.sample_size,
-                    ctx.options.sample_count,
+                    ctx.options().sample_size,
+                    ctx.options().sample_count,
                 )),
             )
         });
@@ -85,7 +85,7 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::ree::REEEncoding;
     use crate::array::Encoding;
-    use crate::compute::compress::{CompressCtx, Compressible};
+    use crate::compress::{CompressCtx, Compressible};
 
     #[test]
     pub fn compress_ree() {

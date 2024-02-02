@@ -1,9 +1,9 @@
 use std::any::Any;
 use std::fmt::{Display, Formatter};
 
+use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::scalar::{NullableScalar, Scalar};
-use crate::types::DType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NullScalar;

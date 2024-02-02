@@ -1,6 +1,6 @@
+use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
-use crate::types::DType;
 use std::any::Any;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;

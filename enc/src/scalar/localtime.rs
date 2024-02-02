@@ -1,6 +1,6 @@
+use crate::dtype::{DType, Nullability, TimeUnit};
 use crate::error::EncResult;
 use crate::scalar::{PScalar, Scalar};
-use crate::types::{DType, Nullability, TimeUnit};
 use std::any::Any;
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};

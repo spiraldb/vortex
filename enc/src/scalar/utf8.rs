@@ -1,9 +1,9 @@
 use std::any::Any;
 use std::fmt::{Display, Formatter};
 
+use crate::dtype::{DType, Nullability};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
-use crate::types::{DType, Nullability};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Utf8Scalar {

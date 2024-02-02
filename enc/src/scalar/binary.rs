@@ -1,6 +1,6 @@
+use crate::dtype::{DType, Nullability};
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
-use crate::types::{DType, Nullability};
 use std::any::Any;
 use std::fmt::{Display, Formatter};
 

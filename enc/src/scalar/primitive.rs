@@ -1,11 +1,13 @@
-use half::f16;
 use std::any::Any;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
+use half::f16;
+
+use crate::dtype::{DType, Nullability};
 use crate::error::{EncError, EncResult};
+use crate::ptype::PType;
 use crate::scalar::{LocalTimeScalar, Scalar};
-use crate::types::{DType, Nullability, PType};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum PScalar {
@@ -274,7 +276,7 @@ impl Display for PScalar {
 
 #[cfg(test)]
 mod test {
-    use crate::types::{IntWidth, Nullability, Signedness};
+    use crate::dtype::{IntWidth, Nullability, Signedness};
 
     use super::*;
 

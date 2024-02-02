@@ -1,3 +1,5 @@
+mod stats;
+
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 use std::usize;
@@ -11,11 +13,11 @@ use crate::array::{
 };
 use crate::arrow::CombineChunks;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
+use crate::dtype::DType;
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
-use crate::types::DType;
 
 #[derive(Debug, Clone)]
 pub struct PatchedArray {

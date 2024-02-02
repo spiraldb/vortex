@@ -10,7 +10,7 @@ use DType::*;
 
 use crate::error::{EncError, EncResult};
 
-use super::PType;
+use crate::ptype::PType;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Nullability {

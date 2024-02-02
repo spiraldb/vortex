@@ -11,8 +11,8 @@ pub use primitive::*;
 pub use struct_::*;
 pub use utf8::*;
 
+use crate::dtype::DType;
 use crate::error::EncResult;
-use crate::types::DType;
 
 mod arrow;
 mod binary;

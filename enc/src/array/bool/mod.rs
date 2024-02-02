@@ -5,16 +5,18 @@ use std::sync::{Arc, RwLock};
 use arrow::array::{ArrayRef as ArrowArrayRef, BooleanArray};
 use arrow::buffer::BooleanBuffer;
 
+use crate::dtype::{DType, Nullability};
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stat, Stats, StatsSet};
-use crate::types::{DType, Nullability};
 
 use super::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
+
+mod stats;
 
 #[derive(Debug, Clone)]
 pub struct BoolArray {

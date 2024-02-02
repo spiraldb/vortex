@@ -9,11 +9,13 @@ use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
+use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
-use crate::types::DType;
+
+mod stats;
 
 #[derive(Debug, Clone)]
 pub struct ChunkedArray {
@@ -224,7 +226,7 @@ mod test {
 
     use crate::array::chunked::ChunkedArray;
     use crate::array::Array;
-    use crate::types::{DType, IntWidth, Nullability, Signedness};
+    use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::new(

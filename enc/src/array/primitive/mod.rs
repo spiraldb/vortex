@@ -15,11 +15,15 @@ use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
+use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
-use crate::types::{match_each_native_ptype, DType, NativePType, PType};
+
+mod compress;
+mod stats;
 
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {
@@ -200,7 +204,7 @@ impl ArrayDisplay for PrimitiveArray {
 
 #[cfg(test)]
 mod test {
-    use crate::types::{IntWidth, Nullability, Signedness};
+    use crate::dtype::{IntWidth, Nullability, Signedness};
 
     use super::*;
 

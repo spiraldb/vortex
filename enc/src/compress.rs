@@ -5,11 +5,6 @@ use once_cell::sync::Lazy;
 
 use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId};
 
-mod constant;
-mod primitive;
-mod ree;
-pub mod zigzag;
-
 #[derive(Debug, Clone)]
 pub struct CompressConfig {
     pub block_size: u32,
@@ -91,6 +86,14 @@ impl<'a> CompressCtx<'a> {
         let mut cloned = self.clone();
         cloned.depth += 1;
         cloned
+    }
+
+    pub fn options(&self) -> &CompressConfig {
+        self.options
+    }
+
+    pub fn is_sample(&self) -> bool {
+        self.is_sample
     }
 }
 

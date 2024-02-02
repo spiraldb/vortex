@@ -10,10 +10,10 @@ use polars_ops::prelude::SeriesMethods;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::Array;
 use crate::polars::IntoPolarsSeries;
+use crate::ptype::{match_each_native_ptype, PType};
 use crate::scalar::ListScalarValues;
 use crate::scalar::Scalar;
 use crate::stats::{Stat, StatsCompute, StatsSet};
-use crate::types::{match_each_native_ptype, PType};
 
 impl StatsCompute for PrimitiveArray {
     fn compute(&self, stat: &Stat) -> StatsSet {

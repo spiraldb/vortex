@@ -8,11 +8,14 @@ use crate::array::{
     EncodingRef,
 };
 use crate::arrow::compute::repeat;
+use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
-use crate::types::DType;
+
+mod compress;
+mod stats;
 
 #[derive(Debug, Clone)]
 pub struct ConstantArray {

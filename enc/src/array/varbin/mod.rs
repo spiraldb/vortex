@@ -1,3 +1,5 @@
+mod stats;
+
 use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
@@ -9,11 +11,11 @@ use crate::array::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 use crate::arrow::CombineChunks;
+use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
-use crate::types::{DType, IntWidth, Nullability, Signedness};
 
 #[derive(Debug, Clone)]
 pub struct VarBinArray {

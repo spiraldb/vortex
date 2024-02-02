@@ -4,7 +4,7 @@ use std::env;
 use std::fmt::{self, Display, Formatter};
 use std::ops::Deref;
 
-use crate::types::DType;
+use crate::dtype::DType;
 
 #[derive(Debug, PartialEq)]
 pub struct ErrString(Cow<'static, str>);

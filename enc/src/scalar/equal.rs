@@ -36,7 +36,7 @@ fn equal(lhs: &dyn Scalar, rhs: &dyn Scalar) -> bool {
         return false;
     }
 
-    use crate::types::DType::*;
+    use crate::dtype::DType::*;
     match lhs.dtype() {
         Bool(_) => dyn_eq!(BoolScalar, lhs, rhs),
         Int(_, _, _) => dyn_eq!(PScalar, lhs, rhs),

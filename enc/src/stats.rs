@@ -6,19 +6,8 @@ use std::sync::RwLock;
 use itertools::Itertools;
 
 use crate::error::{EncError, EncResult};
+use crate::ptype::NativePType;
 use crate::scalar::{ListScalarValues, Scalar};
-use crate::types::NativePType;
-
-mod binary;
-mod bool;
-mod chunked;
-mod constant;
-mod patched;
-mod primitive;
-mod ree;
-mod struct_;
-mod typed;
-mod zigzag;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stat {

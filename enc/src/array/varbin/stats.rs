@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::array::Array;
+use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::stats::{Stat, StatsCompute, StatsSet};
-use crate::types::DType;
 
 pub trait BinaryArray {
     fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>>;
@@ -82,8 +82,8 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;
     use crate::array::Array;
+    use crate::dtype::{DType, Nullability};
     use crate::stats::Stat;
-    use crate::types::{DType, Nullability};
 
     fn array(dtype: DType) -> VarBinArray {
         let values = PrimitiveArray::from_vec(

@@ -1,3 +1,5 @@
+mod stats;
+
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
@@ -7,11 +9,11 @@ use arrow::datatypes::Fields;
 use itertools::Itertools;
 
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
+use crate::dtype::{DType, FieldNames};
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::{Scalar, StructScalar};
 use crate::stats::{Stats, StatsSet};
-use crate::types::{DType, FieldNames};
 
 use super::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,

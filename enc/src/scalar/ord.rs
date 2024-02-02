@@ -22,7 +22,7 @@ fn cmp(lhs: &dyn Scalar, rhs: &dyn Scalar) -> Option<Ordering> {
         return None;
     }
 
-    use crate::types::DType::*;
+    use crate::dtype::DType::*;
     Some(match lhs.dtype() {
         Bool(_) => dyn_ord!(BoolScalar, lhs, rhs),
         Int(_, _, _) => dyn_ord!(PScalar, lhs, rhs),
