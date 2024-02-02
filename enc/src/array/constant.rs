@@ -5,9 +5,12 @@ use arrow::array::Datum;
 
 use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{
+    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    EncodingRef,
+};
 use crate::arrow::compute::repeat;
-use crate::error::{EncError, EncResult};
+use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::DType;
 
@@ -69,9 +72,7 @@ impl Array for ConstantArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        if index >= self.length {
-            return Err(EncError::OutOfBounds(index, 0, self.length));
-        }
+        check_index_bounds(self, index)?;
         Ok(self.scalar.clone())
     }
 
@@ -81,7 +82,7 @@ impl Array for ConstantArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
-        self.check_slice_bounds(start, stop)?;
+        check_slice_bounds(self, start, stop)?;
 
         Ok(ConstantArray::new(self.scalar.clone(), stop - start).boxed())
     }

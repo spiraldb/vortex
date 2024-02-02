@@ -1,8 +1,4 @@
-use allocator_api2::alloc::Allocator;
-use arrow::array::{make_array, ArrayData};
-use arrow::buffer::Buffer;
 use core::cmp::min;
-use half::f16;
 use std::any::Any;
 use std::iter;
 use std::mem::size_of;
@@ -10,10 +6,18 @@ use std::panic::RefUnwindSafe;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
+use allocator_api2::alloc::Allocator;
+use arrow::array::{make_array, ArrayData};
+use arrow::buffer::Buffer;
+use half::f16;
+
 use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
-use crate::error::{EncError, EncResult};
+use crate::array::{
+    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    EncodingRef,
+};
+use crate::error::EncResult;
 use crate::scalar::Scalar;
 use crate::types::{match_each_native_ptype, DType, NativePType, PType};
 
@@ -111,9 +115,7 @@ impl Array for PrimitiveArray {
     }
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
-        if index >= self.len() {
-            return Err(EncError::OutOfBounds(index, 0, self.len()));
-        }
+        check_index_bounds(self, index)?;
 
         Ok(
             match_each_native_ptype!(self.ptype, |$T| self.buffer.typed_data::<$T>()
@@ -137,7 +139,7 @@ impl Array for PrimitiveArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
-        self.check_slice_bounds(start, stop)?;
+        check_slice_bounds(self, start, stop)?;
 
         let byte_start = start * self.ptype.byte_width();
         let byte_length = (stop - start) * self.ptype.byte_width();

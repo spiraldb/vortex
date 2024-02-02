@@ -49,7 +49,7 @@ impl Compressible for PrimitiveArray {
                     self.buffer().typed_data::<$P>(),
                     ctx.options.sample_size,
                     ctx.options.sample_count,
-                ))
+                )),
             )
         });
 

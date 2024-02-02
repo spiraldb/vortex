@@ -69,19 +69,26 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
     fn encoding(&self) -> &'static dyn Encoding;
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
-
-    fn check_slice_bounds(&self, start: usize, stop: usize) -> EncResult<()> {
-        if start > self.len() {
-            return Err(EncError::OutOfBounds(start, 0, self.len()));
-        }
-        if stop > self.len() {
-            return Err(EncError::OutOfBounds(stop, 0, self.len()));
-        }
-        Ok(())
-    }
 }
 
 dyn_clone::clone_trait_object!(Array);
+
+pub(crate) fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> EncResult<()> {
+    if start > array.len() {
+        return Err(EncError::OutOfBounds(start, 0, array.len()));
+    }
+    if stop > array.len() {
+        return Err(EncError::OutOfBounds(stop, 0, array.len()));
+    }
+    Ok(())
+}
+
+pub(crate) fn check_index_bounds(array: &dyn Array, index: usize) -> EncResult<()> {
+    if index >= array.len() {
+        return Err(EncError::OutOfBounds(index, 0, array.len()));
+    }
+    Ok(())
+}
 
 impl<'a> AsRef<(dyn Array + 'a)> for dyn Array {
     fn as_ref(&self) -> &(dyn Array + 'a) {

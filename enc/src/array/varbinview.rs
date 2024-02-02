@@ -9,7 +9,9 @@ use arrow::array::{ArrayRef as ArrowArrayRef, BinaryBuilder, StringBuilder};
 
 use crate::array::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::array::stats::{Stats, StatsSet};
-use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{
+    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
+};
 use crate::arrow::CombineChunks;
 use crate::error::EncResult;
 use crate::scalar::Scalar;
@@ -236,7 +238,7 @@ impl Array for VarBinViewArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
-        self.check_slice_bounds(start, stop)?;
+        check_slice_bounds(self, start, stop)?;
 
         Ok(Self {
             views: self.views.slice(start * VIEW_SIZE, stop * VIEW_SIZE)?,
