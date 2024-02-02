@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use enc::array::primitive::PrimitiveArray;
-use enc::compute;
+use enc::array::zigzag::compress::{zigzag_decode, zigzag_encode};
 
 fn zigzag_benchmark(c: &mut Criterion) {
     let mut data = vec![0, 1, -1, i32::MAX, i32::MIN];
@@ -19,7 +19,7 @@ fn zigzag_benchmark(c: &mut Criterion) {
     let enc_data = PrimitiveArray::from_vec(data.clone());
     c.bench_function("enc zigzag encode", |b| {
         b.iter(|| {
-            let encoded = compute::compress::zigzag::zigzag_encode(black_box(&enc_data));
+            let encoded = zigzag_encode(black_box(&enc_data));
             black_box(encoded);
         })
     });
@@ -32,10 +32,10 @@ fn zigzag_benchmark(c: &mut Criterion) {
         })
     });
 
-    let enc_data_encoded = compute::compress::zigzag::zigzag_encode(&enc_data);
+    let enc_data_encoded = zigzag_encode(&enc_data);
     c.bench_function("enc zigzag decode", |b| {
         b.iter(|| {
-            let decoded = compute::compress::zigzag::zigzag_decode(black_box(&enc_data_encoded));
+            let decoded = zigzag_decode(black_box(&enc_data_encoded));
             black_box(decoded);
         })
     });

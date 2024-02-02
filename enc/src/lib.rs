@@ -1,12 +1,14 @@
 pub mod array;
 mod arrow;
 pub mod scalar;
-pub mod types;
 
+pub mod compress;
 pub mod compute;
+pub mod dtype;
 pub mod encode;
 pub mod error;
 mod formatter;
 mod polars;
+pub mod ptype;
 mod sampling;
 pub mod stats;

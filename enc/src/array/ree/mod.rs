@@ -15,11 +15,14 @@ use crate::array::{
 use crate::arrow::compute::repeat;
 use crate::compute;
 use crate::compute::search_sorted::SearchSortedSide;
+use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
-use crate::types::DType;
+
+mod compress;
+mod stats;
 
 #[derive(Debug, Clone)]
 pub struct REEArray {
@@ -250,7 +253,7 @@ mod test {
     use arrow::array::types::Int32Type;
     use itertools::Itertools;
 
-    use crate::types::{IntWidth, Nullability, Signedness};
+    use crate::dtype::{IntWidth, Nullability, Signedness};
 
     use super::*;
 

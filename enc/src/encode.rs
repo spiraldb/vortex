@@ -25,8 +25,8 @@ use crate::array::struct_::StructArray;
 use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
+use crate::ptype::PType;
 use crate::scalar::{NullScalar, Scalar};
-use crate::types::PType;
 
 impl From<&Buffer> for ArrayRef {
     fn from(value: &Buffer) -> Self {

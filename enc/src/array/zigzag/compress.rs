@@ -4,11 +4,11 @@ use zigzag::ZigZag;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::zigzag::{ZigZagArray, ZigZagEncoding};
 use crate::array::{Array, ArrayKind, ArrayRef, Encoding};
-use crate::compute::compress::{
+use crate::compress::{
     compress, CompressConfig, CompressCtx, CompressedEncoding, Compressible, Compressor,
 };
+use crate::ptype::{NativePType, PType};
 use crate::stats::Stat;
-use crate::types::{NativePType, PType};
 
 impl Compressible for ZigZagArray {
     fn compress(&self, ctx: CompressCtx) -> ArrayRef {

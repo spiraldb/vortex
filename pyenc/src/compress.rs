@@ -1,7 +1,7 @@
 use pyo3::types::PyType;
 use pyo3::{pyclass, pyfunction, pymethods, Py, PyResult, Python};
 
-use enc::compute::compress::{CompressConfig, CompressCtx};
+use enc::compress::{CompressConfig, CompressCtx};
 
 use crate::array::PyArray;
 
@@ -32,7 +32,6 @@ pub fn compress(
     opts: Option<PyCompressConfig>,
 ) -> PyResult<Py<PyArray>> {
     let compress_opts = opts.map(|o| o.inner).unwrap_or_default();
-    let compressed =
-        enc::compute::compress::compress(arr.unwrap(), CompressCtx::new(&compress_opts));
+    let compressed = enc::compress::compress(arr.unwrap(), CompressCtx::new(&compress_opts));
     PyArray::wrap(py, compressed)
 }

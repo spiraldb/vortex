@@ -1,6 +1,6 @@
 use crate::array::constant::{ConstantArray, ConstantEncoding};
 use crate::array::{Array, ArrayRef, Encoding};
-use crate::compute::compress::{CompressConfig, CompressCtx, CompressedEncoding, Compressor};
+use crate::compress::{CompressConfig, CompressCtx, CompressedEncoding, Compressor};
 use crate::stats::Stat;
 
 impl CompressedEncoding for ConstantEncoding {

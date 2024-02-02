@@ -11,11 +11,11 @@ use crate::array::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 use crate::arrow::CombineChunks;
+use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
-use crate::types::{DType, IntWidth, Nullability, Signedness};
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]

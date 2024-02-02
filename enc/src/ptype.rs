@@ -4,8 +4,8 @@ use std::panic::RefUnwindSafe;
 use arrow::datatypes::{ArrowNativeType, DataType};
 use half::f16;
 
+use crate::dtype::{DType, FloatWidth, IntWidth, Signedness};
 use crate::error::{EncError, EncResult};
-use crate::types::{DType, FloatWidth, IntWidth, Signedness};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub enum PType {

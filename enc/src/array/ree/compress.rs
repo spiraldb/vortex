@@ -6,11 +6,11 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::ree::REEArray;
 use crate::array::ree::REEEncoding;
 use crate::array::{Array, ArrayKind, ArrayRef, Encoding};
-use crate::compute::compress::{
+use crate::compress::{
     compress_typed, CompressConfig, CompressCtx, CompressedEncoding, Compressor,
 };
+use crate::ptype::{match_each_native_ptype, PType};
 use crate::stats::Stat;
-use crate::types::{match_each_native_ptype, PType};
 
 impl CompressedEncoding for REEEncoding {
     fn compressor(

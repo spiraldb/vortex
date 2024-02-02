@@ -1,13 +1,16 @@
+pub mod compress;
+mod stats;
+
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
+use crate::array::zigzag::compress::zigzag_encode;
 use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
-use crate::compute::compress::zigzag::zigzag_encode;
+use crate::dtype::{DType, Signedness};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
-use crate::types::{DType, Signedness};
 
 #[derive(Debug, Clone)]
 pub struct ZigZagArray {

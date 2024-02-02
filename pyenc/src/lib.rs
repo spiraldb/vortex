@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
 use dtype::PyDType;
-use enc::types::DType;
+use enc::dtype::DType;
 
 use crate::array::*;
 use crate::compress::PyCompressConfig;

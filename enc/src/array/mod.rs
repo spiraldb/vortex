@@ -14,11 +14,11 @@ use crate::array::typed::{TypedArray, TYPED_ENCODING};
 use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
 use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
 use crate::array::zigzag::{ZigZagArray, ZIGZAG_ENCODING};
+use crate::dtype::DType;
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::Stats;
-use crate::types::DType;
 
 pub mod bool;
 pub mod chunked;

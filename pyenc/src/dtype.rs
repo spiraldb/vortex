@@ -3,7 +3,7 @@ use arrow::pyarrow::FromPyArrow;
 use pyo3::types::PyType;
 use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
 
-use enc::types::DType;
+use enc::dtype::DType;
 
 use crate::error::PyEncError;
 

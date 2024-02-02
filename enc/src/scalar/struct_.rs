@@ -4,9 +4,9 @@ use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 
+use crate::dtype::DType;
 use crate::error::{EncError, EncResult};
 use crate::scalar::Scalar;
-use crate::types::DType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructScalar {

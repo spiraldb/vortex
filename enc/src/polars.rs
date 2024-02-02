@@ -3,8 +3,8 @@ use polars_arrow::array::from_data;
 use polars_core::prelude::{AnyValue, Series};
 
 use crate::array::ArrowIterator;
+use crate::dtype::DType;
 use crate::scalar::{BinaryScalar, BoolScalar, PScalar, Scalar, Utf8Scalar};
-use crate::types::DType;
 
 pub trait IntoPolarsSeries {
     fn into_polars(self) -> Series;
