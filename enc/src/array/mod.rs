@@ -13,7 +13,7 @@ use crate::array::struct_::{StructArray, STRUCT_ENCODING};
 use crate::array::typed::{TypedArray, TYPED_ENCODING};
 use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
 use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
-use crate::array::zigzag::{ZigZagArray, ZIGZAG_ENCODING};
+use crate::compress::{ArrayCompression, EncodingCompression};
 use crate::dtype::{DType, Nullability};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -30,7 +30,6 @@ pub mod struct_;
 pub mod typed;
 pub mod varbin;
 pub mod varbinview;
-pub mod zigzag;
 
 pub type ArrowIterator = dyn Iterator<Item = ArrowArrayRef>;
 pub type ArrayRef = Box<dyn Array>;
@@ -68,6 +67,11 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
     fn encoding(&self) -> &'static dyn Encoding;
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
+
+    /// Optionally implement the array compression trait
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        None
+    }
 }
 
 dyn_clone::clone_trait_object!(Array);
@@ -107,6 +111,12 @@ impl<'a> AsRef<(dyn Array + 'a)> for dyn Array {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct EncodingId(&'static str);
 
+impl EncodingId {
+    pub const fn new(id: &'static str) -> Self {
+        Self(id)
+    }
+}
+
 impl Display for EncodingId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -115,9 +125,32 @@ impl Display for EncodingId {
 
 pub trait Encoding: Debug + Send + Sync + 'static {
     fn id(&self) -> &EncodingId;
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        None
+    }
 }
 
 pub type EncodingRef = &'static dyn Encoding;
+
+/// Struct for discovering pluggable encodings.
+pub struct EncodingProvider {
+    encoding: EncodingRef,
+}
+
+impl EncodingProvider {
+    pub const fn new(encoding: EncodingRef) -> Self {
+        Self { encoding }
+    }
+}
+
+inventory::collect!(EncodingProvider);
+
+pub fn encodings() -> impl Iterator<Item = EncodingRef> {
+    inventory::iter::<EncodingProvider>
+        .into_iter()
+        .map(|provider| provider.encoding)
+}
 
 #[derive(Debug, Clone)]
 pub enum ArrayKind<'a> {
@@ -131,7 +164,6 @@ pub enum ArrayKind<'a> {
     Typed(&'a TypedArray),
     VarBin(&'a VarBinArray),
     VarBinView(&'a VarBinViewArray),
-    ZigZag(&'a ZigZagArray),
     Other(&'a dyn Array),
 }
 
@@ -163,9 +195,6 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
             }
             VARBINVIEW_ENCODING => {
                 ArrayKind::VarBinView(value.as_any().downcast_ref::<VarBinViewArray>().unwrap())
-            }
-            ZIGZAG_ENCODING => {
-                ArrayKind::ZigZag(value.as_any().downcast_ref::<ZigZagArray>().unwrap())
             }
             _ => ArrayKind::Other(value),
         }

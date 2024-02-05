@@ -7,7 +7,7 @@ pub mod compute;
 pub mod dtype;
 pub mod encode;
 pub mod error;
-mod formatter;
+pub mod formatter;
 mod polars;
 pub mod ptype;
 mod sampling;

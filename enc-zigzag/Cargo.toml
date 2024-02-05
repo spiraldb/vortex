@@ -1,0 +1,9 @@
+[package]
+name = "enc-zigzag"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+enc = { "path" = "../enc" }
+inventory = "0.3.15"
+zigzag = "0.1.0"

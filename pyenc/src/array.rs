@@ -12,8 +12,8 @@ use enc::array::struct_::StructArray;
 use enc::array::typed::TypedArray;
 use enc::array::varbin::VarBinArray;
 use enc::array::varbinview::VarBinViewArray;
-use enc::array::zigzag::ZigZagArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
+use enc_zigzag::{ZigZagArray, ZIGZAG_ENCODING};
 
 use crate::dtype::PyDType;
 use crate::enc_arrow;
@@ -103,14 +103,18 @@ impl PyArray {
                 inner.into_any().downcast::<VarBinViewArray>().unwrap(),
             )?
             .extract(py),
-            ArrayKind::ZigZag(_) => {
-                PyZigZagArray::wrap(py, inner.into_any().downcast::<ZigZagArray>().unwrap())?
-                    .extract(py)
-            }
-            ArrayKind::Other(_) => Err(PyValueError::new_err(format!(
-                "Cannot convert {:?} to enc array",
-                inner
-            ))),
+            ArrayKind::Other(other) => match other.encoding().id() {
+                // PyEnc chooses to expose certain encodings as first-class objects.
+                // For the remainder, we should have a generic EncArray implementation that supports basic functions.
+                &ZIGZAG_ENCODING => {
+                    PyZigZagArray::wrap(py, inner.into_any().downcast::<ZigZagArray>().unwrap())?
+                        .extract(py)
+                }
+                _ => Err(PyValueError::new_err(format!(
+                    "Cannot convert {:?} to enc array",
+                    inner
+                ))),
+            },
         }
     }
 

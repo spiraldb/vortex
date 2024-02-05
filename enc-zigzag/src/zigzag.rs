@@ -1,16 +1,15 @@
-pub mod compress;
-mod stats;
-
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use crate::array::zigzag::compress::zigzag_encode;
-use crate::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
-use crate::dtype::{DType, Signedness};
-use crate::error::{EncError, EncResult};
-use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::Scalar;
-use crate::stats::{Stats, StatsSet};
+use enc::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use enc::compress::{ArrayCompression, EncodingCompression};
+use enc::dtype::{DType, Signedness};
+use enc::error::{EncError, EncResult};
+use enc::formatter::{ArrayDisplay, ArrayFormatter};
+use enc::scalar::Scalar;
+use enc::stats::{Stats, StatsSet};
+
+use crate::compress::zigzag_encode;
 
 #[derive(Debug, Clone)]
 pub struct ZigZagArray {
@@ -103,6 +102,10 @@ impl Array for ZigZagArray {
     fn nbytes(&self) -> usize {
         self.encoded.nbytes()
     }
+
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        Some(self)
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for ZigZagArray {
@@ -121,10 +124,14 @@ impl ArrayDisplay for ZigZagArray {
 #[derive(Debug)]
 pub struct ZigZagEncoding;
 
-pub const ZIGZAG_ENCODING: EncodingId = EncodingId("enc.zigzag");
+pub const ZIGZAG_ENCODING: EncodingId = EncodingId::new("enc.zigzag");
 
 impl Encoding for ZigZagEncoding {
     fn id(&self) -> &EncodingId {
         &ZIGZAG_ENCODING
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }

@@ -3,7 +3,18 @@ use std::fmt::Debug;
 
 use once_cell::sync::Lazy;
 
-use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId};
+use crate::array::{Array, ArrayRef, Encoding, EncodingId};
+
+pub trait ArrayCompression {
+    fn compress(&self, ctx: CompressCtx) -> ArrayRef;
+}
+
+pub trait EncodingCompression {
+    fn compressor(&self, array: &dyn Array, config: &CompressConfig)
+        -> Option<&'static Compressor>;
+}
+
+pub type Compressor = fn(&dyn Array, CompressCtx) -> ArrayRef;
 
 #[derive(Debug, Clone)]
 pub struct CompressConfig {
@@ -43,8 +54,8 @@ impl CompressConfig {
     }
 
     pub fn from_encodings(
-        encodings: &[&'static dyn CompressedEncoding],
-        disabled_encodings: &[&'static dyn CompressedEncoding],
+        encodings: &[&'static dyn Encoding],
+        disabled_encodings: &[&'static dyn Encoding],
     ) -> Self {
         Self::new(
             encodings.iter().map(|e| e.id()).collect(),
@@ -76,13 +87,29 @@ impl<'a> CompressCtx<'a> {
         }
     }
 
+    pub fn compress(&self, arr: &dyn Array) -> ArrayRef {
+        if arr.is_empty() {
+            return dyn_clone::clone_box(arr);
+        }
+
+        if self.depth >= self.options.max_depth {
+            return dyn_clone::clone_box(arr);
+        }
+
+        if let Some(compression) = arr.compression() {
+            return compression.compress(self.next_level());
+        } else {
+            dyn_clone::clone_box(arr)
+        }
+    }
+
     pub fn for_sample(&self) -> Self {
         let mut cloned = self.clone();
         cloned.is_sample = true;
         cloned
     }
 
-    pub fn next_level(&self) -> Self {
+    fn next_level(&self) -> Self {
         let mut cloned = self.clone();
         cloned.depth += 1;
         cloned
@@ -101,48 +128,4 @@ impl Default for CompressCtx<'_> {
     fn default() -> Self {
         Self::new(&DEFAULT_COMPRESS_CONFIG)
     }
-}
-
-pub trait Compressible {
-    fn compress(&self, opts: CompressCtx) -> ArrayRef;
-}
-
-impl<T> Compressible for &T
-where
-    T: Compressible,
-{
-    fn compress(&self, opts: CompressCtx) -> ArrayRef {
-        (*self).compress(opts)
-    }
-}
-
-pub trait CompressorFor<T: Array> {
-    fn compress(array: &T) -> ArrayRef;
-}
-
-pub type Compressor = fn(&dyn Array, CompressCtx) -> ArrayRef;
-
-pub trait CompressedEncoding: Encoding + 'static {
-    fn compressor(&self, array: &dyn Array, config: &CompressConfig)
-        -> Option<&'static Compressor>;
-}
-
-pub fn compress(arr: &dyn Array, opts: CompressCtx) -> ArrayRef {
-    match ArrayKind::from(arr) {
-        ArrayKind::Primitive(p) => compress_array(p, opts),
-        ArrayKind::ZigZag(p) => compress_array(p, opts),
-        _ => dyn_clone::clone_box(arr),
-    }
-}
-
-pub fn compress_array<T: AsRef<dyn Array> + Compressible>(arr: T, opts: CompressCtx) -> ArrayRef {
-    if arr.as_ref().is_empty() {
-        return dyn_clone::clone_box(arr.as_ref());
-    }
-
-    if opts.depth == opts.options.max_depth {
-        return dyn_clone::clone_box(arr.as_ref());
-    }
-
-    arr.compress(opts)
 }

@@ -8,6 +8,7 @@ use crate::array::{
     EncodingRef,
 };
 use crate::arrow::compute::repeat;
+use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -121,5 +122,9 @@ pub const CONSTANT_ENCODING: EncodingId = EncodingId("enc.constant");
 impl Encoding for ConstantEncoding {
     fn id(&self) -> &EncodingId {
         &CONSTANT_ENCODING
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }

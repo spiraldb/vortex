@@ -1,26 +1,25 @@
 use arrow::buffer::Buffer;
 use half::f16;
+use polars_arrow::io::iterator::StreamingIterator;
 
 use crate::array::constant::ConstantEncoding;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::ree::REEEncoding;
-use crate::array::zigzag::ZigZagEncoding;
-use crate::array::{Array, ArrayRef};
-use crate::compress::{CompressCtx, CompressedEncoding, Compressible, Compressor};
+use crate::array::{encodings, Array, ArrayRef};
+use crate::compress::{ArrayCompression, CompressCtx, Compressor, EncodingCompression};
 use crate::ptype::match_each_native_ptype;
 use crate::ptype::PType;
 use crate::sampling::default_sample;
 
-impl Compressible for PrimitiveArray {
+impl ArrayCompression for PrimitiveArray {
     fn compress(&self, ctx: CompressCtx) -> ArrayRef {
         // First, we try constant compression
         if let Some(compressor) = ConstantEncoding.compressor(self, ctx.options()) {
             return compressor(self, ctx);
         }
 
-        let candidate_compressors: Vec<&Compressor> = compressors(self.ptype())
-            .into_iter()
-            .flat_map(|kind| kind.compressor(self, ctx.options()))
+        let candidate_compressors: Vec<&Compressor> = encodings()
+            .filter_map(|encoding| encoding.compression())
+            .filter_map(|compression| compression.compressor(self, ctx.options()))
             .collect();
 
         if candidate_compressors.is_empty() {
@@ -75,18 +74,13 @@ impl Compressible for PrimitiveArray {
     }
 }
 
-// TODO(robert): Add more
-fn compressors(_ptype: &PType) -> Vec<&'static dyn CompressedEncoding> {
-    vec![&ZigZagEncoding, &ConstantEncoding, &REEEncoding]
-}
-
 #[cfg(test)]
 mod test {
     use crate::array::constant::ConstantEncoding;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::ree::REEEncoding;
     use crate::array::Encoding;
-    use crate::compress::{CompressCtx, Compressible};
+    use crate::compress::{ArrayCompression, CompressCtx};
 
     #[test]
     pub fn compress_ree() {
