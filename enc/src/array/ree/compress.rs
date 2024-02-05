@@ -8,6 +8,7 @@ use crate::array::{Array, ArrayKind, ArrayRef, Encoding};
 use crate::compress::{
     ArrayCompression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
 };
+use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::ptype::{match_each_native_ptype, PType};
 use crate::stats::Stat;
 
@@ -42,18 +43,34 @@ impl EncodingCompression for REEEncoding {
     }
 }
 
-fn ree_compressor(array: &dyn Array, opts: CompressCtx) -> ArrayRef {
-    match ArrayKind::from(array) {
-        ArrayKind::Primitive(p) => ree_compressor_primitive_array(p, opts),
+fn ree_compressor(array: &dyn Array, _opts: CompressCtx) -> ArrayRef {
+    let (ends, values) = match ArrayKind::from(array) {
+        ArrayKind::Primitive(p) => ree_encode(p),
         _ => panic!("Compress more arrays"),
-    }
+    };
+    REEArray::new(ends.boxed(), values.boxed()).boxed()
 }
 
-fn ree_compressor_primitive_array(array: &PrimitiveArray, ctx: CompressCtx) -> ArrayRef {
+pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     match_each_native_ptype!(array.ptype(), |$P| {
         let (values, runs) = codecz::ree::encode(array.buffer().typed_data::<$P>()).unwrap();
-        let compressed_values = ctx.compress(&PrimitiveArray::from_vec_in::<$P, AlignedAllocator>(values));
-        let compressed_ends = ctx.compress(&PrimitiveArray::from_vec_in::<u32, AlignedAllocator>(runs));
-        REEArray::new(compressed_ends, compressed_values).boxed()
+        let compressed_values = PrimitiveArray::from_vec_in::<$P, AlignedAllocator>(values);
+        let compressed_ends = PrimitiveArray::from_vec_in::<u32, AlignedAllocator>(runs);
+        (compressed_ends, compressed_values)
+    })
+}
+
+pub fn ree_decode(ends: &PrimitiveArray, values: &PrimitiveArray) -> PrimitiveArray {
+    assert!(matches!(
+        ends.dtype(),
+        DType::Int(
+            IntWidth::_32,
+            Signedness::Unsigned,
+            Nullability::NonNullable
+        )
+    ));
+    match_each_native_ptype!(values.ptype(), |$P| {
+        let decoded = codecz::ree::decode::<$P>(values.buffer().typed_data::<$P>(), ends.buffer().typed_data::<u32>()).unwrap();
+        PrimitiveArray::from_vec_in::<$P, AlignedAllocator>(decoded)
     })
 }
