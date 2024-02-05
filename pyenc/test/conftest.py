@@ -1,5 +1,8 @@
+import logging
 import pathlib
 import subprocess
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 def pytest_sessionstart():

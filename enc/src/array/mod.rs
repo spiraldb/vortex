@@ -2,6 +2,7 @@ use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
 
 use arrow::array::ArrayRef as ArrowArrayRef;
+use linkme::distributed_slice;
 
 use crate::array::bool::{BoolArray, BOOL_ENCODING};
 use crate::array::chunked::{ChunkedArray, CHUNKED_ENCODING};
@@ -76,7 +77,7 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
 
 dyn_clone::clone_trait_object!(Array);
 
-pub(crate) fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> EncResult<()> {
+pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> EncResult<()> {
     if start > array.len() {
         return Err(EncError::OutOfBounds(start, 0, array.len()));
     }
@@ -86,7 +87,7 @@ pub(crate) fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -
     Ok(())
 }
 
-pub(crate) fn check_index_bounds(array: &dyn Array, index: usize) -> EncResult<()> {
+pub fn check_index_bounds(array: &dyn Array, index: usize) -> EncResult<()> {
     if index >= array.len() {
         return Err(EncError::OutOfBounds(index, 0, array.len()));
     }
@@ -133,24 +134,8 @@ pub trait Encoding: Debug + Send + Sync + 'static {
 
 pub type EncodingRef = &'static dyn Encoding;
 
-/// Struct for discovering pluggable encodings.
-pub struct EncodingProvider {
-    encoding: EncodingRef,
-}
-
-impl EncodingProvider {
-    pub const fn new(encoding: EncodingRef) -> Self {
-        Self { encoding }
-    }
-}
-
-inventory::collect!(EncodingProvider);
-
-pub fn encodings() -> impl Iterator<Item = EncodingRef> {
-    inventory::iter::<EncodingProvider>
-        .into_iter()
-        .map(|provider| provider.encoding)
-}
+#[distributed_slice]
+pub static ENCODINGS: [EncodingRef] = [..];
 
 #[derive(Debug, Clone)]
 pub enum ArrayKind<'a> {

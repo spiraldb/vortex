@@ -3,7 +3,7 @@ use half::f16;
 
 use crate::array::constant::ConstantEncoding;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{encodings, Array, ArrayRef};
+use crate::array::{Array, ArrayRef, ENCODINGS};
 use crate::compress::{ArrayCompression, CompressCtx, Compressor, EncodingCompression};
 use crate::ptype::match_each_native_ptype;
 use crate::ptype::PType;
@@ -16,7 +16,8 @@ impl ArrayCompression for PrimitiveArray {
             return compressor(self, ctx);
         }
 
-        let candidate_compressors: Vec<&Compressor> = encodings()
+        let candidate_compressors: Vec<&Compressor> = ENCODINGS
+            .iter()
             .filter_map(|encoding| encoding.compression())
             .filter_map(|compression| compression.compressor(self, ctx.options()))
             .collect();
