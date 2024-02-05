@@ -1,5 +1,3 @@
-mod stats;
-
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
@@ -18,6 +16,8 @@ use crate::stats::{Stats, StatsSet};
 use super::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
+
+mod stats;
 
 #[derive(Debug, Clone)]
 pub struct StructArray {

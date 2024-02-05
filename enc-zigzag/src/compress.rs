@@ -1,23 +1,24 @@
-use polars_arrow::legacy::trusted_len::TrustedLenPush;
+use crate::zigzag::{ZigZagArray, ZigZagEncoding};
+use enc::array::primitive::PrimitiveArray;
+use enc::array::Encoding;
+use enc::array::{Array, ArrayKind, ArrayRef};
+use enc::compress::{
+    ArrayCompression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
+};
+use enc::ptype::{NativePType, PType};
+use enc::stats::Stat;
 use zigzag::ZigZag;
 
-use crate::array::primitive::PrimitiveArray;
-use crate::array::zigzag::{ZigZagArray, ZigZagEncoding};
-use crate::array::{Array, ArrayKind, ArrayRef, Encoding};
-use crate::compress::{
-    compress, CompressConfig, CompressCtx, CompressedEncoding, Compressible, Compressor,
-};
-use crate::ptype::{NativePType, PType};
-use crate::stats::Stat;
-
-impl Compressible for ZigZagArray {
+impl ArrayCompression for ZigZagArray {
     fn compress(&self, ctx: CompressCtx) -> ArrayRef {
         // Recursively compress the inner encoded array.
-        compress(self.encoded(), ctx.next_level())
+        ZigZagArray::try_new(ctx.compress(self.encoded()))
+            .unwrap()
+            .boxed()
     }
 }
 
-impl CompressedEncoding for ZigZagEncoding {
+impl EncodingCompression for ZigZagEncoding {
     fn compressor(
         &self,
         array: &dyn Array,
@@ -56,12 +57,12 @@ impl CompressedEncoding for ZigZagEncoding {
     }
 }
 
-fn zigzag_compressor(array: &dyn Array, opts: CompressCtx) -> ArrayRef {
+fn zigzag_compressor(array: &dyn Array, _opts: CompressCtx) -> ArrayRef {
     let encoded = match ArrayKind::from(array) {
         ArrayKind::Primitive(p) => zigzag_encode(p),
         _ => panic!("Compress more arrays"),
     };
-    compress(encoded.as_ref(), opts)
+    ZigZagArray::try_new(encoded.boxed()).unwrap().boxed()
 }
 
 pub fn zigzag_encode(parray: &PrimitiveArray) -> PrimitiveArray {
@@ -79,7 +80,7 @@ where
     <T as ZigZag>::UInt: NativePType,
 {
     let mut encoded = Vec::with_capacity(values.len());
-    unsafe { encoded.extend_trusted_len_unchecked(values.iter().map(|v| T::encode(*v))) };
+    encoded.extend(values.iter().map(|v| T::encode(*v)));
     PrimitiveArray::from_vec(encoded)
 }
 

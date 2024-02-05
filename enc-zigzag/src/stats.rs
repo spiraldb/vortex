@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
-use crate::array::zigzag::ZigZagArray;
-use crate::stats::{Stat, StatsCompute, StatsSet};
+use enc::stats::{Stat, StatsCompute, StatsSet};
+
+use crate::zigzag::ZigZagArray;
 
 impl StatsCompute for ZigZagArray {
     fn compute(&self, _stat: &Stat) -> StatsSet {

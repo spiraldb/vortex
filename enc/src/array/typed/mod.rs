@@ -1,3 +1,4 @@
+mod compress;
 mod stats;
 
 use std::any::Any;
@@ -6,6 +7,7 @@ use std::sync::{Arc, RwLock};
 use arrow::datatypes::DataType;
 
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::compress::ArrayCompression;
 use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -97,6 +99,10 @@ impl Array for TypedArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.array.nbytes()
+    }
+
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        Some(self)
     }
 }
 

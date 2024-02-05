@@ -32,6 +32,7 @@ pub fn compress(
     opts: Option<PyCompressConfig>,
 ) -> PyResult<Py<PyArray>> {
     let compress_opts = opts.map(|o| o.inner).unwrap_or_default();
-    let compressed = enc::compress::compress(arr.unwrap(), CompressCtx::new(&compress_opts));
+    let ctx = CompressCtx::new(&compress_opts);
+    let compressed = ctx.compress(arr.unwrap());
     PyArray::wrap(py, compressed)
 }

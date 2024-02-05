@@ -10,9 +10,10 @@ use arrow::datatypes::DataType;
 
 use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef,
+    EncodingProvider, EncodingRef,
 };
 use crate::arrow::compute::repeat;
+use crate::compress::{ArrayCompression, EncodingCompression};
 use crate::compute;
 use crate::compute::search_sorted::SearchSortedSide;
 use crate::dtype::DType;
@@ -162,6 +163,14 @@ impl Array for REEArray {
     fn nbytes(&self) -> usize {
         self.values.nbytes() + self.ends.nbytes()
     }
+
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        Some(self)
+    }
+}
+
+inventory::submit! {
+    EncodingProvider::new(&REEEncoding)
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
@@ -178,6 +187,10 @@ pub const REE_ENCODING: EncodingId = EncodingId("enc.ree");
 impl Encoding for REEEncoding {
     fn id(&self) -> &EncodingId {
         &REE_ENCODING
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }
 
