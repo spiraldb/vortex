@@ -13,6 +13,7 @@ use enc::array::typed::TypedArray;
 use enc::array::varbin::VarBinArray;
 use enc::array::varbinview::VarBinViewArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
+use enc_roaring::{RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING};
 use enc_zigzag::{ZigZagArray, ZIGZAG_ENCODING};
 
 use crate::dtype::PyDType;
@@ -57,6 +58,10 @@ pyarray!(StructArray, "StructArray");
 pyarray!(TypedArray, "TypedArray");
 pyarray!(VarBinArray, "VarBinArray");
 pyarray!(VarBinViewArray, "VarBinViewArray");
+
+pyarray!(RoaringBoolArray, "RoaringBoolArray");
+pyarray!(RoaringIntArray, "RoaringIntArray");
+
 pyarray!(ZigZagArray, "ZigZagArray");
 
 impl PyArray {
@@ -103,10 +108,20 @@ impl PyArray {
                 inner.into_any().downcast::<VarBinViewArray>().unwrap(),
             )?
             .extract(py),
-            ArrayKind::Other(other) => match other.encoding().id() {
+            ArrayKind::Other(other) => match *other.encoding().id() {
                 // PyEnc chooses to expose certain encodings as first-class objects.
                 // For the remainder, we should have a generic EncArray implementation that supports basic functions.
-                &ZIGZAG_ENCODING => {
+                ROARING_BOOL_ENCODING => PyRoaringBoolArray::wrap(
+                    py,
+                    inner.into_any().downcast::<RoaringBoolArray>().unwrap(),
+                )?
+                .extract(py),
+                ROARING_INT_ENCODING => PyRoaringIntArray::wrap(
+                    py,
+                    inner.into_any().downcast::<RoaringIntArray>().unwrap(),
+                )?
+                .extract(py),
+                ZIGZAG_ENCODING => {
                     PyZigZagArray::wrap(py, inner.into_any().downcast::<ZigZagArray>().unwrap())?
                         .extract(py)
                 }
@@ -138,6 +153,11 @@ impl PyArray {
     }
 
     #[getter]
+    fn encoding(&self) -> String {
+        self.inner.encoding().id().to_string()
+    }
+
+    #[getter]
     fn nbytes(&self) -> usize {
         self.inner.nbytes()
     }
@@ -145,6 +165,26 @@ impl PyArray {
     #[getter]
     fn dtype(self_: PyRef<Self>) -> PyResult<Py<PyDType>> {
         PyDType::wrap(self_.py(), self_.inner.dtype().clone())
+    }
+}
+
+#[pymethods]
+impl PyRoaringBoolArray {
+    #[staticmethod]
+    fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
+        RoaringBoolArray::encode(array.unwrap())
+            .map_err(PyEncError::map_err)
+            .and_then(|zarray| PyArray::wrap(array.py(), zarray.boxed()))
+    }
+}
+
+#[pymethods]
+impl PyRoaringIntArray {
+    #[staticmethod]
+    fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
+        RoaringIntArray::encode(array.unwrap())
+            .map_err(PyEncError::map_err)
+            .and_then(|zarray| PyArray::wrap(array.py(), zarray.boxed()))
     }
 }
 

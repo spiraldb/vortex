@@ -5,6 +5,11 @@ members = [
     "rust/codecz",
     "rust/codecz-sys",
     "rust/enc",
+    "rust/enc-roaring",
     "rust/enc-zigzag",
 ]
 resolver = "2"
+
+[profile.dev]
+# Need this for linkme crate to work. See https://github.com/dtolnay/linkme/issues/61
+codegen-units = 1

@@ -1,3 +1,4 @@
+use log::info;
 use pyo3::prelude::*;
 
 use dtype::PyDType;
@@ -18,6 +19,14 @@ mod error;
 fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
 
+    info!(
+        "Discovered encodings: {:?}",
+        enc::array::ENCODINGS
+            .iter()
+            .map(|e| e.id().to_string())
+            .collect::<Vec<String>>()
+    );
+
     m.add_function(wrap_pyfunction!(encode::encode, m)?)?;
     m.add_function(wrap_pyfunction!(compress::compress, m)?)?;
 
@@ -32,6 +41,10 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyTypedArray>()?;
     m.add_class::<PyVarBinArray>()?;
     m.add_class::<PyVarBinViewArray>()?;
+
+    m.add_class::<PyRoaringBoolArray>()?;
+    m.add_class::<PyRoaringIntArray>()?;
+
     m.add_class::<PyZigZagArray>()?;
 
     m.add_class::<PyDType>()?;

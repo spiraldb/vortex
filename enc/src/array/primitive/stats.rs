@@ -72,6 +72,7 @@ where
     let is_sorted = s.is_sorted(SortOptions::default()).unwrap();
     let mins: T = s.min().unwrap().unwrap();
     let maxs: T = s.max().unwrap().unwrap();
+    let is_unique = s.n_unique().unwrap() == s.len();
 
     let bitwidth = std::mem::size_of::<u64>() * 8;
     let mut bit_widths: Vec<u64> = vec![0; bitwidth + 1];
@@ -94,6 +95,7 @@ where
         (Stat::IsConstant, (mins == maxs).into()),
         (Stat::BitWidthFreq, ListScalarValues(bit_widths).into()),
         (Stat::IsSorted, is_sorted.into()),
+        (Stat::IsUnique, is_unique.into()),
         (Stat::RunCount, run_count.into()),
     ]))
 }

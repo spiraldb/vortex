@@ -14,6 +14,7 @@ pub enum Stat {
     BitWidthFreq,
     IsConstant,
     IsSorted,
+    IsUnique,
     Max,
     Min,
     RunCount,
@@ -25,12 +26,16 @@ pub enum Stat {
 pub struct StatsSet(HashMap<Stat, Box<dyn Scalar>>);
 
 impl StatsSet {
+    pub fn new() -> Self {
+        StatsSet(HashMap::new())
+    }
+
     pub fn from(map: HashMap<Stat, Box<dyn Scalar>>) -> Self {
         StatsSet(map)
     }
 
-    pub fn new() -> Self {
-        StatsSet(HashMap::new())
+    pub fn of(stat: Stat, value: Box<dyn Scalar>) -> Self {
+        StatsSet(HashMap::from([(stat, value)]))
     }
 
     fn get_as<T: TryFrom<Box<dyn Scalar>, Error = EncError>>(
@@ -38,6 +43,10 @@ impl StatsSet {
         stat: &Stat,
     ) -> EncResult<Option<T>> {
         self.0.get(stat).map(|v| T::try_from(v.clone())).transpose()
+    }
+
+    pub fn set(&mut self, stat: Stat, value: Box<dyn Scalar>) {
+        self.0.insert(stat, value);
     }
 
     pub fn merge(&mut self, other: &Self) -> &Self {

@@ -1,9 +1,11 @@
 [package]
-name = "enc-zigzag"
+name = "enc-roaring"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 enc = { "path" = "../enc" }
 linkme = "0.3.22"
-zigzag = "0.1.0"
+croaring = "1.0.1"
+num-traits = "0.2.17"
+log = "0.4.20"
