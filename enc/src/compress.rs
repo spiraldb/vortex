@@ -97,7 +97,9 @@ impl<'a> CompressCtx<'a> {
         }
 
         if let Some(compression) = arr.compression() {
-            return compression.compress(self.next_level());
+            let compressed = compression.compress(self.clone());
+            // TODO(robert): Forward stats from arr to compressed
+            self.next_level().compress(compressed.as_ref())
         } else {
             dyn_clone::clone_box(arr)
         }

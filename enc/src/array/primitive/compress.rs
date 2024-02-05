@@ -1,6 +1,5 @@
 use arrow::buffer::Buffer;
 use half::f16;
-use polars_arrow::io::iterator::StreamingIterator;
 
 use crate::array::constant::ConstantEncoding;
 use crate::array::primitive::PrimitiveArray;

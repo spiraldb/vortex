@@ -1,24 +1,28 @@
 use std::any::Any;
 use std::cmp::min;
+use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
-use std::vec::IntoIter;
 
-use arrow::array::types::UInt64Type;
-use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
-use arrow::array::{PrimitiveArray as ArrowPrimitiveArray, Scalar as ArrowScalar};
-use arrow::datatypes::DataType;
+use arrow::array::ArrowPrimitiveType;
+use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef, AsArray};
+use arrow::datatypes::{DataType, UInt32Type};
 
+use codecz::ree::SupportsREE;
+
+use crate::array::primitive::PrimitiveArray;
+use crate::array::ree::compress::ree_encode;
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingProvider, EncodingRef,
+    check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
+    EncodingId, EncodingProvider, EncodingRef,
 };
-use crate::arrow::compute::repeat;
+use crate::arrow::match_arrow_numeric_type;
 use crate::compress::{ArrayCompression, EncodingCompression};
 use crate::compute;
 use crate::compute::search_sorted::SearchSortedSide;
 use crate::dtype::DType;
-use crate::error::EncResult;
+use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::ptype::NativePType;
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
 
@@ -52,6 +56,16 @@ impl REEArray {
             index + self.offset,
             SearchSortedSide::Right,
         )
+    }
+
+    pub fn encode(array: &dyn Array) -> EncResult<ArrayRef> {
+        match ArrayKind::from(array) {
+            ArrayKind::Primitive(p) => {
+                let (ends, values) = ree_encode(p);
+                Ok(REEArray::new(ends.boxed(), values.boxed()).boxed())
+            }
+            _ => Err(EncError::InvalidEncoding(array.encoding().id().clone())),
+        }
     }
 
     #[inline]
@@ -107,36 +121,28 @@ impl Array for REEArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let physical_offset = self.find_physical_index(0).unwrap();
+        // TODO(robert): Plumb offset rewriting to zig to fuse with REE decompression
+        let ends: Vec<u32> = self
+            .ends
+            .iter_arrow()
+            .flat_map(|c| {
+                let cast_res =
+                    arrow::compute::kernels::cast::cast(c.as_ref(), &DataType::UInt32).unwrap();
+                let ends = cast_res
+                    .as_primitive::<UInt32Type>()
+                    .values()
+                    .iter()
+                    .map(|v| v - self.offset as u32)
+                    .map(|v| min(v, self.length as u32))
+                    .take_while(|v| *v <= self.length as u32)
+                    .collect::<Vec<_>>();
+                ends.into_iter()
+            })
+            .collect();
 
-        // TODO(robert): Do better? Compute? This is subtract with limiting
-        let mut ends = Vec::<usize>::new();
-        let mut left_to_skip = physical_offset;
-        for c in self.ends.iter_arrow() {
-            let cast_res =
-                arrow::compute::kernels::cast::cast(c.as_ref(), &DataType::UInt64).unwrap();
-            let casted = cast_res
-                .as_any()
-                .downcast_ref::<ArrowPrimitiveArray<UInt64Type>>()
-                .unwrap();
-            let limited: Vec<usize> = casted
-                .values()
-                .iter()
-                .skip(min(casted.len(), left_to_skip))
-                .map(|v| *v as usize)
-                .map(|v| v - (self.offset))
-                .map(|v| min(v, self.length))
-                .take_while(|v| *v <= self.length)
-                .collect();
-
-            ends.extend(limited);
-            left_to_skip -= min(casted.len(), left_to_skip);
-        }
-
-        Box::new(REEArrowIterator::new(
-            ends.into_iter(),
-            self.values.iter_arrow(),
-        ))
+        match_arrow_numeric_type!(self.values.dtype(), |$N| {
+            Box::new(REEArrowIterator::<$N>::new(ends, self.values.iter_arrow()))
+        })
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
@@ -203,50 +209,46 @@ impl ArrayDisplay for REEArray {
     }
 }
 
-struct REEArrowIterator {
-    ends: IntoIter<usize>,
+pub struct REEArrowIterator<T: ArrowPrimitiveType>
+where
+    T::Native: NativePType + SupportsREE,
+{
+    ends: Vec<u32>,
     values: Box<ArrowIterator>,
     current_idx: usize,
-    current_arrow_array: Option<ArrowArrayRef>,
-    last_end: usize,
+    _marker: PhantomData<T>,
 }
 
-impl REEArrowIterator {
-    pub fn new(ends: IntoIter<usize>, values: Box<ArrowIterator>) -> Self {
+impl<T: ArrowPrimitiveType> REEArrowIterator<T>
+where
+    T::Native: NativePType + SupportsREE,
+{
+    pub fn new(ends: Vec<u32>, values: Box<ArrowIterator>) -> Self {
         Self {
             ends,
             values,
             current_idx: 0,
-            current_arrow_array: None,
-            last_end: 0,
+            _marker: PhantomData,
         }
     }
 }
 
-impl Iterator for REEArrowIterator {
+impl<T: ArrowPrimitiveType> Iterator for REEArrowIterator<T>
+where
+    T::Native: NativePType + SupportsREE,
+{
     type Item = ArrowArrayRef;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self
-            .current_arrow_array
-            .as_ref()
-            .map(|c| c.len() == self.current_idx)
-            .unwrap_or(true)
-        {
-            self.current_arrow_array = self.values.next();
-        }
-
-        self.current_arrow_array
-            .as_ref()
-            .zip(self.ends.next())
-            .map(|(carr, n)| {
-                let new_scalar: ArrowScalar<ArrowArrayRef> =
-                    ArrowScalar::new(carr.as_ref().slice(self.current_idx, 1));
-                let repeat_count = n - self.last_end;
-                self.current_idx += 1;
-                self.last_end = n;
-                repeat(&new_scalar, repeat_count)
-            })
+        self.values.next().and_then(|vs| {
+            let batch_ends = &self.ends[self.current_idx..self.current_idx + vs.len()];
+            self.current_idx += vs.len();
+            let decoded =
+                codecz::ree::decode::<T::Native>(vs.as_primitive::<T>().values(), batch_ends)
+                    .unwrap();
+            // TODO(robert): Is there a better way to construct a primitive arrow array
+            PrimitiveArray::from_vec_in(decoded).iter_arrow().next()
+        })
     }
 }
 
@@ -300,7 +302,7 @@ mod test {
         assert_eq!(arr.len(), 5);
 
         arr.iter_arrow()
-            .zip_eq([vec![2, 2], vec![3, 3, 3]])
+            .zip_eq([vec![2, 2, 3, 3, 3]])
             .for_each(|(from_iter, orig)| {
                 assert_eq!(from_iter.as_primitive::<Int32Type>().values().deref(), orig);
             });
@@ -310,7 +312,7 @@ mod test {
     fn iter_arrow() {
         let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into());
         arr.iter_arrow()
-            .zip_eq([vec![1, 1], vec![2, 2, 2], vec![3, 3, 3, 3, 3]])
+            .zip_eq([vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]])
             .for_each(|(from_iter, orig)| {
                 assert_eq!(from_iter.as_primitive::<Int32Type>().values().deref(), orig);
             });
