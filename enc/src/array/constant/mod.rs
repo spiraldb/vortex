@@ -16,7 +16,9 @@ use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod stats;
+mod take;
 
 #[derive(Debug, Clone)]
 pub struct ConstantArray {
@@ -34,7 +36,7 @@ impl ConstantArray {
         }
     }
 
-    pub fn value(&self) -> &dyn Scalar {
+    pub fn scalar(&self) -> &dyn Scalar {
         self.scalar.as_ref()
     }
 }
@@ -114,7 +116,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ConstantArray {
 
 impl ArrayDisplay for ConstantArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("{}", self.value()))
+        f.writeln(format!("{}", self.scalar()))
     }
 }
 

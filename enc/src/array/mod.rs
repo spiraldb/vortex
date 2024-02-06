@@ -13,6 +13,7 @@ use crate::array::typed::{TypedArray, TYPED_ENCODING};
 use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
 use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
 use crate::compress::{ArrayCompression, EncodingCompression};
+use crate::compute::ArrayCompute;
 use crate::dtype::{DType, Nullability};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -68,6 +69,10 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
 
     /// Implementation of the array compression trait
     fn compression(&self) -> Option<&dyn ArrayCompression>;
+
+    fn compute(&self) -> Option<&dyn ArrayCompute> {
+        None
+    }
 }
 
 dyn_clone::clone_trait_object!(Array);
