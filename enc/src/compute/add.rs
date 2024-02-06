@@ -13,10 +13,10 @@ pub fn add(lhs: &dyn Array, rhs: &dyn Array) -> EncResult<ArrayRef> {
 
     match (ArrayKind::from(lhs), ArrayKind::from(rhs)) {
         (ArrayKind::Constant(lhs), ArrayKind::Constant(rhs)) => {
-            Ok(ConstantArray::new(add_scalars(lhs.value(), rhs.value())?, length).boxed())
+            Ok(ConstantArray::new(add_scalars(lhs.scalar(), rhs.scalar())?, length).boxed())
         }
-        (ArrayKind::Constant(lhs), _) => add_scalar(rhs, lhs.value()),
-        (_, ArrayKind::Constant(rhs)) => add_scalar(lhs, rhs.value()),
+        (ArrayKind::Constant(lhs), _) => add_scalar(rhs, lhs.scalar()),
+        (_, ArrayKind::Constant(rhs)) => add_scalar(lhs, rhs.scalar()),
         _ => todo!("Implement default addition"),
     }
 }
@@ -24,7 +24,7 @@ pub fn add(lhs: &dyn Array, rhs: &dyn Array) -> EncResult<ArrayRef> {
 pub fn add_scalar(lhs: &dyn Array, rhs: &dyn Scalar) -> EncResult<ArrayRef> {
     match ArrayKind::from(lhs) {
         ArrayKind::Constant(lhs) => {
-            Ok(ConstantArray::new(add_scalars(lhs.value(), rhs)?, lhs.len()).boxed())
+            Ok(ConstantArray::new(add_scalars(lhs.scalar(), rhs)?, lhs.len()).boxed())
         }
         _ => todo!("Implement default addition"),
     }
