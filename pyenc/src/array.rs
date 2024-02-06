@@ -5,7 +5,6 @@ use pyo3::prelude::*;
 use enc::array::bool::BoolArray;
 use enc::array::chunked::ChunkedArray;
 use enc::array::constant::ConstantArray;
-use enc::array::patched::PatchedArray;
 use enc::array::primitive::PrimitiveArray;
 use enc::array::ree::REEArray;
 use enc::array::struct_::StructArray;
@@ -13,6 +12,7 @@ use enc::array::typed::TypedArray;
 use enc::array::varbin::VarBinArray;
 use enc::array::varbinview::VarBinViewArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
+use enc_patched::{PatchedArray, PATCHED_ENCODING};
 use enc_roaring::{RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING};
 use enc_zigzag::{ZigZagArray, ZIGZAG_ENCODING};
 
@@ -76,10 +76,6 @@ impl PyArray {
                 PyChunkedArray::wrap(py, inner.into_any().downcast::<ChunkedArray>().unwrap())?
                     .extract(py)
             }
-            ArrayKind::Patched(_) => {
-                PyPatchedArray::wrap(py, inner.into_any().downcast::<PatchedArray>().unwrap())?
-                    .extract(py)
-            }
             ArrayKind::Constant(_) => {
                 PyConstantArray::wrap(py, inner.into_any().downcast::<ConstantArray>().unwrap())?
                     .extract(py)
@@ -111,6 +107,10 @@ impl PyArray {
             ArrayKind::Other(other) => match *other.encoding().id() {
                 // PyEnc chooses to expose certain encodings as first-class objects.
                 // For the remainder, we should have a generic EncArray implementation that supports basic functions.
+                PATCHED_ENCODING => {
+                    PyPatchedArray::wrap(py, inner.into_any().downcast::<PatchedArray>().unwrap())?
+                        .extract(py)
+                }
                 ROARING_BOOL_ENCODING => PyRoaringBoolArray::wrap(
                     py,
                     inner.into_any().downcast::<RoaringBoolArray>().unwrap(),

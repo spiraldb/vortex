@@ -5,6 +5,7 @@ members = [
     "rust/codecz",
     "rust/codecz-sys",
     "rust/enc",
+    "rust/enc-patched",
     "rust/enc-roaring",
     "rust/enc-zigzag",
 ]
