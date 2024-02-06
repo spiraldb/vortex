@@ -14,6 +14,7 @@ use enc::array::typed::TypedArray;
 use enc::array::varbin::VarBinArray;
 use enc::array::varbinview::VarBinViewArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
+use enc_alp::{ALPArray, ALP_ENCODING};
 use enc_patched::{PatchedArray, PATCHED_ENCODING};
 use enc_ree::{REEArray, REE_ENCODING};
 use enc_roaring::{RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING};
@@ -55,6 +56,8 @@ pyarray!(StructArray, "StructArray");
 pyarray!(TypedArray, "TypedArray");
 pyarray!(VarBinArray, "VarBinArray");
 pyarray!(VarBinViewArray, "VarBinViewArray");
+
+pyarray!(ALPArray, "ALPArray");
 
 pyarray!(PatchedArray, "PatchedArray");
 
@@ -105,6 +108,10 @@ impl PyArray {
             ArrayKind::Other(other) => match *other.encoding().id() {
                 // PyEnc chooses to expose certain encodings as first-class objects.
                 // For the remainder, we should have a generic EncArray implementation that supports basic functions.
+                ALP_ENCODING => {
+                    PyALPArray::wrap(py, inner.into_any().downcast::<ALPArray>().unwrap())?
+                        .extract(py)
+                }
                 PATCHED_ENCODING => {
                     PyPatchedArray::wrap(py, inner.into_any().downcast::<PatchedArray>().unwrap())?
                         .extract(py)

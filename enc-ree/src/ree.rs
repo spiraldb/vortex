@@ -5,17 +5,13 @@ use std::sync::{Arc, RwLock};
 
 use arrow::array::ArrowPrimitiveType;
 use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef, AsArray};
-
-use linkme::distributed_slice;
 use num_traits::AsPrimitive;
 
 use codecz::ree::SupportsREE;
-
-use crate::compress::ree_encode;
 use enc::array::primitive::PrimitiveArray;
 use enc::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef, ENCODINGS,
+    EncodingId, EncodingRef,
 };
 use enc::arrow::match_arrow_numeric_type;
 use enc::compress::{ArrayCompression, EncodingCompression};
@@ -27,6 +23,8 @@ use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::ptype::NativePType;
 use enc::scalar::Scalar;
 use enc::stats::{Stats, StatsSet};
+
+use crate::compress::ree_encode;
 
 #[derive(Debug, Clone)]
 pub struct REEArray {
@@ -173,9 +171,6 @@ impl Array for REEArray {
         Some(self)
     }
 }
-
-#[distributed_slice(ENCODINGS)]
-static ENCODINGS_REE: EncodingRef = &REEEncoding;
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
