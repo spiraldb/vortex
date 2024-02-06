@@ -1,11 +1,11 @@
+pub use alp::*;
 use enc::array::{EncodingRef, ENCODINGS};
 use linkme::distributed_slice;
 
-pub use zigzag::*;
-
+mod alp;
 mod compress;
+mod helpers;
 mod stats;
-mod zigzag;
 
 #[distributed_slice(ENCODINGS)]
-static ENCODINGS_ZIGZAG: EncodingRef = &ZigZagEncoding;
+static ENCODINGS_ALP: EncodingRef = &ALPEncoding;

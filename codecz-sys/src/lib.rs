@@ -3,6 +3,7 @@
 #![allow(non_snake_case)]
 
 use alloc::AlignedVec;
+use core::fmt::{Display, Formatter};
 use core::mem::size_of;
 
 pub mod alloc;
@@ -53,12 +54,32 @@ impl WrittenBuffer_t {
     }
 }
 
+impl Display for WrittenBuffer_t {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "WrittenBuffer: buffer.ptr = {:?}, buffer.len = {}, input_bytes_used: {}, bit_size_per_element: {}, num_elements: {}",
+            self.buffer.ptr, self.buffer.len, self.inputBytesUsed, self.bitSizePerElement, self.numElements,
+        )
+    }
+}
+
 impl OneBufferResult_t {
     pub fn new<T>(buf: &mut AlignedVec<T>) -> Self {
         Self {
             status: ResultStatus_t_UnknownCodecError,
             buf: WrittenBuffer_t::new(buf),
         }
+    }
+}
+
+impl Display for OneBufferResult_t {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "OneBufferResult: status = {:?}, buf = [{}]",
+            self.status, self.buf,
+        )
     }
 }
 
@@ -72,6 +93,16 @@ impl TwoBufferResult_t {
     }
 }
 
+impl Display for TwoBufferResult_t {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "TwoBufferResult: status = {:?}, first = [{}], second = [{}]",
+            self.status, self.first, self.second
+        )
+    }
+}
+
 impl Default for AlpExponentsResult_t {
     fn default() -> Self {
         Self {
@@ -81,12 +112,28 @@ impl Default for AlpExponentsResult_t {
     }
 }
 
+impl Display for AlpExponentsResult_t {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ALP Status = {}, exponents = [{}]",
+            self.status, self.exponents
+        )
+    }
+}
+
 impl Default for AlpExponents_t {
     fn default() -> Self {
         Self {
             e: u8::MAX,
             f: u8::MAX,
         }
+    }
+}
+
+impl Display for AlpExponents_t {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "exponent (e) = {}, factor (f) = {}", self.e, self.f)
     }
 }
 

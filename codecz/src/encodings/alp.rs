@@ -2,6 +2,8 @@ use super::{
     AlignedVec, Codec, CodecError, CodecFunction, OneBufferResult, TwoBufferResult, WrittenBuffer,
     ALIGNED_ALLOCATOR,
 };
+use crate::helpers;
+use arrow_buffer::BooleanBuffer;
 use codecz_sys::{
     codecz_alp_decode_f32, codecz_alp_decode_f64, codecz_alp_encode_f32, codecz_alp_encode_f64,
     codecz_alp_sampleFindExponents_f32, codecz_alp_sampleFindExponents_f64,
@@ -14,17 +16,13 @@ type ALPExponentsResult = codecz_sys::AlpExponentsResult_t;
 pub struct ALPEncoded<EncInt> {
     pub values: AlignedVec<EncInt>,
     pub exponents: ALPExponents,
-    pub exceptions_idx: AlignedVec<u8>, // this is a raw bitset, should change the type
+    pub exceptions_idx: BooleanBuffer,
+    pub num_exceptions: usize,
 }
 
 pub fn encode<T: SupportsALP>(elems: &[T]) -> Result<ALPEncoded<T::EncInt>, CodecError> {
     let exponents = T::find_exponents_impl(elems)?;
-    let (values, exceptions_idx) = encode_with(elems, exponents)?;
-    Ok(ALPEncoded {
-        values,
-        exponents,
-        exceptions_idx,
-    })
+    encode_with(elems, exponents)
 }
 
 pub fn find_exponents<T: SupportsALP>(elems: &[T]) -> Result<ALPExponents, CodecError> {
@@ -34,7 +32,7 @@ pub fn find_exponents<T: SupportsALP>(elems: &[T]) -> Result<ALPExponents, Codec
 pub fn encode_with<T: SupportsALP>(
     elems: &[T],
     exponents: ALPExponents,
-) -> Result<(AlignedVec<T::EncInt>, AlignedVec<u8>), CodecError> {
+) -> Result<ALPEncoded<T::EncInt>, CodecError> {
     let mut values: AlignedVec<T::EncInt> =
         AlignedVec::with_capacity_in(elems.len(), ALIGNED_ALLOCATOR);
 
@@ -64,10 +62,14 @@ pub fn encode_with<T: SupportsALP>(
         values.set_len(elems.len());
         exceptions_idx.set_len(bitset_size_in_bytes);
     }
+    let exceptions_idx = helpers::into_boolean_buffer(exceptions_idx, elems.len());
 
-    // TODO: find a better way of returning bitset. Right now we don't utilize the fact that
-    // exceptions_idx_buf.numElements is the cardinality of the bitset
-    Ok((values, exceptions_idx))
+    Ok(ALPEncoded {
+        values,
+        exponents,
+        exceptions_idx,
+        num_exceptions: exceptions_idx_buf.numElements as usize,
+    })
 }
 
 pub fn decode<T: SupportsALP>(
@@ -184,20 +186,43 @@ mod test {
     use super::*;
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_round_trip() {
-        let vec = vec![1.0, 1.1, 2.73, 4.567, 42.4247];
+        let vec = vec![
+            1.0,
+            1.1,
+            2.73,
+            3.141_592_653_589_793,
+            4.567,
+            42.4247,
+            -1.0,
+            -1.1,
+            -2.73,
+            -3.141_592_653_589_793,
+            -4.567,
+            -42.4247,
+        ];
         let encoded = encode(&vec).unwrap();
 
         assert!(ALIGNED_ALLOCATOR.is_aligned_to(encoded.values.as_ptr()));
         assert_eq!(encoded.exponents.e - encoded.exponents.f, 4);
-        assert!(ALIGNED_ALLOCATOR.is_aligned_to(encoded.exceptions_idx.as_ptr()));
         assert_eq!(
             encoded.values.as_slice(),
-            vec![10000i64, 11000, 27300, 45670, 424247].as_slice()
+            vec![
+                10000i64, 11000, 27300, 31416, 45670, 424247, -10000, -11000, -27300, -31416,
+                -45670, -424247
+            ]
+            .as_slice()
         );
-        assert_eq!(encoded.exceptions_idx.as_slice(), vec![0u8].as_slice());
 
-        let decoded = decode::<f64>(&encoded.values, encoded.exponents).unwrap();
+        let exceptions_idx: Vec<usize> = encoded.exceptions_idx.set_indices().collect();
+        assert_eq!(exceptions_idx, vec![3_usize, 9]);
+
+        let mut decoded = decode::<f64>(&encoded.values, encoded.exponents).unwrap();
+        // manually patch
+        for idx in exceptions_idx.iter() {
+            decoded[*idx] = vec[*idx];
+        }
         assert_eq!(decoded.as_slice(), vec.as_slice());
         assert!(ALIGNED_ALLOCATOR.is_aligned_to(decoded.as_ptr()));
     }
