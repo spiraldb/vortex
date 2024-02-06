@@ -1,3 +1,4 @@
+mod compress;
 mod stats;
 
 use std::any::Any;
@@ -12,6 +13,7 @@ use crate::array::{
     EncodingRef,
 };
 use crate::arrow::CombineChunks;
+use crate::compress::ArrayCompression;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::dtype::DType;
 use crate::error::{EncError, EncResult};
@@ -167,6 +169,10 @@ impl Array for PatchedArray {
     fn nbytes(&self) -> usize {
         // TODO(robert): Take into account offsets
         self.data.nbytes() + self.patch_indices.nbytes() + self.patch_values.nbytes()
+    }
+
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        Some(self)
     }
 }
 

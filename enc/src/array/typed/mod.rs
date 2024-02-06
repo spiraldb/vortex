@@ -1,6 +1,3 @@
-mod compress;
-mod stats;
-
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
@@ -13,6 +10,9 @@ use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
+
+mod compress;
+mod stats;
 
 #[derive(Debug, Clone)]
 pub struct TypedArray {
@@ -27,6 +27,16 @@ impl TypedArray {
             array,
             dtype,
             stats: Arc::new(RwLock::new(StatsSet::new())),
+        }
+    }
+
+    /// Possibly wrap an array in a TypedArray if the dtype is different
+    pub fn maybe_wrap(array: ArrayRef, dtype: &DType) -> ArrayRef {
+        if array.dtype() == dtype {
+            array
+        } else {
+            // Should we check the DType is compatible...?
+            Self::new(array, dtype.clone()).boxed()
         }
     }
 

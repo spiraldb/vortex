@@ -69,10 +69,8 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
 
-    /// Optionally implement the array compression trait
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        None
-    }
+    /// Implementation of the array compression trait
+    fn compression(&self) -> Option<&dyn ArrayCompression>;
 }
 
 dyn_clone::clone_trait_object!(Array);

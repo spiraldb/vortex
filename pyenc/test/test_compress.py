@@ -10,20 +10,28 @@ def test_primitive_compress():
     assert arr_compressed.to_pyarrow().combine_chunks() == a
 
 
-def test_roaring_bool_compress():
+def test_bool_compress():
+    a = enc.encode(pa.array([False] * 10_000 + [True] * 10_000))
+    arr_compressed = enc.compress(a)
+    assert len(arr_compressed) == 20_000
+    assert isinstance(arr_compressed, enc.RoaringBoolArray)
+    assert arr_compressed.nbytes < a.nbytes
+
+
+def test_roaring_bool_encode():
     a = enc.encode(pa.array([True] * 10_000))
     rarr = enc.RoaringBoolArray.encode(a)
     assert isinstance(rarr, enc.RoaringBoolArray)
     assert rarr.nbytes < a.nbytes
 
 
-def test_roaring_int_compress():
+def test_roaring_int_encode():
     a = enc.encode(pa.array(np.arange(10_000), type=pa.uint32()))
     compressed = enc.compress(a)
     assert compressed.encoding == "roaring.int"
 
 
-def test_zigzag_compress():
+def test_zigzag_encode():
     a = enc.encode(pa.array([-1, -1, 0, -1, 1, -1]))
     zarr = enc.ZigZagArray.encode(a)
     assert isinstance(zarr, enc.ZigZagArray)

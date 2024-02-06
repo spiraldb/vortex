@@ -8,7 +8,7 @@ use enc::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
     EncodingId, EncodingRef,
 };
-use enc::compress::EncodingCompression;
+use enc::compress::{ArrayCompression, EncodingCompression};
 use enc::dtype::DType;
 use enc::dtype::Nullability::NonNullable;
 use enc::error::{EncError, EncResult};
@@ -119,6 +119,10 @@ impl Array for RoaringBoolArray {
     fn nbytes(&self) -> usize {
         // TODO(ngates): do we want Native serializer? Or portable? Or frozen?
         self.bitmap.get_serialized_size_in_bytes::<Native>()
+    }
+
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        Some(self)
     }
 }
 

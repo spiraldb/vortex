@@ -1,77 +1,29 @@
-use arrow::buffer::Buffer;
 use half::f16;
 
-use crate::array::constant::ConstantEncoding;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayRef, ENCODINGS};
-use crate::compress::{ArrayCompression, CompressCtx, Compressor, EncodingCompression};
+use crate::array::{Array, ArrayRef};
+use crate::compress::{sampled_compression, ArrayCompression, CompressCtx};
 use crate::ptype::match_each_native_ptype;
 use crate::ptype::PType;
 use crate::sampling::default_sample;
 
 impl ArrayCompression for PrimitiveArray {
     fn compress(&self, ctx: CompressCtx) -> ArrayRef {
-        // First, we try constant compression
-        if let Some(compressor) = ConstantEncoding.compressor(self, ctx.options()) {
-            return compressor(self, ctx);
-        }
-
-        let candidate_compressors: Vec<&Compressor> = ENCODINGS
-            .iter()
-            .filter_map(|encoding| encoding.compression())
-            .filter_map(|compression| compression.compressor(self, ctx.options()))
-            .collect();
-
-        if candidate_compressors.is_empty() {
-            return dyn_clone::clone_box(self);
-        }
-
-        if ctx.is_sample() {
-            let (_, compressed_sample) = candidate_compressors.iter().fold(
-                (self.nbytes(), None),
-                |(compressed_bytes, curr_best), compressor| {
-                    let compressed = compressor(self, ctx.clone());
-
-                    if compressed.nbytes() < compressed_bytes {
-                        (compressed.nbytes(), Some(compressed))
-                    } else {
-                        (compressed_bytes, curr_best)
-                    }
-                },
-            );
-            return compressed_sample.unwrap_or_else(|| dyn_clone::clone_box(self));
-        }
-
-        let sample = match_each_native_ptype!(self.ptype(), |$P| {
-            PrimitiveArray::new(
-                self.ptype().clone(),
-                Buffer::from_vec(default_sample(
-                    self.buffer().typed_data::<$P>(),
-                    ctx.options().sample_size,
-                    ctx.options().sample_count,
-                )),
-                None,
-            )
-        });
-
-        let sample_opts = ctx.for_sample();
-        let compression_ratios: Vec<(&Compressor, f32)> = candidate_compressors
-            .iter()
-            .map(|compressor| {
-                (
-                    *compressor,
-                    compressor(self, sample_opts.clone()).nbytes() as f32 / sample.nbytes() as f32,
-                )
-            })
-            .collect();
-
-        compression_ratios
-            .into_iter()
-            .filter(|(_, ratio)| *ratio < 1.0)
-            .min_by(|(_, first_ratio), (_, second_ratio)| first_ratio.total_cmp(second_ratio))
-            .map(|(compressor, _)| compressor(self, ctx))
-            .unwrap_or_else(|| dyn_clone::clone_box(self))
+        sampled_compression(self, ctx, primitive_sampler)
     }
+}
+
+fn primitive_sampler(array: &dyn Array, sample_size: u16, sample_count: u16) -> ArrayRef {
+    let primitive_array = array.as_any().downcast_ref::<PrimitiveArray>().unwrap();
+    match_each_native_ptype!(primitive_array.ptype(), |$P| {
+        PrimitiveArray::from_vec(
+            default_sample(
+                primitive_array.buffer().typed_data::<$P>(),
+                sample_size,
+                sample_count,
+            ),
+        ).boxed()
+    })
 }
 
 #[cfg(test)]

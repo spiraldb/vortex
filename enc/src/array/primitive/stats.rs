@@ -1,15 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::marker::PhantomData;
 
 use arrow::datatypes::ArrowNativeType;
 use half::f16;
 use num_traits::{NumCast, PrimInt};
-use polars_core::prelude::{Series, SortOptions};
-use polars_ops::prelude::SeriesMethods;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::Array;
-use crate::polars::IntoPolarsSeries;
 use crate::ptype::{match_each_native_ptype, PType};
 use crate::scalar::ListScalarValues;
 use crate::scalar::Scalar;
@@ -64,35 +62,48 @@ float_stats!(f16);
 float_stats!(f32);
 float_stats!(f64);
 
-fn integer_stats<T: ArrowNativeType + NumCast + PrimInt>(array: &PrimitiveArray) -> StatsSet
+fn integer_stats<T: ArrowNativeType + NumCast + PrimInt + Hash>(array: &PrimitiveArray) -> StatsSet
 where
     Box<dyn Scalar>: From<T>,
 {
-    let s: Series = array.iter_arrow().into_polars();
-    let is_sorted = s.is_sorted(SortOptions::default()).unwrap();
-    let mins: T = s.min().unwrap().unwrap();
-    let maxs: T = s.max().unwrap().unwrap();
-    let is_unique = s.n_unique().unwrap() == s.len();
-
     let bitwidth = std::mem::size_of::<u64>() * 8;
     let mut bit_widths: Vec<u64> = vec![0; bitwidth + 1];
 
     let typed_buf: &[T] = array.buffer().typed_data();
+    // TODO(ngates): bail out on empty stats
+
+    let mut unique = HashSet::new();
+    let mut is_unique = true;
+    let mut is_sorted = true;
+    let mut min = typed_buf[0];
+    let mut max = typed_buf[0];
     let mut last_val = typed_buf[0];
     let mut run_count: usize = 0;
+
     for v in typed_buf {
         bit_widths[bitwidth - v.leading_zeros() as usize] += 1;
         if last_val != *v {
+            if *v < last_val {
+                is_sorted = false;
+            }
             run_count += 1;
+        }
+        if *v < min {
+            min = *v;
+        } else if *v > max {
+            max = *v;
+        }
+        if is_unique && !unique.insert(*v) {
+            is_unique = false;
         }
         last_val = *v;
     }
     run_count += 1;
 
     StatsSet::from(HashMap::from([
-        (Stat::Min, mins.into()),
-        (Stat::Max, maxs.into()),
-        (Stat::IsConstant, (mins == maxs).into()),
+        (Stat::Min, min.into()),
+        (Stat::Max, max.into()),
+        (Stat::IsConstant, (min == max).into()),
         (Stat::BitWidthFreq, ListScalarValues(bit_widths).into()),
         (Stat::IsSorted, is_sorted.into()),
         (Stat::IsUnique, is_unique.into()),
@@ -104,27 +115,34 @@ fn float_stats<T: ArrowNativeType + NumCast>(array: &PrimitiveArray) -> StatsSet
 where
     Box<dyn Scalar>: From<T>,
 {
-    let s: Series = array.iter_arrow().into_polars();
-    let is_sorted = s.is_sorted(SortOptions::default()).unwrap();
-
-    let mins: T = s.min().unwrap().unwrap();
-    let maxs: T = s.max().unwrap().unwrap();
-
     let typed_buf: &[T] = array.buffer().typed_data();
+    // TODO: bail out on empty stats
+
+    let mut min = typed_buf[0];
+    let mut max = typed_buf[0];
     let mut last_val: T = typed_buf[0];
+    let mut is_sorted = true;
     let mut run_count: usize = 0;
     for v in typed_buf {
         if last_val != *v {
             run_count += 1;
+            if *v < last_val {
+                is_sorted = false;
+            }
+        }
+        if *v < min {
+            min = *v;
+        } else if *v > max {
+            max = *v;
         }
         last_val = *v;
     }
     run_count += 1;
 
     StatsSet::from(HashMap::from([
-        (Stat::Min, mins.into()),
-        (Stat::Max, maxs.into()),
-        (Stat::IsConstant, (mins == maxs).into()),
+        (Stat::Min, min.into()),
+        (Stat::Max, max.into()),
+        (Stat::IsConstant, (min == max).into()),
         (Stat::IsSorted, is_sorted.into()),
         (Stat::RunCount, run_count.into()),
     ]))
@@ -162,5 +180,14 @@ mod test {
             ]
         );
         assert_eq!(run_count, 5);
+    }
+
+    #[test]
+    fn stats_u8() {
+        let arr = PrimitiveArray::from_vec::<u8>(vec![1, 2, 3, 4, 5]);
+        let min: u8 = arr.stats().get_or_compute_as(&Stat::Min).unwrap();
+        let max: u8 = arr.stats().get_or_compute_as(&Stat::Max).unwrap();
+        assert_eq!(min, 1);
+        assert_eq!(max, 5);
     }
 }

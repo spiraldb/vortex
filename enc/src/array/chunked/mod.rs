@@ -9,12 +9,14 @@ use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
+use crate::compress::ArrayCompression;
 use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
 
+mod compress;
 mod stats;
 
 #[derive(Debug, Clone)]
@@ -150,6 +152,10 @@ impl Array for ChunkedArray {
 
     fn nbytes(&self) -> usize {
         self.chunks().iter().map(|arr| arr.nbytes()).sum()
+    }
+
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        Some(self)
     }
 }
 

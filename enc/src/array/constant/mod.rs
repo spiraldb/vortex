@@ -8,7 +8,7 @@ use crate::array::{
     EncodingRef,
 };
 use crate::arrow::compute::repeat;
-use crate::compress::EncodingCompression;
+use crate::compress::{ArrayCompression, EncodingCompression};
 use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -99,6 +99,10 @@ impl Array for ConstantArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.scalar.nbytes()
+    }
+
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        None
     }
 }
 

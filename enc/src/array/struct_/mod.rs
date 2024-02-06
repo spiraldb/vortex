@@ -3,10 +3,11 @@ use std::sync::{Arc, RwLock};
 
 use arrow::array::StructArray as ArrowStructArray;
 use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
-use arrow::datatypes::Fields;
+use arrow::datatypes::{Field, Fields};
 use itertools::Itertools;
 
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
+use crate::compress::ArrayCompression;
 use crate::dtype::{DType, FieldNames};
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -17,6 +18,7 @@ use super::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 
+mod compress;
 mod stats;
 
 #[derive(Debug, Clone)]
@@ -27,16 +29,12 @@ pub struct StructArray {
 }
 
 impl StructArray {
-    pub fn new(names: Vec<&str>, fields: Vec<ArrayRef>) -> Self {
+    pub fn new(names: FieldNames, fields: Vec<ArrayRef>) -> Self {
         assert!(
             fields.iter().map(|v| v.len()).all_equal(),
             "Fields didn't have the same length"
         );
-        let field_names: FieldNames = names.iter().map(|s| Arc::new((*s).to_owned())).collect();
-        let dtype = DType::Struct(
-            field_names,
-            fields.iter().map(|a| a.dtype().clone()).collect(),
-        );
+        let dtype = DType::Struct(names, fields.iter().map(|a| a.dtype().clone()).collect());
         Self {
             fields,
             dtype,
@@ -47,6 +45,31 @@ impl StructArray {
     #[inline]
     pub fn fields(&self) -> &[ArrayRef] {
         &self.fields
+    }
+
+    pub fn names(&self) -> &FieldNames {
+        if let DType::Struct(names, _fields) = self.dtype() {
+            names
+        } else {
+            panic!("dtype is not a struct")
+        }
+    }
+
+    pub fn field_dtypes(&self) -> &[DType] {
+        if let DType::Struct(_names, fields) = self.dtype() {
+            return fields.as_slice();
+        } else {
+            panic!("dtype is not a struct")
+        }
+    }
+
+    fn arrow_fields(&self) -> Fields {
+        self.names()
+            .iter()
+            .zip(self.field_dtypes())
+            .map(|(name, dtype)| Field::new(name.as_str(), dtype.into(), dtype.is_nullable()))
+            .map(Arc::new)
+            .collect()
     }
 }
 
@@ -97,7 +120,7 @@ impl Array for StructArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let fields: Fields = self.dtype().into();
+        let fields = self.arrow_fields();
         Box::new(
             AlignedArrowArrayIterator::new(
                 self.fields
@@ -138,6 +161,10 @@ impl Array for StructArray {
 
     fn nbytes(&self) -> usize {
         self.fields.iter().map(|arr| arr.nbytes()).sum()
+    }
+
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        Some(self)
     }
 }
 
@@ -189,11 +216,11 @@ mod test {
         let arrow_bbs = ArrowStringArray::<i32>::from(vec!["a", "b", "c"]);
 
         let array = StructArray::new(
-            vec!["a", "b"],
+            vec![Arc::new("a".to_string()), Arc::new("b".to_string())],
             vec![(&arrow_aas).into(), (&arrow_bbs).into()],
         );
         let arrow_struct = ArrowStructArray::new(
-            array.dtype().into(),
+            array.arrow_fields(),
             vec![Arc::new(arrow_aas), Arc::new(arrow_bbs)],
             None,
         );

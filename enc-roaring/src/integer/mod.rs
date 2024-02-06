@@ -8,7 +8,7 @@ use enc::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
     EncodingId, EncodingRef,
 };
-use enc::compress::EncodingCompression;
+use enc::compress::{ArrayCompression, EncodingCompression};
 use enc::dtype::Nullability::NonNullable;
 use enc::dtype::Signedness::Signed;
 use enc::dtype::{DType, IntWidth};
@@ -104,6 +104,10 @@ impl Array for RoaringIntArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.bitmap.get_serialized_size_in_bytes::<Native>()
+    }
+
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        Some(self)
     }
 }
 

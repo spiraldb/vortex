@@ -1,9 +1,9 @@
-use crate::array::EncodingId;
 use std::borrow::Cow;
 use std::env;
 use std::fmt::{self, Display, Formatter};
 use std::ops::Deref;
 
+use crate::array::EncodingId;
 use crate::dtype::DType;
 
 #[derive(Debug, PartialEq)]
@@ -62,24 +62,32 @@ pub enum EncError {
     InvalidArrowDataType(arrow::datatypes::DataType),
     #[error("polars error: {0:?}")]
     PolarsError(PolarsError),
+    #[error("arrow error: {0:?}")]
+    ArrowError(ArrowError),
     #[error("Malformed patch values, patch index had entry for index {0} but there was no corresponding patch value")]
     MalformedPatches(usize),
 }
 
 pub type EncResult<T> = Result<T, EncError>;
 
-// Wrap up PolarsError so that we can implement a dumb PartialEq
-
+// Wrap up external errors so that we can implement a dumb PartialEq
 #[derive(Debug)]
-pub struct PolarsError {
-    inner: polars_core::error::PolarsError,
-}
+pub struct ArrowError(pub arrow::error::ArrowError);
 
-impl PolarsError {
-    pub fn inner(&self) -> &polars_core::error::PolarsError {
-        &self.inner
+impl PartialEq for ArrowError {
+    fn eq(&self, _other: &Self) -> bool {
+        false
     }
 }
+
+impl From<arrow::error::ArrowError> for EncError {
+    fn from(err: arrow::error::ArrowError) -> Self {
+        EncError::ArrowError(ArrowError(err))
+    }
+}
+
+#[derive(Debug)]
+pub struct PolarsError(polars_core::error::PolarsError);
 
 impl PartialEq for PolarsError {
     fn eq(&self, _other: &Self) -> bool {
@@ -89,6 +97,6 @@ impl PartialEq for PolarsError {
 
 impl From<polars_core::error::PolarsError> for EncError {
     fn from(err: polars_core::error::PolarsError) -> Self {
-        EncError::PolarsError(PolarsError { inner: err })
+        EncError::PolarsError(PolarsError(err))
     }
 }

@@ -3,11 +3,21 @@ use croaring::Bitmap;
 use enc::array::bool::{BoolArray, BOOL_ENCODING};
 use enc::array::Encoding;
 use enc::array::{Array, ArrayRef};
-use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use enc::compress::{
+    ArrayCompression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
+};
 use enc::dtype::DType;
 use enc::dtype::Nullability::NonNullable;
 
 use crate::boolean::{RoaringBoolArray, RoaringBoolEncoding};
+
+impl ArrayCompression for RoaringBoolArray {
+    fn compress(&self, _ctx: CompressCtx) -> ArrayRef {
+        let mut bitmap = self.bitmap().clone();
+        bitmap.run_optimize();
+        RoaringBoolArray::new(bitmap, self.len()).boxed()
+    }
+}
 
 impl EncodingCompression for RoaringBoolEncoding {
     fn compressor(
