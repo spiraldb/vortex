@@ -9,7 +9,7 @@ pub mod zigzag;
 pub type AlignedAllocator = codecz_sys::alloc::AlignedAllocator;
 pub type AlignedVec<T> = codecz_sys::alloc::AlignedVec<T>;
 
-pub(crate) const ALIGNED_ALLOCATOR: AlignedAllocator = AlignedAllocator::default();
+pub const ALIGNED_ALLOCATOR: AlignedAllocator = AlignedAllocator::default();
 pub(crate) type WrittenBuffer = codecz_sys::WrittenBuffer_t;
 pub(crate) type OneBufferResult = codecz_sys::OneBufferResult_t;
 pub(crate) type TwoBufferResult = codecz_sys::TwoBufferResult_t;

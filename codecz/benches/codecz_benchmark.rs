@@ -84,19 +84,16 @@ fn alp_benchmark(c: &mut Criterion) {
         })
     });
 
-    let (values, exceptions_idx) = codecz::alp::encode_with(&data, exp).unwrap();
+    let encoded = codecz::alp::encode_with(&data, exp).unwrap();
     println!(
         "num_exceptions: {}, exponents: {:?}",
-        exceptions_idx
-            .iter()
-            .map(|b| b.count_ones() as u64)
-            .sum::<u64>(),
-        exp
+        encoded.num_exceptions, exp
     );
 
     c.bench_function("alp decode", |b| {
         b.iter(|| {
-            let decoded = codecz::alp::decode::<f64>(black_box(&values), black_box(exp)).unwrap();
+            let decoded =
+                codecz::alp::decode::<f64>(black_box(&encoded.values), black_box(exp)).unwrap();
             black_box(decoded);
         })
     });

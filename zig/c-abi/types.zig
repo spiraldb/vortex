@@ -72,10 +72,10 @@ pub const ByteBuffer = extern struct {
 
     pub fn from(cbb: c.ByteBuffer_t) CodecError!ByteBuffer {
         const bb: Self = @bitCast(cbb);
-        return bb.check();
+        return bb.checkAlignment();
     }
 
-    pub fn check(self: Self) CodecError!Self {
+    pub fn checkAlignment(self: Self) CodecError!Self {
         if (!std.mem.isAligned(@intFromPtr(self.ptr), Alignment)) {
             return CodecError.IncorrectAlignment;
         }

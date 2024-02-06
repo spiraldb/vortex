@@ -192,8 +192,8 @@ fn RunEndWrapper(comptime V: type, comptime E: type) type {
         pub fn encode(elems: [*c]V, len: usize, out: [*c]c.TwoBufferResult_t) callconv(.C) void {
             // this verifies alignment and returns an error result if the buffer is not properly aligned
             const zigOut = TwoBufferResult.from(out.*) catch |err| return TwoBufferResult.errOut(err, V, E, out);
-            const valuesBuf = zigOut.first.buffer.check() catch |err| return TwoBufferResult.errOut(err, V, E, out);
-            const runEndsBuf = zigOut.second.buffer.check() catch |err| return TwoBufferResult.errOut(err, V, E, out);
+            const valuesBuf = zigOut.first.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, E, out);
+            const runEndsBuf = zigOut.second.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, E, out);
 
             const values: []align(Alignment) V2 = @alignCast(std.mem.bytesAsSlice(V2, valuesBuf.bytes()));
             const runEnds: []align(Alignment) E = @alignCast(std.mem.bytesAsSlice(E, runEndsBuf.bytes()));
@@ -214,7 +214,7 @@ fn RunEndWrapper(comptime V: type, comptime E: type) type {
             const runEnds: []const E = runEnds_[0..numRuns];
 
             const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
-            const outBuf = zigOut.buf.buffer.check() catch |err| return OneBufferResult.errOut(err, V, out);
+            const outBuf = zigOut.buf.buffer.checkAlignment() catch |err| return OneBufferResult.errOut(err, V, out);
             const decoded: []align(Alignment) V2 = @alignCast(std.mem.bytesAsSlice(V2, outBuf.bytes()));
 
             if (codec.decode(values, runEnds, decoded)) {
@@ -306,7 +306,7 @@ fn PackedIntsWrapper(comptime T: u8) type {
                     const codec: type = encodings.PackedInts(T, W);
                     const numBytes = codec.encodedSizeInBytes(len);
                     const zigOut = PackedIntsResult.from(out.*) catch |err| return PackedIntsResult.errOut(err, V, out);
-                    const outBuf = zigOut.encoded.buffer.check() catch |err| return PackedIntsResult.errOut(err, V, out);
+                    const outBuf = zigOut.encoded.buffer.checkAlignment() catch |err| return PackedIntsResult.errOut(err, V, out);
                     const encoded: []align(Alignment) u8 = @alignCast(std.mem.bytesAsSlice(u8, outBuf.bytes()));
 
                     if (codec.encodeRaw(elems[0..len], minVal, encoded)) |num_exceptions| {
@@ -334,7 +334,7 @@ fn PackedIntsWrapper(comptime T: u8) type {
                     const codec: type = encodings.PackedInts(T, W);
                     const encoded = ByteBuffer.from(encoded_.*) catch |err| return OneBufferResult.errOut(err, V, out);
                     const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
-                    const outBuf = zigOut.buf.buffer.check() catch |err| return OneBufferResult.errOut(err, V, out);
+                    const outBuf = zigOut.buf.buffer.checkAlignment() catch |err| return OneBufferResult.errOut(err, V, out);
                     const decoded: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, outBuf.bytes()));
                     if (codec.decodeRaw(encoded.bytes(), elems_len, minVal, decoded)) {
                         const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(V, outBuf, decoded[0..elems_len]));
@@ -357,8 +357,8 @@ fn PackedIntsWrapper(comptime T: u8) type {
 
                     const codec: type = encodings.PackedInts(T, W);
                     const zigOut = TwoBufferResult.from(out.*) catch |err| return TwoBufferResult.errOut(err, V, u1, out);
-                    const exceptionsBuf = zigOut.first.buffer.check() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
-                    var excPosBuf = zigOut.second.buffer.check() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
+                    const exceptionsBuf = zigOut.first.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
+                    var excPosBuf = zigOut.second.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
                     excPosBuf.fillZeroes();
 
                     const exceptions: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, exceptionsBuf.bytes()));
@@ -471,7 +471,7 @@ fn FforWrapper(comptime V: type) type {
                     const codec: type = encodings.FFOR(V, W);
                     const numBytes = codec.encodedSizeInBytes(len);
                     const zigOut = FforResult.from(out.*) catch |err| return FforResult.errOut(err, V, out);
-                    const outBuf = zigOut.encoded.buffer.check() catch |err| return FforResult.errOut(err, V, out);
+                    const outBuf = zigOut.encoded.buffer.checkAlignment() catch |err| return FforResult.errOut(err, V, out);
 
                     const encoded: []align(Alignment) u8 = @alignCast(std.mem.bytesAsSlice(u8, outBuf.bytes()));
                     if (codec.encodeRaw(elems[0..len], @intCast(min_val), encoded)) |num_exceptions| {
@@ -505,7 +505,7 @@ fn FforWrapper(comptime V: type) type {
                     const codec: type = encodings.FFOR(V, W);
                     const encoded = ByteBuffer.from(encoded_.*) catch |err| return OneBufferResult.errOut(err, V, out);
                     const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
-                    const outBuf = zigOut.buf.buffer.check() catch |err| return OneBufferResult.errOut(err, V, out);
+                    const outBuf = zigOut.buf.buffer.checkAlignment() catch |err| return OneBufferResult.errOut(err, V, out);
 
                     const decoded: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, outBuf.bytes()));
                     if (codec.decodeRaw(encoded.bytes(), elems_len, @intCast(min_val), decoded)) {
@@ -534,8 +534,8 @@ fn FforWrapper(comptime V: type) type {
 
                     const codec: type = encodings.FFOR(V, W);
                     const zigOut = TwoBufferResult.from(out.*) catch |err| return TwoBufferResult.errOut(err, V, u1, out);
-                    const exceptionsBuf = zigOut.first.buffer.check() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
-                    var excPosBuf = zigOut.second.buffer.check() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
+                    const exceptionsBuf = zigOut.first.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
+                    var excPosBuf = zigOut.second.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
                     excPosBuf.fillZeroes();
 
                     const exceptions: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, exceptionsBuf.bytes()));
@@ -647,8 +647,8 @@ fn ALPWrapper(comptime F: type) type {
         ) callconv(.C) void {
             const exp: AlpExponents = AlpExponents.from(exp_.*);
             const zigOut = TwoBufferResult.from(out.*) catch |err| return TwoBufferResult.errOut(err, codec.EncInt, u1, out);
-            const encBuf = zigOut.first.buffer.check() catch |err| return TwoBufferResult.errOut(err, codec.EncInt, u1, out);
-            var excPosBuf = zigOut.second.buffer.check() catch |err| return TwoBufferResult.errOut(err, codec.EncInt, u1, out);
+            const encBuf = zigOut.first.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, codec.EncInt, u1, out);
+            var excPosBuf = zigOut.second.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, codec.EncInt, u1, out);
             excPosBuf.fillZeroes();
 
             const values: []align(Alignment) codec.EncInt = @alignCast(std.mem.bytesAsSlice(codec.EncInt, encBuf.bytes()));
@@ -719,7 +719,7 @@ fn ZigZagWrapper(comptime V: type) type {
 
         pub fn encode(elems: [*c]V, len: usize, out: [*c]c.OneBufferResult_t) callconv(.C) void {
             const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
-            const encodedBuf = zigOut.buf.buffer.check() catch |err| return OneBufferResult.errOut(err, V, out);
+            const encodedBuf = zigOut.buf.buffer.checkAlignment() catch |err| return OneBufferResult.errOut(err, V, out);
             const encoded: []align(Alignment) U = @alignCast(std.mem.bytesAsSlice(U, encodedBuf.bytes()));
             if (codec.encodeRaw(elems[0..len], encoded)) {
                 const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(U, encodedBuf, encoded[0..len]));
@@ -731,7 +731,7 @@ fn ZigZagWrapper(comptime V: type) type {
 
         pub fn decode(encoded: [*c]U, len: usize, out: [*c]c.OneBufferResult_t) callconv(.C) void {
             const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
-            const outBuf = zigOut.buf.buffer.check() catch |err| return OneBufferResult.errOut(err, V, out);
+            const outBuf = zigOut.buf.buffer.checkAlignment() catch |err| return OneBufferResult.errOut(err, V, out);
             const decoded: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, outBuf.bytes()));
             if (codec.decodeRaw(encoded[0..len], decoded)) {
                 const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(V, outBuf, decoded[0..len]));
