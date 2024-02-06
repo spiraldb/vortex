@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 links = "codecz"
 
+[lints]
+workspace = true
+
 [dependencies]
 allocator-api2 = "0.2.16"
 safe-transmute = "0.11.2"
