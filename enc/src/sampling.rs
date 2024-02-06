@@ -1,29 +1,4 @@
-use std::cmp::min;
-
 use rand::Rng;
-
-pub fn default_sample<T: Clone>(values: &[T], sample_size: u16, sample_count: u16) -> Vec<T> {
-    let total_num_samples = min(values.len(), (sample_size * sample_count) as usize);
-
-    if values.len() <= total_num_samples {
-        values.to_vec()
-    } else {
-        let sample_slices = stratified_slices(values.len(), sample_size, sample_count);
-        let mut samples = Vec::with_capacity(
-            sample_slices
-                .iter()
-                .fold(0, |acc, (start, stop)| acc + stop - start),
-        );
-        sample_slices.into_iter().for_each(|(start, stop)| {
-            assert!(
-                stop > start && start < values.len() && stop < values.len(),
-                "Generated slices are out of array bounds"
-            );
-            samples.extend_from_slice(&values[start..stop])
-        });
-        samples
-    }
-}
 
 pub fn stratified_slices(
     length: usize,

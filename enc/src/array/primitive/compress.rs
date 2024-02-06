@@ -1,29 +1,11 @@
-use half::f16;
-
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::ArrayRef;
 use crate::compress::{sampled_compression, ArrayCompression, CompressCtx};
-use crate::ptype::match_each_native_ptype;
-use crate::ptype::PType;
-use crate::sampling::default_sample;
 
 impl ArrayCompression for PrimitiveArray {
     fn compress(&self, ctx: CompressCtx) -> ArrayRef {
-        sampled_compression(self, ctx, primitive_sampler)
+        sampled_compression(self, ctx)
     }
-}
-
-fn primitive_sampler(array: &dyn Array, sample_size: u16, sample_count: u16) -> ArrayRef {
-    let primitive_array = array.as_any().downcast_ref::<PrimitiveArray>().unwrap();
-    match_each_native_ptype!(primitive_array.ptype(), |$P| {
-        PrimitiveArray::from_vec(
-            default_sample(
-                primitive_array.buffer().typed_data::<$P>(),
-                sample_size,
-                sample_count,
-            ),
-        ).boxed()
-    })
 }
 
 #[cfg(test)]

@@ -14,7 +14,7 @@ pub enum Stat {
     BitWidthFreq,
     IsConstant,
     IsSorted,
-    IsUnique,
+    IsStrictSorted,
     Max,
     Min,
     RunCount,
@@ -50,6 +50,7 @@ impl StatsSet {
     }
 
     pub fn merge(&mut self, other: &Self) -> &Self {
+        // FIXME(ngates): make adding a new stat a compile error
         self.merge_min(other);
         self.merge_max(other);
         self.merge_is_constant(other);
@@ -218,6 +219,18 @@ pub struct Stats<'a> {
 impl<'a> Stats<'a> {
     pub fn new(cache: &'a RwLock<StatsSet>, compute: &'a dyn StatsCompute) -> Self {
         Self { cache, compute }
+    }
+
+    pub fn set_many(&self, other: &Stats, stats: Vec<&Stat>) {
+        stats.into_iter().for_each(|stat| {
+            if let Some(v) = other.get(stat) {
+                self.cache.write().unwrap().set(stat.clone(), v)
+            }
+        });
+    }
+
+    pub fn set(&self, stat: Stat, value: Box<dyn Scalar>) {
+        self.cache.write().unwrap().set(stat, value);
     }
 
     pub fn get_all(&self) -> StatsSet {
