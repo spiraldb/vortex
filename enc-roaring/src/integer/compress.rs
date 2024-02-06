@@ -1,5 +1,5 @@
 use croaring::Bitmap;
-use log::warn;
+use log::{info, warn};
 use num_traits::NumCast;
 
 use enc::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
@@ -30,9 +30,8 @@ impl EncodingCompression for RoaringIntEncoding {
         array: &dyn Array,
         config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        warn!("Roaring integer compress");
-
         if !config.is_enabled(self.id()) {
+            warn!("Skipping roaring int, not enabled");
             return None;
         }
 
@@ -49,15 +48,17 @@ impl EncodingCompression for RoaringIntEncoding {
         }
 
         // Only support sorted unique arrays
-        if !array.stats().get_or_compute_or(false, &Stat::IsSorted) {
-            return None;
-        }
-        if !array.stats().get_or_compute_or(false, &Stat::IsUnique) {
+        if !array
+            .stats()
+            .get_or_compute_or(false, &Stat::IsStrictSorted)
+        {
+            warn!("Skipping roaring int, not strict sorted");
             return None;
         }
 
         // TODO(ngates): check that max is <= u32
 
+        info!("Using roaring int");
         Some(&(roaring_int_compressor as Compressor))
     }
 }

@@ -7,7 +7,7 @@ impl StatsCompute for RoaringIntArray {
         if let Some(value) = match stat {
             Stat::IsConstant => Some((self.bitmap.cardinality() <= 1).into()),
             Stat::IsSorted => Some(true.into()),
-            Stat::IsUnique => Some(true.into()),
+            Stat::IsStrictSorted => Some(true.into()),
             Stat::Max => self.bitmap.minimum().map(|v| v.into()),
             Stat::Min => self.bitmap.maximum().map(|v| v.into()),
             Stat::NullCount => Some(0.into()),

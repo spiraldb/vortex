@@ -159,6 +159,17 @@ impl Array for ChunkedArray {
     }
 }
 
+impl FromIterator<ArrayRef> for ChunkedArray {
+    fn from_iter<T: IntoIterator<Item = ArrayRef>>(iter: T) -> Self {
+        let chunks: Vec<ArrayRef> = iter.into_iter().collect();
+        let dtype = chunks
+            .first()
+            .map(|c| c.dtype().clone())
+            .expect("Cannot create a chunked array from an empty iterator");
+        Self::new(chunks, dtype)
+    }
+}
+
 impl<'arr> AsRef<(dyn Array + 'arr)> for ChunkedArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self

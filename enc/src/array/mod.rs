@@ -24,6 +24,7 @@ use crate::stats::Stats;
 pub mod bool;
 pub mod chunked;
 pub mod constant;
+pub mod nullable;
 pub mod patched;
 pub mod primitive;
 pub mod ree;

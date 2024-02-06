@@ -11,6 +11,7 @@ use enc::array::{Array, ArrayRef};
 use enc::compress::CompressCtx;
 use enc::dtype::DType;
 use enc::error::{EncError, EncResult};
+use enc::stats::Stat;
 
 fn download_taxi_data() -> &'static Path {
     let download_path = Path::new("../../pyspiral/bench/.data/https-d37ci6vzurychx-cloudfront-net-trip-data-yellow-tripdata-2023-11.parquet");
@@ -30,13 +31,20 @@ fn download_taxi_data() -> &'static Path {
 }
 
 fn compress(array: ArrayRef) -> usize {
-    CompressCtx::default().compress(array.as_ref()).nbytes()
+    let compressed = CompressCtx::default().compress(array.as_ref());
+    println!("NBytes {}", compressed.nbytes());
+    println!(
+        "Ratio {}",
+        compressed.nbytes() as f32 / array.nbytes() as f32
+    );
+    compressed.nbytes()
 }
 
 fn enc_compress(c: &mut Criterion) {
     let file = File::open(download_taxi_data()).unwrap();
     let reader = ParquetRecordBatchReaderBuilder::try_new(file)
         .unwrap()
+        .with_batch_size(128_000)
         .build()
         .unwrap();
 
@@ -51,7 +59,18 @@ fn enc_compress(c: &mut Criterion) {
         // FIXME(ngates): we shouldn't have to do this ourselves...
         .map(|chunk| TypedArray::maybe_wrap(chunk.clone(), &dtype))
         .collect();
-    let array = ChunkedArray::new(chunks, dtype).boxed();
+    let chunked = ChunkedArray::new(chunks, dtype);
+    chunked.chunks().iter().for_each(|a| {
+        if matches!(a.dtype(), DType::Int(_, _, _) | DType::Float(_, _)) {
+            black_box(a.stats().get_or_compute(&Stat::Min));
+        }
+    });
+    println!(
+        "{} rows in {} chunks",
+        chunked.len(),
+        chunked.chunks().len()
+    );
+    let array = chunked.boxed();
 
     c.bench_function("enc.compress", |b| {
         b.iter(|| compress(black_box(array.clone())))

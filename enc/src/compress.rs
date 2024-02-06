@@ -6,6 +6,8 @@ use once_cell::sync::Lazy;
 
 use crate::array::constant::ConstantEncoding;
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, ENCODINGS};
+use crate::compute;
+use crate::sampling::stratified_slices;
 
 pub trait ArrayCompression {
     fn compress(&self, ctx: CompressCtx) -> ArrayRef;
@@ -102,9 +104,7 @@ impl<'a> CompressCtx<'a> {
         }
 
         if let Some(compression) = arr.compression() {
-            let compressed = compression.compress(self.clone());
-            // TODO(robert): Forward stats from arr to compressed
-            self.next_level().compress(compressed.as_ref())
+            compression.compress(self.next_level())
         } else {
             dyn_clone::clone_box(arr)
         }
@@ -127,15 +127,21 @@ impl Default for CompressCtx<'_> {
     }
 }
 
-pub fn sampled_compression(
-    array: &dyn Array,
-    ctx: CompressCtx,
-    sampler: fn(array: &dyn Array, sample_size: u16, sample_count: u16) -> ArrayRef,
-) -> ArrayRef {
+pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
     // First, we try constant compression
     if let Some(compressor) = ConstantEncoding.compressor(array, ctx.options()) {
         return compressor(array, ctx);
     }
+
+    info!(
+        "Compressing array {:?} at depth {} with encodings {:?}",
+        array.encoding(),
+        ctx.depth,
+        ENCODINGS
+            .iter()
+            .map(|e| e.id())
+            .collect::<Vec<&EncodingId>>(),
+    );
 
     let candidate_compressors: Vec<&Compressor> = ENCODINGS
         .iter()
@@ -166,13 +172,25 @@ pub fn sampled_compression(
     }
 
     // Otherwise, take the sample and try each compressor on it.
-    let sample = sampler(array, ctx.options.sample_size, ctx.options.sample_count);
+    let sample = compute::as_contiguous::as_contiguous(
+        stratified_slices(
+            array.len(),
+            ctx.options.sample_size,
+            ctx.options.sample_count,
+        )
+        .into_iter()
+        .map(|(start, stop)| array.slice(start, stop).unwrap())
+        .collect(),
+    )
+    // FIXME(ngates): errors
+    .unwrap();
+
     let compression_ratios: Vec<(&Compressor, f32)> = candidate_compressors
         .iter()
         .map(|compressor| {
             (
                 *compressor,
-                compressor(array, ctx.clone()).nbytes() as f32 / sample.nbytes() as f32,
+                compressor(sample.as_ref(), ctx.clone()).nbytes() as f32 / sample.nbytes() as f32,
             )
         })
         .collect();

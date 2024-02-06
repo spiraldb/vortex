@@ -74,6 +74,11 @@ impl PrimitiveArray {
         Self::new(T::PTYPE, buffer, None)
     }
 
+    pub fn from_nullable<T: NativePType>(values: Vec<T>, validity: Option<ArrayRef>) -> Self {
+        let buffer = Buffer::from_vec::<T>(values);
+        Self::new(T::PTYPE, buffer, validity)
+    }
+
     fn is_valid(&self, index: usize) -> bool {
         self.validity
             .as_ref()
