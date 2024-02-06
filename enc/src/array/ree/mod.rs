@@ -5,8 +5,9 @@ use std::sync::{Arc, RwLock};
 
 use arrow::array::ArrowPrimitiveType;
 use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef, AsArray};
-use arrow::datatypes::{DataType, UInt32Type};
+
 use linkme::distributed_slice;
+use num_traits::AsPrimitive;
 
 use codecz::ree::SupportsREE;
 
@@ -127,17 +128,17 @@ impl Array for REEArray {
             .ends
             .iter_arrow()
             .flat_map(|c| {
-                let cast_res =
-                    arrow::compute::kernels::cast::cast(c.as_ref(), &DataType::UInt32).unwrap();
-                let ends = cast_res
-                    .as_primitive::<UInt32Type>()
-                    .values()
-                    .iter()
-                    .map(|v| v - self.offset as u32)
-                    .map(|v| min(v, self.length as u32))
-                    .take_while(|v| *v <= self.length as u32)
-                    .collect::<Vec<_>>();
-                ends.into_iter()
+                match_arrow_numeric_type!(self.ends.dtype(), |$E| {
+                    let ends = c.as_primitive::<$E>()
+                        .values()
+                        .iter()
+                        .map(|v| AsPrimitive::<u32>::as_(*v))
+                        .map(|v| v - self.offset as u32)
+                        .map(|v| min(v, self.length as u32))
+                        .take_while(|v| *v <= (self.length as u32))
+                        .collect::<Vec<u32>>();
+                    ends.into_iter()
+                })
             })
             .collect();
 
