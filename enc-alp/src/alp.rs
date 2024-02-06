@@ -1,19 +1,16 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use crate::compress::alp_encode;
-use enc::array::{
-    Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef, ENCODINGS,
-};
-use enc::compress::ArrayCompression;
+pub use codecz::alp::ALPExponents;
+use enc::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use enc::compress::{ArrayCompression, EncodingCompression};
 use enc::dtype::{DType, IntWidth};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::scalar::Scalar;
 use enc::stats::{Stats, StatsSet};
 
-pub use codecz::alp::ALPExponents;
-use linkme::distributed_slice;
+use crate::compress::alp_encode;
 
 #[derive(Debug, Clone)]
 pub struct ALPArray {
@@ -43,10 +40,7 @@ impl ALPArray {
 
     pub fn encode(array: &dyn Array) -> EncResult<ArrayRef> {
         match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => {
-                let (array, exp) = alp_encode(p);
-                Ok(Self::try_new(array, exp).unwrap().boxed())
-            }
+            ArrayKind::Primitive(p) => Ok(alp_encode(p)),
             _ => Err(EncError::InvalidEncoding(array.encoding().id().clone())),
         }
     }
@@ -123,9 +117,6 @@ impl Array for ALPArray {
     }
 }
 
-#[distributed_slice(ENCODINGS)]
-static ENCODINGS_ALP: EncodingRef = &ALPEncoding;
-
 impl<'arr> AsRef<(dyn Array + 'arr)> for ALPArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self
@@ -147,5 +138,9 @@ pub const ALP_ENCODING: EncodingId = EncodingId::new("enc.alp");
 impl Encoding for ALPEncoding {
     fn id(&self) -> &EncodingId {
         &ALP_ENCODING
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }
