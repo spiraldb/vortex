@@ -7,6 +7,9 @@ edition = "2021"
 name = "enc"
 path = "src/lib.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 arrow = { version = "50.0.0", features = ["pyarrow"] }
 bytemuck = { version = "1", features = ["derive"] }

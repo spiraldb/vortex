@@ -55,13 +55,22 @@ impl PrimitiveArray {
     }
 
     pub fn from_vec<T: NativePType>(values: Vec<T>) -> Self {
-        let buffer = Buffer::from_vec::<T>(values);
-        Self::new(T::PTYPE, buffer, None)
+        Self::from_nullable(values, None)
     }
 
     /// Allocate buffer from allocator-api2 vector. This would be easier when arrow gets https://github.com/apache/arrow-rs/issues/3960
     pub fn from_vec_in<T: NativePType, A: Allocator + RefUnwindSafe + Send + Sync + 'static>(
         values: allocator_api2::vec::Vec<T, A>,
+    ) -> Self {
+        Self::from_nullable_in(values, None)
+    }
+
+    pub fn from_nullable_in<
+        T: NativePType,
+        A: Allocator + RefUnwindSafe + Send + Sync + 'static,
+    >(
+        values: allocator_api2::vec::Vec<T, A>,
+        validity: Option<ArrayRef>,
     ) -> Self {
         let ptr = values.as_ptr();
         let buffer = unsafe {
@@ -71,7 +80,7 @@ impl PrimitiveArray {
                 Arc::new(values),
             )
         };
-        Self::new(T::PTYPE, buffer, None)
+        Self::new(T::PTYPE, buffer, validity)
     }
 
     pub fn from_nullable<T: NativePType>(values: Vec<T>, validity: Option<ArrayRef>) -> Self {
@@ -79,7 +88,7 @@ impl PrimitiveArray {
         Self::new(T::PTYPE, buffer, validity)
     }
 
-    fn is_valid(&self, index: usize) -> bool {
+    pub fn is_valid(&self, index: usize) -> bool {
         self.validity
             .as_ref()
             .map(|v| v.scalar_at(index).unwrap().try_into().unwrap())

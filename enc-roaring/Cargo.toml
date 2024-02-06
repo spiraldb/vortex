@@ -3,6 +3,9 @@ name = "enc-roaring"
 version = "0.1.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
 enc = { "path" = "../enc" }
 linkme = "0.3.22"

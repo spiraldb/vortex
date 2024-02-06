@@ -3,7 +3,7 @@ use half::f16;
 use codecz::AlignedAllocator;
 
 use crate::{REEArray, REEEncoding};
-use enc::array::nullable::NullableArray;
+use enc::array::bool::BoolArray;
 use enc::array::primitive::PrimitiveArray;
 use enc::array::{Array, ArrayKind, ArrayRef, Encoding};
 use enc::compress::{
@@ -44,37 +44,33 @@ impl EncodingCompression for REEEncoding {
     }
 }
 
-fn ree_compressor(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
-    ctx.compress(
-        match ArrayKind::from(array) {
-            ArrayKind::Primitive(primitive_array) => {
-                // FIXME(ngates): ree should respect nulls?
-                let (ends, values) = ree_encode(primitive_array);
-                let ree = REEArray::new(ends.boxed(), values.boxed()).boxed();
-                if let Some(validity) = primitive_array.validity() {
-                    NullableArray::new(ree, validity.clone()).boxed()
-                } else {
-                    ree
-                }
-            }
-            _ => panic!("Compress more arrays"),
-        }
-        .as_ref(),
-    )
+fn ree_compressor(array: &dyn Array, _opts: CompressCtx) -> ArrayRef {
+    let (ends, values) = match ArrayKind::from(array) {
+        ArrayKind::Primitive(primitive_array) => ree_encode(primitive_array),
+        _ => panic!("Compress more arrays"),
+    };
+    REEArray::new(ends.boxed(), values.boxed()).boxed()
 }
 
 pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     match_each_native_ptype!(array.ptype(), |$P| {
-        let (values, runs) = codecz::ree::encode(array.buffer().typed_data::<$P>()).unwrap();
+        let (values, ends) = codecz::ree::encode(array.buffer().typed_data::<$P>()).unwrap();
+        let validity = array.validity().map(|_| {
+            BoolArray::from(
+                ends.iter()
+                    .map(|end| array.is_valid((*end as usize) - 1))
+                    .collect::<Vec<bool>>(),
+            ).boxed()
+        });
 
-        let compressed_values = PrimitiveArray::from_vec_in::<$P, AlignedAllocator>(values);
+        let compressed_values = PrimitiveArray::from_nullable_in::<$P, AlignedAllocator>(values, validity);
         compressed_values.stats().set(Stat::IsConstant, false.into());
         compressed_values.stats().set(Stat::RunCount, compressed_values.len().into());
         compressed_values.stats().set_many(&array.stats(), vec![
             &Stat::Min, &Stat::Max, &Stat::IsSorted, &Stat::IsStrictSorted,
         ]);
 
-        let compressed_ends = PrimitiveArray::from_vec_in::<u32, AlignedAllocator>(runs);
+        let compressed_ends = PrimitiveArray::from_vec_in::<u32, AlignedAllocator>(ends);
         compressed_ends.stats().set(Stat::IsSorted, true.into());
         compressed_ends.stats().set(Stat::IsStrictSorted, true.into());
         compressed_ends.stats().set(Stat::IsConstant, false.into());
@@ -85,6 +81,7 @@ pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     })
 }
 
+#[allow(dead_code)]
 pub fn ree_decode(ends: &PrimitiveArray, values: &PrimitiveArray) -> PrimitiveArray {
     assert!(matches!(
         ends.dtype(),
@@ -98,4 +95,40 @@ pub fn ree_decode(ends: &PrimitiveArray, values: &PrimitiveArray) -> PrimitiveAr
         let decoded = codecz::ree::decode::<$P>(values.buffer().typed_data::<$P>(), ends.buffer().typed_data::<u32>()).unwrap();
         PrimitiveArray::from_vec_in::<$P, AlignedAllocator>(decoded)
     })
+}
+
+#[cfg(test)]
+mod test {
+    use crate::compress::ree_encode;
+    use arrow::array::AsArray;
+    use arrow::datatypes::Int32Type;
+    use enc::array::primitive::PrimitiveArray;
+    use enc::array::Array;
+    use enc::arrow::CombineChunks;
+    use itertools::Itertools;
+
+    #[test]
+    fn encode_nullable() {
+        let arr = PrimitiveArray::from_iter(vec![
+            Some(1),
+            Some(1),
+            Some(1),
+            Some(3),
+            Some(3),
+            None,
+            None,
+            Some(4),
+            Some(4),
+            None,
+            None,
+        ]);
+        let (_ends, values) = ree_encode(&arr);
+        values
+            .iter_arrow()
+            .combine_chunks()
+            .as_primitive::<Int32Type>()
+            .into_iter()
+            .zip_eq([Some(1), Some(3), None, Some(4), None])
+            .for_each(|(arrow_scalar, test_scalar)| assert_eq!(arrow_scalar, test_scalar));
+    }
 }

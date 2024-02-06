@@ -12,6 +12,9 @@ members = [
 ]
 resolver = "2"
 
+[workspace.lints.clippy]
+all = "deny"
+
 [profile.dev]
 # Need this for linkme crate to work. See https://github.com/dtolnay/linkme/issues/61
 codegen-units = 1
