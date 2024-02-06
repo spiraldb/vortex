@@ -11,6 +11,7 @@ crate-type = ["rlib", "cdylib"]
 arrow = { version = "50.0.0", features = ["ffi"] }
 enc = { path = "../rust/enc" }
 enc-patched = { path = "../rust/enc-patched" }
+enc-ree = { path = "../rust/enc-ree" }
 enc-roaring = { path = "../rust/enc-roaring" }
 enc-zigzag = { path = "../rust/enc-zigzag" }
 itertools = "0.12.0"

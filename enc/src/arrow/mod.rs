@@ -19,13 +19,14 @@ impl CombineChunks for Box<ArrowIterator> {
     }
 }
 
+#[macro_export]
 macro_rules! match_arrow_numeric_type {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use crate::dtype::DType::*;
-        use crate::dtype::IntWidth::*;
-        use crate::dtype::Signedness::*;
-        use crate::dtype::FloatWidth;
+        use enc::dtype::DType::*;
+        use enc::dtype::IntWidth::*;
+        use enc::dtype::Signedness::*;
+        use enc::dtype::FloatWidth;
         use arrow::datatypes::*;
         match $self {
             Int(_8, Unsigned, _) => __with__! {UInt8Type},
@@ -44,4 +45,4 @@ macro_rules! match_arrow_numeric_type {
     })
 }
 
-pub(crate) use match_arrow_numeric_type;
+pub use match_arrow_numeric_type;

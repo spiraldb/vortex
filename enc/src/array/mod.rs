@@ -8,7 +8,6 @@ use crate::array::bool::{BoolArray, BOOL_ENCODING};
 use crate::array::chunked::{ChunkedArray, CHUNKED_ENCODING};
 use crate::array::constant::{ConstantArray, CONSTANT_ENCODING};
 use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
-use crate::array::ree::{REEArray, REE_ENCODING};
 use crate::array::struct_::{StructArray, STRUCT_ENCODING};
 use crate::array::typed::{TypedArray, TYPED_ENCODING};
 use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
@@ -25,7 +24,6 @@ pub mod chunked;
 pub mod constant;
 pub mod nullable;
 pub mod primitive;
-pub mod ree;
 pub mod struct_;
 pub mod typed;
 pub mod varbin;
@@ -140,7 +138,6 @@ pub enum ArrayKind<'a> {
     Chunked(&'a ChunkedArray),
     Constant(&'a ConstantArray),
     Primitive(&'a PrimitiveArray),
-    REE(&'a REEArray),
     Struct(&'a StructArray),
     Typed(&'a TypedArray),
     VarBin(&'a VarBinArray),
@@ -161,7 +158,6 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
             PRIMITIVE_ENCODING => {
                 ArrayKind::Primitive(value.as_any().downcast_ref::<PrimitiveArray>().unwrap())
             }
-            REE_ENCODING => ArrayKind::REE(value.as_any().downcast_ref::<REEArray>().unwrap()),
             STRUCT_ENCODING => {
                 ArrayKind::Struct(value.as_any().downcast_ref::<StructArray>().unwrap())
             }
