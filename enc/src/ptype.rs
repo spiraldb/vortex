@@ -58,6 +58,7 @@ native_ptype!(f16, F16);
 native_ptype!(f32, F32);
 native_ptype!(f64, F64);
 
+#[macro_export]
 macro_rules! match_each_native_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
@@ -76,7 +77,7 @@ macro_rules! match_each_native_ptype {
         }
     })
 }
-pub(crate) use match_each_native_ptype;
+pub use match_each_native_ptype;
 
 impl PType {
     pub fn is_unsigned_int(self) -> bool {

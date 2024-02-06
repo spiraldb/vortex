@@ -2,23 +2,22 @@ use paste::paste;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+use crate::dtype::PyDType;
+use crate::enc_arrow;
+use crate::error::PyEncError;
 use enc::array::bool::BoolArray;
 use enc::array::chunked::ChunkedArray;
 use enc::array::constant::ConstantArray;
 use enc::array::primitive::PrimitiveArray;
-use enc::array::ree::REEArray;
 use enc::array::struct_::StructArray;
 use enc::array::typed::TypedArray;
 use enc::array::varbin::VarBinArray;
 use enc::array::varbinview::VarBinViewArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
 use enc_patched::{PatchedArray, PATCHED_ENCODING};
+use enc_ree::{REEArray, REE_ENCODING};
 use enc_roaring::{RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING};
 use enc_zigzag::{ZigZagArray, ZIGZAG_ENCODING};
-
-use crate::dtype::PyDType;
-use crate::enc_arrow;
-use crate::error::PyEncError;
 
 #[pyclass(name = "Array", module = "enc", sequence, subclass)]
 pub struct PyArray {
@@ -50,14 +49,16 @@ macro_rules! pyarray {
 
 pyarray!(BoolArray, "BoolArray");
 pyarray!(ChunkedArray, "ChunkedArray");
-pyarray!(PatchedArray, "PatchedArray");
 pyarray!(ConstantArray, "ConstantArray");
 pyarray!(PrimitiveArray, "PrimitiveArray");
-pyarray!(REEArray, "REEArray");
 pyarray!(StructArray, "StructArray");
 pyarray!(TypedArray, "TypedArray");
 pyarray!(VarBinArray, "VarBinArray");
 pyarray!(VarBinViewArray, "VarBinViewArray");
+
+pyarray!(PatchedArray, "PatchedArray");
+
+pyarray!(REEArray, "REEArray");
 
 pyarray!(RoaringBoolArray, "RoaringBoolArray");
 pyarray!(RoaringIntArray, "RoaringIntArray");
@@ -84,9 +85,6 @@ impl PyArray {
                 PyPrimitiveArray::wrap(py, inner.into_any().downcast::<PrimitiveArray>().unwrap())?
                     .extract(py)
             }
-            ArrayKind::REE(_) => {
-                PyREEArray::wrap(py, inner.into_any().downcast::<REEArray>().unwrap())?.extract(py)
-            }
             ArrayKind::Struct(_) => {
                 PyStructArray::wrap(py, inner.into_any().downcast::<StructArray>().unwrap())?
                     .extract(py)
@@ -109,6 +107,10 @@ impl PyArray {
                 // For the remainder, we should have a generic EncArray implementation that supports basic functions.
                 PATCHED_ENCODING => {
                     PyPatchedArray::wrap(py, inner.into_any().downcast::<PatchedArray>().unwrap())?
+                        .extract(py)
+                }
+                REE_ENCODING => {
+                    PyREEArray::wrap(py, inner.into_any().downcast::<REEArray>().unwrap())?
                         .extract(py)
                 }
                 ROARING_BOOL_ENCODING => PyRoaringBoolArray::wrap(

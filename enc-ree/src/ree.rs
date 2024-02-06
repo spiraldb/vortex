@@ -11,25 +11,22 @@ use num_traits::AsPrimitive;
 
 use codecz::ree::SupportsREE;
 
-use crate::array::primitive::PrimitiveArray;
-use crate::array::ree::compress::ree_encode;
-use crate::array::{
+use crate::compress::ree_encode;
+use enc::array::primitive::PrimitiveArray;
+use enc::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
     EncodingId, EncodingRef, ENCODINGS,
 };
-use crate::arrow::match_arrow_numeric_type;
-use crate::compress::{ArrayCompression, EncodingCompression};
-use crate::compute;
-use crate::compute::search_sorted::SearchSortedSide;
-use crate::dtype::DType;
-use crate::error::{EncError, EncResult};
-use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::ptype::NativePType;
-use crate::scalar::Scalar;
-use crate::stats::{Stats, StatsSet};
-
-mod compress;
-mod stats;
+use enc::arrow::match_arrow_numeric_type;
+use enc::compress::{ArrayCompression, EncodingCompression};
+use enc::compute;
+use enc::compute::search_sorted::SearchSortedSide;
+use enc::dtype::DType;
+use enc::error::{EncError, EncResult};
+use enc::formatter::{ArrayDisplay, ArrayFormatter};
+use enc::ptype::NativePType;
+use enc::scalar::Scalar;
+use enc::stats::{Stats, StatsSet};
 
 #[derive(Debug, Clone)]
 pub struct REEArray {
@@ -189,7 +186,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
 #[derive(Debug)]
 pub struct REEEncoding;
 
-pub const REE_ENCODING: EncodingId = EncodingId("enc.ree");
+pub const REE_ENCODING: EncodingId = EncodingId::new("enc.ree");
 
 impl Encoding for REEEncoding {
     fn id(&self) -> &EncodingId {
@@ -269,7 +266,7 @@ mod test {
     use arrow::array::types::Int32Type;
     use itertools::Itertools;
 
-    use crate::dtype::{IntWidth, Nullability, Signedness};
+    use enc::dtype::{IntWidth, Nullability, Signedness};
 
     use super::*;
 

@@ -2,16 +2,16 @@ use half::f16;
 
 use codecz::AlignedAllocator;
 
-use crate::array::nullable::NullableArray;
-use crate::array::primitive::PrimitiveArray;
-use crate::array::ree::{REEArray, REEEncoding};
-use crate::array::{Array, ArrayKind, ArrayRef, Encoding};
-use crate::compress::{
+use crate::{REEArray, REEEncoding};
+use enc::array::nullable::NullableArray;
+use enc::array::primitive::PrimitiveArray;
+use enc::array::{Array, ArrayKind, ArrayRef, Encoding};
+use enc::compress::{
     ArrayCompression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
 };
-use crate::dtype::{DType, IntWidth, Nullability, Signedness};
-use crate::ptype::{match_each_native_ptype, PType};
-use crate::stats::Stat;
+use enc::dtype::{DType, IntWidth, Nullability, Signedness};
+use enc::ptype::{match_each_native_ptype, PType};
+use enc::stats::Stat;
 
 impl ArrayCompression for REEArray {
     fn compress(&self, ctx: CompressCtx) -> ArrayRef {
