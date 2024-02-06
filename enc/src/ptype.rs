@@ -1,11 +1,12 @@
 use std::fmt::{Debug, Display};
 use std::panic::RefUnwindSafe;
 
-use arrow::datatypes::{ArrowNativeType, DataType};
+use arrow::datatypes::ArrowNativeType;
 use half::f16;
 
 use crate::dtype::{DType, FloatWidth, IntWidth, Signedness};
 use crate::error::{EncError, EncResult};
+use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub enum PType {
@@ -75,7 +76,6 @@ macro_rules! match_each_native_ptype {
         }
     })
 }
-use crate::scalar::Scalar;
 pub(crate) use match_each_native_ptype;
 
 impl PType {
@@ -140,33 +140,6 @@ impl TryFrom<&DType> for PType {
                 FloatWidth::_64 => Ok(PType::F64),
             },
             _ => Err(EncError::InvalidDType(value.clone())),
-        }
-    }
-}
-
-impl TryFrom<&DataType> for PType {
-    type Error = EncError;
-
-    fn try_from(value: &DataType) -> EncResult<Self> {
-        match value {
-            DataType::Int8 => Ok(PType::I8),
-            DataType::Int16 => Ok(PType::I16),
-            DataType::Int32 => Ok(PType::I32),
-            DataType::Int64 => Ok(PType::I64),
-            DataType::UInt8 => Ok(PType::U8),
-            DataType::UInt16 => Ok(PType::U16),
-            DataType::UInt32 => Ok(PType::U32),
-            DataType::UInt64 => Ok(PType::U64),
-            DataType::Float16 => Ok(PType::F16),
-            DataType::Float32 => Ok(PType::F32),
-            DataType::Float64 => Ok(PType::F64),
-            DataType::Time32(_) => Ok(PType::I32),
-            DataType::Time64(_) => Ok(PType::I64),
-            DataType::Timestamp(_, _) => Ok(PType::I64),
-            DataType::Date32 => Ok(PType::I32),
-            DataType::Date64 => Ok(PType::I64),
-            DataType::Duration(_) => Ok(PType::I64),
-            _ => Err(EncError::InvalidArrowDataType(value.clone())),
         }
     }
 }

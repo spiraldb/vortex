@@ -5,7 +5,9 @@ use num_traits::NumCast;
 use enc::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use enc::array::Encoding;
 use enc::array::{Array, ArrayRef};
-use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use enc::compress::{
+    ArrayCompression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
+};
 use enc::dtype::DType;
 use enc::dtype::Nullability::NonNullable;
 use enc::dtype::Signedness::Unsigned;
@@ -13,6 +15,14 @@ use enc::ptype::{NativePType, PType};
 use enc::stats::Stat;
 
 use crate::{RoaringIntArray, RoaringIntEncoding};
+
+impl ArrayCompression for RoaringIntArray {
+    fn compress(&self, _ctx: CompressCtx) -> ArrayRef {
+        let mut bitmap = self.bitmap().clone();
+        bitmap.run_optimize();
+        RoaringIntArray::new(bitmap).boxed()
+    }
+}
 
 impl EncodingCompression for RoaringIntEncoding {
     fn compressor(

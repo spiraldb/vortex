@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use arrow::array::cast::AsArray;
 use arrow::array::types::{
     Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
@@ -85,7 +87,12 @@ impl From<&ArrowBooleanArray> for ArrayRef {
 impl From<&ArrowStructArray> for ArrayRef {
     fn from(value: &ArrowStructArray) -> Self {
         StructArray::new(
-            value.column_names(),
+            value
+                .column_names()
+                .iter()
+                .map(|s| s.to_string())
+                .map(Arc::new)
+                .collect(),
             value
                 .columns()
                 .iter()

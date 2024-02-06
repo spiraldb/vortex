@@ -1,3 +1,4 @@
+mod compress;
 mod stats;
 
 use std::any::Any;
@@ -13,6 +14,7 @@ use crate::array::{
     EncodingId, EncodingRef,
 };
 use crate::arrow::CombineChunks;
+use crate::compress::ArrayCompression;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -189,6 +191,10 @@ impl Array for VarBinArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.bytes.nbytes() + self.offsets.nbytes()
+    }
+
+    fn compression(&self) -> Option<&dyn ArrayCompression> {
+        Some(self)
     }
 }
 
