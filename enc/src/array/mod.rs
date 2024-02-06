@@ -7,7 +7,6 @@ use linkme::distributed_slice;
 use crate::array::bool::{BoolArray, BOOL_ENCODING};
 use crate::array::chunked::{ChunkedArray, CHUNKED_ENCODING};
 use crate::array::constant::{ConstantArray, CONSTANT_ENCODING};
-use crate::array::patched::{PatchedArray, PATCHED_ENCODING};
 use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use crate::array::ree::{REEArray, REE_ENCODING};
 use crate::array::struct_::{StructArray, STRUCT_ENCODING};
@@ -25,7 +24,6 @@ pub mod bool;
 pub mod chunked;
 pub mod constant;
 pub mod nullable;
-pub mod patched;
 pub mod primitive;
 pub mod ree;
 pub mod struct_;
@@ -140,7 +138,6 @@ pub static ENCODINGS: [EncodingRef] = [..];
 pub enum ArrayKind<'a> {
     Bool(&'a BoolArray),
     Chunked(&'a ChunkedArray),
-    Patched(&'a PatchedArray),
     Constant(&'a ConstantArray),
     Primitive(&'a PrimitiveArray),
     REE(&'a REEArray),
@@ -160,9 +157,6 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
             }
             CONSTANT_ENCODING => {
                 ArrayKind::Constant(value.as_any().downcast_ref::<ConstantArray>().unwrap())
-            }
-            PATCHED_ENCODING => {
-                ArrayKind::Patched(value.as_any().downcast_ref::<PatchedArray>().unwrap())
             }
             PRIMITIVE_ENCODING => {
                 ArrayKind::Primitive(value.as_any().downcast_ref::<PrimitiveArray>().unwrap())

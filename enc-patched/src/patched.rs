@@ -1,6 +1,3 @@
-mod compress;
-mod stats;
-
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 use std::usize;
@@ -8,18 +5,18 @@ use std::usize;
 use arrow::array::ArrayRef as ArrowArrayRef;
 use arrow::compute::interleave;
 
-use crate::array::{
+use enc::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
-use crate::arrow::CombineChunks;
-use crate::compress::ArrayCompression;
-use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
-use crate::dtype::DType;
-use crate::error::{EncError, EncResult};
-use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::Scalar;
-use crate::stats::{Stats, StatsSet};
+use enc::arrow::CombineChunks;
+use enc::compress::ArrayCompression;
+use enc::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
+use enc::dtype::DType;
+use enc::error::{EncError, EncResult};
+use enc::formatter::{ArrayDisplay, ArrayFormatter};
+use enc::scalar::Scalar;
+use enc::stats::{Stats, StatsSet};
 
 #[derive(Debug, Clone)]
 pub struct PatchedArray {
@@ -197,7 +194,7 @@ impl ArrayDisplay for PatchedArray {
 #[derive(Debug)]
 pub struct PatchedEncoding;
 
-pub const PATCHED_ENCODING: EncodingId = EncodingId("enc.patched");
+pub const PATCHED_ENCODING: EncodingId = EncodingId::new("enc.patched");
 
 impl Encoding for PatchedEncoding {
     fn id(&self) -> &EncodingId {
@@ -313,10 +310,11 @@ mod test {
     use arrow::datatypes::Int32Type;
     use itertools::Itertools;
 
-    use crate::array::patched::PatchedArray;
-    use crate::array::primitive::PrimitiveArray;
-    use crate::array::{Array, ArrayRef};
-    use crate::error::EncError;
+    use enc::array::primitive::PrimitiveArray;
+    use enc::array::{Array, ArrayRef};
+    use enc::error::EncError;
+
+    use super::*;
 
     fn patched_array() -> PatchedArray {
         // merged array: [0, 1, 100, 3, 4, 200, 6, 7, 300, 9]

@@ -1,5 +1,5 @@
 pub mod array;
-mod arrow;
+pub mod arrow;
 pub mod scalar;
 
 pub mod compress;
