@@ -84,6 +84,7 @@ where
     PrimitiveArray::from_vec(encoded)
 }
 
+#[allow(dead_code)]
 pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
     match parray.ptype() {
         PType::U8 => zigzag_decode_primitive::<i8>(parray.buffer().typed_data()),
@@ -94,6 +95,7 @@ pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
     }
 }
 
+#[allow(dead_code)]
 fn zigzag_decode_primitive<T: ZigZag + NativePType>(values: &[T::UInt]) -> PrimitiveArray
 where
     <T as ZigZag>::UInt: NativePType,

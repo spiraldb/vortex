@@ -1,9 +1,10 @@
-use crate::dtype::DType;
-use crate::error::EncResult;
-use crate::scalar::Scalar;
 use std::any::Any;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
+
+use crate::dtype::DType;
+use crate::error::{EncError, EncResult};
+use crate::scalar::{NullScalar, Scalar};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum NullableScalar {
@@ -62,5 +63,56 @@ impl Display for NullableScalar {
             NullableScalar::Some(p) => write!(f, "{}", p),
             NullableScalar::None(_) => write!(f, "null"),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NullableScalarOption<T>(pub Option<T>);
+
+impl<T: Into<Box<dyn Scalar>>> From<NullableScalarOption<T>> for Box<dyn Scalar> {
+    fn from(value: NullableScalarOption<T>) -> Self {
+        match value.0 {
+            // TODO(robert): This should return NullableScalar::None
+            // but that's not possible with some type that holds the associated dtype
+            // We need to change the bound of T to be able to get datatype from it.
+            None => NullScalar::new().boxed(),
+            Some(v) => NullableScalar::some(v.into()).boxed(),
+        }
+    }
+}
+
+impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<&dyn Scalar>
+    for NullableScalarOption<T>
+{
+    type Error = EncError;
+
+    fn try_from(value: &dyn Scalar) -> Result<Self, Self::Error> {
+        let Some(ns) = value.as_any().downcast_ref::<NullableScalar>() else {
+            return Err(EncError::InvalidDType(value.dtype().clone()));
+        };
+
+        Ok(NullableScalarOption(match ns {
+            NullableScalar::None(_) => None,
+            NullableScalar::Some(v) => Some(v.clone().try_into()?),
+        }))
+    }
+}
+
+impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<Box<dyn Scalar>>
+    for NullableScalarOption<T>
+{
+    type Error = EncError;
+
+    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
+        let dtype = value.dtype().clone();
+        let ns = value
+            .into_any()
+            .downcast::<NullableScalar>()
+            .map_err(|_| EncError::InvalidDType(dtype))?;
+
+        Ok(NullableScalarOption(match *ns {
+            NullableScalar::None(_) => None,
+            NullableScalar::Some(v) => Some(v.try_into()?),
+        }))
     }
 }

@@ -8,7 +8,7 @@ use num_traits::{NumCast, PrimInt};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::ptype::{match_each_native_ptype, PType};
-use crate::scalar::ListScalarValues;
+use crate::scalar::ListScalarVec;
 use crate::scalar::Scalar;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
@@ -104,7 +104,7 @@ where
         (Stat::Min, min.into()),
         (Stat::Max, max.into()),
         (Stat::IsConstant, (min == max).into()),
-        (Stat::BitWidthFreq, ListScalarValues(bit_widths).into()),
+        (Stat::BitWidthFreq, ListScalarVec(bit_widths).into()),
         (Stat::IsSorted, is_sorted.into()),
         (Stat::IsStrictSorted, (is_sorted && is_strict_sorted).into()),
         (Stat::RunCount, run_count.into()),
@@ -150,10 +150,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::array::Array;
-    use crate::scalar::ListScalarValues;
-
     use super::*;
+    use crate::array::Array;
+    use crate::scalar::ListScalarVec;
 
     #[test]
     fn stats() {
@@ -168,7 +167,7 @@ mod test {
         let is_constant: bool = arr.stats().get_or_compute_as(&Stat::IsConstant).unwrap();
         let bit_width_freq: Vec<u64> = arr
             .stats()
-            .get_or_compute_as::<ListScalarValues<u64>>(&Stat::BitWidthFreq)
+            .get_or_compute_as::<ListScalarVec<u64>>(&Stat::BitWidthFreq)
             .unwrap()
             .0;
         let run_count: u64 = arr.stats().get_or_compute_as(&Stat::RunCount).unwrap();

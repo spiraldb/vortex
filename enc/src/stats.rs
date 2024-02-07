@@ -7,7 +7,7 @@ use itertools::Itertools;
 
 use crate::error::{EncError, EncResult};
 use crate::ptype::NativePType;
-use crate::scalar::{ListScalarValues, Scalar};
+use crate::scalar::{ListScalarVec, Scalar};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stat {
@@ -163,13 +163,13 @@ impl StatsSet {
         match self.0.entry(Stat::BitWidthFreq) {
             Entry::Occupied(mut e) => {
                 if let Some(other_value) = other
-                    .get_as::<ListScalarValues<u64>>(&Stat::BitWidthFreq)
+                    .get_as::<ListScalarVec<u64>>(&Stat::BitWidthFreq)
                     .unwrap()
                 {
                     // TODO(robert): Avoid the copy here. We could e.get_mut() but need to figure out casting
-                    let self_value: ListScalarValues<u64> = e.get().as_ref().try_into().unwrap();
+                    let self_value: ListScalarVec<u64> = e.get().as_ref().try_into().unwrap();
                     e.insert(
-                        ListScalarValues(
+                        ListScalarVec(
                             self_value
                                 .0
                                 .iter()
