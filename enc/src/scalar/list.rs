@@ -73,8 +73,11 @@ impl Scalar for ListScalar {
     }
 }
 
-impl<T: Into<Box<dyn Scalar>>> From<ListScalarValues<T>> for Box<dyn Scalar> {
-    fn from(value: ListScalarValues<T>) -> Self {
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListScalarVec<T>(pub Vec<T>);
+
+impl<T: Into<Box<dyn Scalar>>> From<ListScalarVec<T>> for Box<dyn Scalar> {
+    fn from(value: ListScalarVec<T>) -> Self {
         let values: Vec<Box<dyn Scalar>> = value.0.into_iter().map(|v| v.into()).collect();
         if values.is_empty() {
             panic!("Can't implicitly convert empty list into ListScalar");
@@ -83,15 +86,12 @@ impl<T: Into<Box<dyn Scalar>>> From<ListScalarValues<T>> for Box<dyn Scalar> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ListScalarValues<T>(pub Vec<T>);
-
-impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<&dyn Scalar> for ListScalarValues<T> {
+impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<&dyn Scalar> for ListScalarVec<T> {
     type Error = EncError;
 
     fn try_from(value: &dyn Scalar) -> Result<Self, Self::Error> {
         if let Some(list_s) = value.as_any().downcast_ref::<ListScalar>() {
-            Ok(ListScalarValues(
+            Ok(ListScalarVec(
                 list_s
                     .values
                     .clone()
@@ -105,9 +105,7 @@ impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<&dyn Scalar> for Lis
     }
 }
 
-impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<Box<dyn Scalar>>
-    for ListScalarValues<T>
-{
+impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<Box<dyn Scalar>> for ListScalarVec<T> {
     type Error = EncError;
 
     fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
@@ -117,7 +115,7 @@ impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<Box<dyn Scalar>>
             .downcast::<ListScalar>()
             .map_err(|_| EncError::InvalidDType(value_dtype))?;
 
-        Ok(ListScalarValues(
+        Ok(ListScalarVec(
             list_s
                 .values
                 .into_iter()

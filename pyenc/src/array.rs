@@ -2,9 +2,6 @@ use paste::paste;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use crate::dtype::PyDType;
-use crate::enc_arrow;
-use crate::error::PyEncError;
 use enc::array::bool::BoolArray;
 use enc::array::chunked::ChunkedArray;
 use enc::array::constant::ConstantArray;
@@ -15,10 +12,16 @@ use enc::array::varbin::VarBinArray;
 use enc::array::varbinview::VarBinViewArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
 use enc_alp::{ALPArray, ALP_ENCODING};
+use enc_dict::DictArray;
+use enc_dict::DICT_ENCODING;
 use enc_patched::{PatchedArray, PATCHED_ENCODING};
 use enc_ree::{REEArray, REE_ENCODING};
 use enc_roaring::{RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING};
 use enc_zigzag::{ZigZagArray, ZIGZAG_ENCODING};
+
+use crate::dtype::PyDType;
+use crate::enc_arrow;
+use crate::error::PyEncError;
 
 #[pyclass(name = "Array", module = "enc", sequence, subclass)]
 pub struct PyArray {
@@ -58,6 +61,8 @@ pyarray!(VarBinArray, "VarBinArray");
 pyarray!(VarBinViewArray, "VarBinViewArray");
 
 pyarray!(ALPArray, "ALPArray");
+
+pyarray!(DictArray, "DictArray");
 
 pyarray!(PatchedArray, "PatchedArray");
 
@@ -110,6 +115,10 @@ impl PyArray {
                 // For the remainder, we should have a generic EncArray implementation that supports basic functions.
                 ALP_ENCODING => {
                     PyALPArray::wrap(py, inner.into_any().downcast::<ALPArray>().unwrap())?
+                        .extract(py)
+                }
+                DICT_ENCODING => {
+                    PyDictArray::wrap(py, inner.into_any().downcast::<DictArray>().unwrap())?
                         .extract(py)
                 }
                 PATCHED_ENCODING => {

@@ -87,6 +87,7 @@ where
     .boxed()
 }
 
+#[allow(dead_code)]
 pub fn alp_decode(parray: &PrimitiveArray, exp: ALPExponents) -> PrimitiveArray {
     match parray.ptype() {
         PType::I32 => PrimitiveArray::from_vec_in(

@@ -29,13 +29,13 @@ impl EncodingCompression for REEEncoding {
             return None;
         }
 
-        let run_count = array.len() as f32
+        let avg_run_length = array.len() as f32
             / array
                 .stats()
                 .get_or_compute_or::<usize>(array.len(), &Stat::RunCount) as f32;
 
         if array.as_any().downcast_ref::<PrimitiveArray>().is_some()
-            && run_count >= config.ree_average_run_threshold
+            && avg_run_length >= config.ree_average_run_threshold
         {
             return Some(&(ree_compressor as Compressor));
         }

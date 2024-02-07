@@ -6,6 +6,7 @@ members = [
     "rust/codecz-sys",
     "rust/enc", 
     "rust/enc-alp",
+    "rust/enc-dict",
     "rust/enc-patched",
     "rust/enc-ree",
     "rust/enc-roaring",

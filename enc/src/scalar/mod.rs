@@ -13,6 +13,7 @@ pub use utf8::*;
 
 use crate::dtype::DType;
 use crate::error::EncResult;
+use crate::ptype::NativePType;
 
 mod arrow;
 mod binary;
@@ -44,3 +45,25 @@ pub trait Scalar: Display + Debug + dyn_clone::DynClone + Send + Sync + 'static 
 }
 
 dyn_clone::clone_trait_object!(Scalar);
+
+/// Allows conversion from Enc scalars to a byte slice.
+pub trait AsBytes {
+    /// Converts this instance into a byte slice
+    fn as_bytes(&self) -> &[u8];
+}
+
+impl<T: NativePType> AsBytes for [T] {
+    #[inline]
+    fn as_bytes(&self) -> &[u8] {
+        let raw_ptr = self.as_ptr() as *const u8;
+        unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of_val(self)) }
+    }
+}
+
+impl<T: NativePType> AsBytes for T {
+    #[inline]
+    fn as_bytes(&self) -> &[u8] {
+        let raw_ptr = self as *const T as *const u8;
+        unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of::<T>()) }
+    }
+}
