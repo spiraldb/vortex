@@ -19,7 +19,7 @@ enc-patched = { path = "../rust/enc-patched" }
 enc-ree = { path = "../rust/enc-ree" }
 enc-roaring = { path = "../rust/enc-roaring" }
 enc-zigzag = { path = "../rust/enc-zigzag" }
-itertools = "0.12.0"
+itertools = "0.12.1"
 log = "0.4.20"
 paste = "1.0.14"
 pyo3 = { version = "0.20.2", features = ["extension-module", "abi3-py311"] }

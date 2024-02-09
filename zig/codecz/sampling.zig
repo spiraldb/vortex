@@ -69,9 +69,9 @@ fn partitionIndices(gpa: std.mem.Allocator, length: usize, numPartitions: u32) !
     var partitions = try std.ArrayList(ArraySlice).initCapacity(gpa, numPartitions);
     defer partitions.deinit();
     var pos: usize = 0;
-    for (0..numLongParts) |i| {
-        pos = i * longStep;
+    for (0..numLongParts) |_| {
         try partitions.append(.{ .start = pos, .stop = pos + longStep });
+        pos += longStep;
     }
     std.debug.assert(pos == numLongParts * longStep);
     while (pos < length) : (pos += shortStep) {

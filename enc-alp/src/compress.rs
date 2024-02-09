@@ -44,7 +44,6 @@ impl EncodingCompression for ALPEncoding {
             return None;
         }
 
-        info!("Compressing with ALP");
         Some(&(alp_compressor as Compressor))
     }
 }

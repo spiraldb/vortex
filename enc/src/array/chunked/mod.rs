@@ -11,7 +11,7 @@ use crate::array::{
 };
 use crate::compress::ArrayCompression;
 use crate::dtype::DType;
-use crate::error::EncResult;
+use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::stats::{Stats, StatsSet};
@@ -28,23 +28,41 @@ pub struct ChunkedArray {
 }
 
 impl ChunkedArray {
-    #[inline]
     pub fn new(chunks: Vec<ArrayRef>, dtype: DType) -> Self {
-        assert!(
-            chunks.iter().map(|chunk| chunk.dtype()).all_equal(),
-            "Chunks have differing dtypes"
-        );
-        let mut chunk_ends = Vec::<usize>::with_capacity(chunks.len());
-        for chunk in chunks.iter() {
-            chunk_ends.push(chunk_ends.last().unwrap_or(&0usize) + chunk.len());
-        }
+        Self::try_new(chunks, dtype).unwrap()
+    }
 
-        Self {
+    pub fn try_new(chunks: Vec<ArrayRef>, dtype: DType) -> EncResult<Self> {
+        chunks
+            .iter()
+            .map(|c| c.dtype().as_nullable())
+            .all_equal_value()
+            .map(|_| ())
+            .or_else(|mismatched| match mismatched {
+                None => Ok(()),
+                Some((fst, snd)) => Err(EncError::MismatchedTypes(fst, snd)),
+            })?;
+
+        let chunk_ends = chunks
+            .iter()
+            .scan(0usize, |acc, c| {
+                *acc += c.len();
+                Some(*acc)
+            })
+            .collect::<Vec<usize>>();
+
+        let dtype = if chunks.iter().any(|c| c.dtype().is_nullable()) && !dtype.is_nullable() {
+            dtype.as_nullable()
+        } else {
+            dtype
+        };
+
+        Ok(Self {
             chunks,
             chunk_ends,
             dtype,
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
+        })
     }
 
     #[inline]

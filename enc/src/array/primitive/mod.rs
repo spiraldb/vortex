@@ -38,19 +38,25 @@ pub struct PrimitiveArray {
 
 impl PrimitiveArray {
     pub fn new(ptype: PType, buffer: Buffer, validity: Option<ArrayRef>) -> Self {
-        check_validity_buffer(validity.as_ref());
+        Self::try_new(ptype, buffer, validity).unwrap()
+    }
+
+    pub fn try_new(ptype: PType, buffer: Buffer, validity: Option<ArrayRef>) -> EncResult<Self> {
+        let validity = validity.filter(|v| !v.is_empty());
+        check_validity_buffer(validity.as_ref())?;
         let dtype = if validity.is_some() {
             DType::from(ptype).as_nullable()
         } else {
             DType::from(ptype)
         };
-        Self {
+
+        Ok(Self {
             buffer,
             ptype,
             dtype,
             validity,
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
+        })
     }
 
     pub fn from_vec<T: NativePType>(values: Vec<T>) -> Self {

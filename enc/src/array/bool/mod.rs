@@ -30,12 +30,18 @@ pub struct BoolArray {
 
 impl BoolArray {
     pub fn new(buffer: BooleanBuffer, validity: Option<ArrayRef>) -> Self {
-        check_validity_buffer(validity.as_ref());
-        Self {
+        Self::try_new(buffer, validity).unwrap()
+    }
+
+    pub fn try_new(buffer: BooleanBuffer, validity: Option<ArrayRef>) -> EncResult<Self> {
+        let validity = validity.filter(|v| !v.is_empty());
+        check_validity_buffer(validity.as_ref())?;
+
+        Ok(Self {
             buffer,
             stats: Arc::new(RwLock::new(StatsSet::new())),
             validity,
-        }
+        })
     }
 
     fn is_valid(&self, index: usize) -> bool {
@@ -84,7 +90,7 @@ impl Array for BoolArray {
 
     #[inline]
     fn dtype(&self) -> &DType {
-        if self.validity.is_some() {
+        if self.validity().is_some() {
             &DType::Bool(Nullability::Nullable)
         } else {
             &DType::Bool(Nullability::NonNullable)

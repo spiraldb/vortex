@@ -1,14 +1,15 @@
+use std::any::Any;
+use std::sync::{Arc, RwLock};
+
 use enc::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
 };
 use enc::compress::{ArrayCompression, EncodingCompression};
-use enc::dtype::{DType, Nullability, Signedness};
+use enc::dtype::{DType, Signedness};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::scalar::Scalar;
 use enc::stats::{Stats, StatsSet};
-use std::any::Any;
-use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Clone)]
 pub struct DictArray {
@@ -23,10 +24,7 @@ impl DictArray {
     }
 
     pub fn try_new(codes: ArrayRef, dict: ArrayRef) -> EncResult<Self> {
-        if !matches!(
-            codes.dtype(),
-            DType::Int(_, Signedness::Unsigned, Nullability::NonNullable)
-        ) {
+        if !matches!(codes.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
             return Err(EncError::InvalidDType(codes.dtype().clone()));
         }
         Ok(Self {

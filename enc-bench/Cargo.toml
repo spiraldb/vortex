@@ -1,0 +1,29 @@
+[package]
+name = "enc-bench"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[dependencies]
+arrow-array = "50.0.0"
+enc = { path = "../enc" }
+enc-alp = { path = "../enc-alp" }
+enc-dict = { path = "../enc-dict" }
+enc-patched = { path = "../enc-patched" }
+enc-ree = { path = "../enc-ree" }
+enc-roaring = { path = "../enc-roaring" }
+enc-zigzag = { path = "../enc-zigzag" }
+itertools = "0.12.1"
+
+[dev-dependencies]
+parquet = "50.0.0"
+criterion = { version = "0.5.1", features = ["html_reports"] }
+reqwest = { version = "0.11.24", features = ["blocking"] }
+simplelog = { version = "0.12.1", features = ["paris"] }
+log = "0.4.20"
+
+[[bench]]
+name = "enc_compress"
+harness = false

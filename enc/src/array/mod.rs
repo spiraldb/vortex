@@ -94,13 +94,17 @@ pub fn check_index_bounds(array: &dyn Array, index: usize) -> EncResult<()> {
     Ok(())
 }
 
-pub(crate) fn check_validity_buffer(validity: Option<&ArrayRef>) {
-    assert!(
-        validity
-            .map(|v| matches!(v.dtype(), DType::Bool(Nullability::NonNullable)))
-            .unwrap_or(true),
-        "validity buffer has to be of non nullable boolean type"
-    );
+pub(crate) fn check_validity_buffer(validity: Option<&ArrayRef>) -> EncResult<()> {
+    if validity
+        .map(|v| !matches!(v.dtype(), DType::Bool(Nullability::NonNullable)))
+        .unwrap_or(false)
+    {
+        return Err(EncError::MismatchedTypes(
+            validity.unwrap().dtype().clone(),
+            DType::Bool(Nullability::NonNullable),
+        ));
+    }
+    Ok(())
 }
 
 impl<'a> AsRef<(dyn Array + 'a)> for dyn Array {

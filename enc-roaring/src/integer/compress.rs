@@ -1,5 +1,5 @@
 use croaring::Bitmap;
-use log::{info, warn};
+use log::info;
 use num_traits::NumCast;
 
 use enc::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
@@ -31,19 +31,19 @@ impl EncodingCompression for RoaringIntEncoding {
         config: &CompressConfig,
     ) -> Option<&'static Compressor> {
         if !config.is_enabled(self.id()) {
-            warn!("Skipping roaring int, not enabled");
+            info!("Skipping roaring int, not enabled");
             return None;
         }
 
         // Only support primitive enc arrays
         if array.encoding().id() != &PRIMITIVE_ENCODING {
-            warn!("Skipping roaring int, not primitive");
+            info!("Skipping roaring int, not primitive");
             return None;
         }
 
         // Only support non-nullable uint arrays
         if !matches!(array.dtype(), DType::Int(_, Unsigned, NonNullable)) {
-            warn!("Skipping roaring int, not non-nullable");
+            info!("Skipping roaring int, not non-nullable");
             return None;
         }
 
@@ -52,7 +52,7 @@ impl EncodingCompression for RoaringIntEncoding {
             .stats()
             .get_or_compute_or(false, &Stat::IsStrictSorted)
         {
-            warn!("Skipping roaring int, not strict sorted");
+            info!("Skipping roaring int, not strict sorted");
             return None;
         }
 

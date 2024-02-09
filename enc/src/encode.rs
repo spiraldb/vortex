@@ -27,9 +27,9 @@ use crate::array::struct_::StructArray;
 use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
+use crate::arrow::convert::TryIntoDType;
 use crate::ptype::PType;
 use crate::scalar::{NullScalar, Scalar};
-
 impl From<&Buffer> for ArrayRef {
     fn from(value: &Buffer) -> Self {
         PrimitiveArray::new(PType::U8, value.to_owned(), None).boxed()
@@ -61,7 +61,11 @@ impl<T: ArrowPrimitiveType> From<&ArrowPrimitiveArray<T>> for ArrayRef {
         if T::DATA_TYPE.is_numeric() {
             arr
         } else {
-            TypedArray::new(arr, T::DATA_TYPE.try_into().unwrap()).boxed()
+            TypedArray::new(
+                arr,
+                T::DATA_TYPE.try_into_dtype(value.is_nullable()).unwrap(),
+            )
+            .boxed()
         }
     }
 }
@@ -71,7 +75,7 @@ impl<T: ByteArrayType> From<&GenericByteArray<T>> for ArrayRef {
         VarBinArray::new(
             value.offsets().into(),
             value.values().into(),
-            T::DATA_TYPE.try_into().unwrap(),
+            T::DATA_TYPE.try_into_dtype(value.is_nullable()).unwrap(),
             value.nulls().map(|b| b.into()),
         )
         .boxed()
