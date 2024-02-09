@@ -9,7 +9,6 @@ use std::sync::{Arc, RwLock};
 use allocator_api2::alloc::Allocator;
 use arrow::array::{make_array, ArrayData, AsArray};
 use arrow::buffer::{Buffer, NullBuffer};
-use half::f16;
 
 use crate::array::bool::BoolArray;
 use crate::array::{

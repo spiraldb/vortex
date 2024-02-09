@@ -60,6 +60,14 @@ impl<T: NativePType> AsBytes for [T] {
     }
 }
 
+impl<T: NativePType> AsBytes for &[T] {
+    #[inline]
+    fn as_bytes(&self) -> &[u8] {
+        let raw_ptr = (*self).as_ptr() as *const u8;
+        unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of_val(*self)) }
+    }
+}
+
 impl<T: NativePType> AsBytes for T {
     #[inline]
     fn as_bytes(&self) -> &[u8] {

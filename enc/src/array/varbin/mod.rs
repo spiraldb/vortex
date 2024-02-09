@@ -1,6 +1,3 @@
-mod compress;
-mod stats;
-
 use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
@@ -8,18 +5,25 @@ use std::sync::{Arc, RwLock};
 use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::buffer::NullBuffer;
 use arrow::datatypes::UInt8Type;
+use num_traits::AsPrimitive;
 
+use crate::array::bool::BoolArray;
+use crate::array::primitive::PrimitiveArray;
 use crate::array::{
-    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef,
+    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
+    Encoding, EncodingId, EncodingRef,
 };
 use crate::arrow::CombineChunks;
 use crate::compress::ArrayCompression;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
-use crate::error::{EncError, EncResult};
+use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::match_each_native_ptype;
 use crate::scalar::{NullableScalar, Scalar};
 use crate::stats::{Stats, StatsSet};
+
+mod compress;
+mod stats;
 
 #[derive(Debug, Clone)]
 pub struct VarBinArray {
@@ -82,14 +86,75 @@ impl VarBinArray {
         self.validity.as_ref()
     }
 
-    pub fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
-        if index > self.len() {
-            return Err(EncError::OutOfBounds(index, 0, self.len()));
+    pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
+        let mut offsets: Vec<u64> = Vec::with_capacity(vec.len() + 1);
+        let mut values: Vec<u8> = Vec::new();
+        offsets.push(0);
+        for v in vec {
+            values.extend_from_slice(v.as_ref());
+            offsets.push(values.len() as u64);
         }
 
-        let offset_start: usize = self.offsets().scalar_at(index)?.try_into()?;
-        let offset_end: usize = self.offsets().scalar_at(index + 1)?.try_into()?;
-        let sliced = self.bytes().slice(offset_start, offset_end)?;
+        VarBinArray::new(
+            PrimitiveArray::from_vec(offsets).boxed(),
+            PrimitiveArray::from_vec(values).boxed(),
+            dtype,
+            None,
+        )
+    }
+
+    pub fn from_iter<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
+        iter: I,
+        dtype: DType,
+    ) -> Self {
+        let iter = iter.into_iter();
+        let (lower, _) = iter.size_hint();
+
+        let mut validity: Vec<bool> = Vec::with_capacity(lower);
+        let mut offsets: Vec<u64> = Vec::with_capacity(lower + 1);
+        offsets.push(0);
+        let mut bytes: Vec<u8> = Vec::new();
+        for i in iter {
+            if let Some(v) = i {
+                validity.push(true);
+                bytes.extend_from_slice(v.as_ref());
+                offsets.push(bytes.len() as u64);
+            } else {
+                validity.push(false);
+                offsets.push(bytes.len() as u64);
+            }
+        }
+
+        let offsets_ref = PrimitiveArray::from_vec(offsets).boxed();
+        let bytes_ref = PrimitiveArray::from_vec(bytes).boxed();
+        if validity.is_empty() {
+            VarBinArray::new(offsets_ref, bytes_ref, dtype, None)
+        } else {
+            VarBinArray::new(
+                offsets_ref,
+                bytes_ref,
+                dtype.as_nullable(),
+                Some(BoolArray::from(validity).boxed()),
+            )
+        }
+    }
+
+    pub fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+        check_index_bounds(self, index)?;
+
+        let (start, end): (usize, usize) =
+            if let Some(p) = self.offsets.as_any().downcast_ref::<PrimitiveArray>() {
+                match_each_native_ptype!(p.ptype(), |$P| {
+                    let buf = p.buffer().typed_data::<$P>();
+                    (buf[index].as_(), buf[index + 1].as_())
+                })
+            } else {
+                (
+                    self.offsets().scalar_at(index)?.try_into()?,
+                    self.offsets().scalar_at(index + 1)?.try_into()?,
+                )
+            };
+        let sliced = self.bytes().slice(start, end)?;
         let arr_ref = sliced.iter_arrow().combine_chunks();
         Ok(arr_ref.as_primitive::<UInt8Type>().values().to_vec())
     }
@@ -221,6 +286,54 @@ impl ArrayDisplay for VarBinArray {
         f.indent(|ind| ind.array(self.offsets()))?;
         f.writeln("bytes:")?;
         f.indent(|ind| ind.array(self.bytes()))
+    }
+}
+
+impl From<Vec<&[u8]>> for VarBinArray {
+    fn from(value: Vec<&[u8]>) -> Self {
+        VarBinArray::from_vec(value, DType::Binary(Nullability::NonNullable))
+    }
+}
+
+impl From<Vec<Vec<u8>>> for VarBinArray {
+    fn from(value: Vec<Vec<u8>>) -> Self {
+        VarBinArray::from_vec(value, DType::Binary(Nullability::NonNullable))
+    }
+}
+
+impl From<Vec<String>> for VarBinArray {
+    fn from(value: Vec<String>) -> Self {
+        VarBinArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
+    }
+}
+
+impl From<Vec<&str>> for VarBinArray {
+    fn from(value: Vec<&str>) -> Self {
+        VarBinArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
+    }
+}
+
+impl<'a> FromIterator<Option<&'a [u8]>> for VarBinArray {
+    fn from_iter<T: IntoIterator<Item = Option<&'a [u8]>>>(iter: T) -> Self {
+        VarBinArray::from_iter(iter, DType::Binary(Nullability::NonNullable))
+    }
+}
+
+impl FromIterator<Option<Vec<u8>>> for VarBinArray {
+    fn from_iter<T: IntoIterator<Item = Option<Vec<u8>>>>(iter: T) -> Self {
+        VarBinArray::from_iter(iter, DType::Binary(Nullability::NonNullable))
+    }
+}
+
+impl FromIterator<Option<String>> for VarBinArray {
+    fn from_iter<T: IntoIterator<Item = Option<String>>>(iter: T) -> Self {
+        VarBinArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
+    }
+}
+
+impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
+    fn from_iter<T: IntoIterator<Item = Option<&'a str>>>(iter: T) -> Self {
+        VarBinArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
     }
 }
 

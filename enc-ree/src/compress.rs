@@ -1,5 +1,3 @@
-use half::f16;
-
 use codecz::AlignedAllocator;
 
 use crate::{REEArray, REEEncoding};
@@ -10,7 +8,7 @@ use enc::compress::{
     ArrayCompression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
 };
 use enc::dtype::{DType, IntWidth, Nullability, Signedness};
-use enc::ptype::{match_each_native_ptype, PType};
+use enc::ptype::match_each_native_ptype;
 use enc::stats::Stat;
 
 impl ArrayCompression for REEArray {
