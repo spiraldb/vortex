@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 
 use arrow::datatypes::ArrowNativeType;
 use half::f16;
-use log::info;
 use num_traits::{NumCast, PrimInt};
 
 use crate::array::primitive::PrimitiveArray;
@@ -31,8 +30,7 @@ impl<'a, P> WrappedPrimitive<'a, P> {
 macro_rules! integer_stats {
     ($T:ty) => {
         impl StatsCompute for WrappedPrimitive<'_, $T> {
-            fn compute(&self, stat: &Stat) -> StatsSet {
-                info!("Computing integer stats for {:?}", stat);
+            fn compute(&self, _stat: &Stat) -> StatsSet {
                 integer_stats::<$T>(self.0)
             }
         }
@@ -51,8 +49,7 @@ integer_stats!(u64);
 macro_rules! float_stats {
     ($T:ty) => {
         impl StatsCompute for WrappedPrimitive<'_, $T> {
-            fn compute(&self, stat: &Stat) -> StatsSet {
-                info!("Computing float stats for {:?}", stat);
+            fn compute(&self, _stat: &Stat) -> StatsSet {
                 float_stats::<$T>(self.0)
             }
         }

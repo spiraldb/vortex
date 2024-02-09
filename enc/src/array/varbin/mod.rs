@@ -16,7 +16,7 @@ use crate::array::{
 use crate::arrow::CombineChunks;
 use crate::compress::ArrayCompression;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
-use crate::error::EncResult;
+use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_each_native_ptype;
 use crate::scalar::{NullableScalar, Scalar};
@@ -41,27 +41,46 @@ impl VarBinArray {
         dtype: DType,
         validity: Option<ArrayRef>,
     ) -> Self {
+        Self::try_new(offsets, bytes, dtype, validity).unwrap()
+    }
+
+    pub fn try_new(
+        offsets: ArrayRef,
+        bytes: ArrayRef,
+        dtype: DType,
+        validity: Option<ArrayRef>,
+    ) -> EncResult<Self> {
         if !matches!(offsets.dtype(), DType::Int(_, _, Nullability::NonNullable)) {
-            panic!("Unsupported type for offsets array");
+            return Err(EncError::UnsupportedOffsetsArrayDType(
+                offsets.dtype().clone(),
+            ));
         }
         if !matches!(
             bytes.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, _)
         ) {
-            panic!("Unsupported type for data array {:?}", bytes.dtype());
+            return Err(EncError::UnsupportedDataArrayDType(bytes.dtype().clone()));
         }
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
-            panic!("Unsupported dtype for varbin array");
+            return Err(EncError::InvalidDType(dtype));
         }
-        check_validity_buffer(validity.as_ref());
 
-        Self {
+        let validity = validity.filter(|v| !v.is_empty());
+        check_validity_buffer(validity.as_ref())?;
+
+        let dtype = if validity.is_some() && !dtype.is_nullable() {
+            dtype.as_nullable()
+        } else {
+            dtype
+        };
+
+        Ok(Self {
             offsets,
             bytes,
             dtype,
             validity,
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
+        })
     }
 
     fn is_valid(&self, index: usize) -> bool {

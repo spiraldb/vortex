@@ -45,7 +45,6 @@ impl EncodingCompression for DictEncoding {
             return None;
         };
 
-        info!("Compressing with Dict");
         Some(&(dict_compressor as Compressor))
     }
 }

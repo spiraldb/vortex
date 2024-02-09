@@ -1,5 +1,6 @@
 use arrow::datatypes::DataType;
 use arrow::pyarrow::FromPyArrow;
+use enc::arrow::convert::TryIntoDType;
 use pyo3::types::PyType;
 use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
 
@@ -32,8 +33,14 @@ impl PyDType {
     fn from_pyarrow(
         cls: &PyType,
         #[pyo3(from_py_with = "import_arrow_dtype")] arrow_dtype: DataType,
+        nullable: bool,
     ) -> PyResult<Py<Self>> {
-        PyDType::wrap(cls.py(), arrow_dtype.try_into().map_err(PyEncError::new)?)
+        PyDType::wrap(
+            cls.py(),
+            arrow_dtype
+                .try_into_dtype(nullable)
+                .map_err(PyEncError::new)?,
+        )
     }
 }
 

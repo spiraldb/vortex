@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::iter::zip;
 use std::sync::Arc;
 
@@ -52,7 +51,7 @@ impl TryFrom<SchemaRef> for DType {
             value
                 .fields()
                 .iter()
-                .map(|f| f.data_type().try_into())
+                .map(|f| f.data_type().try_into_dtype(f.is_nullable()))
                 .collect::<EncResult<Vec<DType>>>()?,
         ))
     }
@@ -124,10 +123,10 @@ impl TryIntoDType for &DataType {
             DataType::Struct(f) => Ok(Struct(
                 f.iter().map(|f| Arc::new(f.name().clone())).collect(),
                 f.iter()
-                    .map(|f| f.try_into())
+                    .map(|f| f.data_type().try_into_dtype(f.is_nullable()))
                     .collect::<EncResult<Vec<DType>>>()?,
             )),
-            DataType::Dictionary(_, v) => v.as_ref().try_into(),
+            DataType::Dictionary(_, v) => v.as_ref().try_into_dtype(is_nullable),
             DataType::Decimal128(p, s) | DataType::Decimal256(p, s) => {
                 Ok(Decimal(*p, *s, nullability))
             }
@@ -155,24 +154,6 @@ impl TryFrom<&FieldRef> for DType {
     }
 }
 
-impl TryFrom<DataType> for DType {
-    type Error = EncError;
-
-    fn try_from(value: DataType) -> Result<Self, Self::Error> {
-        (&value).try_into()
-    }
-}
-
-// TODO(ngates): deprecate this since we don't know about nullability
-impl TryFrom<&DataType> for DType {
-    type Error = EncError;
-
-    fn try_from(value: &DataType) -> EncResult<Self> {
-        // What should the default nullability be?
-        value.try_into_dtype(true)
-    }
-}
-
 impl From<&ArrowTimeUnit> for TimeUnit {
     fn from(value: &ArrowTimeUnit) -> Self {
         match value {
@@ -186,7 +167,7 @@ impl From<&ArrowTimeUnit> for TimeUnit {
 
 impl From<DType> for DataType {
     fn from(value: DType) -> Self {
-        value.borrow().into()
+        (&value).into()
     }
 }
 

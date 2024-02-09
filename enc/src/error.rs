@@ -56,7 +56,7 @@ pub enum EncError {
     InvalidEncoding(EncodingId),
     #[error("can't convert type {0} into {1}")]
     IncompatibleTypes(DType, DType),
-    #[error("Expected both arrays to have the same type, found {0} and {1}")]
+    #[error("Expected type {0} but found type {1}")]
     MismatchedTypes(DType, DType),
     #[error("unexpected arrow data type: {0:?}")]
     InvalidArrowDataType(arrow::datatypes::DataType),
@@ -64,8 +64,12 @@ pub enum EncError {
     PolarsError(PolarsError),
     #[error("arrow error: {0:?}")]
     ArrowError(ArrowError),
-    #[error("Malformed patch values, patch index had entry for index {0} but there was no corresponding patch value")]
+    #[error("malformed patch values, patch index had entry for index {0} but there was no corresponding patch value")]
     MalformedPatches(usize),
+    #[error("unsupported DType {0} for data array")]
+    UnsupportedDataArrayDType(DType),
+    #[error("unsupported DType {0} for offsets array")]
+    UnsupportedOffsetsArrayDType(DType),
 }
 
 pub type EncResult<T> = Result<T, EncError>;

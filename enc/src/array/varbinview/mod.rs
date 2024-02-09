@@ -16,7 +16,7 @@ use crate::array::{
 use crate::arrow::CombineChunks;
 use crate::compress::ArrayCompression;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
-use crate::error::EncResult;
+use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::{NullableScalar, Scalar};
 use crate::stats::{Stats, StatsSet};
@@ -92,29 +92,49 @@ impl VarBinViewArray {
         dtype: DType,
         validity: Option<ArrayRef>,
     ) -> Self {
+        Self::try_new(views, data, dtype, validity).unwrap()
+    }
+
+    pub fn try_new(
+        views: ArrayRef,
+        data: Vec<ArrayRef>,
+        dtype: DType,
+        validity: Option<ArrayRef>,
+    ) -> EncResult<Self> {
         if !matches!(
             views.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
-            panic!("Unsupported type for views array {:?}", views.dtype());
+            return Err(EncError::UnsupportedOffsetsArrayDType(
+                views.dtype().clone(),
+            ));
         }
-        data.iter().for_each(|d| {
-            if !matches!(d.dtype(), DType::Int(IntWidth::_8, Signedness::Unsigned, _)) {
-                panic!("Unsupported type for data array {:?}", d.dtype());
-            }
-        });
-        if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
-            panic!("Unsupported dtype for VarBinView array");
-        }
-        check_validity_buffer(validity.as_ref());
 
-        Self {
+        for d in data.iter() {
+            if !matches!(d.dtype(), DType::Int(IntWidth::_8, Signedness::Unsigned, _)) {
+                return Err(EncError::UnsupportedDataArrayDType(d.dtype().clone()));
+            }
+        }
+
+        if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
+            return Err(EncError::InvalidDType(dtype));
+        }
+        let validity = validity.filter(|v| !v.is_empty());
+        check_validity_buffer(validity.as_ref())?;
+
+        let dtype = if validity.is_some() && !dtype.is_nullable() {
+            dtype.as_nullable()
+        } else {
+            dtype
+        };
+
+        Ok(Self {
             views,
             data,
             dtype,
             validity,
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
+        })
     }
 
     fn is_valid(&self, index: usize) -> bool {

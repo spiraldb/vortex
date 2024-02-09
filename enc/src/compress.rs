@@ -39,7 +39,7 @@ impl Default for CompressConfig {
             block_size: 65536,
             sample_size: 64,
             sample_count: 10,
-            max_depth: 3,
+            max_depth: 4,
             ree_average_run_threshold: 2.0,
             encodings: HashSet::new(),
             disabled_encodings: HashSet::new(),
@@ -89,12 +89,6 @@ impl<'a> CompressCtx<'a> {
     }
 
     pub fn compress(&self, arr: &dyn Array) -> ArrayRef {
-        info!(
-            "Compressing array {:?} with depth {}",
-            arr.encoding(),
-            self.depth
-        );
-
         if arr.is_empty() {
             return dyn_clone::clone_box(arr);
         }
@@ -133,16 +127,6 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
         return compressor(array, ctx);
     }
 
-    info!(
-        "Compressing array {:?} at depth {} with encodings {:?}",
-        array.encoding(),
-        ctx.depth,
-        ENCODINGS
-            .iter()
-            .map(|e| e.id())
-            .collect::<Vec<&EncodingId>>(),
-    );
-
     let candidate_compressors: Vec<&Compressor> = ENCODINGS
         .iter()
         .filter_map(|encoding| encoding.compression())
@@ -150,6 +134,11 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
         .collect();
 
     if candidate_compressors.is_empty() {
+        info!(
+            "No compressors for array with dtype: {} and encoding: {}",
+            array.dtype(),
+            array.encoding().id(),
+        );
         return dyn_clone::clone_box(array);
     }
 
@@ -168,7 +157,17 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
             },
         );
 
-        return compressed_sample.unwrap_or_else(|| dyn_clone::clone_box(array));
+        return compressed_sample
+            .map(|s| {
+                info!(
+                    "Compressed small array with dtype: {} and encoding: {}, using: {}",
+                    array.dtype(),
+                    array.encoding().id(),
+                    s.encoding().id()
+                );
+                s
+            })
+            .unwrap_or_else(|| dyn_clone::clone_box(array));
     }
 
     // Otherwise, take the sample and try each compressor on it.
@@ -199,6 +198,15 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
         .into_iter()
         .filter(|(_, ratio)| *ratio < 1.0)
         .min_by(|(_, first_ratio), (_, second_ratio)| first_ratio.total_cmp(second_ratio))
-        .map(|(compressor, _)| compressor(array, ctx))
+        .map(|(compressor, _)| {
+            let c = compressor(array, ctx);
+            info!(
+                "Compressed array with dtype: {} and encoding: {} using: {}",
+                array.dtype(),
+                array.encoding().id(),
+                c.encoding().id()
+            );
+            c
+        })
         .unwrap_or_else(|| dyn_clone::clone_box(array))
 }
