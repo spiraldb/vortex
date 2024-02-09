@@ -1,12 +1,11 @@
 use arrow::buffer::BooleanBuffer;
-use half::f16;
 use itertools::Itertools;
 
 use crate::array::bool::{BoolArray, BOOL_ENCODING};
 use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use crate::array::{Array, ArrayRef};
 use crate::error::{EncError, EncResult};
-use crate::ptype::{match_each_native_ptype, NativePType, PType};
+use crate::ptype::{match_each_native_ptype, NativePType};
 
 pub fn as_contiguous(arrays: Vec<ArrayRef>) -> EncResult<ArrayRef> {
     if arrays.is_empty() {

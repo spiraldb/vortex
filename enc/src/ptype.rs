@@ -62,6 +62,8 @@ native_ptype!(f64, F64);
 macro_rules! match_each_native_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
+        use $crate::ptype::PType;
+        use half::f16;
         match $self {
             PType::I8 => __with__! { i8 },
             PType::I16 => __with__! { i16 },

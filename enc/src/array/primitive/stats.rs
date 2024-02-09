@@ -7,7 +7,7 @@ use log::info;
 use num_traits::{NumCast, PrimInt};
 
 use crate::array::primitive::PrimitiveArray;
-use crate::ptype::{match_each_native_ptype, PType};
+use crate::ptype::match_each_native_ptype;
 use crate::scalar::ListScalarVec;
 use crate::scalar::Scalar;
 use crate::stats::{Stat, StatsCompute, StatsSet};
