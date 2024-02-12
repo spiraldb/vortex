@@ -32,6 +32,7 @@ mod test {
     use log::{info, LevelFilter};
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+    use std::fs::create_dir_all;
     use std::fs::File;
     use std::path::Path;
 
@@ -41,6 +42,7 @@ mod test {
             return download_path;
         }
 
+        create_dir_all(download_path.parent().unwrap()).unwrap();
         let mut download_file = File::create(download_path).unwrap();
         reqwest::blocking::get(
             "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-11.parquet",
@@ -63,7 +65,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn compression_ratio() {
         enumerate_arrays();
         setup_logger();

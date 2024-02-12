@@ -1,6 +1,7 @@
 use enc::array::{EncodingRef, ENCODINGS};
 use linkme::distributed_slice;
 
+pub use compress::*;
 pub use dict::*;
 
 mod compress;
