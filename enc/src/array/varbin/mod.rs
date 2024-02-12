@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::buffer::NullBuffer;
 use arrow::datatypes::UInt8Type;
-use num_traits::AsPrimitive;
+use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
 
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
@@ -19,6 +19,7 @@ use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_each_native_ptype;
+use crate::ptype::NativePType;
 use crate::scalar::{NullableScalar, Scalar};
 use crate::stats::{Stats, StatsSet};
 
@@ -106,12 +107,25 @@ impl VarBinArray {
     }
 
     pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
-        let mut offsets: Vec<u64> = Vec::with_capacity(vec.len() + 1);
+        let size: usize = vec.iter().map(|v| v.as_ref().len()).sum();
+        if size < u32::MAX as usize {
+            Self::from_vec_sized::<u32, T>(vec, dtype)
+        } else {
+            Self::from_vec_sized::<u64, T>(vec, dtype)
+        }
+    }
+
+    fn from_vec_sized<K, T>(vec: Vec<T>, dtype: DType) -> Self
+    where
+        K: NativePType + FromPrimitive + Unsigned,
+        T: AsRef<[u8]>,
+    {
+        let mut offsets: Vec<K> = Vec::with_capacity(vec.len() + 1);
         let mut values: Vec<u8> = Vec::new();
-        offsets.push(0);
+        offsets.push(K::zero());
         for v in vec {
             values.extend_from_slice(v.as_ref());
-            offsets.push(values.len() as u64);
+            offsets.push(<K as FromPrimitive>::from_usize(values.len()).unwrap());
         }
 
         VarBinArray::new(
