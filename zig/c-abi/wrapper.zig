@@ -10,7 +10,7 @@ const c = @cImport({
 const abi = @import("abi");
 
 // aliases
-const Alignment: u29 = c.SPIRAL_ALIGNMENT;
+const OutputAlign: u29 = c.SPIRAL_ALIGNMENT;
 const AlpExponents = abi.AlpExponents;
 const ByteBuffer = abi.ByteBuffer;
 const ResultStatus = abi.ResultStatus;
@@ -18,8 +18,7 @@ const WrittenBuffer = abi.WrittenBuffer;
 const OneBufferResult = abi.OneBufferResult;
 const TwoBufferResult = abi.TwoBufferResult;
 const AlpExponentsResult = abi.AlpExponentsResult;
-const PackedIntsResult = abi.PackedIntsResult;
-const FforResult = abi.FforResult;
+const OneBufferNumExceptionsResult = abi.OneBufferNumExceptionsResult;
 
 const UnsignedIntegerTypes = [_]type{ u8, u16, u32, u64 };
 const SignedIntegerTypes = [_]type{ i8, i16, i32, i64 };
@@ -187,7 +186,7 @@ fn RunEndWrapper(comptime V: type, comptime E: type) type {
                 ));
             }
         }
-        const codec = encodings.RunEnd(V2, E, Alignment);
+        const codec = encodings.RunEnd(V2, E, OutputAlign);
 
         pub fn encode(elems: [*c]V, len: usize, out: [*c]c.TwoBufferResult_t) callconv(.C) void {
             // this verifies alignment and returns an error result if the buffer is not properly aligned
@@ -195,8 +194,8 @@ fn RunEndWrapper(comptime V: type, comptime E: type) type {
             const valuesBuf = zigOut.first.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, E, out);
             const runEndsBuf = zigOut.second.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, E, out);
 
-            const values: []align(Alignment) V2 = @alignCast(std.mem.bytesAsSlice(V2, valuesBuf.bytes()));
-            const runEnds: []align(Alignment) E = @alignCast(std.mem.bytesAsSlice(E, runEndsBuf.bytes()));
+            const values: []align(OutputAlign) V2 = @alignCast(std.mem.bytesAsSlice(V2, valuesBuf.bytes()));
+            const runEnds: []align(OutputAlign) E = @alignCast(std.mem.bytesAsSlice(E, runEndsBuf.bytes()));
             const elemsSlice = std.mem.bytesAsSlice(V2, std.mem.sliceAsBytes(elems[0..len]));
 
             if (codec.encode(elemsSlice, values, runEnds)) |numRuns| {
@@ -215,7 +214,7 @@ fn RunEndWrapper(comptime V: type, comptime E: type) type {
 
             const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
             const outBuf = zigOut.buf.buffer.checkAlignment() catch |err| return OneBufferResult.errOut(err, V, out);
-            const decoded: []align(Alignment) V2 = @alignCast(std.mem.bytesAsSlice(V2, outBuf.bytes()));
+            const decoded: []align(OutputAlign) V2 = @alignCast(std.mem.bytesAsSlice(V2, outBuf.bytes()));
 
             if (codec.decode(values, runEnds, decoded)) {
                 const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(V2, outBuf, decoded));
@@ -267,137 +266,26 @@ fn RunEndWrapper(comptime V: type, comptime E: type) type {
 }
 
 //
-// Fastlanes Packed Ints Encoding
+// Fastlanes Shared Functions
 //
-comptime {
-    for (UnsignedIntegerTypes) |V| {
-        const T = @bitSizeOf(V);
-        const wrapper = PackedIntsWrapper(T);
-        @export(wrapper.encode, std.builtin.ExportOptions{
-            .name = "codecz_flpi_encode_" ++ @typeName(V),
-            .linkage = .Strong,
-        });
-        @export(wrapper.decode, std.builtin.ExportOptions{
-            .name = "codecz_flpi_decode_" ++ @typeName(V),
-            .linkage = .Strong,
-        });
-        @export(wrapper.collectExceptions, std.builtin.ExportOptions{
-            .name = "codecz_flpi_collectExceptions_" ++ @typeName(V),
-            .linkage = .Strong,
-        });
-        wrapper.checkFnSignatures();
+fn fastLanesMaxPackedBitWidth(comptime T: u8) u8 {
+    if (T == 0) {
+        @compileError("Cannot pack 0 bits");
+    } else if (T <= 8) {
+        return T - 1;
+    } else {
+        // should make at least a 20% reduction
+        return @divFloor(T * 3 + 1, 4);
     }
 }
 
-fn PackedIntsWrapper(comptime T: u8) type {
-    return struct {
-        const Self = @This();
-        const V: type = std.meta.Int(.unsigned, T);
-        const minVal: ?V = null; // by definition, this is only non-null for FFoR
-
-        pub fn encode(elems: [*c]V, len: usize, num_bits: u8, out: [*c]c.PackedIntsResult_t) callconv(.C) void {
-            switch (num_bits) {
-                inline 1, 2, 4, 8, 16, 32 => |W| {
-                    if (T <= W) {
-                        PackedIntsResult.errOut(CodecError.InvalidInput, V, out);
-                        return;
-                    }
-
-                    const codec: type = encodings.PackedInts(T, W);
-                    const numBytes = codec.encodedSizeInBytes(len);
-                    const zigOut = PackedIntsResult.from(out.*) catch |err| return PackedIntsResult.errOut(err, V, out);
-                    const outBuf = zigOut.encoded.buffer.checkAlignment() catch |err| return PackedIntsResult.errOut(err, V, out);
-                    const encoded: []align(Alignment) u8 = @alignCast(std.mem.bytesAsSlice(u8, outBuf.bytes()));
-
-                    if (codec.encodeRaw(elems[0..len], minVal, encoded)) |num_exceptions| {
-                        const result = PackedIntsResult.ok(
-                            WrittenBuffer.initFromSlice(u8, outBuf, encoded[0..numBytes]),
-                            num_exceptions,
-                        );
-                        out.* = result.into();
-                    } else |err| {
-                        PackedIntsResult.errOut(err, V, out);
-                    }
-                },
-                else => PackedIntsResult.errOut(CodecError.InvalidInput, V, out),
-            }
-        }
-
-        pub fn decode(encoded_: [*c]c.ByteBuffer_t, elems_len: usize, num_bits: u8, out: [*c]c.OneBufferResult_t) callconv(.C) void {
-            switch (num_bits) {
-                inline 1, 2, 4, 8, 16, 32 => |W| {
-                    if (T <= W) {
-                        OneBufferResult.errOut(CodecError.InvalidInput, V, out);
-                        return;
-                    }
-
-                    const codec: type = encodings.PackedInts(T, W);
-                    const encoded = ByteBuffer.from(encoded_.*) catch |err| return OneBufferResult.errOut(err, V, out);
-                    const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
-                    const outBuf = zigOut.buf.buffer.checkAlignment() catch |err| return OneBufferResult.errOut(err, V, out);
-                    const decoded: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, outBuf.bytes()));
-                    if (codec.decodeRaw(encoded.bytes(), elems_len, minVal, decoded)) {
-                        const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(V, outBuf, decoded[0..elems_len]));
-                        out.* = result.into();
-                    } else |err| {
-                        OneBufferResult.errOut(err, V, out);
-                    }
-                },
-                else => OneBufferResult.errOut(CodecError.InvalidInput, V, out),
-            }
-        }
-
-        pub fn collectExceptions(elems: [*c]V, len: usize, num_bits: u8, num_exceptions: usize, out: [*c]c.TwoBufferResult_t) callconv(.C) void {
-            switch (num_bits) {
-                inline 1, 2, 4, 8, 16, 32 => |W| {
-                    if (T <= W) {
-                        TwoBufferResult.errOut(CodecError.InvalidInput, V, u1, out);
-                        return;
-                    }
-
-                    const codec: type = encodings.PackedInts(T, W);
-                    const zigOut = TwoBufferResult.from(out.*) catch |err| return TwoBufferResult.errOut(err, V, u1, out);
-                    const exceptionsBuf = zigOut.first.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
-                    var excPosBuf = zigOut.second.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
-                    excPosBuf.fillZeroes();
-
-                    const exceptions: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, exceptionsBuf.bytes()));
-                    var excPositions = excPosBuf.bits(len) catch |err| return TwoBufferResult.errOut(err, V, u1, out);
-                    if (codec.collectExceptions(elems[0..len], minVal, num_exceptions, exceptions, &excPositions)) {
-                        const first = WrittenBuffer.initFromSlice(V, exceptionsBuf, exceptions[0..num_exceptions]); // autofix
-                        const second = WrittenBuffer.initFromBitSlice(excPosBuf, excPositions, num_exceptions);
-                        const result = TwoBufferResult.ok(first, second);
-                        out.* = result.into();
-                    } else |err| {
-                        TwoBufferResult.errOut(err, V, u1, out);
-                    }
-                },
-                else => TwoBufferResult.errOut(CodecError.InvalidInput, V, u1, out),
-            }
-        }
-
-        pub fn checkFnSignatures() void {
-            if (T == 8) {
-                abi.checkFnSignature(Self.encode, c.codecz_flpi_encode_u8);
-                abi.checkFnSignature(Self.decode, c.codecz_flpi_decode_u8);
-                abi.checkFnSignature(Self.collectExceptions, c.codecz_flpi_collectExceptions_u8);
-            } else if (T == 16) {
-                abi.checkFnSignature(Self.encode, c.codecz_flpi_encode_u16);
-                abi.checkFnSignature(Self.decode, c.codecz_flpi_decode_u16);
-                abi.checkFnSignature(Self.collectExceptions, c.codecz_flpi_collectExceptions_u16);
-            } else if (T == 32) {
-                abi.checkFnSignature(Self.encode, c.codecz_flpi_encode_u32);
-                abi.checkFnSignature(Self.decode, c.codecz_flpi_decode_u32);
-                abi.checkFnSignature(Self.collectExceptions, c.codecz_flpi_collectExceptions_u32);
-            } else if (T == 64) {
-                abi.checkFnSignature(Self.encode, c.codecz_flpi_encode_u64);
-                abi.checkFnSignature(Self.decode, c.codecz_flpi_decode_u64);
-                abi.checkFnSignature(Self.collectExceptions, c.codecz_flpi_collectExceptions_u64);
-            } else {
-                @compileError(std.fmt.comptimePrint("Fastlanes Packed Ints: Unsupported type {s}", .{@typeName(V)}));
-            }
-        }
-    };
+test "max num bits to pack" {
+    try std.testing.expectEqual(fastLanesMaxPackedBitWidth(8), 7);
+    try std.testing.expectEqual(fastLanesMaxPackedBitWidth(9), 7);
+    try std.testing.expectEqual(fastLanesMaxPackedBitWidth(10), 8);
+    try std.testing.expectEqual(fastLanesMaxPackedBitWidth(16), 12);
+    try std.testing.expectEqual(fastLanesMaxPackedBitWidth(32), 24);
+    try std.testing.expectEqual(fastLanesMaxPackedBitWidth(64), 51);
 }
 
 //
@@ -408,6 +296,10 @@ comptime {
         const wrapper = FforWrapper(V);
         @export(wrapper.encodedSizeInBytes, std.builtin.ExportOptions{
             .name = "codecz_flbp_encodedSizeInBytes_" ++ @typeName(V),
+            .linkage = .Strong,
+        });
+        @export(wrapper.maxPackedBitWidth, std.builtin.ExportOptions{
+            .name = "codecz_flbp_maxPackedBitWidth_" ++ @typeName(V),
             .linkage = .Strong,
         });
         @export(wrapper.encode, std.builtin.ExportOptions{
@@ -427,6 +319,7 @@ comptime {
 }
 
 fn FforWrapper(comptime V: type) type {
+    const InputAlign: u29 = codecz.encodings.fastlanes.FLMinAlign;
     if (@typeInfo(V) != .Int) {
         @compileError("FFoR: Unsupported type " ++ @typeName(V));
     }
@@ -440,74 +333,65 @@ fn FforWrapper(comptime V: type) type {
     return struct {
         const Self = @This();
         const T = @bitSizeOf(V);
+        const maxW = fastLanesMaxPackedBitWidth(T);
 
         pub fn encodedSizeInBytes(len: usize, num_bits: u8) callconv(.C) usize {
             switch (num_bits) {
-                inline 1, 2, 4, 8, 16, 32 => |W| {
-                    if (T <= W) {
-                        return 0;
-                    } else {
-                        const codec: type = encodings.FFOR(V, W);
-                        return codec.encodedSizeInBytes(len);
-                    }
+                inline 1...maxW => |W| {
+                    const codec: type = encodings.FFOR(V, W);
+                    return codec.encodedSizeInBytes(len);
                 },
                 else => return 0,
             }
         }
 
-        pub fn encode(elems: [*c]V, len: usize, num_bits: u8, min_val: i64, out: [*c]c.FforResult_t) callconv(.C) void {
-            if (min_val > std.math.maxInt(V) or min_val < std.math.minInt(V)) {
-                FforResult.errOut(CodecError.InvalidInput, V, out);
-                return;
+        pub fn maxPackedBitWidth() callconv(.C) u8 {
+            return maxW;
+        }
+
+        pub fn encode(elems_: [*c]align(InputAlign) V, len: usize, num_bits: u8, min_val: V, out: [*c]c.OneBufferNumExceptionsResult_t) callconv(.C) void {
+            if (!std.mem.isAligned(@intFromPtr(elems_), InputAlign)) {
+                OneBufferNumExceptionsResult.errOut(CodecError.IncorrectAlignment, V, out);
             }
 
             switch (num_bits) {
-                inline 1, 2, 4, 8, 16, 32 => |W| {
-                    if (T <= W) {
-                        FforResult.errOut(CodecError.InvalidInput, V, out);
-                        return;
-                    }
-
+                inline 1...maxW => |W| {
                     const codec: type = encodings.FFOR(V, W);
                     const numBytes = codec.encodedSizeInBytes(len);
-                    const zigOut = FforResult.from(out.*) catch |err| return FforResult.errOut(err, V, out);
-                    const outBuf = zigOut.encoded.buffer.checkAlignment() catch |err| return FforResult.errOut(err, V, out);
+                    const zigOut = OneBufferNumExceptionsResult.from(out.*) catch |err| return OneBufferNumExceptionsResult.errOut(err, V, out);
+                    const outBuf = zigOut.encoded.buffer.checkAlignment() catch |err| return OneBufferNumExceptionsResult.errOut(err, V, out);
 
-                    const encoded: []align(Alignment) u8 = @alignCast(std.mem.bytesAsSlice(u8, outBuf.bytes()));
-                    if (codec.encodeRaw(elems[0..len], @intCast(min_val), encoded)) |num_exceptions| {
-                        const result = FforResult.ok(
+                    const elems: []align(InputAlign) const V = @alignCast(elems_[0..len]);
+                    const encoded: []align(OutputAlign) u8 = @alignCast(std.mem.bytesAsSlice(u8, outBuf.bytes()));
+                    if (codec.encodeRaw(elems, @intCast(min_val), encoded)) |num_exceptions| {
+                        const result = OneBufferNumExceptionsResult.ok(
                             WrittenBuffer.initFromSlice(u8, outBuf, encoded[0..numBytes]),
-                            min_val,
                             num_exceptions,
                         );
                         out.* = result.into();
                     } else |err| {
-                        FforResult.errOut(err, V, out);
+                        OneBufferNumExceptionsResult.errOut(err, V, out);
                     }
                 },
-                else => FforResult.errOut(CodecError.InvalidInput, V, out),
+                else => OneBufferNumExceptionsResult.errOut(CodecError.InvalidEncodingParameter, V, out),
             }
         }
 
-        pub fn decode(encoded_: [*c]c.ByteBuffer_t, elems_len: usize, num_bits: u8, min_val: i64, out: [*c]c.OneBufferResult_t) callconv(.C) void {
-            if (min_val > std.math.maxInt(V) or min_val < std.math.minInt(V)) {
-                OneBufferResult.errOut(CodecError.InvalidInput, V, out);
-                return;
-            }
-
+        pub fn decode(
+            encoded_: [*c]c.ByteBuffer_t,
+            elems_len: usize,
+            num_bits: u8,
+            min_val: V,
+            out: [*c]c.OneBufferResult_t,
+        ) callconv(.C) void {
             switch (num_bits) {
-                inline 1, 2, 4, 8, 16, 32 => |W| {
-                    if (T <= W) {
-                        OneBufferResult.errOut(CodecError.InvalidInput, V, out);
-                        return;
-                    }
-
+                inline 1...maxW => |W| {
                     const codec: type = encodings.FFOR(V, W);
                     const encoded = ByteBuffer.from(encoded_.*) catch |err| return OneBufferResult.errOut(err, V, out);
                     const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
                     const outBuf = zigOut.buf.buffer.checkAlignment() catch |err| return OneBufferResult.errOut(err, V, out);
 
-                    const decoded: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, outBuf.bytes()));
+                    const decoded: []align(OutputAlign) V = @alignCast(std.mem.bytesAsSlice(V, outBuf.bytes()));
                     if (codec.decodeRaw(encoded.bytes(), elems_len, @intCast(min_val), decoded)) {
                         const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(V, outBuf, decoded[0..elems_len]));
                         out.* = result.into();
@@ -515,30 +399,20 @@ fn FforWrapper(comptime V: type) type {
                         OneBufferResult.errOut(err, V, out);
                     }
                 },
-                else => OneBufferResult.errOut(CodecError.InvalidInput, V, out),
+                else => OneBufferResult.errOut(CodecError.InvalidEncodingParameter, V, out),
             }
         }
 
-        pub fn collectExceptions(elems: [*c]V, len: usize, num_bits: u8, min_val: i64, num_exceptions: usize, out: [*c]c.TwoBufferResult_t) callconv(.C) void {
-            if (min_val > std.math.maxInt(V) or min_val < std.math.minInt(V)) {
-                TwoBufferResult.errOut(CodecError.InvalidInput, V, u1, out);
-                return;
-            }
-
+        pub fn collectExceptions(elems: [*c]V, len: usize, num_bits: u8, min_val: V, num_exceptions: usize, out: [*c]c.TwoBufferResult_t) callconv(.C) void {
             switch (num_bits) {
-                inline 1, 2, 4, 8, 16, 32 => |W| {
-                    if (T <= W) {
-                        TwoBufferResult.errOut(CodecError.InvalidInput, V, u1, out);
-                        return;
-                    }
-
+                inline 1...maxW => |W| {
                     const codec: type = encodings.FFOR(V, W);
                     const zigOut = TwoBufferResult.from(out.*) catch |err| return TwoBufferResult.errOut(err, V, u1, out);
                     const exceptionsBuf = zigOut.first.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
                     var excPosBuf = zigOut.second.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, V, u1, out);
                     excPosBuf.fillZeroes();
 
-                    const exceptions: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, exceptionsBuf.bytes()));
+                    const exceptions: []align(OutputAlign) V = @alignCast(std.mem.bytesAsSlice(V, exceptionsBuf.bytes()));
                     var excPositions = excPosBuf.bits(len) catch |err| return TwoBufferResult.errOut(err, V, u1, out);
                     if (codec.collectExceptions(elems[0..len], @intCast(min_val), num_exceptions, exceptions, &excPositions)) {
                         const first = WrittenBuffer.initFromSlice(V, exceptionsBuf, exceptions[0..num_exceptions]); // autofix
@@ -549,7 +423,7 @@ fn FforWrapper(comptime V: type) type {
                         TwoBufferResult.errOut(err, V, u1, out);
                     }
                 },
-                else => TwoBufferResult.errOut(CodecError.InvalidInput, V, u1, out),
+                else => TwoBufferResult.errOut(CodecError.InvalidEncodingParameter, V, u1, out),
             }
         }
 
@@ -651,7 +525,7 @@ fn ALPWrapper(comptime F: type) type {
             var excPosBuf = zigOut.second.buffer.checkAlignment() catch |err| return TwoBufferResult.errOut(err, codec.EncInt, u1, out);
             excPosBuf.fillZeroes();
 
-            const values: []align(Alignment) codec.EncInt = @alignCast(std.mem.bytesAsSlice(codec.EncInt, encBuf.bytes()));
+            const values: []align(OutputAlign) codec.EncInt = @alignCast(std.mem.bytesAsSlice(codec.EncInt, encBuf.bytes()));
             var excPositions = excPosBuf.bits(elems_len) catch |err| return TwoBufferResult.errOut(err, codec.EncInt, u1, out);
 
             if (codec.encodeRaw(elems[0..elems_len], exp, values, &excPositions)) |numExceptions| {
@@ -667,7 +541,7 @@ fn ALPWrapper(comptime F: type) type {
         pub fn decode(input: [*c]codec.EncInt, len: usize, exp_: [*c]c.AlpExponents_t, out: [*c]c.OneBufferResult_t) callconv(.C) void {
             const exp: AlpExponents = AlpExponents.from(exp_.*);
             const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, F, out);
-            const outSlice: []align(Alignment) F = @alignCast(std.mem.bytesAsSlice(F, zigOut.buf.buffer.bytes()));
+            const outSlice: []align(OutputAlign) F = @alignCast(std.mem.bytesAsSlice(F, zigOut.buf.buffer.bytes()));
             if (codec.decodeRaw(input[0..len], exp, outSlice)) {
                 const buf = WrittenBuffer.initFromSlice(F, zigOut.buf.buffer, outSlice[0..len]);
                 const result = OneBufferResult.ok(buf);
@@ -720,7 +594,7 @@ fn ZigZagWrapper(comptime V: type) type {
         pub fn encode(elems: [*c]V, len: usize, out: [*c]c.OneBufferResult_t) callconv(.C) void {
             const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
             const encodedBuf = zigOut.buf.buffer.checkAlignment() catch |err| return OneBufferResult.errOut(err, V, out);
-            const encoded: []align(Alignment) U = @alignCast(std.mem.bytesAsSlice(U, encodedBuf.bytes()));
+            const encoded: []align(OutputAlign) U = @alignCast(std.mem.bytesAsSlice(U, encodedBuf.bytes()));
             if (codec.encodeRaw(elems[0..len], encoded)) {
                 const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(U, encodedBuf, encoded[0..len]));
                 out.* = result.into();
@@ -732,7 +606,7 @@ fn ZigZagWrapper(comptime V: type) type {
         pub fn decode(encoded: [*c]U, len: usize, out: [*c]c.OneBufferResult_t) callconv(.C) void {
             const zigOut = OneBufferResult.from(out.*) catch |err| return OneBufferResult.errOut(err, V, out);
             const outBuf = zigOut.buf.buffer.checkAlignment() catch |err| return OneBufferResult.errOut(err, V, out);
-            const decoded: []align(Alignment) V = @alignCast(std.mem.bytesAsSlice(V, outBuf.bytes()));
+            const decoded: []align(OutputAlign) V = @alignCast(std.mem.bytesAsSlice(V, outBuf.bytes()));
             if (codec.decodeRaw(encoded[0..len], decoded)) {
                 const result = OneBufferResult.ok(WrittenBuffer.initFromSlice(V, outBuf, decoded[0..len]));
                 out.* = result.into();
@@ -759,8 +633,4 @@ fn ZigZagWrapper(comptime V: type) type {
             }
         }
     };
-}
-
-test "refAllDecls" {
-    std.testing.refAllDeclsRecursive(@This());
 }

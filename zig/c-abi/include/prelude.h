@@ -9,6 +9,10 @@
 #define SPIRAL_ALIGNMENT 128
 #endif // SPIRAL_ALIGNMENT
 
+#ifndef FL_MIN_ALIGNMENT
+#define FL_MIN_ALIGNMENT 64
+#endif // FL_MIN_ALIGNMENT
+
 #if defined(__cplusplus)
 extern "C" {
 #endif

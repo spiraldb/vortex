@@ -29,3 +29,4 @@ allocator-api2 = "0.2.16"
 humansize = "2.1.3"
 linkme = "0.3.22"
 rayon = "1.8.1"
+codecz = { path = "../codecz" }

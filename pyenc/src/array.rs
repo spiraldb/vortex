@@ -12,8 +12,8 @@ use enc::array::varbin::VarBinArray;
 use enc::array::varbinview::VarBinViewArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
 use enc_alp::{ALPArray, ALP_ENCODING};
-use enc_dict::DictArray;
-use enc_dict::DICT_ENCODING;
+use enc_dict::{DictArray, DICT_ENCODING};
+use enc_ffor::{FFORArray, FFOR_ENCODING};
 use enc_patched::{PatchedArray, PATCHED_ENCODING};
 use enc_ree::{REEArray, REE_ENCODING};
 use enc_roaring::{RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING};
@@ -61,16 +61,12 @@ pyarray!(VarBinArray, "VarBinArray");
 pyarray!(VarBinViewArray, "VarBinViewArray");
 
 pyarray!(ALPArray, "ALPArray");
-
 pyarray!(DictArray, "DictArray");
-
+pyarray!(FFORArray, "FFORArray");
 pyarray!(PatchedArray, "PatchedArray");
-
 pyarray!(REEArray, "REEArray");
-
 pyarray!(RoaringBoolArray, "RoaringBoolArray");
 pyarray!(RoaringIntArray, "RoaringIntArray");
-
 pyarray!(ZigZagArray, "ZigZagArray");
 
 impl PyArray {
@@ -119,6 +115,10 @@ impl PyArray {
                 }
                 DICT_ENCODING => {
                     PyDictArray::wrap(py, inner.into_any().downcast::<DictArray>().unwrap())?
+                        .extract(py)
+                }
+                FFOR_ENCODING => {
+                    PyFFORArray::wrap(py, inner.into_any().downcast::<FFORArray>().unwrap())?
                         .extract(py)
                 }
                 PATCHED_ENCODING => {

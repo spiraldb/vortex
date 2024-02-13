@@ -1,0 +1,16 @@
+[package]
+name = "enc-ffor"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[dependencies]
+arrow = { version = "50.0.0" }
+enc = { "path" = "../enc" }
+enc-patched = { "path" = "../enc-patched" }
+linkme = "0.3.22"
+itertools = "0.12.1"
+codecz = { path = "../codecz" }
+log = { version = "0.4.20", features = [] }

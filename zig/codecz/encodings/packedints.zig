@@ -3,7 +3,8 @@ const Allocator = std.mem.Allocator;
 const codecmath = @import("../codecmath.zig");
 const simd_math = @import("../simd_math.zig");
 const fastlanes = @import("fastlanes.zig");
-const Alignment = fastlanes.Alignment;
+const InputAlign = fastlanes.FLMinAlign;
+const OutputAlign = abi.Alignment;
 const FLVec = fastlanes.FLVec;
 const abi = @import("abi");
 const CodecError = abi.CodecError;
@@ -38,12 +39,12 @@ fn EncodedImpl(comptime V: type) type {
         const Self = @This();
 
         allocator: Allocator,
-        bytes: []align(Alignment) const u8,
+        bytes: []align(OutputAlign) const u8,
         elems_len: usize,
         min_val: ?V,
         num_exceptions: usize = 0,
 
-        exceptions: ?[]align(Alignment) const V = null,
+        exceptions: ?[]align(OutputAlign) const V = null,
         exception_indices: ?std.bit_set.DynamicBitSetUnmanaged = null,
 
         pub fn deinit(self: *Self) void {
@@ -72,7 +73,7 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
         pub const P = @Type(.{ .Int = .{ .signedness = .unsigned, .bits = W } });
         pub const Encoded = EncodedImpl(V);
 
-        const vlen = fastlanes.vecLen(V);
+        const vlen = fastlanes.fastLanesVecLen(V);
         const BitVec = @Vector(vlen, u1);
         const TminusW = @as(@Vector(vlen, @TypeOf(T)), @splat(T - W));
         const elemsPerTranche = fastlanes.FLWidth;
@@ -86,8 +87,8 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
             return (ntranches * bytesPerTranche) + remainderBytes;
         }
 
-        pub fn encode(elems: []const V, allocator: Allocator) CodecError!Encoded {
-            const out = try allocator.alignedAlloc(u8, Alignment, encodedSizeInBytes(elems.len));
+        pub fn encode(elems: []align(InputAlign) const V, allocator: Allocator) CodecError!Encoded {
+            const out = try allocator.alignedAlloc(u8, OutputAlign, encodedSizeInBytes(elems.len));
             errdefer allocator.free(out);
 
             // when calling encodeRaw over FFI, we'll generally have this as a precomputed stat
@@ -111,7 +112,7 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
                 errdefer excPositionsBitset.deinit(allocator);
                 var excPositions = patch.toPackedSlice(excPositionsBitset); // a view on the bitset
 
-                const exceptions = try allocator.alignedAlloc(V, Alignment, encoded.num_exceptions);
+                var exceptions = try allocator.alignedAlloc(V, OutputAlign, encoded.num_exceptions + 1);
                 errdefer allocator.free(exceptions);
 
                 try collectExceptions(
@@ -121,16 +122,19 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
                     exceptions,
                     &excPositions,
                 );
+                if (!allocator.resize(exceptions, numExceptions)) {
+                    exceptions = try allocator.realloc(exceptions, numExceptions);
+                }
                 encoded.exception_indices = excPositionsBitset;
-                encoded.exceptions = exceptions;
+                encoded.exceptions = exceptions[0..numExceptions];
             }
             return encoded;
         }
 
         pub fn encodeRaw(
-            elems: []const V,
+            elems: []align(InputAlign) const V,
             minVal: ?V,
-            encoded: []align(Alignment) u8,
+            encoded: []align(OutputAlign) u8,
         ) CodecError!usize {
             if (encoded.len < encodedSizeInBytes(elems.len)) {
                 std.debug.print("PackedIntsImpl.encodeRaw: out.len = {}, elems.len = {}\n", .{ encoded.len, elems.len });
@@ -230,8 +234,8 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
 
         pub usingnamespace ScatterPatches;
 
-        pub fn decode(encoded: Encoded, allocator: Allocator) CodecError![]align(Alignment) V {
-            const decoded = try allocator.alignedAlloc(V, Alignment, encoded.elems_len);
+        pub fn decode(encoded: Encoded, allocator: Allocator) CodecError![]align(OutputAlign) V {
+            const decoded = try allocator.alignedAlloc(V, OutputAlign, encoded.elems_len);
             errdefer allocator.free(decoded);
 
             try decodeRaw(encoded.bytes, encoded.elems_len, encoded.min_val, decoded);
@@ -273,10 +277,10 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
         }
 
         pub fn decodeRaw(
-            encoded_bytes: []align(Alignment) const u8,
+            encoded_bytes: []align(InputAlign) const u8,
             elems_len: usize,
             minVal: ?V,
-            decoded: []align(Alignment) V,
+            decoded: []align(OutputAlign) V,
         ) CodecError!void {
             const ntranches = elems_len / elemsPerTranche;
 
@@ -381,7 +385,10 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
                     return CodecError.InvalidInput;
                 }
             }
-            if (exceptions.len < numExceptions or excPositions.len < elems.len) {
+
+            // for the vectorized collection to work, we need capacity for one "extra" value
+            // (that extra value will be thrown away, just need to avoid OOB panic)
+            if (exceptions.len < numExceptions + 1 or excPositions.len < elems.len) {
                 std.debug.print(
                     "PackedIntsImpl.collectExceptions: exceptions.len = {}, numExceptions = {}, excPositions.len = {}, elems.len = {}\n",
                     .{ exceptions.len, numExceptions, excPositions.len, elems.len },

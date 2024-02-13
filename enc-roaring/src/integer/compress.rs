@@ -1,5 +1,5 @@
 use croaring::Bitmap;
-use log::info;
+use log::debug;
 use num_traits::NumCast;
 
 use enc::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
@@ -31,19 +31,19 @@ impl EncodingCompression for RoaringIntEncoding {
         config: &CompressConfig,
     ) -> Option<&'static Compressor> {
         if !config.is_enabled(self.id()) {
-            info!("Skipping roaring int, not enabled");
+            debug!("Skipping roaring int, not enabled");
             return None;
         }
 
         // Only support primitive enc arrays
         if array.encoding().id() != &PRIMITIVE_ENCODING {
-            info!("Skipping roaring int, not primitive");
+            debug!("Skipping roaring int, not primitive");
             return None;
         }
 
         // Only support non-nullable uint arrays
         if !matches!(array.dtype(), DType::Int(_, Unsigned, NonNullable)) {
-            info!("Skipping roaring int, not non-nullable");
+            debug!("Skipping roaring int, not non-nullable");
             return None;
         }
 
@@ -52,13 +52,15 @@ impl EncodingCompression for RoaringIntEncoding {
             .stats()
             .get_or_compute_or(false, &Stat::IsStrictSorted)
         {
-            info!("Skipping roaring int, not strict sorted");
+            debug!("Skipping roaring int, not strict sorted");
             return None;
         }
 
-        // TODO(ngates): check that max is <= u32
+        if array.stats().get_or_compute_or(0usize, &Stat::Max) > u32::MAX as usize {
+            debug!("Skipping roaring int, max is larger than {}", u32::MAX);
+        }
 
-        info!("Using roaring int");
+        debug!("Using roaring int");
         Some(&(roaring_int_compressor as Compressor))
     }
 }

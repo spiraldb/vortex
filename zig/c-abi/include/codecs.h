@@ -26,11 +26,13 @@ typedef struct {
 enum ResultStatus_t {
     Ok,
     // errors
+    InvalidEncodingParameter,
     InvalidInput,
     IncorrectAlignment,
     EncodingFailed,
     OutputBufferTooSmall,
     OutOfMemory,
+    ShouldBeUnreachable,
     UnknownCodecError, // catch-all, should never happen
 };
 
@@ -107,7 +109,7 @@ void codecz_zz_decode_i64(uint64_t const *const ptr, uint64_t const len, OneBuff
 // Fastlanes bitpacking
 //
 
-// buffer sizing functions are shared between PackedInts and FFoR
+// sizing functions are shared between PackedInts and FFoR
 uint64_t codecz_flbp_encodedSizeInBytes_u8(uint64_t const len, uint8_t const num_bits);
 uint64_t codecz_flbp_encodedSizeInBytes_u16(uint64_t const len, uint8_t const num_bits);
 uint64_t codecz_flbp_encodedSizeInBytes_u32(uint64_t const len, uint8_t const num_bits);
@@ -116,58 +118,45 @@ uint64_t codecz_flbp_encodedSizeInBytes_i8(uint64_t const len, uint8_t const num
 uint64_t codecz_flbp_encodedSizeInBytes_i16(uint64_t const len, uint8_t const num_bits);
 uint64_t codecz_flbp_encodedSizeInBytes_i32(uint64_t const len, uint8_t const num_bits);
 uint64_t codecz_flbp_encodedSizeInBytes_i64(uint64_t const len, uint8_t const num_bits);
+uint8_t codecz_flbp_maxPackedBitWidth_u8();
+uint8_t codecz_flbp_maxPackedBitWidth_u16();
+uint8_t codecz_flbp_maxPackedBitWidth_u32();
+uint8_t codecz_flbp_maxPackedBitWidth_u64();
+uint8_t codecz_flbp_maxPackedBitWidth_i8();
+uint8_t codecz_flbp_maxPackedBitWidth_i16();
+uint8_t codecz_flbp_maxPackedBitWidth_i32();
+uint8_t codecz_flbp_maxPackedBitWidth_i64();
 
-// Fastlanes Packed Ints Encoding
 typedef struct {
     enum ResultStatus_t status;
     WrittenBuffer_t encoded;
     uint64_t num_exceptions;
-} PackedIntsResult_t;
-
-void codecz_flpi_encode_u8(uint8_t const *const ptr, uint64_t const len, uint8_t const num_bits, PackedIntsResult_t *const out);
-void codecz_flpi_encode_u16(uint16_t const *const ptr, uint64_t const len, uint8_t const num_bits, PackedIntsResult_t *const out);
-void codecz_flpi_encode_u32(uint32_t const *const ptr, uint64_t const len, uint8_t const num_bits, PackedIntsResult_t *const out);
-void codecz_flpi_encode_u64(uint64_t const *const ptr, uint64_t const len, uint8_t const num_bits, PackedIntsResult_t *const out);
-void codecz_flpi_collectExceptions_u8(uint8_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_flpi_collectExceptions_u16(uint16_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_flpi_collectExceptions_u32(uint32_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_flpi_collectExceptions_u64(uint64_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_flpi_decode_u8(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, OneBufferResult_t *const out);
-void codecz_flpi_decode_u16(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, OneBufferResult_t *const out);
-void codecz_flpi_decode_u32(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, OneBufferResult_t *const out);
-void codecz_flpi_decode_u64(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, OneBufferResult_t *const out);
+} OneBufferNumExceptionsResult_t;
 
 // Fastlanes Fused Frame of Reference (FFoR) Encoding
-typedef struct {
-    enum ResultStatus_t status;
-    WrittenBuffer_t encoded;
-    int64_t min_val;
-    uint64_t num_exceptions;
-} FforResult_t;
-
-void codecz_ffor_encode_u8(uint8_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, FforResult_t *const out);
-void codecz_ffor_encode_u16(uint16_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, FforResult_t *const out);
-void codecz_ffor_encode_u32(uint32_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, FforResult_t *const out);
-void codecz_ffor_encode_u64(uint64_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, FforResult_t *const out);
-void codecz_ffor_encode_i8(int8_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, FforResult_t *const out);
-void codecz_ffor_encode_i16(int16_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, FforResult_t *const out);
-void codecz_ffor_encode_i32(int32_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, FforResult_t *const out);
-void codecz_ffor_encode_i64(int64_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, FforResult_t *const out);
-void codecz_ffor_collectExceptions_u8(uint8_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_ffor_collectExceptions_u16(uint16_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_ffor_collectExceptions_u32(uint32_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_ffor_collectExceptions_u64(uint64_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_ffor_collectExceptions_i8(int8_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_ffor_collectExceptions_i16(int16_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_ffor_collectExceptions_i32(int32_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
+void codecz_ffor_encode_u8(uint8_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint8_t min_val, OneBufferNumExceptionsResult_t *const out);
+void codecz_ffor_encode_u16(uint16_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint16_t min_val, OneBufferNumExceptionsResult_t *const out);
+void codecz_ffor_encode_u32(uint32_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint32_t min_val, OneBufferNumExceptionsResult_t *const out);
+void codecz_ffor_encode_u64(uint64_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint64_t min_val, OneBufferNumExceptionsResult_t *const out);
+void codecz_ffor_encode_i8(int8_t const *const ptr, uint64_t const len, uint8_t const num_bits, int8_t min_val, OneBufferNumExceptionsResult_t *const out);
+void codecz_ffor_encode_i16(int16_t const *const ptr, uint64_t const len, uint8_t const num_bits, int16_t min_val, OneBufferNumExceptionsResult_t *const out);
+void codecz_ffor_encode_i32(int32_t const *const ptr, uint64_t const len, uint8_t const num_bits, int32_t min_val, OneBufferNumExceptionsResult_t *const out);
+void codecz_ffor_encode_i64(int64_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, OneBufferNumExceptionsResult_t *const out);
+void codecz_ffor_collectExceptions_u8(uint8_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint8_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
+void codecz_ffor_collectExceptions_u16(uint16_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint16_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
+void codecz_ffor_collectExceptions_u32(uint32_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint32_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
+void codecz_ffor_collectExceptions_u64(uint64_t const *const ptr, uint64_t const len, uint8_t const num_bits, uint64_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
+void codecz_ffor_collectExceptions_i8(int8_t const *const ptr, uint64_t const len, uint8_t const num_bits, int8_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
+void codecz_ffor_collectExceptions_i16(int16_t const *const ptr, uint64_t const len, uint8_t const num_bits, int16_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
+void codecz_ffor_collectExceptions_i32(int32_t const *const ptr, uint64_t const len, uint8_t const num_bits, int32_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
 void codecz_ffor_collectExceptions_i64(int64_t const *const ptr, uint64_t const len, uint8_t const num_bits, int64_t min_val, uint64_t num_exceptions, TwoBufferResult_t *const out);
-void codecz_ffor_decode_u8(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int64_t min_val, OneBufferResult_t *const out);
-void codecz_ffor_decode_u16(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int64_t min_val, OneBufferResult_t *const out);
-void codecz_ffor_decode_u32(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int64_t min_val, OneBufferResult_t *const out);
-void codecz_ffor_decode_u64(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int64_t min_val, OneBufferResult_t *const out);
-void codecz_ffor_decode_i8(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int64_t min_val, OneBufferResult_t *const out);
-void codecz_ffor_decode_i16(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int64_t min_val, OneBufferResult_t *const out);
-void codecz_ffor_decode_i32(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int64_t min_val, OneBufferResult_t *const out);
+void codecz_ffor_decode_u8(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, uint8_t min_val, OneBufferResult_t *const out);
+void codecz_ffor_decode_u16(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, uint16_t min_val, OneBufferResult_t *const out);
+void codecz_ffor_decode_u32(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, uint32_t min_val, OneBufferResult_t *const out);
+void codecz_ffor_decode_u64(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, uint64_t min_val, OneBufferResult_t *const out);
+void codecz_ffor_decode_i8(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int8_t min_val, OneBufferResult_t *const out);
+void codecz_ffor_decode_i16(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int16_t min_val, OneBufferResult_t *const out);
+void codecz_ffor_decode_i32(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int32_t min_val, OneBufferResult_t *const out);
 void codecz_ffor_decode_i64(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int64_t min_val, OneBufferResult_t *const out);
 
 #if defined(__cplusplus)

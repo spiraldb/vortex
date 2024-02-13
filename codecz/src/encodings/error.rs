@@ -4,6 +4,8 @@ use super::{Codec, CodecFunction};
 pub enum CodecError {
     #[error("Invalid input in {0}::{1}")]
     InvalidInput(Codec, CodecFunction),
+    #[error("Invalid encoding parameter in {0}::{1}")]
+    InvalidEncodingParameter(Codec, CodecFunction),
     #[error("Invalid alignment in {0}::{1}")]
     IncorrectAlignment(Codec, CodecFunction),
     #[error("Encoding failed in {0}::{1}")]
@@ -12,6 +14,8 @@ pub enum CodecError {
     OutputBufferTooSmall(Codec, CodecFunction),
     #[error("Out of memory in {0}::{1}")]
     OutOfMemory(Codec, CodecFunction),
+    #[error("Out of memory in {0}::{1}")]
+    ShouldBeUnreachable(Codec, CodecFunction),
     #[error("Unknown codec error in {0}::{1}")]
     Unknown(Codec, CodecFunction),
 }
@@ -24,6 +28,9 @@ impl CodecError {
     ) -> Option<CodecError> {
         match status {
             codecz_sys::ResultStatus_t_Ok => None,
+            codecz_sys::ResultStatus_t_InvalidEncodingParameter => {
+                Some(CodecError::InvalidEncodingParameter(codec, func))
+            }
             codecz_sys::ResultStatus_t_InvalidInput => Some(CodecError::InvalidInput(codec, func)),
             codecz_sys::ResultStatus_t_IncorrectAlignment => {
                 Some(CodecError::IncorrectAlignment(codec, func))
@@ -35,6 +42,9 @@ impl CodecError {
                 Some(CodecError::OutputBufferTooSmall(codec, func))
             }
             codecz_sys::ResultStatus_t_OutOfMemory => Some(CodecError::OutOfMemory(codec, func)),
+            codecz_sys::ResultStatus_t_ShouldBeUnreachable => {
+                Some(CodecError::ShouldBeUnreachable(codec, func))
+            }
             _ => Some(CodecError::Unknown(codec, func)),
         }
     }
