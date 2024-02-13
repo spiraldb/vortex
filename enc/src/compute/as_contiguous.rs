@@ -6,7 +6,7 @@ use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use crate::array::{Array, ArrayRef};
 use crate::error::{EncError, EncResult};
 use crate::ptype::{match_each_native_ptype, NativePType};
-use codecz::AlignedVec;
+use spiral_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 
 pub fn as_contiguous(arrays: Vec<ArrayRef>) -> EncResult<ArrayRef> {
     if arrays.is_empty() {
@@ -100,7 +100,7 @@ fn primitive_as_contiguous(arrays: Vec<&PrimitiveArray>) -> EncResult<PrimitiveA
 
 fn native_primitive_as_contiguous<P: NativePType>(arrays: Vec<&[P]>) -> AlignedVec<P> {
     let len = arrays.iter().map(|a| a.len()).sum();
-    let mut result = codecz::AlignedVec::with_capacity_in(len, codecz::ALIGNED_ALLOCATOR);
+    let mut result = AlignedVec::with_capacity_in(len, ALIGNED_ALLOCATOR);
     arrays.iter().for_each(|arr| result.extend_from_slice(arr));
     result
 }
