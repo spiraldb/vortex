@@ -202,6 +202,10 @@ impl DType {
             Map(k, v, _) => Map(k.clone(), v.clone(), Nullable),
         }
     }
+
+    pub fn eq_ignore_nullability(&self, other: &Self) -> bool {
+        self.as_nullable().eq(&other.as_nullable())
+    }
 }
 
 impl Display for DType {

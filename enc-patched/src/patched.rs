@@ -12,7 +12,7 @@ use enc::array::{
 use enc::arrow::CombineChunks;
 use enc::compress::ArrayCompression;
 use enc::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
-use enc::dtype::DType;
+use enc::dtype::{DType, Nullability, Signedness};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::scalar::Scalar;
@@ -40,14 +40,23 @@ impl PatchedArray {
         patch_indices: ArrayRef,
         patch_values: ArrayRef,
     ) -> EncResult<Self> {
-        if data.dtype() != patch_values.dtype() {
+        if !data.dtype().eq_ignore_nullability(patch_values.dtype()) {
             return Err(EncError::MismatchedTypes(
                 data.dtype().clone(),
                 patch_values.dtype().clone(),
             ));
         }
+        if !data.dtype().is_nullable() && patch_values.dtype().is_nullable() {
+            return Err(EncError::NullPatchValuesNotAllowed(data.dtype().clone()));
+        }
+        if !matches!(
+            patch_indices.dtype(),
+            DType::Int(_, Signedness::Unsigned, Nullability::NonNullable)
+        ) {
+            return Err(EncError::InvalidDType(patch_indices.dtype().clone()));
+        }
+
         let length = data.len();
-        // TODO(jjiang): check path_indices is an unsigned int array type
         Ok(Self {
             data,
             offset: 0,
@@ -320,7 +329,7 @@ mod test {
         // merged array: [0, 1, 100, 3, 4, 200, 6, 7, 300, 9]
         PatchedArray::new(
             vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9].into(),
-            PrimitiveArray::from_vec(vec![2, 5, 8]).boxed(),
+            PrimitiveArray::from_vec(vec![2u32, 5, 8]).boxed(),
             vec![100, 200, 300].into(),
         )
     }
@@ -338,7 +347,7 @@ mod test {
     #[test]
     pub fn iter_no_patch() {
         let data_vec = vec![0, 1, 2, 3, 4, 4, 6, 7, 8, 9];
-        let empty_patch_indices: PrimitiveArray = PrimitiveArray::from_vec(Vec::<i32>::new());
+        let empty_patch_indices: PrimitiveArray = PrimitiveArray::from_vec(Vec::<u32>::new());
         let empty_path_values: ArrayRef = Vec::<i32>::new().into();
         PatchedArray::try_new(
             data_vec.clone().into(),

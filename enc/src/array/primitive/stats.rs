@@ -67,7 +67,7 @@ where
     let typed_buf: &[T] = array.buffer().typed_data();
     // TODO(ngates): bail out on empty stats
 
-    let bitwidth = std::mem::size_of::<u64>() * 8;
+    let bitwidth = std::mem::size_of::<T>() * 8;
     let mut bit_widths: Vec<u64> = vec![0; bitwidth + 1];
     bit_widths[bitwidth - typed_buf[0].leading_zeros() as usize] += 1;
 
@@ -176,9 +176,8 @@ mod test {
         assert_eq!(
             bit_width_freq,
             vec![
-                0u64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0u64, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0
             ]
         );
         assert_eq!(run_count, 5);

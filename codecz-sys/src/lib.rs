@@ -36,6 +36,9 @@ where
     T: Sized,
 {
     fn from(slice: &[T]) -> Self {
+        if slice.as_ptr().align_offset(SPIRAL_ALIGNMENT as usize) != 0 {
+            panic!("slice must be aligned to {} bytes", SPIRAL_ALIGNMENT);
+        }
         Self {
             ptr: slice.as_ptr() as *mut u8,
             len: std::mem::size_of_val(slice) as u64,
@@ -134,6 +137,26 @@ impl Default for AlpExponents_t {
 impl Display for AlpExponents_t {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "exponent (e) = {}, factor (f) = {}", self.e, self.f)
+    }
+}
+
+impl OneBufferNumExceptionsResult_t {
+    pub fn new<T>(buf: &mut AlignedVec<T>) -> Self {
+        Self {
+            status: ResultStatus_t_UnknownCodecError,
+            encoded: WrittenBuffer_t::new(buf),
+            num_exceptions: 0,
+        }
+    }
+}
+
+impl Display for OneBufferNumExceptionsResult_t {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "OneBufferNumExceptionsResult: status = {:?}, encoded = [{}], num_exceptions = {}",
+            self.status, self.encoded, self.num_exceptions
+        )
     }
 }
 

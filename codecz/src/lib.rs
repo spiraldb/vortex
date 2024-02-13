@@ -1,6 +1,6 @@
 pub mod encodings;
-mod helpers;
 pub mod math;
+pub mod utils;
 
 pub use encodings::*;
 pub use math::*;

@@ -3,8 +3,8 @@ const Allocator = std.mem.Allocator;
 const codecmath = @import("../codecmath.zig");
 const sampling = @import("../sampling.zig");
 const fastlanes = @import("fastlanes.zig");
-const Alignment = fastlanes.Alignment;
 const abi = @import("abi");
+const Alignment = abi.Alignment;
 const CodecError = abi.CodecError;
 const patch = @import("../patch.zig");
 
@@ -91,7 +91,7 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             }
             if (exponents.e < exponents.f or exponents.e > codecmath.maxExponentToTry(F)) {
                 std.debug.print("ALP.encodeRaw: exponents.e = {}, exponents.f = {}, maxExponentToTry = {}\n", .{ exponents.e, exponents.f, codecmath.maxExponentToTry(F) });
-                return CodecError.InvalidInput;
+                return CodecError.InvalidEncodingParameter;
             }
 
             var numExceptions: u32 = 0;
@@ -243,6 +243,10 @@ pub fn AdaptiveLosslessFloatingPoint(comptime F: type) type {
             if (out.len < input.len) {
                 std.debug.print("ALP.decodeRaw: out.len = {}, input.len = {}\n", .{ out.len, input.len });
                 return CodecError.OutputBufferTooSmall;
+            }
+            if (exponents.e < exponents.f or exponents.e > codecmath.maxExponentToTry(F)) {
+                std.debug.print("ALP.encodeRaw: exponents.e = {}, exponents.f = {}, maxExponentToTry = {}\n", .{ exponents.e, exponents.f, codecmath.maxExponentToTry(F) });
+                return CodecError.InvalidEncodingParameter;
             }
 
             for (input, out) |enc, *o| {

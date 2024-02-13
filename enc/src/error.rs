@@ -5,6 +5,7 @@ use std::ops::Deref;
 
 use crate::array::EncodingId;
 use crate::dtype::DType;
+use crate::ptype::PType;
 
 #[derive(Debug, PartialEq)]
 pub struct ErrString(Cow<'static, str>);
@@ -50,8 +51,10 @@ pub enum EncError {
     LengthMismatch,
     #[error("{0}")]
     ComputeError(ErrString),
-    #[error("invalid dtype: {0}")]
+    #[error("invalid data type: {0}")]
     InvalidDType(DType),
+    #[error("invalid physical type: {0:?}")]
+    InvalidPType(PType),
     #[error("invalid array encoding: {0:?}")]
     InvalidEncoding(EncodingId),
     #[error("can't convert type {0} into {1}")]
@@ -66,6 +69,8 @@ pub enum EncError {
     ArrowError(ArrowError),
     #[error("malformed patch values, patch index had entry for index {0} but there was no corresponding patch value")]
     MalformedPatches(usize),
+    #[error("patch values may not be null for base dtype {0}")]
+    NullPatchValuesNotAllowed(DType),
     #[error("unsupported DType {0} for data array")]
     UnsupportedDataArrayDType(DType),
     #[error("unsupported DType {0} for offsets array")]

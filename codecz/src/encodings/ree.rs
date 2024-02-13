@@ -2,16 +2,7 @@ use super::{
     AlignedVec, Codec, CodecError, CodecFunction, OneBufferResult, TwoBufferResult, WrittenBuffer,
     ALIGNED_ALLOCATOR,
 };
-use codecz_sys::{
-    codecz_ree_decode_f16_u32, codecz_ree_decode_f32_u32, codecz_ree_decode_f64_u32,
-    codecz_ree_decode_i16_u32, codecz_ree_decode_i32_u32, codecz_ree_decode_i64_u32,
-    codecz_ree_decode_i8_u32, codecz_ree_decode_u16_u32, codecz_ree_decode_u32_u32,
-    codecz_ree_decode_u64_u32, codecz_ree_decode_u8_u32, codecz_ree_encode_f16_u32,
-    codecz_ree_encode_f32_u32, codecz_ree_encode_f64_u32, codecz_ree_encode_i16_u32,
-    codecz_ree_encode_i32_u32, codecz_ree_encode_i64_u32, codecz_ree_encode_i8_u32,
-    codecz_ree_encode_u16_u32, codecz_ree_encode_u32_u32, codecz_ree_encode_u64_u32,
-    codecz_ree_encode_u8_u32,
-};
+use codecz_sys::*;
 use half::f16;
 
 pub fn encode<T: SupportsREE>(elems: &[T]) -> Result<(AlignedVec<T>, AlignedVec<u32>), CodecError> {

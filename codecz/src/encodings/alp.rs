@@ -2,7 +2,6 @@ use super::{
     AlignedVec, Codec, CodecError, CodecFunction, OneBufferResult, TwoBufferResult, WrittenBuffer,
     ALIGNED_ALLOCATOR,
 };
-use crate::helpers;
 use arrow_buffer::BooleanBuffer;
 use codecz_sys::{
     codecz_alp_decode_f32, codecz_alp_decode_f64, codecz_alp_encode_f32, codecz_alp_encode_f64,
@@ -18,6 +17,22 @@ pub struct ALPEncoded<EncInt> {
     pub exponents: ALPExponents,
     pub exceptions_idx: BooleanBuffer,
     pub num_exceptions: usize,
+}
+
+impl<EncInt> ALPEncoded<EncInt> {
+    pub fn new(
+        values: AlignedVec<EncInt>,
+        exponents: ALPExponents,
+        exceptions_idx: BooleanBuffer,
+        num_exceptions: usize,
+    ) -> Self {
+        Self {
+            values,
+            exponents,
+            exceptions_idx,
+            num_exceptions,
+        }
+    }
 }
 
 pub fn encode<T: SupportsALP>(elems: &[T]) -> Result<ALPEncoded<T::EncInt>, CodecError> {
@@ -62,14 +77,14 @@ pub fn encode_with<T: SupportsALP>(
         values.set_len(elems.len());
         exceptions_idx.set_len(bitset_size_in_bytes);
     }
-    let exceptions_idx = helpers::into_boolean_buffer(exceptions_idx, elems.len());
+    let exceptions_idx = crate::utils::into_boolean_buffer(exceptions_idx, elems.len());
 
-    Ok(ALPEncoded {
+    Ok(ALPEncoded::new(
         values,
         exponents,
         exceptions_idx,
-        num_exceptions: exceptions_idx_buf.numElements as usize,
-    })
+        exceptions_idx_buf.numElements as usize,
+    ))
 }
 
 pub fn decode<T: SupportsALP>(
@@ -207,7 +222,7 @@ mod test {
         assert!(ALIGNED_ALLOCATOR.is_aligned_to(encoded.values.as_ptr()));
         assert_eq!(encoded.exponents.e - encoded.exponents.f, 4);
         assert_eq!(
-            encoded.values.as_slice(),
+            encoded.values,
             vec![
                 10000i64, 11000, 27300, 31416, 45670, 424247, -10000, -11000, -27300, -31416,
                 -45670, -424247
@@ -218,7 +233,7 @@ mod test {
         let exceptions_idx: Vec<usize> = encoded.exceptions_idx.set_indices().collect();
         assert_eq!(exceptions_idx, vec![3_usize, 9]);
 
-        let mut decoded = decode::<f64>(&encoded.values, encoded.exponents).unwrap();
+        let mut decoded = decode::<f64>(encoded.values.as_slice(), encoded.exponents).unwrap();
         // manually patch
         for idx in exceptions_idx.iter() {
             decoded[*idx] = vec[*idx];
