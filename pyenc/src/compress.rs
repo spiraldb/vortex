@@ -33,6 +33,6 @@ pub fn compress(
 ) -> PyResult<Py<PyArray>> {
     let compress_opts = opts.map(|o| o.inner).unwrap_or_default();
     let ctx = CompressCtx::new(&compress_opts);
-    let compressed = ctx.compress(arr.unwrap());
+    let compressed = py.allow_threads(|| ctx.compress(arr.unwrap()));
     PyArray::wrap(py, compressed)
 }
