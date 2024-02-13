@@ -1,6 +1,7 @@
 use enc::array::Encoding;
 use enc_alp::ALPEncoding;
 use enc_dict::DictEncoding;
+use enc_ffor::FFoREncoding;
 use enc_patched::PatchedEncoding;
 use enc_ree::REEEncoding;
 use enc_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
@@ -9,13 +10,14 @@ use itertools::Itertools;
 
 pub fn enumerate_arrays() {
     let encodings: Vec<&dyn Encoding> = vec![
-        &RoaringBoolEncoding,
-        &RoaringIntEncoding,
         &ALPEncoding,
         &DictEncoding,
-        &ZigZagEncoding,
-        &REEEncoding,
+        &FFoREncoding,
         &PatchedEncoding,
+        &REEEncoding,
+        &RoaringBoolEncoding,
+        &RoaringIntEncoding,
+        &ZigZagEncoding,
     ];
     println!("{}", encodings.iter().map(|e| e.id()).format(", "));
 }

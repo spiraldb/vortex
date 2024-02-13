@@ -32,6 +32,7 @@ pub enum CodecFunction {
 
 mod test {
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_alignment() {
         assert_eq!(
             codecz_sys::SPIRAL_ALIGNMENT as usize,
@@ -40,6 +41,7 @@ mod test {
         assert_eq!(
             codecz_sys::SPIRAL_ALIGNMENT as usize,
             super::ALIGNED_ALLOCATOR.min_alignment(),
-        )
+        );
+        assert!(arrow_buffer::alloc::ALIGNMENT >= 64);
     }
 }

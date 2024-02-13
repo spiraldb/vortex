@@ -319,7 +319,7 @@ comptime {
 }
 
 fn FforWrapper(comptime V: type) type {
-    const InputAlign: u29 = codecz.encodings.fastlanes.FLMinAlign;
+    const InputAlign: u29 = codecz.encodings.fastlanes.InputAlignment;
     if (@typeInfo(V) != .Int) {
         @compileError("FFoR: Unsupported type " ++ @typeName(V));
     }

@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const codecmath = @import("../codecmath.zig");
 const simd_math = @import("../simd_math.zig");
 const fastlanes = @import("fastlanes.zig");
-const InputAlign = fastlanes.FLMinAlign;
+const InputAlign = fastlanes.InputAlignment;
 const OutputAlign = abi.Alignment;
 const FLVec = fastlanes.FLVec;
 const abi = @import("abi");
@@ -132,13 +132,16 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
         }
 
         pub fn encodeRaw(
-            elems: []align(InputAlign) const V,
+            elems: []const V,
             minVal: ?V,
             encoded: []align(OutputAlign) u8,
         ) CodecError!usize {
             if (encoded.len < encodedSizeInBytes(elems.len)) {
                 std.debug.print("PackedIntsImpl.encodeRaw: out.len = {}, elems.len = {}\n", .{ encoded.len, elems.len });
                 return CodecError.OutputBufferTooSmall;
+            }
+            if (!std.mem.isAligned(@intFromPtr(encoded.ptr), OutputAlign)) {
+                return CodecError.IncorrectAlignment;
             }
             if (comptime codec == .ffor) {
                 if (minVal == null and elems.len > 0) {
@@ -154,13 +157,23 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
 
             // Encode as many tranches as we can, and then fallback to scalar?
             const ntranches = elems.len / elemsPerTranche;
-
-            const in: []const FLVec(V) = @alignCast(std.mem.bytesAsSlice(FLVec(V), std.mem.sliceAsBytes(elems[0 .. ntranches * elemsPerTranche])));
-            var out: []FLVec(UV) = @alignCast(std.mem.bytesAsSlice(FLVec(UV), encoded[0 .. ntranches * bytesPerTranche]));
             var num_exceptions: usize = 0;
+            var out: []FLVec(UV) = @alignCast(std.mem.bytesAsSlice(FLVec(UV), encoded[0 .. ntranches * bytesPerTranche]));
 
-            for (0..ntranches) |i| {
-                num_exceptions += encodeTranche(in[T * i ..][0..T], minVal, out[W * i ..][0..W]);
+            if (ntranches > 0 and std.mem.isAligned(@intFromPtr(elems.ptr), InputAlign)) {
+                const in: []const FLVec(V) = @alignCast(std.mem.bytesAsSlice(FLVec(V), std.mem.sliceAsBytes(elems[0 .. ntranches * elemsPerTranche])));
+
+                for (0..ntranches) |i| {
+                    num_exceptions += encodeTranche(in[T * i ..][0..T], minVal, out[W * i ..][0..W]);
+                }
+            } else if (ntranches > 0) { // unaligned requires copying
+                var tranche: [T]FLVec(V) = undefined;
+                for (0..ntranches) |i| {
+                    inline for (0..T) |j| {
+                        tranche[j] = elems[(i * elemsPerTranche + j * vlen)..][0..vlen].*;
+                    }
+                    num_exceptions += encodeTranche(&tranche, minVal, out[W * i ..][0..W]);
+                }
             }
 
             // Is there a nicer fallback to have?
@@ -282,11 +295,15 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
             minVal: ?V,
             decoded: []align(OutputAlign) V,
         ) CodecError!void {
-            const ntranches = elems_len / elemsPerTranche;
-
             if (decoded.len < elems_len) {
                 std.debug.print("PackedIntsImpl.decodeRaw: out.len = {}, input.len = {}\n", .{ decoded.len, elems_len });
                 return CodecError.OutputBufferTooSmall;
+            }
+            if (!std.mem.isAligned(@intFromPtr(encoded_bytes.ptr), InputAlign)) {
+                return CodecError.IncorrectAlignment;
+            }
+            if (!std.mem.isAligned(@intFromPtr(decoded.ptr), OutputAlign)) {
+                return CodecError.IncorrectAlignment;
             }
             if (comptime codec == .ffor) {
                 if (minVal == null and elems_len > 0) {
@@ -301,6 +318,7 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
             }
 
             // vectorized decoding for most of the data (except very small arrays)
+            const ntranches = elems_len / elemsPerTranche;
             const in: []const FLVec(UV) = @alignCast(std.mem.bytesAsSlice(FLVec(UV), encoded_bytes[0 .. ntranches * bytesPerTranche]));
             var out: []FLVec(V) = @alignCast(std.mem.bytesAsSlice(FLVec(V), std.mem.sliceAsBytes(decoded[0 .. ntranches * elemsPerTranche])));
             for (0..ntranches) |i| {
@@ -398,11 +416,11 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
 
             const ntranches = elems.len / elemsPerTranche;
             var excCount: usize = 0;
-            if (ntranches > 0) {
+            var offset: usize = 0;
+            if (ntranches > 0 and std.mem.isAligned(@intFromPtr(elems.ptr), InputAlign)) {
                 const vecs: []const FLVec(V) = @alignCast(std.mem.bytesAsSlice(FLVec(V), std.mem.sliceAsBytes(elems[0 .. ntranches * elemsPerTranche])));
                 const minVec: ?FLVec(V) = if (codec == .ffor) @as(FLVec(V), @splat(minVal.?)) else null;
 
-                var offset: usize = 0;
                 for (0..ntranches) |tranche_idx| {
                     inline for (vecs[T * tranche_idx ..][0..T]) |vec| {
                         const is_exception_vec = @clz(maybe_frame_encode(FLVec(UV), vec, minVec)) < TminusW;
@@ -414,9 +432,10 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
                         offset += vlen;
                     }
                 }
+                std.debug.assert(offset == ntranches * elemsPerTranche);
             }
 
-            const offset = ntranches * elemsPerTranche;
+            // fallback logic for the tail (or the whole thing if no vectorization)
             const remaining = elems[offset..];
             for (remaining, offset..) |elem, idx| {
                 const value = maybe_frame_encode(UV, elem, minVal);

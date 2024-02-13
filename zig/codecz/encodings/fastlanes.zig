@@ -2,12 +2,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const abi = @import("abi");
 
-// Apache Arrow is only 64 byte aligned, meaning we cannot always be zero-copy with 1024 bit vectors
-// unless we convince Arrow (fork? Recompile?) to align to 128 bytes.
-// So instead, for now, we use FastLanes vectors with 64 byte alignment, and require only 64 byte
-// alignment for *inputs* to FastLanes codecs.
-pub const FLMinAlign = abi.FastLanesMinAlignment;
-pub const FLWidth = FLMinAlign * @bitSizeOf(u8);
+// Apache Arrow buffers are only 64 byte aligned, meaning we cannot always be zero-copy with 1024 bit vectors.
+// So instead, for now, we use FastLanes vectors with 64 byte (512 bit) alignment.
+pub const FLWidth = 512;
+pub const InputAlignment = @alignOf(FLVec(u8));
 
 pub fn fastLanesVecLen(comptime V: type) comptime_int {
     return FLWidth / @bitSizeOf(V);
@@ -19,7 +17,18 @@ pub fn FLVec(comptime V: type) type {
 
 test "FLVec" {
     try std.testing.expectEqual(fastLanesVecLen(u8), 64);
-    try std.testing.expectEqual(FLMinAlign, 64);
+    try std.testing.expectEqual(@typeInfo((FLVec(u8))).Vector.len, 64);
+}
+
+test "fastlanes alignment" {
+    try std.testing.expect(InputAlignment >= 64);
+    try std.testing.expect(std.math.isPowerOfTwo(InputAlignment));
+
+    // this is verifying assumed zig compiler behavior
+    // see https://github.com/ziglang/zig/issues/11856
+    try std.testing.expectEqual(@alignOf(FLVec(u8)), @sizeOf(FLVec(u8)));
+
     try std.testing.expectEqual(abi.Alignment, 128);
-    try std.testing.expectEqual(abi.Alignment % FLMinAlign, 0);
+    try std.testing.expect(abi.Alignment >= InputAlignment);
+    try std.testing.expectEqual(abi.Alignment % InputAlignment, 0);
 }
