@@ -13,6 +13,7 @@ members = [
     "rust/enc-ree",
     "rust/enc-roaring",
     "rust/enc-zigzag",
+    "rust/spiral-alloc",
 ]
 resolver = "2"
 

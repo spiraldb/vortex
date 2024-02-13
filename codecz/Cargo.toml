@@ -17,6 +17,7 @@ codecz-sys = { version = "0.1.0", path = "../codecz-sys" }
 half = "2.3.1"
 arrow-buffer = "50.0.0"
 itertools = "0.12.1"
+spiral-alloc = { version = "0.1.0", path = "../spiral-alloc" }
 
 [dependencies.num-traits]
 version = "0.2"

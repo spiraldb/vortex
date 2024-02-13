@@ -2,11 +2,9 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-use alloc::AlignedVec;
 use core::fmt::{Display, Formatter};
 use core::mem::size_of;
-
-pub mod alloc;
+use spiral_alloc::AlignedVec;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 

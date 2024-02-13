@@ -7,10 +7,8 @@ pub mod ffor;
 pub mod ree;
 pub mod zigzag;
 
-pub type AlignedAllocator = codecz_sys::alloc::AlignedAllocator;
-pub type AlignedVec<T> = codecz_sys::alloc::AlignedVec<T>;
+pub use spiral_alloc::{AlignedAllocator, AlignedVec, ALIGNED_ALLOCATOR, SPIRAL_ALIGNMENT};
 
-pub const ALIGNED_ALLOCATOR: AlignedAllocator = AlignedAllocator::default();
 pub(crate) type ByteBuffer = codecz_sys::ByteBuffer_t;
 pub(crate) type WrittenBuffer = codecz_sys::WrittenBuffer_t;
 pub(crate) type OneBufferResult = codecz_sys::OneBufferResult_t;
@@ -30,4 +28,18 @@ pub enum CodecFunction {
     Encode,
     Decode,
     CollectExceptions,
+}
+
+mod test {
+    #[test]
+    fn test_alignment() {
+        assert_eq!(
+            codecz_sys::SPIRAL_ALIGNMENT as usize,
+            spiral_alloc::SPIRAL_ALIGNMENT,
+        );
+        assert_eq!(
+            codecz_sys::SPIRAL_ALIGNMENT as usize,
+            super::ALIGNED_ALLOCATOR.min_alignment(),
+        )
+    }
 }
