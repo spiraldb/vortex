@@ -1,14 +1,16 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use codecz::ffor::SupportsFFoR;
-use enc::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use enc::array::{
+    check_validity_buffer, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    EncodingRef,
+};
 use enc::compress::{ArrayCompression, EncodingCompression};
 use enc::dtype::DType;
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::ptype::NativePType;
-use enc::scalar::Scalar;
+use enc::scalar::{NullableScalar, Scalar};
 use enc::stats::{Stats, StatsSet};
 
 use crate::compress::ffor_encode;
@@ -16,6 +18,7 @@ use crate::compress::ffor_encode;
 #[derive(Debug, Clone)]
 pub struct FFORArray {
     encoded: ArrayRef,
+    validity: Option<ArrayRef>,
     min_val: Box<dyn Scalar>,
     num_bits: u8,
     len: usize,
@@ -23,8 +26,9 @@ pub struct FFORArray {
 }
 
 impl FFORArray {
-    pub fn try_from_parts<T: SupportsFFoR + NativePType>(
+    pub fn try_from_parts<T: NativePType>(
         encoded: ArrayRef,
+        validity: Option<ArrayRef>,
         min_val: T,
         num_bits: u8,
         len: usize,
@@ -32,13 +36,22 @@ impl FFORArray {
     where
         Box<dyn Scalar>: From<T>,
     {
-        let min_val: Box<dyn Scalar> = min_val.into();
         if !T::PTYPE.is_int() {
             return Err(EncError::InvalidPType(T::PTYPE));
+        };
+        let validity = validity.filter(|v| !v.is_empty());
+        check_validity_buffer(validity.as_ref())?;
+
+        let min_val: Box<dyn Scalar> = min_val.into();
+        let min_val = if validity.is_some() {
+            NullableScalar::some(min_val).boxed()
+        } else {
+            min_val
         };
 
         Ok(Self {
             encoded,
+            validity,
             min_val,
             num_bits,
             len,
@@ -63,6 +76,10 @@ impl FFORArray {
 
     pub fn num_bits(&self) -> u8 {
         self.num_bits
+    }
+
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
     }
 }
 
