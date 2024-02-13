@@ -102,17 +102,6 @@ pub fn encode<T: SupportsFFoR>(
 ) -> Result<FforEncoded, CodecError> {
     let size_in_bytes = T::encoded_size_in_bytes_impl(elems.len(), num_bits);
 
-    if elems
-        .as_ptr()
-        .align_offset(codecz_sys::FL_MIN_ALIGNMENT as usize)
-        != 0
-    {
-        return Err(CodecError::IncorrectAlignment(
-            Codec::FFoR,
-            CodecFunction::Encode,
-        ));
-    }
-
     let mut encoded: AlignedVec<u8> =
         AlignedVec::with_capacity_in(size_in_bytes, ALIGNED_ALLOCATOR);
 

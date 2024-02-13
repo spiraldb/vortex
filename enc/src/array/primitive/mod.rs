@@ -27,6 +27,9 @@ use crate::stats::{Stats, StatsSet};
 mod compress;
 mod stats;
 
+use arrow::alloc::ALIGNMENT as ARROW_ALIGNMENT;
+use log::warn;
+
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {
     buffer: Buffer,
@@ -49,6 +52,13 @@ impl PrimitiveArray {
         } else {
             DType::from(ptype)
         };
+
+        if buffer.as_ptr().align_offset(ARROW_ALIGNMENT) != 0 {
+            warn!(
+                "Arrow buffer is not aligned to {} bytes and thus may require a copy to realign.",
+                ARROW_ALIGNMENT
+            );
+        }
 
         Ok(Self {
             buffer,

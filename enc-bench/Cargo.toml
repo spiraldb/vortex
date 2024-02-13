@@ -11,6 +11,7 @@ arrow-array = "50.0.0"
 enc = { path = "../enc" }
 enc-alp = { path = "../enc-alp" }
 enc-dict = { path = "../enc-dict" }
+enc-ffor = { path = "../enc-ffor"}
 enc-patched = { path = "../enc-patched" }
 enc-ree = { path = "../enc-ree" }
 enc-roaring = { path = "../enc-roaring" }
