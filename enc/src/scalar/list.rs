@@ -56,7 +56,7 @@ impl Scalar for ListScalar {
                 let new_type = if new_fields.is_empty() {
                     dtype.clone()
                 } else {
-                    DType::List(Box::new(new_fields[0].dtype().clone()), n.clone())
+                    DType::List(Box::new(new_fields[0].dtype().clone()), *n)
                 };
                 let list_scalar = ListScalar::new(new_type, new_fields).boxed();
                 match n {

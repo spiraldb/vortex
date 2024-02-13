@@ -47,7 +47,7 @@ impl IntoPolarsValue for &dyn Scalar {
     fn into_polars<'a>(self) -> AnyValue<'a> {
         if let Some(ns) = self.as_any().downcast_ref::<NullableScalar>() {
             return match ns {
-                NullableScalar::Some(s) => s.as_ref().into_polars(),
+                NullableScalar::Some(s, _) => s.as_ref().into_polars(),
                 NullableScalar::None(_) => AnyValue::Null,
             };
         }

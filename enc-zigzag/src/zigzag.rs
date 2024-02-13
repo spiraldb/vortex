@@ -22,7 +22,7 @@ impl ZigZagArray {
     pub fn try_new(encoded: ArrayRef) -> EncResult<Self> {
         let dtype = match encoded.dtype() {
             DType::Int(width, Signedness::Unsigned, nullability) => {
-                DType::Int(width.clone(), Signedness::Signed, nullability.clone())
+                DType::Int(*width, Signedness::Signed, *nullability)
             }
             d => return Err(EncError::InvalidDType(d.clone())),
         };
