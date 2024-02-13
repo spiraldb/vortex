@@ -24,8 +24,8 @@ impl ALPArray {
     pub fn try_new(encoded: ArrayRef, exponents: ALPExponents) -> EncResult<Self> {
         let dtype = match encoded.dtype() {
             DType::Int(width, _, nullability) => match width {
-                IntWidth::_32 => DType::Float(32.into(), nullability.clone()),
-                IntWidth::_64 => DType::Float(64.into(), nullability.clone()),
+                IntWidth::_32 => DType::Float(32.into(), *nullability),
+                IntWidth::_64 => DType::Float(64.into(), *nullability),
                 _ => return Err(EncError::InvalidDType(encoded.dtype().clone())),
             },
             d => return Err(EncError::InvalidDType(d.clone())),

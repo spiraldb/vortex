@@ -9,16 +9,17 @@ use crate::scalar::{NullScalar, Scalar};
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum NullableScalar {
     None(DType),
-    Some(Box<dyn Scalar>),
+    Some(Box<dyn Scalar>, DType),
 }
 
 impl NullableScalar {
     pub fn some(scalar: Box<dyn Scalar>) -> Self {
-        Self::Some(scalar)
+        let dtype = scalar.dtype().as_nullable();
+        Self::Some(scalar, dtype)
     }
 
     pub fn none(dtype: DType) -> Self {
-        Self::None(dtype)
+        Self::None(dtype.as_nullable())
     }
 }
 
@@ -40,7 +41,7 @@ impl Scalar for NullableScalar {
     #[inline]
     fn dtype(&self) -> &DType {
         match self {
-            Self::Some(scalar) => scalar.dtype(),
+            Self::Some(_, dtype) => dtype,
             Self::None(dtype) => dtype,
         }
     }
@@ -51,7 +52,7 @@ impl Scalar for NullableScalar {
 
     fn nbytes(&self) -> usize {
         match self {
-            NullableScalar::Some(s) => s.nbytes(),
+            NullableScalar::Some(s, _) => s.nbytes() + size_of::<DType>(),
             NullableScalar::None(_) => size_of::<DType>(),
         }
     }
@@ -60,7 +61,7 @@ impl Scalar for NullableScalar {
 impl Display for NullableScalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            NullableScalar::Some(p) => write!(f, "{}", p),
+            NullableScalar::Some(p, _) => write!(f, "{}?", p),
             NullableScalar::None(_) => write!(f, "null"),
         }
     }
@@ -93,7 +94,7 @@ impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<&dyn Scalar>
 
         Ok(NullableScalarOption(match ns {
             NullableScalar::None(_) => None,
-            NullableScalar::Some(v) => Some(v.clone().try_into()?),
+            NullableScalar::Some(v, _) => Some(v.clone().try_into()?),
         }))
     }
 }
@@ -112,7 +113,7 @@ impl<T: TryFrom<Box<dyn Scalar>, Error = EncError>> TryFrom<Box<dyn Scalar>>
 
         Ok(NullableScalarOption(match *ns {
             NullableScalar::None(_) => None,
-            NullableScalar::Some(v) => Some(v.try_into()?),
+            NullableScalar::Some(v, _) => Some(v.try_into()?),
         }))
     }
 }

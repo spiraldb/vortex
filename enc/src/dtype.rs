@@ -7,7 +7,7 @@ use DType::*;
 
 use crate::ptype::PType;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Nullability {
     NonNullable,
     Nullable,
@@ -32,7 +32,7 @@ impl Display for Nullability {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Signedness {
     Unknown,
     Unsigned,
@@ -59,7 +59,7 @@ impl Display for Signedness {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum IntWidth {
     Unknown,
     _8,
@@ -92,7 +92,7 @@ impl Display for IntWidth {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum FloatWidth {
     Unknown,
     _16,
@@ -122,7 +122,7 @@ impl Display for FloatWidth {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum TimeUnit {
     Ns,
     Us,
@@ -188,15 +188,15 @@ impl DType {
         match self {
             Null => Null,
             Bool(_) => Bool(Nullable),
-            Int(w, s, _) => Int(w.clone(), s.clone(), Nullable),
+            Int(w, s, _) => Int(*w, *s, Nullable),
             Decimal(s, p, _) => Decimal(*s, *p, Nullable),
-            Float(w, _) => Float(w.clone(), Nullable),
+            Float(w, _) => Float(*w, Nullable),
             Utf8(_) => Utf8(Nullable),
             Binary(_) => Binary(Nullable),
-            LocalTime(u, _) => LocalTime(u.clone(), Nullable),
+            LocalTime(u, _) => LocalTime(*u, Nullable),
             LocalDate(_) => LocalDate(Nullable),
-            Instant(u, _) => Instant(u.clone(), Nullable),
-            ZonedDateTime(u, _) => ZonedDateTime(u.clone(), Nullable),
+            Instant(u, _) => Instant(*u, Nullable),
+            ZonedDateTime(u, _) => ZonedDateTime(*u, Nullable),
             Struct(_, _) => self.clone(),
             List(c, _) => List(c.clone(), Nullable),
             Map(k, v, _) => Map(k.clone(), v.clone(), Nullable),
