@@ -36,3 +36,24 @@ def test_zigzag_encode():
     zarr = enc.ZigZagArray.encode(a)
     assert isinstance(zarr, enc.ZigZagArray)
     # TODO(ngates): support decoding once we have decompressor.
+
+
+def test_chunked_encode():
+    chunked = pa.chunked_array([pa.array([0, 1, 2]), pa.array([3, 4, 5])])
+    encoded = enc.encode(chunked)
+    assert isinstance(encoded, enc.ChunkedArray)
+    assert encoded.to_pyarrow().combine_chunks() == pa.array([0, 1, 2, 3, 4, 5])
+
+
+def test_table_encode():
+    table = pa.table(
+        {
+            "number": pa.chunked_array([pa.array([0, 1, 2]), pa.array([3, 4, 5])]),
+            "string": pa.chunked_array([pa.array(["a", "b", "c"]), pa.array(["d", "e", "f"])]),
+        }
+    )
+    encoded = enc.encode(table)
+    assert isinstance(encoded, enc.ChunkedArray)
+    assert encoded.to_pyarrow().combine_chunks() == pa.StructArray.from_arrays(
+        [pa.array([0, 1, 2, 3, 4, 5]), pa.array(["a", "b", "c", "d", "e", "f"])], names=["number", "string"]
+    )
