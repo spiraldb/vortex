@@ -94,7 +94,7 @@ pub fn check_index_bounds(array: &dyn Array, index: usize) -> EncResult<()> {
     Ok(())
 }
 
-pub(crate) fn check_validity_buffer(validity: Option<&ArrayRef>) -> EncResult<()> {
+pub fn check_validity_buffer(validity: Option<&ArrayRef>) -> EncResult<()> {
     if validity
         .map(|v| !matches!(v.dtype(), DType::Bool(Nullability::NonNullable)))
         .unwrap_or(false)

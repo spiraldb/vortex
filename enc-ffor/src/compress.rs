@@ -55,12 +55,13 @@ pub fn ffor_encode(parray: &PrimitiveArray) -> ArrayRef {
         let min_val: $T = min_val_scalar.as_ref().try_into().unwrap();
         let max_val: $T = max_val_scalar.as_ref().try_into().unwrap();
         let num_bits = codecz::ffor::find_best_bit_width::<$T>(bit_widths.as_slice(), min_val, max_val).unwrap();
-        ffor_encode_primitive(parray.buffer().typed_data::<$T>(), num_bits, min_val)
+        ffor_encode_primitive(parray.buffer().typed_data::<$T>(), parray.validity(), num_bits, min_val)
     })
 }
 
 fn ffor_encode_primitive<T: SupportsFFoR + NativePType>(
     values: &[T],
+    validity: Option<&ArrayRef>,
     num_bits: u8,
     min_val: T,
 ) -> ArrayRef
@@ -74,10 +75,15 @@ where
     } = codecz::ffor::encode::<T>(values, num_bits, min_val).unwrap();
     let bytes_array = PrimitiveArray::from_vec_in(buf);
 
-    let ffor_array =
-        FFORArray::try_from_parts(bytes_array.boxed(), min_val, num_bits, values.len())
-            .unwrap()
-            .boxed();
+    let ffor_array = FFORArray::try_from_parts(
+        bytes_array.boxed(),
+        validity.cloned(),
+        min_val,
+        num_bits,
+        values.len(),
+    )
+    .unwrap()
+    .boxed();
 
     if num_exceptions == 0 {
         return ffor_array;
