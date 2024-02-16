@@ -16,7 +16,6 @@ use enc::ptype::NativePType;
 use enc::scalar::AsBytes;
 
 use crate::dict::{DictArray, DictEncoding};
-use crate::DICT_ENCODING;
 
 impl EncodingCompression for DictEncoding {
     fn compressor(
@@ -24,10 +23,6 @@ impl EncodingCompression for DictEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &DICT_ENCODING {
-            return Some(&(dict_compressor as Compressor));
-        }
-
         // TODO(robert): Add support for VarBinView
         if !matches!(
             ArrayKind::from(array),

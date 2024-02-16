@@ -16,16 +16,21 @@ use crate::compress::alp_encode;
 pub struct ALPArray {
     encoded: ArrayRef,
     exponents: ALPExponents,
+    patches: Option<ArrayRef>,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl ALPArray {
-    pub fn new(encoded: ArrayRef, exponents: ALPExponents) -> Self {
-        Self::try_new(encoded, exponents).unwrap()
+    pub fn new(encoded: ArrayRef, exponents: ALPExponents, patches: Option<ArrayRef>) -> Self {
+        Self::try_new(encoded, exponents, patches).unwrap()
     }
 
-    pub fn try_new(encoded: ArrayRef, exponents: ALPExponents) -> EncResult<Self> {
+    pub fn try_new(
+        encoded: ArrayRef,
+        exponents: ALPExponents,
+        patches: Option<ArrayRef>,
+    ) -> EncResult<Self> {
         let dtype = match encoded.dtype() {
             DType::Int(width, _, nullability) => match width {
                 IntWidth::_32 => DType::Float(32.into(), *nullability),
@@ -37,6 +42,7 @@ impl ALPArray {
         Ok(Self {
             encoded,
             exponents,
+            patches,
             dtype,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
@@ -55,6 +61,10 @@ impl ALPArray {
 
     pub fn exponents(&self) -> ALPExponents {
         self.exponents
+    }
+
+    pub fn patches(&self) -> Option<&ArrayRef> {
+        self.patches.as_ref()
     }
 }
 
@@ -103,7 +113,12 @@ impl Array for ALPArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
-        Ok(Self::try_new(self.encoded.slice(start, stop)?, self.exponents)?.boxed())
+        Ok(Self::try_new(
+            self.encoded().slice(start, stop)?,
+            self.exponents(),
+            self.patches().map(|p| p.slice(start, stop)).transpose()?,
+        )?
+        .boxed())
     }
 
     #[inline]
@@ -113,7 +128,7 @@ impl Array for ALPArray {
 
     #[inline]
     fn nbytes(&self) -> usize {
-        self.encoded.nbytes()
+        self.encoded().nbytes() + self.patches().map(|p| p.nbytes()).unwrap_or(0)
     }
 }
 
@@ -126,6 +141,10 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ALPArray {
 impl ArrayDisplay for ALPArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.writeln(format!("exponents: {}", self.exponents()))?;
+        if let Some(p) = self.patches() {
+            f.writeln("patches:")?;
+            f.indent(|indent| indent.array(p.as_ref()))?;
+        }
         f.indent(|indent| indent.array(self.encoded()))
     }
 }

@@ -6,6 +6,7 @@ use enc::array::bool::BoolArray;
 use enc::array::chunked::ChunkedArray;
 use enc::array::constant::ConstantArray;
 use enc::array::primitive::PrimitiveArray;
+use enc::array::sparse::SparseArray;
 use enc::array::struct_::StructArray;
 use enc::array::typed::TypedArray;
 use enc::array::varbin::VarBinArray;
@@ -14,7 +15,6 @@ use enc::array::{Array, ArrayKind, ArrayRef};
 use enc_alp::{ALPArray, ALP_ENCODING};
 use enc_dict::{DictArray, DICT_ENCODING};
 use enc_ffor::{FFORArray, FFOR_ENCODING};
-use enc_patched::{PatchedArray, PATCHED_ENCODING};
 use enc_ree::{REEArray, REE_ENCODING};
 use enc_roaring::{RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING};
 use enc_zigzag::{ZigZagArray, ZIGZAG_ENCODING};
@@ -55,6 +55,7 @@ pyarray!(BoolArray, "BoolArray");
 pyarray!(ChunkedArray, "ChunkedArray");
 pyarray!(ConstantArray, "ConstantArray");
 pyarray!(PrimitiveArray, "PrimitiveArray");
+pyarray!(SparseArray, "SparseArray");
 pyarray!(StructArray, "StructArray");
 pyarray!(TypedArray, "TypedArray");
 pyarray!(VarBinArray, "VarBinArray");
@@ -63,7 +64,6 @@ pyarray!(VarBinViewArray, "VarBinViewArray");
 pyarray!(ALPArray, "ALPArray");
 pyarray!(DictArray, "DictArray");
 pyarray!(FFORArray, "FFORArray");
-pyarray!(PatchedArray, "PatchedArray");
 pyarray!(REEArray, "REEArray");
 pyarray!(RoaringBoolArray, "RoaringBoolArray");
 pyarray!(RoaringIntArray, "RoaringIntArray");
@@ -87,6 +87,10 @@ impl PyArray {
             }
             ArrayKind::Primitive(_) => {
                 PyPrimitiveArray::wrap(py, inner.into_any().downcast::<PrimitiveArray>().unwrap())?
+                    .extract(py)
+            }
+            ArrayKind::Sparse(_) => {
+                PySparseArray::wrap(py, inner.into_any().downcast::<SparseArray>().unwrap())?
                     .extract(py)
             }
             ArrayKind::Struct(_) => {
@@ -119,10 +123,6 @@ impl PyArray {
                 }
                 FFOR_ENCODING => {
                     PyFFORArray::wrap(py, inner.into_any().downcast::<FFORArray>().unwrap())?
-                        .extract(py)
-                }
-                PATCHED_ENCODING => {
-                    PyPatchedArray::wrap(py, inner.into_any().downcast::<PatchedArray>().unwrap())?
                         .extract(py)
                 }
                 REE_ENCODING => {

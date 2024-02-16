@@ -57,7 +57,7 @@ impl StructArray {
 
     pub fn field_dtypes(&self) -> &[DType] {
         if let DType::Struct(_names, fields) = self.dtype() {
-            return fields.as_slice();
+            fields
         } else {
             panic!("dtype is not a struct")
         }

@@ -9,8 +9,7 @@ use enc::compress::EncodingCompression;
 use enc::dtype::DType;
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
-use enc::ptype::NativePType;
-use enc::scalar::{NullableScalar, Scalar};
+use enc::scalar::Scalar;
 use enc::stats::{Stats, StatsSet};
 
 use crate::compress::ffor_encode;
@@ -19,6 +18,7 @@ use crate::compress::ffor_encode;
 pub struct FFORArray {
     encoded: ArrayRef,
     validity: Option<ArrayRef>,
+    patches: Option<ArrayRef>,
     min_val: Box<dyn Scalar>,
     num_bits: u8,
     len: usize,
@@ -26,32 +26,40 @@ pub struct FFORArray {
 }
 
 impl FFORArray {
-    pub fn try_from_parts<T: NativePType>(
+    pub fn new(
         encoded: ArrayRef,
         validity: Option<ArrayRef>,
-        min_val: T,
+        patches: Option<ArrayRef>,
+        min_val: Box<dyn Scalar>,
         num_bits: u8,
         len: usize,
-    ) -> EncResult<Self>
-    where
-        Box<dyn Scalar>: From<T>,
-    {
-        if !T::PTYPE.is_int() {
-            return Err(EncError::InvalidPType(T::PTYPE));
-        };
+    ) -> Self {
+        Self::try_new(encoded, validity, patches, min_val, num_bits, len).unwrap()
+    }
+
+    pub fn try_new(
+        encoded: ArrayRef,
+        validity: Option<ArrayRef>,
+        patches: Option<ArrayRef>,
+        min_val: Box<dyn Scalar>,
+        num_bits: u8,
+        len: usize,
+    ) -> EncResult<Self> {
         let validity = validity.filter(|v| !v.is_empty());
         check_validity_buffer(validity.as_ref())?;
 
-        let min_val: Box<dyn Scalar> = min_val.into();
-        let min_val = if validity.is_some() {
-            NullableScalar::some(min_val).boxed()
-        } else {
-            min_val
-        };
+        if !matches!(min_val.dtype(), DType::Int(_, _, _)) {
+            return Err(EncError::InvalidDType(min_val.dtype().clone()));
+        }
+
+        if validity.is_some() && !min_val.dtype().is_nullable() {
+            return Err(EncError::InvalidDType(min_val.dtype().clone()));
+        }
 
         Ok(Self {
             encoded,
             validity,
+            patches,
             min_val,
             num_bits,
             len,
@@ -66,20 +74,29 @@ impl FFORArray {
         }
     }
 
+    #[inline]
     pub fn encoded(&self) -> &dyn Array {
         self.encoded.as_ref()
     }
 
+    #[inline]
     pub fn min_val(&self) -> &dyn Scalar {
         self.min_val.as_ref()
     }
 
+    #[inline]
     pub fn num_bits(&self) -> u8 {
         self.num_bits
     }
 
+    #[inline]
     pub fn validity(&self) -> Option<&ArrayRef> {
         self.validity.as_ref()
+    }
+
+    #[inline]
+    pub fn patches(&self) -> Option<&ArrayRef> {
+        self.patches.as_ref()
     }
 }
 
@@ -138,7 +155,7 @@ impl Array for FFORArray {
 
     #[inline]
     fn nbytes(&self) -> usize {
-        self.encoded.nbytes()
+        self.encoded().nbytes() + self.patches().map(|p| p.nbytes()).unwrap_or(0)
     }
 }
 
@@ -155,6 +172,10 @@ impl ArrayDisplay for FFORArray {
             self.min_val(),
             self.num_bits()
         ))?;
+        if let Some(p) = self.patches() {
+            f.writeln("patches:")?;
+            f.indent(|indent| indent.array(p.as_ref()))?;
+        }
         f.indent(|indent| indent.array(self.encoded()))
     }
 }
