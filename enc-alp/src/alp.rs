@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 
 pub use codecz::alp::ALPExponents;
 use enc::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
-use enc::compress::{ArrayCompression, EncodingCompression};
+use enc::compress::EncodingCompression;
 use enc::dtype::{DType, IntWidth};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
@@ -21,6 +21,10 @@ pub struct ALPArray {
 }
 
 impl ALPArray {
+    pub fn new(encoded: ArrayRef, exponents: ALPExponents) -> Self {
+        Self::try_new(encoded, exponents).unwrap()
+    }
+
     pub fn try_new(encoded: ArrayRef, exponents: ALPExponents) -> EncResult<Self> {
         let dtype = match encoded.dtype() {
             DType::Int(width, _, nullability) => match width {
@@ -111,10 +115,6 @@ impl Array for ALPArray {
     fn nbytes(&self) -> usize {
         self.encoded.nbytes()
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for ALPArray {
@@ -125,8 +125,8 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ALPArray {
 
 impl ArrayDisplay for ALPArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("exponents: {}", &self.exponents))?;
-        f.indent(|indent| indent.array(self.encoded.as_ref()))
+        f.writeln(format!("exponents: {}", self.exponents()))?;
+        f.indent(|indent| indent.array(self.encoded()))
     }
 }
 

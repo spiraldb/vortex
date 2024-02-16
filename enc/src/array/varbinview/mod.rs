@@ -14,7 +14,7 @@ use crate::array::{
     EncodingId, EncodingRef,
 };
 use crate::arrow::CombineChunks;
-use crate::compress::ArrayCompression;
+use crate::compress::EncodingCompression;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -308,10 +308,6 @@ impl Array for VarBinViewArray {
     fn nbytes(&self) -> usize {
         self.views.nbytes() + self.data.iter().map(|arr| arr.nbytes()).sum::<usize>()
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for VarBinViewArray {
@@ -328,6 +324,10 @@ pub const VARBINVIEW_ENCODING: EncodingId = EncodingId("enc.varbinview");
 impl Encoding for VarBinViewEncoding {
     fn id(&self) -> &EncodingId {
         &VARBINVIEW_ENCODING
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }
 

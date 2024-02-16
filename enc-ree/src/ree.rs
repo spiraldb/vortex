@@ -14,7 +14,7 @@ use enc::array::{
     EncodingId, EncodingRef,
 };
 use enc::arrow::match_arrow_numeric_type;
-use enc::compress::{ArrayCompression, EncodingCompression};
+use enc::compress::EncodingCompression;
 use enc::compute;
 use enc::compute::search_sorted::SearchSortedSide;
 use enc::dtype::DType;
@@ -36,8 +36,9 @@ pub struct REEArray {
 }
 
 impl REEArray {
-    pub fn new(ends: ArrayRef, values: ArrayRef) -> Self {
-        let length = run_ends_logical_length(&ends);
+    pub fn new(ends: ArrayRef, values: ArrayRef, length: usize) -> Self {
+        // TODO(robert): This requires all array implement scalar_at, take length in constructor for now
+        // let length = run_ends_logical_length(&ends);
         Self {
             ends,
             values,
@@ -49,7 +50,7 @@ impl REEArray {
 
     pub fn find_physical_index(&self, index: usize) -> EncResult<usize> {
         compute::search_sorted::search_sorted_usize(
-            &self.ends,
+            self.ends(),
             index + self.offset,
             SearchSortedSide::Right,
         )
@@ -59,7 +60,7 @@ impl REEArray {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => {
                 let (ends, values) = ree_encode(p);
-                Ok(REEArray::new(ends.boxed(), values.boxed()).boxed())
+                Ok(REEArray::new(ends.boxed(), values.boxed(), array.len()).boxed())
             }
             _ => Err(EncError::InvalidEncoding(array.encoding().id().clone())),
         }
@@ -166,10 +167,6 @@ impl Array for REEArray {
     fn nbytes(&self) -> usize {
         self.values.nbytes() + self.ends.nbytes()
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
@@ -246,6 +243,8 @@ where
 }
 
 /// Gets the logical end of ends array of run end encoding.
+// TODO(robert): Once we fix scalar at for all arrays use this function
+#[allow(dead_code)]
 fn run_ends_logical_length<T: AsRef<dyn Array>>(ends: &T) -> usize {
     ends.as_ref()
         .scalar_at(ends.as_ref().len() - 1)
@@ -267,7 +266,7 @@ mod test {
 
     #[test]
     fn new() {
-        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into());
+        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into(), 10);
         assert_eq!(arr.len(), 10);
         assert_eq!(
             arr.dtype(),
@@ -285,7 +284,7 @@ mod test {
 
     #[test]
     fn slice() {
-        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into())
+        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into(), 10)
             .slice(3, 8)
             .unwrap();
         assert_eq!(
@@ -303,7 +302,7 @@ mod test {
 
     #[test]
     fn iter_arrow() {
-        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into());
+        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into(), 10);
         arr.iter_arrow()
             .zip_eq([vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]])
             .for_each(|(from_iter, orig)| {

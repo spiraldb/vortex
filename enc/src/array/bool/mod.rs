@@ -6,7 +6,7 @@ use arrow::array::{ArrayRef as ArrowArrayRef, AsArray, BooleanArray};
 use arrow::buffer::{BooleanBuffer, NullBuffer};
 
 use crate::arrow::CombineChunks;
-use crate::compress::ArrayCompression;
+use crate::compress::EncodingCompression;
 use crate::dtype::{DType, Nullability};
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -151,10 +151,6 @@ impl Array for BoolArray {
     fn nbytes(&self) -> usize {
         (self.len() + 7) / 8
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
-    }
 }
 
 #[derive(Debug)]
@@ -165,6 +161,10 @@ pub const BOOL_ENCODING: EncodingId = EncodingId("enc.bool");
 impl Encoding for BoolEncoding {
     fn id(&self) -> &EncodingId {
         &BOOL_ENCODING
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }
 

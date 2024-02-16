@@ -1,11 +1,29 @@
-use crate::array::primitive::PrimitiveArray;
-use crate::array::ArrayRef;
-use crate::compress::{sampled_compression, ArrayCompression, CompressCtx};
+use crate::array::primitive::{PrimitiveEncoding, PRIMITIVE_ENCODING};
+use crate::array::{Array, ArrayRef};
+use crate::compress::{
+    sampled_compression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
+};
 
-impl ArrayCompression for PrimitiveArray {
-    fn compress(&self, ctx: CompressCtx) -> ArrayRef {
-        sampled_compression(self, ctx)
+impl EncodingCompression for PrimitiveEncoding {
+    fn compressor(
+        &self,
+        array: &dyn Array,
+        _config: &CompressConfig,
+    ) -> Option<&'static Compressor> {
+        if array.encoding().id() == &PRIMITIVE_ENCODING {
+            Some(&(primitive_compressor as Compressor))
+        } else {
+            None
+        }
     }
+}
+
+fn primitive_compressor(
+    array: &dyn Array,
+    _like: Option<&dyn Array>,
+    ctx: CompressCtx,
+) -> ArrayRef {
+    sampled_compression(array, ctx)
 }
 
 #[cfg(test)]
@@ -13,12 +31,12 @@ mod test {
     use crate::array::constant::ConstantEncoding;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::Encoding;
-    use crate::compress::{ArrayCompression, CompressCtx};
+    use crate::compress::CompressCtx;
 
     #[test]
     pub fn compress_constant() {
         let arr = PrimitiveArray::from_vec(vec![1, 1, 1, 1]);
-        let res = arr.compress(CompressCtx::default());
+        let res = CompressCtx::default().compress(arr.as_ref(), None);
         assert_eq!(res.encoding().id(), ConstantEncoding.id());
         assert_eq!(res.scalar_at(3).unwrap().try_into(), Ok(1));
     }

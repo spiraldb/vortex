@@ -197,7 +197,7 @@ impl DType {
             LocalDate(_) => LocalDate(Nullable),
             Instant(u, _) => Instant(*u, Nullable),
             ZonedDateTime(u, _) => ZonedDateTime(*u, Nullable),
-            Struct(_, _) => self.clone(),
+            Struct(n, fs) => Struct(n.clone(), fs.iter().map(|f| f.as_nullable()).collect()),
             List(c, _) => List(c.clone(), Nullable),
             Map(k, v, _) => Map(k.clone(), v.clone(), Nullable),
         }

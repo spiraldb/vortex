@@ -3,37 +3,29 @@ use std::hash::{Hash, Hasher};
 use ahash::RandomState;
 use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
-use log::info;
+use log::debug;
 use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
 
 use enc::array::primitive::PrimitiveArray;
 use enc::array::varbin::VarBinArray;
-use enc::array::{Array, ArrayKind, ArrayRef, Encoding};
-use enc::compress::{
-    ArrayCompression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
-};
+use enc::array::{Array, ArrayKind, ArrayRef};
+use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use enc::dtype::DType;
 use enc::match_each_native_ptype;
 use enc::ptype::NativePType;
 use enc::scalar::AsBytes;
 
 use crate::dict::{DictArray, DictEncoding};
-
-impl ArrayCompression for DictArray {
-    fn compress(&self, ctx: CompressCtx) -> ArrayRef {
-        DictArray::new(ctx.compress(self.codes()), ctx.compress(self.dict())).boxed()
-    }
-}
+use crate::DICT_ENCODING;
 
 impl EncodingCompression for DictEncoding {
     fn compressor(
         &self,
         array: &dyn Array,
-        config: &CompressConfig,
+        _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if !config.is_enabled(self.id()) {
-            info!("Skipping Dict: disabled");
-            return None;
+        if array.encoding().id() == &DICT_ENCODING {
+            return Some(&(dict_compressor as Compressor));
         }
 
         // TODO(robert): Add support for VarBinView
@@ -41,7 +33,7 @@ impl EncodingCompression for DictEncoding {
             ArrayKind::from(array),
             ArrayKind::Primitive(_) | ArrayKind::VarBin(_)
         ) {
-            info!("Skipping Dict: not primitive or varbin");
+            debug!("Skipping Dict: not primitive or varbin");
             return None;
         };
 
@@ -66,18 +58,33 @@ impl<T: AsBytes> PartialEq<Self> for Value<T> {
 
 impl<T: AsBytes> Eq for Value<T> {}
 
-fn dict_compressor(array: &dyn Array, _ctx: CompressCtx) -> ArrayRef {
-    match ArrayKind::from(array) {
+fn dict_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+    let dict_like = like.map(|like_arr| like_arr.as_any().downcast_ref::<DictArray>().unwrap());
+
+    let (codes, dict) = match ArrayKind::from(array) {
         ArrayKind::Primitive(p) => {
-            let (codes, values) = dict_encode_primitive(p);
-            DictArray::new(codes.boxed(), values.boxed()).boxed()
+            let (codes, dict) = dict_encode_primitive(p);
+            (
+                ctx.next_level()
+                    .compress(codes.as_ref(), dict_like.map(|dict| dict.codes())),
+                ctx.next_level()
+                    .compress(dict.as_ref(), dict_like.map(|dict| dict.dict())),
+            )
         }
         ArrayKind::VarBin(vb) => {
-            let (codes, values) = dict_encode_varbin(vb);
-            DictArray::new(codes.boxed(), values.boxed()).boxed()
+            let (codes, dict) = dict_encode_varbin(vb);
+            (
+                ctx.next_level()
+                    .compress(codes.as_ref(), dict_like.map(|dict| dict.codes())),
+                ctx.next_level()
+                    .compress(dict.as_ref(), dict_like.map(|dict| dict.dict())),
+            )
         }
-        _ => panic!("This encoding should have been excluded already"),
-    }
+
+        _ => unreachable!("This array kind should have been filtered out"),
+    };
+
+    DictArray::new(codes, dict).boxed()
 }
 
 // TODO(robert): Use distinct count instead of len for width estimation

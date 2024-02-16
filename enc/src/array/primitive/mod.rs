@@ -7,8 +7,10 @@ use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
 use allocator_api2::alloc::Allocator;
+use arrow::alloc::ALIGNMENT as ARROW_ALIGNMENT;
 use arrow::array::{make_array, ArrayData, AsArray};
 use arrow::buffer::{Buffer, NullBuffer};
+use log::debug;
 
 use crate::array::bool::BoolArray;
 use crate::array::{
@@ -16,7 +18,7 @@ use crate::array::{
     Encoding, EncodingId, EncodingRef,
 };
 use crate::arrow::CombineChunks;
-use crate::compress::ArrayCompression;
+use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -26,9 +28,6 @@ use crate::stats::{Stats, StatsSet};
 
 mod compress;
 mod stats;
-
-use arrow::alloc::ALIGNMENT as ARROW_ALIGNMENT;
-use log::warn;
 
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {
@@ -54,7 +53,7 @@ impl PrimitiveArray {
         };
 
         if buffer.as_ptr().align_offset(ARROW_ALIGNMENT) != 0 {
-            warn!(
+            debug!(
                 "Arrow buffer is not aligned to {} bytes and thus may require a copy to realign.",
                 ARROW_ALIGNMENT
             );
@@ -227,10 +226,6 @@ impl Array for PrimitiveArray {
     fn nbytes(&self) -> usize {
         self.buffer.len()
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for PrimitiveArray {
@@ -247,6 +242,10 @@ pub const PRIMITIVE_ENCODING: EncodingId = EncodingId("enc.primitive");
 impl Encoding for PrimitiveEncoding {
     fn id(&self) -> &EncodingId {
         &PRIMITIVE_ENCODING
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }
 

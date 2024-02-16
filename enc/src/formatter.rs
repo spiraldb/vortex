@@ -53,6 +53,17 @@ impl<'a, 'b: 'a> ArrayFormatter<'a, 'b> {
         self.indent = original_ident;
         res
     }
+
+    pub fn new_total_size<F>(&mut self, total: usize, new_total: F) -> std::fmt::Result
+    where
+        F: FnOnce(&mut ArrayFormatter) -> std::fmt::Result,
+    {
+        let original_total = self.total_size;
+        self.total_size = total;
+        let res = new_total(self);
+        self.total_size = original_total;
+        res
+    }
 }
 
 #[cfg(test)]

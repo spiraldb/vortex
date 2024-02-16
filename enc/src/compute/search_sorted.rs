@@ -20,16 +20,16 @@ impl From<SearchSortedSide> for polars_ops::prelude::SearchSortedSide {
     }
 }
 
-pub fn search_sorted_usize<T: AsRef<dyn Array>>(
-    indices: &T,
+pub fn search_sorted_usize(
+    indices: &dyn Array,
     index: usize,
     side: SearchSortedSide,
 ) -> EncResult<usize> {
     let enc_scalar: Box<dyn Scalar> = index.into();
     // Convert index into correctly typed Arrow scalar.
-    let enc_scalar = enc_scalar.cast(indices.as_ref().dtype())?;
+    let enc_scalar = enc_scalar.cast(indices.dtype())?;
 
-    let series: Series = indices.as_ref().iter_arrow().into_polars();
+    let series: Series = indices.iter_arrow().into_polars();
     Ok(search_sorted(
         &series,
         &Series::from_any_values("needle", &[enc_scalar.into_polars()], true)?,
@@ -50,19 +50,19 @@ mod test {
         let haystack: ArrayRef = vec![1, 2, 3].into();
 
         assert_eq!(
-            search_sorted_usize(&haystack, 0, SearchSortedSide::Left).unwrap(),
+            search_sorted_usize(haystack.as_ref(), 0, SearchSortedSide::Left).unwrap(),
             0
         );
         assert_eq!(
-            search_sorted_usize(&haystack, 1, SearchSortedSide::Left).unwrap(),
+            search_sorted_usize(haystack.as_ref(), 1, SearchSortedSide::Left).unwrap(),
             0
         );
         assert_eq!(
-            search_sorted_usize(&haystack, 1, SearchSortedSide::Right).unwrap(),
+            search_sorted_usize(haystack.as_ref(), 1, SearchSortedSide::Right).unwrap(),
             1
         );
         assert_eq!(
-            search_sorted_usize(&haystack, 4, SearchSortedSide::Left).unwrap(),
+            search_sorted_usize(haystack.as_ref(), 4, SearchSortedSide::Left).unwrap(),
             3
         );
     }

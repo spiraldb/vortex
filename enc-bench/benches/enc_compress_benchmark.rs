@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use std::path::Path;
 
 use arrow_array::RecordBatchReader;
@@ -24,6 +24,7 @@ fn download_taxi_data() -> &'static Path {
         return download_path;
     }
 
+    create_dir_all(download_path.parent().unwrap()).unwrap();
     let mut download_file = File::create(download_path).unwrap();
     reqwest::blocking::get(
         "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-11.parquet",
@@ -36,7 +37,9 @@ fn download_taxi_data() -> &'static Path {
 }
 
 fn compress(array: ArrayRef) -> usize {
-    CompressCtx::default().compress(array.as_ref()).nbytes()
+    CompressCtx::default()
+        .compress(array.as_ref(), None)
+        .nbytes()
 }
 
 fn enc_compress(c: &mut Criterion) {

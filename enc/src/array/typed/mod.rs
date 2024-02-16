@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use arrow::datatypes::DataType;
 
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
-use crate::compress::ArrayCompression;
+use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -110,10 +110,6 @@ impl Array for TypedArray {
     fn nbytes(&self) -> usize {
         self.array.nbytes()
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for TypedArray {
@@ -130,6 +126,10 @@ pub const TYPED_ENCODING: EncodingId = EncodingId("enc.typed");
 impl Encoding for TypedEncoding {
     fn id(&self) -> &EncodingId {
         &TYPED_ENCODING
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }
 

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
 
-use log::info;
+use log::debug;
 use once_cell::sync::Lazy;
 
 use crate::array::constant::ConstantEncoding;
@@ -9,16 +9,12 @@ use crate::array::{Array, ArrayRef, Encoding, EncodingId, ENCODINGS};
 use crate::compute;
 use crate::sampling::stratified_slices;
 
-pub trait ArrayCompression {
-    fn compress(&self, ctx: CompressCtx) -> ArrayRef;
-}
-
 pub trait EncodingCompression {
     fn compressor(&self, array: &dyn Array, config: &CompressConfig)
         -> Option<&'static Compressor>;
 }
 
-pub type Compressor = fn(&dyn Array, CompressCtx) -> ArrayRef;
+pub type Compressor = fn(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef;
 
 #[derive(Debug, Clone)]
 pub struct CompressConfig {
@@ -88,7 +84,7 @@ impl<'a> CompressCtx<'a> {
         Self { options, depth: 0 }
     }
 
-    pub fn compress(&self, arr: &dyn Array) -> ArrayRef {
+    pub fn compress(&self, arr: &dyn Array, like: Option<&dyn Array>) -> ArrayRef {
         if arr.is_empty() {
             return dyn_clone::clone_box(arr);
         }
@@ -97,14 +93,20 @@ impl<'a> CompressCtx<'a> {
             return dyn_clone::clone_box(arr);
         }
 
-        if let Some(compression) = arr.compression() {
-            compression.compress(self.next_level())
+        let encoding = like.unwrap_or(arr).encoding();
+        if self.options.is_enabled(encoding.id()) {
+            encoding
+                .compression()
+                .and_then(|compression| compression.compressor(arr, self.options))
+                .map(|compressor| compressor(arr, like, self.clone()))
+                .unwrap_or_else(|| dyn_clone::clone_box(arr))
         } else {
+            debug!("Skipping {}: disabled", encoding.id());
             dyn_clone::clone_box(arr)
         }
     }
 
-    fn next_level(&self) -> Self {
+    pub fn next_level(&self) -> Self {
         let mut cloned = self.clone();
         cloned.depth += 1;
         cloned
@@ -124,17 +126,18 @@ impl Default for CompressCtx<'_> {
 pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
     // First, we try constant compression
     if let Some(compressor) = ConstantEncoding.compressor(array, ctx.options()) {
-        return compressor(array, ctx);
+        return compressor(array, None, ctx);
     }
 
     let candidate_compressors: Vec<&Compressor> = ENCODINGS
         .iter()
+        .filter(|encoding| ctx.options.is_enabled(encoding.id()))
         .filter_map(|encoding| encoding.compression())
         .filter_map(|compression| compression.compressor(array, ctx.options()))
         .collect();
 
     if candidate_compressors.is_empty() {
-        info!(
+        debug!(
             "No compressors for array with dtype: {} and encoding: {}",
             array.dtype(),
             array.encoding().id(),
@@ -147,7 +150,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
         let (_, compressed_sample) = candidate_compressors.iter().fold(
             (array.nbytes(), None),
             |(compressed_bytes, curr_best), compressor| {
-                let compressed = compressor(array, ctx.clone());
+                let compressed = compressor(array, None, ctx.next_level());
 
                 if compressed.nbytes() < compressed_bytes {
                     (compressed.nbytes(), Some(compressed))
@@ -159,7 +162,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
 
         return compressed_sample
             .map(|s| {
-                info!(
+                debug!(
                     "Compressed small array with dtype: {} and encoding: {}, using: {}",
                     array.dtype(),
                     array.encoding().id(),
@@ -184,13 +187,12 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
     // FIXME(ngates): errors
     .unwrap();
 
-    let compression_ratios: Vec<(&Compressor, f32)> = candidate_compressors
-        .iter()
+    let compression_ratios: Vec<(ArrayRef, f32)> = candidate_compressors
+        .into_iter()
         .map(|compressor| {
-            (
-                *compressor,
-                compressor(sample.as_ref(), ctx.clone()).nbytes() as f32 / sample.nbytes() as f32,
-            )
+            let compressed_sample = compressor(sample.as_ref(), None, ctx.clone());
+            let compression_ratio = compressed_sample.nbytes() as f32 / sample.nbytes() as f32;
+            (compressed_sample, compression_ratio)
         })
         .collect();
 
@@ -198,9 +200,9 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
         .into_iter()
         .filter(|(_, ratio)| *ratio < 1.0)
         .min_by(|(_, first_ratio), (_, second_ratio)| first_ratio.total_cmp(second_ratio))
-        .map(|(compressor, _)| {
-            let c = compressor(array, ctx);
-            info!(
+        .map(|(sample, _)| {
+            let c = ctx.next_level().compress(array, Some(sample.as_ref()));
+            debug!(
                 "Compressed array with dtype: {} and encoding: {} using: {}",
                 array.dtype(),
                 array.encoding().id(),

@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use enc::array::Encoding;
 use enc_alp::ALPEncoding;
 use enc_dict::DictEncoding;
@@ -6,7 +8,6 @@ use enc_patched::PatchedEncoding;
 use enc_ree::REEEncoding;
 use enc_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
 use enc_zigzag::ZigZagEncoding;
-use itertools::Itertools;
 
 pub fn enumerate_arrays() {
     let encodings: Vec<&dyn Encoding> = vec![
@@ -24,19 +25,20 @@ pub fn enumerate_arrays() {
 
 #[cfg(test)]
 mod test {
-    use crate::enumerate_arrays;
+    use std::fs::create_dir_all;
+    use std::fs::File;
+    use std::path::Path;
+
     use arrow_array::RecordBatchReader;
+    use log::LevelFilter;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+
     use enc::array::chunked::ChunkedArray;
     use enc::array::{Array, ArrayRef};
     use enc::compress::CompressCtx;
     use enc::dtype::DType;
     use enc::error::{EncError, EncResult};
-    use log::{info, LevelFilter};
-    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-    use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-    use std::fs::create_dir_all;
-    use std::fs::File;
-    use std::path::Path;
 
     pub fn download_taxi_data() -> &'static Path {
         let download_path = Path::new("../../pyspiral/bench/.data/https-d37ci6vzurychx-cloudfront-net-trip-data-yellow-tripdata-2023-11.parquet");
@@ -68,15 +70,11 @@ mod test {
 
     #[test]
     fn compression_ratio() {
-        enumerate_arrays();
         setup_logger();
 
         let file = File::open(download_taxi_data()).unwrap();
-        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
-            .unwrap()
-            .with_batch_size(128_000)
-            .build()
-            .unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let reader = builder.with_batch_size(128_000).build().unwrap();
 
         let schema = reader.schema();
         let dtype: DType = schema.try_into().unwrap();
@@ -86,16 +84,17 @@ mod test {
             .collect::<EncResult<Vec<ArrayRef>>>()
             .unwrap();
         let chunked = ChunkedArray::new(chunks, dtype);
-        info!(
+        println!(
             "{} rows in {} chunks",
             chunked.len(),
             chunked.chunks().len()
         );
         let array = chunked.boxed();
-        let compressed = CompressCtx::default().compress(array.as_ref());
-        info!("NBytes {}", compressed.nbytes());
-        info!(
-            "Ratio {}",
+        let compressed = CompressCtx::default().compress(array.as_ref(), None);
+        println!("Compressed array {compressed}");
+        println!(
+            "NBytes {}, Ratio {}",
+            compressed.nbytes(),
             compressed.nbytes() as f32 / array.nbytes() as f32
         );
     }

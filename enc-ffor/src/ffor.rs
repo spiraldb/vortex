@@ -5,7 +5,7 @@ use enc::array::{
     check_validity_buffer, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
-use enc::compress::{ArrayCompression, EncodingCompression};
+use enc::compress::EncodingCompression;
 use enc::dtype::DType;
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
@@ -70,8 +70,8 @@ impl FFORArray {
         self.encoded.as_ref()
     }
 
-    pub fn min_val(&self) -> Box<dyn Scalar> {
-        self.min_val.clone()
+    pub fn min_val(&self) -> &dyn Scalar {
+        self.min_val.as_ref()
     }
 
     pub fn num_bits(&self) -> u8 {
@@ -140,14 +140,6 @@ impl Array for FFORArray {
     fn nbytes(&self) -> usize {
         self.encoded.nbytes()
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        // FFOR and other bitpacking algorithms are essentially the "terminal"
-        // lightweight encodings for integers, as the output is essentially an array
-        // of opaque bytes. At that point, the only available schemes are general-purpose
-        // compression algorithms, which we would apply at the file level instead (if at all)
-        None
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for FFORArray {
@@ -158,8 +150,12 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for FFORArray {
 
 impl ArrayDisplay for FFORArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("min_val: {}, len: {}", &self.min_val, self.len))?;
-        f.indent(|indent| indent.array(self.encoded.as_ref()))
+        f.writeln(format!(
+            "min_val: {}, num_bits: {}",
+            self.min_val(),
+            self.num_bits()
+        ))?;
+        f.indent(|indent| indent.array(self.encoded()))
     }
 }
 

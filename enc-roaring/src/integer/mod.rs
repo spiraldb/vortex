@@ -8,12 +8,11 @@ use enc::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
     EncodingId, EncodingRef,
 };
-use enc::compress::{ArrayCompression, EncodingCompression};
-use enc::dtype::Nullability::NonNullable;
-use enc::dtype::Signedness::Signed;
-use enc::dtype::{DType, IntWidth};
+use enc::compress::EncodingCompression;
+use enc::dtype::DType;
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
+use enc::ptype::PType;
 use enc::scalar::Scalar;
 use enc::stats::{Stats, StatsSet};
 
@@ -23,19 +22,33 @@ mod stats;
 #[derive(Debug, Clone)]
 pub struct RoaringIntArray {
     bitmap: Bitmap,
+    ptype: PType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl RoaringIntArray {
-    pub fn new(bitmap: Bitmap) -> Self {
-        Self {
-            bitmap,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+    pub fn new(bitmap: Bitmap, ptype: PType) -> Self {
+        Self::try_new(bitmap, ptype).unwrap()
+    }
+
+    pub fn try_new(bitmap: Bitmap, ptype: PType) -> EncResult<Self> {
+        if !ptype.is_unsigned_int() {
+            return Err(EncError::InvalidPType(ptype));
         }
+
+        Ok(Self {
+            bitmap,
+            ptype,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
+        })
     }
 
     pub fn bitmap(&self) -> &Bitmap {
         &self.bitmap
+    }
+
+    pub fn ptype(&self) -> PType {
+        self.ptype
     }
 
     pub fn encode(array: &dyn Array) -> EncResult<Self> {
@@ -74,7 +87,7 @@ impl Array for RoaringIntArray {
 
     #[inline]
     fn dtype(&self) -> &DType {
-        &DType::Int(IntWidth::_32, Signed, NonNullable)
+        self.ptype.into()
     }
 
     fn stats(&self) -> Stats {
@@ -84,7 +97,15 @@ impl Array for RoaringIntArray {
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
         // Unwrap since we know the index is valid
-        Ok(self.bitmap.select(index as u32).unwrap().into())
+        let bitmap_value = self.bitmap.select(index as u32).unwrap();
+        let scalar: Box<dyn Scalar> = match self.ptype {
+            PType::U8 => (bitmap_value as u8).into(),
+            PType::U16 => (bitmap_value as u16).into(),
+            PType::U32 => bitmap_value.into(),
+            PType::U64 => (bitmap_value as u64).into(),
+            _ => unreachable!("RoaringIntArray constructor should have disallowed this type"),
+        };
+        Ok(scalar)
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -105,10 +126,6 @@ impl Array for RoaringIntArray {
     fn nbytes(&self) -> usize {
         self.bitmap.get_serialized_size_in_bytes::<Native>()
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for RoaringIntArray {
@@ -119,8 +136,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for RoaringIntArray {
 
 impl ArrayDisplay for RoaringIntArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln("roaring:")?;
-        f.indent(|indent| indent.writeln(format!("{:?}", self.bitmap)))
+        f.indent(|indent| indent.writeln(format!("{:?}", self.bitmap())))
     }
 }
 

@@ -2,7 +2,7 @@ use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use enc::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
-use enc::compress::{ArrayCompression, EncodingCompression};
+use enc::compress::EncodingCompression;
 use enc::dtype::{DType, Signedness};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
@@ -19,6 +19,10 @@ pub struct ZigZagArray {
 }
 
 impl ZigZagArray {
+    pub fn new(encoded: ArrayRef) -> Self {
+        Self::try_new(encoded).unwrap()
+    }
+
     pub fn try_new(encoded: ArrayRef) -> EncResult<Self> {
         let dtype = match encoded.dtype() {
             DType::Int(width, Signedness::Unsigned, nullability) => {
@@ -101,10 +105,6 @@ impl Array for ZigZagArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.encoded.nbytes()
-    }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
     }
 }
 

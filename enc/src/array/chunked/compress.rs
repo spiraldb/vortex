@@ -1,17 +1,44 @@
-use crate::array::chunked::ChunkedArray;
-use crate::array::{Array, ArrayRef};
-use crate::compress::{ArrayCompression, CompressCtx};
 use rayon::prelude::*;
 
-impl ArrayCompression for ChunkedArray {
-    fn compress(&self, ctx: CompressCtx) -> ArrayRef {
-        ChunkedArray::new(
-            self.chunks
-                .par_iter()
-                .map(|chunk| ctx.compress(chunk.as_ref()))
-                .collect(),
-            self.dtype.clone(),
-        )
-        .boxed()
+use crate::array::chunked::{ChunkedArray, ChunkedEncoding, CHUNKED_ENCODING};
+use crate::array::{Array, ArrayRef};
+use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+
+impl EncodingCompression for ChunkedEncoding {
+    fn compressor(
+        &self,
+        array: &dyn Array,
+        _config: &CompressConfig,
+    ) -> Option<&'static Compressor> {
+        if array.encoding().id() == &CHUNKED_ENCODING {
+            Some(&(chunked_compressor as Compressor))
+        } else {
+            None
+        }
     }
+}
+
+fn chunked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+    let chunked_array = array.as_any().downcast_ref::<ChunkedArray>().unwrap();
+    let chunked_like =
+        like.map(|like_array| like_array.as_any().downcast_ref::<ChunkedArray>().unwrap());
+
+    let compressed_chunks = chunked_like
+        .map(|c_like| {
+            chunked_array
+                .chunks()
+                .par_iter()
+                .zip_eq(c_like.chunks())
+                .map(|(chunk, chunk_like)| ctx.compress(chunk.as_ref(), Some(chunk_like.as_ref())))
+                .collect()
+        })
+        .unwrap_or_else(|| {
+            chunked_array
+                .chunks()
+                .par_iter()
+                .map(|chunk| ctx.compress(chunk.as_ref(), None))
+                .collect()
+        });
+
+    ChunkedArray::new(compressed_chunks, array.dtype().clone()).boxed()
 }

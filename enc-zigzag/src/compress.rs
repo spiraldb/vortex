@@ -1,33 +1,18 @@
 use crate::zigzag::{ZigZagArray, ZigZagEncoding};
 use enc::array::primitive::PrimitiveArray;
-use enc::array::Encoding;
+
 use enc::array::{Array, ArrayKind, ArrayRef};
-use enc::compress::{
-    ArrayCompression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
-};
+use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use enc::ptype::{NativePType, PType};
 use enc::stats::Stat;
 use zigzag::ZigZag;
-
-impl ArrayCompression for ZigZagArray {
-    fn compress(&self, ctx: CompressCtx) -> ArrayRef {
-        // Recursively compress the inner encoded array.
-        ZigZagArray::try_new(ctx.compress(self.encoded()))
-            .unwrap()
-            .boxed()
-    }
-}
 
 impl EncodingCompression for ZigZagEncoding {
     fn compressor(
         &self,
         array: &dyn Array,
-        config: &CompressConfig,
+        _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if !config.is_enabled(self.id()) {
-            return None;
-        }
-
         // Only support primitive arrays
         let Some(parray) = array.as_any().downcast_ref::<PrimitiveArray>() else {
             return None;
@@ -39,30 +24,27 @@ impl EncodingCompression for ZigZagEncoding {
         }
 
         // Only compress if the array has negative values
-        match parray.stats().get_or_compute_cast::<i64>(&Stat::Min) {
-            None => {
-                // Unknown whether the array has negative values?
-                return None;
-            }
-            Some(min_scalar) => {
-                if min_scalar >= 0 {
-                    return None;
-                }
-            }
-        }
-
         // TODO(ngates): also check that Stat::Max is less than half the max value of the type
-
-        Some(&(zigzag_compressor as Compressor))
+        parray
+            .stats()
+            .get_or_compute_cast::<i64>(&Stat::Min)
+            .filter(|min| min < &0)
+            .map(|_| &(zigzag_compressor as Compressor))
     }
 }
 
-fn zigzag_compressor(array: &dyn Array, _opts: CompressCtx) -> ArrayRef {
+fn zigzag_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+    let zigzag_like = like.map(|like_arr| like_arr.as_any().downcast_ref::<ZigZagArray>().unwrap());
     let encoded = match ArrayKind::from(array) {
         ArrayKind::Primitive(p) => zigzag_encode(p),
-        _ => panic!("Compress more arrays"),
+        _ => unreachable!("This array kind should have been filtered out"),
     };
-    ZigZagArray::try_new(encoded.boxed()).unwrap().boxed()
+
+    ZigZagArray::new(
+        ctx.next_level()
+            .compress(encoded.as_ref(), zigzag_like.map(|z| z.encoded())),
+    )
+    .boxed()
 }
 
 pub fn zigzag_encode(parray: &PrimitiveArray) -> PrimitiveArray {

@@ -9,7 +9,7 @@ use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
-use crate::compress::ArrayCompression;
+use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -171,10 +171,6 @@ impl Array for ChunkedArray {
     fn nbytes(&self) -> usize {
         self.chunks().iter().map(|arr| arr.nbytes()).sum()
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
-    }
 }
 
 impl FromIterator<ArrayRef> for ChunkedArray {
@@ -199,7 +195,8 @@ impl ArrayDisplay for ChunkedArray {
         f.writeln("chunks:")?;
         f.indent(|indent| {
             for chunk in self.chunks() {
-                indent.array(chunk.as_ref())?;
+                indent
+                    .new_total_size(chunk.nbytes(), |new_total| new_total.array(chunk.as_ref()))?;
             }
             Ok(())
         })
@@ -214,6 +211,10 @@ pub const CHUNKED_ENCODING: EncodingId = EncodingId("enc.chunked");
 impl Encoding for ChunkedEncoding {
     fn id(&self) -> &EncodingId {
         &CHUNKED_ENCODING
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }
 

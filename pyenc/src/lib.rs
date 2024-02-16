@@ -1,4 +1,4 @@
-use log::info;
+use log::debug;
 use pyo3::prelude::*;
 
 use dtype::PyDType;
@@ -19,7 +19,7 @@ mod error;
 fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
 
-    info!(
+    debug!(
         "Discovered encodings: {:?}",
         enc::array::ENCODINGS
             .iter()
