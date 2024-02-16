@@ -3,11 +3,8 @@ use log::debug;
 use num_traits::NumCast;
 
 use enc::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
-use enc::array::Encoding;
 use enc::array::{Array, ArrayRef};
-use enc::compress::{
-    ArrayCompression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
-};
+use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use enc::dtype::DType;
 use enc::dtype::Nullability::NonNullable;
 use enc::dtype::Signedness::Unsigned;
@@ -16,25 +13,12 @@ use enc::stats::Stat;
 
 use crate::{RoaringIntArray, RoaringIntEncoding};
 
-impl ArrayCompression for RoaringIntArray {
-    fn compress(&self, _ctx: CompressCtx) -> ArrayRef {
-        let mut bitmap = self.bitmap().clone();
-        bitmap.run_optimize();
-        RoaringIntArray::new(bitmap).boxed()
-    }
-}
-
 impl EncodingCompression for RoaringIntEncoding {
     fn compressor(
         &self,
         array: &dyn Array,
-        config: &CompressConfig,
+        _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if !config.is_enabled(self.id()) {
-            debug!("Skipping roaring int, not enabled");
-            return None;
-        }
-
         // Only support primitive enc arrays
         if array.encoding().id() != &PRIMITIVE_ENCODING {
             debug!("Skipping roaring int, not primitive");
@@ -58,6 +42,7 @@ impl EncodingCompression for RoaringIntEncoding {
 
         if array.stats().get_or_compute_or(0usize, &Stat::Max) > u32::MAX as usize {
             debug!("Skipping roaring int, max is larger than {}", u32::MAX);
+            return None;
         }
 
         debug!("Using roaring int");
@@ -65,7 +50,11 @@ impl EncodingCompression for RoaringIntEncoding {
     }
 }
 
-fn roaring_int_compressor(array: &dyn Array, _opts: CompressCtx) -> ArrayRef {
+fn roaring_int_compressor(
+    array: &dyn Array,
+    _like: Option<&dyn Array>,
+    _ctx: CompressCtx,
+) -> ArrayRef {
     roaring_encode(array.as_any().downcast_ref::<PrimitiveArray>().unwrap()).boxed()
 }
 
@@ -81,8 +70,7 @@ pub fn roaring_encode(primitive_array: &PrimitiveArray) -> RoaringIntArray {
 
 fn roaring_encode_primitive<T: NumCast + NativePType>(values: &[T]) -> RoaringIntArray {
     let mut bitmap = Bitmap::new();
-    values.iter().for_each(|&i| bitmap.add(i.to_u32().unwrap()));
+    bitmap.extend(values.iter().map(|i| i.to_u32().unwrap()));
     bitmap.run_optimize();
-    // bitmap.shrink_to_fit();
-    RoaringIntArray::new(bitmap)
+    RoaringIntArray::new(bitmap, T::PTYPE)
 }

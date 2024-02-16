@@ -67,8 +67,6 @@ pub enum EncError {
     PolarsError(PolarsError),
     #[error("arrow error: {0:?}")]
     ArrowError(ArrowError),
-    #[error("malformed patch values, patch index had entry for index {0} but there was no corresponding patch value")]
-    MalformedPatches(usize),
     #[error("patch values may not be null for base dtype {0}")]
     NullPatchValuesNotAllowed(DType),
     #[error("unsupported DType {0} for data array")]

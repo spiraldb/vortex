@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use enc::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
 };
-use enc::compress::{ArrayCompression, EncodingCompression};
+use enc::compress::EncodingCompression;
 use enc::dtype::{DType, Signedness};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
@@ -96,10 +96,6 @@ impl Array for DictArray {
 
     fn nbytes(&self) -> usize {
         self.codes().nbytes() + self.dict().nbytes()
-    }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
     }
 }
 

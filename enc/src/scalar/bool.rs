@@ -1,8 +1,9 @@
+use std::any::Any;
+use std::fmt::{Display, Formatter};
+
 use crate::dtype::{DType, Nullability};
 use crate::error::{EncError, EncResult};
 use crate::scalar::{NullableScalar, Scalar};
-use std::any::Any;
-use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BoolScalar {
@@ -74,9 +75,15 @@ impl TryFrom<&dyn Scalar> for bool {
     type Error = EncError;
 
     fn try_from(value: &dyn Scalar) -> EncResult<Self> {
-        match value.as_any().downcast_ref::<BoolScalar>() {
-            Some(bool_scalar) => Ok(bool_scalar.value()),
-            None => Err(EncError::InvalidDType(value.dtype().clone())),
+        if let Some(bool_scalar) = value.as_any().downcast_ref::<BoolScalar>() {
+            Ok(bool_scalar.value())
+        } else if let Some(nscalar) = value.as_any().downcast_ref::<NullableScalar>() {
+            match nscalar {
+                NullableScalar::Some(v, _) => v.as_ref().try_into(),
+                NullableScalar::None(_) => Err(EncError::InvalidDType(value.dtype().clone())),
+            }
+        } else {
+            Err(EncError::InvalidDType(value.dtype().clone()))
         }
     }
 }

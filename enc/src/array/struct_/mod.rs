@@ -7,7 +7,7 @@ use arrow::datatypes::{Field, Fields};
 use itertools::Itertools;
 
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
-use crate::compress::ArrayCompression;
+use crate::compress::EncodingCompression;
 use crate::dtype::{DType, FieldNames};
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -162,10 +162,6 @@ impl Array for StructArray {
     fn nbytes(&self) -> usize {
         self.fields.iter().map(|arr| arr.nbytes()).sum()
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for StructArray {
@@ -182,6 +178,10 @@ pub const STRUCT_ENCODING: EncodingId = EncodingId("enc.struct");
 impl Encoding for StructEncoding {
     fn id(&self) -> &EncodingId {
         &STRUCT_ENCODING
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }
 

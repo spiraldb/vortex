@@ -12,7 +12,7 @@ use crate::array::struct_::{StructArray, STRUCT_ENCODING};
 use crate::array::typed::{TypedArray, TYPED_ENCODING};
 use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
 use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
-use crate::compress::{ArrayCompression, EncodingCompression};
+use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::dtype::{DType, Nullability};
 use crate::error::{EncError, EncResult};
@@ -23,7 +23,6 @@ use crate::stats::Stats;
 pub mod bool;
 pub mod chunked;
 pub mod constant;
-pub mod nullable;
 pub mod primitive;
 pub mod struct_;
 pub mod typed;
@@ -66,9 +65,6 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
     fn encoding(&self) -> &'static dyn Encoding;
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
-
-    /// Implementation of the array compression trait
-    fn compression(&self) -> Option<&dyn ArrayCompression>;
 
     fn compute(&self) -> Option<&dyn ArrayCompute> {
         None
@@ -131,9 +127,8 @@ impl Display for EncodingId {
 pub trait Encoding: Debug + Send + Sync + 'static {
     fn id(&self) -> &EncodingId;
 
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        None
-    }
+    /// Implementation of the array compression trait
+    fn compression(&self) -> Option<&dyn EncodingCompression>;
 }
 
 pub type EncodingRef = &'static dyn Encoding;

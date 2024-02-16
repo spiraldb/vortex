@@ -1,8 +1,7 @@
 use std::any::Any;
+use std::iter;
 use std::sync::{Arc, RwLock};
-use std::usize;
 
-use arrow::array::ArrayRef as ArrowArrayRef;
 use arrow::compute::interleave;
 
 use enc::array::{
@@ -10,7 +9,7 @@ use enc::array::{
     EncodingRef,
 };
 use enc::arrow::CombineChunks;
-use enc::compress::ArrayCompression;
+use enc::compress::EncodingCompression;
 use enc::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use enc::dtype::{DType, Nullability, Signedness};
 use enc::error::{EncError, EncResult};
@@ -21,10 +20,8 @@ use enc::stats::{Stats, StatsSet};
 #[derive(Debug, Clone)]
 pub struct PatchedArray {
     data: ArrayRef,
-    // used internally to track the starting index of the array in case of slicing
-    offset: usize,
-    // used internally to track the length of the array in case of slicing
-    length: usize,
+    // Offset value for patch indicies as a result of slicing
+    patch_indices_offset: usize,
     patch_indices: ArrayRef,
     patch_values: ArrayRef,
     stats: Arc<RwLock<StatsSet>>,
@@ -56,11 +53,9 @@ impl PatchedArray {
             return Err(EncError::InvalidDType(patch_indices.dtype().clone()));
         }
 
-        let length = data.len();
         Ok(Self {
             data,
-            offset: 0,
-            length,
+            patch_indices_offset: 0,
             patch_indices,
             patch_values,
             stats: Arc::new(RwLock::new(StatsSet::new())),
@@ -68,8 +63,8 @@ impl PatchedArray {
     }
 
     #[inline]
-    pub fn offset(&self) -> usize {
-        self.offset
+    pub fn patch_indices_offset(&self) -> usize {
+        self.patch_indices_offset
     }
 
     #[inline]
@@ -106,12 +101,12 @@ impl Array for PatchedArray {
 
     #[inline]
     fn len(&self) -> usize {
-        self.length
+        self.data.len()
     }
 
     #[inline]
     fn is_empty(&self) -> bool {
-        self.length == 0
+        self.data.is_empty()
     }
 
     #[inline]
@@ -126,41 +121,93 @@ impl Array for PatchedArray {
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
-        let true_index = index + self.offset;
 
-        // Check whether `true_index` exists in the patch index array
+        // Check whether `true_patch_index` exists in the patch index array
         // First, get the index of the patch index array that is the first index
         // greater than or equal to the true index
-        search_sorted_usize(&self.patch_indices, true_index, SearchSortedSide::Left)
-            .and_then(|idx| {
-                // If the value at this index is equal to the true index, then it exists in the patch index array
-                // and we should return the value at the corresponding index in the patch values array
-                let patch_index = self.patch_indices.scalar_at(idx)?;
-                if usize::try_from(patch_index)? == true_index {
-                    self.patch_values.scalar_at(idx)
-                } else {
-                    Err(EncError::MalformedPatches(idx))
-                }
-            })
-            // Otherwise, we should return the value at the corresponding index in the data array
-            .or_else(|_| self.data.scalar_at(true_index))
+        let true_patch_index = index + self.patch_indices_offset;
+        search_sorted_usize(
+            self.patch_indices(),
+            true_patch_index,
+            SearchSortedSide::Left,
+        )
+        .and_then(|idx| {
+            // If the value at this index is equal to the true index, then it exists in the patch index array
+            // and we should return the value at the corresponding index in the patch values array
+            self.patch_indices()
+                .scalar_at(idx)
+                .and_then(usize::try_from)
+                .and_then(|patch_index| {
+                    if patch_index == true_patch_index {
+                        self.patch_values().scalar_at(idx)
+                    } else {
+                        // Otherwise, we should return the value at the corresponding index in the data array
+                        self.data().scalar_at(index)
+                    }
+                })
+                // In this case idx is out of bounds of patch_indices
+                .or_else(|_| self.data.scalar_at(index))
+        })
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        Box::new(std::iter::once(
-            PatchedArrowIterator::new(self).get_array_ref(),
+        if self.patch_indices().is_empty() {
+            return self.data.iter_arrow();
+        }
+
+        let mut indices: Vec<(usize, usize)> = vec![Default::default(); self.len()];
+        let patch_indices = ScalarIterator::new(self.patch_indices())
+            .map(|v| usize::try_from(v).unwrap() - self.patch_indices_offset)
+            .filter(|i| i < &self.len())
+            .enumerate();
+
+        let mut current_offset: usize = 0;
+        for (patch_index_index, patch_index) in patch_indices {
+            indices.splice(
+                current_offset..patch_index,
+                iter::repeat(0).zip(current_offset..patch_index),
+            );
+            indices[patch_index] = (1, patch_index_index);
+            current_offset = patch_index + 1;
+        }
+
+        if current_offset < self.len() {
+            indices.splice(
+                current_offset..self.len(),
+                iter::repeat(0).zip(current_offset..self.len()),
+            );
+        }
+
+        Box::new(iter::once(
+            interleave(
+                &[
+                    &(self.data.iter_arrow().combine_chunks()),
+                    &self.patch_values.iter_arrow().combine_chunks(),
+                ],
+                indices.as_ref(),
+            )
+            .unwrap(),
         ))
     }
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
+        // Find the index of the first patch index that is greater than or equal to the offset of this array
+        let patch_index_start_index =
+            search_sorted_usize(self.patch_indices(), start, SearchSortedSide::Left)?;
+        let patch_index_end_index =
+            search_sorted_usize(self.patch_indices(), stop, SearchSortedSide::Right)?;
+
         Ok(PatchedArray {
-            data: self.data.clone(),
-            offset: self.offset + start,
-            length: stop - start,
-            patch_indices: self.patch_indices.clone(),
-            patch_values: self.patch_values.clone(),
+            data: self.data.slice(start, stop)?,
+            patch_indices_offset: self.patch_indices_offset + start,
+            patch_indices: self
+                .patch_indices
+                .slice(patch_index_start_index, patch_index_end_index)?,
+            patch_values: self
+                .patch_values
+                .slice(patch_index_start_index, patch_index_end_index)?,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
         .boxed())
@@ -173,12 +220,32 @@ impl Array for PatchedArray {
 
     #[inline]
     fn nbytes(&self) -> usize {
-        // TODO(robert): Take into account offsets
         self.data.nbytes() + self.patch_indices.nbytes() + self.patch_values.nbytes()
     }
+}
 
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
+struct ScalarIterator<'a> {
+    array: &'a dyn Array,
+    index: usize,
+}
+
+impl<'a> ScalarIterator<'a> {
+    pub fn new(array: &'a dyn Array) -> Self {
+        Self { array, index: 0 }
+    }
+}
+
+impl<'a> Iterator for ScalarIterator<'a> {
+    type Item = Box<dyn Scalar>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.array.len() {
+            None
+        } else {
+            let res = self.array.scalar_at(self.index).unwrap();
+            self.index += 1;
+            Some(res)
+        }
     }
 }
 
@@ -190,7 +257,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for PatchedArray {
 
 impl ArrayDisplay for PatchedArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("offset: {}", self.offset()))?;
+        f.writeln(format!("offset: {}", self.patch_indices_offset()))?;
         f.writeln("patch indices:")?;
         f.indent(|indented| indented.array(self.patch_indices()))?;
         f.writeln("patches:")?;
@@ -209,105 +276,9 @@ impl Encoding for PatchedEncoding {
     fn id(&self) -> &EncodingId {
         &PATCHED_ENCODING
     }
-}
 
-struct PatchedArrowIterator {
-    data: ArrayRef,
-    length: usize,
-    patch_indices: ArrayRef,
-    patch_values: ArrayRef,
-    // Used for sliced arrays to track the offset of the patch values array
-    // When an array is sliced, the patch_values should be shifted by this offset
-    patch_value_offset: usize,
-}
-
-impl PatchedArrowIterator {
-    fn next_patch_index<T: AsRef<dyn Array>>(
-        patch_indices: T,
-        index: usize,
-        array_starting_offset: usize,
-    ) -> Option<usize> {
-        if index < patch_indices.as_ref().len() {
-            Some(
-                usize::try_from(patch_indices.as_ref().scalar_at(index).ok()?).ok()?
-                    - array_starting_offset,
-            )
-        } else {
-            None
-        }
-    }
-
-    fn new(array: &PatchedArray) -> Self {
-        // Slice the data array to get the data that is relevant to this array
-        // unwrap directly because the start and length are already checked in .slice()
-        let data = array
-            .data
-            .slice(array.offset, array.offset + array.length)
-            .unwrap();
-
-        // Find the index of the first patch index that is greater than or equal to the offset of this array
-        let patch_index_start_index =
-            search_sorted_usize(&array.patch_indices, array.offset, SearchSortedSide::Left)
-                .unwrap();
-
-        // Slice the patch indices array to get the data that is relevant to this array
-        let patch_indices: ArrayRef = array
-            .patch_indices
-            .slice(patch_index_start_index, array.patch_indices.len())
-            .unwrap();
-
-        // Slice the patch values array to get the data that is relevant to this array
-        let patch_values = array
-            .patch_values
-            .slice(patch_index_start_index, array.patch_values.len())
-            .unwrap();
-
-        Self {
-            data,
-            length: array.length,
-            patch_indices,
-            patch_values,
-            patch_value_offset: array.offset,
-        }
-    }
-
-    fn get_array_ref(&mut self) -> ArrowArrayRef {
-        let mut indices: Vec<(usize, usize)> = vec![Default::default(); self.length];
-
-        let mut patch_indices_index: usize = 0;
-        let mut next_patch_index: Option<usize> = None;
-        if self.patch_indices.len() > 0 {
-            next_patch_index = PatchedArrowIterator::next_patch_index(
-                &self.patch_indices,
-                0,
-                self.patch_value_offset,
-            );
-        }
-
-        for (i, index) in indices.iter_mut().enumerate().take(self.length) {
-            if next_patch_index.is_some() && Some(i) == next_patch_index {
-                *index = (1, patch_indices_index);
-                patch_indices_index += 1;
-                next_patch_index = PatchedArrowIterator::next_patch_index(
-                    &self.patch_indices,
-                    patch_indices_index,
-                    self.patch_value_offset,
-                );
-            } else {
-                *index = (0, i);
-            }
-        }
-
-        // `self.data` and `self.patch_values` are guaranteed to have the same type through the constructor
-        // `interleave` shouldn't return an error and it's safe to unwrap
-        interleave(
-            &[
-                &(self.data.iter_arrow().combine_chunks()),
-                &self.patch_values.iter_arrow().combine_chunks(),
-            ],
-            indices.as_ref(),
-        )
-        .unwrap()
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 }
 

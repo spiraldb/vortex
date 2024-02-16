@@ -8,7 +8,7 @@ use enc::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
     EncodingId, EncodingRef,
 };
-use enc::compress::{ArrayCompression, EncodingCompression};
+use enc::compress::EncodingCompression;
 use enc::dtype::DType;
 use enc::dtype::Nullability::NonNullable;
 use enc::error::{EncError, EncResult};
@@ -120,10 +120,6 @@ impl Array for RoaringBoolArray {
         // TODO(ngates): do we want Native serializer? Or portable? Or frozen?
         self.bitmap.get_serialized_size_in_bytes::<Native>()
     }
-
-    fn compression(&self) -> Option<&dyn ArrayCompression> {
-        Some(self)
-    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for RoaringBoolArray {
@@ -134,8 +130,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for RoaringBoolArray {
 
 impl ArrayDisplay for RoaringBoolArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln("roaring:")?;
-        f.indent(|indent| indent.writeln(format!("{:?}", self.bitmap)))
+        f.indent(|indent| indent.writeln(format!("{:?}", self.bitmap())))
     }
 }
 

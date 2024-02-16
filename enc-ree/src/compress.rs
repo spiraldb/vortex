@@ -3,19 +3,11 @@ use codecz::AlignedAllocator;
 use crate::{REEArray, REEEncoding};
 use enc::array::bool::BoolArray;
 use enc::array::primitive::PrimitiveArray;
-use enc::array::{Array, ArrayKind, ArrayRef, Encoding};
-use enc::compress::{
-    ArrayCompression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
-};
+use enc::array::{Array, ArrayKind, ArrayRef};
+use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use enc::dtype::{DType, IntWidth, Nullability, Signedness};
 use enc::ptype::match_each_native_ptype;
 use enc::stats::Stat;
-
-impl ArrayCompression for REEArray {
-    fn compress(&self, ctx: CompressCtx) -> ArrayRef {
-        REEArray::new(ctx.compress(self.ends()), ctx.compress(self.values())).boxed()
-    }
-}
 
 impl EncodingCompression for REEEncoding {
     fn compressor(
@@ -23,10 +15,6 @@ impl EncodingCompression for REEEncoding {
         array: &dyn Array,
         config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if !config.is_enabled(self.id()) {
-            return None;
-        }
-
         let avg_run_length = array.len() as f32
             / array
                 .stats()
@@ -42,12 +30,22 @@ impl EncodingCompression for REEEncoding {
     }
 }
 
-fn ree_compressor(array: &dyn Array, _opts: CompressCtx) -> ArrayRef {
-    let (ends, values) = match ArrayKind::from(array) {
-        ArrayKind::Primitive(primitive_array) => ree_encode(primitive_array),
-        _ => panic!("Compress more arrays"),
+fn ree_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+    let ree_like = like.map(|like_arr| like_arr.as_any().downcast_ref::<REEArray>().unwrap());
+    let (compressed_ends, compressed_values) = match ArrayKind::from(array) {
+        ArrayKind::Primitive(primitive_array) => {
+            let (ends, values) = ree_encode(primitive_array);
+            (
+                ctx.next_level()
+                    .compress(ends.as_ref(), ree_like.map(|ree| ree.ends())),
+                ctx.next_level()
+                    .compress(values.as_ref(), ree_like.map(|ree| ree.values())),
+            )
+        }
+        _ => unreachable!("This array kind should have been filtered out"),
     };
-    REEArray::new(ends.boxed(), values.boxed()).boxed()
+
+    REEArray::new(compressed_ends, compressed_values, array.len()).boxed()
 }
 
 pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
