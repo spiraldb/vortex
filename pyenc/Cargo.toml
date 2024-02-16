@@ -16,7 +16,6 @@ enc = { path = "../rust/enc" }
 enc-alp = { path = "../rust/enc-alp" }
 enc-dict = { path = "../rust/enc-dict" }
 enc-ffor = { path = "../rust/enc-ffor" }
-enc-patched = { path = "../rust/enc-patched" }
 enc-ree = { path = "../rust/enc-ree" }
 enc-roaring = { path = "../rust/enc-roaring" }
 enc-zigzag = { path = "../rust/enc-zigzag" }

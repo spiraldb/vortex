@@ -4,7 +4,6 @@ use enc::array::Encoding;
 use enc_alp::ALPEncoding;
 use enc_dict::DictEncoding;
 use enc_ffor::FFoREncoding;
-use enc_patched::PatchedEncoding;
 use enc_ree::REEEncoding;
 use enc_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
 use enc_zigzag::ZigZagEncoding;
@@ -14,7 +13,6 @@ pub fn enumerate_arrays() {
         &ALPEncoding,
         &DictEncoding,
         &FFoREncoding,
-        &PatchedEncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
         &RoaringIntEncoding,
@@ -34,6 +32,7 @@ mod test {
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 
+    use crate::enumerate_arrays;
     use enc::array::chunked::ChunkedArray;
     use enc::array::{Array, ArrayRef};
     use enc::compress::CompressCtx;
@@ -70,6 +69,7 @@ mod test {
 
     #[test]
     fn compression_ratio() {
+        enumerate_arrays();
         setup_logger();
 
         let file = File::open(download_taxi_data()).unwrap();

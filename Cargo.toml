@@ -9,7 +9,6 @@ members = [
     "rust/enc-bench",
     "rust/enc-dict",
     "rust/enc-ffor",
-    "rust/enc-patched",
     "rust/enc-ree",
     "rust/enc-roaring",
     "rust/enc-zigzag",

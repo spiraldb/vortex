@@ -9,7 +9,6 @@ workspace = true
 [dependencies]
 arrow = { version = "50.0.0" }
 enc = { "path" = "../enc" }
-enc-patched = { "path" = "../enc-patched" }
 linkme = "0.3.22"
 itertools = "0.12.1"
 codecz = { path = "../codecz" }
