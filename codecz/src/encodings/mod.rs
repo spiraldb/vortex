@@ -5,7 +5,6 @@ pub use error::CodecError;
 pub mod alp;
 pub mod ffor;
 pub mod ree;
-pub mod zigzag;
 
 pub use spiral_alloc::{AlignedAllocator, AlignedVec, ALIGNED_ALLOCATOR, SPIRAL_ALIGNMENT};
 

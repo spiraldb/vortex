@@ -98,18 +98,6 @@ enum ResultStatus_t codecz_alp_decodeSingle_f32(int32_t in, AlpExponents_t const
 enum ResultStatus_t codecz_alp_decodeSingle_f64(int64_t in, AlpExponents_t const *const exponents, double *out);
 
 //
-// ZigZag Encoding
-//
-void codecz_zz_encode_i8(int8_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
-void codecz_zz_encode_i16(int16_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
-void codecz_zz_encode_i32(int32_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
-void codecz_zz_encode_i64(int64_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
-void codecz_zz_decode_i8(uint8_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
-void codecz_zz_decode_i16(uint16_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
-void codecz_zz_decode_i32(uint32_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
-void codecz_zz_decode_i64(uint64_t const *const ptr, uint64_t const len, OneBufferResult_t *const out);
-
-//
 // Fastlanes bitpacking
 //
 
