@@ -73,6 +73,8 @@ pub enum EncError {
     UnsupportedDataArrayDType(DType),
     #[error("unsupported DType {0} for offsets array")]
     UnsupportedOffsetsArrayDType(DType),
+    #[error("array containing indices or run ends must be strictly monotonically increasing")]
+    IndexArrayMustBeStrictSorted,
 }
 
 pub type EncResult<T> = Result<T, EncError>;
