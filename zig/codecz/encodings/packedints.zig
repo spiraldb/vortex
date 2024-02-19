@@ -338,6 +338,56 @@ fn PackedIntsImpl(comptime signedness: std.builtin.Signedness, comptime T: u8, c
             }
         }
 
+        pub fn decodeSingle(
+            encoded_bytes: []const u8,
+            elems_len: usize,
+            minVal: ?V,
+            indexToDecode: usize,
+        ) CodecError!V {
+            if (indexToDecode >= elems_len) {
+                return CodecError.InvalidInput;
+            }
+            const ntranches = elems_len / elemsPerTranche;
+            const tranche_index = indexToDecode / elemsPerTranche;
+            const index_in_tranche = indexToDecode % elemsPerTranche;
+
+            // it's in the tail
+            if (tranche_index == ntranches) {
+                const packedInts = std.PackedIntSlice(P).init(
+                    @constCast(encoded_bytes[ntranches * bytesPerTranche ..]),
+                    elems_len % elemsPerTranche,
+                );
+                const val: UV = @intCast(packedInts.get(index_in_tranche));
+                return maybe_frame_decode(V, val, minVal);
+            }
+
+            // there are `vlen` lanes (rows) of `W` words (columns) each of which has T bits
+            const lane_index = index_in_tranche % vlen; // which lane... roughly, which row in the matrix
+            const lane_element_index = index_in_tranche / vlen; // which element in the lane... roughly, which column
+            const lane_bit_start = lane_element_index * W;
+            const lane_word_start = lane_bit_start / T;
+            const lane_word_end = (lane_bit_start + W - 1) / T; // inclusive
+
+            const words: [2]UV = blk: {
+                const byte_offset = tranche_index * bytesPerTranche;
+                // the tranche is laid out as a column-major 2D array of words
+                const tranche_words = std.mem.bytesAsSlice(UV, encoded_bytes[byte_offset..][0..bytesPerTranche]);
+                break :blk [_]UV{
+                    tranche_words[lane_word_start * vlen + lane_index],
+                    tranche_words[lane_word_end * vlen + lane_index], // this may be a duplicate word
+                };
+            };
+
+            const bit_offset_in_words = lane_bit_start - (lane_word_start * @bitSizeOf(UV));
+            const packedInts = std.PackedIntSlice(P){
+                .bytes = @constCast(std.mem.sliceAsBytes(&words)[bit_offset_in_words / 8 ..]),
+                .bit_offset = @intCast(bit_offset_in_words % 8),
+                .len = 1,
+            };
+            const val: UV = @intCast(packedInts.get(0));
+            return maybe_frame_decode(V, val, minVal);
+        }
+
         fn decodeTranche(in: *const [W]FLVec(UV), minVal: ?V, out: *[T]FLVec(V)) void {
             if (comptime codec == .ffor) {
                 std.debug.assert(minVal != null);
@@ -510,7 +560,7 @@ fn testPackedInts(comptime signedness: std.builtin.Signedness, comptime codec: C
     const Ts = [_]u8{ 8, 64 };
 
     inline for (Ts) |T| {
-        const W = comptime try std.math.divCeil(u8, T, 2);
+        const W = comptime try std.math.divCeil(u8, T, 2) - 1;
         const ints = PackedIntsImpl(signedness, T, W, codec);
 
         for (Ns) |N| {
@@ -532,10 +582,22 @@ fn testPackedInts(comptime signedness: std.builtin.Signedness, comptime codec: C
 
             var encoded = try ints.encode(values, ally);
             defer encoded.deinit();
-            const result = try ints.decode(encoded, ally);
-            defer ally.free(result);
+            const decoded = try ints.decode(encoded, ally);
+            defer ally.free(decoded);
 
-            try std.testing.expectEqualSlices(ints.V, values, result);
+            try std.testing.expectEqualSlices(ints.V, values, decoded);
+            for (0..N) |i| {
+                if (encoded.exception_indices != null and encoded.exception_indices.?.isSet(i)) {
+                    continue;
+                }
+                const decSingle = try ints.decodeSingle(encoded.bytes, encoded.elems_len, encoded.min_val, i);
+                if (decSingle != values[i]) {
+                    std.debug.print("Error: T = {d}, W = {d}, N = {d}, codec = {s}\n", .{ T, W, N, @tagName(codec) });
+                    std.debug.print("Error: expected {d} but got {d} at position {d}\n", .{ values[i], decSingle, i });
+                    return error.TestFailed;
+                }
+                try std.testing.expectEqual(values[i], decSingle);
+            }
         }
     }
 }

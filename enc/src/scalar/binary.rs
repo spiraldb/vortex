@@ -24,15 +24,27 @@ impl Scalar for BinaryScalar {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     #[inline]
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
 
     #[inline]
+    fn as_nonnull(&self) -> Option<&dyn Scalar> {
+        Some(self)
+    }
+
+    #[inline]
+    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+        Some(self)
+    }
+
+    #[inline]
     fn boxed(self) -> Box<dyn Scalar> {
         Box::new(self)
     }
+
     #[inline]
     fn dtype(&self) -> &DType {
         &DType::Binary(Nullability::NonNullable)

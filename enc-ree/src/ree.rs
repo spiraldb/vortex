@@ -37,7 +37,7 @@ pub struct REEArray {
 
 impl REEArray {
     pub fn new(ends: ArrayRef, values: ArrayRef, length: usize) -> Self {
-        // TODO(robert): This requires all array implement scalar_at, take length in constructor for now
+        // see https://github.com/fulcrum-so/spiral/issues/873
         // let length = run_ends_logical_length(&ends);
         Self {
             ends,
@@ -60,7 +60,7 @@ impl REEArray {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => {
                 let (ends, values) = ree_encode(p);
-                Ok(REEArray::new(ends.boxed(), values.boxed(), array.len()).boxed())
+                Ok(REEArray::new(ends.boxed(), values.boxed(), p.len()).boxed())
             }
             _ => Err(EncError::InvalidEncoding(array.encoding().id().clone())),
         }
@@ -242,14 +242,17 @@ where
     }
 }
 
-/// Gets the logical end of ends array of run end encoding.
-// TODO(robert): Once we fix scalar at for all arrays use this function
+/// Gets the logical end from the ends array.
 #[allow(dead_code)]
 fn run_ends_logical_length<T: AsRef<dyn Array>>(ends: &T) -> usize {
-    ends.as_ref()
-        .scalar_at(ends.as_ref().len() - 1)
-        .and_then(|end| end.try_into())
-        .unwrap_or_else(|_| panic!("Couldn't convert ends to usize"))
+    if ends.as_ref().is_empty() {
+        0
+    } else {
+        ends.as_ref()
+            .scalar_at(ends.as_ref().len() - 1)
+            .and_then(|end| end.try_into())
+            .unwrap_or_else(|_| panic!("Couldn't convert ends to usize"))
+    }
 }
 
 #[cfg(test)]

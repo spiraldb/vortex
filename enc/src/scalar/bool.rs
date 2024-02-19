@@ -25,9 +25,20 @@ impl Scalar for BoolScalar {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     #[inline]
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
+    }
+
+    #[inline]
+    fn as_nonnull(&self) -> Option<&dyn Scalar> {
+        Some(self)
+    }
+
+    #[inline]
+    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+        Some(self)
     }
 
     #[inline]
@@ -75,13 +86,11 @@ impl TryFrom<&dyn Scalar> for bool {
     type Error = EncError;
 
     fn try_from(value: &dyn Scalar) -> EncResult<Self> {
-        if let Some(bool_scalar) = value.as_any().downcast_ref::<BoolScalar>() {
+        if let Some(bool_scalar) = value
+            .as_nonnull()
+            .and_then(|v| v.as_any().downcast_ref::<BoolScalar>())
+        {
             Ok(bool_scalar.value())
-        } else if let Some(nscalar) = value.as_any().downcast_ref::<NullableScalar>() {
-            match nscalar {
-                NullableScalar::Some(v, _) => v.as_ref().try_into(),
-                NullableScalar::None(_) => Err(EncError::InvalidDType(value.dtype().clone())),
-            }
         } else {
             Err(EncError::InvalidDType(value.dtype().clone()))
         }

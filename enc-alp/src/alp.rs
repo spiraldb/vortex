@@ -1,13 +1,14 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
+use codecz::alp;
 pub use codecz::alp::ALPExponents;
 use enc::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use enc::compress::EncodingCompression;
-use enc::dtype::{DType, IntWidth};
+use enc::dtype::{DType, FloatWidth, IntWidth};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
-use enc::scalar::Scalar;
+use enc::scalar::{NullableScalar, Scalar};
 use enc::stats::{Stats, StatsSet};
 
 use crate::compress::alp_encode;
@@ -104,8 +105,35 @@ impl Array for ALPArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, _index: usize) -> EncResult<Box<dyn Scalar>> {
-        todo!()
+    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+        if let Some(patch) = self
+            .patches()
+            .and_then(|p| p.scalar_at(index).ok())
+            .and_then(|p| p.into_nonnull())
+        {
+            return Ok(patch);
+        }
+
+        let Some(encoded_val) = self.encoded.scalar_at(index)?.into_nonnull() else {
+            return Ok(NullableScalar::none(self.dtype().clone()).boxed());
+        };
+        match self.dtype {
+            DType::Float(FloatWidth::_32, _) => {
+                let encoded_val: i32 = encoded_val.try_into().unwrap();
+                Ok(alp::decode_single::<f32>(encoded_val, self.exponents)
+                    .unwrap()
+                    .into())
+            }
+
+            DType::Float(FloatWidth::_64, _) => {
+                let encoded_val: i64 = encoded_val.try_into().unwrap();
+                Ok(alp::decode_single::<f64>(encoded_val, self.exponents)
+                    .unwrap()
+                    .into())
+            }
+
+            _ => unreachable!(),
+        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

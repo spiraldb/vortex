@@ -4,9 +4,12 @@ use super::{
 };
 use arrow_buffer::BooleanBuffer;
 use codecz_sys::{
-    codecz_alp_decode_f32, codecz_alp_decode_f64, codecz_alp_encode_f32, codecz_alp_encode_f64,
-    codecz_alp_sampleFindExponents_f32, codecz_alp_sampleFindExponents_f64,
+    codecz_alp_decodeSingle_f32, codecz_alp_decodeSingle_f64, codecz_alp_decode_f32,
+    codecz_alp_decode_f64, codecz_alp_encodeSingle_f32, codecz_alp_encodeSingle_f64,
+    codecz_alp_encode_f32, codecz_alp_encode_f64, codecz_alp_sampleFindExponents_f32,
+    codecz_alp_sampleFindExponents_f64,
 };
+use num_traits::float::FloatCore;
 use safe_transmute::TriviallyTransmutable;
 
 pub type ALPExponents = codecz_sys::AlpExponents_t;
@@ -87,6 +90,22 @@ pub fn encode_with<T: SupportsALP>(
     ))
 }
 
+pub fn encode_single_with<T: SupportsALP + PartialEq<T>>(
+    elem: T,
+    exponents: ALPExponents,
+) -> Result<T::EncInt, CodecError> {
+    let encoded = T::encode_single_impl(elem, exponents)?;
+    let decoded = T::decode_single_impl(encoded, exponents);
+    if decoded.map(|d| d == elem).unwrap_or(false) {
+        Ok(encoded)
+    } else {
+        Err(CodecError::EncodingFailed(
+            Codec::ALP,
+            CodecFunction::Encode,
+        ))
+    }
+}
+
 pub fn decode<T: SupportsALP>(
     values: &[T::EncInt],
     exponents: ALPExponents,
@@ -108,7 +127,14 @@ pub fn decode<T: SupportsALP>(
     Ok(decoded)
 }
 
-pub trait SupportsALP: Sized + TriviallyTransmutable {
+pub fn decode_single<T: SupportsALP>(
+    enc: T::EncInt,
+    exponents: ALPExponents,
+) -> Result<T, CodecError> {
+    T::decode_single_impl(enc, exponents)
+}
+
+pub trait SupportsALP: Sized + TriviallyTransmutable + FloatCore {
     type EncInt: TriviallyTransmutable;
 
     fn find_exponents_impl(elems: &[Self]) -> Result<ALPExponents, CodecError>;
@@ -125,6 +151,10 @@ pub trait SupportsALP: Sized + TriviallyTransmutable {
         exponents: ALPExponents,
         out: &mut AlignedVec<Self>,
     ) -> Result<WrittenBuffer, CodecError>;
+
+    fn encode_single_impl(elem: Self, exponents: ALPExponents) -> Result<Self::EncInt, CodecError>;
+
+    fn decode_single_impl(enc: Self::EncInt, exponents: ALPExponents) -> Result<Self, CodecError>;
 }
 
 macro_rules! impl_alp {
@@ -187,6 +217,36 @@ macro_rules! impl_alp {
                         return Err(e);
                     }
                     Ok(result.buf)
+                }
+
+                fn encode_single_impl(elem: Self, exponents: ALPExponents) -> Result<Self::EncInt, CodecError> {
+                    let mut result = 0 as Self::EncInt;
+                    let status = unsafe {
+                        [<codecz_alp_encodeSingle_ $t>](
+                            elem,
+                            &exponents as *const ALPExponents,
+                            &mut result as *mut Self::EncInt
+                        )
+                    };
+                    if let Some(e) = CodecError::parse_error(status, Codec::ALP, CodecFunction::EncodeSingle) {
+                        return Err(e);
+                    }
+                    Ok(result)
+                }
+
+                fn decode_single_impl(enc: Self::EncInt, exponents: ALPExponents) -> Result<Self, CodecError> {
+                    let mut result = 0 as Self;
+                    let status = unsafe {
+                        [<codecz_alp_decodeSingle_ $t>](
+                            enc,
+                            &exponents as *const ALPExponents,
+                            &mut result as *mut Self
+                        )
+                    };
+                    if let Some(e) = CodecError::parse_error(status, Codec::ALP, CodecFunction::DecodeSingle) {
+                        return Err(e);
+                    }
+                    Ok(result)
                 }
             }
         }

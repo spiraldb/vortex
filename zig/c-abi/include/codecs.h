@@ -92,6 +92,10 @@ void codecz_alp_encode_f32(float const *const ptr, uint64_t const len, AlpExpone
 void codecz_alp_encode_f64(double const *const ptr, uint64_t const len, AlpExponents_t const *const exponents, TwoBufferResult_t *const out);
 void codecz_alp_decode_f32(int32_t const *const ptr, uint64_t const len, AlpExponents_t const *const exponents, OneBufferResult_t *const out);
 void codecz_alp_decode_f64(int64_t const *const ptr, uint64_t const len, AlpExponents_t const *const exponents, OneBufferResult_t *const out);
+enum ResultStatus_t codecz_alp_encodeSingle_f32(float in, AlpExponents_t const *const exponents, int32_t *out);
+enum ResultStatus_t codecz_alp_encodeSingle_f64(double in, AlpExponents_t const *const exponents, int64_t *out);
+enum ResultStatus_t codecz_alp_decodeSingle_f32(int32_t in, AlpExponents_t const *const exponents, float *out);
+enum ResultStatus_t codecz_alp_decodeSingle_f64(int64_t in, AlpExponents_t const *const exponents, double *out);
 
 //
 // ZigZag Encoding
@@ -158,6 +162,14 @@ void codecz_ffor_decode_i8(ByteBuffer_t const *const bytes, uint64_t const num_e
 void codecz_ffor_decode_i16(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int16_t min_val, OneBufferResult_t *const out);
 void codecz_ffor_decode_i32(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int32_t min_val, OneBufferResult_t *const out);
 void codecz_ffor_decode_i64(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int64_t min_val, OneBufferResult_t *const out);
+enum ResultStatus_t codecz_ffor_decodeSingle_u8(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, uint8_t min_val, uint64_t index_to_decode, uint8_t* out);
+enum ResultStatus_t codecz_ffor_decodeSingle_u16(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, uint16_t min_val, uint64_t index_to_decode, uint16_t* out);
+enum ResultStatus_t codecz_ffor_decodeSingle_u32(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, uint32_t min_val, uint64_t index_to_decode, uint32_t* out);
+enum ResultStatus_t codecz_ffor_decodeSingle_u64(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, uint64_t min_val, uint64_t index_to_decode, uint64_t* out);
+enum ResultStatus_t codecz_ffor_decodeSingle_i8(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int8_t min_val, uint64_t index_to_decode, int8_t* out);
+enum ResultStatus_t codecz_ffor_decodeSingle_i16(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int16_t min_val, uint64_t index_to_decode, int16_t* out);
+enum ResultStatus_t codecz_ffor_decodeSingle_i32(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int32_t min_val, uint64_t index_to_decode, int32_t* out);
+enum ResultStatus_t codecz_ffor_decodeSingle_i64(ByteBuffer_t const *const bytes, uint64_t const num_elems, uint8_t const num_bits, int64_t min_val, uint64_t index_to_decode, int64_t* out);
 
 #if defined(__cplusplus)
 } // extern "C"

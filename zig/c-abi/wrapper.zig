@@ -310,6 +310,10 @@ comptime {
             .name = "codecz_ffor_decode_" ++ @typeName(V),
             .linkage = .Strong,
         });
+        @export(wrapper.decodeSingle, std.builtin.ExportOptions{
+            .name = "codecz_ffor_decodeSingle_" ++ @typeName(V),
+            .linkage = .Strong,
+        });
         @export(wrapper.collectExceptions, std.builtin.ExportOptions{
             .name = "codecz_ffor_collectExceptions_" ++ @typeName(V),
             .linkage = .Strong,
@@ -403,6 +407,29 @@ fn FforWrapper(comptime V: type) type {
             }
         }
 
+        pub fn decodeSingle(
+            encoded_: [*c]c.ByteBuffer_t,
+            elems_len: usize,
+            num_bits: u8,
+            min_val: V,
+            index: usize,
+            out: [*c]V,
+        ) callconv(.C) ResultStatus {
+            switch (num_bits) {
+                inline 1...maxW => |W| {
+                    const codec: type = encodings.FFOR(V, W);
+                    const encoded = ByteBuffer.from(encoded_.*) catch |err| return ResultStatus.fromCodecError(err);
+                    if (codec.decodeSingle(encoded.bytes(), elems_len, @intCast(min_val), index)) |value| {
+                        out.* = value;
+                        return ResultStatus.Ok;
+                    } else |err| {
+                        return ResultStatus.fromCodecError(err);
+                    }
+                },
+                else => return ResultStatus.InvalidEncodingParameter,
+            }
+        }
+
         pub fn collectExceptions(elems: [*c]V, len: usize, num_bits: u8, min_val: V, num_exceptions: usize, out: [*c]c.TwoBufferResult_t) callconv(.C) void {
             switch (num_bits) {
                 inline 1...maxW => |W| {
@@ -433,41 +460,49 @@ fn FforWrapper(comptime V: type) type {
                 abi.checkFnSignature(Self.encode, c.codecz_ffor_encode_u8);
                 abi.checkFnSignature(Self.decode, c.codecz_ffor_decode_u8);
                 abi.checkFnSignature(Self.collectExceptions, c.codecz_ffor_collectExceptions_u8);
+                abi.checkFnSignature(Self.decodeSingle, c.codecz_ffor_decodeSingle_u8);
             } else if (V == u16) {
                 abi.checkFnSignature(Self.encodedSizeInBytes, c.codecz_flbp_encodedSizeInBytes_u16);
                 abi.checkFnSignature(Self.encode, c.codecz_ffor_encode_u16);
                 abi.checkFnSignature(Self.decode, c.codecz_ffor_decode_u16);
                 abi.checkFnSignature(Self.collectExceptions, c.codecz_ffor_collectExceptions_u16);
+                abi.checkFnSignature(Self.decodeSingle, c.codecz_ffor_decodeSingle_u16);
             } else if (V == u32) {
                 abi.checkFnSignature(Self.encodedSizeInBytes, c.codecz_flbp_encodedSizeInBytes_u32);
                 abi.checkFnSignature(Self.encode, c.codecz_ffor_encode_u32);
                 abi.checkFnSignature(Self.decode, c.codecz_ffor_decode_u32);
                 abi.checkFnSignature(Self.collectExceptions, c.codecz_ffor_collectExceptions_u32);
+                abi.checkFnSignature(Self.decodeSingle, c.codecz_ffor_decodeSingle_u32);
             } else if (V == u64) {
                 abi.checkFnSignature(Self.encodedSizeInBytes, c.codecz_flbp_encodedSizeInBytes_u64);
                 abi.checkFnSignature(Self.encode, c.codecz_ffor_encode_u64);
                 abi.checkFnSignature(Self.decode, c.codecz_ffor_decode_u64);
                 abi.checkFnSignature(Self.collectExceptions, c.codecz_ffor_collectExceptions_u64);
+                abi.checkFnSignature(Self.decodeSingle, c.codecz_ffor_decodeSingle_u64);
             } else if (V == i8) {
                 abi.checkFnSignature(Self.encodedSizeInBytes, c.codecz_flbp_encodedSizeInBytes_i8);
                 abi.checkFnSignature(Self.encode, c.codecz_ffor_encode_i8);
                 abi.checkFnSignature(Self.decode, c.codecz_ffor_decode_i8);
                 abi.checkFnSignature(Self.collectExceptions, c.codecz_ffor_collectExceptions_i8);
+                abi.checkFnSignature(Self.decodeSingle, c.codecz_ffor_decodeSingle_i8);
             } else if (V == i16) {
                 abi.checkFnSignature(Self.encodedSizeInBytes, c.codecz_flbp_encodedSizeInBytes_i16);
                 abi.checkFnSignature(Self.encode, c.codecz_ffor_encode_i16);
                 abi.checkFnSignature(Self.decode, c.codecz_ffor_decode_i16);
                 abi.checkFnSignature(Self.collectExceptions, c.codecz_ffor_collectExceptions_i16);
+                abi.checkFnSignature(Self.decodeSingle, c.codecz_ffor_decodeSingle_i16);
             } else if (V == i32) {
                 abi.checkFnSignature(Self.encodedSizeInBytes, c.codecz_flbp_encodedSizeInBytes_i32);
                 abi.checkFnSignature(Self.encode, c.codecz_ffor_encode_i32);
                 abi.checkFnSignature(Self.decode, c.codecz_ffor_decode_i32);
                 abi.checkFnSignature(Self.collectExceptions, c.codecz_ffor_collectExceptions_i32);
+                abi.checkFnSignature(Self.decodeSingle, c.codecz_ffor_decodeSingle_i32);
             } else if (V == i64) {
                 abi.checkFnSignature(Self.encodedSizeInBytes, c.codecz_flbp_encodedSizeInBytes_i64);
                 abi.checkFnSignature(Self.encode, c.codecz_ffor_encode_i64);
                 abi.checkFnSignature(Self.decode, c.codecz_ffor_decode_i64);
                 abi.checkFnSignature(Self.collectExceptions, c.codecz_ffor_collectExceptions_i64);
+                abi.checkFnSignature(Self.decodeSingle, c.codecz_ffor_decodeSingle_i64);
             } else {
                 @compileError(std.fmt.comptimePrint("FFoR: Unsupported type {s}", .{@typeName(V)}));
             }
@@ -492,6 +527,14 @@ comptime {
         });
         @export(wrapper.decode, std.builtin.ExportOptions{
             .name = "codecz_alp_decode_" ++ @typeName(F),
+            .linkage = .Strong,
+        });
+        @export(wrapper.encodeSingle, std.builtin.ExportOptions{
+            .name = "codecz_alp_encodeSingle_" ++ @typeName(F),
+            .linkage = .Strong,
+        });
+        @export(wrapper.decodeSingle, std.builtin.ExportOptions{
+            .name = "codecz_alp_decodeSingle_" ++ @typeName(F),
             .linkage = .Strong,
         });
         wrapper.checkFnSignatures();
@@ -551,15 +594,31 @@ fn ALPWrapper(comptime F: type) type {
             }
         }
 
+        pub fn encodeSingle(value: F, exp_: [*c]c.AlpExponents_t, out: [*c]codec.EncInt) callconv(.C) ResultStatus {
+            const exp: AlpExponents = AlpExponents.from(exp_.*);
+            out.* = codec.encodeSingle(value, exp);
+            return ResultStatus.Ok;
+        }
+
+        pub fn decodeSingle(encoded: codec.EncInt, exp_: [*c]c.AlpExponents_t, out: [*c]F) callconv(.C) ResultStatus {
+            const exp: AlpExponents = AlpExponents.from(exp_.*);
+            out.* = codec.decodeSingle(encoded, exp);
+            return ResultStatus.Ok;
+        }
+
         pub fn checkFnSignatures() void {
             if (F == f32) {
                 abi.checkFnSignature(Self.sampleFindExponents, c.codecz_alp_sampleFindExponents_f32);
                 abi.checkFnSignature(Self.encode, c.codecz_alp_encode_f32);
                 abi.checkFnSignature(Self.decode, c.codecz_alp_decode_f32);
+                abi.checkFnSignature(Self.encodeSingle, c.codecz_alp_encodeSingle_f32);
+                abi.checkFnSignature(Self.decodeSingle, c.codecz_alp_decodeSingle_f32);
             } else if (F == f64) {
                 abi.checkFnSignature(Self.sampleFindExponents, c.codecz_alp_sampleFindExponents_f64);
                 abi.checkFnSignature(Self.encode, c.codecz_alp_encode_f64);
                 abi.checkFnSignature(Self.decode, c.codecz_alp_decode_f64);
+                abi.checkFnSignature(Self.encodeSingle, c.codecz_alp_encodeSingle_f64);
+                abi.checkFnSignature(Self.decodeSingle, c.codecz_alp_decodeSingle_f64);
             } else {
                 @compileError(std.fmt.comptimePrint("ALP: unsupported type {s}", .{@typeName(F)}));
             }
