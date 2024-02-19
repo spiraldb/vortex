@@ -194,6 +194,16 @@ pub fn decode<T: SupportsFFoR>(
     Ok(decoded)
 }
 
+pub fn decode_single<T: SupportsFFoR>(
+    encoded: &[u8],
+    num_elems: usize,
+    num_bits: u8,
+    min_val: T,
+    index_to_decode: usize,
+) -> Result<T, CodecError> {
+    T::decode_single_impl(encoded, num_elems, num_bits, min_val, index_to_decode)
+}
+
 pub trait SupportsFFoR: Sized + TriviallyTransmutable + PrimInt {
     fn encoded_size_in_bytes_impl(len: usize, num_bits: u8) -> usize;
 
@@ -222,6 +232,14 @@ pub trait SupportsFFoR: Sized + TriviallyTransmutable + PrimInt {
         min_val: Self,
         out: &mut AlignedVec<Self>,
     ) -> Result<WrittenBuffer, CodecError>;
+
+    fn decode_single_impl(
+        encoded: &[u8],
+        num_elems: usize,
+        num_bits: u8,
+        min_val: Self,
+        index_to_decode: usize,
+    ) -> Result<Self, CodecError>;
 }
 
 macro_rules! impl_ffor {
@@ -305,6 +323,31 @@ macro_rules! impl_ffor {
                         return Err(e);
                     }
                     Ok(result.buf)
+                }
+
+                fn decode_single_impl(
+                    encoded: &[u8],
+                    num_elems: usize,
+                    num_bits: u8,
+                    min_val: Self,
+                    index_to_decode: usize,
+                ) -> Result<Self, CodecError> {
+                    let input: ByteBuffer = encoded.into();
+                    let mut result = 0 as Self;
+                    let status = unsafe {
+                        [<codecz_ffor_decodeSingle_ $t>](
+                            &input as *const ByteBuffer,
+                            num_elems as u64,
+                            num_bits,
+                            min_val,
+                            index_to_decode as u64,
+                            &mut result as *mut Self
+                        )
+                    };
+                    if let Some(e) = CodecError::parse_error(status, Codec::FFoR, CodecFunction::DecodeSingle) {
+                        return Err(e);
+                    }
+                    Ok(result)
                 }
             }
         }

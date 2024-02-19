@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
+use enc::array::primitive::PrimitiveArray;
 use enc::array::{
     check_validity_buffer, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
@@ -9,7 +10,8 @@ use enc::compress::EncodingCompression;
 use enc::dtype::DType;
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
-use enc::scalar::Scalar;
+use enc::match_each_integer_ptype;
+use enc::scalar::{NullableScalar, Scalar};
 use enc::stats::{Stats, StatsSet};
 
 use crate::compress::ffor_encode;
@@ -98,6 +100,12 @@ impl FFORArray {
     pub fn patches(&self) -> Option<&ArrayRef> {
         self.patches.as_ref()
     }
+
+    pub fn is_valid(&self, index: usize) -> bool {
+        self.validity()
+            .map(|v| v.scalar_at(index).and_then(|v| v.try_into()).unwrap())
+            .unwrap_or(true)
+    }
 }
 
 impl Array for FFORArray {
@@ -136,8 +144,40 @@ impl Array for FFORArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, _index: usize) -> EncResult<Box<dyn Scalar>> {
-        todo!()
+    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+        if !self.is_valid(index) {
+            return Ok(NullableScalar::none(self.dtype().clone()).boxed());
+        }
+
+        if let Some(patch) = self
+            .patches()
+            .and_then(|p| p.scalar_at(index).ok())
+            .and_then(|p| p.into_nonnull())
+        {
+            return Ok(patch);
+        }
+
+        let Some(parray) = self.encoded().as_any().downcast_ref::<PrimitiveArray>() else {
+            return Err(EncError::InvalidEncoding(
+                self.encoded().encoding().id().clone(),
+            ));
+        };
+
+        if let Ok(ptype) = self.dtype().try_into() {
+            match_each_integer_ptype!(ptype, |$T| {
+            return Ok(codecz::ffor::decode_single::<$T>(
+                parray.buffer().as_slice(),
+                self.len,
+                self.num_bits,
+                self.min_val().try_into().unwrap(),
+                index,
+            )
+            .unwrap()
+            .into());
+            })
+        } else {
+            return Err(EncError::InvalidDType(self.dtype().clone()));
+        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

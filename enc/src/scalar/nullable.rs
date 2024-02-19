@@ -35,9 +35,26 @@ impl Scalar for NullableScalar {
     }
 
     #[inline]
+    fn as_nonnull(&self) -> Option<&dyn Scalar> {
+        match self {
+            Self::Some(s, _) => Some(s.as_ref()),
+            Self::None(_) => None,
+        }
+    }
+
+    #[inline]
+    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+        match *self {
+            Self::Some(s, _) => Some(s),
+            Self::None(_) => None,
+        }
+    }
+
+    #[inline]
     fn boxed(self) -> Box<dyn Scalar> {
         Box::new(self)
     }
+
     #[inline]
     fn dtype(&self) -> &DType {
         match self {

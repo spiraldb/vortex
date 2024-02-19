@@ -28,6 +28,8 @@ pub enum CodecFunction {
     Encode,
     Decode,
     CollectExceptions,
+    EncodeSingle,
+    DecodeSingle,
 }
 
 mod test {

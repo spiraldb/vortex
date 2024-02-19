@@ -33,6 +33,16 @@ impl Scalar for NullScalar {
     }
 
     #[inline]
+    fn as_nonnull(&self) -> Option<&dyn Scalar> {
+        None
+    }
+
+    #[inline]
+    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+        None
+    }
+
+    #[inline]
     fn boxed(self) -> Box<dyn Scalar> {
         Box::new(self)
     }

@@ -36,6 +36,16 @@ impl Scalar for ListScalar {
     }
 
     #[inline]
+    fn as_nonnull(&self) -> Option<&dyn Scalar> {
+        Some(self)
+    }
+
+    #[inline]
+    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+        Some(self)
+    }
+
+    #[inline]
     fn boxed(self) -> Box<dyn Scalar> {
         Box::new(self)
     }

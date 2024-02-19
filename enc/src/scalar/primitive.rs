@@ -7,7 +7,7 @@ use half::f16;
 use crate::dtype::{DType, Nullability};
 use crate::error::{EncError, EncResult};
 use crate::ptype::PType;
-use crate::scalar::{LocalTimeScalar, NullableScalar, Scalar};
+use crate::scalar::{LocalTimeScalar, Scalar};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum PScalar {
@@ -132,6 +132,16 @@ impl Scalar for PScalar {
     }
 
     #[inline]
+    fn as_nonnull(&self) -> Option<&dyn Scalar> {
+        Some(self)
+    }
+
+    #[inline]
+    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+        Some(self)
+    }
+
+    #[inline]
     fn boxed(self) -> Box<dyn Scalar> {
         Box::new(self)
     }
@@ -175,17 +185,13 @@ macro_rules! pscalar {
             type Error = EncError;
 
             fn try_from(value: &dyn Scalar) -> EncResult<Self> {
-                if let Some(pscalar) = value.as_any().downcast_ref::<PScalar>() {
+                if let Some(pscalar) = value
+                    .as_nonnull()
+                    .and_then(|v| v.as_any().downcast_ref::<PScalar>())
+                {
                     match pscalar {
                         PScalar::$ptype(v) => Ok(*v),
                         _ => Err(EncError::InvalidDType(pscalar.ptype().into())),
-                    }
-                } else if let Some(nscalar) = value.as_any().downcast_ref::<NullableScalar>() {
-                    match nscalar {
-                        NullableScalar::Some(v, _) => v.as_ref().try_into(),
-                        NullableScalar::None(_) => {
-                            Err(EncError::InvalidDType(value.dtype().clone()))
-                        }
                     }
                 } else {
                     Err(EncError::InvalidDType(value.dtype().clone()))
@@ -243,18 +249,16 @@ impl TryFrom<&dyn Scalar> for usize {
             })
         }
 
-        if let Some(pscalar) = value.as_any().downcast_ref::<PScalar>() {
+        if let Some(pscalar) = value
+            .as_nonnull()
+            .and_then(|v| v.as_any().downcast_ref::<PScalar>())
+        {
             match_each_pscalar_integer!(pscalar, |$V| {
                 if is_negative(*$V) {
                     return Err(EncError::ComputeError("required positive integer".into()));
                 }
                 Ok(*$V as usize)
             })
-        } else if let Some(nscalar) = value.as_any().downcast_ref::<NullableScalar>() {
-            match nscalar {
-                NullableScalar::Some(v, _) => v.as_ref().try_into(),
-                NullableScalar::None(_) => Err(EncError::InvalidDType(value.dtype().clone())),
-            }
         } else {
             Err(EncError::InvalidDType(value.dtype().clone()))
         }

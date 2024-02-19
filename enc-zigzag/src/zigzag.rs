@@ -1,15 +1,19 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use enc::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
-use enc::compress::EncodingCompression;
-use enc::dtype::{DType, Signedness};
-use enc::error::{EncError, EncResult};
-use enc::formatter::{ArrayDisplay, ArrayFormatter};
-use enc::scalar::Scalar;
-use enc::stats::{Stats, StatsSet};
+use zigzag::ZigZag;
 
 use crate::compress::zigzag_encode;
+use enc::array::{
+    check_index_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    EncodingRef,
+};
+use enc::compress::EncodingCompression;
+use enc::dtype::{DType, IntWidth, Signedness};
+use enc::error::{EncError, EncResult};
+use enc::formatter::{ArrayDisplay, ArrayFormatter};
+use enc::scalar::{NullableScalar, Scalar};
+use enc::stats::{Stats, StatsSet};
 
 #[derive(Debug, Clone)]
 pub struct ZigZagArray {
@@ -85,8 +89,28 @@ impl Array for ZigZagArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, _index: usize) -> EncResult<Box<dyn Scalar>> {
-        todo!()
+    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+        check_index_bounds(self, index)?;
+
+        let scalar = self.encoded().scalar_at(index)?;
+        let Some(scalar) = scalar.as_nonnull() else {
+            return Ok(NullableScalar::none(self.dtype().clone()).boxed());
+        };
+        match self.dtype() {
+            DType::Int(IntWidth::_8, Signedness::Signed, _) => {
+                Ok(i8::decode(scalar.try_into()?).into())
+            }
+            DType::Int(IntWidth::_16, Signedness::Signed, _) => {
+                Ok(i16::decode(scalar.try_into()?).into())
+            }
+            DType::Int(IntWidth::_32, Signedness::Signed, _) => {
+                Ok(i32::decode(scalar.try_into()?).into())
+            }
+            DType::Int(IntWidth::_64, Signedness::Signed, _) => {
+                Ok(i64::decode(scalar.try_into()?).into())
+            }
+            _ => Err(EncError::InvalidDType(self.dtype().clone())),
+        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

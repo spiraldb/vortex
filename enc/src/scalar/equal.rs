@@ -42,6 +42,8 @@ fn equal(lhs: &dyn Scalar, rhs: &dyn Scalar) -> bool {
     if let Some(ls) = lhs.as_any().downcast_ref::<NullableScalar>() {
         if let Some(rs) = rhs.as_any().downcast_ref::<NullableScalar>() {
             return dyn_eq!(NullableScalar, ls, rs);
+        } else {
+            unreachable!("DTypes were equal, but only one was nullable")
         }
     }
 

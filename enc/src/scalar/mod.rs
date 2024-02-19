@@ -29,10 +29,13 @@ mod struct_;
 mod utf8;
 
 pub trait Scalar: Display + Debug + dyn_clone::DynClone + Send + Sync + 'static {
-    /// convert itself to
     fn as_any(&self) -> &dyn Any;
 
     fn into_any(self: Box<Self>) -> Box<dyn Any>;
+
+    fn as_nonnull(&self) -> Option<&dyn Scalar>;
+
+    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>>;
 
     fn boxed(self) -> Box<dyn Scalar>;
 
