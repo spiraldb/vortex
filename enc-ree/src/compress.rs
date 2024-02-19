@@ -1,13 +1,12 @@
 use codecz::AlignedAllocator;
-
-use crate::{REEArray, REEEncoding};
-use enc::array::bool::BoolArray;
 use enc::array::primitive::PrimitiveArray;
-use enc::array::{Array, ArrayKind, ArrayRef};
+use enc::array::{Array, ArrayRef};
 use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
-use enc::dtype::{DType, IntWidth, Nullability, Signedness};
+use enc::dtype::{DType, IntWidth, Nullability};
 use enc::ptype::match_each_native_ptype;
 use enc::stats::Stat;
+
+use crate::{REEArray, REEEncoding};
 
 impl EncodingCompression for REEEncoding {
     fn compressor(
@@ -32,34 +31,33 @@ impl EncodingCompression for REEEncoding {
 
 fn ree_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
     let ree_like = like.map(|like_arr| like_arr.as_any().downcast_ref::<REEArray>().unwrap());
-    let (compressed_ends, compressed_values) = match ArrayKind::from(array) {
-        ArrayKind::Primitive(primitive_array) => {
-            let (ends, values) = ree_encode(primitive_array);
-            (
-                ctx.next_level()
-                    .compress(ends.as_ref(), ree_like.map(|ree| ree.ends())),
-                ctx.next_level()
-                    .compress(values.as_ref(), ree_like.map(|ree| ree.values())),
-            )
-        }
-        _ => unreachable!("This array kind should have been filtered out"),
-    };
+    let primitive_array = array
+        .as_any()
+        .downcast_ref::<PrimitiveArray>()
+        .expect("Not a primitive array");
 
-    REEArray::new(compressed_ends, compressed_values, array.len()).boxed()
+    let (ends, values) = ree_encode(primitive_array);
+    let compressed_ends = ctx
+        .next_level()
+        .compress(ends.as_ref(), ree_like.map(|ree| ree.ends()));
+    let compressed_values = ctx
+        .next_level()
+        .compress(values.as_ref(), ree_like.map(|ree| ree.values()));
+
+    REEArray::new(
+        compressed_ends,
+        compressed_values,
+        primitive_array.validity().cloned(),
+        array.len(),
+    )
+    .boxed()
 }
 
 pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     match_each_native_ptype!(array.ptype(), |$P| {
         let (values, ends) = codecz::ree::encode(array.buffer().typed_data::<$P>()).unwrap();
-        let validity = array.validity().map(|_| {
-            BoolArray::from(
-                ends.iter()
-                    .map(|end| array.is_valid((*end as usize) - 1))
-                    .collect::<Vec<bool>>(),
-            ).boxed()
-        });
 
-        let compressed_values = PrimitiveArray::from_nullable_in::<$P, AlignedAllocator>(values, validity);
+        let compressed_values = PrimitiveArray::from_nullable_in::<$P, AlignedAllocator>(values, None);
         compressed_values.stats().set(Stat::IsConstant, false.into());
         compressed_values.stats().set(Stat::RunCount, compressed_values.len().into());
         compressed_values.stats().set_many(&array.stats(), vec![
@@ -78,53 +76,74 @@ pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
 }
 
 #[allow(dead_code)]
-pub fn ree_decode(ends: &PrimitiveArray, values: &PrimitiveArray) -> PrimitiveArray {
+pub fn ree_decode(
+    ends: &PrimitiveArray,
+    values: &PrimitiveArray,
+    validity: Option<ArrayRef>,
+) -> PrimitiveArray {
     assert!(matches!(
         ends.dtype(),
-        DType::Int(
-            IntWidth::_32,
-            Signedness::Unsigned,
-            Nullability::NonNullable
-        )
+        DType::Int(IntWidth::_32, _, Nullability::NonNullable)
     ));
     match_each_native_ptype!(values.ptype(), |$P| {
         let decoded = codecz::ree::decode::<$P>(values.buffer().typed_data::<$P>(), ends.buffer().typed_data::<u32>()).unwrap();
-        PrimitiveArray::from_vec_in::<$P, AlignedAllocator>(decoded)
+        PrimitiveArray::from_nullable_in::<$P, AlignedAllocator>(decoded, validity)
     })
 }
 
 #[cfg(test)]
 mod test {
-    use crate::compress::ree_encode;
-    use arrow::array::AsArray;
-    use arrow::datatypes::Int32Type;
+    use arrow::buffer::BooleanBuffer;
+
+    use enc::array::bool::BoolArray;
     use enc::array::primitive::PrimitiveArray;
     use enc::array::Array;
-    use enc::arrow::CombineChunks;
-    use itertools::Itertools;
+
+    use crate::compress::ree_decode;
+    use crate::REEArray;
 
     #[test]
     fn encode_nullable() {
-        let arr = PrimitiveArray::from_iter(vec![
-            Some(1),
-            Some(1),
-            Some(1),
-            Some(3),
-            Some(3),
-            None,
-            None,
-            Some(4),
-            Some(4),
-            None,
-            None,
-        ]);
-        let (_ends, values) = ree_encode(&arr);
-        values
-            .iter_arrow()
-            .combine_chunks()
-            .as_primitive::<Int32Type>()
-            .into_iter()
-            .zip_eq([Some(1), Some(3), None, Some(4), None])
-            .for_each(|(arrow_scalar, test_scalar)| assert_eq!(arrow_scalar, test_scalar));
+        let validity = {
+            let mut validity = vec![true; 10];
+            validity[2] = false;
+            validity[7] = false;
+            BoolArray::from(validity)
+        };
+        let arr = REEArray::new(
+            vec![2u32, 5, 10].into(),
+            vec![1i32, 2, 3].into(),
+            Some(validity.boxed()),
+            10,
+        );
+
+        let decoded = ree_decode(
+            arr.ends()
+                .as_any()
+                .downcast_ref::<PrimitiveArray>()
+                .unwrap(),
+            arr.values()
+                .as_any()
+                .downcast_ref::<PrimitiveArray>()
+                .unwrap(),
+            arr.validity().cloned(),
+        );
+
+        assert_eq!(
+            decoded.buffer().typed_data::<i32>(),
+            vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3].as_slice()
+        );
+        assert_eq!(
+            decoded
+                .validity()
+                .unwrap()
+                .as_any()
+                .downcast_ref::<BoolArray>()
+                .unwrap()
+                .buffer(),
+            &BooleanBuffer::from(vec![
+                true, true, false, true, true, true, true, false, true, true,
+            ])
+        );
     }
 }

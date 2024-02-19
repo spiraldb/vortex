@@ -10,19 +10,19 @@ use num_traits::AsPrimitive;
 use codecz::ree::SupportsREE;
 use enc::array::primitive::PrimitiveArray;
 use enc::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef,
+    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayKind, ArrayRef,
+    ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 use enc::arrow::match_arrow_numeric_type;
 use enc::compress::EncodingCompression;
 use enc::compute;
 use enc::compute::search_sorted::SearchSortedSide;
-use enc::dtype::DType;
+use enc::dtype::{DType, Nullability, Signedness};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::ptype::NativePType;
 use enc::scalar::Scalar;
-use enc::stats::{Stats, StatsSet};
+use enc::stats::{Stat, Stats, StatsSet};
 
 use crate::compress::ree_encode;
 
@@ -30,22 +30,55 @@ use crate::compress::ree_encode;
 pub struct REEArray {
     ends: ArrayRef,
     values: ArrayRef,
+    validity: Option<ArrayRef>,
     offset: usize,
     length: usize,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl REEArray {
-    pub fn new(ends: ArrayRef, values: ArrayRef, length: usize) -> Self {
+    pub fn new(
+        ends: ArrayRef,
+        values: ArrayRef,
+        validity: Option<ArrayRef>,
+        length: usize,
+    ) -> Self {
+        Self::try_new(ends, values, validity, length).unwrap()
+    }
+
+    pub fn try_new(
+        ends: ArrayRef,
+        values: ArrayRef,
+        validity: Option<ArrayRef>,
+        length: usize,
+    ) -> EncResult<Self> {
+        check_validity_buffer(validity.as_ref())?;
+
+        if !matches!(
+            ends.dtype(),
+            DType::Int(_, Signedness::Unsigned, Nullability::NonNullable)
+        ) {
+            return Err(EncError::InvalidDType(ends.dtype().clone()));
+        }
+
+        if !ends
+            .stats()
+            .get_as::<bool>(&Stat::IsStrictSorted)
+            .unwrap_or(true)
+        {
+            return Err(EncError::IndexArrayMustBeStrictSorted);
+        }
+
         // see https://github.com/fulcrum-so/spiral/issues/873
         // let length = run_ends_logical_length(&ends);
-        Self {
+        Ok(Self {
             ends,
             values,
+            validity,
             length,
             offset: 0,
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
+        })
     }
 
     pub fn find_physical_index(&self, index: usize) -> EncResult<usize> {
@@ -60,7 +93,10 @@ impl REEArray {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => {
                 let (ends, values) = ree_encode(p);
-                Ok(REEArray::new(ends.boxed(), values.boxed(), p.len()).boxed())
+                Ok(
+                    REEArray::new(ends.boxed(), values.boxed(), p.validity().cloned(), p.len())
+                        .boxed(),
+                )
             }
             _ => Err(EncError::InvalidEncoding(array.encoding().id().clone())),
         }
@@ -74,6 +110,11 @@ impl REEArray {
     #[inline]
     pub fn values(&self) -> &dyn Array {
         self.values.as_ref()
+    }
+
+    #[inline]
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
     }
 }
 
@@ -145,11 +186,16 @@ impl Array for REEArray {
 
     fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
-        let slice_begin = self.find_physical_index(start).unwrap();
-        let slice_end = self.find_physical_index(stop).unwrap();
+        let slice_begin = self.find_physical_index(start)?;
+        let slice_end = self.find_physical_index(stop)?;
         Ok(Self {
-            ends: self.ends.slice(slice_begin, slice_end + 1).unwrap(),
-            values: self.values.slice(slice_begin, slice_end + 1).unwrap(),
+            ends: self.ends.slice(slice_begin, slice_end + 1)?,
+            values: self.values.slice(slice_begin, slice_end + 1)?,
+            validity: self
+                .validity
+                .as_ref()
+                .map(|v| v.slice(slice_begin, slice_end + 1))
+                .transpose()?,
             offset: start,
             length: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
@@ -269,7 +315,7 @@ mod test {
 
     #[test]
     fn new() {
-        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into(), 10);
+        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1, 2, 3].into(), None, 10);
         assert_eq!(arr.len(), 10);
         assert_eq!(
             arr.dtype(),
@@ -287,7 +333,7 @@ mod test {
 
     #[test]
     fn slice() {
-        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into(), 10)
+        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1, 2, 3].into(), None, 10)
             .slice(3, 8)
             .unwrap();
         assert_eq!(
@@ -305,7 +351,7 @@ mod test {
 
     #[test]
     fn iter_arrow() {
-        let arr = REEArray::new(vec![2, 5, 10].into(), vec![1, 2, 3].into(), 10);
+        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1, 2, 3].into(), None, 10);
         arr.iter_arrow()
             .zip_eq([vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]])
             .for_each(|(from_iter, orig)| {
