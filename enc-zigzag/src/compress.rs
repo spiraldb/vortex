@@ -5,6 +5,7 @@ use enc::array::{Array, ArrayKind, ArrayRef};
 use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use enc::ptype::{NativePType, PType};
 use enc::stats::Stat;
+use spiral_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 use zigzag::ZigZag;
 
 impl EncodingCompression for ZigZagEncoding {
@@ -49,39 +50,58 @@ fn zigzag_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressC
 
 pub fn zigzag_encode(parray: &PrimitiveArray) -> PrimitiveArray {
     match parray.ptype() {
-        PType::I8 => zigzag_encode_primitive::<i8>(parray.buffer().typed_data()),
-        PType::I16 => zigzag_encode_primitive::<i16>(parray.buffer().typed_data()),
-        PType::I32 => zigzag_encode_primitive::<i32>(parray.buffer().typed_data()),
-        PType::I64 => zigzag_encode_primitive::<i64>(parray.buffer().typed_data()),
+        PType::I8 => zigzag_encode_primitive::<i8>(parray.buffer().typed_data(), parray.validity()),
+        PType::I16 => {
+            zigzag_encode_primitive::<i16>(parray.buffer().typed_data(), parray.validity())
+        }
+        PType::I32 => {
+            zigzag_encode_primitive::<i32>(parray.buffer().typed_data(), parray.validity())
+        }
+        PType::I64 => {
+            zigzag_encode_primitive::<i64>(parray.buffer().typed_data(), parray.validity())
+        }
         _ => panic!("Unsupported ptype"),
     }
 }
 
-fn zigzag_encode_primitive<T: ZigZag + NativePType>(values: &[T]) -> PrimitiveArray
+fn zigzag_encode_primitive<T: ZigZag + NativePType>(
+    values: &[T],
+    validity: Option<&ArrayRef>,
+) -> PrimitiveArray
 where
     <T as ZigZag>::UInt: NativePType,
 {
-    let mut encoded = Vec::with_capacity(values.len());
+    let mut encoded = AlignedVec::with_capacity_in(values.len(), ALIGNED_ALLOCATOR);
     encoded.extend(values.iter().map(|v| T::encode(*v)));
-    PrimitiveArray::from_vec(encoded)
+    PrimitiveArray::from_nullable_in(encoded, validity.cloned())
 }
 
 #[allow(dead_code)]
 pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
     match parray.ptype() {
-        PType::U8 => zigzag_decode_primitive::<i8>(parray.buffer().typed_data()),
-        PType::U16 => zigzag_decode_primitive::<i16>(parray.buffer().typed_data()),
-        PType::U32 => zigzag_decode_primitive::<i32>(parray.buffer().typed_data()),
-        PType::U64 => zigzag_decode_primitive::<i64>(parray.buffer().typed_data()),
+        PType::U8 => zigzag_decode_primitive::<i8>(parray.buffer().typed_data(), parray.validity()),
+        PType::U16 => {
+            zigzag_decode_primitive::<i16>(parray.buffer().typed_data(), parray.validity())
+        }
+        PType::U32 => {
+            zigzag_decode_primitive::<i32>(parray.buffer().typed_data(), parray.validity())
+        }
+        PType::U64 => {
+            zigzag_decode_primitive::<i64>(parray.buffer().typed_data(), parray.validity())
+        }
         _ => panic!("Unsupported ptype"),
     }
 }
 
 #[allow(dead_code)]
-fn zigzag_decode_primitive<T: ZigZag + NativePType>(values: &[T::UInt]) -> PrimitiveArray
+fn zigzag_decode_primitive<T: ZigZag + NativePType>(
+    values: &[T::UInt],
+    validity: Option<&ArrayRef>,
+) -> PrimitiveArray
 where
     <T as ZigZag>::UInt: NativePType,
 {
-    let encoded: Vec<T> = values.iter().map(|v| T::decode(*v)).collect();
-    PrimitiveArray::from_vec(encoded)
+    let mut encoded: AlignedVec<T> = AlignedVec::with_capacity_in(values.len(), ALIGNED_ALLOCATOR);
+    encoded.extend(values.iter().map(|v| T::decode(*v)));
+    PrimitiveArray::from_nullable_in(encoded, validity.cloned())
 }

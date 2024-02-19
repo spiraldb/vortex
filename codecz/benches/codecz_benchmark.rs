@@ -1,10 +1,11 @@
-use codecz::encodings::ree;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{
     distributions::{Distribution, Uniform},
     SeedableRng,
 };
 use rand_chacha::ChaCha8Rng;
+
+use codecz::encodings::ree;
 
 fn ree_benchmark(c: &mut Criterion) {
     let mut rng = ChaCha8Rng::seed_from_u64(0);
@@ -29,29 +30,6 @@ fn ree_benchmark(c: &mut Criterion) {
     c.bench_function("ree decode", |b| {
         b.iter(|| {
             let decoded = ree::decode(black_box(&values), black_box(&run_ends)).unwrap();
-            black_box(decoded);
-        })
-    });
-}
-
-fn zigzag_benchmark(c: &mut Criterion) {
-    let mut rng = ChaCha8Rng::seed_from_u64(0);
-    let range = Uniform::new(i32::MIN, i32::MAX);
-    let mut data: Vec<i32> = (0..100000).map(|_| range.sample(&mut rng)).collect();
-    data.append(&mut vec![0, 1, -1, i32::MAX, i32::MIN]);
-    let data = data; // discard mut
-
-    c.bench_function("zigzag encode", |b| {
-        b.iter(|| {
-            let encoded = codecz::zigzag::encode(black_box(&data)).unwrap();
-            black_box(encoded);
-        })
-    });
-
-    let encoded = codecz::zigzag::encode(&data).unwrap();
-    c.bench_function("zigzag decode", |b| {
-        b.iter(|| {
-            let decoded = codecz::zigzag::decode::<i32>(black_box(&encoded)).unwrap();
             black_box(decoded);
         })
     });
@@ -99,5 +77,5 @@ fn alp_benchmark(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, ree_benchmark, zigzag_benchmark, alp_benchmark);
+criterion_group!(benches, ree_benchmark, alp_benchmark);
 criterion_main!(benches);
