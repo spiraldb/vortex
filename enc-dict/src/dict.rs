@@ -9,6 +9,7 @@ use enc::dtype::{DType, Signedness};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::scalar::Scalar;
+use enc::serde::{ArraySerde, EncodingSerde};
 use enc::stats::{Stats, StatsSet};
 
 #[derive(Debug, Clone)]
@@ -76,8 +77,8 @@ impl Array for DictArray {
 
     fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
-        let dict_index: usize = self.codes.scalar_at(index)?.try_into()?;
-        self.dict.scalar_at(dict_index)
+        let dict_index: usize = self.codes().scalar_at(index)?.try_into()?;
+        self.dict().scalar_at(dict_index)
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -85,9 +86,9 @@ impl Array for DictArray {
     }
 
     // TODO(robert): Add function to trim the dictionary
-    fn slice(&self, _start: usize, _stop: usize) -> EncResult<ArrayRef> {
-        check_slice_bounds(self, _start, _stop)?;
-        Ok(Self::new(self.codes().slice(_start, _stop)?, self.dict.clone()).boxed())
+    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+        check_slice_bounds(self, start, stop)?;
+        Ok(Self::new(self.codes().slice(start, stop)?, self.dict.clone()).boxed())
     }
 
     fn encoding(&self) -> &'static dyn Encoding {
@@ -96,6 +97,10 @@ impl Array for DictArray {
 
     fn nbytes(&self) -> usize {
         self.codes().nbytes() + self.dict().nbytes()
+    }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
     }
 }
 
@@ -125,6 +130,10 @@ impl Encoding for DictEncoding {
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

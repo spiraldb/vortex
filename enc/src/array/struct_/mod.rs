@@ -5,6 +5,7 @@ use arrow::array::StructArray as ArrowStructArray;
 use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
 use arrow::datatypes::{Field, Fields};
 use itertools::Itertools;
+use linkme::distributed_slice;
 
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
 use crate::compress::EncodingCompression;
@@ -12,13 +13,16 @@ use crate::dtype::{DType, FieldNames};
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::{Scalar, StructScalar};
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 use super::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
+    ENCODINGS,
 };
 
 mod compress;
+mod serde;
 mod stats;
 
 #[derive(Debug, Clone)]
@@ -162,6 +166,10 @@ impl Array for StructArray {
     fn nbytes(&self) -> usize {
         self.fields.iter().map(|arr| arr.nbytes()).sum()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for StructArray {
@@ -175,12 +183,19 @@ pub struct StructEncoding;
 
 pub const STRUCT_ENCODING: EncodingId = EncodingId("enc.struct");
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_STRUCT: EncodingRef = &StructEncoding;
+
 impl Encoding for StructEncoding {
     fn id(&self) -> &EncodingId {
         &STRUCT_ENCODING
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

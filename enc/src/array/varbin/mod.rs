@@ -5,13 +5,14 @@ use std::sync::{Arc, RwLock};
 use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::buffer::NullBuffer;
 use arrow::datatypes::UInt8Type;
+use linkme::distributed_slice;
 use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
 
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{
     check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
-    Encoding, EncodingId, EncodingRef,
+    Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
@@ -21,9 +22,11 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
 use crate::scalar::{NullableScalar, Scalar};
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod serde;
 mod stats;
 
 #[derive(Debug, Clone)]
@@ -290,6 +293,10 @@ impl Array for VarBinArray {
     fn nbytes(&self) -> usize {
         self.bytes.nbytes() + self.offsets.nbytes()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for VarBinArray {
@@ -303,12 +310,19 @@ struct VarBinEncoding;
 
 pub const VARBIN_ENCODING: EncodingId = EncodingId("enc.varbin");
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_VARBIN: EncodingRef = &VarBinEncoding;
+
 impl Encoding for VarBinEncoding {
     fn id(&self) -> &EncodingId {
         &VARBIN_ENCODING
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

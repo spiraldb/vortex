@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use arrow::array::{ArrayRef as ArrowArrayRef, AsArray, BooleanArray};
 use arrow::buffer::{BooleanBuffer, NullBuffer};
+use linkme::distributed_slice;
 
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
@@ -11,14 +12,16 @@ use crate::dtype::{DType, Nullability};
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::{NullableScalar, Scalar};
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 
 use super::{
     check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
-    Encoding, EncodingId, EncodingRef,
+    Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
 
 mod compress;
+mod serde;
 mod stats;
 
 #[derive(Debug, Clone)]
@@ -151,6 +154,10 @@ impl Array for BoolArray {
     fn nbytes(&self) -> usize {
         (self.len() + 7) / 8
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -158,12 +165,19 @@ struct BoolEncoding;
 
 pub const BOOL_ENCODING: EncodingId = EncodingId("enc.bool");
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_BOOL: EncodingRef = &BoolEncoding;
+
 impl Encoding for BoolEncoding {
     fn id(&self) -> &EncodingId {
         &BOOL_ENCODING
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

@@ -8,6 +8,7 @@ pub use localtime::*;
 pub use null::*;
 pub use nullable::*;
 pub use primitive::*;
+pub use serde::*;
 pub use struct_::*;
 pub use utf8::*;
 
@@ -25,6 +26,7 @@ mod null;
 mod nullable;
 mod ord;
 mod primitive;
+mod serde;
 mod struct_;
 mod utf8;
 

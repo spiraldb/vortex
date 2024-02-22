@@ -14,9 +14,11 @@ use enc::dtype::Nullability::NonNullable;
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::scalar::Scalar;
+use enc::serde::{ArraySerde, EncodingSerde};
 use enc::stats::{Stats, StatsSet};
 
 mod compress;
+mod serde;
 mod stats;
 
 #[derive(Debug, Clone)]
@@ -120,6 +122,10 @@ impl Array for RoaringBoolArray {
         // TODO(ngates): do we want Native serializer? Or portable? Or frozen?
         self.bitmap.get_serialized_size_in_bytes::<Native>()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for RoaringBoolArray {
@@ -145,6 +151,10 @@ impl Encoding for RoaringBoolEncoding {
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

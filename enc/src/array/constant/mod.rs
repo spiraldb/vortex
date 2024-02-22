@@ -2,10 +2,11 @@ use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use arrow::array::Datum;
+use linkme::distributed_slice;
 
 use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef,
+    EncodingRef, ENCODINGS,
 };
 use crate::arrow::compute::repeat;
 use crate::compress::EncodingCompression;
@@ -13,10 +14,12 @@ use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
 mod compute;
+mod serde;
 mod stats;
 mod take;
 
@@ -102,6 +105,10 @@ impl Array for ConstantArray {
     fn nbytes(&self) -> usize {
         self.scalar.nbytes()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for ConstantArray {
@@ -121,12 +128,19 @@ pub struct ConstantEncoding;
 
 pub const CONSTANT_ENCODING: EncodingId = EncodingId("enc.constant");
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_CONSTANT: EncodingRef = &ConstantEncoding;
+
 impl Encoding for ConstantEncoding {
     fn id(&self) -> &EncodingId {
         &CONSTANT_ENCODING
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

@@ -11,22 +11,23 @@ path = "src/lib.rs"
 workspace = true
 
 [dependencies]
+allocator-api2 = "0.2.16"
 arrow = { version = "50.0.0", features = ["pyarrow"] }
-bytemuck = { version = "1", features = ["derive"] }
 dyn-clone = "1.0.16"
 half = "2.3.1"
-itertools = "0.12.0"
-log = "0.4.20"
-num-traits = "0.2.17"
-polars-arrow = { version = "0.36.2", features = ["arrow_rs"] }
-polars-core = "0.36.2"
-polars-ops = { version = "0.36.2", features = ["search_sorted"] }
-roaring = "0.10.2"
-thiserror = "1.0.56"
-rand = { version = "0.8.5", features = [] }
-once_cell = "1.19.0"
-allocator-api2 = "0.2.16"
 humansize = "2.1.3"
-linkme = "0.3.22"
+itertools = "0.12.1"
+leb128 = "0.2.5"
+linkme = "0.3.23"
+log = "0.4.20"
+num-traits = "0.2.18"
+num_enum = "0.7.2"
+once_cell = "1.19.0"
+polars-arrow = { version = "0.37.0", features = ["arrow_rs"] }
+polars-core = "0.37.0"
+polars-ops = { version = "0.37.0", features = ["search_sorted"] }
+rand = { version = "0.8.5", features = [] }
 rayon = "1.8.1"
+roaring = "0.10.3"
 spiral-alloc = { version = "0.1.0", path = "../spiral-alloc" }
+thiserror = "1.0.57"

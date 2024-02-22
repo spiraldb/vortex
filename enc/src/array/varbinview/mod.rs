@@ -1,4 +1,5 @@
 mod compress;
+mod serde;
 
 use std::any::Any;
 use std::str::from_utf8_unchecked;
@@ -8,10 +9,11 @@ use std::{iter, mem};
 use arrow::array::cast::AsArray;
 use arrow::array::types::UInt8Type;
 use arrow::array::{ArrayRef as ArrowArrayRef, BinaryBuilder, StringBuilder};
+use linkme::distributed_slice;
 
 use crate::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef,
+    EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
@@ -19,6 +21,7 @@ use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::{NullableScalar, Scalar};
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 #[derive(Clone, Copy)]
@@ -308,6 +311,10 @@ impl Array for VarBinViewArray {
     fn nbytes(&self) -> usize {
         self.views.nbytes() + self.data.iter().map(|arr| arr.nbytes()).sum::<usize>()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for VarBinViewArray {
@@ -321,12 +328,19 @@ struct VarBinViewEncoding;
 
 pub const VARBINVIEW_ENCODING: EncodingId = EncodingId("enc.varbinview");
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_VARBINVIEW: EncodingRef = &VarBinViewEncoding;
+
 impl Encoding for VarBinViewEncoding {
     fn id(&self) -> &EncodingId {
         &VARBINVIEW_ENCODING
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

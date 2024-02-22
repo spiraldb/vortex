@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use log::debug;
 use once_cell::sync::Lazy;
 
-use crate::array::constant::ConstantEncoding;
+use crate::array::constant::{ConstantEncoding, CONSTANT_ENCODING};
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, ENCODINGS};
 use crate::compute;
 use crate::sampling::stratified_slices;
@@ -46,8 +46,10 @@ impl Default for CompressConfig {
 impl CompressConfig {
     pub fn new(
         encodings: HashSet<&'static EncodingId>,
-        disabled_encodings: HashSet<&'static EncodingId>,
+        mut disabled_encodings: HashSet<&'static EncodingId>,
     ) -> Self {
+        // Always disable constant encoding, it's handled separately
+        disabled_encodings.insert(&CONSTANT_ENCODING);
         Self {
             encodings,
             disabled_encodings,
@@ -112,6 +114,7 @@ impl<'a> CompressCtx<'a> {
         cloned
     }
 
+    #[inline]
     pub fn options(&self) -> &CompressConfig {
         self.options
     }
@@ -132,6 +135,9 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
     let candidate_compressors: Vec<&Compressor> = ENCODINGS
         .iter()
         .filter(|encoding| ctx.options.is_enabled(encoding.id()))
+        // TODO(robert): Avoid own encoding to avoid infinite recursion
+        .filter(|encoding| encoding.id().name() != array.encoding().id().name())
+        .filter(|encoding| ctx.options().is_enabled(encoding.id()))
         .filter_map(|encoding| encoding.compression())
         .filter_map(|compression| compression.compressor(array, ctx.options()))
         .collect();

@@ -12,6 +12,7 @@ use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::match_each_integer_ptype;
 use enc::scalar::{NullableScalar, Scalar};
+use enc::serde::{ArraySerde, EncodingSerde};
 use enc::stats::{Stats, StatsSet};
 
 use crate::compress::ffor_encode;
@@ -197,6 +198,10 @@ impl Array for FFORArray {
     fn nbytes(&self) -> usize {
         self.encoded().nbytes() + self.patches().map(|p| p.nbytes()).unwrap_or(0)
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for FFORArray {
@@ -231,6 +236,10 @@ impl Encoding for FFoREncoding {
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }
