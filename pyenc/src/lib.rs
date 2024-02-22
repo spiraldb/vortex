@@ -13,6 +13,7 @@ mod dtype;
 mod enc_arrow;
 mod encode;
 mod error;
+mod serde;
 
 /// A Python module implemented in Rust.
 #[pymodule]
@@ -29,6 +30,8 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(encode::encode, m)?)?;
     m.add_function(wrap_pyfunction!(compress::compress, m)?)?;
+    m.add_function(wrap_pyfunction!(serde::write, m)?)?;
+    m.add_function(wrap_pyfunction!(serde::read, m)?)?;
 
     m.add_class::<PyArray>()?;
     m.add_class::<PyBoolArray>()?;

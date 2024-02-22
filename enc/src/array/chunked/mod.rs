@@ -4,19 +4,22 @@ use std::vec::IntoIter;
 
 use arrow::array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
+use linkme::distributed_slice;
 
 use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef,
+    EncodingRef, ENCODINGS,
 };
 use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod serde;
 mod stats;
 
 #[derive(Debug, Clone)]
@@ -171,6 +174,10 @@ impl Array for ChunkedArray {
     fn nbytes(&self) -> usize {
         self.chunks().iter().map(|arr| arr.nbytes()).sum()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl FromIterator<ArrayRef> for ChunkedArray {
@@ -208,12 +215,19 @@ struct ChunkedEncoding;
 
 pub const CHUNKED_ENCODING: EncodingId = EncodingId("enc.chunked");
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_CHUNKED: EncodingRef = &ChunkedEncoding;
+
 impl Encoding for ChunkedEncoding {
     fn id(&self) -> &EncodingId {
         &CHUNKED_ENCODING
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

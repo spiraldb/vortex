@@ -13,6 +13,7 @@ use enc::dtype::{DType, IntWidth, Signedness};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::scalar::{NullableScalar, Scalar};
+use enc::serde::{ArraySerde, EncodingSerde};
 use enc::stats::{Stats, StatsSet};
 
 #[derive(Debug, Clone)]
@@ -130,6 +131,10 @@ impl Array for ZigZagArray {
     fn nbytes(&self) -> usize {
         self.encoded.nbytes()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for ZigZagArray {
@@ -156,6 +161,10 @@ impl Encoding for ZigZagEncoding {
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

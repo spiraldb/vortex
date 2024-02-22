@@ -10,12 +10,13 @@ use allocator_api2::alloc::Allocator;
 use arrow::alloc::ALIGNMENT as ARROW_ALIGNMENT;
 use arrow::array::{make_array, ArrayData, AsArray};
 use arrow::buffer::{Buffer, NullBuffer};
+use linkme::distributed_slice;
 use log::debug;
 
 use crate::array::bool::BoolArray;
 use crate::array::{
     check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
-    Encoding, EncodingId, EncodingRef,
+    Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
@@ -24,9 +25,11 @@ use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::scalar::{NullableScalar, Scalar};
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod serde;
 mod stats;
 
 #[derive(Debug, Clone)]
@@ -226,6 +229,10 @@ impl Array for PrimitiveArray {
     fn nbytes(&self) -> usize {
         self.buffer.len()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for PrimitiveArray {
@@ -239,12 +246,19 @@ pub struct PrimitiveEncoding;
 
 pub const PRIMITIVE_ENCODING: EncodingId = EncodingId("enc.primitive");
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_PRIMITIVE: EncodingRef = &PrimitiveEncoding;
+
 impl Encoding for PrimitiveEncoding {
     fn id(&self) -> &EncodingId {
         &PRIMITIVE_ENCODING
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

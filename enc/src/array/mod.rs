@@ -19,6 +19,7 @@ use crate::dtype::{DType, Nullability};
 use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::Stats;
 
 pub mod bool;
@@ -71,6 +72,8 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
     fn compute(&self) -> Option<&dyn ArrayCompute> {
         None
     }
+
+    fn serde(&self) -> &dyn ArraySerde;
 }
 
 dyn_clone::clone_trait_object!(Array);
@@ -118,11 +121,16 @@ impl EncodingId {
     pub const fn new(id: &'static str) -> Self {
         Self(id)
     }
+
+    #[inline]
+    pub fn name(&self) -> &str {
+        self.0
+    }
 }
 
 impl Display for EncodingId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        Display::fmt(self.0, f)
     }
 }
 
@@ -131,6 +139,9 @@ pub trait Encoding: Debug + Send + Sync + 'static {
 
     /// Implementation of the array compression trait
     fn compression(&self) -> Option<&dyn EncodingCompression>;
+
+    /// Array serialization
+    fn serde(&self) -> Option<&dyn EncodingSerde>;
 }
 
 pub type EncodingRef = &'static dyn Encoding;

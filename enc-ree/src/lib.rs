@@ -5,6 +5,7 @@ pub use ree::*;
 
 mod compress;
 mod ree;
+mod serde;
 mod stats;
 
 #[distributed_slice(ENCODINGS)]

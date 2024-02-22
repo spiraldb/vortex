@@ -22,6 +22,7 @@ use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::ptype::NativePType;
 use enc::scalar::Scalar;
+use enc::serde::{ArraySerde, EncodingSerde};
 use enc::stats::{Stat, Stats, StatsSet};
 
 use crate::compress::ree_encode;
@@ -213,6 +214,10 @@ impl Array for REEArray {
     fn nbytes(&self) -> usize {
         self.values.nbytes() + self.ends.nbytes()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
@@ -232,6 +237,10 @@ impl Encoding for REEEncoding {
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

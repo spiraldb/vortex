@@ -8,11 +8,11 @@ use arrow::array::{
 use arrow::datatypes::{Field, Fields};
 use num_traits::AsPrimitive;
 
-use crate::array::ArrowArrayRef;
 use crate::array::{
     check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
+use crate::array::{ArrowArrayRef, ENCODINGS};
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
@@ -21,11 +21,14 @@ use crate::error::{EncError, EncResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_arrow_numeric_type;
 use crate::scalar::{NullableScalar, Scalar};
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use arrow::array::AsArray;
 use itertools::Itertools;
+use linkme::distributed_slice;
 
 mod compress;
+mod serde;
 mod stats;
 
 #[derive(Debug, Clone)]
@@ -45,6 +48,15 @@ impl SparseArray {
     }
 
     pub fn try_new(indices: ArrayRef, values: ArrayRef, len: usize) -> EncResult<Self> {
+        Self::new_with_offset(indices, values, len, 0)
+    }
+
+    pub(crate) fn new_with_offset(
+        indices: ArrayRef,
+        values: ArrayRef,
+        len: usize,
+        indices_offset: usize,
+    ) -> EncResult<Self> {
         if !matches!(
             indices.dtype(),
             DType::Int(_, Signedness::Unsigned, Nullability::NonNullable)
@@ -63,7 +75,7 @@ impl SparseArray {
         Ok(Self {
             indices,
             values,
-            indices_offset: 0,
+            indices_offset,
             dtype,
             len,
             stats: Arc::new(RwLock::new(StatsSet::new())),
@@ -209,6 +221,10 @@ impl Array for SparseArray {
     fn nbytes(&self) -> usize {
         self.indices.nbytes() + self.values.nbytes()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for SparseArray {
@@ -232,12 +248,19 @@ pub struct SparseEncoding;
 
 pub const SPARSE_ENCODING: EncodingId = EncodingId::new("enc.sparse");
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_SPARSE: EncodingRef = &SparseEncoding;
+
 impl Encoding for SparseEncoding {
     fn id(&self) -> &EncodingId {
         &SPARSE_ENCODING
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

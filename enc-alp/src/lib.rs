@@ -4,6 +4,7 @@ use linkme::distributed_slice;
 
 mod alp;
 mod compress;
+mod serde;
 mod stats;
 
 #[distributed_slice(ENCODINGS)]

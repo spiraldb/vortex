@@ -11,4 +11,5 @@ pub mod formatter;
 mod polars;
 pub mod ptype;
 mod sampling;
+pub mod serde;
 pub mod stats;

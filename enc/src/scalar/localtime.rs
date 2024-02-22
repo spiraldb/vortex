@@ -18,6 +18,17 @@ impl LocalTimeScalar {
             dtype: DType::LocalTime(unit, Nullability::NonNullable),
         }
     }
+
+    pub fn value(&self) -> &PScalar {
+        &self.value
+    }
+
+    pub fn time_unit(&self) -> TimeUnit {
+        let DType::LocalTime(u, _) = self.dtype else {
+            unreachable!("unexpected dtype")
+        };
+        u
+    }
 }
 
 impl Scalar for LocalTimeScalar {

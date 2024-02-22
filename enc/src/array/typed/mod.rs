@@ -2,16 +2,19 @@ use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use arrow::datatypes::DataType;
+use linkme::distributed_slice;
 
-use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::EncResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod serde;
 mod stats;
 
 #[derive(Debug, Clone)]
@@ -110,6 +113,10 @@ impl Array for TypedArray {
     fn nbytes(&self) -> usize {
         self.array.nbytes()
     }
+
+    fn serde(&self) -> &dyn ArraySerde {
+        self
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for TypedArray {
@@ -123,12 +130,19 @@ struct TypedEncoding;
 
 pub const TYPED_ENCODING: EncodingId = EncodingId("enc.typed");
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_TYPED: EncodingRef = &TypedEncoding;
+
 impl Encoding for TypedEncoding {
     fn id(&self) -> &EncodingId {
         &TYPED_ENCODING
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
 }

@@ -6,6 +6,7 @@ pub use dict::*;
 
 mod compress;
 mod dict;
+mod serde;
 mod stats;
 
 #[distributed_slice(ENCODINGS)]
