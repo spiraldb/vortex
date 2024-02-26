@@ -1,3 +1,4 @@
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::sparse::{SparseArray, SparseEncoding, SPARSE_ENCODING};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
@@ -17,8 +18,8 @@ impl EncodingCompression for SparseEncoding {
 }
 
 fn sparse_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let sparse_array = array.as_any().downcast_ref::<SparseArray>().unwrap();
-    let sparse_like = like.map(|la| la.as_any().downcast_ref::<SparseArray>().unwrap());
+    let sparse_array = array.as_sparse();
+    let sparse_like = like.map(|la| la.as_sparse());
     SparseArray::new(
         ctx.compress(sparse_array.indices(), sparse_like.map(|sa| sa.indices())),
         ctx.compress(sparse_array.values(), sparse_like.map(|sa| sa.values())),

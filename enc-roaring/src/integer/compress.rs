@@ -2,6 +2,7 @@ use croaring::Bitmap;
 use log::debug;
 use num_traits::NumCast;
 
+use enc::array::downcast::DowncastArrayBuiltin;
 use enc::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use enc::array::{Array, ArrayRef};
 use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
@@ -55,7 +56,7 @@ fn roaring_int_compressor(
     _like: Option<&dyn Array>,
     _ctx: CompressCtx,
 ) -> ArrayRef {
-    roaring_encode(array.as_any().downcast_ref::<PrimitiveArray>().unwrap()).boxed()
+    roaring_encode(array.as_primitive()).boxed()
 }
 
 pub fn roaring_encode(primitive_array: &PrimitiveArray) -> RoaringIntArray {

@@ -1,3 +1,4 @@
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::struct_::{StructArray, StructEncoding, STRUCT_ENCODING};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
@@ -20,9 +21,8 @@ impl EncodingCompression for StructEncoding {
 }
 
 fn struct_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let struct_array = array.as_any().downcast_ref::<StructArray>().unwrap();
-    let struct_like =
-        like.map(|like_array| like_array.as_any().downcast_ref::<StructArray>().unwrap());
+    let struct_array = array.as_struct();
+    let struct_like = like.map(|like_array| like_array.as_struct());
 
     let fields = struct_like
         .map(|s_like| {

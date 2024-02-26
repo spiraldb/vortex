@@ -6,6 +6,7 @@ use hashbrown::HashMap;
 use log::debug;
 use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
 
+use enc::array::downcast::DowncastArrayBuiltin;
 use enc::array::primitive::PrimitiveArray;
 use enc::array::varbin::VarBinArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
@@ -16,6 +17,7 @@ use enc::ptype::NativePType;
 use enc::scalar::AsBytes;
 
 use crate::dict::{DictArray, DictEncoding};
+use crate::downcast::DowncastDict;
 
 impl EncodingCompression for DictEncoding {
     fn compressor(
@@ -54,7 +56,7 @@ impl<T: AsBytes> PartialEq<Self> for Value<T> {
 impl<T: AsBytes> Eq for Value<T> {}
 
 fn dict_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let dict_like = like.map(|like_arr| like_arr.as_any().downcast_ref::<DictArray>().unwrap());
+    let dict_like = like.map(|like_arr| like_arr.as_dict());
 
     let (codes, dict) = match ArrayKind::from(array) {
         ArrayKind::Primitive(p) => {
@@ -157,9 +159,9 @@ macro_rules! dict_encode_offsets_codes {
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying
 pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
-    if let Some(bytes) = array.bytes().as_any().downcast_ref::<PrimitiveArray>() {
+    if let Some(bytes) = array.bytes().maybe_primitive() {
         let bytes = bytes.buffer().typed_data::<u8>();
-        return if let Some(offsets) = array.offsets().as_any().downcast_ref::<PrimitiveArray>() {
+        return if let Some(offsets) = array.offsets().maybe_primitive() {
             match_each_native_ptype!(offsets.ptype(), |$P| {
                 let offsets = offsets.buffer().typed_data::<$P>();
 

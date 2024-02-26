@@ -7,6 +7,7 @@ use linkme::distributed_slice;
 use crate::array::bool::{BoolArray, BOOL_ENCODING};
 use crate::array::chunked::{ChunkedArray, CHUNKED_ENCODING};
 use crate::array::constant::{ConstantArray, CONSTANT_ENCODING};
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use crate::array::sparse::{SparseArray, SPARSE_ENCODING};
 use crate::array::struct_::{StructArray, STRUCT_ENCODING};
@@ -167,31 +168,15 @@ pub enum ArrayKind<'a> {
 impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
     fn from(value: &'a dyn Array) -> Self {
         match *value.encoding().id() {
-            BOOL_ENCODING => ArrayKind::Bool(value.as_any().downcast_ref::<BoolArray>().unwrap()),
-            CHUNKED_ENCODING => {
-                ArrayKind::Chunked(value.as_any().downcast_ref::<ChunkedArray>().unwrap())
-            }
-            CONSTANT_ENCODING => {
-                ArrayKind::Constant(value.as_any().downcast_ref::<ConstantArray>().unwrap())
-            }
-            PRIMITIVE_ENCODING => {
-                ArrayKind::Primitive(value.as_any().downcast_ref::<PrimitiveArray>().unwrap())
-            }
-            SPARSE_ENCODING => {
-                ArrayKind::Sparse(value.as_any().downcast_ref::<SparseArray>().unwrap())
-            }
-            STRUCT_ENCODING => {
-                ArrayKind::Struct(value.as_any().downcast_ref::<StructArray>().unwrap())
-            }
-            TYPED_ENCODING => {
-                ArrayKind::Typed(value.as_any().downcast_ref::<TypedArray>().unwrap())
-            }
-            VARBIN_ENCODING => {
-                ArrayKind::VarBin(value.as_any().downcast_ref::<VarBinArray>().unwrap())
-            }
-            VARBINVIEW_ENCODING => {
-                ArrayKind::VarBinView(value.as_any().downcast_ref::<VarBinViewArray>().unwrap())
-            }
+            BOOL_ENCODING => ArrayKind::Bool(value.as_bool()),
+            CHUNKED_ENCODING => ArrayKind::Chunked(value.as_chunked()),
+            CONSTANT_ENCODING => ArrayKind::Constant(value.as_constant()),
+            PRIMITIVE_ENCODING => ArrayKind::Primitive(value.as_primitive()),
+            SPARSE_ENCODING => ArrayKind::Sparse(value.as_sparse()),
+            STRUCT_ENCODING => ArrayKind::Struct(value.as_struct()),
+            TYPED_ENCODING => ArrayKind::Typed(value.as_typed()),
+            VARBIN_ENCODING => ArrayKind::VarBin(value.as_varbin()),
+            VARBINVIEW_ENCODING => ArrayKind::VarBinView(value.as_varbinview()),
             _ => ArrayKind::Other(value),
         }
     }

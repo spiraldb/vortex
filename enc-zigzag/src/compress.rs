@@ -1,5 +1,7 @@
 use zigzag::ZigZag;
 
+use crate::downcast::DowncastZigzag;
+use enc::array::downcast::DowncastArrayBuiltin;
 use enc::array::primitive::PrimitiveArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
 use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
@@ -17,7 +19,7 @@ impl EncodingCompression for ZigZagEncoding {
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
         // Only support primitive arrays
-        let Some(parray) = array.as_any().downcast_ref::<PrimitiveArray>() else {
+        let Some(parray) = array.maybe_primitive() else {
             return None;
         };
 
@@ -37,7 +39,7 @@ impl EncodingCompression for ZigZagEncoding {
 }
 
 fn zigzag_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let zigzag_like = like.map(|like_arr| like_arr.as_any().downcast_ref::<ZigZagArray>().unwrap());
+    let zigzag_like = like.map(|like_arr| like_arr.as_zigzag());
     let encoded = match ArrayKind::from(array) {
         ArrayKind::Primitive(p) => zigzag_encode(p),
         _ => unreachable!("This array kind should have been filtered out"),

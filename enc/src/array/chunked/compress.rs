@@ -1,6 +1,7 @@
 use rayon::prelude::*;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding, CHUNKED_ENCODING};
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 
@@ -19,9 +20,8 @@ impl EncodingCompression for ChunkedEncoding {
 }
 
 fn chunked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let chunked_array = array.as_any().downcast_ref::<ChunkedArray>().unwrap();
-    let chunked_like =
-        like.map(|like_array| like_array.as_any().downcast_ref::<ChunkedArray>().unwrap());
+    let chunked_array = array.as_chunked();
+    let chunked_like = like.map(|like_array| like_array.as_chunked());
 
     let compressed_chunks = chunked_like
         .map(|c_like| {

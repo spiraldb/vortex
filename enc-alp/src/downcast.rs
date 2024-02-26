@@ -8,6 +8,7 @@ mod private {
 
 pub trait DowncastALP: private::Sealed {
     fn maybe_alp(&self) -> Option<&ALPArray>;
+
     fn as_alp(&self) -> &ALPArray {
         self.maybe_alp().unwrap()
     }

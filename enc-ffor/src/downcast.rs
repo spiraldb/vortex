@@ -8,6 +8,7 @@ mod private {
 
 pub trait DowncastFFOR: private::Sealed {
     fn maybe_ffor(&self) -> Option<&FFORArray>;
+
     fn as_ffor(&self) -> &FFORArray {
         self.maybe_ffor().unwrap()
     }

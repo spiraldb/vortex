@@ -1,3 +1,4 @@
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::varbin::{VarBinArray, VarBinEncoding, VARBIN_ENCODING};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
@@ -17,9 +18,8 @@ impl EncodingCompression for VarBinEncoding {
 }
 
 fn varbin_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let varbin_array = array.as_any().downcast_ref::<VarBinArray>().unwrap();
-    let varbin_like =
-        like.map(|like_array| like_array.as_any().downcast_ref::<VarBinArray>().unwrap());
+    let varbin_array = array.as_varbin();
+    let varbin_like = like.map(|like_array| like_array.as_varbin());
 
     VarBinArray::new(
         ctx.compress(

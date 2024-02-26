@@ -2,6 +2,7 @@ use arrow::buffer::BooleanBuffer;
 use itertools::Itertools;
 
 use crate::array::bool::{BoolArray, BOOL_ENCODING};
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use crate::array::{Array, ArrayRef};
 use crate::error::{EncError, EncResult};
@@ -19,20 +20,12 @@ pub fn as_contiguous(arrays: Vec<ArrayRef>) -> EncResult<ArrayRef> {
     }
 
     match *arrays[0].encoding().id() {
-        BOOL_ENCODING => Ok(bool_as_contiguous(
-            arrays
-                .iter()
-                .map(|a| a.as_any().downcast_ref::<BoolArray>().unwrap())
-                .collect(),
-        )?
-        .boxed()),
-        PRIMITIVE_ENCODING => Ok(primitive_as_contiguous(
-            arrays
-                .iter()
-                .map(|a| a.as_any().downcast_ref::<PrimitiveArray>().unwrap())
-                .collect(),
-        )?
-        .boxed()),
+        BOOL_ENCODING => {
+            Ok(bool_as_contiguous(arrays.iter().map(|a| a.as_bool()).collect())?.boxed())
+        }
+        PRIMITIVE_ENCODING => {
+            Ok(primitive_as_contiguous(arrays.iter().map(|a| a.as_primitive()).collect())?.boxed())
+        }
         _ => Err(EncError::ComputeError(
             format!("as_contiguous not supported for {:?}", arrays[0].encoding()).into(),
         ))?,

@@ -1,11 +1,13 @@
 use codecz::AlignedAllocator;
-use enc::array::primitive::PrimitiveArray;
+use enc::array::downcast::DowncastArrayBuiltin;
+use enc::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use enc::array::{Array, ArrayRef};
 use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use enc::dtype::{DType, IntWidth, Nullability};
 use enc::ptype::match_each_native_ptype;
 use enc::stats::Stat;
 
+use crate::downcast::DowncastREE;
 use crate::{REEArray, REEEncoding};
 
 impl EncodingCompression for REEEncoding {
@@ -19,7 +21,7 @@ impl EncodingCompression for REEEncoding {
                 .stats()
                 .get_or_compute_or::<usize>(array.len(), &Stat::RunCount) as f32;
 
-        if array.as_any().downcast_ref::<PrimitiveArray>().is_some()
+        if array.encoding().id() == &PRIMITIVE_ENCODING
             && avg_run_length >= config.ree_average_run_threshold
         {
             return Some(&(ree_compressor as Compressor));
@@ -30,11 +32,8 @@ impl EncodingCompression for REEEncoding {
 }
 
 fn ree_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let ree_like = like.map(|like_arr| like_arr.as_any().downcast_ref::<REEArray>().unwrap());
-    let primitive_array = array
-        .as_any()
-        .downcast_ref::<PrimitiveArray>()
-        .expect("Not a primitive array");
+    let ree_like = like.map(|like_arr| like_arr.as_ree());
+    let primitive_array = array.as_primitive();
 
     let (ends, values) = ree_encode(primitive_array);
     let compressed_ends = ctx

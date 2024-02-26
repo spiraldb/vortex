@@ -9,6 +9,7 @@ use linkme::distributed_slice;
 use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
 
 use crate::array::bool::BoolArray;
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{
     check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
@@ -178,18 +179,17 @@ impl VarBinArray {
     pub fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
         check_index_bounds(self, index)?;
 
-        let (start, end): (usize, usize) =
-            if let Some(p) = self.offsets.as_any().downcast_ref::<PrimitiveArray>() {
-                match_each_native_ptype!(p.ptype(), |$P| {
-                    let buf = p.buffer().typed_data::<$P>();
-                    (buf[index].as_(), buf[index + 1].as_())
-                })
-            } else {
-                (
-                    self.offsets().scalar_at(index)?.try_into()?,
-                    self.offsets().scalar_at(index + 1)?.try_into()?,
-                )
-            };
+        let (start, end): (usize, usize) = if let Some(p) = self.offsets.maybe_primitive() {
+            match_each_native_ptype!(p.ptype(), |$P| {
+                let buf = p.buffer().typed_data::<$P>();
+                (buf[index].as_(), buf[index + 1].as_())
+            })
+        } else {
+            (
+                self.offsets().scalar_at(index)?.try_into()?,
+                self.offsets().scalar_at(index + 1)?.try_into()?,
+            )
+        };
         let sliced = self.bytes().slice(start, end)?;
         let arr_ref = sliced.iter_arrow().combine_chunks();
         Ok(arr_ref.as_primitive::<UInt8Type>().values().to_vec())

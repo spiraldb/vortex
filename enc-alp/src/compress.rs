@@ -2,6 +2,7 @@ use log::debug;
 
 use codecz::alp;
 use codecz::alp::{ALPEncoded, ALPExponents, SupportsALP};
+use enc::array::downcast::DowncastArrayBuiltin;
 use enc::array::primitive::PrimitiveArray;
 use enc::array::sparse::SparseArray;
 use enc::array::{Array, ArrayRef};
@@ -9,6 +10,7 @@ use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression
 use enc::ptype::{NativePType, PType};
 
 use crate::alp::{ALPArray, ALPEncoding};
+use crate::downcast::DowncastALP;
 
 impl EncodingCompression for ALPEncoding {
     fn compressor(
@@ -17,7 +19,7 @@ impl EncodingCompression for ALPEncoding {
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
         // Only support primitive arrays
-        let Some(parray) = array.as_any().downcast_ref::<PrimitiveArray>() else {
+        let Some(parray) = array.maybe_primitive() else {
             debug!("Skipping ALP: not primitive");
             return None;
         };
@@ -33,9 +35,9 @@ impl EncodingCompression for ALPEncoding {
 }
 
 fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let like_alp = like.and_then(|like_array| like_array.as_any().downcast_ref::<ALPArray>());
+    let like_alp = like.map(|like_array| like_array.as_alp());
 
-    let parray = array.as_any().downcast_ref::<PrimitiveArray>().unwrap();
+    let parray = array.as_primitive();
     let (encoded, exponents, patches) = like_alp
         .map(|alp_like| alp_encode_like_parts(parray, alp_like))
         .unwrap_or_else(|| alp_encode_parts(parray));
