@@ -1,3 +1,4 @@
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::typed::{TypedArray, TypedEncoding, TYPED_ENCODING};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
@@ -17,9 +18,8 @@ impl EncodingCompression for TypedEncoding {
 }
 
 fn typed_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let typed_array = array.as_any().downcast_ref::<TypedArray>().unwrap();
-    let typed_like =
-        like.map(|like_array| like_array.as_any().downcast_ref::<TypedArray>().unwrap());
+    let typed_array = array.as_typed();
+    let typed_like = like.map(|like_array| like_array.as_typed());
 
     TypedArray::new(
         ctx.compress(

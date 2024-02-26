@@ -8,6 +8,7 @@ mod private {
 
 pub trait DowncastREE: private::Sealed {
     fn maybe_ree(&self) -> Option<&REEArray>;
+
     fn as_ree(&self) -> &REEArray {
         self.maybe_ree().unwrap()
     }

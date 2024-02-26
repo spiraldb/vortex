@@ -8,6 +8,7 @@ mod private {
 
 pub trait DowncastDict: private::Sealed {
     fn maybe_dict(&self) -> Option<&DictArray>;
+
     fn as_dict(&self) -> &DictArray {
         self.maybe_dict().unwrap()
     }

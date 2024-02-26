@@ -1,3 +1,4 @@
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding, VARBINVIEW_ENCODING};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
@@ -22,13 +23,8 @@ fn varbinview_compressor(
     like: Option<&dyn Array>,
     ctx: CompressCtx,
 ) -> ArrayRef {
-    let varbinview_array = array.as_any().downcast_ref::<VarBinViewArray>().unwrap();
-    let varbinview_like = like.map(|like_array| {
-        like_array
-            .as_any()
-            .downcast_ref::<VarBinViewArray>()
-            .unwrap()
-    });
+    let varbinview_array = array.as_varbinview();
+    let varbinview_like = like.map(|like_array| like_array.as_varbinview());
 
     VarBinViewArray::new(
         // TODO(robert): Can we compress views? Not right now

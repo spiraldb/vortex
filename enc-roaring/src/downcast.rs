@@ -8,11 +8,13 @@ mod private {
 
 pub trait DowncastRoaring: private::Sealed {
     fn maybe_roaring_int(&self) -> Option<&RoaringIntArray>;
+
     fn as_roaring_int(&self) -> &RoaringIntArray {
         self.maybe_roaring_int().unwrap()
     }
 
     fn maybe_roaring_bool(&self) -> Option<&RoaringBoolArray>;
+
     fn as_roaring_bool(&self) -> &RoaringBoolArray {
         self.maybe_roaring_bool().unwrap()
     }

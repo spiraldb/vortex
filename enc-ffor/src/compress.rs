@@ -1,7 +1,9 @@
 use log::debug;
 
+use crate::downcast::DowncastFFOR;
 use codecz::ffor;
 use codecz::ffor::{FforEncoded, SupportsFFoR};
+use enc::array::downcast::DowncastArrayBuiltin;
 use enc::array::primitive::PrimitiveArray;
 use enc::array::sparse::SparseArray;
 use enc::array::{Array, ArrayRef};
@@ -20,7 +22,7 @@ impl EncodingCompression for FFoREncoding {
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
         // Only support primitive arrays
-        let Some(parray) = array.as_any().downcast_ref::<PrimitiveArray>() else {
+        let Some(parray) = array.maybe_primitive() else {
             debug!("Skipping FFoR: not primitive");
             return None;
         };
@@ -41,8 +43,8 @@ impl EncodingCompression for FFoREncoding {
 // of opaque bytes. At that point, the only available schemes are general-purpose
 // compression algorithms, which we would apply at the file level instead (if at all)
 fn ffor_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let like_ffor = like.and_then(|like_array| like_array.as_any().downcast_ref::<FFORArray>());
-    let parray = array.as_any().downcast_ref::<PrimitiveArray>().unwrap();
+    let like_ffor = like.map(|like_array| like_array.as_ffor());
+    let parray = array.as_primitive();
 
     let (encoded, patches, min_val, num_bits) = like_ffor
         .map(|ffor_like| ffor_encode_like_parts(parray, ffor_like.num_bits()))

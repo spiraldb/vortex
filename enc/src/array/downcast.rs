@@ -15,46 +15,55 @@ mod private {
 
 pub trait DowncastArrayBuiltin: private::Sealed {
     fn maybe_primitive(&self) -> Option<&PrimitiveArray>;
+
     fn as_primitive(&self) -> &PrimitiveArray {
         self.maybe_primitive().unwrap()
     }
 
     fn maybe_bool(&self) -> Option<&BoolArray>;
+
     fn as_bool(&self) -> &BoolArray {
         self.maybe_bool().unwrap()
     }
 
     fn maybe_varbin(&self) -> Option<&VarBinArray>;
+
     fn as_varbin(&self) -> &VarBinArray {
         self.maybe_varbin().unwrap()
     }
 
     fn maybe_varbinview(&self) -> Option<&VarBinViewArray>;
+
     fn as_varbinview(&self) -> &VarBinViewArray {
         self.maybe_varbinview().unwrap()
     }
 
     fn maybe_typed(&self) -> Option<&TypedArray>;
+
     fn as_typed(&self) -> &TypedArray {
         self.maybe_typed().unwrap()
     }
 
     fn maybe_struct(&self) -> Option<&StructArray>;
+
     fn as_struct(&self) -> &StructArray {
         self.maybe_struct().unwrap()
     }
 
     fn maybe_sparse(&self) -> Option<&SparseArray>;
+
     fn as_sparse(&self) -> &SparseArray {
         self.maybe_sparse().unwrap()
     }
 
     fn maybe_constant(&self) -> Option<&ConstantArray>;
+
     fn as_constant(&self) -> &ConstantArray {
         self.maybe_constant().unwrap()
     }
 
     fn maybe_chunked(&self) -> Option<&ChunkedArray>;
+
     fn as_chunked(&self) -> &ChunkedArray {
         self.maybe_chunked().unwrap()
     }

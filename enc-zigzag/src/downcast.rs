@@ -8,6 +8,7 @@ mod private {
 
 pub trait DowncastZigzag: private::Sealed {
     fn maybe_zigzag(&self) -> Option<&ZigZagArray>;
+
     fn as_zigzag(&self) -> &ZigZagArray {
         self.maybe_zigzag().unwrap()
     }

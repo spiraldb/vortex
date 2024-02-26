@@ -1,6 +1,7 @@
 use croaring::Bitmap;
 
 use enc::array::bool::{BoolArray, BOOL_ENCODING};
+use enc::array::downcast::DowncastArrayBuiltin;
 use enc::array::{Array, ArrayRef};
 use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use enc::dtype::DType;
@@ -33,7 +34,7 @@ impl EncodingCompression for RoaringBoolEncoding {
 }
 
 fn roaring_compressor(array: &dyn Array, _like: Option<&dyn Array>, _ctx: CompressCtx) -> ArrayRef {
-    roaring_encode(array.as_any().downcast_ref::<BoolArray>().unwrap()).boxed()
+    roaring_encode(array.as_bool()).boxed()
 }
 
 pub fn roaring_encode(bool_array: &BoolArray) -> RoaringBoolArray {
