@@ -4,6 +4,7 @@ use linkme::distributed_slice;
 pub use zigzag::*;
 
 mod compress;
+mod downcast;
 mod serde;
 mod stats;
 mod zigzag;

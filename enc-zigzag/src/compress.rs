@@ -1,12 +1,14 @@
-use crate::zigzag::{ZigZagArray, ZigZagEncoding};
-use enc::array::primitive::PrimitiveArray;
+use zigzag::ZigZag;
 
+use enc::array::primitive::PrimitiveArray;
 use enc::array::{Array, ArrayKind, ArrayRef};
 use enc::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use enc::error::EncResult;
 use enc::ptype::{NativePType, PType};
 use enc::stats::Stat;
 use spiral_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
-use zigzag::ZigZag;
+
+use crate::zigzag::{ZigZagArray, ZigZagEncoding};
 
 impl EncodingCompression for ZigZagEncoding {
     fn compressor(
@@ -43,13 +45,13 @@ fn zigzag_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressC
 
     ZigZagArray::new(
         ctx.next_level()
-            .compress(encoded.as_ref(), zigzag_like.map(|z| z.encoded())),
+            .compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded())),
     )
     .boxed()
 }
 
-pub fn zigzag_encode(parray: &PrimitiveArray) -> PrimitiveArray {
-    match parray.ptype() {
+pub fn zigzag_encode(parray: &PrimitiveArray) -> EncResult<ZigZagArray> {
+    let encoded = match parray.ptype() {
         PType::I8 => zigzag_encode_primitive::<i8>(parray.buffer().typed_data(), parray.validity()),
         PType::I16 => {
             zigzag_encode_primitive::<i16>(parray.buffer().typed_data(), parray.validity())
@@ -61,7 +63,8 @@ pub fn zigzag_encode(parray: &PrimitiveArray) -> PrimitiveArray {
             zigzag_encode_primitive::<i64>(parray.buffer().typed_data(), parray.validity())
         }
         _ => panic!("Unsupported ptype"),
-    }
+    };
+    ZigZagArray::try_new(encoded.boxed())
 }
 
 fn zigzag_encode_primitive<T: ZigZag + NativePType>(

@@ -3,7 +3,6 @@ use std::sync::{Arc, RwLock};
 
 use zigzag::ZigZag;
 
-use crate::compress::zigzag_encode;
 use enc::array::{
     check_index_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
@@ -15,6 +14,8 @@ use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::scalar::{NullableScalar, Scalar};
 use enc::serde::{ArraySerde, EncodingSerde};
 use enc::stats::{Stats, StatsSet};
+
+use crate::compress::zigzag_encode;
 
 #[derive(Debug, Clone)]
 pub struct ZigZagArray {
@@ -44,7 +45,7 @@ impl ZigZagArray {
 
     pub fn encode(array: &dyn Array) -> EncResult<ArrayRef> {
         match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => Ok(Self::try_new(zigzag_encode(p).boxed())?.boxed()),
+            ArrayKind::Primitive(p) => Ok(zigzag_encode(p)?.boxed()),
             _ => Err(EncError::InvalidEncoding(array.encoding().id().clone())),
         }
     }

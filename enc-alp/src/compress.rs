@@ -54,9 +54,9 @@ fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
     .boxed()
 }
 
-pub fn alp_encode(parray: &PrimitiveArray) -> ArrayRef {
+pub fn alp_encode(parray: &PrimitiveArray) -> ALPArray {
     let (encoded, exponents, patches) = alp_encode_parts(parray);
-    ALPArray::new(encoded, exponents, patches).boxed()
+    ALPArray::new(encoded, exponents, patches)
 }
 
 fn alp_encode_parts(parray: &PrimitiveArray) -> (ArrayRef, ALPExponents, Option<ArrayRef>) {

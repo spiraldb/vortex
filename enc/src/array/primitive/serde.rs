@@ -1,7 +1,5 @@
 use std::io;
-use std::io::{ErrorKind, Read};
-
-use arrow::buffer::MutableBuffer;
+use std::io::ErrorKind;
 
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use crate::array::{Array, ArrayRef};
@@ -13,25 +11,49 @@ impl ArraySerde for PrimitiveArray {
         if let Some(v) = self.validity() {
             ctx.write(v.as_ref())?;
         }
-        ctx.write_usize(self.len())?;
-        ctx.writer().write_all(self.buffer().as_slice())
+        ctx.write_buffer(self.len(), self.buffer())
     }
 }
 
 impl EncodingSerde for PrimitiveEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
         let validity = if ctx.schema().is_nullable() {
-            Some(ctx.read()?)
+            Some(ctx.validity().read()?)
         } else {
             None
         };
-        let values_len = ctx.read_usize()?;
-        let mut buffer = Vec::<u8>::with_capacity(values_len);
-        ctx.reader()
-            .take(values_len as u64)
-            .read_to_end(&mut buffer)?;
+
         let ptype =
             PType::try_from(ctx.schema()).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
-        Ok(PrimitiveArray::new(ptype, MutableBuffer::from(buffer).into(), validity).boxed())
+        let (_, buf) = ctx.read_buffer(|len| len * ptype.byte_width())?;
+        Ok(PrimitiveArray::new(ptype, buf, validity).boxed())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::array::downcast::DowncastArrayBuiltin;
+    use crate::array::primitive::PrimitiveArray;
+    use crate::serde::test::roundtrip_array;
+
+    #[test]
+    fn roundtrip() {
+        let arr = PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]);
+        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        assert_eq!(
+            arr.buffer().typed_data::<i32>(),
+            read_arr.as_primitive().buffer().typed_data::<i32>()
+        );
+
+        assert_eq!(
+            arr.validity().unwrap().as_bool().buffer().values(),
+            read_arr
+                .as_primitive()
+                .validity()
+                .unwrap()
+                .as_bool()
+                .buffer()
+                .values()
+        );
     }
 }

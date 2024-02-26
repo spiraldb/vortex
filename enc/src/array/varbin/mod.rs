@@ -61,7 +61,7 @@ impl VarBinArray {
         }
         if !matches!(
             bytes.dtype(),
-            DType::Int(IntWidth::_8, Signedness::Unsigned, _)
+            DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
             return Err(EncError::UnsupportedDataArrayDType(bytes.dtype().clone()));
         }
