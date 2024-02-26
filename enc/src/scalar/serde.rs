@@ -1,5 +1,5 @@
 use std::io;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{ErrorKind, Read};
 
 use half::f16;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -9,7 +9,7 @@ use crate::scalar::{
     BinaryScalar, BoolScalar, ListScalar, LocalTimeScalar, NullScalar, NullableScalar, PScalar,
     Scalar, StructScalar, Utf8Scalar,
 };
-use crate::serde::{DTypeReader, DTypeWriter, TimeUnitTag};
+use crate::serde::{DTypeReader, TimeUnitTag, WriteCtx};
 
 pub struct ScalarReader<'a> {
     reader: &'a mut dyn Read,
@@ -127,25 +127,24 @@ impl<'a> ScalarReader<'a> {
     }
 }
 
-pub struct ScalarWriter<'a> {
-    writer: &'a mut dyn Write,
+pub struct ScalarWriter<'a, 'b> {
+    writer: &'b mut WriteCtx<'a>,
 }
 
-impl<'a> ScalarWriter<'a> {
-    pub fn new(writer: &'a mut dyn Write) -> Self {
+impl<'a, 'b> ScalarWriter<'a, 'b> {
+    pub fn new(writer: &'b mut WriteCtx<'a>) -> Self {
         Self { writer }
     }
 
     pub fn write(&mut self, scalar: &dyn Scalar) -> io::Result<()> {
         let tag = ScalarTag::from(scalar);
-        self.writer.write_all(&[tag.into()])?;
+        self.writer.write_fixed_slice([tag.into()])?;
         match tag {
             ScalarTag::Binary => {
                 let binary = scalar.as_any().downcast_ref::<BinaryScalar>().unwrap();
-                leb128::write::unsigned(self.writer, binary.value().len() as u64)?;
-                self.writer.write_all(binary.value().as_slice())
+                self.writer.write_slice(binary.value().as_slice())
             }
-            ScalarTag::Bool => self.writer.write_all(&[scalar
+            ScalarTag::Bool => self.writer.write_fixed_slice([scalar
                 .as_any()
                 .downcast_ref::<BoolScalar>()
                 .unwrap()
@@ -154,49 +153,50 @@ impl<'a> ScalarWriter<'a> {
                 let PScalar::F16(f) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&f.to_le_bytes())
+                self.writer.write_fixed_slice(f.to_le_bytes())
             }
             ScalarTag::F32 => {
                 let PScalar::F32(f) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&f.to_le_bytes())
+                self.writer.write_fixed_slice(f.to_le_bytes())
             }
             ScalarTag::F64 => {
                 let PScalar::F64(f) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&f.to_le_bytes())
+                self.writer.write_fixed_slice(f.to_le_bytes())
             }
             ScalarTag::I16 => {
                 let PScalar::I16(i) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&i.to_le_bytes())
+                self.writer.write_fixed_slice(i.to_le_bytes())
             }
             ScalarTag::I32 => {
                 let PScalar::I32(i) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&i.to_le_bytes())
+                self.writer.write_fixed_slice(i.to_le_bytes())
             }
             ScalarTag::I64 => {
                 let PScalar::I64(i) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&i.to_le_bytes())
+                self.writer.write_fixed_slice(i.to_le_bytes())
             }
             ScalarTag::I8 => {
                 let PScalar::I8(i) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&i.to_le_bytes())
+                self.writer.write_fixed_slice(i.to_le_bytes())
             }
             ScalarTag::List => {
                 let ls = scalar.as_any().downcast_ref::<ListScalar>().unwrap();
-                leb128::write::unsigned(self.writer, ls.values().len() as u64)?;
+                self.writer.write_usize(ls.values().len())?;
                 if ls.values().is_empty() {
-                    DTypeWriter::new(self.writer).write(ls.dtype())
+                    self.writer.dtype(ls.dtype())?;
+                    Ok(())
                 } else {
                     for elem in ls.values() {
                         self.write(elem.as_ref())?;
@@ -208,25 +208,21 @@ impl<'a> ScalarWriter<'a> {
                 let lt = scalar.as_any().downcast_ref::<LocalTimeScalar>().unwrap();
                 self.write(lt.value())?;
                 self.writer
-                    .write_all(&[TimeUnitTag::from(lt.time_unit()).into()])
+                    .write_fixed_slice([TimeUnitTag::from(lt.time_unit()).into()])
             }
             ScalarTag::Null => Ok(()),
             ScalarTag::Nullable => {
                 let ns = scalar.as_any().downcast_ref::<NullableScalar>().unwrap();
+                self.writer
+                    .write_option_tag(matches!(ns, NullableScalar::Some(_, _)))?;
                 match ns {
-                    NullableScalar::None(d) => {
-                        self.writer.write_all(&[0x00])?;
-                        DTypeWriter::new(self.writer).write(d)
-                    }
-                    NullableScalar::Some(s, _) => {
-                        self.writer.write_all(&[0x01])?;
-                        self.write(s.as_ref())
-                    }
+                    NullableScalar::None(d) => self.writer.dtype(d),
+                    NullableScalar::Some(s, _) => self.write(s.as_ref()),
                 }
             }
             ScalarTag::Struct => {
                 let s = scalar.as_any().downcast_ref::<StructScalar>().unwrap();
-                DTypeWriter::new(self.writer).write(s.dtype())?;
+                self.writer.dtype(s.dtype())?;
                 for field in s.values() {
                     self.write(field.as_ref())?;
                 }
@@ -236,30 +232,29 @@ impl<'a> ScalarWriter<'a> {
                 let PScalar::U16(u) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&u.to_le_bytes())
+                self.writer.write_fixed_slice(u.to_le_bytes())
             }
             ScalarTag::U32 => {
                 let PScalar::U32(u) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&u.to_le_bytes())
+                self.writer.write_fixed_slice(u.to_le_bytes())
             }
             ScalarTag::U64 => {
                 let PScalar::U64(u) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&u.to_le_bytes())
+                self.writer.write_fixed_slice(u.to_le_bytes())
             }
             ScalarTag::U8 => {
                 let PScalar::U8(u) = scalar.as_any().downcast_ref::<PScalar>().unwrap() else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid scalar"));
                 };
-                self.writer.write_all(&u.to_le_bytes())
+                self.writer.write_fixed_slice(u.to_le_bytes())
             }
             ScalarTag::Utf8 => {
                 let utf8 = scalar.as_any().downcast_ref::<Utf8Scalar>().unwrap();
-                leb128::write::unsigned(self.writer, utf8.value().len() as u64)?;
-                self.writer.write_all(utf8.value().as_bytes())
+                self.writer.write_slice(utf8.value().as_bytes())
             }
         }
     }

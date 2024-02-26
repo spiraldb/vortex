@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use enc::array::primitive::PrimitiveArray;
+use enc::array::downcast::DowncastArrayBuiltin;
 use enc::array::{
     check_validity_buffer, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
@@ -72,7 +72,7 @@ impl FFORArray {
 
     pub fn encode(array: &dyn Array) -> EncResult<ArrayRef> {
         match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => Ok(ffor_encode(p)),
+            ArrayKind::Primitive(p) => Ok(ffor_encode(p).boxed()),
             _ => Err(EncError::InvalidEncoding(array.encoding().id().clone())),
         }
     }
@@ -158,7 +158,7 @@ impl Array for FFORArray {
             return Ok(patch);
         }
 
-        let Some(parray) = self.encoded().as_any().downcast_ref::<PrimitiveArray>() else {
+        let Some(parray) = self.encoded().maybe_primitive() else {
             return Err(EncError::InvalidEncoding(
                 self.encoded().encoding().id().clone(),
             ));

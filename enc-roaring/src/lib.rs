@@ -5,7 +5,9 @@ use enc::array::{EncodingRef, ENCODINGS};
 pub use integer::*;
 
 mod boolean;
+mod downcast;
 mod integer;
+mod serde_tests;
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_ROARING_BOOL: EncodingRef = &RoaringBoolEncoding;

@@ -70,7 +70,7 @@ fn ffor_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx
     .boxed()
 }
 
-pub fn ffor_encode(parray: &PrimitiveArray) -> ArrayRef {
+pub fn ffor_encode(parray: &PrimitiveArray) -> FFORArray {
     let (encoded, patches, min_val, num_bits) = ffor_encode_parts(parray);
     FFORArray::new(
         encoded,
@@ -80,7 +80,6 @@ pub fn ffor_encode(parray: &PrimitiveArray) -> ArrayRef {
         num_bits,
         parray.len(),
     )
-    .boxed()
 }
 
 fn ffor_encode_parts(parray: &PrimitiveArray) -> (ArrayRef, Option<ArrayRef>, Box<dyn Scalar>, u8) {

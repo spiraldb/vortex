@@ -1,11 +1,12 @@
 use std::io;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{ErrorKind, Read};
 use std::sync::Arc;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::dtype::DType::*;
 use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness, TimeUnit};
+use crate::serde::WriteCtx;
 
 pub struct DTypeReader<'a> {
     reader: &'a mut dyn Read,
@@ -81,17 +82,17 @@ impl<'a> DTypeReader<'a> {
                 let field_num = leb128::read::unsigned(self.reader)
                     .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
                 let mut names = Vec::<Arc<String>>::with_capacity(field_num as usize);
-                for v in names.iter_mut() {
+                for _ in 0..field_num {
                     let len = leb128::read::unsigned(self.reader)
                         .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
-                    let mut name = Vec::<u8>::with_capacity(len as usize);
-                    self.reader.take(len).read_to_end(&mut name)?;
-                    *v = Arc::new(unsafe { String::from_utf8_unchecked(name) });
+                    let mut name = String::with_capacity(len as usize);
+                    self.reader.take(len).read_to_string(&mut name)?;
+                    names.push(Arc::new(name));
                 }
 
                 let mut fields = Vec::<DType>::with_capacity(field_num as usize);
-                for v in fields.iter_mut() {
-                    *v = self.read()?;
+                for _ in 0..field_num {
+                    fields.push(self.read()?);
                 }
                 Ok(Struct(names, fields))
             }
@@ -129,17 +130,18 @@ impl<'a> DTypeReader<'a> {
     }
 }
 
-pub struct DTypeWriter<'a> {
-    writer: &'a mut dyn Write,
+pub struct DTypeWriter<'a, 'b> {
+    writer: &'b mut WriteCtx<'a>,
 }
 
-impl<'a> DTypeWriter<'a> {
-    pub fn new(writer: &'a mut dyn Write) -> Self {
+impl<'a, 'b> DTypeWriter<'a, 'b> {
+    pub fn new(writer: &'b mut WriteCtx<'a>) -> Self {
         Self { writer }
     }
 
     pub fn write(&mut self, dtype: &DType) -> io::Result<()> {
-        self.writer.write_all(&[DTypeTag::from(dtype).into()])?;
+        self.writer
+            .write_fixed_slice([DTypeTag::from(dtype).into()])?;
         match dtype {
             Null => {}
             Bool(n) => self.write_nullability(*n)?,
@@ -150,7 +152,7 @@ impl<'a> DTypeWriter<'a> {
             }
             Decimal(p, w, n) => {
                 self.write_nullability(*n)?;
-                self.writer.write_all(&[*p, *w as u8])?
+                self.writer.write_fixed_slice([*p, *w as u8])?
             }
             Float(w, n) => {
                 self.write_nullability(*n)?;
@@ -172,10 +174,9 @@ impl<'a> DTypeWriter<'a> {
                 self.write_time_unit(*u)?
             }
             Struct(ns, fs) => {
-                leb128::write::unsigned(self.writer, ns.len() as u64)?;
+                self.writer.write_usize(ns.len())?;
                 for name in ns {
-                    leb128::write::unsigned(self.writer, name.len() as u64)?;
-                    self.writer.write_all(name.as_bytes())?;
+                    self.writer.write_slice(name.as_bytes())?;
                 }
                 for field in fs {
                     self.write(field)?
@@ -197,27 +198,27 @@ impl<'a> DTypeWriter<'a> {
 
     fn write_signedness(&mut self, signedness: Signedness) -> io::Result<()> {
         self.writer
-            .write_all(&[SignednessTag::from(signedness).into()])
+            .write_fixed_slice([SignednessTag::from(signedness).into()])
     }
 
     fn write_nullability(&mut self, nullability: Nullability) -> io::Result<()> {
         self.writer
-            .write_all(&[NullabilityTag::from(nullability).into()])
+            .write_fixed_slice([NullabilityTag::from(nullability).into()])
     }
 
     fn write_int_width(&mut self, int_width: IntWidth) -> io::Result<()> {
         self.writer
-            .write_all(&[IntWidthTag::from(int_width).into()])
+            .write_fixed_slice([IntWidthTag::from(int_width).into()])
     }
 
     fn write_float_width(&mut self, float_width: FloatWidth) -> io::Result<()> {
         self.writer
-            .write_all(&[FloatWidthTag::from(float_width).into()])
+            .write_fixed_slice([FloatWidthTag::from(float_width).into()])
     }
 
     fn write_time_unit(&mut self, time_unit: TimeUnit) -> io::Result<()> {
         self.writer
-            .write_all(&[TimeUnitTag::from(time_unit).into()])
+            .write_fixed_slice([TimeUnitTag::from(time_unit).into()])
     }
 }
 
@@ -428,13 +429,14 @@ mod test {
     use crate::dtype::IntWidth::_64;
     use crate::dtype::Nullability::NonNullable;
     use crate::dtype::Signedness::Unsigned;
-    use crate::serde::{DTypeReader, DTypeWriter};
+    use crate::serde::{DTypeReader, WriteCtx};
 
     #[test]
     fn roundtrip() {
         let mut buffer: Vec<u8> = Vec::new();
         let dtype = Int(_64, Unsigned, NonNullable);
-        DTypeWriter::new(&mut buffer).write(&dtype).unwrap();
+        let mut ctx = WriteCtx::new(&mut buffer);
+        ctx.dtype(&dtype).unwrap();
         assert_eq!(buffer, [0x02, 0x01, 0x04, 0x01]);
         let read_dtype = DTypeReader::new(&mut buffer.as_slice()).read().unwrap();
         assert_eq!(dtype, read_dtype);

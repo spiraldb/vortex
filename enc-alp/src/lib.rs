@@ -4,6 +4,7 @@ use linkme::distributed_slice;
 
 mod alp;
 mod compress;
+mod downcast;
 mod serde;
 mod stats;
 

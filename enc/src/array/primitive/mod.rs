@@ -71,11 +71,13 @@ impl PrimitiveArray {
         })
     }
 
+    #[inline]
     pub fn from_vec<T: NativePType>(values: Vec<T>) -> Self {
         Self::from_nullable(values, None)
     }
 
     /// Allocate buffer from allocator-api2 vector. This would be easier when arrow gets https://github.com/apache/arrow-rs/issues/3960
+    #[inline]
     pub fn from_vec_in<T: NativePType, A: Allocator + RefUnwindSafe + Send + Sync + 'static>(
         values: allocator_api2::vec::Vec<T, A>,
     ) -> Self {
@@ -299,11 +301,7 @@ impl<T: NativePType> FromIterator<Option<T>> for PrimitiveArray {
         if validity.is_empty() {
             PrimitiveArray::from_vec(values)
         } else {
-            PrimitiveArray::new(
-                T::PTYPE,
-                Buffer::from_vec(values),
-                Some(BoolArray::from(validity).boxed()),
-            )
+            PrimitiveArray::from_nullable(values, Some(BoolArray::from(validity).boxed()))
         }
     }
 }

@@ -5,7 +5,7 @@ use codecz::alp;
 pub use codecz::alp::ALPExponents;
 use enc::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use enc::compress::EncodingCompression;
-use enc::dtype::{DType, FloatWidth, IntWidth};
+use enc::dtype::{DType, FloatWidth, IntWidth, Signedness};
 use enc::error::{EncError, EncResult};
 use enc::formatter::{ArrayDisplay, ArrayFormatter};
 use enc::scalar::{NullableScalar, Scalar};
@@ -34,10 +34,10 @@ impl ALPArray {
         patches: Option<ArrayRef>,
     ) -> EncResult<Self> {
         let dtype = match encoded.dtype() {
-            DType::Int(width, _, nullability) => match width {
+            d @ DType::Int(width, Signedness::Signed, nullability) => match width {
                 IntWidth::_32 => DType::Float(32.into(), *nullability),
                 IntWidth::_64 => DType::Float(64.into(), *nullability),
-                _ => return Err(EncError::InvalidDType(encoded.dtype().clone())),
+                _ => return Err(EncError::InvalidDType(d.clone())),
             },
             d => return Err(EncError::InvalidDType(d.clone())),
         };
@@ -52,7 +52,7 @@ impl ALPArray {
 
     pub fn encode(array: &dyn Array) -> EncResult<ArrayRef> {
         match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => Ok(alp_encode(p)),
+            ArrayKind::Primitive(p) => Ok(alp_encode(p).boxed()),
             _ => Err(EncError::InvalidEncoding(array.encoding().id().clone())),
         }
     }

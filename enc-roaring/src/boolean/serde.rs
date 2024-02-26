@@ -1,5 +1,5 @@
 use std::io;
-use std::io::Read;
+use std::io::ErrorKind;
 
 use croaring::{Bitmap, Portable};
 
@@ -13,23 +13,39 @@ impl ArraySerde for RoaringBoolArray {
         ctx.write_usize(self.len())?;
         let mut data = Vec::new();
         self.bitmap().serialize_into::<Portable>(&mut data);
-        ctx.write_usize(data.len())?;
-        ctx.writer().write_all(data.as_slice())
+        ctx.write_slice(data.as_slice())
     }
 }
 
 impl EncodingSerde for RoaringBoolEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
         let len = ctx.read_usize()?;
-        let bitmap_len = ctx.read_usize()?;
-        let mut bitmap_data = Vec::<u8>::with_capacity(bitmap_len);
-        ctx.reader()
-            .take(bitmap_len as u64)
-            .read_to_end(&mut bitmap_data)?;
+        let bitmap_data = ctx.read_slice()?;
         Ok(RoaringBoolArray::new(
-            Bitmap::try_deserialize::<Portable>(bitmap_data.as_slice()).unwrap(),
+            Bitmap::try_deserialize::<Portable>(bitmap_data.as_slice())
+                .ok_or(io::Error::new(ErrorKind::InvalidData, "invalid bitmap"))?,
             len,
         )
         .boxed())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use croaring::Bitmap;
+
+    use crate::serde_tests::test::roundtrip_array;
+    use crate::RoaringBoolArray;
+
+    #[test]
+    fn roundtrip() {
+        let arr = RoaringBoolArray::new(Bitmap::from_range(245..63000), 65536);
+        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+
+        let read_roaring = read_arr
+            .as_any()
+            .downcast_ref::<RoaringBoolArray>()
+            .unwrap();
+        assert_eq!(arr.bitmap(), read_roaring.bitmap());
     }
 }

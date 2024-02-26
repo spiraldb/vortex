@@ -114,7 +114,10 @@ impl VarBinViewArray {
         }
 
         for d in data.iter() {
-            if !matches!(d.dtype(), DType::Int(IntWidth::_8, Signedness::Unsigned, _)) {
+            if !matches!(
+                d.dtype(),
+                DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
+            ) {
                 return Err(EncError::UnsupportedDataArrayDType(d.dtype().clone()));
             }
         }

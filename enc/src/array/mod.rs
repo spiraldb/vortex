@@ -25,6 +25,7 @@ use crate::stats::Stats;
 pub mod bool;
 pub mod chunked;
 pub mod constant;
+pub mod downcast;
 pub mod primitive;
 pub mod sparse;
 pub mod struct_;

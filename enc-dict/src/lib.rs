@@ -6,6 +6,7 @@ pub use dict::*;
 
 mod compress;
 mod dict;
+mod downcast;
 mod serde;
 mod stats;
 
