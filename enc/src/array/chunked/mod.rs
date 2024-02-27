@@ -266,8 +266,6 @@ impl Iterator for ChunkedArrowIterator {
 
 #[cfg(test)]
 mod test {
-    use std::ops::Deref;
-
     use arrow::array::cast::AsArray;
     use arrow::array::types::UInt64Type;
     use arrow::array::ArrayRef as ArrowArrayRef;
@@ -294,7 +292,7 @@ mod test {
     }
 
     fn assert_equal_slices<T: ArrowPrimitiveType>(arr: ArrowArrayRef, slice: &[T::Native]) {
-        assert_eq!(arr.as_primitive::<T>().values().deref(), slice);
+        assert_eq!(*arr.as_primitive::<T>().values(), slice);
     }
 
     #[test]

@@ -156,7 +156,6 @@ impl ArrayDisplay for TypedArray {
 #[cfg(test)]
 mod test {
     use std::iter;
-    use std::ops::Deref;
 
     use arrow::array::cast::AsArray;
     use arrow::array::types::Time64MicrosecondType;
@@ -197,8 +196,8 @@ mod test {
             ]))))
             .for_each(|(enc, arrow)| {
                 assert_eq!(
-                    enc.as_primitive::<Time64MicrosecondType>().values().deref(),
-                    arrow.values().deref()
+                    *enc.as_primitive::<Time64MicrosecondType>().values(),
+                    *arrow.values()
                 )
             });
     }

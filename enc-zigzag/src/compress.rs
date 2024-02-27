@@ -19,9 +19,7 @@ impl EncodingCompression for ZigZagEncoding {
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
         // Only support primitive arrays
-        let Some(parray) = array.maybe_primitive() else {
-            return None;
-        };
+        let parray = array.maybe_primitive()?;
 
         // Only supports signed integers
         if !parray.ptype().is_signed_int() {

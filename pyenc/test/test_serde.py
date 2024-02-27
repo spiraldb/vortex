@@ -1,6 +1,7 @@
-import enc
 import pyarrow as pa
 from pyarrow import fs
+
+import enc
 
 local = fs.LocalFileSystem()
 

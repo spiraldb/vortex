@@ -64,11 +64,10 @@ fn repeat_primitive<T: ArrowPrimitiveType>(
 
 #[cfg(test)]
 mod test {
+    use crate::arrow::compute::repeat;
     use arrow::array::cast::AsArray;
     use arrow::array::types::UInt64Type;
     use arrow::array::{Scalar, UInt64Array};
-
-    use super::*;
 
     #[test]
     fn test_repeat() {

@@ -267,12 +267,11 @@ impl Encoding for SparseEncoding {
 
 #[cfg(test)]
 mod test {
-    use std::ops::Deref;
-
+    use crate::array::sparse::SparseArray;
+    use crate::array::Array;
+    use crate::error::EncError;
     use arrow::array::AsArray;
     use arrow::datatypes::{Int32Type, UInt32Type};
-
-    use super::*;
 
     fn sparse_array() -> SparseArray {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
@@ -282,23 +281,21 @@ mod test {
     fn assert_sparse_array(sparse: &dyn Array, values: (&[u32], &[i32])) {
         let sparse_arrow = sparse.as_ref().iter_arrow().next().unwrap();
         assert_eq!(
-            sparse_arrow
+            *sparse_arrow
                 .as_struct()
                 .column_by_name("indices")
                 .unwrap()
                 .as_primitive::<UInt32Type>()
-                .values()
-                .deref(),
+                .values(),
             values.0
         );
         assert_eq!(
-            sparse_arrow
+            *sparse_arrow
                 .as_struct()
                 .column_by_name("values")
                 .unwrap()
                 .as_primitive::<Int32Type>()
-                .values()
-                .deref(),
+                .values(),
             values.1
         );
     }

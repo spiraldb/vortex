@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [ "develop" ]
+  pull_request:
+    branches: [ "develop" ]
+  workflow_dispatch: { }
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build:
+    name: 'build'
+    runs-on: ubuntu-latest-medium
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-zig
+      - uses: ./.github/actions/setup-rust
+      - uses: ./.github/actions/setup-python
+
+      - name: Python Lint - Format
+        run: rye run ruff format --check .
+      - name: Python Lint - Ruff
+        run: rye run ruff .
+
+      - name: Rust Lint - Format
+        run: cargo fmt --all --check
+      - name: Rust Lint - Clippy
+        run: cargo clippy --all-targets
+
+      - name: Zig Lint - Fmt
+        run: zig fmt --check zig/
+
+      - name: Rust Test
+        run: cargo test --all
+
+      - name: Zig Test
+        run: zig build test
+
+      - name: Pytest - PyEnc
+        run: rye run pytest --benchmark-disable test/
+        working-directory: pyenc/
+
