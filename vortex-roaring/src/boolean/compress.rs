@@ -48,6 +48,7 @@ pub fn roaring_encode(bool_array: &BoolArray) -> RoaringBoolArray {
             .map(|(i, _)| i as u32),
     );
     bitmap.run_optimize();
+    bitmap.shrink_to_fit();
 
     RoaringBoolArray::new(bitmap, bool_array.buffer().len())
 }

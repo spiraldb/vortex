@@ -73,5 +73,6 @@ fn roaring_encode_primitive<T: NumCast + NativePType>(values: &[T]) -> RoaringIn
     let mut bitmap = Bitmap::new();
     bitmap.extend(values.iter().map(|i| i.to_u32().unwrap()));
     bitmap.run_optimize();
+    bitmap.shrink_to_fit();
     RoaringIntArray::new(bitmap, T::PTYPE)
 }
