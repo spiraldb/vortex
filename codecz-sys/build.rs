@@ -7,7 +7,7 @@ fn main() {
         .canonicalize()
         .expect("Failed to canonicalize CARGO_MANIFEST_DIR");
     let root_dir = buildrs_dir
-        .join("../../")
+        .join("../")
         .canonicalize()
         .expect("Failed to canonicalize root dir");
     let codecz_header = root_dir
@@ -29,7 +29,7 @@ fn main() {
         .filter(|e| {
             !e.path()
                 .components()
-                .any(|c| c.as_os_str() == "zig-cache" || c.as_os_str() == "_deprecated_libenc")
+                .any(|c| c.as_os_str() == "zig-cache")
         })
         .filter(|e| {
             e.path()
