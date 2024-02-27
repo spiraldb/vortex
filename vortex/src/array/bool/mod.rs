@@ -9,7 +9,7 @@ use linkme::distributed_slice;
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
 use crate::dtype::{DType, Nullability};
-use crate::error::EncResult;
+use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -36,7 +36,7 @@ impl BoolArray {
         Self::try_new(buffer, validity).unwrap()
     }
 
-    pub fn try_new(buffer: BooleanBuffer, validity: Option<ArrayRef>) -> EncResult<Self> {
+    pub fn try_new(buffer: BooleanBuffer, validity: Option<ArrayRef>) -> VortexResult<Self> {
         let validity = validity.filter(|v| !v.is_empty());
         check_validity_buffer(validity.as_ref())?;
 
@@ -105,7 +105,7 @@ impl Array for BoolArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
 
         if self.is_valid(index) {
@@ -130,7 +130,7 @@ impl Array for BoolArray {
         )) as ArrowArrayRef))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         Ok(Self {

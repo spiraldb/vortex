@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 use itertools::Itertools;
 
 use crate::dtype::DType;
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,7 +57,7 @@ impl Scalar for StructScalar {
         &self.dtype
     }
 
-    fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
         match dtype {
             DType::Struct(names, field_dtypes) => {
                 if field_dtypes.len() != self.values.len() {

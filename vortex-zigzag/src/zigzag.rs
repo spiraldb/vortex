@@ -9,7 +9,7 @@ use vortex::array::{
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::{DType, IntWidth, Signedness};
-use vortex::error::{VortexError, EncResult};
+use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::scalar::{NullableScalar, Scalar};
 use vortex::serde::{ArraySerde, EncodingSerde};
@@ -29,7 +29,7 @@ impl ZigZagArray {
         Self::try_new(encoded).unwrap()
     }
 
-    pub fn try_new(encoded: ArrayRef) -> EncResult<Self> {
+    pub fn try_new(encoded: ArrayRef) -> VortexResult<Self> {
         let dtype = match encoded.dtype() {
             DType::Int(width, Signedness::Unsigned, nullability) => {
                 DType::Int(*width, Signedness::Signed, *nullability)
@@ -43,7 +43,7 @@ impl ZigZagArray {
         })
     }
 
-    pub fn encode(array: &dyn Array) -> EncResult<ArrayRef> {
+    pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(zigzag_encode(p)?.boxed()),
             _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
@@ -91,7 +91,7 @@ impl Array for ZigZagArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
 
         let scalar = self.encoded().scalar_at(index)?;
@@ -119,7 +119,7 @@ impl Array for ZigZagArray {
         todo!()
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         Ok(Self::try_new(self.encoded.slice(start, stop)?)?.boxed())
     }
 

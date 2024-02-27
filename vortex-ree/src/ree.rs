@@ -18,7 +18,7 @@ use vortex::compress::EncodingCompression;
 use vortex::compute;
 use vortex::compute::search_sorted::SearchSortedSide;
 use vortex::dtype::{DType, Nullability, Signedness};
-use vortex::error::{VortexError, EncResult};
+use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::ptype::NativePType;
 use vortex::scalar::Scalar;
@@ -52,7 +52,7 @@ impl REEArray {
         values: ArrayRef,
         validity: Option<ArrayRef>,
         length: usize,
-    ) -> EncResult<Self> {
+    ) -> VortexResult<Self> {
         check_validity_buffer(validity.as_ref())?;
 
         if !matches!(
@@ -82,7 +82,7 @@ impl REEArray {
         })
     }
 
-    pub fn find_physical_index(&self, index: usize) -> EncResult<usize> {
+    pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
         compute::search_sorted::search_sorted_usize(
             self.ends(),
             index + self.offset,
@@ -90,7 +90,7 @@ impl REEArray {
         )
     }
 
-    pub fn encode(array: &dyn Array) -> EncResult<ArrayRef> {
+    pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => {
                 let (ends, values) = ree_encode(p);
@@ -155,7 +155,7 @@ impl Array for REEArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
         self.values.scalar_at(self.find_physical_index(index)?)
     }
@@ -185,7 +185,7 @@ impl Array for REEArray {
         })
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
         let slice_begin = self.find_physical_index(start)?;
         let slice_end = self.find_physical_index(stop)?;
@@ -314,8 +314,8 @@ fn run_ends_logical_length<T: AsRef<dyn Array>>(ends: &T) -> usize {
 mod test {
     use arrow::array::cast::AsArray;
     use arrow::array::types::Int32Type;
-    use vortex::array::Array;
     use itertools::Itertools;
+    use vortex::array::Array;
 
     use crate::REEArray;
     use vortex::dtype::{DType, IntWidth, Nullability, Signedness};

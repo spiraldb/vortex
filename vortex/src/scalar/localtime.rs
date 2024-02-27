@@ -1,5 +1,5 @@
 use crate::dtype::{DType, Nullability, TimeUnit};
-use crate::error::EncResult;
+use crate::error::VortexResult;
 use crate::scalar::{PScalar, Scalar};
 use std::any::Any;
 use std::cmp::Ordering;
@@ -62,7 +62,7 @@ impl Scalar for LocalTimeScalar {
         &self.dtype
     }
 
-    fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+    fn cast(&self, _dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
         todo!()
     }
 

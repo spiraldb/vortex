@@ -8,7 +8,7 @@ use vortex::array::{
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::DType;
-use vortex::error::{VortexError, EncResult};
+use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::match_each_integer_ptype;
 use vortex::scalar::{NullableScalar, Scalar};
@@ -47,7 +47,7 @@ impl FFORArray {
         min_val: Box<dyn Scalar>,
         num_bits: u8,
         len: usize,
-    ) -> EncResult<Self> {
+    ) -> VortexResult<Self> {
         let validity = validity.filter(|v| !v.is_empty());
         check_validity_buffer(validity.as_ref())?;
 
@@ -70,7 +70,7 @@ impl FFORArray {
         })
     }
 
-    pub fn encode(array: &dyn Array) -> EncResult<ArrayRef> {
+    pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(ffor_encode(p).boxed()),
             _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
@@ -145,7 +145,7 @@ impl Array for FFORArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         if !self.is_valid(index) {
             return Ok(NullableScalar::none(self.dtype().clone()).boxed());
         }
@@ -185,7 +185,7 @@ impl Array for FFORArray {
         todo!()
     }
 
-    fn slice(&self, _start: usize, _stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {
         unimplemented!("FFoRArray::slice")
     }
 

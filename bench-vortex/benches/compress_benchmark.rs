@@ -14,7 +14,7 @@ use vortex::array::varbin::VarBinArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::CompressCtx;
 use vortex::dtype::DType;
-use vortex::error::{VortexError, EncResult};
+use vortex::error::{VortexError, VortexResult};
 
 use vortex_bench::enumerate_arrays;
 
@@ -57,7 +57,7 @@ fn enc_compress(c: &mut Criterion) {
     let chunks = reader
         .map(|batch_result| batch_result.map_err(VortexError::from))
         .map(|batch| batch.map(|b| b.into()))
-        .collect::<EncResult<Vec<ArrayRef>>>()
+        .collect::<VortexResult<Vec<ArrayRef>>>()
         .unwrap();
     let chunked = ChunkedArray::new(chunks, dtype);
     println!(

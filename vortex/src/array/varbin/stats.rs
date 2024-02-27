@@ -5,11 +5,11 @@ use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::array::Array;
 use crate::dtype::DType;
-use crate::error::EncResult;
+use crate::error::VortexResult;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 pub trait BinaryArray {
-    fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>>;
+    fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>>;
 }
 
 impl<T> StatsCompute for T
@@ -66,13 +66,13 @@ where
 }
 
 impl BinaryArray for VarBinArray {
-    fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+    fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         VarBinArray::bytes_at(self, index)
     }
 }
 
 impl BinaryArray for VarBinViewArray {
-    fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+    fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         VarBinViewArray::bytes_at(self, index)
     }
 }

@@ -13,7 +13,7 @@ pub use struct_::*;
 pub use utf8::*;
 
 use crate::dtype::DType;
-use crate::error::EncResult;
+use crate::error::VortexResult;
 use crate::ptype::NativePType;
 
 mod arrow;
@@ -44,7 +44,7 @@ pub trait Scalar: Display + Debug + dyn_clone::DynClone + Send + Sync + 'static 
     /// the logical type.
     fn dtype(&self) -> &DType;
 
-    fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>>;
+    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>>;
 
     fn nbytes(&self) -> usize;
 }

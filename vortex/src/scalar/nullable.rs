@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use crate::dtype::DType;
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::scalar::{NullScalar, Scalar};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -63,7 +63,7 @@ impl Scalar for NullableScalar {
         }
     }
 
-    fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+    fn cast(&self, _dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
         todo!()
     }
 
@@ -99,7 +99,7 @@ impl<T: Into<Box<dyn Scalar>>> From<NullableScalarOption<T>> for Box<dyn Scalar>
     }
 }
 
-impl<T: TryFrom<Box<dyn Scalar>, Error =VortexError>> TryFrom<&dyn Scalar>
+impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<&dyn Scalar>
     for NullableScalarOption<T>
 {
     type Error = VortexError;
@@ -116,7 +116,7 @@ impl<T: TryFrom<Box<dyn Scalar>, Error =VortexError>> TryFrom<&dyn Scalar>
     }
 }
 
-impl<T: TryFrom<Box<dyn Scalar>, Error =VortexError>> TryFrom<Box<dyn Scalar>>
+impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<Box<dyn Scalar>>
     for NullableScalarOption<T>
 {
     type Error = VortexError;

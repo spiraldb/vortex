@@ -1,5 +1,5 @@
 use crate::array::Array;
-use crate::error::EncResult;
+use crate::error::VortexResult;
 use crate::polars::IntoPolarsSeries;
 use crate::polars::IntoPolarsValue;
 use crate::scalar::Scalar;
@@ -24,7 +24,7 @@ pub fn search_sorted_usize(
     indices: &dyn Array,
     index: usize,
     side: SearchSortedSide,
-) -> EncResult<usize> {
+) -> VortexResult<usize> {
     let enc_scalar: Box<dyn Scalar> = index.into();
     // Convert index into correctly typed Arrow scalar.
     let enc_scalar = enc_scalar.cast(indices.dtype())?;

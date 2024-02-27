@@ -5,7 +5,7 @@ use std::sync::RwLock;
 
 use itertools::Itertools;
 
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, Scalar};
 
@@ -38,10 +38,10 @@ impl StatsSet {
         StatsSet(HashMap::from([(stat, value)]))
     }
 
-    fn get_as<T: TryFrom<Box<dyn Scalar>, Error =VortexError>>(
+    fn get_as<T: TryFrom<Box<dyn Scalar>, Error = VortexError>>(
         &self,
         stat: &Stat,
-    ) -> EncResult<Option<T>> {
+    ) -> VortexResult<Option<T>> {
         self.0.get(stat).map(|v| T::try_from(v.clone())).transpose()
     }
 
@@ -241,7 +241,10 @@ impl<'a> Stats<'a> {
         self.cache.read().unwrap().0.get(stat).cloned()
     }
 
-    pub fn get_as<T: TryFrom<Box<dyn Scalar>, Error =VortexError>>(&self, stat: &Stat) -> Option<T> {
+    pub fn get_as<T: TryFrom<Box<dyn Scalar>, Error = VortexError>>(
+        &self,
+        stat: &Stat,
+    ) -> Option<T> {
         self.get(stat).map(|v| T::try_from(v).unwrap())
     }
 
@@ -263,14 +266,14 @@ impl<'a> Stats<'a> {
             .map(|v| T::try_from(v.cast(T::PTYPE.into()).unwrap()).unwrap())
     }
 
-    pub fn get_or_compute_as<T: TryFrom<Box<dyn Scalar>, Error =VortexError>>(
+    pub fn get_or_compute_as<T: TryFrom<Box<dyn Scalar>, Error = VortexError>>(
         &self,
         stat: &Stat,
     ) -> Option<T> {
         self.get_or_compute(stat).map(|v| T::try_from(v).unwrap())
     }
 
-    pub fn get_or_compute_or<T: TryFrom<Box<dyn Scalar>, Error =VortexError>>(
+    pub fn get_or_compute_or<T: TryFrom<Box<dyn Scalar>, Error = VortexError>>(
         &self,
         default: T,
         stat: &Stat,

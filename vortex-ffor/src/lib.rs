@@ -1,6 +1,6 @@
-use vortex::array::{EncodingRef, ENCODINGS};
 pub use ffor::*;
 use linkme::distributed_slice;
+use vortex::array::{EncodingRef, ENCODINGS};
 
 mod compress;
 mod downcast;

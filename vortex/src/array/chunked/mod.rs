@@ -12,7 +12,7 @@ use crate::array::{
 };
 use crate::compress::EncodingCompression;
 use crate::dtype::DType;
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -35,7 +35,7 @@ impl ChunkedArray {
         Self::try_new(chunks, dtype).unwrap()
     }
 
-    pub fn try_new(chunks: Vec<ArrayRef>, dtype: DType) -> EncResult<Self> {
+    pub fn try_new(chunks: Vec<ArrayRef>, dtype: DType) -> VortexResult<Self> {
         chunks
             .iter()
             .map(|c| c.dtype().as_nullable())
@@ -126,7 +126,7 @@ impl Array for ChunkedArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
         let (chunk_index, chunk_offset) = self.find_physical_location(index);
         self.chunks[chunk_index].scalar_at(chunk_offset)
@@ -136,7 +136,7 @@ impl Array for ChunkedArray {
         Box::new(ChunkedArrowIterator::new(self))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(start);

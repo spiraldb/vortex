@@ -1,8 +1,8 @@
 #[cfg(test)]
 pub mod test {
+    use std::io;
     use vortex::array::{Array, ArrayRef};
     use vortex::serde::{ReadCtx, WriteCtx};
-    use std::io;
 
     pub fn roundtrip_array(array: &dyn Array) -> io::Result<ArrayRef> {
         let mut buf = Vec::<u8>::new();

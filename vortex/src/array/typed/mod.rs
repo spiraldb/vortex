@@ -7,7 +7,7 @@ use linkme::distributed_slice;
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::compress::EncodingCompression;
 use crate::dtype::DType;
-use crate::error::EncResult;
+use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -85,7 +85,7 @@ impl Array for TypedArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         let underlying = self.array.scalar_at(index)?;
         underlying.as_ref().cast(self.dtype())
     }
@@ -100,7 +100,7 @@ impl Array for TypedArray {
         )
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         Ok(Self::new(self.array.slice(start, stop)?, self.dtype.clone()).boxed())
     }
 

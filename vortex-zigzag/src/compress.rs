@@ -5,7 +5,7 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
-use vortex::error::EncResult;
+use vortex::error::VortexResult;
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
@@ -50,7 +50,7 @@ fn zigzag_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressC
     .boxed()
 }
 
-pub fn zigzag_encode(parray: &PrimitiveArray) -> EncResult<ZigZagArray> {
+pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
     let encoded = match parray.ptype() {
         PType::I8 => zigzag_encode_primitive::<i8>(parray.buffer().typed_data(), parray.validity()),
         PType::I16 => {

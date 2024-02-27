@@ -21,7 +21,7 @@ use crate::array::{
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
 use crate::dtype::DType;
-use crate::error::EncResult;
+use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::scalar::{NullableScalar, Scalar};
@@ -46,7 +46,7 @@ impl PrimitiveArray {
         Self::try_new(ptype, buffer, validity).unwrap()
     }
 
-    pub fn try_new(ptype: PType, buffer: Buffer, validity: Option<ArrayRef>) -> EncResult<Self> {
+    pub fn try_new(ptype: PType, buffer: Buffer, validity: Option<ArrayRef>) -> VortexResult<Self> {
         let validity = validity.filter(|v| !v.is_empty());
         check_validity_buffer(validity.as_ref())?;
         let dtype = if validity.is_some() {
@@ -166,7 +166,7 @@ impl Array for PrimitiveArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
 
         if self.is_valid(index) {
@@ -202,7 +202,7 @@ impl Array for PrimitiveArray {
         )))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         let byte_start = start * self.ptype.byte_width();

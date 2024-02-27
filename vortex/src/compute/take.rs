@@ -1,11 +1,11 @@
 use crate::array::{Array, ArrayRef};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 
 pub trait TakeFn {
-    fn take(&self, indices: &dyn Array) -> EncResult<ArrayRef>;
+    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef>;
 }
 
-pub fn take(array: &dyn Array, indices: &dyn Array) -> EncResult<ArrayRef> {
+pub fn take(array: &dyn Array, indices: &dyn Array) -> VortexResult<ArrayRef> {
     array
         .compute()
         .and_then(|c| c.take())

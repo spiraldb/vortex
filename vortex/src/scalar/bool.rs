@@ -2,7 +2,7 @@ use std::any::Any;
 use std::fmt::{Display, Formatter};
 
 use crate::dtype::{DType, Nullability};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::scalar::{NullableScalar, Scalar};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -51,7 +51,7 @@ impl Scalar for BoolScalar {
         &DType::Bool(Nullability::NonNullable)
     }
 
-    fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
         match dtype {
             DType::Bool(Nullability::NonNullable) => Ok(self.clone().boxed()),
             DType::Bool(Nullability::Nullable) => {
@@ -77,7 +77,7 @@ impl TryFrom<Box<dyn Scalar>> for bool {
     type Error = VortexError;
 
     #[inline]
-    fn try_from(value: Box<dyn Scalar>) -> EncResult<Self> {
+    fn try_from(value: Box<dyn Scalar>) -> VortexResult<Self> {
         value.as_ref().try_into()
     }
 }
@@ -85,7 +85,7 @@ impl TryFrom<Box<dyn Scalar>> for bool {
 impl TryFrom<&dyn Scalar> for bool {
     type Error = VortexError;
 
-    fn try_from(value: &dyn Scalar) -> EncResult<Self> {
+    fn try_from(value: &dyn Scalar) -> VortexResult<Self> {
         if let Some(bool_scalar) = value
             .as_nonnull()
             .and_then(|v| v.as_any().downcast_ref::<BoolScalar>())

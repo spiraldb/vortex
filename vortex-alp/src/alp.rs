@@ -6,7 +6,7 @@ pub use codecz::alp::ALPExponents;
 use vortex::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::dtype::{DType, FloatWidth, IntWidth, Signedness};
-use vortex::error::{VortexError, EncResult};
+use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::scalar::{NullableScalar, Scalar};
 use vortex::serde::{ArraySerde, EncodingSerde};
@@ -32,7 +32,7 @@ impl ALPArray {
         encoded: ArrayRef,
         exponents: ALPExponents,
         patches: Option<ArrayRef>,
-    ) -> EncResult<Self> {
+    ) -> VortexResult<Self> {
         let dtype = match encoded.dtype() {
             d @ DType::Int(width, Signedness::Signed, nullability) => match width {
                 IntWidth::_32 => DType::Float(32.into(), *nullability),
@@ -50,7 +50,7 @@ impl ALPArray {
         })
     }
 
-    pub fn encode(array: &dyn Array) -> EncResult<ArrayRef> {
+    pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(alp_encode(p).boxed()),
             _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
@@ -106,7 +106,7 @@ impl Array for ALPArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         if let Some(patch) = self
             .patches()
             .and_then(|p| p.scalar_at(index).ok())
@@ -141,7 +141,7 @@ impl Array for ALPArray {
         todo!()
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         Ok(Self::try_new(
             self.encoded().slice(start, stop)?,
             self.exponents(),

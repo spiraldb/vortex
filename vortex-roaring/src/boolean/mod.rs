@@ -11,7 +11,7 @@ use vortex::array::{
 use vortex::compress::EncodingCompression;
 use vortex::dtype::DType;
 use vortex::dtype::Nullability::NonNullable;
-use vortex::error::{VortexError, EncResult};
+use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
@@ -41,7 +41,7 @@ impl RoaringBoolArray {
         &self.bitmap
     }
 
-    pub fn encode(array: &dyn Array) -> EncResult<Self> {
+    pub fn encode(array: &dyn Array) -> VortexResult<Self> {
         match ArrayKind::from(array) {
             ArrayKind::Bool(p) => Ok(roaring_encode(p)),
             _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
@@ -84,7 +84,7 @@ impl Array for RoaringBoolArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
 
         if self.bitmap.contains(index as u32) {
@@ -98,7 +98,7 @@ impl Array for RoaringBoolArray {
         todo!()
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         let slice_bitmap = Bitmap::from_range(start as u32..stop as u32);
@@ -163,13 +163,13 @@ impl Encoding for RoaringBoolEncoding {
 mod test {
     use vortex::array::bool::BoolArray;
     use vortex::array::Array;
-    use vortex::error::EncResult;
+    use vortex::error::VortexResult;
     use vortex::scalar::Scalar;
 
     use crate::RoaringBoolArray;
 
     #[test]
-    pub fn iter() -> EncResult<()> {
+    pub fn iter() -> VortexResult<()> {
         let bool: &dyn Array = &BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool)?;
 
@@ -180,7 +180,7 @@ mod test {
     }
 
     #[test]
-    pub fn scalar_at() -> EncResult<()> {
+    pub fn scalar_at() -> VortexResult<()> {
         let bool: &dyn Array = &BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool)?;
 

@@ -12,8 +12,8 @@ use vortex::arrow::convert::TryIntoDType;
 use vortex::dtype::DType;
 
 use crate::array::PyArray;
-use crate::vortex_arrow::map_arrow_err;
 use crate::error::PyVortexError;
+use crate::vortex_arrow::map_arrow_err;
 
 /// The main entry point for creating enc arrays from other Python objects.
 ///

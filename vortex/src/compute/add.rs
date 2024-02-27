@@ -1,10 +1,10 @@
 use crate::array::constant::ConstantArray;
 use crate::array::{Array, ArrayKind, ArrayRef};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::scalar::Scalar;
 
 // TODO(ngates): convert this to arithmetic operations with macro over the kernel.
-pub fn add(lhs: &dyn Array, rhs: &dyn Array) -> EncResult<ArrayRef> {
+pub fn add(lhs: &dyn Array, rhs: &dyn Array) -> VortexResult<ArrayRef> {
     // Check that the arrays are the same length.
     let length = lhs.len();
     if rhs.len() != length {
@@ -21,7 +21,7 @@ pub fn add(lhs: &dyn Array, rhs: &dyn Array) -> EncResult<ArrayRef> {
     }
 }
 
-pub fn add_scalar(lhs: &dyn Array, rhs: &dyn Scalar) -> EncResult<ArrayRef> {
+pub fn add_scalar(lhs: &dyn Array, rhs: &dyn Scalar) -> VortexResult<ArrayRef> {
     match ArrayKind::from(lhs) {
         ArrayKind::Constant(lhs) => {
             Ok(ConstantArray::new(add_scalars(lhs.scalar(), rhs)?, lhs.len()).boxed())
@@ -30,7 +30,7 @@ pub fn add_scalar(lhs: &dyn Array, rhs: &dyn Scalar) -> EncResult<ArrayRef> {
     }
 }
 
-pub fn add_scalars(_lhs: &dyn Scalar, _rhs: &dyn Scalar) -> EncResult<Box<dyn Scalar>> {
+pub fn add_scalars(_lhs: &dyn Scalar, _rhs: &dyn Scalar) -> VortexResult<Box<dyn Scalar>> {
     // Might need to improve this implementation...
     Ok(24.into())
 }

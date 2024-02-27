@@ -1,6 +1,6 @@
 pub use alp::*;
-use vortex::array::{EncodingRef, ENCODINGS};
 use linkme::distributed_slice;
+use vortex::array::{EncodingRef, ENCODINGS};
 
 mod alp;
 mod compress;

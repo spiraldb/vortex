@@ -10,7 +10,7 @@ use vortex::array::{
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::DType;
-use vortex::error::{VortexError, EncResult};
+use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::ptype::PType;
 use vortex::scalar::Scalar;
@@ -33,7 +33,7 @@ impl RoaringIntArray {
         Self::try_new(bitmap, ptype).unwrap()
     }
 
-    pub fn try_new(bitmap: Bitmap, ptype: PType) -> EncResult<Self> {
+    pub fn try_new(bitmap: Bitmap, ptype: PType) -> VortexResult<Self> {
         if !ptype.is_unsigned_int() {
             return Err(VortexError::InvalidPType(ptype));
         }
@@ -53,7 +53,7 @@ impl RoaringIntArray {
         self.ptype
     }
 
-    pub fn encode(array: &dyn Array) -> EncResult<Self> {
+    pub fn encode(array: &dyn Array) -> VortexResult<Self> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(roaring_encode(p)),
             _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
@@ -96,7 +96,7 @@ impl Array for RoaringIntArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
         // Unwrap since we know the index is valid
         let bitmap_value = self.bitmap.select(index as u32).unwrap();
@@ -114,7 +114,7 @@ impl Array for RoaringIntArray {
         todo!()
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
         todo!()
     }
@@ -169,12 +169,12 @@ impl Encoding for RoaringIntEncoding {
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::Array;
-    use vortex::error::EncResult;
+    use vortex::error::VortexResult;
 
     use crate::RoaringIntArray;
 
     #[test]
-    pub fn scalar_at() -> EncResult<()> {
+    pub fn scalar_at() -> VortexResult<()> {
         let ints: &dyn Array = &PrimitiveArray::from_vec::<u32>(vec![2, 12, 22, 32]);
         let array = RoaringIntArray::encode(ints)?;
 

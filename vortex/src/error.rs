@@ -77,7 +77,7 @@ pub enum VortexError {
     IndexArrayMustBeStrictSorted,
 }
 
-pub type EncResult<T> = Result<T, VortexError>;
+pub type VortexResult<T> = Result<T, VortexError>;
 
 // Wrap up external errors so that we can implement a dumb PartialEq
 #[derive(Debug)]

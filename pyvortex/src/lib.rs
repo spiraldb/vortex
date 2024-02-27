@@ -10,10 +10,10 @@ use crate::compress::PyCompressConfig;
 mod array;
 mod compress;
 mod dtype;
-mod vortex_arrow;
 mod encode;
 mod error;
 mod serde;
+mod vortex_arrow;
 
 /// A Python module implemented in Rust.
 #[pymodule]

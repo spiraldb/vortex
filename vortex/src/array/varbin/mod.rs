@@ -18,7 +18,7 @@ use crate::array::{
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
@@ -54,7 +54,7 @@ impl VarBinArray {
         bytes: ArrayRef,
         dtype: DType,
         validity: Option<ArrayRef>,
-    ) -> EncResult<Self> {
+    ) -> VortexResult<Self> {
         if !matches!(offsets.dtype(), DType::Int(_, _, Nullability::NonNullable)) {
             return Err(VortexError::UnsupportedOffsetsArrayDType(
                 offsets.dtype().clone(),
@@ -64,7 +64,9 @@ impl VarBinArray {
             bytes.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
-            return Err(VortexError::UnsupportedDataArrayDType(bytes.dtype().clone()));
+            return Err(VortexError::UnsupportedDataArrayDType(
+                bytes.dtype().clone(),
+            ));
         }
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
             return Err(VortexError::InvalidDType(dtype));
@@ -176,7 +178,7 @@ impl VarBinArray {
         }
     }
 
-    pub fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+    pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         check_index_bounds(self, index)?;
 
         let (start, end): (usize, usize) = if let Some(p) = self.offsets.maybe_primitive() {
@@ -232,7 +234,7 @@ impl Array for VarBinArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         if self.is_valid(index) {
             self.bytes_at(index).map(|bytes| {
                 if matches!(self.dtype, DType::Utf8(_)) {
@@ -269,7 +271,7 @@ impl Array for VarBinArray {
         Box::new(iter::once(make_array(data)))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         Ok(VarBinArray::new(

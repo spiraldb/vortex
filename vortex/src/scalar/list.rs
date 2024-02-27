@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use itertools::Itertools;
 
 use crate::dtype::{DType, Nullability};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::scalar::{NullableScalar, Scalar};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,7 +54,7 @@ impl Scalar for ListScalar {
         &self.dtype
     }
 
-    fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
         match dtype {
             DType::List(field_dtype, n) => {
                 let new_fields: Vec<Box<dyn Scalar>> = self
@@ -96,7 +96,7 @@ impl<T: Into<Box<dyn Scalar>>> From<ListScalarVec<T>> for Box<dyn Scalar> {
     }
 }
 
-impl<T: TryFrom<Box<dyn Scalar>, Error =VortexError>> TryFrom<&dyn Scalar> for ListScalarVec<T> {
+impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<&dyn Scalar> for ListScalarVec<T> {
     type Error = VortexError;
 
     fn try_from(value: &dyn Scalar) -> Result<Self, Self::Error> {
@@ -115,7 +115,9 @@ impl<T: TryFrom<Box<dyn Scalar>, Error =VortexError>> TryFrom<&dyn Scalar> for L
     }
 }
 
-impl<T: TryFrom<Box<dyn Scalar>, Error =VortexError>> TryFrom<Box<dyn Scalar>> for ListScalarVec<T> {
+impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<Box<dyn Scalar>>
+    for ListScalarVec<T>
+{
     type Error = VortexError;
 
     fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {

@@ -1,8 +1,8 @@
 use arrow::datatypes::DataType;
 use arrow::pyarrow::FromPyArrow;
-use vortex::arrow::convert::TryIntoDType;
 use pyo3::types::PyType;
 use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
+use vortex::arrow::convert::TryIntoDType;
 
 use vortex::dtype::DType;
 

@@ -18,7 +18,7 @@ use crate::array::{
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -103,7 +103,7 @@ impl VarBinViewArray {
         data: Vec<ArrayRef>,
         dtype: DType,
         validity: Option<ArrayRef>,
-    ) -> EncResult<Self> {
+    ) -> VortexResult<Self> {
         if !matches!(
             views.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
@@ -184,7 +184,7 @@ impl VarBinViewArray {
         self.validity.as_ref()
     }
 
-    pub fn bytes_at(&self, index: usize) -> EncResult<Vec<u8>> {
+    pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         let view = self.view_at(index);
         unsafe {
             if view.inlined.size > 12 {
@@ -246,7 +246,7 @@ impl Array for VarBinViewArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         if self.is_valid(index) {
             self.bytes_at(index).map(|bytes| {
                 if matches!(self.dtype, DType::Utf8(_)) {
@@ -289,7 +289,7 @@ impl Array for VarBinViewArray {
         Box::new(iter::once(data_arr))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         Ok(Self {

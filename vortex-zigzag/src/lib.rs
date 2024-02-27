@@ -1,5 +1,5 @@
-use vortex::array::{EncodingRef, ENCODINGS};
 use linkme::distributed_slice;
+use vortex::array::{EncodingRef, ENCODINGS};
 
 pub use zigzag::*;
 

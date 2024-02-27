@@ -16,12 +16,14 @@ use vortex_alp::{ALPArray, ALP_ENCODING};
 use vortex_dict::{DictArray, DICT_ENCODING};
 use vortex_ffor::{FFORArray, FFOR_ENCODING};
 use vortex_ree::{REEArray, REE_ENCODING};
-use vortex_roaring::{RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING};
+use vortex_roaring::{
+    RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING,
+};
 use vortex_zigzag::{ZigZagArray, ZIGZAG_ENCODING};
 
 use crate::dtype::PyDType;
-use crate::vortex_arrow;
 use crate::error::PyVortexError;
+use crate::vortex_arrow;
 
 #[pyclass(name = "Array", module = "vortex", sequence, subclass)]
 pub struct PyArray {

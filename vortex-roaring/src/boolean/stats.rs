@@ -37,13 +37,13 @@ impl StatsCompute for RoaringBoolArray {
 mod test {
     use vortex::array::bool::BoolArray;
     use vortex::array::Array;
-    use vortex::error::EncResult;
+    use vortex::error::VortexResult;
     use vortex::stats::Stat::*;
 
     use crate::RoaringBoolArray;
 
     #[test]
-    pub fn stats_all_true() -> EncResult<()> {
+    pub fn stats_all_true() -> VortexResult<()> {
         let bool: &dyn Array = &BoolArray::from(vec![true, true]);
         let array = RoaringBoolArray::encode(bool)?;
 
@@ -65,7 +65,7 @@ mod test {
     }
 
     #[test]
-    pub fn stats_all_false() -> EncResult<()> {
+    pub fn stats_all_false() -> VortexResult<()> {
         let bool: &dyn Array = &BoolArray::from(vec![false, false]);
         let array = RoaringBoolArray::encode(bool)?;
 
@@ -87,7 +87,7 @@ mod test {
     }
 
     #[test]
-    pub fn stats_mixed() -> EncResult<()> {
+    pub fn stats_mixed() -> VortexResult<()> {
         let bool: &dyn Array = &BoolArray::from(vec![false, true, true]);
         let array = RoaringBoolArray::encode(bool)?;
 

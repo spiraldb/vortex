@@ -11,7 +11,7 @@ use crate::array::{
 use crate::arrow::compute::repeat;
 use crate::compress::EncodingCompression;
 use crate::dtype::DType;
-use crate::error::EncResult;
+use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -80,7 +80,7 @@ impl Array for ConstantArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
         Ok(self.scalar.clone())
     }
@@ -90,7 +90,7 @@ impl Array for ConstantArray {
         Box::new(std::iter::once(repeat(arrow_scalar.as_ref(), self.length)))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         Ok(ConstantArray::new(self.scalar.clone(), stop - start).boxed())

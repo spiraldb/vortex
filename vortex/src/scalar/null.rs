@@ -2,7 +2,7 @@ use std::any::Any;
 use std::fmt::{Display, Formatter};
 
 use crate::dtype::DType;
-use crate::error::EncResult;
+use crate::error::VortexResult;
 use crate::scalar::{NullableScalar, Scalar};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,7 +52,7 @@ impl Scalar for NullScalar {
         &DType::Null
     }
 
-    fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
         Ok(NullableScalar::none(dtype.clone()).boxed())
     }
 

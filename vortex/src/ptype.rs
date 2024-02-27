@@ -5,7 +5,7 @@ use arrow::datatypes::ArrowNativeType;
 use half::f16;
 
 use crate::dtype::{DType, FloatWidth, IntWidth, Signedness};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
@@ -33,7 +33,7 @@ pub trait NativePType:
     + Default
     + ArrowNativeType
     + RefUnwindSafe
-    + TryFrom<Box<dyn Scalar>, Error =VortexError>
+    + TryFrom<Box<dyn Scalar>, Error = VortexError>
 {
     const PTYPE: PType;
 }
@@ -126,7 +126,7 @@ impl PType {
 impl TryFrom<&DType> for PType {
     type Error = VortexError;
 
-    fn try_from(value: &DType) -> EncResult<Self> {
+    fn try_from(value: &DType) -> VortexResult<Self> {
         use Signedness::*;
         match value {
             DType::Int(w, s, _) => match w {

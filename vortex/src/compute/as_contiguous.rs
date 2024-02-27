@@ -5,11 +5,11 @@ use crate::array::bool::{BoolArray, BOOL_ENCODING};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use crate::array::{Array, ArrayRef};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::ptype::{match_each_native_ptype, NativePType};
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 
-pub fn as_contiguous(arrays: Vec<ArrayRef>) -> EncResult<ArrayRef> {
+pub fn as_contiguous(arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
     if arrays.is_empty() {
         return Err(VortexError::ComputeError("No arrays to concatenate".into()));
     }
@@ -32,7 +32,7 @@ pub fn as_contiguous(arrays: Vec<ArrayRef>) -> EncResult<ArrayRef> {
     }
 }
 
-fn bool_as_contiguous(arrays: Vec<&BoolArray>) -> EncResult<BoolArray> {
+fn bool_as_contiguous(arrays: Vec<&BoolArray>) -> VortexResult<BoolArray> {
     // TODO(ngates): implement a HasValidity trait to avoid this duplicate code.
     let validity = if arrays.iter().all(|a| a.validity().is_none()) {
         None
@@ -60,7 +60,7 @@ fn bool_as_contiguous(arrays: Vec<&BoolArray>) -> EncResult<BoolArray> {
     ))
 }
 
-fn primitive_as_contiguous(arrays: Vec<&PrimitiveArray>) -> EncResult<PrimitiveArray> {
+fn primitive_as_contiguous(arrays: Vec<&PrimitiveArray>) -> VortexResult<PrimitiveArray> {
     if !arrays.iter().map(|chunk| (*chunk).ptype()).all_equal() {
         return Err(VortexError::ComputeError(
             "Chunks have differing ptypes".into(),

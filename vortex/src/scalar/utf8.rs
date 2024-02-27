@@ -2,7 +2,7 @@ use std::any::Any;
 use std::fmt::{Display, Formatter};
 
 use crate::dtype::{DType, Nullability};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -50,7 +50,7 @@ impl Scalar for Utf8Scalar {
         &DType::Utf8(Nullability::NonNullable)
     }
 
-    fn cast(&self, _dtype: &DType) -> EncResult<Box<dyn Scalar>> {
+    fn cast(&self, _dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
         todo!()
     }
 

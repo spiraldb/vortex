@@ -17,7 +17,7 @@ use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::dtype::{DType, Nullability, Signedness};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_arrow_numeric_type;
 use crate::scalar::{NullableScalar, Scalar};
@@ -47,7 +47,7 @@ impl SparseArray {
         Self::try_new(indices, values, len).unwrap()
     }
 
-    pub fn try_new(indices: ArrayRef, values: ArrayRef, len: usize) -> EncResult<Self> {
+    pub fn try_new(indices: ArrayRef, values: ArrayRef, len: usize) -> VortexResult<Self> {
         Self::new_with_offset(indices, values, len, 0)
     }
 
@@ -56,7 +56,7 @@ impl SparseArray {
         values: ArrayRef,
         len: usize,
         indices_offset: usize,
-    ) -> EncResult<Self> {
+    ) -> VortexResult<Self> {
         if !matches!(
             indices.dtype(),
             DType::Int(_, Signedness::Unsigned, Nullability::NonNullable)
@@ -134,7 +134,7 @@ impl Array for SparseArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
 
         // Check whether `true_patch_index` exists in the patch index array
@@ -194,7 +194,7 @@ impl Array for SparseArray {
         )) as Arc<dyn ArrowArray>))
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         // Find the index of the first patch index that is greater than or equal to the offset of this array

@@ -17,7 +17,7 @@ use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::dtype::{DType, Nullability};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -61,11 +61,11 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
     /// Get statistics for the array
     fn stats(&self) -> Stats;
     /// Get scalar value at given index
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>>;
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>>;
     /// Produce arrow batches from the encoding
     fn iter_arrow(&self) -> Box<ArrowIterator>;
     /// Limit array to start..stop range
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef>;
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef>;
     /// Encoding kind of the array
     fn encoding(&self) -> &'static dyn Encoding;
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
@@ -80,7 +80,7 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
 
 dyn_clone::clone_trait_object!(Array);
 
-pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> EncResult<()> {
+pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> VortexResult<()> {
     if start > array.len() {
         return Err(VortexError::OutOfBounds(start, 0, array.len()));
     }
@@ -90,14 +90,14 @@ pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> EncRe
     Ok(())
 }
 
-pub fn check_index_bounds(array: &dyn Array, index: usize) -> EncResult<()> {
+pub fn check_index_bounds(array: &dyn Array, index: usize) -> VortexResult<()> {
     if index >= array.len() {
         return Err(VortexError::OutOfBounds(index, 0, array.len()));
     }
     Ok(())
 }
 
-pub fn check_validity_buffer(validity: Option<&ArrayRef>) -> EncResult<()> {
+pub fn check_validity_buffer(validity: Option<&ArrayRef>) -> VortexResult<()> {
     if validity
         .map(|v| !matches!(v.dtype(), DType::Bool(Nullability::NonNullable)))
         .unwrap_or(false)

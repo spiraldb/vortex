@@ -5,7 +5,7 @@ use std::mem::size_of;
 use half::f16;
 
 use crate::dtype::{DType, Nullability};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 use crate::scalar::{LocalTimeScalar, Scalar};
 
@@ -43,7 +43,7 @@ impl PScalar {
 
     // General conversion function that handles casting primitive scalar to non primitive.
     // If target dtype can be converted to ptype you should use cast_ptype.
-    pub fn cast_dtype(&self, dtype: DType) -> EncResult<Box<dyn Scalar>> {
+    pub fn cast_dtype(&self, dtype: DType) -> VortexResult<Box<dyn Scalar>> {
         macro_rules! from_int {
             ($dtype:ident , $ps:ident) => {
                 match $dtype {
@@ -64,7 +64,7 @@ impl PScalar {
         }
     }
 
-    pub fn cast_ptype(&self, ptype: PType) -> EncResult<Box<dyn Scalar>> {
+    pub fn cast_ptype(&self, ptype: PType) -> VortexResult<Box<dyn Scalar>> {
         macro_rules! from_int {
             ($ptype:ident , $v:ident) => {
                 match $ptype {
@@ -151,8 +151,8 @@ impl Scalar for PScalar {
         self.ptype().into()
     }
 
-    fn cast(&self, dtype: &DType) -> EncResult<Box<dyn Scalar>> {
-        let ptype: EncResult<PType> = dtype.try_into();
+    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+        let ptype: VortexResult<PType> = dtype.try_into();
         ptype
             .and_then(|p| self.cast_ptype(p))
             .or_else(|_| self.cast_dtype(dtype.clone()))
@@ -176,7 +176,7 @@ macro_rules! pscalar {
             type Error = VortexError;
 
             #[inline]
-            fn try_from(value: Box<dyn Scalar>) -> EncResult<Self> {
+            fn try_from(value: Box<dyn Scalar>) -> VortexResult<Self> {
                 value.as_ref().try_into()
             }
         }
@@ -184,7 +184,7 @@ macro_rules! pscalar {
         impl TryFrom<&dyn Scalar> for $T {
             type Error = VortexError;
 
-            fn try_from(value: &dyn Scalar) -> EncResult<Self> {
+            fn try_from(value: &dyn Scalar) -> VortexResult<Self> {
                 if let Some(pscalar) = value
                     .as_nonnull()
                     .and_then(|v| v.as_any().downcast_ref::<PScalar>())
@@ -223,7 +223,7 @@ impl From<usize> for Box<dyn Scalar> {
 impl TryFrom<Box<dyn Scalar>> for usize {
     type Error = VortexError;
 
-    fn try_from(value: Box<dyn Scalar>) -> EncResult<Self> {
+    fn try_from(value: Box<dyn Scalar>) -> VortexResult<Self> {
         value.as_ref().try_into()
     }
 }
@@ -231,7 +231,7 @@ impl TryFrom<Box<dyn Scalar>> for usize {
 impl TryFrom<&dyn Scalar> for usize {
     type Error = VortexError;
 
-    fn try_from(value: &dyn Scalar) -> EncResult<Self> {
+    fn try_from(value: &dyn Scalar) -> VortexResult<Self> {
         macro_rules! match_each_pscalar_integer {
             ($self:expr, | $_:tt $pscalar:ident | $($body:tt)*) => ({
                 macro_rules! __with_pscalar__ {( $_ $pscalar:ident ) => ( $($body)* )}
@@ -300,7 +300,9 @@ mod test {
         let scalar: Box<dyn Scalar> = (-10i16).into();
         assert_eq!(
             scalar.as_ref().try_into(),
-            Err::<usize, VortexError>(VortexError::ComputeError("required positive integer".into()))
+            Err::<usize, VortexError>(VortexError::ComputeError(
+                "required positive integer".into()
+            ))
         );
     }
 

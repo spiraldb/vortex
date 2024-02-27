@@ -10,7 +10,7 @@ use linkme::distributed_slice;
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
 use crate::compress::EncodingCompression;
 use crate::dtype::{DType, FieldNames};
-use crate::error::EncResult;
+use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::{Scalar, StructScalar};
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -112,7 +112,7 @@ impl Array for StructArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         Ok(StructScalar::new(
             self.dtype.clone(),
             self.fields
@@ -142,7 +142,7 @@ impl Array for StructArray {
         )
     }
 
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         let fields = self

@@ -9,7 +9,7 @@ use crate::array::typed::TypedArray;
 use crate::array::{Array, ArrayRef};
 use crate::dtype::DType::*;
 use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, TimeUnit};
-use crate::error::{VortexError, EncResult};
+use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 
 impl From<RecordBatch> for ArrayRef {
@@ -41,7 +41,7 @@ impl From<RecordBatch> for ArrayRef {
 impl TryFrom<SchemaRef> for DType {
     type Error = VortexError;
 
-    fn try_from(value: SchemaRef) -> EncResult<Self> {
+    fn try_from(value: SchemaRef) -> VortexResult<Self> {
         Ok(Struct(
             value
                 .fields()
@@ -52,7 +52,7 @@ impl TryFrom<SchemaRef> for DType {
                 .fields()
                 .iter()
                 .map(|f| f.data_type().try_into_dtype(f.is_nullable()))
-                .collect::<EncResult<Vec<DType>>>()?,
+                .collect::<VortexResult<Vec<DType>>>()?,
         ))
     }
 }
@@ -60,7 +60,7 @@ impl TryFrom<SchemaRef> for DType {
 impl TryFrom<&DataType> for PType {
     type Error = VortexError;
 
-    fn try_from(value: &DataType) -> EncResult<Self> {
+    fn try_from(value: &DataType) -> VortexResult<Self> {
         match value {
             DataType::Int8 => Ok(PType::I8),
             DataType::Int16 => Ok(PType::I16),
@@ -85,11 +85,11 @@ impl TryFrom<&DataType> for PType {
 }
 
 pub trait TryIntoDType {
-    fn try_into_dtype(self, is_nullable: bool) -> EncResult<DType>;
+    fn try_into_dtype(self, is_nullable: bool) -> VortexResult<DType>;
 }
 
 impl TryIntoDType for &DataType {
-    fn try_into_dtype(self, is_nullable: bool) -> EncResult<DType> {
+    fn try_into_dtype(self, is_nullable: bool) -> VortexResult<DType> {
         use crate::dtype::Nullability::*;
         use crate::dtype::Signedness::*;
 
@@ -124,7 +124,7 @@ impl TryIntoDType for &DataType {
                 f.iter().map(|f| Arc::new(f.name().clone())).collect(),
                 f.iter()
                     .map(|f| f.data_type().try_into_dtype(f.is_nullable()))
-                    .collect::<EncResult<Vec<DType>>>()?,
+                    .collect::<VortexResult<Vec<DType>>>()?,
             )),
             DataType::Dictionary(_, v) => v.as_ref().try_into_dtype(is_nullable),
             DataType::Decimal128(p, s) | DataType::Decimal256(p, s) => {
@@ -149,7 +149,7 @@ impl TryIntoDType for &DataType {
 impl TryFrom<&FieldRef> for DType {
     type Error = VortexError;
 
-    fn try_from(value: &FieldRef) -> EncResult<Self> {
+    fn try_from(value: &FieldRef) -> VortexResult<Self> {
         value.data_type().try_into_dtype(value.is_nullable())
     }
 }

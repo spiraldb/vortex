@@ -6,7 +6,7 @@ use vortex::array::{
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::{DType, Signedness};
-use vortex::error::{VortexError, EncResult};
+use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
@@ -24,7 +24,7 @@ impl DictArray {
         Self::try_new(codes, dict).unwrap()
     }
 
-    pub fn try_new(codes: ArrayRef, dict: ArrayRef) -> EncResult<Self> {
+    pub fn try_new(codes: ArrayRef, dict: ArrayRef) -> VortexResult<Self> {
         if !matches!(codes.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
             return Err(VortexError::InvalidDType(codes.dtype().clone()));
         }
@@ -75,7 +75,7 @@ impl Array for DictArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> EncResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
         check_index_bounds(self, index)?;
         let dict_index: usize = self.codes().scalar_at(index)?.try_into()?;
         self.dict().scalar_at(dict_index)
@@ -86,7 +86,7 @@ impl Array for DictArray {
     }
 
     // TODO(robert): Add function to trim the dictionary
-    fn slice(&self, start: usize, stop: usize) -> EncResult<ArrayRef> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
         Ok(Self::new(self.codes().slice(start, stop)?, self.dict.clone()).boxed())
     }
