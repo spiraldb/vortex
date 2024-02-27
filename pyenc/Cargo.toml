@@ -12,13 +12,13 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 arrow = { version = "50.0.0", features = ["ffi"] }
-enc = { path = "../rust/enc" }
-enc-alp = { path = "../rust/enc-alp" }
-enc-dict = { path = "../rust/enc-dict" }
-enc-ffor = { path = "../rust/enc-ffor" }
-enc-ree = { path = "../rust/enc-ree" }
-enc-roaring = { path = "../rust/enc-roaring" }
-enc-zigzag = { path = "../rust/enc-zigzag" }
+enc = { path = "../enc" }
+enc-alp = { path = "../enc-alp" }
+enc-dict = { path = "../enc-dict" }
+enc-ffor = { path = "../enc-ffor" }
+enc-ree = { path = "../enc-ree" }
+enc-roaring = { path = "../enc-roaring" }
+enc-zigzag = { path = "../enc-zigzag" }
 itertools = "0.12.1"
 log = "0.4.20"
 paste = "1.0.14"

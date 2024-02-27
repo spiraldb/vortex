@@ -1,18 +1,17 @@
 [workspace]
 members = [
     "pyenc",
-    "pyspiral",
-    "rust/codecz",
-    "rust/codecz-sys",
-    "rust/enc",
-    "rust/enc-alp",
-    "rust/enc-bench",
-    "rust/enc-dict",
-    "rust/enc-ffor",
-    "rust/enc-ree",
-    "rust/enc-roaring",
-    "rust/enc-zigzag",
-    "rust/spiral-alloc",
+    "codecz",
+    "codecz-sys",
+    "enc",
+    "enc-alp",
+    "enc-bench",
+    "enc-dict",
+    "enc-ffor",
+    "enc-ree",
+    "enc-roaring",
+    "enc-zigzag",
+    "spiral-alloc",
 ]
 resolver = "2"
 
