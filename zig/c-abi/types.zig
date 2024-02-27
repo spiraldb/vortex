@@ -5,7 +5,7 @@ const c = @cImport({
     @cInclude("wrapper.h");
 });
 
-pub const Alignment: u29 = c.SPIRAL_ALIGNMENT;
+pub const Alignment: u29 = c.VORTEX_ALIGNMENT;
 pub const FastLanesMinAlignment: u29 = c.FL_MIN_ALIGNMENT;
 
 pub const CodecError = error{

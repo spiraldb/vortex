@@ -1,0 +1,13 @@
+[package]
+name = "vortex-dict"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ahash = "0.8.7"
+vortex = { "path" = "../vortex" }
+half = { version = "2.3.1", features = ["std", "num-traits"] }
+hashbrown = "0.14.3"
+linkme = "0.3.22"
+log = "0.4.20"
+num-traits = "0.2.17"

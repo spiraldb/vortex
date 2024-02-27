@@ -6,7 +6,7 @@ pub mod alp;
 pub mod ffor;
 pub mod ree;
 
-pub use spiral_alloc::{AlignedAllocator, AlignedVec, ALIGNED_ALLOCATOR, SPIRAL_ALIGNMENT};
+pub use vortex_alloc::{AlignedAllocator, AlignedVec, ALIGNED_ALLOCATOR, VORTEX_ALIGNMENT};
 
 pub(crate) type ByteBuffer = codecz_sys::ByteBuffer_t;
 pub(crate) type WrittenBuffer = codecz_sys::WrittenBuffer_t;
@@ -36,11 +36,11 @@ mod test {
     #[allow(clippy::assertions_on_constants)]
     fn test_alignment() {
         assert_eq!(
-            codecz_sys::SPIRAL_ALIGNMENT as usize,
-            spiral_alloc::SPIRAL_ALIGNMENT,
+            codecz_sys::VORTEX_ALIGNMENT as usize,
+            vortex_alloc::VORTEX_ALIGNMENT,
         );
         assert_eq!(
-            codecz_sys::SPIRAL_ALIGNMENT as usize,
+            codecz_sys::VORTEX_ALIGNMENT as usize,
             super::ALIGNED_ALLOCATOR.min_alignment(),
         );
         assert!(arrow_buffer::alloc::ALIGNMENT >= 64);

@@ -5,9 +5,9 @@
 #include "float.h"
 #include "assert.h"
 
-#ifndef SPIRAL_ALIGNMENT
-#define SPIRAL_ALIGNMENT 128
-#endif // SPIRAL_ALIGNMENT
+#ifndef VORTEX_ALIGNMENT
+#define VORTEX_ALIGNMENT 128
+#endif // VORTEX_ALIGNMENT
 
 #ifndef FL_MIN_ALIGNMENT
 #define FL_MIN_ALIGNMENT 64

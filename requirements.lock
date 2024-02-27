@@ -7,5 +7,5 @@
 #   all-features: false
 #   with-sources: false
 
--e file:pyenc
+-e file:pyvortex
 -e file:.
