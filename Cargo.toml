@@ -1,17 +1,17 @@
 [workspace]
 members = [
-    "pyenc",
+    "bench-vortex",
     "codecz",
     "codecz-sys",
-    "enc",
-    "enc-alp",
-    "enc-bench",
-    "enc-dict",
-    "enc-ffor",
-    "enc-ree",
-    "enc-roaring",
-    "enc-zigzag",
-    "spiral-alloc",
+    "pyvortex",
+    "vortex",
+    "vortex-alloc",
+    "vortex-alp",
+    "vortex-dict",
+    "vortex-ffor",
+    "vortex-ree",
+    "vortex-roaring",
+    "vortex-zigzag",
 ]
 resolver = "2"
 

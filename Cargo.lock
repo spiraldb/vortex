@@ -566,8 +566,8 @@ dependencies = [
  "rand",
  "rand_chacha",
  "safe-transmute",
- "spiral-alloc",
  "thiserror",
+ "vortex-alloc",
 ]
 
 [[package]]
@@ -576,7 +576,7 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "safe-transmute",
- "spiral-alloc",
+ "vortex-alloc",
  "walkdir",
 ]
 
@@ -761,124 +761,6 @@ name = "either"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11157ac094ffbdde99aa67b23417ebdd801842852b500e395a45a9c0aac03e4a"
-
-[[package]]
-name = "enc"
-version = "0.1.0"
-dependencies = [
- "allocator-api2",
- "arrow",
- "dyn-clone",
- "half",
- "humansize",
- "itertools 0.12.1",
- "leb128",
- "linkme",
- "log",
- "num-traits",
- "num_enum",
- "once_cell",
- "polars-arrow",
- "polars-core",
- "polars-ops",
- "rand",
- "rayon",
- "roaring",
- "spiral-alloc",
- "thiserror",
-]
-
-[[package]]
-name = "enc-alp"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "codecz",
- "enc",
- "itertools 0.12.1",
- "linkme",
- "log",
-]
-
-[[package]]
-name = "enc-bench"
-version = "0.1.0"
-dependencies = [
- "arrow-array",
- "criterion",
- "enc",
- "enc-alp",
- "enc-dict",
- "enc-ffor",
- "enc-ree",
- "enc-roaring",
- "enc-zigzag",
- "itertools 0.12.1",
- "log",
- "parquet",
- "rand",
- "reqwest",
- "simplelog",
-]
-
-[[package]]
-name = "enc-dict"
-version = "0.1.0"
-dependencies = [
- "ahash",
- "enc",
- "half",
- "hashbrown",
- "linkme",
- "log",
- "num-traits",
-]
-
-[[package]]
-name = "enc-ffor"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "codecz",
- "enc",
- "itertools 0.12.1",
- "linkme",
- "log",
-]
-
-[[package]]
-name = "enc-ree"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "codecz",
- "enc",
- "half",
- "itertools 0.10.5",
- "linkme",
- "num-traits",
-]
-
-[[package]]
-name = "enc-roaring"
-version = "0.1.0"
-dependencies = [
- "croaring",
- "enc",
- "linkme",
- "log",
- "num-traits",
-]
-
-[[package]]
-name = "enc-zigzag"
-version = "0.1.0"
-dependencies = [
- "enc",
- "linkme",
- "spiral-alloc",
- "zigzag",
-]
 
 [[package]]
 name = "encoding_rs"
@@ -2070,25 +1952,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pyenc"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "enc",
- "enc-alp",
- "enc-dict",
- "enc-ffor",
- "enc-ree",
- "enc-roaring",
- "enc-zigzag",
- "itertools 0.12.1",
- "log",
- "paste",
- "pyo3",
- "pyo3-log",
-]
-
-[[package]]
 name = "pyo3"
 version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2160,6 +2023,25 @@ dependencies = [
  "pyo3-build-config",
  "quote",
  "syn 2.0.51",
+]
+
+[[package]]
+name = "pyvortex"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "itertools 0.12.1",
+ "log",
+ "paste",
+ "pyo3",
+ "pyo3-log",
+ "vortex",
+ "vortex-alp",
+ "vortex-dict",
+ "vortex-ffor",
+ "vortex-ree",
+ "vortex-roaring",
+ "vortex-zigzag",
 ]
 
 [[package]]
@@ -2533,13 +2415,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "spiral-alloc"
-version = "0.1.0"
-dependencies = [
- "allocator-api2",
-]
-
-[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2890,6 +2765,131 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "vortex"
+version = "0.1.0"
+dependencies = [
+ "allocator-api2",
+ "arrow",
+ "dyn-clone",
+ "half",
+ "humansize",
+ "itertools 0.12.1",
+ "leb128",
+ "linkme",
+ "log",
+ "num-traits",
+ "num_enum",
+ "once_cell",
+ "polars-arrow",
+ "polars-core",
+ "polars-ops",
+ "rand",
+ "rayon",
+ "roaring",
+ "thiserror",
+ "vortex-alloc",
+]
+
+[[package]]
+name = "vortex-alloc"
+version = "0.1.0"
+dependencies = [
+ "allocator-api2",
+]
+
+[[package]]
+name = "vortex-alp"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "codecz",
+ "itertools 0.12.1",
+ "linkme",
+ "log",
+ "vortex",
+]
+
+[[package]]
+name = "vortex-bench"
+version = "0.1.0"
+dependencies = [
+ "arrow-array",
+ "criterion",
+ "itertools 0.12.1",
+ "log",
+ "parquet",
+ "rand",
+ "reqwest",
+ "simplelog",
+ "vortex",
+ "vortex-alp",
+ "vortex-dict",
+ "vortex-ffor",
+ "vortex-ree",
+ "vortex-roaring",
+ "vortex-zigzag",
+]
+
+[[package]]
+name = "vortex-dict"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "half",
+ "hashbrown",
+ "linkme",
+ "log",
+ "num-traits",
+ "vortex",
+]
+
+[[package]]
+name = "vortex-ffor"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "codecz",
+ "itertools 0.12.1",
+ "linkme",
+ "log",
+ "vortex",
+]
+
+[[package]]
+name = "vortex-ree"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "codecz",
+ "half",
+ "itertools 0.10.5",
+ "linkme",
+ "num-traits",
+ "vortex",
+]
+
+[[package]]
+name = "vortex-roaring"
+version = "0.1.0"
+dependencies = [
+ "croaring",
+ "linkme",
+ "log",
+ "num-traits",
+ "vortex",
+]
+
+[[package]]
+name = "vortex-zigzag"
+version = "0.1.0"
+dependencies = [
+ "linkme",
+ "vortex",
+ "vortex-alloc",
+ "zigzag",
+]
 
 [[package]]
 name = "walkdir"
