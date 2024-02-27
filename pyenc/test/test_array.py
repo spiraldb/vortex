@@ -1,6 +1,7 @@
-import enc
 import pyarrow as pa
 import pytest
+
+import enc
 
 
 def test_primitive_array_round_trip():

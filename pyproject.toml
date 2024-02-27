@@ -40,10 +40,12 @@ members = [
 
 [tool.ruff]
 line-length = 120
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
 select = ["F", "E", "W", "UP", "I"]
 # Do not auto-fix unused variables. This is really annoying when IntelliJ runs autofix while editing.
 unfixable = ["F841"]
-extend-exclude = [".venv"]
 
 [tool.pytest.ini_options]
 log_cli = true

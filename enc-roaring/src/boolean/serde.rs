@@ -32,6 +32,7 @@ impl EncodingSerde for RoaringBoolEncoding {
 
 #[cfg(test)]
 mod test {
+    use crate::downcast::DowncastRoaring;
     use croaring::Bitmap;
 
     use crate::serde_tests::test::roundtrip_array;
@@ -42,10 +43,7 @@ mod test {
         let arr = RoaringBoolArray::new(Bitmap::from_range(245..63000), 65536);
         let read_arr = roundtrip_array(arr.as_ref()).unwrap();
 
-        let read_roaring = read_arr
-            .as_any()
-            .downcast_ref::<RoaringBoolArray>()
-            .unwrap();
+        let read_roaring = read_arr.as_roaring_bool();
         assert_eq!(arr.bitmap(), read_roaring.bitmap());
     }
 }

@@ -1,0 +1,23 @@
+name: 'Setup Zig'
+description: 'Toolchain setup and Initial compilation'
+runs:
+  using: "composite"
+  steps:
+    - name: Zig Version
+      id: zig-version
+      shell: bash
+      run: echo "version=$(cat .zig-version | tr -d '\n ')" >> $GITHUB_OUTPUT
+
+    - name: Zig Setup
+      uses: goto-bus-stop/setup-zig@v2
+      with:
+        version: "${{ steps.zig-version.outputs.version }}"
+      
+    # TODO(ngates): should we cache zig-cache? Or zig-out?
+    - name: Zig Build
+      shell: bash
+      run: zig build
+
+    - name: Export Path
+      shell: bash
+      run: echo "PATH=$PATH" >> $GITHUB_ENV

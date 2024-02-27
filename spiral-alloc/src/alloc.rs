@@ -1,5 +1,3 @@
-use core::alloc::Layout;
-use core::alloc::LayoutError;
 use core::ptr::NonNull;
 
 use super::SPIRAL_ALIGNMENT;

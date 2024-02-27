@@ -386,11 +386,13 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
 
 #[cfg(test)]
 mod test {
-    use arrow::array::GenericStringArray as ArrowStringArray;
+    use crate::array::Array;
+    use arrow::array::{AsArray, GenericStringArray as ArrowStringArray};
 
     use crate::array::primitive::PrimitiveArray;
-
-    use super::*;
+    use crate::array::varbin::VarBinArray;
+    use crate::arrow::CombineChunks;
+    use crate::dtype::{DType, Nullability};
 
     fn binary_array() -> VarBinArray {
         let values = PrimitiveArray::from_vec(

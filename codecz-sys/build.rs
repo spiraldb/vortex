@@ -26,11 +26,7 @@ fn main() {
     for entry in WalkDir::new(root_dir.join("zig"))
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            !e.path()
-                .components()
-                .any(|c| c.as_os_str() == "zig-cache")
-        })
+        .filter(|e| !e.path().components().any(|c| c.as_os_str() == "zig-cache"))
         .filter(|e| {
             e.path()
                 .extension()

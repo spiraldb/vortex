@@ -17,7 +17,6 @@ use codecz_sys::{
     RunLengthStats_t,
 };
 use num_traits::Num;
-use paste;
 
 #[allow(dead_code)]
 pub struct RunLengthStats {

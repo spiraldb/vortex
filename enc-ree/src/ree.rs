@@ -312,15 +312,13 @@ fn run_ends_logical_length<T: AsRef<dyn Array>>(ends: &T) -> usize {
 
 #[cfg(test)]
 mod test {
-    use std::ops::Deref;
-
     use arrow::array::cast::AsArray;
     use arrow::array::types::Int32Type;
+    use enc::array::Array;
     use itertools::Itertools;
 
-    use enc::dtype::{IntWidth, Nullability, Signedness};
-
-    use super::*;
+    use crate::REEArray;
+    use enc::dtype::{DType, IntWidth, Nullability, Signedness};
 
     #[test]
     fn new() {
@@ -354,7 +352,7 @@ mod test {
         arr.iter_arrow()
             .zip_eq([vec![2, 2, 3, 3, 3]])
             .for_each(|(from_iter, orig)| {
-                assert_eq!(from_iter.as_primitive::<Int32Type>().values().deref(), orig);
+                assert_eq!(*from_iter.as_primitive::<Int32Type>().values(), orig);
             });
     }
 
@@ -364,7 +362,7 @@ mod test {
         arr.iter_arrow()
             .zip_eq([vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]])
             .for_each(|(from_iter, orig)| {
-                assert_eq!(from_iter.as_primitive::<Int32Type>().values().deref(), orig);
+                assert_eq!(*from_iter.as_primitive::<Int32Type>().values(), orig);
             });
     }
 }

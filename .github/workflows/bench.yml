@@ -1,0 +1,35 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [ "develop" ]
+  workflow_dispatch: { }
+
+permissions:
+  actions: read
+  contents: write
+  deployments: write
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest-large
+    if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[benchmark]') && github.ref_name == 'develop') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-zig
+      - uses: ./.github/actions/setup-rust
+
+      - name: Bench - Vortex
+        run: cargo bench | tee bench.txt
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1.19.3
+        with:
+          name: Vortex Benchmarks
+          tool: cargo
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          output-file-path: bench.txt
+          summary-always: true
+          auto-push: true
+          fail-on-alert: false

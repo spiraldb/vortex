@@ -1,6 +1,7 @@
-import enc
 import numpy as np
 import pyarrow as pa
+
+import enc
 
 
 def test_primitive_compress():
