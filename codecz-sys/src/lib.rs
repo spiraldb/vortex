@@ -4,7 +4,7 @@
 
 use core::fmt::{Display, Formatter};
 use core::mem::size_of;
-use spiral_alloc::AlignedVec;
+use vortex_alloc::AlignedVec;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
@@ -34,8 +34,8 @@ where
     T: Sized,
 {
     fn from(slice: &[T]) -> Self {
-        if slice.as_ptr().align_offset(SPIRAL_ALIGNMENT as usize) != 0 {
-            panic!("slice must be aligned to {} bytes", SPIRAL_ALIGNMENT);
+        if slice.as_ptr().align_offset(VORTEX_ALIGNMENT as usize) != 0 {
+            panic!("slice must be aligned to {} bytes", VORTEX_ALIGNMENT);
         }
         Self {
             ptr: slice.as_ptr() as *mut u8,

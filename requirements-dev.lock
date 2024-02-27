@@ -7,7 +7,7 @@
 #   all-features: false
 #   with-sources: false
 
--e file:pyenc
+-e file:pyvortex
 -e file:.
 babel==2.14.0
 bracex==2.4

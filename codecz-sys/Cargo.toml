@@ -9,7 +9,7 @@ workspace = true
 
 [dependencies]
 safe-transmute = "0.11.2"
-spiral-alloc = { version = "0.1.0", path = "../spiral-alloc" }
+vortex-alloc = { version = "0.1.0", path = "../vortex-alloc" }
 
 [build-dependencies]
 bindgen = "0.69.1"

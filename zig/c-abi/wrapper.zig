@@ -10,7 +10,7 @@ const c = @cImport({
 const abi = @import("abi");
 
 // aliases
-const OutputAlign: u29 = c.SPIRAL_ALIGNMENT;
+const OutputAlign: u29 = c.VORTEX_ALIGNMENT;
 const AlpExponents = abi.AlpExponents;
 const ByteBuffer = abi.ByteBuffer;
 const ResultStatus = abi.ResultStatus;

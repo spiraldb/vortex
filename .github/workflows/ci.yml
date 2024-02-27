@@ -40,7 +40,7 @@ jobs:
       - name: Zig Test
         run: zig build test
 
-      - name: Pytest - PyEnc
+      - name: Pytest - PyVortex
         run: rye run pytest --benchmark-disable test/
-        working-directory: pyenc/
+        working-directory: pyvortex/
 

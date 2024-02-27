@@ -35,7 +35,7 @@ serve-docs = "mkdocs serve"
 
 [tool.rye.workspace]
 members = [
-    "pyenc",
+    "pyvortex",
 ]
 
 [tool.ruff]

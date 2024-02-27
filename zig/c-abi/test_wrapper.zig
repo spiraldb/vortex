@@ -7,7 +7,7 @@ const c = @cImport({
 });
 
 test "alignment 128" {
-    try std.testing.expectEqual(c.SPIRAL_ALIGNMENT, 128);
+    try std.testing.expectEqual(c.VORTEX_ALIGNMENT, 128);
 }
 
 test "result status" {
@@ -95,11 +95,11 @@ test "run end encoding" {
     const ints = [_]V{ 1, 1, 1, 2, 3, 4, 4, 5 };
     const numRuns = 5;
 
-    const valuesOut: []align(128) V = try gpa.alignedAlloc(V, c.SPIRAL_ALIGNMENT, 5);
+    const valuesOut: []align(128) V = try gpa.alignedAlloc(V, c.VORTEX_ALIGNMENT, 5);
     defer gpa.free(valuesOut);
     const valuesBuf = abi.ByteBuffer.initFromSlice(valuesOut);
 
-    const runEndsOut: []align(128) u32 = try gpa.alignedAlloc(u32, c.SPIRAL_ALIGNMENT, 5);
+    const runEndsOut: []align(128) u32 = try gpa.alignedAlloc(u32, c.VORTEX_ALIGNMENT, 5);
     defer gpa.free(runEndsOut);
     const runEndsBuf = abi.ByteBuffer.initFromSlice(runEndsOut);
 
@@ -126,7 +126,7 @@ test "run end encoding" {
     const runEnds = [_]u32{ 3, 4, 5, 7, 8 };
     try std.testing.expectEqualSlices(u32, &runEnds, runEndsOut);
 
-    const decodeOut: []align(128) V = try gpa.alignedAlloc(V, c.SPIRAL_ALIGNMENT, ints.len);
+    const decodeOut: []align(128) V = try gpa.alignedAlloc(V, c.VORTEX_ALIGNMENT, ints.len);
     defer gpa.free(decodeOut);
     const decodeBuf = abi.ByteBuffer.initFromSlice(decodeOut);
 
@@ -161,11 +161,11 @@ test "alp encoding" {
         4.123457612347956123084712340569871234, // this will be an exception that needs patching
     };
 
-    const valuesOut: []align(128) i64 = try gpa.alignedAlloc(i64, c.SPIRAL_ALIGNMENT, floats.len);
+    const valuesOut: []align(128) i64 = try gpa.alignedAlloc(i64, c.VORTEX_ALIGNMENT, floats.len);
     defer gpa.free(valuesOut);
     const valuesBuf = abi.ByteBuffer.initFromSlice(valuesOut);
 
-    const bitsetOut: []align(128) u8 = try gpa.alignedAlloc(u8, c.SPIRAL_ALIGNMENT, (floats.len + 7) / 8);
+    const bitsetOut: []align(128) u8 = try gpa.alignedAlloc(u8, c.VORTEX_ALIGNMENT, (floats.len + 7) / 8);
     defer gpa.free(bitsetOut);
     const bitsetBuf = abi.ByteBuffer.initFromSlice(bitsetOut);
 
@@ -213,7 +213,7 @@ test "alp encoding" {
     }
     try std.testing.expectEqual(bitset.get(floats.len - 1), 1);
 
-    const decodeOut: []align(128) f64 = try gpa.alignedAlloc(f64, c.SPIRAL_ALIGNMENT, floats.len);
+    const decodeOut: []align(128) f64 = try gpa.alignedAlloc(f64, c.VORTEX_ALIGNMENT, floats.len);
     defer gpa.free(decodeOut);
     const decodeBuf = abi.ByteBuffer.initFromSlice(decodeOut);
 
@@ -240,7 +240,7 @@ test "fastlanes ffor encoding" {
     const gpa = std.testing.allocator;
     const ints = blk: {
         const stack = [_]i32{ 1, -2, 3, -4, 5, 100_000 };
-        const aligned = try gpa.alignedAlloc(i32, c.SPIRAL_ALIGNMENT, 6);
+        const aligned = try gpa.alignedAlloc(i32, c.VORTEX_ALIGNMENT, 6);
         @memcpy(aligned, &stack);
         break :blk aligned;
     };
@@ -249,7 +249,7 @@ test "fastlanes ffor encoding" {
     const numBits = 4;
 
     const bytesNeeded = c.codecz_flbp_encodedSizeInBytes_u32(ints.len, numBits);
-    const encodedOut: []align(128) u8 = try gpa.alignedAlloc(u8, c.SPIRAL_ALIGNMENT, bytesNeeded);
+    const encodedOut: []align(128) u8 = try gpa.alignedAlloc(u8, c.VORTEX_ALIGNMENT, bytesNeeded);
     defer gpa.free(encodedOut);
     const encodedBuf = abi.ByteBuffer.initFromSlice(encodedOut);
 
@@ -271,12 +271,12 @@ test "fastlanes ffor encoding" {
 
     const exceptionsOut: []align(128) u32 = try gpa.alignedAlloc(
         u32,
-        c.SPIRAL_ALIGNMENT,
+        c.VORTEX_ALIGNMENT,
         encodeResult.num_exceptions + 1,
     );
     defer gpa.free(exceptionsOut);
     const exceptionsBuf = abi.ByteBuffer.initFromSlice(exceptionsOut);
-    const bitsetOut: []align(128) u8 = try gpa.alignedAlloc(u8, c.SPIRAL_ALIGNMENT, (ints.len + 7) / 8);
+    const bitsetOut: []align(128) u8 = try gpa.alignedAlloc(u8, c.VORTEX_ALIGNMENT, (ints.len + 7) / 8);
     defer gpa.free(bitsetOut);
     const bitsetBuf = abi.ByteBuffer.initFromSlice(bitsetOut);
 
@@ -309,7 +309,7 @@ test "fastlanes ffor encoding" {
     }
     try std.testing.expectEqual(bitset.get(ints.len - 1), 1);
 
-    const decodeOut: []align(128) i32 = try gpa.alignedAlloc(i32, c.SPIRAL_ALIGNMENT, ints.len);
+    const decodeOut: []align(128) i32 = try gpa.alignedAlloc(i32, c.VORTEX_ALIGNMENT, ints.len);
     defer gpa.free(decodeOut);
     const decodeBuf = abi.ByteBuffer.initFromSlice(decodeOut);
 
