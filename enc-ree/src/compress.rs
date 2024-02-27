@@ -95,7 +95,7 @@ mod test {
     use arrow::buffer::BooleanBuffer;
 
     use enc::array::bool::BoolArray;
-    use enc::array::primitive::PrimitiveArray;
+    use enc::array::downcast::DowncastArrayBuiltin;
     use enc::array::Array;
 
     use crate::compress::ree_decode;
@@ -117,14 +117,8 @@ mod test {
         );
 
         let decoded = ree_decode(
-            arr.ends()
-                .as_any()
-                .downcast_ref::<PrimitiveArray>()
-                .unwrap(),
-            arr.values()
-                .as_any()
-                .downcast_ref::<PrimitiveArray>()
-                .unwrap(),
+            arr.ends().as_primitive(),
+            arr.values().as_primitive(),
             arr.validity().cloned(),
         );
 
@@ -133,13 +127,7 @@ mod test {
             vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3].as_slice()
         );
         assert_eq!(
-            decoded
-                .validity()
-                .unwrap()
-                .as_any()
-                .downcast_ref::<BoolArray>()
-                .unwrap()
-                .buffer(),
+            decoded.validity().unwrap().as_bool().buffer(),
             &BooleanBuffer::from(vec![
                 true, true, false, true, true, true, true, false, true, true,
             ])

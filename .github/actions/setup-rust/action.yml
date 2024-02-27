@@ -1,0 +1,44 @@
+name: 'Setup Rust'
+description: 'Toolchain setup and Initial compilation'
+inputs:
+  rust-toolchain: # id of input
+    description: 'Rust toolchain version to use'
+    required: true
+    default: stable
+runs:
+  using: "composite"
+  steps:
+    - name: Rust Toolchain Cache
+      id: rustup-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.rustup
+        key: "rustup-${{ runner.os }}-${{ inputs.rust-toolchain }}"
+
+    - name: Rust Toolchain
+      uses: dtolnay/rust-toolchain@stable
+      if: steps.rustup-cache.outputs.cache-hit != 'true'
+      with:
+        toolchain: "${{ inputs.rust-toolchain }}"
+        components: clippy, rustfmt
+    - name: Rust Dependency Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: "shared" # To allow reuse across jobs
+
+    - name: Rust Compile Cache
+      uses: mozilla-actions/sccache-action@v0.0.4
+    - name: Rust Compile Cache Config
+      shell: bash
+      run: |
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV
+
+    - name: Rust Build
+      shell: bash
+      run: cargo build --all-targets
+
+    - name: Export Path
+      shell: bash
+      run: echo "PATH=$PATH" >> $GITHUB_ENV

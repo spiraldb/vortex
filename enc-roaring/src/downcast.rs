@@ -6,6 +6,7 @@ mod private {
     pub trait Sealed {}
 }
 
+#[allow(dead_code)]
 pub trait DowncastRoaring: private::Sealed {
     fn maybe_roaring_int(&self) -> Option<&RoaringIntArray>;
 

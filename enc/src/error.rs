@@ -96,6 +96,7 @@ impl From<arrow::error::ArrowError> for EncError {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct PolarsError(polars_core::error::PolarsError);
 
 impl PartialEq for PolarsError {

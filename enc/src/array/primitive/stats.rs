@@ -147,9 +147,10 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use crate::array::primitive::PrimitiveArray;
     use crate::array::Array;
     use crate::scalar::ListScalarVec;
+    use crate::stats::Stat;
 
     #[test]
     fn stats() {

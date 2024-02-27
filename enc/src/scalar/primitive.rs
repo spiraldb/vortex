@@ -285,9 +285,10 @@ impl Display for PScalar {
 
 #[cfg(test)]
 mod test {
-    use crate::dtype::{IntWidth, Nullability, Signedness};
-
-    use super::*;
+    use crate::dtype::{DType, IntWidth, Nullability, Signedness};
+    use crate::error::EncError;
+    use crate::ptype::PType;
+    use crate::scalar::Scalar;
 
     #[test]
     fn into_from() {
