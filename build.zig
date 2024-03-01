@@ -14,32 +14,6 @@ pub fn build(b: *std.Build) void {
     const filter_test = b.option([]const u8, "filter-tests", "Filter tests by name");
     const test_step = b.step("test", "Run library tests");
 
-    // zimd
-    const zimd = b.addModule("zimd", CreateOptions{
-        .root_source_file = .{ .path = "zig/zimd/zimd.zig" },
-        .target = target,
-        .optimize = optimize,
-        .omit_frame_pointer = false,
-        .error_tracing = true,
-        .unwind_tables = true,
-        .strip = false,
-    });
-
-    // test zimd
-    const zimd_test = b.addTest(TestOptions{
-        .root_source_file = .{ .path = "zig/zimd/zimd.zig" },
-        .target = target,
-        .optimize = optimize,
-        .filter = filter_test,
-        .omit_frame_pointer = false,
-        .error_tracing = true,
-        .unwind_tables = true,
-        .strip = false,
-    });
-    zimd_test.root_module.addImport("zimd", zimd);
-    const zimd_test_run = b.addRunArtifact(zimd_test);
-    test_step.dependOn(&zimd_test_run.step);
-
     // C ABI types
     const c_abi_options = CreateOptions{
         .root_source_file = .{ .path = "zig/c-abi/types.zig" },
@@ -68,7 +42,6 @@ pub fn build(b: *std.Build) void {
         .strip = false,
     });
     codecz.addImport("abi", c_abi_types);
-    codecz.addImport("zimd", zimd);
 
     // test codecs
     const codecz_test = b.addTest(TestOptions{
@@ -84,7 +57,6 @@ pub fn build(b: *std.Build) void {
     });
     codecz_test.root_module.addImport("codecz", codecz);
     codecz_test.root_module.addImport("abi", c_abi_types);
-    codecz_test.root_module.addImport("zimd", zimd);
     codecz_test.addIncludePath(.{ .path = "zig/c-abi/include" });
     const codecz_test_run = b.addRunArtifact(codecz_test);
     test_step.dependOn(&codecz_test_run.step);
@@ -105,7 +77,6 @@ pub fn build(b: *std.Build) void {
     });
     lib_step.root_module.addImport("codecz", codecz);
     lib_step.root_module.addImport("abi", c_abi_types);
-    lib_step.root_module.addImport("zimd", zimd);
     lib_step.addIncludePath(.{ .path = "zig/c-abi/include" });
     lib_step.root_module.c_std = std.Build.CStd.C11;
     lib_step.bundle_compiler_rt = true;
