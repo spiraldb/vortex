@@ -1,0 +1,8 @@
+site_name: "My Library"
+
+theme:
+  name: "material"
+
+plugins:
+  - search
+  - mkdocstrings

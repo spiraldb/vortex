@@ -3,6 +3,7 @@ members = [
     "bench-vortex",
     "codecz",
     "codecz-sys",
+    "fastlanez-sys",
     "pyvortex",
     "vortex",
     "vortex-alloc",
