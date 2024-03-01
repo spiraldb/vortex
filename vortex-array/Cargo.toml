@@ -1,5 +1,5 @@
 [package]
-name = "vortex"
+name = "vortex-array"
 version = { workspace = true }
 description = "Vortex in memory columnar data format"
 homepage = { workspace = true }
@@ -37,5 +37,5 @@ polars-ops = { version = "0.37.0", features = ["search_sorted"] }
 rand = { version = "0.8.5", features = [] }
 rayon = "1.8.1"
 roaring = "0.10.3"
-vortex-alloc = { version = "0.1.0", path = "../vortex-alloc" }
+vortex-alloc = { path = "../vortex-alloc" }
 thiserror = "1.0.57"
