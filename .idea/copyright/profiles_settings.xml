@@ -1,0 +1,12 @@
+<component name="CopyrightManager">
+  <settings default="Apache 2.0">
+    <module2copyright>
+      <element module="All" copyright="Apache 2.0" />
+    </module2copyright>
+    <LanguageOptions name="Rust">
+      <option name="fileTypeOverride" value="3" />
+      <option name="block" value="false" />
+      <option name="prefixLines" value="false" />
+    </LanguageOptions>
+  </settings>
+</component>
