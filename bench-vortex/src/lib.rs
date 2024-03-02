@@ -17,7 +17,7 @@ use itertools::Itertools;
 use vortex::array::Encoding;
 use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
-use vortex_ffor::FFoREncoding;
+use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
 use vortex_zigzag::ZigZagEncoding;
@@ -25,8 +25,9 @@ use vortex_zigzag::ZigZagEncoding;
 pub fn enumerate_arrays() {
     let encodings: Vec<&dyn Encoding> = vec![
         &ALPEncoding,
+        &BitPackedEncoding,
         &DictEncoding,
-        &FFoREncoding,
+        &FoREncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
         &RoaringIntEncoding,
@@ -46,15 +47,16 @@ mod test {
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 
-    use crate::enumerate_arrays;
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::{Array, ArrayRef};
     use vortex::compress::CompressCtx;
     use vortex::dtype::DType;
     use vortex::error::{VortexError, VortexResult};
 
+    use crate::enumerate_arrays;
+
     pub fn download_taxi_data() -> &'static Path {
-        let download_path = Path::new("../../pyspiral/bench/.data/https-d37ci6vzurychx-cloudfront-net-trip-data-yellow-tripdata-2023-11.parquet");
+        let download_path = Path::new("data/yellow-tripdata-2023-11.parquet");
         if download_path.exists() {
             return download_path;
         }

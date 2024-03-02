@@ -19,7 +19,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-use std::mem::{size_of, MaybeUninit};
+use std::mem::{MaybeUninit, size_of};
 
 use arrayref::array_mut_ref;
 use seq_macro::seq;
@@ -28,20 +28,22 @@ use uninit::prelude::VecCapacity;
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 pub struct Pred<const B: bool>;
+
 pub trait Satisfied {}
+
 impl Satisfied for Pred<true> {}
 
 /// BitPack into a compile-time known bit-width.
-pub trait BitPack<const W: u8>
+pub trait BitPack<const W: usize>
 where
     Self: Sized,
     Pred<{ W > 0 }>: Satisfied,
-    Pred<{ W < 8 * size_of::<Self>() as u8 }>: Satisfied,
+    Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
 {
     fn bitpack<'a>(
         input: &[Self; 1024],
-        output: &'a mut [MaybeUninit<u8>; 128 * W as usize],
-    ) -> &'a [u8; 128 * W as usize];
+        output: &'a mut [MaybeUninit<u8>; 128 * W],
+    ) -> &'a [u8; 128 * W];
 }
 
 #[derive(Debug)]
@@ -54,17 +56,17 @@ where
 {
     fn try_bitpack<'a>(
         input: &[Self; 1024],
-        width: u8,
+        width: usize,
         output: &'a mut [MaybeUninit<u8>],
     ) -> Result<&'a [u8], UnsupportedBitWidth>;
 
     fn try_bitpack_into(
         input: &[Self; 1024],
-        width: u8,
+        width: usize,
         output: &mut Vec<u8>,
     ) -> Result<(), UnsupportedBitWidth> {
-        Self::try_bitpack(input, width, output.reserve_uninit(width as usize * 128))?;
-        unsafe { output.set_len(output.len() + (width as usize * 128)) }
+        Self::try_bitpack(input, width, output.reserve_uninit(width * 128))?;
+        unsafe { output.set_len(output.len() + (width * 128)) }
         Ok(())
     }
 }
@@ -92,7 +94,7 @@ macro_rules! bitpack_impl {
         impl TryBitPack for $T {
             fn try_bitpack<'a>(
                 input: &[Self; 1024],
-                width: u8,
+                width: usize,
                 output: &'a mut [MaybeUninit<u8>],
             ) -> Result<&'a [u8], UnsupportedBitWidth> {
                 seq!(N in 1..$W {

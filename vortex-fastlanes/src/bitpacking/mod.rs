@@ -1,8 +1,9 @@
 use std::any::Any;
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use vortex::array::{
-    check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
+    Array, ArrayRef, ArrowIterator, check_validity_buffer, Encoding, EncodingId, EncodingRef,
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::DType;
@@ -10,7 +11,9 @@ use vortex::error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::scalar::{NullableScalar, Scalar};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stats, StatsSet};
+use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
+
+mod compress;
 
 #[derive(Debug, Clone)]
 pub struct BitPackedArray {
@@ -18,7 +21,7 @@ pub struct BitPackedArray {
     validity: Option<ArrayRef>,
     patches: Option<ArrayRef>,
     len: usize,
-    bit_width: u8,
+    bit_width: usize,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
@@ -28,7 +31,7 @@ impl BitPackedArray {
         encoded: ArrayRef,
         validity: Option<ArrayRef>,
         patches: Option<ArrayRef>,
-        bit_width: u8,
+        bit_width: usize,
         dtype: DType,
         len: usize,
     ) -> VortexResult<Self> {
@@ -54,7 +57,7 @@ impl BitPackedArray {
     }
 
     #[inline]
-    pub fn bit_width(&self) -> u8 {
+    pub fn bit_width(&self) -> usize {
         self.bit_width
     }
 
@@ -166,6 +169,13 @@ impl ArrayDisplay for BitPackedArray {
             f.indent(|indent| indent.array(p.as_ref()))?;
         }
         f.indent(|indent| indent.array(self.encoded()))
+    }
+}
+
+impl StatsCompute for BitPackedArray {
+    fn compute(&self, _stat: &Stat) -> StatsSet {
+        // TODO(ngates): implement based on the encoded array
+        StatsSet::from(HashMap::new())
     }
 }
 

@@ -38,16 +38,16 @@ pub enum PType {
 }
 
 pub trait NativePType:
-    Send
-    + Sync
-    + Sized
-    + Debug
-    + Display
-    + PartialEq
-    + Default
-    + ArrowNativeType
-    + RefUnwindSafe
-    + TryFrom<Box<dyn Scalar>, Error = VortexError>
+Send
++ Sync
++ Sized
++ Debug
++ Display
++ PartialEq
++ Default
++ ArrowNativeType
++ RefUnwindSafe
++ TryFrom<Box<dyn Scalar>, Error=VortexError>
 {
     const PTYPE: PType;
 }
@@ -115,6 +115,22 @@ macro_rules! match_each_integer_ptype {
 }
 pub use match_each_integer_ptype;
 
+#[macro_export]
+macro_rules! match_each_unsigned_integer_ptype {
+    ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
+        macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
+        use $crate::ptype::PType;
+        match $self {
+            PType::U8 => __with__! { u8 },
+            PType::U16 => __with__! { u16 },
+            PType::U32 => __with__! { u32 },
+            PType::U64 => __with__! { u64 },
+            _ => panic!("Unsupported ptype {:?}", $self),
+        }
+    })
+}
+pub use match_each_unsigned_integer_ptype;
+
 impl PType {
     pub fn is_unsigned_int(self) -> bool {
         matches!(self, PType::U8 | PType::U16 | PType::U32 | PType::U64)
@@ -134,6 +150,10 @@ impl PType {
 
     pub fn byte_width(&self) -> usize {
         match_each_native_ptype!(self, |$T| std::mem::size_of::<$T>())
+    }
+
+    pub fn bit_width(&self) -> usize {
+        self.byte_width() * 8
     }
 }
 

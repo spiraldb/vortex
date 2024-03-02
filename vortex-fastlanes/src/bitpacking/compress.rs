@@ -16,9 +16,9 @@ use arrayref::array_ref;
 use log::debug;
 
 use fastlanez_sys::TryBitPack;
+use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
@@ -38,15 +38,22 @@ impl EncodingCompression for BitPackedEncoding {
             return None;
         };
 
-        // Only supports unsigned ints
-        // TODO(ngates): we should add an array that narrows types as much as possible.
-        //  e.g. signed -> unsigned, 64 -> 32, etc.
-        if !parray.ptype().is_unsigned_int() {
-            debug!("Skipping BitPacking: not unsigned int");
+        // Only supports ints
+        if !parray.ptype().is_int() {
+            debug!("Skipping BitPacking: not int");
             return None;
         }
 
-        // TODO(nates): check if best bit-width is actually narrower than ptype?
+        // Check that the min > zero
+        if parray
+            .stats()
+            .get_or_compute_cast::<i64>(&Stat::Min)
+            .unwrap()
+            < 0
+        {
+            debug!("Skipping BitPacking: min is zero");
+            return None;
+        }
 
         debug!("Compressing with BitPacking");
         Some(&(bitpacked_compressor as Compressor))
@@ -68,7 +75,7 @@ fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: Compre
         .unwrap_or_else(|| best_bit_width(parray.ptype(), &bit_width_freq));
 
     return BitPackedArray::try_new(
-        bitpack(parray, bit_width as usize),
+        bitpack(parray, bit_width),
         parray.validity().map(|v| {
             ctx.compress(
                 v.as_ref(),
@@ -89,12 +96,16 @@ fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: Compre
 }
 
 fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
+    // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
+    // TODO(ngates): we should implement this using a vortex cast to centralize this hack.
     use PType::*;
     let bytes = match parray.ptype() {
-        U8 | U16 | U32 | U64 => bitpack_primitive(parray.buffer().typed_data::<u8>(), bit_width),
-        _ => panic!("Unsupported type"),
+        I8 | U8 => bitpack_primitive(parray.buffer().typed_data::<u8>(), bit_width),
+        I16 | U16 => bitpack_primitive(parray.buffer().typed_data::<u16>(), bit_width),
+        I32 | U32 => bitpack_primitive(parray.buffer().typed_data::<u32>(), bit_width),
+        I64 | U64 => bitpack_primitive(parray.buffer().typed_data::<u64>(), bit_width),
+        _ => panic!("Unsupported ptype {:?}", parray.ptype()),
     };
-    // bitpack_primitive(parray.buffer().typed_data::<$T>(), bit_width)
     PrimitiveArray::from_vec(bytes).boxed()
 }
 
@@ -112,25 +123,25 @@ where
     (0..num_chunks - 1).for_each(|i| {
         let start_elem = i * 1024;
         let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
-        TryBitPack::try_bitpack_into(chunk, bit_width as u8, &mut output).unwrap();
+        TryBitPack::try_bitpack_into(chunk, bit_width, &mut output).unwrap();
     });
 
     // Pad the last chunk with zeros to a full 1024 elements.
     let last_chunk_size = array.len() % 1024;
     let mut last_chunk: [T; 1024] = [T::default(); 1024];
     last_chunk[..last_chunk_size].copy_from_slice(&array[array.len() - last_chunk_size..]);
-    TryBitPack::try_bitpack_into(&last_chunk, bit_width as u8, &mut output).unwrap();
+    TryBitPack::try_bitpack_into(&last_chunk, bit_width, &mut output).unwrap();
 
     output
 }
 
-fn bitpack_patches(_parray: &PrimitiveArray, _bit_width: u8) -> ArrayRef {
+fn bitpack_patches(_parray: &PrimitiveArray, _bit_width: usize) -> ArrayRef {
     todo!("bitpack_patches")
 }
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
 /// We could try to be clever, but we can never really predict how the exceptions will compress.
-fn best_bit_width(ptype: &PType, bit_width_freq: &[usize]) -> u8 {
+fn best_bit_width(ptype: &PType, bit_width_freq: &[usize]) -> usize {
     let len: usize = bit_width_freq.iter().sum();
     let bytes_per_exception = ptype.byte_width() + 4;
 
@@ -152,19 +163,19 @@ fn best_bit_width(ptype: &PType, bit_width_freq: &[usize]) -> u8 {
         }
     }
 
-    best_width as u8
+    best_width
 }
 
-fn num_exceptions(bit_width: u8, bit_width_freq: &[usize]) -> usize {
-    bit_width_freq[(bit_width + 1) as usize..].iter().sum()
+fn num_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
+    bit_width_freq[bit_width + 1..].iter().sum()
 }
 
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
 
-    use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
+    use vortex::array::primitive::PrimitiveEncoding;
 
     use super::*;
 
