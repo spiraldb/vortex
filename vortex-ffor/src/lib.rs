@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use linkme::distributed_slice;
+
 pub use ffor::*;
-use vortex::array::EncodingRef;
+use vortex::array::{EncodingRef, ENCODINGS};
 
 mod compress;
 mod downcast;
@@ -21,5 +23,5 @@ mod ffor;
 mod serde;
 mod stats;
 
-// #[distributed_slice(ENCODINGS)]
+#[distributed_slice(ENCODINGS)]
 static ENCODINGS_FFOR: EncodingRef = &FFoREncoding;

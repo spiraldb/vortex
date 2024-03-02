@@ -25,9 +25,10 @@ use vortex_zigzag::ZigZagEncoding;
 pub fn enumerate_arrays() {
     let encodings: Vec<&dyn Encoding> = vec![
         &ALPEncoding,
-        &BitPackedEncoding,
         &DictEncoding,
+        &BitPackedEncoding,
         &FoREncoding,
+        //&FFoREncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
         &RoaringIntEncoding,
@@ -45,10 +46,10 @@ mod test {
     use arrow_array::RecordBatchReader;
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-    use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+    use simplelog::{ColorChoice, Config, TerminalMode, TermLogger};
 
-    use vortex::array::chunked::ChunkedArray;
     use vortex::array::{Array, ArrayRef};
+    use vortex::array::chunked::ChunkedArray;
     use vortex::compress::CompressCtx;
     use vortex::dtype::DType;
     use vortex::error::{VortexError, VortexResult};

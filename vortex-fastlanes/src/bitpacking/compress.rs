@@ -19,7 +19,9 @@ use fastlanez_sys::TryBitPack;
 use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::array::sparse::SparseArray;
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
@@ -55,6 +57,19 @@ impl EncodingCompression for BitPackedEncoding {
             return None;
         }
 
+        let bit_width_freq = parray
+            .stats()
+            .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)
+            .unwrap()
+            .0;
+        let bit_width = best_bit_width(parray.ptype(), &bit_width_freq);
+
+        // Check that the bit width is less than the type's bit width
+        if bit_width == parray.ptype().bit_width() {
+            debug!("Skipping BitPacking: bit packing has no effect");
+            return None;
+        }
+
         debug!("Compressing with BitPacking");
         Some(&(bitpacked_compressor as Compressor))
     }
@@ -73,6 +88,14 @@ fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: Compre
     let bit_width = like_bp
         .map(|bp| bp.bit_width())
         .unwrap_or_else(|| best_bit_width(parray.ptype(), &bit_width_freq));
+    let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
+
+    // If we pack into zero bits, then just return the sparse array.
+    // TODO(ngates): this breaks our rule of returning ourselves. But we can't really do that
+    //  unless we create an empty bitpacked array?
+    if bit_width == 0 {
+        return bitpack_patches(parray, bit_width, num_exceptions);
+    }
 
     return BitPackedArray::try_new(
         bitpack(parray, bit_width),
@@ -82,8 +105,11 @@ fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: Compre
                 like_bp.and_then(|bp| bp.validity().map(|a| a.as_ref())),
             )
         }),
-        if num_exceptions(bit_width, &bit_width_freq) > 0 {
-            Some(bitpack_patches(parray, bit_width))
+        if num_exceptions > 0 {
+            Some(ctx.compress(
+                bitpack_patches(parray, bit_width, num_exceptions).as_ref(),
+                like_bp.and_then(|bp| bp.patches()).map(|a| a.as_ref()),
+            ))
         } else {
             None
         },
@@ -135,8 +161,27 @@ where
     output
 }
 
-fn bitpack_patches(_parray: &PrimitiveArray, _bit_width: usize) -> ArrayRef {
-    todo!("bitpack_patches")
+fn bitpack_patches(
+    parray: &PrimitiveArray,
+    bit_width: usize,
+    num_exceptions_hint: usize,
+) -> ArrayRef {
+    match_each_integer_ptype!(parray.ptype(), |$T| {
+        let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
+        let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
+        for (i, v) in parray.buffer().typed_data::<$T>().iter().enumerate() {
+            if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width {
+                indices.push(i as u64);
+                values.push(*v);
+            }
+        }
+        let len = indices.len();
+        SparseArray::new(
+            PrimitiveArray::from_vec(indices).boxed(),
+            PrimitiveArray::from_vec(values).boxed(),
+            len,
+        ).boxed()
+    })
 }
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
@@ -166,7 +211,7 @@ fn best_bit_width(ptype: &PType, bit_width_freq: &[usize]) -> usize {
     best_width
 }
 
-fn num_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
+fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
     bit_width_freq[bit_width + 1..].iter().sum()
 }
 

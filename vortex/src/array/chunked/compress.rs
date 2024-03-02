@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use itertools::Itertools;
 use rayon::prelude::*;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding, CHUNKED_ENCODING};
