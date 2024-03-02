@@ -42,8 +42,19 @@ impl EncodingCompression for GCDEncoding {
         };
 
         // Only supports unsigned ints
-        if !parray.ptype().is_unsigned_int() {
+        // TODO(ngates): cast ints!
+        if !parray.ptype().is_int() {
             debug!("Skipping GCD: only supports integer types");
+            return None;
+        }
+
+        if parray
+            .stats()
+            .get_or_compute_cast::<i64>(&Stat::Min)
+            .unwrap()
+            < 0
+        {
+            debug!("Skipping GCD: only supports positive integers");
             return None;
         }
 
@@ -83,7 +94,7 @@ fn gcd_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
     GCDArray::new(ctx.compress(&shifted, like_gcd.map(|g| g.shifted())), shift).boxed()
 }
 
-fn best_shift(ctz_freq: &[usize]) -> usize {
+fn best_shift(ctz_freq: &[usize]) -> u8 {
     let mut shift = 0;
     for &freq in ctz_freq.iter() {
         if freq > 0 {

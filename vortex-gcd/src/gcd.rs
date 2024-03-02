@@ -113,7 +113,7 @@ impl Array for GCDArray {
 
     #[inline]
     fn nbytes(&self) -> usize {
-        self.encoded().nbytes() + self.patches().map(|p| p.nbytes()).unwrap_or(0)
+        self.shifted.nbytes() + 1
     }
 
     fn serde(&self) -> &dyn ArraySerde {
@@ -155,6 +155,6 @@ impl Encoding for GCDEncoding {
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+        None
     }
 }
