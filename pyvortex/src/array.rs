@@ -16,6 +16,7 @@ use paste::paste;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::array::bool::BoolArray;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::constant::ConstantArray;
@@ -25,15 +26,15 @@ use vortex::array::struct_::StructArray;
 use vortex::array::typed::TypedArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::varbinview::VarBinViewArray;
-use vortex::array::{Array, ArrayKind, ArrayRef};
-use vortex_alp::{ALPArray, ALP_ENCODING};
-use vortex_dict::{DictArray, DICT_ENCODING};
-use vortex_ffor::{FFORArray, FFOR_ENCODING};
-use vortex_ree::{REEArray, REE_ENCODING};
+use vortex_alp::{ALP_ENCODING, ALPArray};
+use vortex_dict::{DICT_ENCODING, DictArray};
+use vortex_fastlanes::BitPackedArray;
+use vortex_ffor::{FFOR_ENCODING, FFORArray};
+use vortex_ree::{REE_ENCODING, REEArray};
 use vortex_roaring::{
-    RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING,
+    ROARING_BOOL_ENCODING, ROARING_INT_ENCODING, RoaringBoolArray, RoaringIntArray,
 };
-use vortex_zigzag::{ZigZagArray, ZIGZAG_ENCODING};
+use vortex_zigzag::{ZIGZAG_ENCODING, ZigZagArray};
 
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
@@ -78,6 +79,7 @@ pyarray!(VarBinArray, "VarBinArray");
 pyarray!(VarBinViewArray, "VarBinViewArray");
 
 pyarray!(ALPArray, "ALPArray");
+pyarray!(BitPackedArray, "BitPackedArray");
 pyarray!(DictArray, "DictArray");
 pyarray!(FFORArray, "FFORArray");
 pyarray!(REEArray, "REEArray");

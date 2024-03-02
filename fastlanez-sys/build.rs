@@ -1,6 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+
 use walkdir::WalkDir;
 
 fn main() {
@@ -8,19 +9,20 @@ fn main() {
         .canonicalize()
         .expect("Failed to canonicalize CARGO_MANIFEST_DIR");
     let root_dir = buildrs_dir
-        .join("../../")
+        .join("../")
         .canonicalize()
         .expect("Failed to canonicalize root dir");
+    let fastlanez_dir = root_dir.join("deps/fastlanez");
 
     // Tell cargo to tell rustc to link codecz
     println!(
         "cargo:rustc-link-search={}",
-        root_dir.join("zig-out/lib").to_str().unwrap()
+        fastlanez_dir.join("zig-out/lib").to_str().unwrap()
     );
     println!("cargo:rustc-link-lib=fastlanez");
 
     rerun_if_changed(&buildrs_dir.join("build.rs"));
-    WalkDir::new(&root_dir.join("src"))
+    WalkDir::new(&fastlanez_dir.join("src"))
         .into_iter()
         .filter_map(|e| e.ok())
         .for_each(|e| rerun_if_changed(e.path()));
@@ -28,10 +30,10 @@ fn main() {
     let zig_opt = get_zig_opt();
     println!("cargo:info=invoking `zig build` with {}", zig_opt);
     if !Command::new("zig")
-        .arg("build")
+        .args(["build", "lib"])
         .arg(zig_opt)
         .args(["--summary", "all"])
-        .current_dir(root_dir.clone())
+        .current_dir(fastlanez_dir.clone())
         .spawn()
         .expect("Could not invoke `zig build`")
         .wait()
@@ -46,8 +48,12 @@ fn main() {
     }
 
     let bindings = bindgen::Builder::default()
-        .header(root_dir
-            .join("zig-out/include/fastlanez.h").to_str().unwrap())
+        .header(
+            fastlanez_dir
+                .join("zig-out/include/fastlanez.h")
+                .to_str()
+                .unwrap(),
+        )
         .clang_args(&[
             get_zig_include().as_ref(),
             "-DZIG_TARGET_MAX_INT_ALIGNMENT=16",
@@ -88,7 +94,7 @@ fn get_zig_opt() -> &'static str {
     if profile_env == "debug" || cfg!(debug_assertions) {
         "-Doptimize=Debug"
     } else if profile_env == "release" || !opt_level_zero {
-        "-Doptimize=ReleaseSafe"
+        "-Doptimize=ReleaseSmall"
     } else {
         // we're in a custom profile, the opt_level is 0, but debug assertions aren't enabled
         // pretty weird case, let's default to debug
@@ -100,14 +106,16 @@ fn get_zig_opt() -> &'static str {
 }
 
 fn get_zig_include() -> String {
-    String::from_utf8(Command::new("bash")
-        .arg("-c")
-        .arg("zig env | grep lib_dir | awk -F'\"' '{print \"-I\"$4}'")
-        .stdout(Stdio::piped())
-        .output()
-        .expect("Failed to execute command")
-        .stdout)
-        .expect("Failed to convert command output to string")
-        .trim_end()
-        .to_string()
+    String::from_utf8(
+        Command::new("bash")
+            .arg("-c")
+            .arg("zig env | grep lib_dir | awk -F'\"' '{print \"-I\"$4}'")
+            .stdout(Stdio::piped())
+            .output()
+            .expect("Failed to execute command")
+            .stdout,
+    )
+    .expect("Failed to convert command output to string")
+    .trim_end()
+    .to_string()
 }

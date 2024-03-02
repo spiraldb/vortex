@@ -1,0 +1,15 @@
+[package]
+name = "vortex-fastlanes"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[dependencies]
+arrayref = "0.3.7"
+vortex = { "path" = "../vortex" }
+linkme = "0.3.22"
+itertools = "0.12.1"
+fastlanez-sys = { path = "../fastlanez-sys" }
+log = "0.4.20"

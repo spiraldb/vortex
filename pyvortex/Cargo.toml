@@ -15,6 +15,7 @@ arrow = { version = "50.0.0", features = ["ffi"] }
 vortex = { path = "../vortex" }
 vortex-alp = { path = "../vortex-alp" }
 vortex-dict = { path = "../vortex-dict" }
+vortex-fastlanes = { path = "../vortex-fastlanes" }
 vortex-ffor = { path = "../vortex-ffor" }
 vortex-ree = { path = "../vortex-ree" }
 vortex-roaring = { path = "../vortex-roaring" }

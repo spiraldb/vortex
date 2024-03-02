@@ -148,7 +148,6 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> ArrayRef {
 
     let candidate_compressors: Vec<&Compressor> = ENCODINGS
         .iter()
-        .filter(|encoding| ctx.options.is_enabled(encoding.id()))
         // TODO(robert): Avoid own encoding to avoid infinite recursion
         .filter(|encoding| encoding.id().name() != array.encoding().id().name())
         .filter(|encoding| ctx.options().is_enabled(encoding.id()))

@@ -1,0 +1,3 @@
+[submodule "deps/fastlanez"]
+	path = deps/fastlanez
+	url = https://github.com/fulcrum-so/fastlanez.git
