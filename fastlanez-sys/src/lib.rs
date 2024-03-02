@@ -19,7 +19,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-use std::mem::{MaybeUninit, size_of};
+use std::mem::{size_of, MaybeUninit};
 
 use arrayref::array_mut_ref;
 use seq_macro::seq;
