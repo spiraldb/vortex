@@ -89,6 +89,8 @@ mod test {
     use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
 
+    use crate::BitPackedEncoding;
+
     use super::*;
 
     #[test]
