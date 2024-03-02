@@ -2833,6 +2833,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-datetime"
+version = "0.1.0"
+dependencies = [
+ "linkme",
+ "log",
+ "vortex",
+]
+
+[[package]]
 name = "vortex-dict"
 version = "0.1.0"
 dependencies = [

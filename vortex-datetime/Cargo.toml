@@ -1,0 +1,9 @@
+[package]
+name = "vortex-datetime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+vortex = { "path" = "../vortex" }
+linkme = "0.3.22"
+log = "0.4.20"

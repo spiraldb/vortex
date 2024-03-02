@@ -7,6 +7,7 @@ members = [
     "vortex",
     "vortex-alloc",
     "vortex-alp",
+    "vortex-datetime",
     "vortex-dict",
     "vortex-ffor",
     "vortex-ree",
