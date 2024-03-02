@@ -16,10 +16,10 @@ use arrayref::array_ref;
 use log::debug;
 
 use fastlanez_sys::TryBitPack;
-use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
@@ -219,8 +219,8 @@ fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 mod test {
     use std::collections::HashSet;
 
-    use vortex::array::Encoding;
     use vortex::array::primitive::PrimitiveEncoding;
+    use vortex::array::Encoding;
 
     use super::*;
 

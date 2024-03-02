@@ -15,9 +15,9 @@
 use itertools::Itertools;
 use log::debug;
 
-use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::match_each_integer_ptype;
 use vortex::stats::Stat;
@@ -86,8 +86,8 @@ fn for_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
 mod test {
     use std::collections::HashSet;
 
-    use vortex::array::Encoding;
     use vortex::array::primitive::PrimitiveEncoding;
+    use vortex::array::Encoding;
 
     use super::*;
 

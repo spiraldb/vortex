@@ -46,10 +46,10 @@ mod test {
     use arrow_array::RecordBatchReader;
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-    use simplelog::{ColorChoice, Config, TerminalMode, TermLogger};
+    use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 
-    use vortex::array::{Array, ArrayRef};
     use vortex::array::chunked::ChunkedArray;
+    use vortex::array::{Array, ArrayRef};
     use vortex::compress::CompressCtx;
     use vortex::dtype::DType;
     use vortex::error::{VortexError, VortexResult};

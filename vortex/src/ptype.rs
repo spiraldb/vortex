@@ -38,16 +38,16 @@ pub enum PType {
 }
 
 pub trait NativePType:
-Send
-+ Sync
-+ Sized
-+ Debug
-+ Display
-+ PartialEq
-+ Default
-+ ArrowNativeType
-+ RefUnwindSafe
-+ TryFrom<Box<dyn Scalar>, Error=VortexError>
+    Send
+    + Sync
+    + Sized
+    + Debug
+    + Display
+    + PartialEq
+    + Default
+    + ArrowNativeType
+    + RefUnwindSafe
+    + TryFrom<Box<dyn Scalar>, Error = VortexError>
 {
     const PTYPE: PType;
 }

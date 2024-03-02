@@ -19,8 +19,8 @@ pub use r#for::*;
 use vortex::array::{EncodingRef, ENCODINGS};
 
 mod bitpacking;
-mod serde;
 mod r#for;
+mod serde;
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_FL_BITPACKING: EncodingRef = &BitPackedEncoding;

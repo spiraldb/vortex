@@ -16,16 +16,16 @@ use std::fs::{create_dir_all, File};
 use std::path::Path;
 
 use arrow_array::RecordBatchReader;
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use rand::{Rng, thread_rng};
 use rand::distributions::{Alphanumeric, Uniform};
 use rand::prelude::SliceRandom;
+use rand::{thread_rng, Rng};
 
-use vortex::array::{Array, ArrayRef};
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::CompressCtx;
 use vortex::dtype::DType;
 use vortex::error::{VortexError, VortexResult};

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use vortex::array::{
-    Array, ArrayRef, ArrowIterator, check_validity_buffer, Encoding, EncodingId, EncodingRef,
+    check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::DType;
