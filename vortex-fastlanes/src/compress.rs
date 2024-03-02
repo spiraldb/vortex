@@ -55,16 +55,17 @@ impl EncodingCompression for BitPackedEncoding {
 
 fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
     let parray = array.as_primitive();
+    let bit_width_freq = parray
+        .stats()
+        .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)
+        .unwrap()
+        .0;
+
     let like_bp = like.map(|l| l.as_any().downcast_ref::<BitPackedArray>().unwrap());
 
-    let bit_width = like_bp.map(|bp| bp.bit_width()).unwrap_or_else(|| {
-        let bit_width_freq = parray
-            .stats()
-            .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)
-            .unwrap()
-            .0;
-        best_bit_width(parray.ptype(), bit_width_freq)
-    });
+    let bit_width = like_bp
+        .map(|bp| bp.bit_width())
+        .unwrap_or_else(|| best_bit_width(parray.ptype(), &bit_width_freq));
 
     return BitPackedArray::try_new(
         bitpack(parray, bit_width as usize),
@@ -74,7 +75,11 @@ fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: Compre
                 like_bp.and_then(|bp| bp.validity().map(|a| a.as_ref())),
             )
         }),
-        bitpack_patches(parray, bit_width),
+        if num_exceptions(bit_width, &bit_width_freq) > 0 {
+            Some(bitpack_patches(parray, bit_width))
+        } else {
+            None
+        },
         bit_width,
         parray.dtype().clone(),
         parray.len(),
@@ -119,13 +124,13 @@ where
     output
 }
 
-fn bitpack_patches(_parray: &PrimitiveArray, _bit_width: u8) -> Option<ArrayRef> {
-    None
+fn bitpack_patches(_parray: &PrimitiveArray, _bit_width: u8) -> ArrayRef {
+    todo!("bitpack_patches")
 }
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
 /// We could try to be clever, but we can never really predict how the exceptions will compress.
-fn best_bit_width(ptype: &PType, bit_width_freq: Vec<usize>) -> u8 {
+fn best_bit_width(ptype: &PType, bit_width_freq: &Vec<usize>) -> u8 {
     let len: usize = bit_width_freq.iter().sum();
     let bytes_per_exception = ptype.byte_width() + 4;
 
@@ -150,6 +155,10 @@ fn best_bit_width(ptype: &PType, bit_width_freq: Vec<usize>) -> u8 {
     best_width as u8
 }
 
+fn num_exceptions(bit_width: u8, bit_width_freq: &Vec<usize>) -> usize {
+    bit_width_freq[(bit_width + 1) as usize..].iter().sum()
+}
+
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
@@ -163,8 +172,8 @@ mod test {
     fn test_best_bit_width() {
         // 10 1-bit values, 20 2-bit, etc.
         let freq = vec![0, 10, 20, 15, 1, 0, 0, 0];
-        // 3-bits => (46 * 3) + (8 * 1 * 5) => 178 bits => 23 bytes
-        assert_eq!(best_bit_width(&PType::U8, freq), 3);
+        // 3-bits => (46 * 3) + (8 * 1 * 5) => 178 bits => 23 bytes and zero exceptions
+        assert_eq!(best_bit_width(&PType::U8, &freq), 3);
     }
 
     #[test]
