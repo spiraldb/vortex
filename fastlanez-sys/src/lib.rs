@@ -27,9 +27,6 @@ use uninit::prelude::VecCapacity;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-#[derive(Debug)]
-pub struct UnsupportedBitWidth;
-
 pub struct Pred<const B: bool>;
 pub trait Satisfied {}
 impl Satisfied for Pred<true> {}
@@ -47,22 +44,37 @@ where
     ) -> &'a [u8; 128 * W as usize];
 }
 
-seq!(N in 1..8 {
-    impl BitPack<N> for u8 {
-        #[inline]
-        fn bitpack<'a>(
-            input: &[Self; 1024],
-            output: &'a mut [MaybeUninit<u8>; 128 * N],
-        ) -> &'a [u8; 128 * N] {
-            unsafe {
-                let output_array: &mut [u8; 128 * N] = std::mem::transmute(output);
-                fl_bitpack_u8_u~N(input, output_array);
-                output_array
-            }
+macro_rules! bitpack_impl {
+    ($T:ty, $W:literal) => {
+        paste::item! {
+            seq!(N in 1..$W {
+                impl BitPack<N> for $T {
+                    #[inline]
+                    fn bitpack<'a>(
+                        input: &[Self; 1024],
+                        output: &'a mut [MaybeUninit<u8>; 128 * N],
+                    ) -> &'a [u8; 128 * N] {
+                        unsafe {
+                            let output_array: &mut [u8; 128 * N] = std::mem::transmute(output);
+                            [<fl_bitpack_ $T _u >]~N(input, output_array);
+                            output_array
+                        }
+                    }
+                }
+            });
         }
-    }
-});
+    };
+}
 
+bitpack_impl!(u8, 8);
+bitpack_impl!(u16, 16);
+bitpack_impl!(u32, 32);
+bitpack_impl!(u64, 64);
+
+#[derive(Debug)]
+pub struct UnsupportedBitWidth;
+
+/// Try to bitpack into a runtime-known bit width.
 pub trait TryBitPack
 where
     Self: Sized,
