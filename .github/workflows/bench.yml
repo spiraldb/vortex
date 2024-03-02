@@ -16,6 +16,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[benchmark]') && github.ref_name == 'develop') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: ./.github/actions/setup-zig
       - uses: ./.github/actions/setup-rust
