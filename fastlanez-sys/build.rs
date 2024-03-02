@@ -22,7 +22,7 @@ fn main() {
     println!("cargo:rustc-link-lib=fastlanez");
 
     rerun_if_changed(&buildrs_dir.join("build.rs"));
-    WalkDir::new(&fastlanez_dir.join("src"))
+    WalkDir::new(fastlanez_dir.join("src"))
         .into_iter()
         .filter_map(|e| e.ok())
         .for_each(|e| rerun_if_changed(e.path()));

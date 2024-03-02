@@ -16,9 +16,9 @@ use arrayref::array_ref;
 use log::debug;
 
 use fastlanez_sys::TryBitPack;
+use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
@@ -109,7 +109,7 @@ where
     let mut output = Vec::with_capacity(num_chunks * bit_width * 128);
 
     // Loop over all but the last chunk.
-    (0..num_chunks - 1).into_iter().for_each(|i| {
+    (0..num_chunks - 1).for_each(|i| {
         let start_elem = i * 1024;
         let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
         TryBitPack::try_bitpack_into(chunk, bit_width as u8, &mut output).unwrap();
@@ -130,7 +130,7 @@ fn bitpack_patches(_parray: &PrimitiveArray, _bit_width: u8) -> ArrayRef {
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
 /// We could try to be clever, but we can never really predict how the exceptions will compress.
-fn best_bit_width(ptype: &PType, bit_width_freq: &Vec<usize>) -> u8 {
+fn best_bit_width(ptype: &PType, bit_width_freq: &[usize]) -> u8 {
     let len: usize = bit_width_freq.iter().sum();
     let bytes_per_exception = ptype.byte_width() + 4;
 
@@ -155,7 +155,7 @@ fn best_bit_width(ptype: &PType, bit_width_freq: &Vec<usize>) -> u8 {
     best_width as u8
 }
 
-fn num_exceptions(bit_width: u8, bit_width_freq: &Vec<usize>) -> usize {
+fn num_exceptions(bit_width: u8, bit_width_freq: &[usize]) -> usize {
     bit_width_freq[(bit_width + 1) as usize..].iter().sum()
 }
 
@@ -163,8 +163,8 @@ fn num_exceptions(bit_width: u8, bit_width_freq: &Vec<usize>) -> usize {
 mod test {
     use std::collections::HashSet;
 
-    use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
+    use vortex::array::primitive::PrimitiveEncoding;
 
     use super::*;
 

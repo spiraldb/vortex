@@ -19,7 +19,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-use std::mem::{size_of, MaybeUninit};
+use std::mem::{MaybeUninit, size_of};
 
 use arrayref::array_mut_ref;
 use seq_macro::seq;
@@ -58,7 +58,7 @@ where
         output: &'a mut [MaybeUninit<u8>],
     ) -> Result<&'a [u8], UnsupportedBitWidth>;
 
-    fn try_bitpack_into<'a>(
+    fn try_bitpack_into(
         input: &[Self; 1024],
         width: u8,
         output: &mut Vec<u8>,
