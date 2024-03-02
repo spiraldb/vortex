@@ -44,33 +44,6 @@ where
     ) -> &'a [u8; 128 * W as usize];
 }
 
-macro_rules! bitpack_impl {
-    ($T:ty, $W:literal) => {
-        paste::item! {
-            seq!(N in 1..$W {
-                impl BitPack<N> for $T {
-                    #[inline]
-                    fn bitpack<'a>(
-                        input: &[Self; 1024],
-                        output: &'a mut [MaybeUninit<u8>; 128 * N],
-                    ) -> &'a [u8; 128 * N] {
-                        unsafe {
-                            let output_array: &mut [u8; 128 * N] = std::mem::transmute(output);
-                            [<fl_bitpack_ $T _u >]~N(input, output_array);
-                            output_array
-                        }
-                    }
-                }
-            });
-        }
-    };
-}
-
-bitpack_impl!(u8, 8);
-bitpack_impl!(u16, 16);
-bitpack_impl!(u32, 32);
-bitpack_impl!(u64, 64);
-
 #[derive(Debug)]
 pub struct UnsupportedBitWidth;
 
@@ -96,17 +69,44 @@ where
     }
 }
 
-impl TryBitPack for u8 {
-    fn try_bitpack<'a>(
-        input: &[Self; 1024],
-        width: u8,
-        output: &'a mut [MaybeUninit<u8>],
-    ) -> Result<&'a [u8], UnsupportedBitWidth> {
-        seq!(N in 1..8 {
-            match width {
-                #(N => Ok(BitPack::<N>::bitpack(input, array_mut_ref![output, 0, N * 128]).as_slice()),)*
-                _ => Err(UnsupportedBitWidth),
+macro_rules! bitpack_impl {
+    ($T:ty, $W:literal) => {
+        paste::item! {
+            seq!(N in 1..$W {
+                impl BitPack<N> for $T {
+                    #[inline]
+                    fn bitpack<'a>(
+                        input: &[Self; 1024],
+                        output: &'a mut [MaybeUninit<u8>; 128 * N],
+                    ) -> &'a [u8; 128 * N] {
+                            unsafe {
+                                let output_array: &mut [u8; 128 * N] = std::mem::transmute(output);
+                                [<fl_bitpack_ $T _u >]~N(input, output_array);
+                                output_array
+                            }
+                    }
+                }
+            });
+        }
+
+        impl TryBitPack for $T {
+            fn try_bitpack<'a>(
+                input: &[Self; 1024],
+                width: u8,
+                output: &'a mut [MaybeUninit<u8>],
+            ) -> Result<&'a [u8], UnsupportedBitWidth> {
+                seq!(N in 1..$W {
+                    match width {
+                        #(N => Ok(BitPack::<N>::bitpack(input, array_mut_ref![output, 0, N * 128]).as_slice()),)*
+                        _ => Err(UnsupportedBitWidth),
+                    }
+                })
             }
-        })
-    }
+        }
+    };
 }
+
+bitpack_impl!(u8, 8);
+bitpack_impl!(u16, 16);
+bitpack_impl!(u32, 32);
+bitpack_impl!(u64, 64);
