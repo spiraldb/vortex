@@ -16,9 +16,9 @@ use arrayref::array_ref;
 use log::debug;
 
 use fastlanez_sys::TryBitPack;
-use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
@@ -163,8 +163,8 @@ fn num_exceptions(bit_width: u8, bit_width_freq: &Vec<usize>) -> usize {
 mod test {
     use std::collections::HashSet;
 
-    use vortex::array::Encoding;
     use vortex::array::primitive::PrimitiveEncoding;
+    use vortex::array::Encoding;
 
     use super::*;
 
