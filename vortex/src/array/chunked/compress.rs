@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use itertools::Itertools;
 use rayon::prelude::*;
 
-use crate::array::chunked::{ChunkedArray, ChunkedEncoding, CHUNKED_ENCODING};
-use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef};
+use crate::array::chunked::{CHUNKED_ENCODING, ChunkedArray, ChunkedEncoding};
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 
 impl EncodingCompression for ChunkedEncoding {
