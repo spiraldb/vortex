@@ -14,9 +14,9 @@
 
 use rayon::prelude::*;
 
-use crate::array::{Array, ArrayRef};
-use crate::array::chunked::{CHUNKED_ENCODING, ChunkedArray, ChunkedEncoding};
+use crate::array::chunked::{ChunkedArray, ChunkedEncoding, CHUNKED_ENCODING};
 use crate::array::downcast::DowncastArrayBuiltin;
+use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 
 impl EncodingCompression for ChunkedEncoding {
