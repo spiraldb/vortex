@@ -22,7 +22,7 @@ use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompress
 use vortex::match_each_integer_ptype;
 use vortex::stats::Stat;
 
-use crate::{BitPackedEncoding, FoRArray, FoREncoding};
+use crate::{FoRArray, FoREncoding};
 
 impl EncodingCompression for FoREncoding {
     fn compressor(

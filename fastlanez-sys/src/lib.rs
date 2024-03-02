@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]

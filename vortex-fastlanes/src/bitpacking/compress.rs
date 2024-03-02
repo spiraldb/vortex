@@ -135,10 +135,7 @@ fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
     PrimitiveArray::from_vec(bytes).boxed()
 }
 
-fn bitpack_primitive<T: NativePType>(array: &[T], bit_width: usize) -> Vec<u8>
-where
-    T: TryBitPack,
-{
+fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize) -> Vec<u8> {
     // How many fastlanes vectors we will process.
     let num_chunks = (array.len() + 1023) / 1024;
 
