@@ -12,6 +12,7 @@ vortex = { path = "../vortex" }
 vortex-alp = { path = "../vortex-alp" }
 vortex-dict = { path = "../vortex-dict" }
 vortex-ffor = { path = "../vortex-ffor" }
+vortex-gcd = { path = "../vortex-gcd" }
 vortex-ree = { path = "../vortex-ree" }
 vortex-roaring = { path = "../vortex-roaring" }
 vortex-zigzag = { path = "../vortex-zigzag" }

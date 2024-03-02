@@ -2827,6 +2827,7 @@ dependencies = [
  "vortex-alp",
  "vortex-dict",
  "vortex-ffor",
+ "vortex-gcd",
  "vortex-ree",
  "vortex-roaring",
  "vortex-zigzag",
