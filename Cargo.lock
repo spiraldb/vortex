@@ -2858,6 +2858,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-gcd"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "codecz",
+ "itertools 0.12.1",
+ "linkme",
+ "log",
+ "vortex",
+]
+
+[[package]]
 name = "vortex-ree"
 version = "0.1.0"
 dependencies = [

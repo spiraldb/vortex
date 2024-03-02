@@ -25,7 +25,9 @@ use crate::scalar::{ListScalarVec, Scalar};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stat {
+    // TODO(ngates): convert this to leading zeros?
     BitWidthFreq,
+    TrailingZerosFreq,
     IsConstant,
     IsSorted,
     IsStrictSorted,

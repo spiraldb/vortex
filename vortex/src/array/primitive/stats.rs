@@ -85,6 +85,9 @@ where
     let mut bit_widths: Vec<u64> = vec![0; bitwidth + 1];
     bit_widths[bitwidth - typed_buf[0].leading_zeros() as usize] += 1;
 
+    let mut ctz: Vec<u64> = vec![0; bitwidth + 1];
+    ctz[typed_buf[0].trailing_zeros() as usize] += 1;
+
     let mut is_sorted = true;
     let mut is_strict_sorted = true;
     let mut min = typed_buf[0];
@@ -94,6 +97,7 @@ where
 
     for v in &typed_buf[1..] {
         bit_widths[bitwidth - v.leading_zeros() as usize] += 1;
+        ctz[v.trailing_zeros() as usize] += 1;
         if last_val == *v {
             is_strict_sorted = false;
         } else {
@@ -116,6 +120,7 @@ where
         (Stat::Max, max.into()),
         (Stat::IsConstant, (min == max).into()),
         (Stat::BitWidthFreq, ListScalarVec(bit_widths).into()),
+        (Stat::TrailingZerosFreq, ListScalarVec(ctz).into()),
         (Stat::IsSorted, is_sorted.into()),
         (Stat::IsStrictSorted, (is_sorted && is_strict_sorted).into()),
         (Stat::RunCount, run_count.into()),
@@ -161,8 +166,8 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::array::primitive::PrimitiveArray;
     use crate::array::Array;
+    use crate::array::primitive::PrimitiveArray;
     use crate::scalar::ListScalarVec;
     use crate::stats::Stat;
 
