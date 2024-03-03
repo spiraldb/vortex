@@ -99,16 +99,13 @@ fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: Compre
 
     return BitPackedArray::try_new(
         bitpack(parray, bit_width),
-        parray.validity().map(|v| {
-            ctx.compress(
-                v.as_ref(),
-                like_bp.and_then(|bp| bp.validity().map(|a| a.as_ref())),
-            )
-        }),
+        parray
+            .validity()
+            .map(|v| ctx.compress(v.as_ref(), like_bp.and_then(|bp| bp.validity()))),
         if num_exceptions > 0 {
             Some(ctx.compress(
                 bitpack_patches(parray, bit_width, num_exceptions).as_ref(),
-                like_bp.and_then(|bp| bp.patches()).map(|a| a.as_ref()),
+                like_bp.and_then(|bp| bp.patches()),
             ))
         } else {
             None

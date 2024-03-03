@@ -20,7 +20,6 @@ use vortex::array::{EncodingRef, ENCODINGS};
 
 mod bitpacking;
 mod r#for;
-mod serde;
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_FL_BITPACKING: EncodingRef = &BitPackedEncoding;

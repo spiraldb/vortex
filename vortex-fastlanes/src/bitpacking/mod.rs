@@ -14,6 +14,7 @@ use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 
 mod compress;
+mod serde;
 
 #[derive(Debug, Clone)]
 pub struct BitPackedArray {
@@ -62,13 +63,13 @@ impl BitPackedArray {
     }
 
     #[inline]
-    pub fn validity(&self) -> Option<&ArrayRef> {
-        self.validity.as_ref()
+    pub fn validity(&self) -> Option<&dyn Array> {
+        self.validity.as_deref()
     }
 
     #[inline]
-    pub fn patches(&self) -> Option<&ArrayRef> {
-        self.patches.as_ref()
+    pub fn patches(&self) -> Option<&dyn Array> {
+        self.patches.as_deref()
     }
 
     pub fn is_valid(&self, index: usize) -> bool {
@@ -194,7 +195,6 @@ impl Encoding for BitPackedEncoding {
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
-        None
-        // Some(self)
+        Some(self)
     }
 }

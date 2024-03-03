@@ -12,6 +12,7 @@ use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 
 mod compress;
+mod serde;
 
 #[derive(Debug, Clone)]
 pub struct FoRArray {
@@ -144,7 +145,6 @@ impl Encoding for FoREncoding {
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
-        None
-        // Some(self)
+        Some(self)
     }
 }
