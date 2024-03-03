@@ -16,18 +16,18 @@ use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::{ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray};
 use arrow::array::AsArray;
 use arrow::array::BooleanBufferBuilder;
+use arrow::array::{ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray};
 use arrow::buffer::{NullBuffer, ScalarBuffer};
 use arrow::datatypes::UInt32Type;
 use linkme::distributed_slice;
 
+use crate::array::ENCODINGS;
 use crate::array::{
-    Array, ArrayRef, ArrowIterator, check_index_bounds, check_slice_bounds, Encoding, EncodingId,
+    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
-use crate::array::ENCODINGS;
 use crate::compress::EncodingCompression;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::dtype::{DType, Nullability, Signedness};
@@ -271,8 +271,8 @@ mod test {
     use arrow::datatypes::Int32Type;
     use itertools::Itertools;
 
-    use crate::array::Array;
     use crate::array::sparse::SparseArray;
+    use crate::array::Array;
     use crate::error::VortexError;
 
     fn sparse_array() -> SparseArray {
