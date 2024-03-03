@@ -16,18 +16,18 @@ use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::{
-    Array as ArrowArray, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
-};
-use arrow::datatypes::{Field, Fields};
-use num_traits::AsPrimitive;
+use arrow::array::{ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray};
+use arrow::array::AsArray;
+use arrow::array::BooleanBufferBuilder;
+use arrow::buffer::{NullBuffer, ScalarBuffer};
+use arrow::datatypes::UInt32Type;
+use linkme::distributed_slice;
 
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    Array, ArrayRef, ArrowIterator, check_index_bounds, check_slice_bounds, Encoding, EncodingId,
     EncodingRef,
 };
-use crate::array::{ArrowArrayRef, ENCODINGS};
-use crate::arrow::CombineChunks;
+use crate::array::ENCODINGS;
 use crate::compress::EncodingCompression;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::dtype::{DType, Nullability, Signedness};
@@ -37,9 +37,6 @@ use crate::match_arrow_numeric_type;
 use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
-use arrow::array::AsArray;
-use itertools::Itertools;
-use linkme::distributed_slice;
 
 mod compress;
 mod serde;
@@ -52,7 +49,6 @@ pub struct SparseArray {
     // Offset value for patch indices as a result of slicing
     indices_offset: usize,
     len: usize,
-    dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
@@ -78,19 +74,10 @@ impl SparseArray {
             return Err(VortexError::InvalidDType(indices.dtype().clone()));
         }
 
-        let dtype = DType::Struct(
-            vec![
-                Arc::new("indices".to_string()),
-                Arc::new("values".to_string()),
-            ],
-            vec![indices.dtype().clone(), values.dtype().clone()],
-        );
-
         Ok(Self {
             indices,
             values,
             indices_offset,
-            dtype,
             len,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
@@ -140,7 +127,7 @@ impl Array for SparseArray {
 
     #[inline]
     fn dtype(&self) -> &DType {
-        &self.dtype
+        self.values().dtype()
     }
 
     #[inline]
@@ -175,37 +162,37 @@ impl Array for SparseArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        // TODO(robert): Use compute dispatch to perform subtract
-        let indices_array = match_arrow_numeric_type!(self.indices().dtype(), |$E| {
-            let indices: Vec<<$E as ArrowPrimitiveType>::Native> = self
-                .indices()
-                .iter_arrow()
-                .flat_map(|c| {
-                        let ends = c.as_primitive::<$E>()
-                            .values()
-                            .iter()
-                            .map(|v| *v - AsPrimitive::<<$E as ArrowPrimitiveType>::Native>::as_(self.indices_offset))
-                            .collect::<Vec<_>>();
-                        ends.into_iter()
-                })
-                .collect();
-            Arc::new(ArrowPrimitiveArray::<$E>::from(indices)) as ArrowArrayRef
+        // Resolve our indices into a vector of usize applying the offset
+        let mut indices = Vec::with_capacity(self.len());
+        self.indices().iter_arrow().for_each(|c| {
+            indices.extend(
+                c.as_primitive::<UInt32Type>()
+                    .values()
+                    .into_iter()
+                    .map(|v| (*v as usize) - self.indices_offset),
+            )
         });
 
-        let DType::Struct(names, children) = self.dtype() else {
-            unreachable!("DType should have been a struct")
-        };
-        let fields: Fields = names
-            .iter()
-            .zip_eq(children)
-            .map(|(name, dtype)| Field::new(name.as_str(), dtype.into(), dtype.is_nullable()))
-            .map(Arc::new)
-            .collect();
-        Box::new(iter::once(Arc::new(ArrowStructArray::new(
-            fields,
-            vec![indices_array, self.values.iter_arrow().combine_chunks()],
-            None,
-        )) as Arc<dyn ArrowArray>))
+        let array: ArrowArrayRef = match_arrow_numeric_type!(self.values().dtype(), |$E| {
+            let mut validity = BooleanBufferBuilder::new(self.len());
+            validity.append_n(self.len(), false);
+            let mut values = vec![<$E as ArrowPrimitiveType>::Native::default(); self.len()];
+            let mut offset = 0;
+            for values_array in self.values().iter_arrow() {
+                for v in values_array.as_primitive::<$E>().values() {
+                    let idx = indices[offset];
+                    values[idx] = *v;
+                    validity.set_bit(idx, true);
+                    offset += 1;
+                }
+            }
+            Arc::new(ArrowPrimitiveArray::<$E>::new(
+                ScalarBuffer::from(values),
+                Some(NullBuffer::from(validity.finish())),
+            ))
+        });
+
+        Box::new(iter::once(array))
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
@@ -219,7 +206,6 @@ impl Array for SparseArray {
             indices_offset: self.indices_offset + start,
             indices: self.indices.slice(index_start_index, index_end_index)?,
             values: self.values.slice(index_start_index, index_end_index)?,
-            dtype: self.dtype.clone(),
             len: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
@@ -281,44 +267,47 @@ impl Encoding for SparseEncoding {
 
 #[cfg(test)]
 mod test {
-    use crate::array::sparse::SparseArray;
-    use crate::array::Array;
-    use crate::error::VortexError;
     use arrow::array::AsArray;
-    use arrow::datatypes::{Int32Type, UInt32Type};
+    use arrow::datatypes::Int32Type;
+    use itertools::Itertools;
+
+    use crate::array::Array;
+    use crate::array::sparse::SparseArray;
+    use crate::error::VortexError;
 
     fn sparse_array() -> SparseArray {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
-        SparseArray::new(vec![2u32, 5, 8].into(), vec![100, 200, 300].into(), 10)
+        SparseArray::new(vec![2u32, 5, 8].into(), vec![100i32, 200, 300].into(), 10)
     }
 
-    fn assert_sparse_array(sparse: &dyn Array, values: (&[u32], &[i32])) {
-        let sparse_arrow = sparse.as_ref().iter_arrow().next().unwrap();
-        assert_eq!(
-            *sparse_arrow
-                .as_struct()
-                .column_by_name("indices")
-                .unwrap()
-                .as_primitive::<UInt32Type>()
-                .values(),
-            values.0
-        );
-        assert_eq!(
-            *sparse_arrow
-                .as_struct()
-                .column_by_name("values")
-                .unwrap()
-                .as_primitive::<Int32Type>()
-                .values(),
-            values.1
-        );
+    fn assert_sparse_array(sparse: &dyn Array, values: &[Option<i32>]) {
+        let sparse_arrow = sparse
+            .as_ref()
+            .iter_arrow()
+            .next()
+            .unwrap()
+            .as_primitive::<Int32Type>()
+            .into_iter()
+            .collect_vec();
+        assert_eq!(sparse_arrow, values);
     }
 
     #[test]
     pub fn iter() {
         assert_sparse_array(
             sparse_array().as_ref(),
-            (&[2u32, 5, 8], &[100i32, 200, 300]),
+            &[
+                None,
+                None,
+                Some(100),
+                None,
+                None,
+                Some(200),
+                None,
+                None,
+                Some(300),
+                None,
+            ],
         );
     }
 
@@ -326,17 +315,20 @@ mod test {
     pub fn iter_sliced() {
         assert_sparse_array(
             sparse_array().slice(2, 7).unwrap().as_ref(),
-            (&[0u32, 3], &[100i32, 200]),
+            &[Some(100), None, None, Some(200), None],
         );
     }
 
     #[test]
     pub fn iter_sliced_twice() {
         let sliced_once = sparse_array().slice(1, 8).unwrap();
-        assert_sparse_array(sliced_once.as_ref(), (&[1u32, 4], &[100i32, 200]));
+        assert_sparse_array(
+            sliced_once.as_ref(),
+            &[None, Some(100), None, None, Some(200), None, None],
+        );
         assert_sparse_array(
             sliced_once.slice(1, 6).unwrap().as_ref(),
-            (&[0u32, 3], &[100i32, 200]),
+            &[Some(100), None, None, Some(200), None],
         );
     }
 
