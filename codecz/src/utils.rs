@@ -14,22 +14,24 @@
 
 extern crate alloc;
 
-use crate::{AlignedVec, ALIGNED_ALLOCATOR};
 use alloc::sync::Arc;
-use arrow_buffer::{BooleanBuffer, Buffer};
 use core::ptr::NonNull;
 
-pub fn into_u32_vec(bb: &BooleanBuffer, cardinality: usize) -> AlignedVec<u32> {
-    let mut vec: AlignedVec<u32> = AlignedVec::with_capacity_in(cardinality, ALIGNED_ALLOCATOR);
+use arrow_buffer::{BooleanBuffer, Buffer};
+
+use crate::{AlignedVec, ALIGNED_ALLOCATOR};
+
+pub fn into_u64_vec(bb: &BooleanBuffer, cardinality: usize) -> AlignedVec<u64> {
+    let mut vec: AlignedVec<u64> = AlignedVec::with_capacity_in(cardinality, ALIGNED_ALLOCATOR);
     if cardinality > 0 {
         for idx in bb.set_indices() {
-            vec.push(idx as u32);
+            vec.push(idx as u64);
         }
     }
     vec
 }
 
-pub fn gather_patches<T: Copy + Sized>(data: &[T], indices: &[u32]) -> AlignedVec<T> {
+pub fn gather_patches<T: Copy + Sized>(data: &[T], indices: &[u64]) -> AlignedVec<T> {
     let mut vec: AlignedVec<T> = AlignedVec::with_capacity_in(indices.len(), ALIGNED_ALLOCATOR);
     for idx in indices {
         vec.push(data[*idx as usize]);

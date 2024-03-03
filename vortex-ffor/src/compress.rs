@@ -14,7 +14,6 @@
 
 use log::debug;
 
-use crate::downcast::DowncastFFOR;
 use codecz::ffor;
 use codecz::ffor::{FforEncoded, SupportsFFoR};
 use vortex::array::downcast::DowncastArrayBuiltin;
@@ -27,6 +26,7 @@ use vortex::ptype::NativePType;
 use vortex::scalar::{ListScalarVec, NullableScalar, Scalar};
 use vortex::stats::Stat;
 
+use crate::downcast::DowncastFFOR;
 use crate::ffor::{FFORArray, FFoREncoding};
 
 impl EncodingCompression for FFoREncoding {
@@ -145,7 +145,7 @@ where
     } else {
         let (patch_values, patch_indices) =
             ffor::collect_exceptions(values, num_bits, min_val, num_exceptions).unwrap();
-        let patch_indices = codecz::utils::into_u32_vec(&patch_indices, num_exceptions);
+        let patch_indices = codecz::utils::into_u64_vec(&patch_indices, num_exceptions);
         Some(
             SparseArray::new(
                 PrimitiveArray::from_vec_in(patch_indices).boxed(),
