@@ -17,6 +17,7 @@ use std::io::ErrorKind;
 
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::{Array, ArrayRef};
+use crate::dtype::DType;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for SparseArray {
@@ -33,8 +34,8 @@ impl EncodingSerde for SparseEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
         let len = ctx.read_usize()?;
         let offset = ctx.read_usize()?;
-        let indices = ctx.subfield(0).read()?;
-        let values = ctx.subfield(1).read()?;
+        let indices = ctx.with_schema(&DType::IDX).read()?;
+        let values = ctx.read()?;
         Ok(SparseArray::new_with_offset(indices, values, len, offset)
             .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?
             .boxed())
@@ -52,7 +53,7 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = SparseArray::new(
-            PrimitiveArray::from_vec(vec![7u8, 37, 71, 97]).boxed(),
+            PrimitiveArray::from_vec(vec![7u64, 37, 71, 97]).boxed(),
             PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]).boxed(),
             100,
         );

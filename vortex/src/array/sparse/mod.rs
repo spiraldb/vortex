@@ -16,21 +16,21 @@ use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
+use arrow::array::{ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray};
 use arrow::array::AsArray;
 use arrow::array::BooleanBufferBuilder;
-use arrow::array::{ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray};
 use arrow::buffer::{NullBuffer, ScalarBuffer};
-use arrow::datatypes::UInt32Type;
+use arrow::datatypes::UInt64Type;
 use linkme::distributed_slice;
 
-use crate::array::ENCODINGS;
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    Array, ArrayRef, ArrowIterator, check_index_bounds, check_slice_bounds, Encoding, EncodingId,
     EncodingRef,
 };
+use crate::array::ENCODINGS;
 use crate::compress::EncodingCompression;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
-use crate::dtype::{DType, Nullability, Signedness};
+use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_arrow_numeric_type;
@@ -67,10 +67,7 @@ impl SparseArray {
         len: usize,
         indices_offset: usize,
     ) -> VortexResult<Self> {
-        if !matches!(
-            indices.dtype(),
-            DType::Int(_, Signedness::Unsigned, Nullability::NonNullable)
-        ) {
+        if !matches!(indices.dtype(), &DType::IDX) {
             return Err(VortexError::InvalidDType(indices.dtype().clone()));
         }
 
@@ -166,7 +163,7 @@ impl Array for SparseArray {
         let mut indices = Vec::with_capacity(self.len());
         self.indices().iter_arrow().for_each(|c| {
             indices.extend(
-                c.as_primitive::<UInt32Type>()
+                c.as_primitive::<UInt64Type>()
                     .values()
                     .into_iter()
                     .map(|v| (*v as usize) - self.indices_offset),
@@ -271,13 +268,13 @@ mod test {
     use arrow::datatypes::Int32Type;
     use itertools::Itertools;
 
-    use crate::array::sparse::SparseArray;
     use crate::array::Array;
+    use crate::array::sparse::SparseArray;
     use crate::error::VortexError;
 
     fn sparse_array() -> SparseArray {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
-        SparseArray::new(vec![2u32, 5, 8].into(), vec![100i32, 200, 300].into(), 10)
+        SparseArray::new(vec![2u64, 5, 8].into(), vec![100i32, 200, 300].into(), 10)
     }
 
     fn assert_sparse_array(sparse: &dyn Array, values: &[Option<i32>]) {
