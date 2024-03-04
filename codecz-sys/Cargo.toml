@@ -1,8 +1,15 @@
 [package]
 name = "codecz-sys"
-version = "0.1.0"
-edition = "2021"
-links = "codecz"
+version = { workspace = true }
+description = "Rust bindings for vortex zig compression codecs"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 
 [lints]
 workspace = true
