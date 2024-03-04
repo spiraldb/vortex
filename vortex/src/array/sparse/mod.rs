@@ -11,8 +11,7 @@ use linkme::distributed_slice;
 
 use crate::array::ENCODINGS;
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef,
+    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 use crate::compress::EncodingCompression;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
@@ -20,11 +19,11 @@ use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_arrow_numeric_type;
-use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -116,32 +115,6 @@ impl Array for SparseArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-
-        // Check whether `true_patch_index` exists in the patch index array
-        // First, get the index of the patch index array that is the first index
-        // greater than or equal to the true index
-        let true_patch_index = index + self.indices_offset;
-        search_sorted_usize(self.indices(), true_patch_index, SearchSortedSide::Left).and_then(
-            |idx| {
-                // If the value at this index is equal to the true index, then it exists in the patch index array
-                // and we should return the value at the corresponding index in the patch values array
-                self.indices()
-                    .scalar_at(idx)
-                    .or_else(|_| Ok(NullableScalar::none(self.values().dtype().clone()).boxed()))
-                    .and_then(usize::try_from)
-                    .and_then(|patch_index| {
-                        if patch_index == true_patch_index {
-                            self.values().scalar_at(idx)
-                        } else {
-                            Ok(NullableScalar::none(self.values().dtype().clone()).boxed())
-                        }
-                    })
-            },
-        )
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -258,6 +231,7 @@ mod test {
 
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
+    use crate::compute::scalar_at::scalar_at;
     use crate::error::VortexError;
 
     fn sparse_array() -> SparseArray {
@@ -318,13 +292,13 @@ mod test {
     }
 
     #[test]
-    pub fn scalar_at() {
+    pub fn test_scalar_at() {
         assert_eq!(
-            usize::try_from(sparse_array().scalar_at(2).unwrap()).unwrap(),
+            usize::try_from(scalar_at(sparse_array().as_ref(), 2).unwrap()).unwrap(),
             100
         );
         assert_eq!(
-            sparse_array().scalar_at(10).err().unwrap(),
+            scalar_at(sparse_array().as_ref(), 10).err().unwrap(),
             VortexError::OutOfBounds(10, 0, 10)
         );
     }
@@ -332,9 +306,12 @@ mod test {
     #[test]
     pub fn scalar_at_sliced() {
         let sliced = sparse_array().slice(2, 7).unwrap();
-        assert_eq!(usize::try_from(sliced.scalar_at(0).unwrap()).unwrap(), 100);
         assert_eq!(
-            sliced.scalar_at(5).err().unwrap(),
+            usize::try_from(scalar_at(sliced.as_ref(), 0).unwrap()).unwrap(),
+            100
+        );
+        assert_eq!(
+            scalar_at(sliced.as_ref(), 5).err().unwrap(),
             VortexError::OutOfBounds(5, 0, 5)
         );
     }
@@ -343,21 +320,21 @@ mod test {
     pub fn scalar_at_sliced_twice() {
         let sliced_once = sparse_array().slice(1, 8).unwrap();
         assert_eq!(
-            usize::try_from(sliced_once.scalar_at(1).unwrap()).unwrap(),
+            usize::try_from(scalar_at(sliced_once.as_ref(), 1).unwrap()).unwrap(),
             100
         );
         assert_eq!(
-            sliced_once.scalar_at(7).err().unwrap(),
+            scalar_at(sliced_once.as_ref(), 7).err().unwrap(),
             VortexError::OutOfBounds(7, 0, 7)
         );
 
         let sliced_twice = sliced_once.slice(1, 6).unwrap();
         assert_eq!(
-            usize::try_from(sliced_twice.scalar_at(3).unwrap()).unwrap(),
+            usize::try_from(scalar_at(sliced_twice.as_ref(), 3).unwrap()).unwrap(),
             200
         );
         assert_eq!(
-            sliced_twice.scalar_at(5).err().unwrap(),
+            scalar_at(sliced_twice.as_ref(), 5).err().unwrap(),
             VortexError::OutOfBounds(5, 0, 5)
         );
     }

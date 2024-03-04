@@ -9,11 +9,11 @@ use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -83,11 +83,6 @@ impl Array for TypedArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        let underlying = self.array.scalar_at(index)?;
-        underlying.as_ref().cast(self.dtype())
     }
 
     // TODO(robert): Have cast happen in enc space and not in arrow space
@@ -166,6 +161,7 @@ mod test {
 
     use crate::array::typed::TypedArray;
     use crate::array::Array;
+    use crate::compute::scalar_at::scalar_at;
     use crate::dtype::{DType, Nullability, TimeUnit};
     use crate::scalar::{LocalTimeScalar, PScalar, Scalar};
 
@@ -176,11 +172,11 @@ mod test {
             DType::LocalTime(TimeUnit::Us, Nullability::NonNullable),
         );
         assert_eq!(
-            arr.scalar_at(0).unwrap().as_ref(),
+            scalar_at(arr.as_ref(), 0).unwrap().as_ref(),
             &LocalTimeScalar::new(PScalar::U64(64_799_000_000), TimeUnit::Us) as &dyn Scalar
         );
         assert_eq!(
-            arr.scalar_at(1).unwrap().as_ref(),
+            scalar_at(arr.as_ref(), 1).unwrap().as_ref(),
             &LocalTimeScalar::new(PScalar::U64(43_000_000_000), TimeUnit::Us) as &dyn Scalar
         );
     }

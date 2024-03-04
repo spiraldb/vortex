@@ -1,14 +1,11 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-};
+use vortex::array::{check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId};
 use vortex::compress::EncodingCompression;
 use vortex::dtype::{DType, Signedness};
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 
@@ -73,12 +70,6 @@ impl Array for DictArray {
 
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-        let dict_index: usize = self.codes().scalar_at(index)?.try_into()?;
-        self.dict().scalar_at(dict_index)
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
