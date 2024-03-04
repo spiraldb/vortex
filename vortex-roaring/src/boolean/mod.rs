@@ -5,19 +5,19 @@ use croaring::{Bitmap, Native};
 
 use compress::roaring_encode;
 use vortex::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef,
+    check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    EncodingRef,
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::DType;
 use vortex::dtype::Nullability::NonNullable;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -82,16 +82,6 @@ impl Array for RoaringBoolArray {
 
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-
-        if self.bitmap.contains(index as u32) {
-            Ok(true.into())
-        } else {
-            Ok(false.into())
-        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

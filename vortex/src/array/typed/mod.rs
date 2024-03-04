@@ -9,11 +9,11 @@ use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -83,11 +83,6 @@ impl Array for TypedArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        let underlying = self.array.scalar_at(index)?;
-        underlying.as_ref().cast(self.dtype())
     }
 
     // TODO(robert): Have cast happen in enc space and not in arrow space

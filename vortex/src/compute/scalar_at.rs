@@ -12,8 +12,7 @@ pub fn scalar_at(array: &dyn Array, index: usize) -> VortexResult<Box<dyn Scalar
     }
 
     array
-        .compute()
-        .and_then(|c| c.scalar_at())
+        .scalar_at()
         .map(|t| t.scalar_at(index))
         .unwrap_or_else(|| {
             // TODO(ngates): default implementation of decode and then try again

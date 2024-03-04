@@ -6,10 +6,11 @@ use vortex::array::{
     check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 use vortex::compress::EncodingCompression;
+use vortex::compute::scalar_at::scalar_at;
+use vortex::compute::ArrayCompute;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::scalar::{NullableScalar, Scalar};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 
@@ -74,7 +75,7 @@ impl BitPackedArray {
 
     pub fn is_valid(&self, index: usize) -> bool {
         self.validity()
-            .map(|v| v.scalar_at(index).and_then(|v| v.try_into()).unwrap())
+            .map(|v| scalar_at(v, index).and_then(|v| v.try_into()).unwrap())
             .unwrap_or(true)
     }
 }
@@ -115,22 +116,6 @@ impl Array for BitPackedArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        if !self.is_valid(index) {
-            return Ok(NullableScalar::none(self.dtype().clone()).boxed());
-        }
-
-        if let Some(patch) = self
-            .patches()
-            .and_then(|p| p.scalar_at(index).ok())
-            .and_then(|p| p.into_nonnull())
-        {
-            return Ok(patch);
-        }
-
-        todo!("Decode single element from BitPacked array");
-    }
-
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         todo!()
     }
@@ -155,6 +140,8 @@ impl Array for BitPackedArray {
         self
     }
 }
+
+impl ArrayCompute for BitPackedArray {}
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for BitPackedArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {

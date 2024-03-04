@@ -1,5 +1,4 @@
 use crate::compute::scalar_at::ScalarAtFn;
-use polars_arrow::scalar::Scalar;
 use take::TakeFn;
 
 pub mod add;

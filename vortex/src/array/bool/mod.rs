@@ -8,10 +8,10 @@ use linkme::distributed_slice;
 
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
+use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, Nullability};
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 
@@ -50,8 +50,8 @@ impl BoolArray {
 
     fn is_valid(&self, index: usize) -> bool {
         self.validity
-            .as_ref()
-            .map(|v| v.scalar_at(index).unwrap().try_into().unwrap())
+            .as_deref()
+            .map(|v| scalar_at(v, index).unwrap().try_into().unwrap())
             .unwrap_or(true)
     }
 
@@ -105,8 +105,6 @@ impl Array for BoolArray {
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
     }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {}
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(iter::once(Arc::new(BooleanArray::new(

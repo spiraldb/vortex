@@ -11,12 +11,12 @@ include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 
-[lints]
-workspace = true
-
 [dependencies]
 vortex = { "path" = "../vortex" }
 linkme = "0.3.22"
 croaring = "1.0.1"
 num-traits = "0.2.17"
 log = "0.4.20"
+
+[lints]
+workspace = true

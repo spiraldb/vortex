@@ -4,6 +4,7 @@ use vortex::array::{EncodingRef, ENCODINGS};
 pub use zigzag::*;
 
 mod compress;
+mod compute;
 mod downcast;
 mod serde;
 mod stats;

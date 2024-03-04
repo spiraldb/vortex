@@ -19,7 +19,6 @@ use crate::compute::ArrayCompute;
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::Stats;
 
@@ -45,7 +44,9 @@ pub type ArrayRef = Box<dyn Array>;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'static {
+pub trait Array:
+    ArrayDisplay + ArrayCompute + Debug + Send + Sync + dyn_clone::DynClone + 'static
+{
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
     /// Move an owned array to `ArrayRef`
@@ -68,10 +69,6 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
     fn encoding(&self) -> &'static dyn Encoding;
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
-
-    fn compute(&self) -> Option<&dyn ArrayCompute> {
-        None
-    }
 
     fn serde(&self) -> &dyn ArraySerde;
 }
@@ -98,7 +95,7 @@ pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> Vorte
     Ok(())
 }
 
-pub fn check_validity_buffer(validity: Option<&ArrayRef>) -> VortexResult<()> {
+pub fn check_validity_buffer(validity: Option<&dyn Array>) -> VortexResult<()> {
     // TODO(ngates): take a length parameter and check that the length of the validity buffer matches
     if validity
         .map(|v| !matches!(v.dtype(), DType::Bool(Nullability::NonNullable)))

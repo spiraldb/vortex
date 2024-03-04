@@ -11,8 +11,7 @@ use linkme::distributed_slice;
 
 use crate::array::ENCODINGS;
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef,
+    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 use crate::compress::EncodingCompression;
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
@@ -20,11 +19,11 @@ use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_arrow_numeric_type;
-use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -116,32 +115,6 @@ impl Array for SparseArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-
-        // Check whether `true_patch_index` exists in the patch index array
-        // First, get the index of the patch index array that is the first index
-        // greater than or equal to the true index
-        let true_patch_index = index + self.indices_offset;
-        search_sorted_usize(self.indices(), true_patch_index, SearchSortedSide::Left).and_then(
-            |idx| {
-                // If the value at this index is equal to the true index, then it exists in the patch index array
-                // and we should return the value at the corresponding index in the patch values array
-                self.indices()
-                    .scalar_at(idx)
-                    .or_else(|_| Ok(NullableScalar::none(self.values().dtype().clone()).boxed()))
-                    .and_then(usize::try_from)
-                    .and_then(|patch_index| {
-                        if patch_index == true_patch_index {
-                            self.values().scalar_at(idx)
-                        } else {
-                            Ok(NullableScalar::none(self.values().dtype().clone()).boxed())
-                        }
-                    })
-            },
-        )
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
