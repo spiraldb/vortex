@@ -242,11 +242,13 @@ impl ArrayDisplay for FFORArray {
 #[derive(Debug)]
 pub struct FFoREncoding;
 
-pub const FFOR_ENCODING: EncodingId = EncodingId::new("vortex.ffor");
+impl FFoREncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.ffor");
+}
 
 impl Encoding for FFoREncoding {
     fn id(&self) -> &EncodingId {
-        &FFOR_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

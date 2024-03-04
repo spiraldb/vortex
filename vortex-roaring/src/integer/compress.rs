@@ -17,7 +17,7 @@ use log::debug;
 use num_traits::NumCast;
 
 use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
+use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::dtype::DType;
@@ -35,7 +35,7 @@ impl EncodingCompression for RoaringIntEncoding {
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
         // Only support primitive enc arrays
-        if array.encoding().id() != &PRIMITIVE_ENCODING {
+        if array.encoding().id() != &PrimitiveEncoding::ID {
             debug!("Skipping roaring int, not primitive");
             return None;
         }

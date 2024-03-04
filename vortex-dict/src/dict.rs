@@ -136,11 +136,13 @@ impl ArrayDisplay for DictArray {
 #[derive(Debug)]
 pub struct DictEncoding;
 
-pub const DICT_ENCODING: EncodingId = EncodingId::new("vortex.dict");
+impl DictEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.dict");
+}
 
 impl Encoding for DictEncoding {
     fn id(&self) -> &EncodingId {
-        &DICT_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

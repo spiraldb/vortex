@@ -195,14 +195,16 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for StructArray {
 #[derive(Debug)]
 pub struct StructEncoding;
 
-pub const STRUCT_ENCODING: EncodingId = EncodingId::new("vortex.struct");
+impl StructEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.struct");
+}
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_STRUCT: EncodingRef = &StructEncoding;
 
 impl Encoding for StructEncoding {
     fn id(&self) -> &EncodingId {
-        &STRUCT_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

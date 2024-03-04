@@ -23,7 +23,7 @@ impl EncodingCompression for SparseEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &SparseArray::ID {
+        if array.encoding().id() == &Self::ID {
             Some(&(sparse_compressor as Compressor))
         } else {
             None

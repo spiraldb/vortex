@@ -277,14 +277,16 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for PrimitiveArray {
 #[derive(Debug)]
 pub struct PrimitiveEncoding;
 
-pub const PRIMITIVE_ENCODING: EncodingId = EncodingId::new("vortex.primitive");
+impl PrimitiveEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.primitive");
+}
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_PRIMITIVE: EncodingRef = &PrimitiveEncoding;
 
 impl Encoding for PrimitiveEncoding {
     fn id(&self) -> &EncodingId {
-        &PRIMITIVE_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

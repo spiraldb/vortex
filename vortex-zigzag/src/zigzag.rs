@@ -168,11 +168,13 @@ impl ArrayDisplay for ZigZagArray {
 #[derive(Debug)]
 pub struct ZigZagEncoding;
 
-pub const ZIGZAG_ENCODING: EncodingId = EncodingId::new("vortex.zigzag");
+impl ZigZagEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.zigzag");
+}
 
 impl Encoding for ZigZagEncoding {
     fn id(&self) -> &EncodingId {
-        &ZIGZAG_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

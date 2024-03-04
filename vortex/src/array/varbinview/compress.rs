@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding, VARBINVIEW_ENCODING};
+use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use rayon::prelude::*;
@@ -24,7 +24,7 @@ impl EncodingCompression for VarBinViewEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &VARBINVIEW_ENCODING {
+        if array.encoding().id() == &Self::ID {
             Some(&(varbinview_compressor as Compressor))
         } else {
             None

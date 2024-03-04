@@ -246,11 +246,13 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
 #[derive(Debug)]
 pub struct REEEncoding;
 
-pub const REE_ENCODING: EncodingId = EncodingId::new("vortex.ree");
+impl REEEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.ree");
+}
 
 impl Encoding for REEEncoding {
     fn id(&self) -> &EncodingId {
-        &REE_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

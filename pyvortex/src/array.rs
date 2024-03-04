@@ -26,15 +26,13 @@ use vortex::array::typed::TypedArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::varbinview::VarBinViewArray;
 use vortex::array::{Array, ArrayKind, ArrayRef};
-use vortex_alp::{ALPArray, ALP_ENCODING};
-use vortex_dict::{DictArray, DICT_ENCODING};
-use vortex_fastlanes::{BitPackedArray, FoRArray, FL_BITPACKED_ENCODING, FL_FOR_ENCODING};
-use vortex_ffor::{FFORArray, FFOR_ENCODING};
-use vortex_ree::{REEArray, REE_ENCODING};
-use vortex_roaring::{
-    RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING,
-};
-use vortex_zigzag::{ZigZagArray, ZIGZAG_ENCODING};
+use vortex_alp::{ALPArray, ALPEncoding};
+use vortex_dict::{DictArray, DictEncoding};
+use vortex_fastlanes::{BitPackedArray, BitPackedEncoding, FoRArray, FoREncoding};
+use vortex_ffor::{FFORArray, FFoREncoding};
+use vortex_ree::{REEArray, REEEncoding};
+use vortex_roaring::{RoaringBoolArray, RoaringBoolEncoding, RoaringIntArray, RoaringIntEncoding};
+use vortex_zigzag::{ZigZagArray, ZigZagEncoding};
 
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
@@ -132,42 +130,42 @@ impl PyArray {
             ArrayKind::Other(other) => match *other.encoding().id() {
                 // PyEnc chooses to expose certain encodings as first-class objects.
                 // For the remainder, we should have a generic EncArray implementation that supports basic functions.
-                ALP_ENCODING => {
+                ALPEncoding::ID => {
                     PyALPArray::wrap(py, inner.into_any().downcast::<ALPArray>().unwrap())?
                         .extract(py)
                 }
-                DICT_ENCODING => {
+                DictEncoding::ID => {
                     PyDictArray::wrap(py, inner.into_any().downcast::<DictArray>().unwrap())?
                         .extract(py)
                 }
-                FL_FOR_ENCODING => {
+                FoREncoding::ID => {
                     PyFoRArray::wrap(py, inner.into_any().downcast::<FoRArray>().unwrap())?
                         .extract(py)
                 }
-                FL_BITPACKED_ENCODING => PyBitPackedArray::wrap(
+                BitPackedEncoding::ID => PyBitPackedArray::wrap(
                     py,
                     inner.into_any().downcast::<BitPackedArray>().unwrap(),
                 )?
                 .extract(py),
-                FFOR_ENCODING => {
+                FFoREncoding::ID => {
                     PyFFORArray::wrap(py, inner.into_any().downcast::<FFORArray>().unwrap())?
                         .extract(py)
                 }
-                REE_ENCODING => {
+                REEEncoding::ID => {
                     PyREEArray::wrap(py, inner.into_any().downcast::<REEArray>().unwrap())?
                         .extract(py)
                 }
-                ROARING_BOOL_ENCODING => PyRoaringBoolArray::wrap(
+                RoaringBoolEncoding::ID => PyRoaringBoolArray::wrap(
                     py,
                     inner.into_any().downcast::<RoaringBoolArray>().unwrap(),
                 )?
                 .extract(py),
-                ROARING_INT_ENCODING => PyRoaringIntArray::wrap(
+                RoaringIntEncoding::ID => PyRoaringIntArray::wrap(
                     py,
                     inner.into_any().downcast::<RoaringIntArray>().unwrap(),
                 )?
                 .extract(py),
-                ZIGZAG_ENCODING => {
+                ZigZagEncoding::ID => {
                     PyZigZagArray::wrap(py, inner.into_any().downcast::<ZigZagArray>().unwrap())?
                         .extract(py)
                 }

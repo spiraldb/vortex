@@ -14,7 +14,7 @@
 
 use croaring::Bitmap;
 
-use vortex::array::bool::{BoolArray, BOOL_ENCODING};
+use vortex::array::bool::{BoolArray, BoolEncoding};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
@@ -30,7 +30,7 @@ impl EncodingCompression for RoaringBoolEncoding {
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
         // Only support bool enc arrays
-        if array.encoding().id() != &BOOL_ENCODING {
+        if array.encoding().id() != &BoolEncoding::ID {
             return None;
         }
 

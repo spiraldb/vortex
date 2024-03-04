@@ -175,16 +175,18 @@ impl Array for BoolArray {
 }
 
 #[derive(Debug)]
-struct BoolEncoding;
+pub struct BoolEncoding;
 
-pub const BOOL_ENCODING: EncodingId = EncodingId::new("vortex.bool");
+impl BoolEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.bool");
+}
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_BOOL: EncodingRef = &BoolEncoding;
 
 impl Encoding for BoolEncoding {
     fn id(&self) -> &EncodingId {
-        &BOOL_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
