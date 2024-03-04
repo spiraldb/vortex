@@ -13,14 +13,16 @@
 // limitations under the License.
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::ArrayCompute;
-use crate::compute::patch::PatchFn;
+use crate::compute::primitive::AsPrimitiveFn;
+use crate::error::VortexResult;
+use crate::ptype::PType;
 
-mod patch;
-mod primitive;
-
-impl ArrayCompute for PrimitiveArray {
-    fn patch(&self) -> Option<&dyn PatchFn> {
-        Some(self)
+impl AsPrimitiveFn for PrimitiveArray {
+    fn as_primitive(&self, ptype: &PType) -> VortexResult<PrimitiveArray> {
+        if self.ptype() == ptype {
+            Ok(self.clone())
+        } else {
+            todo!()
+        }
     }
 }

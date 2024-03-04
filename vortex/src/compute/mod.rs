@@ -13,17 +13,23 @@
 // limitations under the License.
 
 use patch::PatchFn;
+use primitive::AsPrimitiveFn;
 use take::TakeFn;
 
 pub mod add;
 pub mod as_contiguous;
 pub mod cast;
 pub mod patch;
+pub mod primitive;
 pub mod repeat;
 pub mod search_sorted;
 pub mod take;
 
 pub trait ArrayCompute {
+    fn as_primitive(&self) -> Option<&dyn AsPrimitiveFn> {
+        None
+    }
+
     fn patch(&self) -> Option<&dyn PatchFn> {
         None
     }

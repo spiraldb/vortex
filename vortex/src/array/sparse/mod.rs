@@ -57,6 +57,8 @@ pub struct SparseArray {
 }
 
 impl SparseArray {
+    pub const ID: EncodingId = EncodingId::new("vortex.sparse");
+
     pub fn new(indices: ArrayRef, values: ArrayRef, len: usize) -> Self {
         Self::try_new(indices, values, len).unwrap()
     }
@@ -278,14 +280,12 @@ impl ArrayDisplay for SparseArray {
 #[derive(Debug)]
 pub struct SparseEncoding;
 
-pub const SPARSE_ENCODING: EncodingId = EncodingId::new("vortex.sparse");
-
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_SPARSE: EncodingRef = &SparseEncoding;
 
 impl Encoding for SparseEncoding {
     fn id(&self) -> &EncodingId {
-        &SPARSE_ENCODING
+        &SparseArray::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

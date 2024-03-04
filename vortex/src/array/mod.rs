@@ -18,16 +18,16 @@ use std::fmt::{Debug, Display, Formatter};
 use arrow::array::ArrayRef as ArrowArrayRef;
 use linkme::distributed_slice;
 
-use crate::array::bool::{BoolArray, BOOL_ENCODING};
-use crate::array::chunked::{ChunkedArray, CHUNKED_ENCODING};
-use crate::array::constant::{ConstantArray, CONSTANT_ENCODING};
+use crate::array::bool::{BOOL_ENCODING, BoolArray};
+use crate::array::chunked::{CHUNKED_ENCODING, ChunkedArray};
+use crate::array::constant::{CONSTANT_ENCODING, ConstantArray};
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
-use crate::array::sparse::{SparseArray, SPARSE_ENCODING};
-use crate::array::struct_::{StructArray, STRUCT_ENCODING};
-use crate::array::typed::{TypedArray, TYPED_ENCODING};
-use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
-use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
+use crate::array::primitive::{PRIMITIVE_ENCODING, PrimitiveArray};
+use crate::array::sparse::SparseArray;
+use crate::array::struct_::{STRUCT_ENCODING, StructArray};
+use crate::array::typed::{TYPED_ENCODING, TypedArray};
+use crate::array::varbin::{VARBIN_ENCODING, VarBinArray};
+use crate::array::varbinview::{VARBINVIEW_ENCODING, VarBinViewArray};
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::dtype::{DType, Nullability};
@@ -93,6 +93,16 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
 }
 
 dyn_clone::clone_trait_object!(Array);
+
+pub trait BoxOptionalArray {
+    fn boxed(&self) -> Option<ArrayRef>;
+}
+
+impl BoxOptionalArray for Option<&dyn Array> {
+    fn boxed(&self) -> Option<ArrayRef> {
+        self.map(|a| dyn_clone::clone_box(a))
+    }
+}
 
 pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> VortexResult<()> {
     if start > array.len() {
@@ -186,7 +196,7 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
             CHUNKED_ENCODING => ArrayKind::Chunked(value.as_chunked()),
             CONSTANT_ENCODING => ArrayKind::Constant(value.as_constant()),
             PRIMITIVE_ENCODING => ArrayKind::Primitive(value.as_primitive()),
-            SPARSE_ENCODING => ArrayKind::Sparse(value.as_sparse()),
+            SparseArray::ID => ArrayKind::Sparse(value.as_sparse()),
             STRUCT_ENCODING => ArrayKind::Struct(value.as_struct()),
             TYPED_ENCODING => ArrayKind::Typed(value.as_typed()),
             VARBIN_ENCODING => ArrayKind::VarBin(value.as_varbin()),

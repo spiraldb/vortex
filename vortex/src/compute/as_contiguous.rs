@@ -15,13 +15,14 @@
 use arrow::buffer::BooleanBuffer;
 use itertools::Itertools;
 
-use crate::array::bool::{BoolArray, BOOL_ENCODING};
+use vortex_alloc::{ALIGNED_ALLOCATOR, AlignedVec};
+
+use crate::array::{Array, ArrayRef, BoxOptionalArray};
+use crate::array::bool::{BOOL_ENCODING, BoolArray};
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
-use crate::array::{Array, ArrayRef};
+use crate::array::primitive::{PRIMITIVE_ENCODING, PrimitiveArray};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::{match_each_native_ptype, NativePType};
-use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 
 pub fn as_contiguous(arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
     if arrays.is_empty() {
@@ -90,7 +91,7 @@ fn primitive_as_contiguous(arrays: Vec<&PrimitiveArray>) -> VortexResult<Primiti
                 .iter()
                 .map(|a| {
                     a.validity()
-                        .cloned()
+                        .boxed()
                         .unwrap_or_else(|| BoolArray::from(vec![true; a.len()]).boxed())
                 })
                 .collect(),
