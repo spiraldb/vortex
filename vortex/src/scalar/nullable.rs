@@ -63,8 +63,23 @@ impl Scalar for NullableScalar {
         }
     }
 
-    fn cast(&self, _dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
-        todo!()
+    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+        match self {
+            Self::Some(s, _dt) => {
+                if dtype.is_nullable() {
+                    Ok(Self::Some(s.cast(&dtype.as_nonnullable())?, dtype.clone()).boxed())
+                } else {
+                    s.cast(&dtype.as_nonnullable())
+                }
+            }
+            Self::None(_dt) => {
+                if dtype.is_nullable() {
+                    Ok(Self::None(dtype.clone()).boxed())
+                } else {
+                    Err(VortexError::InvalidDType(dtype.clone()))
+                }
+            }
+        }
     }
 
     fn nbytes(&self) -> usize {

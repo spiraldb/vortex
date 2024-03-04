@@ -3,6 +3,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::RwLock;
 
+use crate::dtype::DType;
 use itertools::Itertools;
 
 use crate::error::{VortexError, VortexResult};
@@ -263,7 +264,9 @@ impl<'a> Stats<'a> {
 
     pub fn get_or_compute_cast<T: NativePType>(&self, stat: &Stat) -> Option<T> {
         self.get_or_compute(stat)
-            .map(|v| T::try_from(v.cast(T::PTYPE.into()).unwrap()).unwrap())
+            // TODO(ngates): fix the API so we don't convert the result to optional
+            .and_then(|v: Box<dyn Scalar>| v.cast(&DType::from(T::PTYPE)).ok())
+            .and_then(|v| T::try_from(v).ok())
     }
 
     pub fn get_or_compute_as<T: TryFrom<Box<dyn Scalar>, Error = VortexError>>(

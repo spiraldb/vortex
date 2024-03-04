@@ -28,6 +28,16 @@ impl EncodingCompression for FoREncoding {
             return None;
         }
 
+        let imin = parray
+            .stats()
+            .get_or_compute_cast::<i64>(&Stat::Min)
+            .unwrap();
+        let imax = parray
+            .stats()
+            .get_or_compute_cast::<i64>(&Stat::Max)
+            .unwrap();
+        println!("imin: {} imax: {}", imin, imax);
+
         match_each_integer_ptype!(parray.ptype(), |$T| {
             // Nothing for us to do if the min is already zero.
             let min = parray

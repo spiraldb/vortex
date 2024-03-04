@@ -33,13 +33,13 @@ impl EncodingCompression for BitPackedEncoding {
         }
 
         // Check that the min > zero
-        if parray
-            .stats()
-            .get_or_compute_cast::<i64>(&Stat::Min)
-            .unwrap()
-            < 0
-        {
-            debug!("Skipping BitPacking: min is zero");
+        if let Some(min) = parray.stats().get_or_compute_cast::<i64>(&Stat::Min) {
+            if min < 0 {
+                debug!("Skipping BitPacking: min is zero");
+                return None;
+            }
+        } else {
+            debug!("Skipping BitPacking: no min");
             return None;
         }
 
