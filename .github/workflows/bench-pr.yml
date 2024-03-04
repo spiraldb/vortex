@@ -22,6 +22,8 @@ jobs:
           labels: benchmark
 
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: ./.github/actions/setup-zig
       - uses: ./.github/actions/setup-rust

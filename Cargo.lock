@@ -104,6 +104,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrayref"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b4930d2cb77ce62f89ee5d5289b4ac049559b1c45539271f5ed4fdc7db34545"
+
+[[package]]
 name = "arrow"
 version = "50.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -818,6 +824,18 @@ name = "fast-float"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95765f67b4b18863968b4a1bd5bb576f732b29a4a28c7cd84c09fa3e2875f33c"
+
+[[package]]
+name = "fastlanez-sys"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "bindgen",
+ "paste",
+ "seq-macro",
+ "uninit",
+ "walkdir",
+]
 
 [[package]]
 name = "fastrand"
@@ -2038,6 +2056,7 @@ dependencies = [
  "vortex",
  "vortex-alp",
  "vortex-dict",
+ "vortex-fastlanes",
  "vortex-ffor",
  "vortex-ree",
  "vortex-roaring",
@@ -2744,6 +2763,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7de7d73e1754487cb58364ee906a499937a0dfabd86bcb980fa99ec8c8fa2ce"
 
 [[package]]
+name = "uninit"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "359fdaaabedff944f100847f2e0ea88918d8012fe64baf5b54c191ad010168c9"
+
+[[package]]
 name = "url"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2826,6 +2851,7 @@ dependencies = [
  "vortex",
  "vortex-alp",
  "vortex-dict",
+ "vortex-fastlanes",
  "vortex-ffor",
  "vortex-ree",
  "vortex-roaring",
@@ -2842,6 +2868,18 @@ dependencies = [
  "linkme",
  "log",
  "num-traits",
+ "vortex",
+]
+
+[[package]]
+name = "vortex-fastlanes"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "fastlanez-sys",
+ "itertools 0.12.1",
+ "linkme",
+ "log",
  "vortex",
 ]
 
