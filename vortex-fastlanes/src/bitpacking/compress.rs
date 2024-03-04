@@ -90,26 +90,30 @@ fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: Compre
         .unwrap_or_else(|| best_bit_width(parray.ptype(), &bit_width_freq));
     let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
-    // If we pack into zero bits, then just return the sparse array.
-    // TODO(ngates): this breaks our rule of returning ourselves. But we can't really do that
-    //  unless we create an empty bitpacked array?
-    if bit_width == 0 {
-        return bitpack_patches(parray, bit_width, num_exceptions);
-    }
+    // If we pack into zero bits, then we have an empty byte array.
+    let packed = if bit_width == 0 {
+        PrimitiveArray::from_vec(Vec::<u8>::new()).boxed()
+    } else {
+        bitpack(parray, bit_width)
+    };
+
+    let validity = parray
+        .validity()
+        .map(|v| ctx.compress(v.as_ref(), like_bp.and_then(|bp| bp.validity())));
+
+    let patches = if num_exceptions > 0 {
+        Some(ctx.compress(
+            bitpack_patches(parray, bit_width, num_exceptions).as_ref(),
+            like_bp.and_then(|bp| bp.patches()),
+        ))
+    } else {
+        None
+    };
 
     return BitPackedArray::try_new(
-        bitpack(parray, bit_width),
-        parray
-            .validity()
-            .map(|v| ctx.compress(v.as_ref(), like_bp.and_then(|bp| bp.validity()))),
-        if num_exceptions > 0 {
-            Some(ctx.compress(
-                bitpack_patches(parray, bit_width, num_exceptions).as_ref(),
-                like_bp.and_then(|bp| bp.patches()),
-            ))
-        } else {
-            None
-        },
+        packed,
+        validity,
+        patches,
         bit_width,
         parray.dtype().clone(),
         parray.len(),
