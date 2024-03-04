@@ -12,23 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use patch::PatchFn;
-use take::TakeFn;
+use crate::array::primitive::PrimitiveArray;
+use crate::compute::ArrayCompute;
+use crate::compute::patch::PatchFn;
+use crate::compute::take::TakeFn;
 
-pub mod add;
-pub mod as_contiguous;
-pub mod cast;
-pub mod patch;
-pub mod repeat;
-pub mod search_sorted;
-pub mod take;
+mod patch;
 
-pub trait ArrayCompute {
+impl ArrayCompute for PrimitiveArray {
     fn patch(&self) -> Option<&dyn PatchFn> {
-        None
-    }
-
-    fn take(&self) -> Option<&dyn TakeFn> {
-        None
+        Some(self)
     }
 }

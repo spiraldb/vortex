@@ -22,16 +22,16 @@ use std::sync::{Arc, RwLock};
 
 use allocator_api2::alloc::Allocator;
 use arrow::alloc::ALIGNMENT as ARROW_ALIGNMENT;
-use arrow::array::{make_array, ArrayData, AsArray};
-use arrow::buffer::{Buffer, NullBuffer};
+use arrow::array::{ArrayData, AsArray, make_array};
+use arrow::buffer::{Buffer, NullBuffer, ScalarBuffer};
 use linkme::distributed_slice;
 use log::debug;
 
-use crate::array::bool::BoolArray;
 use crate::array::{
-    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
+    Array, ArrayRef, ArrowIterator, check_index_bounds, check_slice_bounds, check_validity_buffer,
     Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
+use crate::array::bool::BoolArray;
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
 use crate::dtype::DType;
@@ -43,6 +43,7 @@ use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -141,6 +142,15 @@ impl PrimitiveArray {
     #[inline]
     pub fn validity(&self) -> Option<&ArrayRef> {
         self.validity.as_ref()
+    }
+
+    // Try to get a zero-copy mutable view of the buffer (if there's only one strong reference).
+    // Otherwise returns a copy.
+    pub fn into_vec<T: NativePType>(self) -> Vec<T> {
+        self.buffer
+            .into_vec()
+            // Otherwise, create a copy.
+            .unwrap_or_else(Vec::from(self.buffer.typed_data::<T>()))
     }
 }
 

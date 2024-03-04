@@ -13,8 +13,10 @@
 // limitations under the License.
 
 use crate::array::constant::ConstantArray;
-use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
+use crate::compute::take::TakeFn;
+
+mod take;
 
 impl ArrayCompute for ConstantArray {
     fn take(&self) -> Option<&dyn TakeFn> {

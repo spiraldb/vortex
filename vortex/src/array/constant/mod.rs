@@ -19,7 +19,7 @@ use arrow::array::Datum;
 use linkme::distributed_slice;
 
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    Array, ArrayRef, ArrowIterator, check_index_bounds, check_slice_bounds, Encoding, EncodingId,
     EncodingRef, ENCODINGS,
 };
 use crate::arrow::compute::repeat;
@@ -35,7 +35,6 @@ mod compress;
 mod compute;
 mod serde;
 mod stats;
-mod take;
 
 #[derive(Debug, Clone)]
 pub struct ConstantArray {

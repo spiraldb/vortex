@@ -19,11 +19,14 @@ use std::sync::{Arc, RwLock};
 use arrow::array::{
     Array as ArrowArray, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
 };
-use arrow::datatypes::{Field, Fields};
+use arrow::array::AsArray;
+use arrow::datatypes::{Field, Fields, UInt64Type};
+use itertools::Itertools;
+use linkme::distributed_slice;
 use num_traits::AsPrimitive;
 
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    Array, ArrayRef, ArrowIterator, check_index_bounds, check_slice_bounds, Encoding, EncodingId,
     EncodingRef,
 };
 use crate::array::{ArrowArrayRef, ENCODINGS};
@@ -37,9 +40,6 @@ use crate::match_arrow_numeric_type;
 use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
-use arrow::array::AsArray;
-use itertools::Itertools;
-use linkme::distributed_slice;
 
 mod compress;
 mod serde;
@@ -78,6 +78,8 @@ impl SparseArray {
             return Err(VortexError::InvalidDType(indices.dtype().clone()));
         }
 
+        // TODO(ngates): check that indices.max falls within the length
+
         let dtype = DType::Struct(
             vec![
                 Arc::new("indices".to_string()),
@@ -109,6 +111,22 @@ impl SparseArray {
     #[inline]
     pub fn indices(&self) -> &dyn Array {
         self.indices.as_ref()
+    }
+
+    /// Return indices as a vector of usize with the indices_offset applied.
+    pub fn resolved_indices(&self) -> Vec<usize> {
+        let mut indices = Vec::with_capacity(self.len());
+        self.indices().iter_arrow().for_each(|c| {
+            indices.extend(
+                arrow::compute::cast(c.as_ref(), &arrow::datatypes::DataType::UInt64)
+                    .unwrap()
+                    .as_primitive::<UInt64Type>()
+                    .values()
+                    .into_iter()
+                    .map(|v| (*v as usize) - self.indices_offset),
+            )
+        });
+        indices
     }
 }
 
@@ -281,11 +299,12 @@ impl Encoding for SparseEncoding {
 
 #[cfg(test)]
 mod test {
-    use crate::array::sparse::SparseArray;
-    use crate::array::Array;
-    use crate::error::VortexError;
     use arrow::array::AsArray;
     use arrow::datatypes::{Int32Type, UInt32Type};
+
+    use crate::array::Array;
+    use crate::array::sparse::SparseArray;
+    use crate::error::VortexError;
 
     fn sparse_array() -> SparseArray {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
