@@ -17,6 +17,7 @@ use std::panic::RefUnwindSafe;
 
 use arrow::datatypes::ArrowNativeType;
 use half::f16;
+use num_traits::NumCast;
 
 use crate::dtype::{DType, FloatWidth, IntWidth, Signedness};
 use crate::error::{VortexError, VortexResult};
@@ -47,6 +48,7 @@ pub trait NativePType:
     + Default
     + ArrowNativeType
     + RefUnwindSafe
+    + NumCast
     + TryFrom<Box<dyn Scalar>, Error = VortexError>
 {
     const PTYPE: PType;

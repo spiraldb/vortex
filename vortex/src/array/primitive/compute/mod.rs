@@ -14,12 +14,17 @@
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::ArrayCompute;
+use crate::compute::cast::CastPrimitiveFn;
 use crate::compute::patch::PatchFn;
 
+mod cast;
 mod patch;
-mod primitive;
 
 impl ArrayCompute for PrimitiveArray {
+    fn cast_primitive(&self) -> Option<&dyn CastPrimitiveFn> {
+        Some(self)
+    }
+
     fn patch(&self) -> Option<&dyn PatchFn> {
         Some(self)
     }

@@ -94,12 +94,12 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
 
 dyn_clone::clone_trait_object!(Array);
 
-pub trait BoxOptionalArray {
-    fn boxed(&self) -> Option<ArrayRef>;
+pub trait CloneOptionalArray {
+    fn clone_optional(&self) -> Option<ArrayRef>;
 }
 
-impl BoxOptionalArray for Option<&dyn Array> {
-    fn boxed(&self) -> Option<ArrayRef> {
+impl CloneOptionalArray for Option<&dyn Array> {
+    fn clone_optional(&self) -> Option<ArrayRef> {
         self.map(|a| dyn_clone::clone_box(a))
     }
 }

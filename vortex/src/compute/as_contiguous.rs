@@ -17,7 +17,7 @@ use itertools::Itertools;
 
 use vortex_alloc::{ALIGNED_ALLOCATOR, AlignedVec};
 
-use crate::array::{Array, ArrayRef, BoxOptionalArray};
+use crate::array::{Array, ArrayRef, CloneOptionalArray};
 use crate::array::bool::{BOOL_ENCODING, BoolArray};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PRIMITIVE_ENCODING, PrimitiveArray};
@@ -91,7 +91,7 @@ fn primitive_as_contiguous(arrays: Vec<&PrimitiveArray>) -> VortexResult<Primiti
                 .iter()
                 .map(|a| {
                     a.validity()
-                        .boxed()
+                        .clone_optional()
                         .unwrap_or_else(|| BoolArray::from(vec![true; a.len()]).boxed())
                 })
                 .collect(),

@@ -15,7 +15,7 @@
 use itertools::Itertools;
 
 use crate::{compute, match_each_native_ptype};
-use crate::array::{Array, ArrayRef, BoxOptionalArray};
+use crate::array::{Array, ArrayRef, CloneOptionalArray};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
@@ -40,13 +40,14 @@ fn patch_with_sparse(array: &PrimitiveArray, patch: &SparseArray) -> VortexResul
     let patch_indices = patch.resolved_indices();
     match_each_native_ptype!(array.ptype(), |$T| {
         let mut values = Vec::from(array.typed_data::<$T>());
-        let patch_values = compute::primitive::as_primitive::<$T>(patch.values())?;
-        for (idx, value) in patch_indices.iter().zip_eq(patch_values.iter()) {
+        let patch_values = compute::cast::cast_primitive(patch.values(), array.ptype())?;
+        for (idx, value) in patch_indices.iter().zip_eq(patch_values.typed_data::<$T>().iter()) {
             values[*idx] = *value;
         }
         Ok(PrimitiveArray::from_nullable(
             values,
-            array.validity().boxed(),
+            // TODO(ngates): if patch values has null, we need to patch into the validity buffer
+            array.validity().clone_optional(),
         ).boxed())
     })
 }
