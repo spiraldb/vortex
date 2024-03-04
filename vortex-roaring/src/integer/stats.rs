@@ -1,9 +1,10 @@
+use vortex::error::VortexResult;
 use vortex::stats::{Stat, StatsCompute, StatsSet};
 
 use crate::RoaringIntArray;
 
 impl StatsCompute for RoaringIntArray {
-    fn compute(&self, stat: &Stat) -> StatsSet {
+    fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {
         if let Some(value) = match stat {
             Stat::IsConstant => Some((self.bitmap.cardinality() <= 1).into()),
             Stat::IsSorted => Some(true.into()),
@@ -13,9 +14,9 @@ impl StatsCompute for RoaringIntArray {
             Stat::NullCount => Some(0.into()),
             _ => None,
         } {
-            StatsSet::of(stat.clone(), value)
+            Ok(StatsSet::of(stat.clone(), value))
         } else {
-            StatsSet::default()
+            Ok(StatsSet::default())
         }
     }
 }

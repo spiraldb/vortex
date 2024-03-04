@@ -16,7 +16,7 @@ impl<T> StatsCompute for T
 where
     T: BinaryArray + Array,
 {
-    fn compute(&self, _stat: &Stat) -> StatsSet {
+    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
         let mut min = vec![0xFF];
         let mut max = vec![0x00];
         let mut is_constant = true;
@@ -41,7 +41,7 @@ where
             runs += 1;
         }
 
-        StatsSet::from(HashMap::from([
+        Ok(StatsSet::from(HashMap::from([
             (
                 Stat::Min,
                 if matches!(self.dtype(), DType::Utf8(_)) {
@@ -61,7 +61,7 @@ where
             (Stat::RunCount, runs.into()),
             (Stat::IsSorted, is_sorted.into()),
             (Stat::IsConstant, is_constant.into()),
-        ]))
+        ])))
     }
 }
 

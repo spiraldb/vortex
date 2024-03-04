@@ -208,7 +208,7 @@ impl StatsSet {
 }
 
 pub trait StatsCompute {
-    fn compute(&self, stat: &Stat) -> StatsSet;
+    fn compute(&self, stat: &Stat) -> VortexResult<StatsSet>;
 }
 
 pub struct Stats<'a> {
@@ -257,7 +257,7 @@ impl<'a> Stats<'a> {
             .write()
             .unwrap()
             .0
-            .extend(self.compute.compute(stat).0);
+            .extend(self.compute.compute(stat).unwrap().0);
         self.get(stat)
     }
 

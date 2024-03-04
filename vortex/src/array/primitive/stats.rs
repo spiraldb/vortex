@@ -6,13 +6,14 @@ use half::f16;
 use num_traits::{NumCast, PrimInt};
 
 use crate::array::primitive::PrimitiveArray;
+use crate::error::VortexResult;
 use crate::ptype::match_each_native_ptype;
 use crate::scalar::ListScalarVec;
 use crate::scalar::Scalar;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for PrimitiveArray {
-    fn compute(&self, stat: &Stat) -> StatsSet {
+    fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {
         match_each_native_ptype!(self.ptype(), |$P| {
             WrappedPrimitive::<$P>::new(self).compute(stat)
         })
@@ -30,7 +31,7 @@ impl<'a, P> WrappedPrimitive<'a, P> {
 macro_rules! integer_stats {
     ($T:ty) => {
         impl StatsCompute for WrappedPrimitive<'_, $T> {
-            fn compute(&self, _stat: &Stat) -> StatsSet {
+            fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
                 integer_stats::<$T>(self.0)
             }
         }
@@ -49,7 +50,7 @@ integer_stats!(u64);
 macro_rules! float_stats {
     ($T:ty) => {
         impl StatsCompute for WrappedPrimitive<'_, $T> {
-            fn compute(&self, _stat: &Stat) -> StatsSet {
+            fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
                 float_stats::<$T>(self.0)
             }
         }
@@ -60,7 +61,9 @@ float_stats!(f16);
 float_stats!(f32);
 float_stats!(f64);
 
-fn integer_stats<T: ArrowNativeType + NumCast + PrimInt>(array: &PrimitiveArray) -> StatsSet
+fn integer_stats<T: ArrowNativeType + NumCast + PrimInt>(
+    array: &PrimitiveArray,
+) -> VortexResult<StatsSet>
 where
     Box<dyn Scalar>: From<T>,
 {
@@ -97,7 +100,7 @@ where
     }
     run_count += 1;
 
-    StatsSet::from(HashMap::from([
+    Ok(StatsSet::from(HashMap::from([
         (Stat::Min, min.into()),
         (Stat::Max, max.into()),
         (Stat::IsConstant, (min == max).into()),
@@ -105,10 +108,10 @@ where
         (Stat::IsSorted, is_sorted.into()),
         (Stat::IsStrictSorted, (is_sorted && is_strict_sorted).into()),
         (Stat::RunCount, run_count.into()),
-    ]))
+    ])))
 }
 
-fn float_stats<T: ArrowNativeType + NumCast>(array: &PrimitiveArray) -> StatsSet
+fn float_stats<T: ArrowNativeType + NumCast>(array: &PrimitiveArray) -> VortexResult<StatsSet>
 where
     Box<dyn Scalar>: From<T>,
 {
@@ -136,13 +139,13 @@ where
     }
     run_count += 1;
 
-    StatsSet::from(HashMap::from([
+    Ok(StatsSet::from(HashMap::from([
         (Stat::Min, min.into()),
         (Stat::Max, max.into()),
         (Stat::IsConstant, (min == max).into()),
         (Stat::IsSorted, is_sorted.into()),
         (Stat::RunCount, run_count.into()),
-    ]))
+    ])))
 }
 
 #[cfg(test)]
