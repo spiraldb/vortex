@@ -36,14 +36,12 @@ impl EncodingSerde for FoREncoding {
 
 #[cfg(test)]
 mod test {
+    use crate::FoRArray;
     use std::io;
-
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::{Array, ArrayRef};
     use vortex::scalar::Scalar;
     use vortex::serde::{ReadCtx, WriteCtx};
-
-    use super::*;
 
     fn roundtrip_array(array: &dyn Array) -> io::Result<ArrayRef> {
         let mut buf = Vec::<u8>::new();
