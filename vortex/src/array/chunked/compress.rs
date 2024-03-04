@@ -1,4 +1,4 @@
-use rayon::prelude::*;
+use itertools::Itertools;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
@@ -27,7 +27,8 @@ fn chunked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: Compress
         .map(|c_like| {
             chunked_array
                 .chunks()
-                .par_iter()
+                .iter()
+                //.par_iter()
                 .zip_eq(c_like.chunks())
                 .map(|(chunk, chunk_like)| ctx.compress(chunk.as_ref(), Some(chunk_like.as_ref())))
                 .collect()
@@ -35,7 +36,8 @@ fn chunked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: Compress
         .unwrap_or_else(|| {
             chunked_array
                 .chunks()
-                .par_iter()
+                .iter()
+                // .par_iter()
                 .map(|chunk| ctx.compress(chunk.as_ref(), None))
                 .collect()
         });
