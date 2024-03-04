@@ -3,7 +3,7 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::dtype::DType;
 use crate::error::VortexResult;
-use crate::scalar::{NullableScalar, Scalar};
+use crate::scalar::{NullableScalar, Scalar, ScalarRef};
 
 impl ArrayCompute for VarBinViewArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -12,7 +12,7 @@ impl ArrayCompute for VarBinViewArray {
 }
 
 impl ScalarAtFn for VarBinViewArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
         if self.is_valid(index) {
             self.bytes_at(index).map(|bytes| {
                 if matches!(self.dtype, DType::Utf8(_)) {

@@ -2,7 +2,7 @@ use crate::array::struct_::StructArray;
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
-use crate::scalar::{Scalar, StructScalar};
+use crate::scalar::{Scalar, ScalarRef, StructScalar};
 use itertools::Itertools;
 
 impl ArrayCompute for StructArray {
@@ -12,7 +12,7 @@ impl ArrayCompute for StructArray {
 }
 
 impl ScalarAtFn for StructArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
         Ok(StructScalar::new(
             self.dtype.clone(),
             self.fields

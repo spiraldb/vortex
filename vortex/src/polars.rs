@@ -4,7 +4,9 @@ use polars_core::prelude::{AnyValue, Series};
 
 use crate::array::ArrowIterator;
 use crate::dtype::DType;
-use crate::scalar::{BinaryScalar, BoolScalar, NullableScalar, PScalar, Scalar, Utf8Scalar};
+use crate::scalar::{
+    BinaryScalar, BoolScalar, NullableScalar, PScalar, Scalar, ScalarRef, Utf8Scalar,
+};
 
 pub trait IntoPolarsSeries {
     fn into_polars(self) -> Series;
@@ -37,7 +39,7 @@ pub trait IntoPolarsValue {
     fn into_polars<'a>(self) -> AnyValue<'a>;
 }
 
-impl IntoPolarsValue for Box<dyn Scalar> {
+impl IntoPolarsValue for ScalarRef {
     fn into_polars<'a>(self) -> AnyValue<'a> {
         self.as_ref().into_polars()
     }

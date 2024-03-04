@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::Scalar;
+use crate::scalar::{Scalar, ScalarRef};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Utf8Scalar {
@@ -36,12 +36,12 @@ impl Scalar for Utf8Scalar {
     }
 
     #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
         Some(self)
     }
 
     #[inline]
-    fn boxed(self) -> Box<dyn Scalar> {
+    fn boxed(self) -> ScalarRef {
         Box::new(self)
     }
 
@@ -50,7 +50,7 @@ impl Scalar for Utf8Scalar {
         &DType::Utf8(Nullability::NonNullable)
     }
 
-    fn cast(&self, _dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+    fn cast(&self, _dtype: &DType) -> VortexResult<ScalarRef> {
         todo!()
     }
 
@@ -59,22 +59,22 @@ impl Scalar for Utf8Scalar {
     }
 }
 
-impl From<String> for Box<dyn Scalar> {
+impl From<String> for ScalarRef {
     fn from(value: String) -> Self {
         Utf8Scalar::new(value).boxed()
     }
 }
 
-impl From<&str> for Box<dyn Scalar> {
+impl From<&str> for ScalarRef {
     fn from(value: &str) -> Self {
         Utf8Scalar::new(value.to_string()).boxed()
     }
 }
 
-impl TryFrom<Box<dyn Scalar>> for String {
+impl TryFrom<ScalarRef> for String {
     type Error = VortexError;
 
-    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
+    fn try_from(value: ScalarRef) -> Result<Self, Self::Error> {
         let dtype = value.dtype().clone();
         let scalar = value
             .into_any()

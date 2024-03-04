@@ -7,7 +7,7 @@ use half::f16;
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
-use crate::scalar::{LocalTimeScalar, Scalar};
+use crate::scalar::{LocalTimeScalar, Scalar, ScalarRef};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum PScalar {
@@ -43,7 +43,7 @@ impl PScalar {
 
     // General conversion function that handles casting primitive scalar to non primitive.
     // If target dtype can be converted to ptype you should use cast_ptype.
-    pub fn cast_dtype(&self, dtype: DType) -> VortexResult<Box<dyn Scalar>> {
+    pub fn cast_dtype(&self, dtype: DType) -> VortexResult<ScalarRef> {
         macro_rules! from_int {
             ($dtype:ident , $ps:ident) => {
                 match $dtype {
@@ -64,7 +64,7 @@ impl PScalar {
         }
     }
 
-    pub fn cast_ptype(&self, ptype: PType) -> VortexResult<Box<dyn Scalar>> {
+    pub fn cast_ptype(&self, ptype: PType) -> VortexResult<ScalarRef> {
         macro_rules! from_int {
             ($ptype:ident , $v:ident) => {
                 match $ptype {
@@ -137,12 +137,12 @@ impl Scalar for PScalar {
     }
 
     #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
         Some(self)
     }
 
     #[inline]
-    fn boxed(self) -> Box<dyn Scalar> {
+    fn boxed(self) -> ScalarRef {
         Box::new(self)
     }
 
@@ -151,7 +151,7 @@ impl Scalar for PScalar {
         self.ptype().into()
     }
 
-    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+    fn cast(&self, dtype: &DType) -> VortexResult<ScalarRef> {
         let ptype: VortexResult<PType> = dtype.try_into();
         ptype
             .and_then(|p| self.cast_ptype(p))
@@ -165,18 +165,18 @@ impl Scalar for PScalar {
 
 macro_rules! pscalar {
     ($T:ty, $ptype:tt) => {
-        impl From<$T> for Box<dyn Scalar> {
+        impl From<$T> for ScalarRef {
             #[inline]
             fn from(value: $T) -> Self {
                 PScalar::$ptype(value).boxed()
             }
         }
 
-        impl TryFrom<Box<dyn Scalar>> for $T {
+        impl TryFrom<ScalarRef> for $T {
             type Error = VortexError;
 
             #[inline]
-            fn try_from(value: Box<dyn Scalar>) -> VortexResult<Self> {
+            fn try_from(value: ScalarRef) -> VortexResult<Self> {
                 value.as_ref().try_into()
             }
         }
@@ -213,17 +213,17 @@ pscalar!(f16, F16);
 pscalar!(f32, F32);
 pscalar!(f64, F64);
 
-impl From<usize> for Box<dyn Scalar> {
+impl From<usize> for ScalarRef {
     #[inline]
     fn from(value: usize) -> Self {
         PScalar::U64(value as u64).boxed()
     }
 }
 
-impl TryFrom<Box<dyn Scalar>> for usize {
+impl TryFrom<ScalarRef> for usize {
     type Error = VortexError;
 
-    fn try_from(value: Box<dyn Scalar>) -> VortexResult<Self> {
+    fn try_from(value: ScalarRef) -> VortexResult<Self> {
         value.as_ref().try_into()
     }
 }
@@ -288,16 +288,16 @@ mod test {
     use crate::dtype::{DType, IntWidth, Nullability, Signedness};
     use crate::error::VortexError;
     use crate::ptype::PType;
-    use crate::scalar::Scalar;
+    use crate::scalar::ScalarRef;
 
     #[test]
     fn into_from() {
-        let scalar: Box<dyn Scalar> = 10u16.into();
+        let scalar: ScalarRef = 10u16.into();
         assert_eq!(scalar.as_ref().try_into(), Ok(10u16));
         // All integers should be convertible to usize
         assert_eq!(scalar.as_ref().try_into(), Ok(10usize));
 
-        let scalar: Box<dyn Scalar> = (-10i16).into();
+        let scalar: ScalarRef = (-10i16).into();
         assert_eq!(
             scalar.as_ref().try_into(),
             Err::<usize, VortexError>(VortexError::ComputeError(
@@ -308,7 +308,7 @@ mod test {
 
     #[test]
     fn cast() {
-        let scalar: Box<dyn Scalar> = 10u16.into();
+        let scalar: ScalarRef = 10u16.into();
         let u32_scalar = scalar
             .cast(&DType::Int(
                 IntWidth::_32,

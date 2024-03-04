@@ -9,10 +9,11 @@ pub fn repeat(scalar: &dyn Scalar, n: usize) -> ArrayRef {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::scalar::ScalarRef;
 
     #[test]
     fn test_repeat() {
-        let scalar: Box<dyn Scalar> = 47.into();
+        let scalar: ScalarRef = 47.into();
         let array = repeat(scalar.as_ref(), 100);
         assert_eq!(array.len(), 100);
     }

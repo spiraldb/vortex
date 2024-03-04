@@ -4,16 +4,16 @@ use std::mem::size_of;
 
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::{NullScalar, Scalar};
+use crate::scalar::{NullScalar, Scalar, ScalarRef};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum NullableScalar {
     None(DType),
-    Some(Box<dyn Scalar>, DType),
+    Some(ScalarRef, DType),
 }
 
 impl NullableScalar {
-    pub fn some(scalar: Box<dyn Scalar>) -> Self {
+    pub fn some(scalar: ScalarRef) -> Self {
         let dtype = scalar.dtype().as_nullable();
         Self::Some(scalar, dtype)
     }
@@ -43,7 +43,7 @@ impl Scalar for NullableScalar {
     }
 
     #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
         match *self {
             Self::Some(s, _) => Some(s),
             Self::None(_) => None,
@@ -51,7 +51,7 @@ impl Scalar for NullableScalar {
     }
 
     #[inline]
-    fn boxed(self) -> Box<dyn Scalar> {
+    fn boxed(self) -> ScalarRef {
         Box::new(self)
     }
 
@@ -63,7 +63,7 @@ impl Scalar for NullableScalar {
         }
     }
 
-    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+    fn cast(&self, dtype: &DType) -> VortexResult<ScalarRef> {
         match self {
             Self::Some(s, _dt) => {
                 if dtype.is_nullable() {
@@ -102,7 +102,7 @@ impl Display for NullableScalar {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NullableScalarOption<T>(pub Option<T>);
 
-impl<T: Into<Box<dyn Scalar>>> From<NullableScalarOption<T>> for Box<dyn Scalar> {
+impl<T: Into<ScalarRef>> From<NullableScalarOption<T>> for ScalarRef {
     fn from(value: NullableScalarOption<T>) -> Self {
         match value.0 {
             // TODO(robert): This should return NullableScalar::None
@@ -114,9 +114,7 @@ impl<T: Into<Box<dyn Scalar>>> From<NullableScalarOption<T>> for Box<dyn Scalar>
     }
 }
 
-impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<&dyn Scalar>
-    for NullableScalarOption<T>
-{
+impl<T: TryFrom<ScalarRef, Error = VortexError>> TryFrom<&dyn Scalar> for NullableScalarOption<T> {
     type Error = VortexError;
 
     fn try_from(value: &dyn Scalar) -> Result<Self, Self::Error> {
@@ -131,12 +129,10 @@ impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<&dyn Scalar>
     }
 }
 
-impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<Box<dyn Scalar>>
-    for NullableScalarOption<T>
-{
+impl<T: TryFrom<ScalarRef, Error = VortexError>> TryFrom<ScalarRef> for NullableScalarOption<T> {
     type Error = VortexError;
 
-    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
+    fn try_from(value: ScalarRef) -> Result<Self, Self::Error> {
         let dtype = value.dtype().clone();
         let ns = value
             .into_any()

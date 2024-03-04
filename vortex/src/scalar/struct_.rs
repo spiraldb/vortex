@@ -6,22 +6,22 @@ use itertools::Itertools;
 
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::Scalar;
+use crate::scalar::{Scalar, ScalarRef};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructScalar {
     dtype: DType,
-    values: Vec<Box<dyn Scalar>>,
+    values: Vec<ScalarRef>,
 }
 
 impl StructScalar {
     #[inline]
-    pub fn new(dtype: DType, values: Vec<Box<dyn Scalar>>) -> Self {
+    pub fn new(dtype: DType, values: Vec<ScalarRef>) -> Self {
         Self { dtype, values }
     }
 
     #[inline]
-    pub fn values(&self) -> &[Box<dyn Scalar>] {
+    pub fn values(&self) -> &[ScalarRef] {
         &self.values
     }
 }
@@ -43,12 +43,12 @@ impl Scalar for StructScalar {
     }
 
     #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
         Some(self)
     }
 
     #[inline]
-    fn boxed(self) -> Box<dyn Scalar> {
+    fn boxed(self) -> ScalarRef {
         Box::new(self)
     }
 
@@ -57,14 +57,14 @@ impl Scalar for StructScalar {
         &self.dtype
     }
 
-    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+    fn cast(&self, dtype: &DType) -> VortexResult<ScalarRef> {
         match dtype {
             DType::Struct(names, field_dtypes) => {
                 if field_dtypes.len() != self.values.len() {
                     return Err(VortexError::InvalidDType(dtype.clone()));
                 }
 
-                let new_fields: Vec<Box<dyn Scalar>> = self
+                let new_fields: Vec<ScalarRef> = self
                     .values
                     .iter()
                     .zip_eq(field_dtypes.iter())

@@ -3,7 +3,7 @@ use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
-use crate::scalar::{NullableScalar, Scalar};
+use crate::scalar::{NullableScalar, Scalar, ScalarRef};
 
 impl ArrayCompute for SparseArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -12,7 +12,7 @@ impl ArrayCompute for SparseArray {
 }
 
 impl ScalarAtFn for SparseArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
         // Check whether `true_patch_index` exists in the patch index array
         // First, get the index of the patch index array that is the first index
         // greater than or equal to the true index
