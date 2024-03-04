@@ -1,7 +1,15 @@
 [package]
 name = "fastlanez-sys"
-version = "0.1.0"
-edition = "2021"
+version = { workspace = true }
+description = "Vortex bindings for zig fastlanes codec"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 links = "fastlanez"
 
 [lints]
