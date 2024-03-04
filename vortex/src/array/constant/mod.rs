@@ -35,6 +35,7 @@ mod compress;
 mod compute;
 mod serde;
 mod stats;
+mod take;
 
 #[derive(Debug, Clone)]
 pub struct ConstantArray {

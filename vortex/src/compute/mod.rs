@@ -12,27 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use cast::CastPrimitiveFn;
-use patch::PatchFn;
 use take::TakeFn;
 
 pub mod add;
 pub mod as_contiguous;
 pub mod cast;
-pub mod patch;
 pub mod repeat;
 pub mod search_sorted;
 pub mod take;
 
 pub trait ArrayCompute {
-    fn cast_primitive(&self) -> Option<&dyn CastPrimitiveFn> {
-        None
-    }
-
-    fn patch(&self) -> Option<&dyn PatchFn> {
-        None
-    }
-
     fn take(&self) -> Option<&dyn TakeFn> {
         None
     }

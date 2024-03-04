@@ -23,7 +23,7 @@ use std::sync::{Arc, RwLock};
 use allocator_api2::alloc::Allocator;
 use arrow::alloc::ALIGNMENT as ARROW_ALIGNMENT;
 use arrow::array::{make_array, ArrayData, AsArray};
-use arrow::buffer::{Buffer, NullBuffer, ScalarBuffer};
+use arrow::buffer::{Buffer, NullBuffer};
 use linkme::distributed_slice;
 use log::debug;
 
@@ -34,7 +34,6 @@ use crate::array::{
 };
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
-use crate::compute::ArrayCompute;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -44,7 +43,6 @@ use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
-mod compute;
 mod serde;
 mod stats;
 
@@ -143,17 +141,6 @@ impl PrimitiveArray {
     #[inline]
     pub fn validity(&self) -> Option<&dyn Array> {
         self.validity.as_deref()
-    }
-
-    pub fn scalar_buffer<T: NativePType>(&self) -> ScalarBuffer<T> {
-        ScalarBuffer::from(self.buffer().clone())
-    }
-
-    pub fn typed_data<T: NativePType>(&self) -> &[T] {
-        if self.ptype() != &T::PTYPE {
-            panic!("Invalid PType")
-        }
-        self.buffer().typed_data()
     }
 }
 
@@ -257,10 +244,6 @@ impl Array for PrimitiveArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.buffer.len()
-    }
-
-    fn compute(&self) -> Option<&dyn ArrayCompute> {
-        Some(self)
     }
 
     fn serde(&self) -> &dyn ArraySerde {
