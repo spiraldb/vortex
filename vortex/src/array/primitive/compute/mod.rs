@@ -19,6 +19,7 @@ use crate::compute::ArrayCompute;
 
 mod cast;
 mod patch;
+mod scalar_at;
 
 impl ArrayCompute for PrimitiveArray {
     fn cast_primitive(&self) -> Option<&dyn CastPrimitiveFn> {

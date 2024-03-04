@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use crate::array::primitive::PrimitiveEncoding;
 use crate::array::{Array, ArrayRef};
 use crate::compress::{
@@ -46,12 +32,13 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::Encoding;
     use crate::compress::CompressCtx;
+    use crate::compute::scalar_at::scalar_at;
 
     #[test]
     pub fn compress_constant() {
         let arr = PrimitiveArray::from_vec(vec![1, 1, 1, 1]);
         let res = CompressCtx::default().compress(arr.as_ref(), None);
         assert_eq!(res.encoding().id(), ConstantEncoding.id());
-        assert_eq!(res.scalar_at(3).unwrap().try_into(), Ok(1));
+        assert_eq!(scalar_at(res.as_ref(), 3).unwrap().try_into(), Ok(1));
     }
 }

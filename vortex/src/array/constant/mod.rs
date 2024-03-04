@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
@@ -19,8 +5,8 @@ use arrow::array::Datum;
 use linkme::distributed_slice;
 
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef, ENCODINGS,
+    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
+    ENCODINGS,
 };
 use crate::arrow::compute::repeat;
 use crate::compress::EncodingCompression;
@@ -91,11 +77,6 @@ impl Array for ConstantArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-        Ok(self.scalar.clone())
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

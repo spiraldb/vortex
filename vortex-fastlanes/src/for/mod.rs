@@ -1,23 +1,10 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use vortex::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
+use vortex::compute::ArrayCompute;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
@@ -92,10 +79,6 @@ impl Array for FoRArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, _index: usize) -> VortexResult<Box<dyn Scalar>> {
-        todo!()
-    }
-
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         todo!()
     }
@@ -123,6 +106,8 @@ impl Array for FoRArray {
         self
     }
 }
+
+impl ArrayCompute for FoRArray {}
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for FoRArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {

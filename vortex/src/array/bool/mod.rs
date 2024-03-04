@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
@@ -22,19 +8,20 @@ use linkme::distributed_slice;
 
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
+use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, Nullability};
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 
 use super::{
-    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
-    Encoding, EncodingId, EncodingRef, ENCODINGS,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
+    EncodingId, EncodingRef, ENCODINGS,
 };
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -63,8 +50,8 @@ impl BoolArray {
 
     fn is_valid(&self, index: usize) -> bool {
         self.validity
-            .as_ref()
-            .map(|v| v.scalar_at(index).unwrap().try_into().unwrap())
+            .as_deref()
+            .map(|v| scalar_at(v, index).unwrap().try_into().unwrap())
             .unwrap_or(true)
     }
 
@@ -117,16 +104,6 @@ impl Array for BoolArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-
-        if self.is_valid(index) {
-            Ok(self.buffer.value(index).into())
-        } else {
-            Ok(NullableScalar::none(self.dtype().clone()).boxed())
-        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -257,9 +234,9 @@ mod test {
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(true));
-        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(false));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(false));
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(true));
+        assert_eq!(scalar_at(arr.as_ref(), 1).unwrap().try_into(), Ok(false));
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(false));
     }
 
     #[test]

@@ -1,31 +1,17 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::{
     check_validity_buffer, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef,
 };
 use vortex::compress::EncodingCompression;
+use vortex::compute::scalar_at::scalar_at;
+use vortex::compute::ArrayCompute;
 use vortex::dtype::DType;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::match_each_integer_ptype;
-use vortex::scalar::{NullableScalar, Scalar};
+use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 
@@ -118,7 +104,7 @@ impl FFORArray {
 
     pub fn is_valid(&self, index: usize) -> bool {
         self.validity()
-            .map(|v| v.scalar_at(index).and_then(|v| v.try_into()).unwrap())
+            .map(|v| scalar_at(v, index).and_then(|v| v.try_into()).unwrap())
             .unwrap_or(true)
     }
 }
@@ -159,42 +145,6 @@ impl Array for FFORArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        if !self.is_valid(index) {
-            return Ok(NullableScalar::none(self.dtype().clone()).boxed());
-        }
-
-        if let Some(patch) = self
-            .patches()
-            .and_then(|p| p.scalar_at(index).ok())
-            .and_then(|p| p.into_nonnull())
-        {
-            return Ok(patch);
-        }
-
-        let Some(parray) = self.encoded().maybe_primitive() else {
-            return Err(VortexError::InvalidEncoding(
-                self.encoded().encoding().id().clone(),
-            ));
-        };
-
-        if let Ok(ptype) = self.dtype().try_into() {
-            match_each_integer_ptype!(ptype, |$T| {
-            return Ok(codecz::ffor::decode_single::<$T>(
-                parray.buffer().as_slice(),
-                self.len,
-                self.num_bits,
-                self.min_val().try_into().unwrap(),
-                index,
-            )
-            .unwrap()
-            .into());
-            })
-        } else {
-            return Err(VortexError::InvalidDType(self.dtype().clone()));
-        }
-    }
-
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         todo!()
     }
@@ -217,6 +167,8 @@ impl Array for FFORArray {
         self
     }
 }
+
+impl ArrayCompute for FFORArray {}
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for FFORArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {

@@ -1,31 +1,11 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use zigzag::ZigZag;
-
-use vortex::array::{
-    check_index_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef,
-};
+use vortex::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
-use vortex::dtype::{DType, IntWidth, Signedness};
+use vortex::dtype::{DType, Signedness};
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::scalar::{NullableScalar, Scalar};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 
@@ -103,30 +83,6 @@ impl Array for ZigZagArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-
-        let scalar = self.encoded().scalar_at(index)?;
-        let Some(scalar) = scalar.as_nonnull() else {
-            return Ok(NullableScalar::none(self.dtype().clone()).boxed());
-        };
-        match self.dtype() {
-            DType::Int(IntWidth::_8, Signedness::Signed, _) => {
-                Ok(i8::decode(scalar.try_into()?).into())
-            }
-            DType::Int(IntWidth::_16, Signedness::Signed, _) => {
-                Ok(i16::decode(scalar.try_into()?).into())
-            }
-            DType::Int(IntWidth::_32, Signedness::Signed, _) => {
-                Ok(i32::decode(scalar.try_into()?).into())
-            }
-            DType::Int(IntWidth::_64, Signedness::Signed, _) => {
-                Ok(i64::decode(scalar.try_into()?).into())
-            }
-            _ => Err(VortexError::InvalidDType(self.dtype().clone())),
-        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

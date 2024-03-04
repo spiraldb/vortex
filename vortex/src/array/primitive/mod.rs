@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use core::cmp::min;
 use std::any::Any;
 use std::iter;
@@ -29,17 +15,17 @@ use log::debug;
 
 use crate::array::bool::BoolArray;
 use crate::array::{
-    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
-    Encoding, EncodingId, EncodingRef, ENCODINGS,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
+    EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
+use crate::compute::scalar_at::scalar_at;
 use crate::compute::ArrayCompute;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
-use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
@@ -125,8 +111,8 @@ impl PrimitiveArray {
 
     pub fn is_valid(&self, index: usize) -> bool {
         self.validity
-            .as_ref()
-            .map(|v| v.scalar_at(index).unwrap().try_into().unwrap())
+            .as_deref()
+            .map(|v| scalar_at(v, index).unwrap().try_into().unwrap())
             .unwrap_or(true)
     }
 
@@ -193,23 +179,6 @@ impl Array for PrimitiveArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-
-        if self.is_valid(index) {
-            Ok(
-                match_each_native_ptype!(self.ptype, |$T| self.buffer.typed_data::<$T>()
-                    .get(index)
-                    .unwrap()
-                    .clone()
-                    .into()
-                ),
-            )
-        } else {
-            Ok(NullableScalar::none(self.dtype().clone()).boxed())
-        }
-    }
-
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(iter::once(make_array(
             ArrayData::builder(self.dtype().into())
@@ -257,10 +226,6 @@ impl Array for PrimitiveArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.buffer.len()
-    }
-
-    fn compute(&self) -> Option<&dyn ArrayCompute> {
-        Some(self)
     }
 
     fn serde(&self) -> &dyn ArraySerde {
@@ -366,9 +331,9 @@ mod test {
         );
 
         // Ensure we can fetch the scalar at the given index.
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(1));
-        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(1));
+        assert_eq!(scalar_at(arr.as_ref(), 1).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(3));
     }
 
     #[test]
@@ -377,8 +342,8 @@ mod test {
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(3));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(4));
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(arr.as_ref(), 1).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(4));
     }
 }

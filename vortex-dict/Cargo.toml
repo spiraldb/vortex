@@ -19,3 +19,6 @@ hashbrown = "0.14.3"
 linkme = "0.3.22"
 log = "0.4.20"
 num-traits = "0.2.17"
+
+[lints]
+workspace = true

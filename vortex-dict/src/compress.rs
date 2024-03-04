@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::hash::{Hash, Hasher};
 
 use ahash::RandomState;
@@ -25,6 +11,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::compute::scalar_at::scalar_at;
 use vortex::dtype::DType;
 use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
@@ -221,8 +208,8 @@ fn bytes_at_primitive<'a, T: NativePType + AsPrimitive<usize>>(
 }
 
 fn bytes_at<'a>(offsets: &'a dyn Array, bytes: &'a [u8], idx: usize) -> &'a [u8] {
-    let start: usize = offsets.scalar_at(idx).unwrap().try_into().unwrap();
-    let stop: usize = offsets.scalar_at(idx + 1).unwrap().try_into().unwrap();
+    let start: usize = scalar_at(offsets, idx).unwrap().try_into().unwrap();
+    let stop: usize = scalar_at(offsets, idx + 1).unwrap().try_into().unwrap();
     &bytes[start..stop]
 }
 
@@ -282,7 +269,7 @@ where
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::array::Array;
+    use vortex::compute::scalar_at::scalar_at;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
 
@@ -311,8 +298,8 @@ mod test {
         assert!(!codes.is_valid(2));
         assert!(!codes.is_valid(5));
         assert!(!codes.is_valid(7));
-        assert_eq!(values.scalar_at(0), Ok(1.into()));
-        assert_eq!(values.scalar_at(2), Ok(3.into()));
+        assert_eq!(scalar_at(values.as_ref(), 0), Ok(1.into()));
+        assert_eq!(scalar_at(values.as_ref(), 2), Ok(3.into()));
     }
 
     #[test]

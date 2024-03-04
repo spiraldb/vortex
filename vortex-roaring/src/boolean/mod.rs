@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
@@ -19,19 +5,19 @@ use croaring::{Bitmap, Native};
 
 use compress::roaring_encode;
 use vortex::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef,
+    check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    EncodingRef,
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::DType;
 use vortex::dtype::Nullability::NonNullable;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -96,16 +82,6 @@ impl Array for RoaringBoolArray {
 
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-
-        if self.bitmap.contains(index as u32) {
-            Ok(true.into())
-        } else {
-            Ok(false.into())
-        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -179,6 +155,7 @@ impl Encoding for RoaringBoolEncoding {
 mod test {
     use vortex::array::bool::BoolArray;
     use vortex::array::Array;
+    use vortex::compute::scalar_at::scalar_at;
     use vortex::error::VortexResult;
     use vortex::scalar::Scalar;
 
@@ -196,17 +173,17 @@ mod test {
     }
 
     #[test]
-    pub fn scalar_at() -> VortexResult<()> {
+    pub fn test_scalar_at() -> VortexResult<()> {
         let bool: &dyn Array = &BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool)?;
 
         let truthy: Box<dyn Scalar> = true.into();
         let falsy: Box<dyn Scalar> = false.into();
 
-        assert_eq!(array.scalar_at(0)?, truthy);
-        assert_eq!(array.scalar_at(1)?, falsy);
-        assert_eq!(array.scalar_at(2)?, truthy);
-        assert_eq!(array.scalar_at(3)?, truthy);
+        assert_eq!(scalar_at(array.as_ref(), 0)?, truthy);
+        assert_eq!(scalar_at(array.as_ref(), 1)?, falsy);
+        assert_eq!(scalar_at(array.as_ref(), 2)?, truthy);
+        assert_eq!(scalar_at(array.as_ref(), 3)?, truthy);
 
         Ok(())
     }

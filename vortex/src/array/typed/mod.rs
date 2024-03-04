@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
@@ -23,11 +9,11 @@ use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -97,11 +83,6 @@ impl Array for TypedArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        let underlying = self.array.scalar_at(index)?;
-        underlying.as_ref().cast(self.dtype())
     }
 
     // TODO(robert): Have cast happen in enc space and not in arrow space
@@ -180,6 +161,7 @@ mod test {
 
     use crate::array::typed::TypedArray;
     use crate::array::Array;
+    use crate::compute::scalar_at::scalar_at;
     use crate::dtype::{DType, Nullability, TimeUnit};
     use crate::scalar::{LocalTimeScalar, PScalar, Scalar};
 
@@ -190,11 +172,11 @@ mod test {
             DType::LocalTime(TimeUnit::Us, Nullability::NonNullable),
         );
         assert_eq!(
-            arr.scalar_at(0).unwrap().as_ref(),
+            scalar_at(arr.as_ref(), 0).unwrap().as_ref(),
             &LocalTimeScalar::new(PScalar::U64(64_799_000_000), TimeUnit::Us) as &dyn Scalar
         );
         assert_eq!(
-            arr.scalar_at(1).unwrap().as_ref(),
+            scalar_at(arr.as_ref(), 1).unwrap().as_ref(),
             &LocalTimeScalar::new(PScalar::U64(43_000_000_000), TimeUnit::Us) as &dyn Scalar
         );
     }
