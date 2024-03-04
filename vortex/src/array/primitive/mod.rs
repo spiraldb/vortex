@@ -9,7 +9,7 @@ use std::sync::{Arc, RwLock};
 use allocator_api2::alloc::Allocator;
 use arrow::alloc::ALIGNMENT as ARROW_ALIGNMENT;
 use arrow::array::{make_array, ArrayData, AsArray};
-use arrow::buffer::{Buffer, NullBuffer};
+use arrow::buffer::{Buffer, NullBuffer, ScalarBuffer};
 use linkme::distributed_slice;
 use log::debug;
 
@@ -128,6 +128,17 @@ impl PrimitiveArray {
     #[inline]
     pub fn validity(&self) -> Option<&dyn Array> {
         self.validity.as_deref()
+    }
+
+    pub fn scalar_buffer<T: NativePType>(&self) -> ScalarBuffer<T> {
+        ScalarBuffer::from(self.buffer().clone())
+    }
+
+    pub fn typed_data<T: NativePType>(&self) -> &[T] {
+        if self.ptype() != &T::PTYPE {
+            panic!("Invalid PType")
+        }
+        self.buffer().typed_data()
     }
 }
 

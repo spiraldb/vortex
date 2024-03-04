@@ -15,9 +15,9 @@ pub fn scalar_at(array: &dyn Array, index: usize) -> VortexResult<Box<dyn Scalar
         .scalar_at()
         .map(|t| t.scalar_at(index))
         .unwrap_or_else(|| {
-            // TODO(ngates): default implementation of decode and then try again
-            Err(VortexError::ComputeError(
-                format!("scalar_at not implemented for {}", &array.encoding().id()).into(),
+            Err(VortexError::NotImplemented(
+                "scalar_at",
+                array.encoding().id(),
             ))
         })
 }

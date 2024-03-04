@@ -51,6 +51,14 @@ pub enum VortexError {
     LengthMismatch,
     #[error("{0}")]
     ComputeError(ErrString),
+    #[error("{0}")]
+    InvalidArgument(ErrString),
+    // Used when a function is not implemented for a given array type.
+    #[error("function {0} not implemented for {1}")]
+    NotImplemented(&'static str, &'static EncodingId),
+    // Used when a function is implemented for an array type, but the RHS is not supported.
+    #[error("missing kernel {0} for {1} and {2:?}")]
+    MissingKernel(&'static str, &'static EncodingId, Vec<&'static EncodingId>),
     #[error("invalid data type: {0}")]
     InvalidDType(DType),
     #[error("invalid physical type: {0:?}")]

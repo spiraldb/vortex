@@ -3,8 +3,9 @@ use std::iter;
 use std::sync::{Arc, RwLock};
 
 use arrow::array::AsArray;
-use arrow::array::BooleanBufferBuilder;
-use arrow::array::{ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray};
+use arrow::array::{
+    ArrayRef as ArrowArrayRef, BooleanBufferBuilder, PrimitiveArray as ArrowPrimitiveArray,
+};
 use arrow::buffer::{NullBuffer, ScalarBuffer};
 use arrow::datatypes::UInt64Type;
 use linkme::distributed_slice;
@@ -79,6 +80,22 @@ impl SparseArray {
     pub fn indices(&self) -> &dyn Array {
         self.indices.as_ref()
     }
+
+    /// Return indices as a vector of usize with the indices_offset applied.
+    pub fn resolved_indices(&self) -> Vec<usize> {
+        let mut indices = Vec::with_capacity(self.len());
+        self.indices().iter_arrow().for_each(|c| {
+            indices.extend(
+                arrow::compute::cast(c.as_ref(), &arrow::datatypes::DataType::UInt64)
+                    .unwrap()
+                    .as_primitive::<UInt64Type>()
+                    .values()
+                    .into_iter()
+                    .map(|v| (*v as usize) - self.indices_offset),
+            )
+        });
+        indices
+    }
 }
 
 impl Array for SparseArray {
@@ -119,16 +136,7 @@ impl Array for SparseArray {
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         // Resolve our indices into a vector of usize applying the offset
-        let mut indices = Vec::with_capacity(self.len());
-        self.indices().iter_arrow().for_each(|c| {
-            indices.extend(
-                c.as_primitive::<UInt64Type>()
-                    .values()
-                    .into_iter()
-                    .map(|v| (*v as usize) - self.indices_offset),
-            )
-        });
-
+        let indices = self.resolved_indices();
         let array: ArrowArrayRef = match_arrow_numeric_type!(self.values().dtype(), |$E| {
             let mut validity = BooleanBufferBuilder::new(self.len());
             validity.append_n(self.len(), false);
@@ -147,7 +155,6 @@ impl Array for SparseArray {
                 Some(NullBuffer::from(validity.finish())),
             ))
         });
-
         Box::new(iter::once(array))
     }
 
