@@ -19,7 +19,7 @@ use codecz::ffor::{FforEncoded, SupportsFFoR};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
@@ -72,7 +72,7 @@ fn ffor_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx
 
     FFORArray::new(
         encoded,
-        parray.validity().cloned(),
+        parray.validity().clone_optional(),
         patches.map(|p| {
             ctx.next_level().compress(
                 p.as_ref(),
@@ -90,7 +90,7 @@ pub fn ffor_encode(parray: &PrimitiveArray) -> FFORArray {
     let (encoded, patches, min_val, num_bits) = ffor_encode_parts(parray);
     FFORArray::new(
         encoded,
-        parray.validity().cloned(),
+        parray.validity().clone_optional(),
         patches,
         min_val,
         num_bits,

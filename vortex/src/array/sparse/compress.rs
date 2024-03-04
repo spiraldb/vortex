@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::array::{Array, ArrayRef};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::sparse::{SparseArray, SparseEncoding};
+use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 
 impl EncodingCompression for SparseEncoding {

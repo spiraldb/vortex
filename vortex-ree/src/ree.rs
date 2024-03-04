@@ -25,7 +25,7 @@ use codecz::ree::SupportsREE;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{
     check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayKind, ArrayRef,
-    ArrowIterator, Encoding, EncodingId, EncodingRef,
+    ArrowIterator, CloneOptionalArray, Encoding, EncodingId, EncodingRef,
 };
 use vortex::arrow::match_arrow_numeric_type;
 use vortex::compress::EncodingCompression;
@@ -108,10 +108,13 @@ impl REEArray {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => {
                 let (ends, values) = ree_encode(p);
-                Ok(
-                    REEArray::new(ends.boxed(), values.boxed(), p.validity().cloned(), p.len())
-                        .boxed(),
+                Ok(REEArray::new(
+                    ends.boxed(),
+                    values.boxed(),
+                    p.validity().clone_optional(),
+                    p.len(),
                 )
+                .boxed())
             }
             _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
         }

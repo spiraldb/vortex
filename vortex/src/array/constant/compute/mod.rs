@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::array::constant::ConstantArray;
-use crate::compute::ArrayCompute;
 use crate::compute::take::TakeFn;
+use crate::compute::ArrayCompute;
 
 mod take;
 

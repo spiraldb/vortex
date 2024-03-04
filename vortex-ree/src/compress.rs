@@ -15,7 +15,7 @@
 use codecz::AlignedAllocator;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::dtype::{DType, IntWidth, Nullability};
 use vortex::ptype::match_each_native_ptype;
@@ -60,7 +60,7 @@ fn ree_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
     REEArray::new(
         compressed_ends,
         compressed_values,
-        primitive_array.validity().cloned(),
+        primitive_array.validity().clone_optional(),
         array.len(),
     )
     .boxed()

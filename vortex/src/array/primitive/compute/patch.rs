@@ -14,13 +14,13 @@
 
 use itertools::Itertools;
 
-use crate::{compute, match_each_native_ptype};
-use crate::array::{Array, ArrayRef, CloneOptionalArray};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
+use crate::array::{Array, ArrayRef, CloneOptionalArray};
 use crate::compute::patch::PatchFn;
 use crate::error::{VortexError, VortexResult};
+use crate::{compute, match_each_native_ptype};
 
 impl PatchFn for PrimitiveArray {
     fn patch(&self, patch: &dyn Array) -> VortexResult<ArrayRef> {
@@ -30,7 +30,7 @@ impl PatchFn for PrimitiveArray {
             _ => Err(VortexError::MissingKernel(
                 "patch",
                 self.encoding().id(),
-                vec![patch.encoding().id().into()],
+                vec![patch.encoding().id()],
             )),
         }
     }

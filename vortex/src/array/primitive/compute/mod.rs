@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::ArrayCompute;
 use crate::compute::cast::CastPrimitiveFn;
 use crate::compute::patch::PatchFn;
+use crate::compute::ArrayCompute;
 
 mod cast;
 mod patch;

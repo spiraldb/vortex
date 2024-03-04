@@ -23,7 +23,7 @@ use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
-use vortex::array::{Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::dtype::DType;
 use vortex::match_each_native_ptype;
@@ -138,7 +138,7 @@ fn dict_encode_typed_primitive<
     }
 
     (
-        PrimitiveArray::from_nullable(codes, array.validity().cloned()),
+        PrimitiveArray::from_nullable(codes, array.validity().clone_optional()),
         PrimitiveArray::from_vec(values),
     )
 }

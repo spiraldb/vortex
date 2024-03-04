@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::array::Array;
 use crate::array::primitive::PrimitiveArray;
+use crate::array::Array;
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 

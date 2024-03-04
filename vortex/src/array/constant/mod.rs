@@ -19,7 +19,7 @@ use arrow::array::Datum;
 use linkme::distributed_slice;
 
 use crate::array::{
-    Array, ArrayRef, ArrowIterator, check_index_bounds, check_slice_bounds, Encoding, EncodingId,
+    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
     EncodingRef, ENCODINGS,
 };
 use crate::arrow::compute::repeat;

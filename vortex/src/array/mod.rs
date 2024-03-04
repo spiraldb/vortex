@@ -18,16 +18,16 @@ use std::fmt::{Debug, Display, Formatter};
 use arrow::array::ArrayRef as ArrowArrayRef;
 use linkme::distributed_slice;
 
-use crate::array::bool::{BOOL_ENCODING, BoolArray};
-use crate::array::chunked::{CHUNKED_ENCODING, ChunkedArray};
-use crate::array::constant::{CONSTANT_ENCODING, ConstantArray};
+use crate::array::bool::{BoolArray, BOOL_ENCODING};
+use crate::array::chunked::{ChunkedArray, CHUNKED_ENCODING};
+use crate::array::constant::{ConstantArray, CONSTANT_ENCODING};
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::primitive::{PRIMITIVE_ENCODING, PrimitiveArray};
+use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
 use crate::array::sparse::SparseArray;
-use crate::array::struct_::{STRUCT_ENCODING, StructArray};
-use crate::array::typed::{TYPED_ENCODING, TypedArray};
-use crate::array::varbin::{VARBIN_ENCODING, VarBinArray};
-use crate::array::varbinview::{VARBINVIEW_ENCODING, VarBinViewArray};
+use crate::array::struct_::{StructArray, STRUCT_ENCODING};
+use crate::array::typed::{TypedArray, TYPED_ENCODING};
+use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
+use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::dtype::{DType, Nullability};
@@ -100,7 +100,7 @@ pub trait CloneOptionalArray {
 
 impl CloneOptionalArray for Option<&dyn Array> {
     fn clone_optional(&self) -> Option<ArrayRef> {
-        self.map(|a| dyn_clone::clone_box(a))
+        self.map(dyn_clone::clone_box)
     }
 }
 

@@ -15,12 +15,12 @@
 use arrow::buffer::BooleanBuffer;
 use itertools::Itertools;
 
-use vortex_alloc::{ALIGNED_ALLOCATOR, AlignedVec};
+use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 
-use crate::array::{Array, ArrayRef, CloneOptionalArray};
-use crate::array::bool::{BOOL_ENCODING, BoolArray};
+use crate::array::bool::{BoolArray, BOOL_ENCODING};
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::primitive::{PRIMITIVE_ENCODING, PrimitiveArray};
+use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
+use crate::array::{Array, ArrayRef, CloneOptionalArray};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::{match_each_native_ptype, NativePType};
 
