@@ -28,6 +28,7 @@ use vortex::array::varbinview::VarBinViewArray;
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex_alp::{ALPArray, ALP_ENCODING};
 use vortex_dict::{DictArray, DICT_ENCODING};
+use vortex_fastlanes::{BitPackedArray, FoRArray, FL_BITPACKED_ENCODING, FL_FOR_ENCODING};
 use vortex_ffor::{FFORArray, FFOR_ENCODING};
 use vortex_ree::{REEArray, REE_ENCODING};
 use vortex_roaring::{
@@ -78,6 +79,8 @@ pyarray!(VarBinArray, "VarBinArray");
 pyarray!(VarBinViewArray, "VarBinViewArray");
 
 pyarray!(ALPArray, "ALPArray");
+pyarray!(BitPackedArray, "BitPackedArray");
+pyarray!(FoRArray, "FoRArray");
 pyarray!(DictArray, "DictArray");
 pyarray!(FFORArray, "FFORArray");
 pyarray!(REEArray, "REEArray");
@@ -137,6 +140,15 @@ impl PyArray {
                     PyDictArray::wrap(py, inner.into_any().downcast::<DictArray>().unwrap())?
                         .extract(py)
                 }
+                FL_FOR_ENCODING => {
+                    PyFoRArray::wrap(py, inner.into_any().downcast::<FoRArray>().unwrap())?
+                        .extract(py)
+                }
+                FL_BITPACKED_ENCODING => PyBitPackedArray::wrap(
+                    py,
+                    inner.into_any().downcast::<BitPackedArray>().unwrap(),
+                )?
+                .extract(py),
                 FFOR_ENCODING => {
                     PyFFORArray::wrap(py, inner.into_any().downcast::<FFORArray>().unwrap())?
                         .extract(py)

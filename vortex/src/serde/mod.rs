@@ -119,6 +119,20 @@ impl<'a> ReadCtx<'a> {
             .map(|u| u as usize)
     }
 
+    pub fn read_option_tag(&mut self) -> io::Result<bool> {
+        let mut tag = [0; 1];
+        self.r.read_exact(&mut tag)?;
+        Ok(tag[0] == 0x01)
+    }
+
+    pub fn read_optional_array(&mut self) -> io::Result<Option<ArrayRef>> {
+        if self.read_option_tag()? {
+            self.read().map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn read(&mut self) -> io::Result<ArrayRef> {
         let encoding_id = self.read_usize()?;
         if let Some(serde) = ENCODINGS
@@ -176,6 +190,15 @@ impl<'a> WriteCtx<'a> {
 
     pub fn write_option_tag(&mut self, present: bool) -> io::Result<()> {
         self.w.write_all(&[if present { 0x01 } else { 0x00 }])
+    }
+
+    pub fn write_optional_array(&mut self, array: Option<&dyn Array>) -> io::Result<()> {
+        self.write_option_tag(array.is_some())?;
+        if let Some(array) = array {
+            self.write(array)
+        } else {
+            Ok(())
+        }
     }
 
     pub fn write(&mut self, array: &dyn Array) -> io::Result<()> {

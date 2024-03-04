@@ -25,6 +25,12 @@ def test_primitive_compress():
     assert arr_compressed.nbytes < a.nbytes
 
 
+def test_for_compress():
+    a = pa.array(np.arange(10_000) + 10_000_000)
+    arr_compressed = vortex.compress(vortex.encode(a))
+    assert not isinstance(arr_compressed, vortex.PrimitiveArray)
+
+
 def test_bool_compress():
     a = vortex.encode(pa.array([False] * 10_000 + [True] * 10_000))
     arr_compressed = vortex.compress(a)
