@@ -94,6 +94,16 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
 
 dyn_clone::clone_trait_object!(Array);
 
+pub trait CloneOptionalArray {
+    fn clone_optional(&self) -> Option<ArrayRef>;
+}
+
+impl CloneOptionalArray for Option<&dyn Array> {
+    fn clone_optional(&self) -> Option<ArrayRef> {
+        self.map(dyn_clone::clone_box)
+    }
+}
+
 pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> VortexResult<()> {
     if start > array.len() {
         return Err(VortexError::OutOfBounds(start, 0, array.len()));
@@ -111,7 +121,7 @@ pub fn check_index_bounds(array: &dyn Array, index: usize) -> VortexResult<()> {
     Ok(())
 }
 
-pub fn check_validity_buffer(validity: Option<&ArrayRef>) -> VortexResult<()> {
+pub fn check_validity_buffer(validity: Option<&dyn Array>) -> VortexResult<()> {
     // TODO(ngates): take a length parameter and check that the length of the validity buffer matches
     if validity
         .map(|v| !matches!(v.dtype(), DType::Bool(Nullability::NonNullable)))

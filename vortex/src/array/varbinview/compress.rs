@@ -63,9 +63,7 @@ fn varbinview_compressor(
         varbinview_array.validity().map(|v| {
             ctx.compress(
                 v.as_ref(),
-                varbinview_like
-                    .and_then(|vbvlike| vbvlike.validity())
-                    .map(|v| v.as_ref()),
+                varbinview_like.and_then(|vbvlike| vbvlike.validity()),
             )
         }),
     )

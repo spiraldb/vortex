@@ -79,8 +79,8 @@ impl ALPArray {
         self.exponents
     }
 
-    pub fn patches(&self) -> Option<&ArrayRef> {
-        self.patches.as_ref()
+    pub fn patches(&self) -> Option<&dyn Array> {
+        self.patches.as_deref()
     }
 }
 

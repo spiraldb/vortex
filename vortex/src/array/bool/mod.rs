@@ -52,7 +52,7 @@ impl BoolArray {
 
     pub fn try_new(buffer: BooleanBuffer, validity: Option<ArrayRef>) -> VortexResult<Self> {
         let validity = validity.filter(|v| !v.is_empty());
-        check_validity_buffer(validity.as_ref())?;
+        check_validity_buffer(validity.as_deref())?;
 
         Ok(Self {
             buffer,
@@ -74,8 +74,8 @@ impl BoolArray {
     }
 
     #[inline]
-    pub fn validity(&self) -> Option<&ArrayRef> {
-        self.validity.as_ref()
+    pub fn validity(&self) -> Option<&dyn Array> {
+        self.validity.as_deref()
     }
 }
 
