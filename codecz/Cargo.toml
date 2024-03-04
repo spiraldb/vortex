@@ -1,12 +1,18 @@
 [package]
 name = "codecz"
-version = "0.1.0"
-edition = "2021"
+version = { workspace = true }
+description = "Rust wrapper for vortex zig compression codecs"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 
 [lints]
 workspace = true
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 enum-display = "0.1.3"

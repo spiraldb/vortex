@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest-medium
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: ./.github/actions/setup-zig
       - uses: ./.github/actions/setup-rust
       - uses: ./.github/actions/setup-python

@@ -1,7 +1,7 @@
 [package]
-name = "codecz-sys"
+name = "vortex-fastlanes"
 version = { workspace = true }
-description = "Rust bindings for vortex zig compression codecs"
+description = "Vortex fastlanes arrays arrays"
 homepage = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
@@ -15,9 +15,9 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
-safe-transmute = "0.11.2"
-vortex-alloc = { version = "0.1.0", path = "../vortex-alloc" }
-
-[build-dependencies]
-bindgen = "0.69.1"
-walkdir = "2.4.0"
+arrayref = "0.3.7"
+vortex = { "path" = "../vortex" }
+linkme = "0.3.22"
+itertools = "0.12.1"
+fastlanez-sys = { path = "../fastlanez-sys" }
+log = "0.4.20"
