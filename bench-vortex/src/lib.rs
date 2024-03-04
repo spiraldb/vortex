@@ -12,7 +12,7 @@ use vortex::array::varbinview::VarBinViewEncoding;
 use vortex::array::Encoding;
 use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
-use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
+use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
 use vortex_zigzag::ZigZagEncoding;
