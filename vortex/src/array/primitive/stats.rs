@@ -73,14 +73,10 @@ where
     let typed_buf: &[T] = array.buffer().typed_data();
 
     // TODO(ngates): add optimized implementation for non-null;
-    let validity = array
-        .validity()
-        .map(|v| cast_bool(v))
-        .transpose()?
-        .map_or_else(
-            || NullBuffer::new_valid(array.len()),
-            |v| NullBuffer::from(v.buffer().clone()),
-        );
+    let validity = array.validity().map(cast_bool).transpose()?.map_or_else(
+        || NullBuffer::new_valid(array.len()),
+        |v| NullBuffer::from(v.buffer().clone()),
+    );
 
     // TODO(ngates): bail out on empty stats
     let first = if validity.iter().next().unwrap() {
