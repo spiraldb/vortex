@@ -1,5 +1,6 @@
 use arrow::buffer::BooleanBuffer;
 use itertools::Itertools;
+use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
@@ -7,7 +8,6 @@ use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use crate::array::{Array, ArrayRef, CloneOptionalArray};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::{match_each_native_ptype, NativePType};
-use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 
 pub fn as_contiguous(arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
     if arrays.is_empty() {
