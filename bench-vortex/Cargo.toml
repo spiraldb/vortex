@@ -1,7 +1,15 @@
 [package]
 name = "vortex-bench"
-version = "0.1.0"
-edition = "2021"
+version = { workspace = true }
+description = "End to end vortex benchmarks"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 
 [lints]
 workspace = true

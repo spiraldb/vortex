@@ -1,7 +1,7 @@
 [package]
 name = "vortex"
 version = { workspace = true }
-description = "Vortex in memory array format"
+description = "Vortex in memory columnar data format"
 homepage = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
