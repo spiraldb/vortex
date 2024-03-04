@@ -34,10 +34,10 @@ use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::match_arrow_numeric_type;
 use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+use crate::{compute, match_arrow_numeric_type};
 
 mod compress;
 mod serde;
@@ -179,16 +179,7 @@ impl Array for SparseArray {
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         // Resolve our indices into a vector of usize applying the offset
-        let mut indices = Vec::with_capacity(self.len());
-        self.indices().iter_arrow().for_each(|c| {
-            indices.extend(
-                c.as_primitive::<UInt64Type>()
-                    .values()
-                    .into_iter()
-                    .map(|v| (*v as usize) - self.indices_offset),
-            )
-        });
-
+        let indices = self.resolved_indices();
         let array: ArrowArrayRef = match_arrow_numeric_type!(self.values().dtype(), |$E| {
             let mut validity = BooleanBufferBuilder::new(self.len());
             validity.append_n(self.len(), false);
@@ -207,7 +198,6 @@ impl Array for SparseArray {
                 Some(NullBuffer::from(validity.finish())),
             ))
         });
-
         Box::new(iter::once(array))
     }
 
