@@ -42,10 +42,10 @@ impl EncodingCompression for FoREncoding {
             // Check if FoR would cause overflow
             let max = parray
                 .stats()
-                .get_or_compute_cast::<$T>(&Stat::Max)
+                .get_or_compute_as::<$T>(&Stat::Max)
                 .unwrap();
             if max.checked_sub(min).is_none() {
-                debug!("Skipping FoR: range too large");
+                println!("Skipping FoR: range too large {} {} {:?}", min, max, parray.ptype());
                 return None;
             }
         });
