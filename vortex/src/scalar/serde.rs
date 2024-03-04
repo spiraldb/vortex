@@ -7,7 +7,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use crate::dtype::{DType, FloatWidth, IntWidth, Signedness, TimeUnit};
 use crate::scalar::{
     BinaryScalar, BoolScalar, ListScalar, LocalTimeScalar, NullScalar, NullableScalar, PScalar,
-    Scalar, StructScalar, Utf8Scalar,
+    Scalar, ScalarRef, StructScalar, Utf8Scalar,
 };
 use crate::serde::{DTypeReader, TimeUnitTag, WriteCtx};
 
@@ -26,7 +26,7 @@ impl<'a> ScalarReader<'a> {
         Ok(bytes)
     }
 
-    pub fn read(&mut self) -> io::Result<Box<dyn Scalar>> {
+    pub fn read(&mut self) -> io::Result<ScalarRef> {
         let tag = ScalarTag::try_from(self.read_nbytes::<1>()?[0])
             .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
         match tag {
@@ -64,7 +64,7 @@ impl<'a> ScalarReader<'a> {
                     let dtype = DTypeReader::new(self.reader).read()?;
                     Ok(ListScalar::new(dtype, Vec::new()).boxed())
                 } else {
-                    let mut values = Vec::<Box<dyn Scalar>>::with_capacity(elems as usize);
+                    let mut values = Vec::<ScalarRef>::with_capacity(elems as usize);
                     for value in values.iter_mut() {
                         *value = self.read()?;
                     }
@@ -100,7 +100,7 @@ impl<'a> ScalarReader<'a> {
                 let DType::Struct(ns, _fs) = &dtype else {
                     return Err(io::Error::new(ErrorKind::InvalidData, "invalid dtype"));
                 };
-                let mut values = Vec::<Box<dyn Scalar>>::with_capacity(ns.len());
+                let mut values = Vec::<ScalarRef>::with_capacity(ns.len());
                 for value in values.iter_mut() {
                     *value = self.read()?;
                 }

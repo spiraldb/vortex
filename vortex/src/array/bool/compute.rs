@@ -3,7 +3,7 @@ use crate::array::Array;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
-use crate::scalar::{NullableScalar, Scalar};
+use crate::scalar::{NullableScalar, Scalar, ScalarRef};
 
 impl ArrayCompute for BoolArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -12,7 +12,7 @@ impl ArrayCompute for BoolArray {
 }
 
 impl ScalarAtFn for BoolArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
         if self.is_valid(index) {
             Ok(self.buffer.value(index).into())
         } else {

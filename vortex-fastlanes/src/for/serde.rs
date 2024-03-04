@@ -26,7 +26,7 @@ mod test {
     use std::io;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::{Array, ArrayRef};
-    use vortex::scalar::Scalar;
+    use vortex::scalar::ScalarRef;
     use vortex::serde::{ReadCtx, WriteCtx};
 
     fn roundtrip_array(array: &dyn Array) -> io::Result<ArrayRef> {
@@ -42,7 +42,7 @@ mod test {
     fn roundtrip() {
         let arr = FoRArray::try_new(
             PrimitiveArray::from_vec(vec![-7i64, -13, 17, 23]).boxed(),
-            <i64 as Into<Box<dyn Scalar>>>::into(-7i64),
+            <i64 as Into<ScalarRef>>::into(-7i64),
         )
         .unwrap();
         roundtrip_array(arr.as_ref()).unwrap();

@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::{NullableScalar, Scalar};
+use crate::scalar::{NullableScalar, Scalar, ScalarRef};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BoolScalar {
@@ -37,12 +37,12 @@ impl Scalar for BoolScalar {
     }
 
     #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
         Some(self)
     }
 
     #[inline]
-    fn boxed(self) -> Box<dyn Scalar> {
+    fn boxed(self) -> ScalarRef {
         Box::new(self)
     }
 
@@ -51,7 +51,7 @@ impl Scalar for BoolScalar {
         &DType::Bool(Nullability::NonNullable)
     }
 
-    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+    fn cast(&self, dtype: &DType) -> VortexResult<ScalarRef> {
         match dtype {
             DType::Bool(Nullability::NonNullable) => Ok(self.clone().boxed()),
             DType::Bool(Nullability::Nullable) => {
@@ -66,18 +66,18 @@ impl Scalar for BoolScalar {
     }
 }
 
-impl From<bool> for Box<dyn Scalar> {
+impl From<bool> for ScalarRef {
     #[inline]
     fn from(value: bool) -> Self {
         BoolScalar::new(value).boxed()
     }
 }
 
-impl TryFrom<Box<dyn Scalar>> for bool {
+impl TryFrom<ScalarRef> for bool {
     type Error = VortexError;
 
     #[inline]
-    fn try_from(value: Box<dyn Scalar>) -> VortexResult<Self> {
+    fn try_from(value: ScalarRef) -> VortexResult<Self> {
         value.as_ref().try_into()
     }
 }
@@ -109,7 +109,7 @@ mod test {
 
     #[test]
     fn into_from() {
-        let scalar: Box<dyn Scalar> = false.into();
+        let scalar: ScalarRef = false.into();
         assert_eq!(scalar.as_ref().try_into(), Ok(false));
     }
 }

@@ -8,8 +8,7 @@ use num_traits::{NumCast, PrimInt};
 use crate::array::primitive::PrimitiveArray;
 use crate::error::VortexResult;
 use crate::ptype::match_each_native_ptype;
-use crate::scalar::ListScalarVec;
-use crate::scalar::Scalar;
+use crate::scalar::{ListScalarVec, ScalarRef};
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for PrimitiveArray {
@@ -65,7 +64,7 @@ fn integer_stats<T: ArrowNativeType + NumCast + PrimInt>(
     array: &PrimitiveArray,
 ) -> VortexResult<StatsSet>
 where
-    Box<dyn Scalar>: From<T>,
+    ScalarRef: From<T>,
 {
     let typed_buf: &[T] = array.buffer().typed_data();
     // TODO(ngates): bail out on empty stats
@@ -113,7 +112,7 @@ where
 
 fn float_stats<T: ArrowNativeType + NumCast>(array: &PrimitiveArray) -> VortexResult<StatsSet>
 where
-    Box<dyn Scalar>: From<T>,
+    ScalarRef: From<T>,
 {
     let typed_buf: &[T] = array.buffer().typed_data();
     // TODO: bail out on empty stats

@@ -5,7 +5,7 @@ use arrow::buffer::{Buffer, MutableBuffer};
 
 use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
-use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
+use crate::scalar::{Scalar, ScalarReader, ScalarRef, ScalarWriter};
 pub use crate::serde::dtype::{DTypeReader, DTypeWriter, TimeUnitTag};
 
 mod dtype;
@@ -71,7 +71,7 @@ impl<'a> ReadCtx<'a> {
     }
 
     #[inline]
-    pub fn scalar(&mut self) -> io::Result<Box<dyn Scalar>> {
+    pub fn scalar(&mut self) -> io::Result<ScalarRef> {
         ScalarReader::new(self.r).read()
     }
 

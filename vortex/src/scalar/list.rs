@@ -5,22 +5,22 @@ use itertools::Itertools;
 
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::{NullableScalar, Scalar};
+use crate::scalar::{NullableScalar, Scalar, ScalarRef};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ListScalar {
     dtype: DType,
-    values: Vec<Box<dyn Scalar>>,
+    values: Vec<ScalarRef>,
 }
 
 impl ListScalar {
     #[inline]
-    pub fn new(dtype: DType, values: Vec<Box<dyn Scalar>>) -> Self {
+    pub fn new(dtype: DType, values: Vec<ScalarRef>) -> Self {
         Self { dtype, values }
     }
 
     #[inline]
-    pub fn values(&self) -> &[Box<dyn Scalar>] {
+    pub fn values(&self) -> &[ScalarRef] {
         &self.values
     }
 }
@@ -41,12 +41,12 @@ impl Scalar for ListScalar {
     }
 
     #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
         Some(self)
     }
 
     #[inline]
-    fn boxed(self) -> Box<dyn Scalar> {
+    fn boxed(self) -> ScalarRef {
         Box::new(self)
     }
     #[inline]
@@ -54,10 +54,10 @@ impl Scalar for ListScalar {
         &self.dtype
     }
 
-    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+    fn cast(&self, dtype: &DType) -> VortexResult<ScalarRef> {
         match dtype {
             DType::List(field_dtype, n) => {
-                let new_fields: Vec<Box<dyn Scalar>> = self
+                let new_fields: Vec<ScalarRef> = self
                     .values
                     .iter()
                     .map(|field| field.cast(field_dtype))
@@ -86,9 +86,9 @@ impl Scalar for ListScalar {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ListScalarVec<T>(pub Vec<T>);
 
-impl<T: Into<Box<dyn Scalar>>> From<ListScalarVec<T>> for Box<dyn Scalar> {
+impl<T: Into<ScalarRef>> From<ListScalarVec<T>> for ScalarRef {
     fn from(value: ListScalarVec<T>) -> Self {
-        let values: Vec<Box<dyn Scalar>> = value.0.into_iter().map(|v| v.into()).collect();
+        let values: Vec<ScalarRef> = value.0.into_iter().map(|v| v.into()).collect();
         if values.is_empty() {
             panic!("Can't implicitly convert empty list into ListScalar");
         }
@@ -96,7 +96,7 @@ impl<T: Into<Box<dyn Scalar>>> From<ListScalarVec<T>> for Box<dyn Scalar> {
     }
 }
 
-impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<&dyn Scalar> for ListScalarVec<T> {
+impl<T: TryFrom<ScalarRef, Error = VortexError>> TryFrom<&dyn Scalar> for ListScalarVec<T> {
     type Error = VortexError;
 
     fn try_from(value: &dyn Scalar) -> Result<Self, Self::Error> {
@@ -115,12 +115,10 @@ impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<&dyn Scalar> for 
     }
 }
 
-impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<Box<dyn Scalar>>
-    for ListScalarVec<T>
-{
+impl<T: TryFrom<ScalarRef, Error = VortexError>> TryFrom<ScalarRef> for ListScalarVec<T> {
     type Error = VortexError;
 
-    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
+    fn try_from(value: ScalarRef) -> Result<Self, Self::Error> {
         let value_dtype = value.dtype().clone();
         let list_s = value
             .into_any()

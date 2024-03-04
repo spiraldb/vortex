@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::scalar::localtime::LocalTimeScalar;
 use crate::scalar::{
-    BinaryScalar, BoolScalar, NullableScalar, PScalar, Scalar, StructScalar, Utf8Scalar,
+    BinaryScalar, BoolScalar, NullableScalar, PScalar, Scalar, ScalarRef, StructScalar, Utf8Scalar,
 };
 
 impl PartialEq for dyn Scalar {
@@ -17,7 +17,7 @@ impl PartialEq<dyn Scalar> for Arc<dyn Scalar> {
     }
 }
 
-impl PartialEq<dyn Scalar> for Box<dyn Scalar> {
+impl PartialEq<dyn Scalar> for ScalarRef {
     fn eq(&self, that: &dyn Scalar) -> bool {
         equal(self.as_ref(), that)
     }

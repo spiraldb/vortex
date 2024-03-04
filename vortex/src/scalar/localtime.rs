@@ -1,6 +1,6 @@
 use crate::dtype::{DType, Nullability, TimeUnit};
 use crate::error::VortexResult;
-use crate::scalar::{PScalar, Scalar};
+use crate::scalar::{PScalar, Scalar, ScalarRef};
 use std::any::Any;
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
@@ -48,12 +48,12 @@ impl Scalar for LocalTimeScalar {
     }
 
     #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
         Some(self)
     }
 
     #[inline]
-    fn boxed(self) -> Box<dyn Scalar> {
+    fn boxed(self) -> ScalarRef {
         Box::new(self)
     }
 
@@ -62,7 +62,7 @@ impl Scalar for LocalTimeScalar {
         &self.dtype
     }
 
-    fn cast(&self, _dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+    fn cast(&self, _dtype: &DType) -> VortexResult<ScalarRef> {
         todo!()
     }
 

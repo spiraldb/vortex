@@ -4,7 +4,7 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
-use crate::scalar::Scalar;
+use crate::scalar::ScalarRef;
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -17,7 +17,7 @@ impl ArrayCompute for ConstantArray {
 }
 
 impl ScalarAtFn for ConstantArray {
-    fn scalar_at(&self, _index: usize) -> VortexResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, _index: usize) -> VortexResult<ScalarRef> {
         Ok(dyn_clone::clone_box(self.scalar()))
     }
 }

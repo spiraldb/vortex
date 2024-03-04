@@ -7,7 +7,7 @@ use num_traits::NumCast;
 
 use crate::dtype::{DType, FloatWidth, IntWidth, Signedness};
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::Scalar;
+use crate::scalar::ScalarRef;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub enum PType {
@@ -35,7 +35,7 @@ pub trait NativePType:
     + ArrowNativeType
     + RefUnwindSafe
     + NumCast
-    + TryFrom<Box<dyn Scalar>, Error = VortexError>
+    + TryFrom<ScalarRef, Error = VortexError>
 {
     const PTYPE: PType;
 }

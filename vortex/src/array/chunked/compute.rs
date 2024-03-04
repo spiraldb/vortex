@@ -2,7 +2,7 @@ use crate::array::chunked::ChunkedArray;
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
-use crate::scalar::Scalar;
+use crate::scalar::ScalarRef;
 
 impl ArrayCompute for ChunkedArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -11,7 +11,7 @@ impl ArrayCompute for ChunkedArray {
 }
 
 impl ScalarAtFn for ChunkedArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
         let (chunk_index, chunk_offset) = self.find_physical_location(index);
         scalar_at(self.chunks[chunk_index].as_ref(), chunk_offset)
     }

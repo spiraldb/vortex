@@ -13,7 +13,7 @@ use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::Scalar;
+use crate::scalar::{Scalar, ScalarRef};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
@@ -24,13 +24,13 @@ mod stats;
 
 #[derive(Debug, Clone)]
 pub struct ConstantArray {
-    scalar: Box<dyn Scalar>,
+    scalar: ScalarRef,
     length: usize,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl ConstantArray {
-    pub fn new(scalar: Box<dyn Scalar>, length: usize) -> Self {
+    pub fn new(scalar: ScalarRef, length: usize) -> Self {
         Self {
             scalar,
             length,

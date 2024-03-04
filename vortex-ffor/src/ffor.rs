@@ -11,7 +11,7 @@ use vortex::compute::ArrayCompute;
 use vortex::dtype::DType;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::scalar::Scalar;
+use vortex::scalar::{Scalar, ScalarRef};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 
@@ -22,7 +22,7 @@ pub struct FFORArray {
     encoded: ArrayRef,
     validity: Option<ArrayRef>,
     patches: Option<ArrayRef>,
-    min_val: Box<dyn Scalar>,
+    min_val: ScalarRef,
     num_bits: u8,
     len: usize,
     stats: Arc<RwLock<StatsSet>>,
@@ -33,7 +33,7 @@ impl FFORArray {
         encoded: ArrayRef,
         validity: Option<ArrayRef>,
         patches: Option<ArrayRef>,
-        min_val: Box<dyn Scalar>,
+        min_val: ScalarRef,
         num_bits: u8,
         len: usize,
     ) -> Self {
@@ -44,7 +44,7 @@ impl FFORArray {
         encoded: ArrayRef,
         validity: Option<ArrayRef>,
         patches: Option<ArrayRef>,
-        min_val: Box<dyn Scalar>,
+        min_val: ScalarRef,
         num_bits: u8,
         len: usize,
     ) -> VortexResult<Self> {

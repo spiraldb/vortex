@@ -157,7 +157,7 @@ mod test {
     use vortex::array::Array;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::error::VortexResult;
-    use vortex::scalar::Scalar;
+    use vortex::scalar::ScalarRef;
 
     use crate::RoaringBoolArray;
 
@@ -177,8 +177,8 @@ mod test {
         let bool: &dyn Array = &BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool)?;
 
-        let truthy: Box<dyn Scalar> = true.into();
-        let falsy: Box<dyn Scalar> = false.into();
+        let truthy: ScalarRef = true.into();
+        let falsy: ScalarRef = false.into();
 
         assert_eq!(scalar_at(array.as_ref(), 0)?, truthy);
         assert_eq!(scalar_at(array.as_ref(), 1)?, falsy);

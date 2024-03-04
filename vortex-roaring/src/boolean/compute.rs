@@ -2,7 +2,7 @@ use crate::RoaringBoolArray;
 use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::ArrayCompute;
 use vortex::error::VortexResult;
-use vortex::scalar::Scalar;
+use vortex::scalar::ScalarRef;
 
 impl ArrayCompute for RoaringBoolArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -11,7 +11,7 @@ impl ArrayCompute for RoaringBoolArray {
 }
 
 impl ScalarAtFn for RoaringBoolArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
         if self.bitmap.contains(index as u32) {
             Ok(true.into())
         } else {

@@ -9,7 +9,7 @@ use vortex::array::{Array, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
-use vortex::scalar::{ListScalarVec, NullableScalar, Scalar};
+use vortex::scalar::{ListScalarVec, NullableScalar, Scalar, ScalarRef};
 use vortex::stats::Stat;
 
 use crate::downcast::DowncastFFOR;
@@ -82,7 +82,7 @@ pub fn ffor_encode(parray: &PrimitiveArray) -> FFORArray {
     )
 }
 
-fn ffor_encode_parts(parray: &PrimitiveArray) -> (ArrayRef, Option<ArrayRef>, Box<dyn Scalar>, u8) {
+fn ffor_encode_parts(parray: &PrimitiveArray) -> (ArrayRef, Option<ArrayRef>, ScalarRef, u8) {
     let min_val_scalar = parray.stats().get_or_compute(&Stat::Min).unwrap();
     let max_val_scalar = parray.stats().get_or_compute(&Stat::Max).unwrap();
     let bit_widths = parray
@@ -101,7 +101,7 @@ fn ffor_encode_parts(parray: &PrimitiveArray) -> (ArrayRef, Option<ArrayRef>, Bo
 fn ffor_encode_like_parts(
     parray: &PrimitiveArray,
     num_bits: u8,
-) -> (ArrayRef, Option<ArrayRef>, Box<dyn Scalar>, u8) {
+) -> (ArrayRef, Option<ArrayRef>, ScalarRef, u8) {
     let min_val_scalar = parray.stats().get_or_compute(&Stat::Min).unwrap();
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let min_val: $T = min_val_scalar.as_ref().try_into().unwrap();
@@ -113,9 +113,9 @@ fn ffor_encode_primitive<T: SupportsFFoR + NativePType>(
     values: &[T],
     num_bits: u8,
     min_val: T,
-) -> (ArrayRef, Option<ArrayRef>, Box<dyn Scalar>, u8)
+) -> (ArrayRef, Option<ArrayRef>, ScalarRef, u8)
 where
-    Box<dyn Scalar>: From<T>,
+    ScalarRef: From<T>,
 {
     // TODO: actually handle CodecErrors instead of blindly unwrapping
     let FforEncoded {

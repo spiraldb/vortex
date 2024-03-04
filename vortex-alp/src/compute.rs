@@ -5,7 +5,7 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
 use vortex::dtype::{DType, FloatWidth};
 use vortex::error::VortexResult;
-use vortex::scalar::{NullableScalar, Scalar};
+use vortex::scalar::{NullableScalar, Scalar, ScalarRef};
 
 impl ArrayCompute for ALPArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -14,7 +14,7 @@ impl ArrayCompute for ALPArray {
 }
 
 impl ScalarAtFn for ALPArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
         if let Some(patch) = self
             .patches()
             .and_then(|p| scalar_at(p, index).ok())
