@@ -63,8 +63,23 @@ impl Scalar for NullableScalar {
         }
     }
 
-    fn cast(&self, _dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
-        todo!()
+    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+        match self {
+            Self::Some(s, _dt) => {
+                if dtype.is_nullable() {
+                    Ok(Self::Some(s.cast(&dtype.as_nonnullable())?, dtype.clone()).boxed())
+                } else {
+                    s.cast(&dtype.as_nonnullable())
+                }
+            }
+            Self::None(_dt) => {
+                if dtype.is_nullable() {
+                    Ok(Self::None(dtype.clone()).boxed())
+                } else {
+                    Err(VortexError::InvalidDType(dtype.clone()))
+                }
+            }
+        }
     }
 
     fn nbytes(&self) -> usize {
@@ -132,5 +147,20 @@ impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<Box<dyn Scalar>>
             NullableScalar::None(_) => None,
             NullableScalar::Some(v, _) => Some(v.try_into()?),
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::dtype::DType;
+    use crate::ptype::PType;
+    use crate::scalar::Scalar;
+
+    #[test]
+    fn test_nullable_scalar_option() {
+        let ns: Box<dyn Scalar> = Some(10i16).into();
+        let nsi32 = ns.cast(&DType::from(PType::I32)).unwrap();
+        let v: i32 = nsi32.try_into().unwrap();
+        assert_eq!(v, 10);
     }
 }
