@@ -243,14 +243,16 @@ impl ArrayDisplay for SparseArray {
 #[derive(Debug)]
 pub struct SparseEncoding;
 
-pub const SPARSE_ENCODING: EncodingId = EncodingId::new("vortex.sparse");
+impl SparseEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.sparse");
+}
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_SPARSE: EncodingRef = &SparseEncoding;
 
 impl Encoding for SparseEncoding {
     fn id(&self) -> &EncodingId {
-        &SPARSE_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

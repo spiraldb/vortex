@@ -322,16 +322,18 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for VarBinArray {
 }
 
 #[derive(Debug)]
-struct VarBinEncoding;
+pub struct VarBinEncoding;
 
-pub const VARBIN_ENCODING: EncodingId = EncodingId::new("vortex.varbin");
+impl VarBinEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.varbin");
+}
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_VARBIN: EncodingRef = &VarBinEncoding;
 
 impl Encoding for VarBinEncoding {
     fn id(&self) -> &EncodingId {
-        &VARBIN_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

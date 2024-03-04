@@ -14,7 +14,7 @@
 
 use rayon::prelude::*;
 
-use crate::array::chunked::{ChunkedArray, ChunkedEncoding, CHUNKED_ENCODING};
+use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
@@ -25,7 +25,7 @@ impl EncodingCompression for ChunkedEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &CHUNKED_ENCODING {
+        if array.encoding().id() == &Self::ID {
             Some(&(chunked_compressor as Compressor))
         } else {
             None

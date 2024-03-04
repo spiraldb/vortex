@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::array::primitive::{PrimitiveEncoding, PRIMITIVE_ENCODING};
+use crate::array::primitive::PrimitiveEncoding;
 use crate::array::{Array, ArrayRef};
 use crate::compress::{
     sampled_compression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
@@ -24,7 +24,7 @@ impl EncodingCompression for PrimitiveEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &PRIMITIVE_ENCODING {
+        if array.encoding().id() == &Self::ID {
             Some(&(primitive_compressor as Compressor))
         } else {
             None

@@ -14,7 +14,7 @@
 
 use codecz::AlignedAllocator;
 use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
+use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::dtype::{DType, IntWidth, Nullability};
@@ -35,7 +35,7 @@ impl EncodingCompression for REEEncoding {
                 .stats()
                 .get_or_compute_or::<usize>(array.len(), &Stat::RunCount) as f32;
 
-        if array.encoding().id() == &PRIMITIVE_ENCODING
+        if array.encoding().id() == &PrimitiveEncoding::ID
             && avg_run_length >= config.ree_average_run_threshold
         {
             return Some(&(ree_compressor as Compressor));

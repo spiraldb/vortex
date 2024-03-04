@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::sparse::{SparseArray, SparseEncoding, SPARSE_ENCODING};
+use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 
@@ -23,7 +23,7 @@ impl EncodingCompression for SparseEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &SPARSE_ENCODING {
+        if array.encoding().id() == &Self::ID {
             Some(&(sparse_compressor as Compressor))
         } else {
             None

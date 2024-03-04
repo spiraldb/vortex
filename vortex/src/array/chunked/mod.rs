@@ -225,16 +225,18 @@ impl ArrayDisplay for ChunkedArray {
 }
 
 #[derive(Debug)]
-struct ChunkedEncoding;
+pub struct ChunkedEncoding;
 
-pub const CHUNKED_ENCODING: EncodingId = EncodingId::new("vortex.chunked");
+impl ChunkedEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.chunked");
+}
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_CHUNKED: EncodingRef = &ChunkedEncoding;
 
 impl Encoding for ChunkedEncoding {
     fn id(&self) -> &EncodingId {
-        &CHUNKED_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

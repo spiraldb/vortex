@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::struct_::{StructArray, StructEncoding, STRUCT_ENCODING};
+use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use rayon::iter::IndexedParallelIterator;
@@ -26,7 +26,7 @@ impl EncodingCompression for StructEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &STRUCT_ENCODING {
+        if array.encoding().id() == &Self::ID {
             Some(&(struct_compressor as Compressor))
         } else {
             None

@@ -18,7 +18,7 @@ use std::fmt::Debug;
 use log::debug;
 use once_cell::sync::Lazy;
 
-use crate::array::constant::{ConstantEncoding, CONSTANT_ENCODING};
+use crate::array::constant::ConstantEncoding;
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, ENCODINGS};
 use crate::compute;
 use crate::sampling::stratified_slices;
@@ -63,7 +63,7 @@ impl CompressConfig {
         mut disabled_encodings: HashSet<&'static EncodingId>,
     ) -> Self {
         // Always disable constant encoding, it's handled separately
-        disabled_encodings.insert(&CONSTANT_ENCODING);
+        disabled_encodings.insert(&ConstantEncoding::ID);
         Self {
             encodings,
             disabled_encodings,
