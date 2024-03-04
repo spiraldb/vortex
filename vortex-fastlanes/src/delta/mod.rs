@@ -126,7 +126,7 @@ impl ArrayDisplay for DeltaArray {
             f.writeln("validity:")?;
             f.indent(|indent| indent.array(v.as_ref()))?;
         }
-        f.array(self.encoded())
+        f.indent(|indent| indent.array(self.encoded()))
     }
 }
 

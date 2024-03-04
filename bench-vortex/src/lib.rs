@@ -1,19 +1,40 @@
 use itertools::Itertools;
+use vortex::array::bool::BoolEncoding;
+use vortex::array::chunked::ChunkedEncoding;
+use vortex::array::constant::ConstantEncoding;
 
+use vortex::array::primitive::PrimitiveEncoding;
+use vortex::array::sparse::SparseEncoding;
+use vortex::array::struct_::StructEncoding;
+use vortex::array::typed::TypedEncoding;
+use vortex::array::varbin::VarBinEncoding;
+use vortex::array::varbinview::VarBinViewEncoding;
 use vortex::array::Encoding;
 use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
-use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
+use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
 use vortex_zigzag::ZigZagEncoding;
 
-pub fn enumerate_arrays() {
+pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
     let encodings: Vec<&dyn Encoding> = vec![
+        // TODO(ngates): fix https://github.com/fulcrum-so/vortex/issues/35
+        // Builtins
+        &BoolEncoding,
+        &ChunkedEncoding,
+        &ConstantEncoding,
+        &PrimitiveEncoding,
+        &SparseEncoding,
+        &StructEncoding,
+        &TypedEncoding,
+        &VarBinEncoding,
+        &VarBinViewEncoding,
+        // Encodings
         &ALPEncoding,
         &DictEncoding,
         &BitPackedEncoding,
-        // &DeltaEncoding,
+        &DeltaEncoding,
         &FoREncoding,
         //&FFoREncoding,
         &REEEncoding,
@@ -22,10 +43,12 @@ pub fn enumerate_arrays() {
         &ZigZagEncoding,
     ];
     println!("{}", encodings.iter().map(|e| e.id()).format(", "));
+    encodings
 }
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
     use std::fs::create_dir_all;
     use std::fs::File;
     use std::path::Path;
@@ -37,7 +60,7 @@ mod test {
 
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::{Array, ArrayRef};
-    use vortex::compress::CompressCtx;
+    use vortex::compress::{CompressConfig, CompressCtx};
     use vortex::dtype::DType;
     use vortex::error::{VortexError, VortexResult};
 
@@ -94,7 +117,12 @@ mod test {
             chunked.chunks().len()
         );
         let array = chunked.boxed();
-        let compressed = CompressCtx::default().compress(array.as_ref(), None);
+        let cfg = CompressConfig::new(
+            HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
+            HashSet::default(),
+        );
+        println!("Compression config {cfg:?}");
+        let compressed = CompressCtx::new(&cfg).compress(array.as_ref(), None);
         println!("Compressed array {compressed}");
         println!(
             "NBytes {}, Ratio {}",
