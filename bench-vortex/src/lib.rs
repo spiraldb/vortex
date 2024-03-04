@@ -34,7 +34,7 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         &ALPEncoding,
         &DictEncoding,
         &BitPackedEncoding,
-        &DeltaEncoding,
+        // &DeltaEncoding,
         &FoREncoding,
         //&FFoREncoding,
         &REEEncoding,
