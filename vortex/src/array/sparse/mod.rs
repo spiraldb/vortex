@@ -17,13 +17,12 @@ use std::iter;
 use std::sync::{Arc, RwLock};
 
 use arrow::array::{
-    Array as ArrowArray, ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray,
+    ArrayRef as ArrowArrayRef, BooleanBufferBuilder, PrimitiveArray as ArrowPrimitiveArray,
 };
 use arrow::array::AsArray;
+use arrow::buffer::{NullBuffer, ScalarBuffer};
 use arrow::datatypes::UInt64Type;
-use itertools::Itertools;
 use linkme::distributed_slice;
-use num_traits::AsPrimitive;
 
 use crate::array::{
     Array, ArrayRef, ArrowIterator, check_index_bounds, check_slice_bounds, Encoding, EncodingId,
@@ -287,10 +286,7 @@ mod test {
     use itertools::Itertools;
 
     use crate::array::Array;
-    use crate::array::Array;
     use crate::array::sparse::SparseArray;
-    use crate::array::sparse::SparseArray;
-    use crate::error::VortexError;
     use crate::error::VortexError;
 
     fn sparse_array() -> SparseArray {
