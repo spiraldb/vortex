@@ -197,11 +197,13 @@ impl StatsCompute for BitPackedArray {
 #[derive(Debug)]
 pub struct BitPackedEncoding;
 
-pub const FL_BITPACKED_ENCODING: EncodingId = EncodingId::new("fastlanes.bitpacked");
+impl BitPackedEncoding {
+    pub const ID: EncodingId = EncodingId::new("fastlanes.bitpacked");
+}
 
 impl Encoding for BitPackedEncoding {
     fn id(&self) -> &EncodingId {
-        &FL_BITPACKED_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

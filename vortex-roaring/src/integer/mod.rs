@@ -163,11 +163,13 @@ impl ArrayDisplay for RoaringIntArray {
 #[derive(Debug)]
 pub struct RoaringIntEncoding;
 
-pub const ROARING_INT_ENCODING: EncodingId = EncodingId::new("roaring.int");
+impl RoaringIntEncoding {
+    pub const ID: EncodingId = EncodingId::new("roaring.int");
+}
 
 impl Encoding for RoaringIntEncoding {
     fn id(&self) -> &EncodingId {
-        &ROARING_INT_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

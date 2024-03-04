@@ -147,11 +147,13 @@ impl StatsCompute for FoRArray {
 #[derive(Debug)]
 pub struct FoREncoding;
 
-pub const FL_FOR_ENCODING: EncodingId = EncodingId::new("fastlanes.for");
+impl FoREncoding {
+    pub const ID: EncodingId = EncodingId::new("fastlanes.for");
+}
 
 impl Encoding for FoREncoding {
     fn id(&self) -> &EncodingId {
-        &FL_FOR_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

@@ -30,8 +30,8 @@ use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 
 use super::{
-    check_index_bounds, check_slice_bounds, check_validity_buffer, encoding_impl, Array, ArrayRef,
-    ArrowIterator, Encoding, EncodingId, EncodingRef, ENCODINGS,
+    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
+    Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
 
 mod compress;
