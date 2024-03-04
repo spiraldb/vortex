@@ -230,7 +230,7 @@ fn dict_encode_typed_varbin<O, K, V, U>(
     dtype: DType,
     value_lookup: V,
     len: usize,
-    validity: Option<&ArrayRef>,
+    validity: Option<&dyn Array>,
 ) -> (PrimitiveArray, VarBinArray)
 where
     O: NativePType + Unsigned + FromPrimitive,
@@ -268,7 +268,7 @@ where
         codes.push(code)
     }
     (
-        PrimitiveArray::from_nullable(codes, validity.cloned()),
+        PrimitiveArray::from_nullable(codes, validity.clone_optional()),
         VarBinArray::new(
             PrimitiveArray::from_vec(offsets).boxed(),
             PrimitiveArray::from_vec(bytes).boxed(),

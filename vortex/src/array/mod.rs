@@ -121,7 +121,7 @@ pub fn check_index_bounds(array: &dyn Array, index: usize) -> VortexResult<()> {
     Ok(())
 }
 
-pub fn check_validity_buffer(validity: Option<&ArrayRef>) -> VortexResult<()> {
+pub fn check_validity_buffer(validity: Option<&dyn Array>) -> VortexResult<()> {
     // TODO(ngates): take a length parameter and check that the length of the validity buffer matches
     if validity
         .map(|v| !matches!(v.dtype(), DType::Bool(Nullability::NonNullable)))

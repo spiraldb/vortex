@@ -67,7 +67,7 @@ impl REEArray {
         validity: Option<ArrayRef>,
         length: usize,
     ) -> VortexResult<Self> {
-        check_validity_buffer(validity.as_ref())?;
+        check_validity_buffer(validity.as_deref())?;
 
         if !matches!(
             ends.dtype(),
@@ -131,8 +131,8 @@ impl REEArray {
     }
 
     #[inline]
-    pub fn validity(&self) -> Option<&ArrayRef> {
-        self.validity.as_ref()
+    pub fn validity(&self) -> Option<&dyn Array> {
+        self.validity.as_deref()
     }
 }
 

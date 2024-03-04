@@ -56,7 +56,7 @@ fn bool_as_contiguous(arrays: Vec<&BoolArray>) -> VortexResult<BoolArray> {
                 .iter()
                 .map(|a| {
                     a.validity()
-                        .cloned()
+                        .clone_optional()
                         .unwrap_or_else(|| BoolArray::from(vec![true; a.len()]).boxed())
                 })
                 .collect(),

@@ -63,7 +63,7 @@ impl FFORArray {
         len: usize,
     ) -> VortexResult<Self> {
         let validity = validity.filter(|v| !v.is_empty());
-        check_validity_buffer(validity.as_ref())?;
+        check_validity_buffer(validity.as_deref())?;
 
         if !matches!(min_val.dtype(), DType::Int(_, _, _)) {
             return Err(VortexError::InvalidDType(min_val.dtype().clone()));
@@ -107,13 +107,13 @@ impl FFORArray {
     }
 
     #[inline]
-    pub fn validity(&self) -> Option<&ArrayRef> {
-        self.validity.as_ref()
+    pub fn validity(&self) -> Option<&dyn Array> {
+        self.validity.as_deref()
     }
 
     #[inline]
-    pub fn patches(&self) -> Option<&ArrayRef> {
-        self.patches.as_ref()
+    pub fn patches(&self) -> Option<&dyn Array> {
+        self.patches.as_deref()
     }
 
     pub fn is_valid(&self, index: usize) -> bool {
