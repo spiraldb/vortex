@@ -231,6 +231,7 @@ mod test {
 
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
+    use crate::compute::scalar_at::scalar_at;
     use crate::error::VortexError;
 
     fn sparse_array() -> SparseArray {
@@ -291,13 +292,13 @@ mod test {
     }
 
     #[test]
-    pub fn scalar_at() {
+    pub fn test_scalar_at() {
         assert_eq!(
-            usize::try_from(sparse_array().scalar_at(2).unwrap()).unwrap(),
+            usize::try_from(scalar_at(sparse_array().as_ref(), 2).unwrap()).unwrap(),
             100
         );
         assert_eq!(
-            sparse_array().scalar_at(10).err().unwrap(),
+            scalar_at(sparse_array().as_ref(), 10).err().unwrap(),
             VortexError::OutOfBounds(10, 0, 10)
         );
     }
@@ -305,9 +306,12 @@ mod test {
     #[test]
     pub fn scalar_at_sliced() {
         let sliced = sparse_array().slice(2, 7).unwrap();
-        assert_eq!(usize::try_from(sliced.scalar_at(0).unwrap()).unwrap(), 100);
         assert_eq!(
-            sliced.scalar_at(5).err().unwrap(),
+            usize::try_from(scalar_at(sliced.as_ref(), 0).unwrap()).unwrap(),
+            100
+        );
+        assert_eq!(
+            scalar_at(sliced.as_ref(), 5).err().unwrap(),
             VortexError::OutOfBounds(5, 0, 5)
         );
     }
@@ -316,21 +320,21 @@ mod test {
     pub fn scalar_at_sliced_twice() {
         let sliced_once = sparse_array().slice(1, 8).unwrap();
         assert_eq!(
-            usize::try_from(sliced_once.scalar_at(1).unwrap()).unwrap(),
+            usize::try_from(scalar_at(sliced_once.as_ref(), 1).unwrap()).unwrap(),
             100
         );
         assert_eq!(
-            sliced_once.scalar_at(7).err().unwrap(),
+            scalar_at(sliced_once.as_ref(), 7).err().unwrap(),
             VortexError::OutOfBounds(7, 0, 7)
         );
 
         let sliced_twice = sliced_once.slice(1, 6).unwrap();
         assert_eq!(
-            usize::try_from(sliced_twice.scalar_at(3).unwrap()).unwrap(),
+            usize::try_from(scalar_at(sliced_twice.as_ref(), 3).unwrap()).unwrap(),
             200
         );
         assert_eq!(
-            sliced_twice.scalar_at(5).err().unwrap(),
+            scalar_at(sliced_twice.as_ref(), 5).err().unwrap(),
             VortexError::OutOfBounds(5, 0, 5)
         );
     }

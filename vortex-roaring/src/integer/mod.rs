@@ -157,17 +157,18 @@ impl Encoding for RoaringIntEncoding {
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::Array;
+    use vortex::compute::scalar_at::scalar_at;
     use vortex::error::VortexResult;
 
     use crate::RoaringIntArray;
 
     #[test]
-    pub fn scalar_at() -> VortexResult<()> {
+    pub fn test_scalar_at() -> VortexResult<()> {
         let ints: &dyn Array = &PrimitiveArray::from_vec::<u32>(vec![2, 12, 22, 32]);
         let array = RoaringIntArray::encode(ints)?;
 
-        assert_eq!(array.scalar_at(0), Ok(2u32.into()));
-        assert_eq!(array.scalar_at(1), Ok(12u32.into()));
+        assert_eq!(scalar_at(array.as_ref(), 0), Ok(2u32.into()));
+        assert_eq!(scalar_at(array.as_ref(), 1), Ok(12u32.into()));
 
         Ok(())
     }

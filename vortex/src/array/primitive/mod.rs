@@ -319,9 +319,9 @@ mod test {
         );
 
         // Ensure we can fetch the scalar at the given index.
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(1));
-        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(1));
+        assert_eq!(scalar_at(arr.as_ref(), 1).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(3));
     }
 
     #[test]
@@ -330,8 +330,8 @@ mod test {
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(3));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(4));
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(arr.as_ref(), 1).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(4));
     }
 }

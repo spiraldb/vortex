@@ -234,9 +234,9 @@ mod test {
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(true));
-        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(false));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(false));
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(true));
+        assert_eq!(scalar_at(arr.as_ref(), 1).unwrap().try_into(), Ok(false));
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(false));
     }
 
     #[test]

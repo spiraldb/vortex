@@ -269,7 +269,7 @@ where
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::array::Array;
+    use vortex::compute::scalar_at::scalar_at;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
 
@@ -298,8 +298,8 @@ mod test {
         assert!(!codes.is_valid(2));
         assert!(!codes.is_valid(5));
         assert!(!codes.is_valid(7));
-        assert_eq!(values.scalar_at(0), Ok(1.into()));
-        assert_eq!(values.scalar_at(2), Ok(3.into()));
+        assert_eq!(scalar_at(values.as_ref(), 0), Ok(1.into()));
+        assert_eq!(scalar_at(values.as_ref(), 2), Ok(3.into()));
     }
 
     #[test]

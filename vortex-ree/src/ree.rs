@@ -315,6 +315,7 @@ mod test {
     use arrow::array::types::Int32Type;
     use itertools::Itertools;
     use vortex::array::Array;
+    use vortex::compute::scalar_at::scalar_at;
 
     use crate::REEArray;
     use vortex::dtype::{DType, IntWidth, Nullability, Signedness};
@@ -331,10 +332,10 @@ mod test {
         // 0, 1 => 1
         // 2, 3, 4 => 2
         // 5, 6, 7, 8, 9 => 3
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(1));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(5).unwrap().try_into(), Ok(3));
-        assert_eq!(arr.scalar_at(9).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(1));
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(arr.as_ref(), 5).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(arr.as_ref(), 9).unwrap().try_into(), Ok(3));
     }
 
     #[test]

@@ -155,6 +155,7 @@ impl Encoding for RoaringBoolEncoding {
 mod test {
     use vortex::array::bool::BoolArray;
     use vortex::array::Array;
+    use vortex::compute::scalar_at::scalar_at;
     use vortex::error::VortexResult;
     use vortex::scalar::Scalar;
 
@@ -172,17 +173,17 @@ mod test {
     }
 
     #[test]
-    pub fn scalar_at() -> VortexResult<()> {
+    pub fn test_scalar_at() -> VortexResult<()> {
         let bool: &dyn Array = &BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool)?;
 
         let truthy: Box<dyn Scalar> = true.into();
         let falsy: Box<dyn Scalar> = false.into();
 
-        assert_eq!(array.scalar_at(0)?, truthy);
-        assert_eq!(array.scalar_at(1)?, falsy);
-        assert_eq!(array.scalar_at(2)?, truthy);
-        assert_eq!(array.scalar_at(3)?, truthy);
+        assert_eq!(scalar_at(array.as_ref(), 0)?, truthy);
+        assert_eq!(scalar_at(array.as_ref(), 1)?, falsy);
+        assert_eq!(scalar_at(array.as_ref(), 2)?, truthy);
+        assert_eq!(scalar_at(array.as_ref(), 3)?, truthy);
 
         Ok(())
     }

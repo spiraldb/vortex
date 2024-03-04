@@ -392,9 +392,9 @@ mod test {
     pub fn varbin_view() {
         let binary_arr = binary_array();
         assert_eq!(binary_arr.len(), 2);
-        assert_eq!(binary_arr.scalar_at(0), Ok("hello world".into()));
+        assert_eq!(scalar_at(binary_arr.as_ref(), 0), Ok("hello world".into()));
         assert_eq!(
-            binary_arr.scalar_at(1),
+            scalar_at(binary_arr.as_ref(), 1),
             Ok("hello world this is a long string".into())
         )
     }
@@ -403,7 +403,7 @@ mod test {
     pub fn slice() {
         let binary_arr = binary_array().slice(1, 2).unwrap();
         assert_eq!(
-            binary_arr.scalar_at(0),
+            scalar_at(binary_arr.as_ref(), 0),
             Ok("hello world this is a long string".into())
         );
     }
