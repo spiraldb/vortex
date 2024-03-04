@@ -21,7 +21,6 @@ use crate::array::{
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
 use crate::compute::scalar_at::scalar_at;
-use crate::compute::ArrayCompute;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};

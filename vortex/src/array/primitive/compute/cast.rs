@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use crate::array::primitive::PrimitiveArray;
 use crate::array::CloneOptionalArray;
 use crate::compute::cast::CastPrimitiveFn;
@@ -35,22 +21,25 @@ impl CastPrimitiveFn for PrimitiveArray {
 }
 
 fn cast<T: NativePType>(array: &PrimitiveArray) -> VortexResult<Vec<T>> {
-    array
-        .typed_data::<u32>()
-        .iter()
-        // TODO(ngates): allow configurable checked/unchecked casting
-        .map(|v| {
-            T::from(*v).ok_or_else(|| {
-                VortexError::ComputeError(format!("Failed to cast {} to {:?}", v, T::PTYPE).into())
+    match_each_native_ptype!(array.ptype(), |$E| {
+        array
+            .typed_data::<$E>()
+            .iter()
+            // TODO(ngates): allow configurable checked/unchecked casting
+            .map(|v| {
+                T::from(*v).ok_or_else(|| {
+                    VortexError::ComputeError(format!("Failed to cast {} to {:?}", v, T::PTYPE).into())
+                })
             })
-        })
-        .collect()
+            .collect()
+    })
 }
 
 #[cfg(test)]
 mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::compute;
+    use crate::error::VortexError;
     use crate::ptype::PType;
 
     #[test]
@@ -70,7 +59,11 @@ mod test {
     #[test]
     fn cast_i32_u32() {
         let arr = PrimitiveArray::from_vec(vec![-1i32]);
-        let u8arr = compute::cast::cast_primitive(&arr, &PType::U32).unwrap();
-        assert_eq!(u8arr.typed_data::<f32>(), vec![0.0f32, 10., 200.]);
+        assert_eq!(
+            compute::cast::cast_primitive(&arr, &PType::U32)
+                .err()
+                .unwrap(),
+            VortexError::ComputeError("Failed to cast -1 to U32".into(),)
+        )
     }
 }
