@@ -127,10 +127,13 @@ macro_rules! delta_impl {
                     output: &mut Vec<Self>,
                 ) {
                     unsafe {
+                        let next = array_mut_ref![output.reserve_uninit(1024), 0, 1024];
+                        // TODO(ngates): avoid initializing the array?
+                        *next = [MaybeUninit::new($T::default()); 1024];
                         [<fl_delta_encode_ $T>](
                             input,
                             transmute(base),
-                            transmute(array_mut_ref![output.reserve_uninit(1024), 0, 1024]),
+                            transmute(next),
                         );
                         output.set_len(output.len() + 1024)
                     }
