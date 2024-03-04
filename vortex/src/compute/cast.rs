@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::array::primitive::PrimitiveArray;
 use crate::array::Array;
+use crate::array::primitive::PrimitiveArray;
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 
@@ -29,7 +29,7 @@ pub fn cast_primitive(array: &dyn Array, ptype: &PType) -> VortexResult<Primitiv
         .map(|t| t.cast_primitive(ptype))
         .unwrap_or_else(|| {
             Err(VortexError::NotImplemented(
-                "as_primitive",
+                "cast_primitive",
                 array.encoding().id(),
             ))
         })

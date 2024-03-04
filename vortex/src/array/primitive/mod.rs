@@ -22,18 +22,19 @@ use std::sync::{Arc, RwLock};
 
 use allocator_api2::alloc::Allocator;
 use arrow::alloc::ALIGNMENT as ARROW_ALIGNMENT;
-use arrow::array::{make_array, ArrayData, AsArray};
+use arrow::array::{ArrayData, AsArray, make_array};
 use arrow::buffer::{Buffer, NullBuffer, ScalarBuffer};
 use linkme::distributed_slice;
 use log::debug;
 
-use crate::array::bool::BoolArray;
 use crate::array::{
-    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
+    Array, ArrayRef, ArrowIterator, check_index_bounds, check_slice_bounds, check_validity_buffer,
     Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
+use crate::array::bool::BoolArray;
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
+use crate::compute::ArrayCompute;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -256,6 +257,10 @@ impl Array for PrimitiveArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.buffer.len()
+    }
+
+    fn compute(&self) -> Option<&dyn ArrayCompute> {
+        Some(self)
     }
 
     fn serde(&self) -> &dyn ArraySerde {
