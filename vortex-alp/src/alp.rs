@@ -199,11 +199,13 @@ impl ArrayDisplay for ALPArray {
 #[derive(Debug)]
 pub struct ALPEncoding;
 
-pub const ALP_ENCODING: EncodingId = EncodingId::new("vortex.alp");
+impl ALPEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.alp");
+}
 
 impl Encoding for ALPEncoding {
     fn id(&self) -> &EncodingId {
-        &ALP_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

@@ -30,8 +30,8 @@ use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 
 use super::{
-    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
-    Encoding, EncodingId, EncodingRef, ENCODINGS,
+    check_index_bounds, check_slice_bounds, check_validity_buffer, encoding_impl, Array, ArrayRef,
+    ArrowIterator, Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
 
 mod compress;
@@ -175,16 +175,18 @@ impl Array for BoolArray {
 }
 
 #[derive(Debug)]
-struct BoolEncoding;
+pub struct BoolEncoding;
 
-pub const BOOL_ENCODING: EncodingId = EncodingId::new("vortex.bool");
+impl BoolEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.bool");
+}
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_BOOL: EncodingRef = &BoolEncoding;
 
 impl Encoding for BoolEncoding {
     fn id(&self) -> &EncodingId {
-        &BOOL_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

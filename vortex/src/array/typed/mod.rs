@@ -140,16 +140,18 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for TypedArray {
 }
 
 #[derive(Debug)]
-struct TypedEncoding;
+pub struct TypedEncoding;
 
-pub const TYPED_ENCODING: EncodingId = EncodingId::new("vortex.typed");
+impl TypedEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.typed");
+}
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_TYPED: EncodingRef = &TypedEncoding;
 
 impl Encoding for TypedEncoding {
     fn id(&self) -> &EncodingId {
-        &TYPED_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

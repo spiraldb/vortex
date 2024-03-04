@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::array::bool::{BoolEncoding, BOOL_ENCODING};
+use crate::array::bool::BoolEncoding;
 use crate::array::{Array, ArrayRef};
 use crate::compress::{
     sampled_compression, CompressConfig, CompressCtx, Compressor, EncodingCompression,
@@ -24,7 +24,7 @@ impl EncodingCompression for BoolEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &BOOL_ENCODING {
+        if array.encoding().id() == &BoolEncoding::ID {
             Some(&(bool_compressor as Compressor))
         } else {
             None

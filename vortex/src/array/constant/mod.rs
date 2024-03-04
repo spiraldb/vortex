@@ -140,14 +140,16 @@ impl ArrayDisplay for ConstantArray {
 #[derive(Debug)]
 pub struct ConstantEncoding;
 
-pub const CONSTANT_ENCODING: EncodingId = EncodingId::new("vortex.constant");
+impl ConstantEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.constant");
+}
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_CONSTANT: EncodingRef = &ConstantEncoding;
 
 impl Encoding for ConstantEncoding {
     fn id(&self) -> &EncodingId {
-        &CONSTANT_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

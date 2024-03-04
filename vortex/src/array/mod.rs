@@ -18,16 +18,16 @@ use std::fmt::{Debug, Display, Formatter};
 use arrow::array::ArrayRef as ArrowArrayRef;
 use linkme::distributed_slice;
 
-use crate::array::bool::{BoolArray, BOOL_ENCODING};
-use crate::array::chunked::{ChunkedArray, CHUNKED_ENCODING};
-use crate::array::constant::{ConstantArray, CONSTANT_ENCODING};
+use crate::array::bool::{BoolArray, BoolEncoding};
+use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
+use crate::array::constant::{ConstantArray, ConstantEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
-use crate::array::sparse::{SparseArray, SPARSE_ENCODING};
-use crate::array::struct_::{StructArray, STRUCT_ENCODING};
-use crate::array::typed::{TypedArray, TYPED_ENCODING};
-use crate::array::varbin::{VarBinArray, VARBIN_ENCODING};
-use crate::array::varbinview::{VarBinViewArray, VARBINVIEW_ENCODING};
+use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
+use crate::array::sparse::{SparseArray, SparseEncoding};
+use crate::array::struct_::{StructArray, StructEncoding};
+use crate::array::typed::{TypedArray, TypedEncoding};
+use crate::array::varbin::{VarBinArray, VarBinEncoding};
+use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::dtype::{DType, Nullability};
@@ -182,15 +182,15 @@ pub enum ArrayKind<'a> {
 impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
     fn from(value: &'a dyn Array) -> Self {
         match *value.encoding().id() {
-            BOOL_ENCODING => ArrayKind::Bool(value.as_bool()),
-            CHUNKED_ENCODING => ArrayKind::Chunked(value.as_chunked()),
-            CONSTANT_ENCODING => ArrayKind::Constant(value.as_constant()),
-            PRIMITIVE_ENCODING => ArrayKind::Primitive(value.as_primitive()),
-            SPARSE_ENCODING => ArrayKind::Sparse(value.as_sparse()),
-            STRUCT_ENCODING => ArrayKind::Struct(value.as_struct()),
-            TYPED_ENCODING => ArrayKind::Typed(value.as_typed()),
-            VARBIN_ENCODING => ArrayKind::VarBin(value.as_varbin()),
-            VARBINVIEW_ENCODING => ArrayKind::VarBinView(value.as_varbinview()),
+            BoolEncoding::ID => ArrayKind::Bool(value.as_bool()),
+            ChunkedEncoding::ID => ArrayKind::Chunked(value.as_chunked()),
+            ConstantEncoding::ID => ArrayKind::Constant(value.as_constant()),
+            PrimitiveEncoding::ID => ArrayKind::Primitive(value.as_primitive()),
+            SparseEncoding::ID => ArrayKind::Sparse(value.as_sparse()),
+            StructEncoding::ID => ArrayKind::Struct(value.as_struct()),
+            TypedEncoding::ID => ArrayKind::Typed(value.as_typed()),
+            VarBinEncoding::ID => ArrayKind::VarBin(value.as_varbin()),
+            VarBinViewEncoding::ID => ArrayKind::VarBinView(value.as_varbinview()),
             _ => ArrayKind::Other(value),
         }
     }

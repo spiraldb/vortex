@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::typed::{TypedArray, TypedEncoding, TYPED_ENCODING};
+use crate::array::typed::{TypedArray, TypedEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 
@@ -23,7 +23,7 @@ impl EncodingCompression for TypedEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &TYPED_ENCODING {
+        if array.encoding().id() == &Self::ID {
             Some(&(typed_compressor as Compressor))
         } else {
             None

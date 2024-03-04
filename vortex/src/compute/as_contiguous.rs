@@ -15,9 +15,9 @@
 use arrow::buffer::BooleanBuffer;
 use itertools::Itertools;
 
-use crate::array::bool::{BoolArray, BOOL_ENCODING};
+use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
+use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::{match_each_native_ptype, NativePType};
@@ -34,10 +34,10 @@ pub fn as_contiguous(arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
     }
 
     match *arrays[0].encoding().id() {
-        BOOL_ENCODING => {
+        BoolEncoding::ID => {
             Ok(bool_as_contiguous(arrays.iter().map(|a| a.as_bool()).collect())?.boxed())
         }
-        PRIMITIVE_ENCODING => {
+        PrimitiveEncoding::ID => {
             Ok(primitive_as_contiguous(arrays.iter().map(|a| a.as_primitive()).collect())?.boxed())
         }
         _ => Err(VortexError::ComputeError(
