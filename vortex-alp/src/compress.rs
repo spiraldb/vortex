@@ -129,7 +129,7 @@ where
     let patches = if num_exceptions == 0 {
         None
     } else {
-        let patch_indices = codecz::utils::into_u32_vec(&exceptions_idx, num_exceptions);
+        let patch_indices = codecz::utils::into_u64_vec(&exceptions_idx, num_exceptions);
         let patch_values = codecz::utils::gather_patches(
             values.buffer().typed_data::<T>(),
             patch_indices.as_slice(),
