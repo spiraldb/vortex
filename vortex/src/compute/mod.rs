@@ -1,4 +1,4 @@
-use cast::CastPrimitiveFn;
+use cast::{CastBoolFn, CastPrimitiveFn};
 use patch::PatchFn;
 use scalar_at::ScalarAtFn;
 use take::TakeFn;
@@ -13,6 +13,10 @@ pub mod search_sorted;
 pub mod take;
 
 pub trait ArrayCompute {
+    fn cast_bool(&self) -> Option<&dyn CastBoolFn> {
+        None
+    }
+
     fn cast_primitive(&self) -> Option<&dyn CastPrimitiveFn> {
         None
     }
@@ -24,6 +28,7 @@ pub trait ArrayCompute {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         None
     }
+
     fn take(&self) -> Option<&dyn TakeFn> {
         None
     }

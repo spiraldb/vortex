@@ -1,11 +1,15 @@
+use arrow::buffer::NullBuffer;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use crate::array::Array;
 use arrow::datatypes::ArrowNativeType;
 use half::f16;
 use num_traits::{NumCast, PrimInt};
+use polars_arrow::io::iterator::StreamingIterator;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::compute::cast::cast_bool;
 use crate::ptype::match_each_native_ptype;
 use crate::scalar::ListScalarVec;
 use crate::scalar::Scalar;
@@ -65,6 +69,17 @@ where
     Box<dyn Scalar>: From<T>,
 {
     let typed_buf: &[T] = array.buffer().typed_data();
+
+    // TODO(ngates): add optimized implementation for non-null;
+    let validity = array
+        .validity()
+        .map(|v| cast_bool(v))
+        .transpose()?
+        .map_or_else(
+            || NullBuffer::new_valid(array.len()),
+            |v| NullBuffer::from(v.buffer()),
+        )?;
+
     // TODO(ngates): bail out on empty stats
 
     let bitwidth = std::mem::size_of::<T>() * 8;
