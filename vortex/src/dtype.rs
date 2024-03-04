@@ -176,6 +176,13 @@ pub enum DType {
 }
 
 impl DType {
+    /// The default DType for indices
+    pub const IDX: DType = Int(
+        IntWidth::_64,
+        Signedness::Unsigned,
+        Nullability::NonNullable,
+    );
+
     pub fn is_nullable(&self) -> bool {
         use Nullability::*;
 
