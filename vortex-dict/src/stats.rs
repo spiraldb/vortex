@@ -1,9 +1,10 @@
+use vortex::error::VortexResult;
 use vortex::stats::{Stat, StatsCompute, StatsSet};
 
 use crate::dict::DictArray;
 
 impl StatsCompute for DictArray {
-    fn compute(&self, _stat: &Stat) -> StatsSet {
+    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
         let mut stats = StatsSet::new();
 
         if let Some(rc) = self.codes().stats().get_or_compute(&Stat::RunCount) {
@@ -46,6 +47,6 @@ impl StatsCompute for DictArray {
             }
         }
 
-        stats
+        Ok(stats)
     }
 }

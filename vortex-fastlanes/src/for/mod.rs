@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use vortex::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
@@ -123,9 +122,8 @@ impl ArrayDisplay for FoRArray {
 }
 
 impl StatsCompute for FoRArray {
-    fn compute(&self, _stat: &Stat) -> StatsSet {
-        // TODO(ngates): implement based on the encoded array
-        StatsSet::from(HashMap::new())
+    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+        Ok(StatsSet::default())
     }
 }
 

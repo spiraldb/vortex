@@ -2,15 +2,16 @@ use std::collections::HashMap;
 
 use crate::array::bool::BoolArray;
 use crate::array::Array;
+use crate::error::VortexResult;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for BoolArray {
-    fn compute(&self, _stat: &Stat) -> StatsSet {
+    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
         if self.len() == 0 {
-            return StatsSet::from(HashMap::from([
+            return Ok(StatsSet::from(HashMap::from([
                 (Stat::TrueCount, 0.into()),
                 (Stat::RunCount, 0.into()),
-            ]));
+            ])));
         }
 
         let mut prev_bit = self.buffer().value(0);
@@ -28,7 +29,7 @@ impl StatsCompute for BoolArray {
         }
         run_count += 1;
 
-        StatsSet::from(HashMap::from([
+        Ok(StatsSet::from(HashMap::from([
             (Stat::Min, (true_count == self.len()).into()),
             (Stat::Max, (true_count > 0).into()),
             (
@@ -37,6 +38,6 @@ impl StatsCompute for BoolArray {
             ),
             (Stat::RunCount, run_count.into()),
             (Stat::TrueCount, true_count.into()),
-        ]))
+        ])))
     }
 }
