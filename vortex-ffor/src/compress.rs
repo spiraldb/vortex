@@ -74,10 +74,8 @@ fn ffor_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx
         encoded,
         parray.validity().clone_optional(),
         patches.map(|p| {
-            ctx.next_level().compress(
-                p.as_ref(),
-                like_ffor.and_then(|lf| lf.patches()).map(|p| p.as_ref()),
-            )
+            ctx.next_level()
+                .compress(p.as_ref(), like_ffor.and_then(|lf| lf.patches()))
         }),
         min_val,
         num_bits,

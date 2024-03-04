@@ -61,10 +61,8 @@ fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
             .compress(encoded.as_ref(), like_alp.map(|a| a.encoded())),
         exponents,
         patches.map(|p| {
-            ctx.next_level().compress(
-                p.as_ref(),
-                like_alp.and_then(|a| a.patches()).map(|p| p.as_ref()),
-            )
+            ctx.next_level()
+                .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
         }),
     )
     .boxed()

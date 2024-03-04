@@ -45,14 +45,9 @@ fn varbin_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressC
             varbin_like.map(|typed_arr| typed_arr.bytes()),
         ),
         array.dtype().clone(),
-        varbin_array.validity().map(|v| {
-            ctx.compress(
-                v.as_ref(),
-                varbin_like
-                    .and_then(|vblike| vblike.validity())
-                    .map(|v| v.as_ref()),
-            )
-        }),
+        varbin_array
+            .validity()
+            .map(|v| ctx.compress(v.as_ref(), varbin_like.and_then(|vblike| vblike.validity()))),
     )
     .boxed()
 }
