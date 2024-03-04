@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use vortex::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
+use vortex::compute::ArrayCompute;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
@@ -78,10 +79,6 @@ impl Array for FoRArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, _index: usize) -> VortexResult<Box<dyn Scalar>> {
-        todo!()
-    }
-
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         todo!()
     }
@@ -109,6 +106,8 @@ impl Array for FoRArray {
         self
     }
 }
+
+impl ArrayCompute for FoRArray {}
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for FoRArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {

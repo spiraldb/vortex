@@ -1,3 +1,5 @@
+#![feature(iterator_try_collect)]
+
 pub mod array;
 pub mod arrow;
 pub mod scalar;

@@ -1,4 +1,5 @@
 mod compress;
+mod compute;
 mod serde;
 
 use std::any::Any;
@@ -17,10 +18,10 @@ use crate::array::{
 };
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
+use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
@@ -145,8 +146,8 @@ impl VarBinViewArray {
 
     fn is_valid(&self, index: usize) -> bool {
         self.validity
-            .as_ref()
-            .map(|v| v.scalar_at(index).unwrap().try_into().unwrap())
+            .as_deref()
+            .map(|v| scalar_at(v, index).unwrap().try_into().unwrap())
             .unwrap_or(true)
     }
 
@@ -244,20 +245,6 @@ impl Array for VarBinViewArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        if self.is_valid(index) {
-            self.bytes_at(index).map(|bytes| {
-                if matches!(self.dtype, DType::Utf8(_)) {
-                    unsafe { String::from_utf8_unchecked(bytes) }.into()
-                } else {
-                    bytes.into()
-                }
-            })
-        } else {
-            Ok(NullableScalar::none(self.dtype.clone()).boxed())
-        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -405,9 +392,9 @@ mod test {
     pub fn varbin_view() {
         let binary_arr = binary_array();
         assert_eq!(binary_arr.len(), 2);
-        assert_eq!(binary_arr.scalar_at(0), Ok("hello world".into()));
+        assert_eq!(scalar_at(binary_arr.as_ref(), 0), Ok("hello world".into()));
         assert_eq!(
-            binary_arr.scalar_at(1),
+            scalar_at(binary_arr.as_ref(), 1),
             Ok("hello world this is a long string".into())
         )
     }
@@ -416,7 +403,7 @@ mod test {
     pub fn slice() {
         let binary_arr = binary_array().slice(1, 2).unwrap();
         assert_eq!(
-            binary_arr.scalar_at(0),
+            scalar_at(binary_arr.as_ref(), 0),
             Ok("hello world this is a long string".into())
         );
     }

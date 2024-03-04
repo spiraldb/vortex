@@ -5,8 +5,8 @@ use arrow::array::Datum;
 use linkme::distributed_slice;
 
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef, ENCODINGS,
+    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
+    ENCODINGS,
 };
 use crate::arrow::compute::repeat;
 use crate::compress::EncodingCompression;
@@ -21,7 +21,6 @@ mod compress;
 mod compute;
 mod serde;
 mod stats;
-mod take;
 
 #[derive(Debug, Clone)]
 pub struct ConstantArray {
@@ -78,11 +77,6 @@ impl Array for ConstantArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-        Ok(self.scalar.clone())
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

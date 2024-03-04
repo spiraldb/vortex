@@ -15,20 +15,21 @@ use log::debug;
 
 use crate::array::bool::BoolArray;
 use crate::array::{
-    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
-    Encoding, EncodingId, EncodingRef, ENCODINGS,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
+    EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
+use crate::compute::scalar_at::scalar_at;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
-use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -109,8 +110,8 @@ impl PrimitiveArray {
 
     pub fn is_valid(&self, index: usize) -> bool {
         self.validity
-            .as_ref()
-            .map(|v| v.scalar_at(index).unwrap().try_into().unwrap())
+            .as_deref()
+            .map(|v| scalar_at(v, index).unwrap().try_into().unwrap())
             .unwrap_or(true)
     }
 
@@ -164,23 +165,6 @@ impl Array for PrimitiveArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-
-        if self.is_valid(index) {
-            Ok(
-                match_each_native_ptype!(self.ptype, |$T| self.buffer.typed_data::<$T>()
-                    .get(index)
-                    .unwrap()
-                    .clone()
-                    .into()
-                ),
-            )
-        } else {
-            Ok(NullableScalar::none(self.dtype().clone()).boxed())
-        }
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -335,9 +319,9 @@ mod test {
         );
 
         // Ensure we can fetch the scalar at the given index.
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(1));
-        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(1));
+        assert_eq!(scalar_at(arr.as_ref(), 1).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(3));
     }
 
     #[test]
@@ -346,8 +330,8 @@ mod test {
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(1).unwrap().try_into(), Ok(3));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(4));
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(arr.as_ref(), 1).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(4));
     }
 }

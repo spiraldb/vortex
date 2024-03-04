@@ -4,6 +4,7 @@ use vortex::array::{EncodingRef, ENCODINGS};
 pub use ree::*;
 
 mod compress;
+mod compute;
 mod downcast;
 mod ree;
 mod serde;

@@ -12,7 +12,6 @@ use crate::compress::EncodingCompression;
 use crate::dtype::{DType, FieldNames};
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::{Scalar, StructScalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
@@ -22,6 +21,7 @@ use super::{
 };
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -110,17 +110,6 @@ impl Array for StructArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        Ok(StructScalar::new(
-            self.dtype.clone(),
-            self.fields
-                .iter()
-                .map(|field| field.scalar_at(index))
-                .try_collect()?,
-        )
-        .boxed())
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
