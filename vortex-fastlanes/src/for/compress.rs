@@ -28,22 +28,15 @@ impl EncodingCompression for FoREncoding {
             return None;
         }
 
-        let imin = parray
-            .stats()
-            .get_or_compute_cast::<i64>(&Stat::Min)
-            .unwrap();
-        let imax = parray
-            .stats()
-            .get_or_compute_cast::<i64>(&Stat::Max)
-            .unwrap();
+        let imin = parray.stats().get_or_compute_cast::<i64>(&Stat::Min)?;
+        let imax = parray.stats().get_or_compute_cast::<i64>(&Stat::Max)?;
         println!("imin: {} imax: {}", imin, imax);
 
         match_each_integer_ptype!(parray.ptype(), |$T| {
             // Nothing for us to do if the min is already zero.
             let min = parray
                 .stats()
-                .get_or_compute_as::<$T>(&Stat::Min)
-                .unwrap();
+                .get_or_compute_as::<$T>(&Stat::Min)?;
             if min == 0 {
                debug!("Skipping FoR: min is already zero");
                 return None;
@@ -52,8 +45,7 @@ impl EncodingCompression for FoREncoding {
             // Check if FoR would cause overflow
             let max = parray
                 .stats()
-                .get_or_compute_as::<$T>(&Stat::Max)
-                .unwrap();
+                .get_or_compute_as::<$T>(&Stat::Max)?;
             if max.checked_sub(min).is_none() {
                 println!("Skipping FoR: range too large {} {} {:?}", min, max, parray.ptype());
                 return None;
