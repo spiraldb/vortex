@@ -149,3 +149,18 @@ impl<T: TryFrom<Box<dyn Scalar>, Error = VortexError>> TryFrom<Box<dyn Scalar>>
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::dtype::DType;
+    use crate::ptype::PType;
+    use crate::scalar::Scalar;
+
+    #[test]
+    fn test_nullable_scalar_option() {
+        let ns: Box<dyn Scalar> = Some(10i16).into();
+        let nsi32 = ns.cast(&DType::from(PType::I32)).unwrap();
+        let v: i32 = nsi32.try_into().unwrap();
+        assert_eq!(v, 10);
+    }
+}
