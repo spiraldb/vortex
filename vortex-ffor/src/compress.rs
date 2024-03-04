@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use log::debug;
 
 use codecz::ffor;
@@ -19,7 +5,7 @@ use codecz::ffor::{FforEncoded, SupportsFFoR};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
@@ -72,12 +58,10 @@ fn ffor_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx
 
     FFORArray::new(
         encoded,
-        parray.validity().cloned(),
+        parray.validity().clone_optional(),
         patches.map(|p| {
-            ctx.next_level().compress(
-                p.as_ref(),
-                like_ffor.and_then(|lf| lf.patches()).map(|p| p.as_ref()),
-            )
+            ctx.next_level()
+                .compress(p.as_ref(), like_ffor.and_then(|lf| lf.patches()))
         }),
         min_val,
         num_bits,
@@ -90,7 +74,7 @@ pub fn ffor_encode(parray: &PrimitiveArray) -> FFORArray {
     let (encoded, patches, min_val, num_bits) = ffor_encode_parts(parray);
     FFORArray::new(
         encoded,
-        parray.validity().cloned(),
+        parray.validity().clone_optional(),
         patches,
         min_val,
         num_bits,

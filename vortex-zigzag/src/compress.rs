@@ -1,23 +1,9 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use zigzag::ZigZag;
 
 use crate::downcast::DowncastZigzag;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::error::VortexResult;
 use vortex::ptype::{NativePType, PType};
@@ -83,14 +69,14 @@ pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
 
 fn zigzag_encode_primitive<T: ZigZag + NativePType>(
     values: &[T],
-    validity: Option<&ArrayRef>,
+    validity: Option<&dyn Array>,
 ) -> PrimitiveArray
 where
     <T as ZigZag>::UInt: NativePType,
 {
     let mut encoded = AlignedVec::with_capacity_in(values.len(), ALIGNED_ALLOCATOR);
     encoded.extend(values.iter().map(|v| T::encode(*v)));
-    PrimitiveArray::from_nullable_in(encoded, validity.cloned())
+    PrimitiveArray::from_nullable_in(encoded, validity.clone_optional())
 }
 
 #[allow(dead_code)]
@@ -113,12 +99,12 @@ pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
 #[allow(dead_code)]
 fn zigzag_decode_primitive<T: ZigZag + NativePType>(
     values: &[T::UInt],
-    validity: Option<&ArrayRef>,
+    validity: Option<&dyn Array>,
 ) -> PrimitiveArray
 where
     <T as ZigZag>::UInt: NativePType,
 {
     let mut encoded: AlignedVec<T> = AlignedVec::with_capacity_in(values.len(), ALIGNED_ALLOCATOR);
     encoded.extend(values.iter().map(|v| T::decode(*v)));
-    PrimitiveArray::from_nullable_in(encoded, validity.cloned())
+    PrimitiveArray::from_nullable_in(encoded, validity.clone_optional())
 }

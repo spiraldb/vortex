@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::hash::{Hash, Hasher};
 
 use ahash::RandomState;
@@ -23,7 +9,7 @@ use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
-use vortex::array::{Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::dtype::DType;
 use vortex::match_each_native_ptype;
@@ -138,7 +124,7 @@ fn dict_encode_typed_primitive<
     }
 
     (
-        PrimitiveArray::from_nullable(codes, array.validity().cloned()),
+        PrimitiveArray::from_nullable(codes, array.validity().clone_optional()),
         PrimitiveArray::from_vec(values),
     )
 }
@@ -230,7 +216,7 @@ fn dict_encode_typed_varbin<O, K, V, U>(
     dtype: DType,
     value_lookup: V,
     len: usize,
-    validity: Option<&ArrayRef>,
+    validity: Option<&dyn Array>,
 ) -> (PrimitiveArray, VarBinArray)
 where
     O: NativePType + Unsigned + FromPrimitive,
@@ -268,7 +254,7 @@ where
         codes.push(code)
     }
     (
-        PrimitiveArray::from_nullable(codes, validity.cloned()),
+        PrimitiveArray::from_nullable(codes, validity.clone_optional()),
         VarBinArray::new(
             PrimitiveArray::from_vec(offsets).boxed(),
             PrimitiveArray::from_vec(bytes).boxed(),

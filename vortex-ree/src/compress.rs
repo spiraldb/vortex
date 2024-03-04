@@ -1,21 +1,7 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use codecz::AlignedAllocator;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::dtype::{DType, IntWidth, Nullability};
 use vortex::ptype::match_each_native_ptype;
@@ -60,7 +46,7 @@ fn ree_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
     REEArray::new(
         compressed_ends,
         compressed_values,
-        primitive_array.validity().cloned(),
+        primitive_array.validity().clone_optional(),
         array.len(),
     )
     .boxed()
@@ -110,7 +96,7 @@ mod test {
 
     use vortex::array::bool::BoolArray;
     use vortex::array::downcast::DowncastArrayBuiltin;
-    use vortex::array::Array;
+    use vortex::array::{Array, CloneOptionalArray};
 
     use crate::compress::ree_decode;
     use crate::REEArray;
@@ -133,7 +119,7 @@ mod test {
         let decoded = ree_decode(
             arr.ends().as_primitive(),
             arr.values().as_primitive(),
-            arr.validity().cloned(),
+            arr.validity().clone_optional(),
         );
 
         assert_eq!(

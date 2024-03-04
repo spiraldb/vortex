@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use log::debug;
 
 use codecz::alp;
@@ -19,7 +5,7 @@ use codecz::alp::{ALPEncoded, ALPExponents, SupportsALP};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 
@@ -61,10 +47,8 @@ fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
             .compress(encoded.as_ref(), like_alp.map(|a| a.encoded())),
         exponents,
         patches.map(|p| {
-            ctx.next_level().compress(
-                p.as_ref(),
-                like_alp.and_then(|a| a.patches()).map(|p| p.as_ref()),
-            )
+            ctx.next_level()
+                .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
         }),
     )
     .boxed()
@@ -108,7 +92,7 @@ fn alp_encode_like_parts(
 
 fn alp_encode_primitive<T: SupportsALP + NativePType>(
     values: &[T],
-    validity: Option<&ArrayRef>,
+    validity: Option<&dyn Array>,
     exponents: Option<ALPExponents>,
 ) -> (ArrayRef, ALPExponents, Option<ArrayRef>)
 where
@@ -124,7 +108,7 @@ where
         .map(|exp| alp::encode_with(values, exp))
         .unwrap_or_else(|| alp::encode(values))
         .unwrap();
-    let values = PrimitiveArray::from_nullable_in(values, validity.cloned()); // move and re-alias
+    let values = PrimitiveArray::from_nullable_in(values, validity.clone_optional()); // move and re-alias
 
     let patches = if num_exceptions == 0 {
         None

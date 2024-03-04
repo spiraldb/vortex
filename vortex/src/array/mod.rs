@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -91,6 +77,16 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
 }
 
 dyn_clone::clone_trait_object!(Array);
+
+pub trait CloneOptionalArray {
+    fn clone_optional(&self) -> Option<ArrayRef>;
+}
+
+impl CloneOptionalArray for Option<&dyn Array> {
+    fn clone_optional(&self) -> Option<ArrayRef> {
+        self.map(dyn_clone::clone_box)
+    }
+}
 
 pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> VortexResult<()> {
     if start > array.len() {
