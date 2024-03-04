@@ -1,16 +1,14 @@
 use arrayref::array_ref;
 use log::debug;
+use std::mem::size_of;
 
-use fastlanez_sys::TryBitPack;
+use fastlanez_sys::{transpose, Delta};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
-use vortex::match_each_integer_ptype;
-use vortex::ptype::{NativePType, PType};
-use vortex::scalar::ListScalarVec;
-use vortex::stats::Stat;
+use vortex::match_each_signed_integer_ptype;
+use vortex::ptype::NativePType;
 
 use crate::{DeltaArray, DeltaEncoding};
 
@@ -26,8 +24,8 @@ impl EncodingCompression for DeltaEncoding {
             return None;
         };
 
-        // Only supports ints
-        if !parray.ptype().is_int() {
+        // Only supports signed ints
+        if !parray.ptype().is_signed_int() {
             debug!("Skipping Delta: not int");
             return None;
         }
@@ -45,37 +43,46 @@ fn delta_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCt
         .validity()
         .map(|v| ctx.compress(v.as_ref(), like_delta.and_then(|d| d.validity())));
 
-    let delta_encoded = match_each_integer_ptype!(parray.ptype(), |$T| {
-        delta_primitive(parray.typed_data::<$T>())
+    let delta_encoded = match_each_signed_integer_ptype!(parray.ptype(), |$T| {
+        PrimitiveArray::from_vec(delta_primitive(parray.buffer().typed_data::<$T>()))
     });
 
     let encoded = ctx.next_level().compress(
-        PrimitiveArray::from_vec(delta_encoded).as_ref(),
+        delta_encoded.as_ref(),
         like_delta.map(|d| d.encoded().as_ref()),
     );
 
-    return DeltaArray::try_new(encoded, validity).unwrap().boxed();
+    return DeltaArray::try_new(array.len(), encoded, validity)
+        .unwrap()
+        .boxed();
 }
 
-fn delta_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize) -> Vec<u8> {
+fn delta_primitive<T: NativePType + Delta>(array: &[T]) -> Vec<T>
+where
+    [(); 128 / size_of::<T>()]:,
+{
     // How many fastlanes vectors we will process.
     let num_chunks = (array.len() + 1023) / 1024;
 
-    // Allocate a result byte array.
-    let mut output = Vec::with_capacity(num_chunks * bit_width * 128);
+    // Allocate a result array.
+    let mut output = Vec::with_capacity(array.len());
+
+    // Start with a base vector of zeros.
+    let mut base = [T::default(); 128 / size_of::<T>()];
 
     // Loop over all but the last chunk.
     (0..num_chunks - 1).for_each(|i| {
         let start_elem = i * 1024;
         let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
-        TryBitPack::try_bitpack_into(chunk, bit_width, &mut output).unwrap();
+        let transposed = transpose(chunk);
+        Delta::delta(&transposed, &mut base, &mut output);
     });
 
     // Pad the last chunk with zeros to a full 1024 elements.
     let last_chunk_size = array.len() % 1024;
     let mut last_chunk: [T; 1024] = [T::default(); 1024];
     last_chunk[..last_chunk_size].copy_from_slice(&array[array.len() - last_chunk_size..]);
-    TryBitPack::try_bitpack_into(&last_chunk, bit_width, &mut output).unwrap();
+    Delta::delta(&last_chunk, &mut base, &mut output);
 
     output
 }
@@ -103,7 +110,6 @@ mod test {
             None,
         );
         assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
-        let bp = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
-        assert_eq!(bp.bit_width(), 6);
+        _ = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
     }
 }

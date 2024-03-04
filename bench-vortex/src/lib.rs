@@ -13,6 +13,7 @@ pub fn enumerate_arrays() {
         &ALPEncoding,
         &DictEncoding,
         &BitPackedEncoding,
+        // &DeltaEncoding,
         &FoREncoding,
         //&FFoREncoding,
         &REEEncoding,

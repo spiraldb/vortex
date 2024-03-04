@@ -2,14 +2,13 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{
-    check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
-};
+use vortex::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
+use vortex::compute::scalar_at::scalar_at;
+use vortex::compute::ArrayCompute;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::scalar::{NullableScalar, Scalar};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 
@@ -18,14 +17,20 @@ mod serde;
 
 #[derive(Debug, Clone)]
 pub struct DeltaArray {
+    len: usize,
     encoded: ArrayRef,
     validity: Option<ArrayRef>,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl DeltaArray {
-    pub fn try_new(encoded: ArrayRef, validity: Option<ArrayRef>) -> VortexResult<Self> {
+    pub fn try_new(
+        len: usize,
+        encoded: ArrayRef,
+        validity: Option<ArrayRef>,
+    ) -> VortexResult<Self> {
         Ok(Self {
+            len,
             encoded,
             validity,
             stats: Arc::new(RwLock::new(StatsSet::new())),
@@ -44,7 +49,7 @@ impl DeltaArray {
 
     pub fn is_valid(&self, index: usize) -> bool {
         self.validity()
-            .map(|v| v.scalar_at(index).and_then(|v| v.try_into()).unwrap())
+            .map(|v| scalar_at(v, index).and_then(|v| v.try_into()).unwrap())
             .unwrap_or(true)
     }
 }
@@ -67,7 +72,7 @@ impl Array for DeltaArray {
 
     #[inline]
     fn len(&self) -> usize {
-        self.encoded.len()
+        self.len
     }
 
     #[inline]
@@ -83,10 +88,6 @@ impl Array for DeltaArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, _index: usize) -> VortexResult<Box<dyn Scalar>> {
-        todo!()
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
@@ -112,6 +113,8 @@ impl Array for DeltaArray {
     }
 }
 
+impl ArrayCompute for DeltaArray {}
+
 impl<'arr> AsRef<(dyn Array + 'arr)> for DeltaArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self
@@ -120,7 +123,6 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for DeltaArray {
 
 impl ArrayDisplay for DeltaArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("packed: u{}", self.bit_width()))?;
         if let Some(v) = self.validity() {
             f.writeln("validity:")?;
             f.indent(|indent| indent.array(v.as_ref()))?;

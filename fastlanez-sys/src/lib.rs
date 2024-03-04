@@ -1,10 +1,12 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
+#![feature(maybe_uninit_uninit_array)]
+#![feature(maybe_uninit_array_assume_init)]
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-use std::mem::{size_of, MaybeUninit};
+use std::mem::{size_of, transmute, MaybeUninit};
 
 use arrayref::array_mut_ref;
 use seq_macro::seq;
@@ -12,10 +14,16 @@ use uninit::prelude::VecCapacity;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+pub fn transpose<'a, T: Sized>(input: &[T; 1024]) -> [T; 1024] {
+    unsafe {
+        let mut output: [MaybeUninit<T>; 1024] = MaybeUninit::uninit_array();
+        fl_transpose_u8(transmute(input), transmute(&mut output));
+        MaybeUninit::array_assume_init(output)
+    }
+}
+
 pub struct Pred<const B: bool>;
-
 pub trait Satisfied {}
-
 impl Satisfied for Pred<true> {}
 
 /// BitPack into a compile-time known bit-width.
@@ -97,3 +105,42 @@ bitpack_impl!(u8, 8);
 bitpack_impl!(u16, 16);
 bitpack_impl!(u32, 32);
 bitpack_impl!(u64, 64);
+
+pub trait Delta
+where
+    Self: Sized,
+{
+    fn delta(
+        input: &[Self; 1024],
+        base: &mut [Self; 128 / size_of::<Self>()],
+        output: &mut Vec<Self>,
+    );
+}
+
+macro_rules! delta_impl {
+    ($T:ty) => {
+        paste::item! {
+            impl Delta for $T {
+                fn delta(
+                    input: &[Self; 1024],
+                    base: &mut [Self; 128 / size_of::<Self>()],
+                    output: &mut Vec<Self>,
+                ) {
+                    unsafe {
+                        [<fl_delta_encode_ $T>](
+                            input,
+                            transmute(base),
+                            transmute(array_mut_ref![output.reserve_uninit(1024), 0, 1024]),
+                        );
+                        output.set_len(output.len() + 1024)
+                    }
+                }
+            }
+        }
+    };
+}
+
+delta_impl!(i8);
+delta_impl!(i16);
+delta_impl!(i32);
+delta_impl!(i64);
