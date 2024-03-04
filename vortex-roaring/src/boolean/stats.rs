@@ -1,10 +1,11 @@
 use vortex::array::Array;
+use vortex::error::VortexResult;
 use vortex::stats::{Stat, StatsCompute, StatsSet};
 
 use crate::boolean::RoaringBoolArray;
 
 impl StatsCompute for RoaringBoolArray {
-    fn compute(&self, stat: &Stat) -> StatsSet {
+    fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {
         let cardinality = self.bitmap().cardinality() as usize;
         if let Some(value) = match stat {
             Stat::IsConstant => Some((cardinality == self.len() || cardinality == 0).into()),
@@ -26,9 +27,9 @@ impl StatsCompute for RoaringBoolArray {
             Stat::NullCount => Some(0.into()),
             _ => None,
         } {
-            StatsSet::of(stat.clone(), value)
+            Ok(StatsSet::of(stat.clone(), value))
         } else {
-            StatsSet::default()
+            Ok(StatsSet::default())
         }
     }
 }
