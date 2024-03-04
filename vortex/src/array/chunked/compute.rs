@@ -12,24 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::array::bool::BoolArray;
+use crate::array::chunked::ChunkedArray;
+use crate::array::Array;
 use crate::compute::scalar_at::ScalarAtFn;
-use polars_arrow::scalar::Scalar;
-use take::TakeFn;
+use crate::compute::ArrayCompute;
+use crate::error::VortexResult;
+use crate::scalar::{NullableScalar, Scalar};
 
-pub mod add;
-pub mod as_contiguous;
-pub mod cast;
-pub mod repeat;
-pub mod scalar_at;
-pub mod search_sorted;
-pub mod take;
-
-pub trait ArrayCompute {
+impl ArrayCompute for ChunkedArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        None
+        Some(self)
     }
+}
 
-    fn take(&self) -> Option<&dyn TakeFn> {
-        None
+impl ScalarAtFn for ChunkedArray {
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
+        let (chunk_index, chunk_offset) = self.find_physical_location(index);
+        self.chunks[chunk_index].scalar_at(chunk_offset)
     }
 }

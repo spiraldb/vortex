@@ -74,8 +74,6 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone + 'sta
     fn dtype(&self) -> &DType;
     /// Get statistics for the array
     fn stats(&self) -> Stats;
-    /// Get scalar value at given index
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>>;
     /// Produce arrow batches from the encoding
     fn iter_arrow(&self) -> Box<ArrowIterator>;
     /// Limit array to start..stop range
@@ -100,13 +98,6 @@ pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> Vorte
     }
     if stop > array.len() {
         return Err(VortexError::OutOfBounds(stop, 0, array.len()));
-    }
-    Ok(())
-}
-
-pub fn check_index_bounds(array: &dyn Array, index: usize) -> VortexResult<()> {
-    if index >= array.len() {
-        return Err(VortexError::OutOfBounds(index, 0, array.len()));
     }
     Ok(())
 }

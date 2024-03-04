@@ -30,11 +30,12 @@ use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 
 use super::{
-    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator,
-    Encoding, EncodingId, EncodingRef, ENCODINGS,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
+    EncodingId, EncodingRef, ENCODINGS,
 };
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -119,15 +120,7 @@ impl Array for BoolArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-
-        if self.is_valid(index) {
-            Ok(self.buffer.value(index).into())
-        } else {
-            Ok(NullableScalar::none(self.dtype().clone()).boxed())
-        }
-    }
+    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {}
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         Box::new(iter::once(Arc::new(BooleanArray::new(

@@ -21,8 +21,8 @@ use itertools::Itertools;
 use linkme::distributed_slice;
 
 use crate::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef, ENCODINGS,
+    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
+    ENCODINGS,
 };
 use crate::compress::EncodingCompression;
 use crate::dtype::DType;
@@ -33,6 +33,7 @@ use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -138,12 +139,6 @@ impl Array for ChunkedArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-        let (chunk_index, chunk_offset) = self.find_physical_location(index);
-        self.chunks[chunk_index].scalar_at(chunk_offset)
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
