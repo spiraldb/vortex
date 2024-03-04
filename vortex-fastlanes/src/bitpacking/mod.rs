@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use vortex::array::{
@@ -161,9 +160,8 @@ impl ArrayDisplay for BitPackedArray {
 }
 
 impl StatsCompute for BitPackedArray {
-    fn compute(&self, _stat: &Stat) -> StatsSet {
-        // TODO(ngates): implement based on the encoded array
-        StatsSet::from(HashMap::new())
+    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+        Ok(StatsSet::default())
     }
 }
 

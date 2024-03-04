@@ -1,9 +1,11 @@
 use crate::array::chunked::ChunkedArray;
+use crate::error::VortexResult;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for ChunkedArray {
-    fn compute(&self, stat: &Stat) -> StatsSet {
-        self.chunks()
+    fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {
+        Ok(self
+            .chunks()
             .iter()
             .map(|c| {
                 let s = c.stats();
@@ -14,6 +16,6 @@ impl StatsCompute for ChunkedArray {
             .fold(StatsSet::new(), |mut acc, x| {
                 acc.merge(&x);
                 acc
-            })
+            }))
     }
 }
