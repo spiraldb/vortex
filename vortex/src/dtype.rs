@@ -190,23 +190,33 @@ impl DType {
         }
     }
 
+    pub fn as_nonnullable(&self) -> Self {
+        self.with_nullability(Nullability::NonNullable)
+    }
+
     pub fn as_nullable(&self) -> Self {
-        use Nullability::*;
+        self.with_nullability(Nullability::Nullable)
+    }
+
+    pub fn with_nullability(&self, nullability: Nullability) -> Self {
         match self {
             Null => Null,
-            Bool(_) => Bool(Nullable),
-            Int(w, s, _) => Int(*w, *s, Nullable),
-            Decimal(s, p, _) => Decimal(*s, *p, Nullable),
-            Float(w, _) => Float(*w, Nullable),
-            Utf8(_) => Utf8(Nullable),
-            Binary(_) => Binary(Nullable),
-            LocalTime(u, _) => LocalTime(*u, Nullable),
-            LocalDate(_) => LocalDate(Nullable),
-            Instant(u, _) => Instant(*u, Nullable),
-            ZonedDateTime(u, _) => ZonedDateTime(*u, Nullable),
-            Struct(n, fs) => Struct(n.clone(), fs.iter().map(|f| f.as_nullable()).collect()),
-            List(c, _) => List(c.clone(), Nullable),
-            Map(k, v, _) => Map(k.clone(), v.clone(), Nullable),
+            Bool(_) => Bool(nullability),
+            Int(w, s, _) => Int(*w, *s, nullability),
+            Decimal(s, p, _) => Decimal(*s, *p, nullability),
+            Float(w, _) => Float(*w, nullability),
+            Utf8(_) => Utf8(nullability),
+            Binary(_) => Binary(nullability),
+            LocalTime(u, _) => LocalTime(*u, nullability),
+            LocalDate(_) => LocalDate(nullability),
+            Instant(u, _) => Instant(*u, nullability),
+            ZonedDateTime(u, _) => ZonedDateTime(*u, nullability),
+            Struct(n, fs) => Struct(
+                n.clone(),
+                fs.iter().map(|f| f.with_nullability(nullability)).collect(),
+            ),
+            List(c, _) => List(c.clone(), nullability),
+            Map(k, v, _) => Map(k.clone(), v.clone(), nullability),
         }
     }
 
