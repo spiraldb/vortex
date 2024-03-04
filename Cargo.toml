@@ -32,7 +32,6 @@ include = [
 edition = "2021"
 rust-version = "1.76"
 
-
 [workspace.lints.clippy]
 all = "deny"
 
