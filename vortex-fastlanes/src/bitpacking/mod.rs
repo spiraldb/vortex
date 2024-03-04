@@ -20,6 +20,7 @@ use vortex::array::{
     check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 use vortex::compress::EncodingCompression;
+use vortex::compute;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};

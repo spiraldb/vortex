@@ -34,10 +34,10 @@ use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::match_arrow_numeric_type;
 use crate::scalar::{NullableScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
-use crate::{compute, match_arrow_numeric_type};
 
 mod compress;
 mod serde;
@@ -54,8 +54,6 @@ pub struct SparseArray {
 }
 
 impl SparseArray {
-    pub const ID: EncodingId = EncodingId::new("vortex.sparse");
-
     pub fn new(indices: ArrayRef, values: ArrayRef, len: usize) -> Self {
         Self::try_new(indices, values, len).unwrap()
     }
@@ -252,12 +250,16 @@ impl ArrayDisplay for SparseArray {
 #[derive(Debug)]
 pub struct SparseEncoding;
 
+impl SparseEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.sparse");
+}
+
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_SPARSE: EncodingRef = &SparseEncoding;
 
 impl Encoding for SparseEncoding {
     fn id(&self) -> &EncodingId {
-        &SparseArray::ID
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
