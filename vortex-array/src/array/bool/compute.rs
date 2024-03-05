@@ -6,7 +6,6 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
 use crate::scalar::{NullableScalar, Scalar, ScalarRef};
-use crate::stats::Stat;
 
 impl ArrayCompute for BoolArray {
     fn cast_bool(&self) -> Option<&dyn CastBoolFn> {
@@ -42,13 +41,6 @@ impl FillForwardFn for BoolArray {
     fn fill_forward(&self) -> VortexResult<ArrayRef> {
         if self.validity().is_none() {
             Ok(dyn_clone::clone_box(self))
-        } else if self
-            .stats()
-            .get_or_compute_as::<usize>(&Stat::NullCount)
-            .unwrap()
-            == 0usize
-        {
-            return Ok(BoolArray::new(self.buffer().clone(), None).boxed());
         } else {
             let validity = cast_bool(self.validity().unwrap())?;
             let bools = self.buffer();
