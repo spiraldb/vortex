@@ -34,7 +34,7 @@ impl FillForwardFn for PrimitiveArray {
                         last_value
                     })
                     .collect::<Vec<_>>();
-                Ok(PrimitiveArray::from(filled).boxed())
+                Ok(filled.into())
             })
         }
     }
