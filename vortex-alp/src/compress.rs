@@ -82,8 +82,38 @@ trait ALPFloat: NativePType + Float {
         (self + Self::SWEET) - Self::SWEET
     }
 
-    fn find_best_exponents(_values: &[Self]) -> Exponents {
-        Exponents { e: 16, f: 13 }
+    fn find_best_exponents(values: &[Self]) -> Exponents {
+        let mut best_e: usize = 0;
+        let mut best_f: usize = 0;
+        let mut best_nbytes: usize = usize::MAX;
+
+        // TODO(wmanning): idea, start with highest e, then find the best f
+        // after that, try e's in descending order, with a gap no larger than the original e - f
+        for e in 0..Self::F10.len() - 1 {
+            for f in 0..e {
+                let (_, encoded, patches) = Self::encode_to_array(
+                    values,
+                    Some(&Exponents {
+                        e: e as u8,
+                        f: f as u8,
+                    }),
+                );
+                let size = encoded.nbytes() + patches.map_or(0, |p| p.nbytes());
+                if size < best_nbytes {
+                    best_nbytes = size;
+                    best_e = e;
+                    best_f = f;
+                } else if size == best_nbytes && e - f < best_e - best_f {
+                    best_e = e;
+                    best_f = f;
+                }
+            }
+        }
+
+        Exponents {
+            e: best_e as u8,
+            f: best_f as u8,
+        }
     }
 
     fn encode_to_array(
@@ -121,7 +151,7 @@ trait ALPFloat: NativePType + Float {
                 let decoded =
                     encoded * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize];
 
-                if encoded != decoded {
+                if decoded != *v {
                     exc_pos.push(i as u64);
                     exc_value.push(*v);
                     // TODO(ngates): we could find previous?
@@ -225,6 +255,9 @@ impl ALPFloat for f64 {
         0.000000000000000001,
         0.0000000000000000001,
         0.00000000000000000001,
+        0.000000000000000000001,
+        0.0000000000000000000001,
+        0.00000000000000000000001,
     ];
 }
 
@@ -252,6 +285,7 @@ mod test {
         let array = PrimitiveArray::from_vec(vec![1.234; 1024]);
         let encoded = alp_encode(&array);
         println!("Encoded {:?}", encoded);
+        assert_eq!(encoded.patches(), None);
         assert_eq!(encoded.exponents(), &Exponents { e: 0, f: 0 });
     }
 }
