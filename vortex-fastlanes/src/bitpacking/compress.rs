@@ -33,20 +33,14 @@ impl EncodingCompression for BitPackedEncoding {
         }
 
         // Check that the min > zero
-        if parray
-            .stats()
-            .get_or_compute_cast::<i64>(&Stat::Min)
-            .unwrap()
-            < 0
-        {
+        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? < 0 {
             debug!("Skipping BitPacking: min is zero");
             return None;
         }
 
         let bit_width_freq = parray
             .stats()
-            .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)
-            .unwrap()
+            .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)?
             .0;
         let bit_width = best_bit_width(parray.ptype(), &bit_width_freq);
 
