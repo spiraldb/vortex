@@ -1,36 +1,26 @@
 use arrow::buffer::BooleanBuffer;
-use arrow::datatypes::ArrowNativeType;
-use half::f16;
-use num_traits::{NumCast, PrimInt};
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::mem::size_of;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::cast::cast_bool;
 use crate::error::VortexResult;
+use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
-use crate::scalar::{ListScalarVec, ScalarRef};
+use crate::scalar::{ListScalarVec, PScalar, ScalarRef};
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for PrimitiveArray {
     fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {
-        // let mut iter = self.typed_data::<i16>().iter().peekable();
-        // match iter.peek() {
-        //     // No values at all
-        //     None => return Ok(StatsSet::default()),
-        //     Some(first) => {
-        //         StatsAccumulator::new(**first);
-        //     }
-        // }
-
-        match self.validity() {
-            None => self.typed_data::<u16>().compute(stat),
-            Some(validity_array) => {
-                let validity = cast_bool(validity_array)?;
-                NullableValues(self.typed_data::<u16>(), validity.buffer()).compute(stat)
+        match_each_native_ptype!(self.ptype(), |$P| {
+            match self.validity() {
+                None => self.typed_data::<$P>().compute(stat),
+                Some(validity_array) => {
+                    let validity = cast_bool(validity_array)?;
+                    NullableValues(self.typed_data::<$P>(), validity.buffer()).compute(stat)
+                }
             }
-        }
+        })
     }
 }
 
@@ -72,23 +62,31 @@ impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
 }
 
 trait BitWidth {
-    fn bit_width(&self) -> usize;
+    fn bit_width(self) -> usize;
 }
-//
-// impl<T: PrimInt> BitWidth for PInt<T> {
-//     fn bit_width(&self) -> usize {
-//         (size_of::<T>() * 8) - self.leading_zeros() as usize
-//     }
-// }
 
-impl<T: NativePType> BitWidth for T {
-    fn bit_width(&self) -> usize {
-        size_of::<T>() * 8
+impl<T: NativePType + Into<PScalar>> BitWidth for T {
+    fn bit_width(self) -> usize {
+        let bit_width = size_of::<T>() * 8;
+        let scalar: PScalar = self.into();
+        match scalar {
+            PScalar::U8(i) => bit_width - i.leading_zeros() as usize,
+            PScalar::U16(i) => bit_width - i.leading_zeros() as usize,
+            PScalar::U32(i) => bit_width - i.leading_zeros() as usize,
+            PScalar::U64(i) => bit_width - i.leading_zeros() as usize,
+            PScalar::I8(i) => bit_width - i.leading_zeros() as usize,
+            PScalar::I16(i) => bit_width - i.leading_zeros() as usize,
+            PScalar::I32(i) => bit_width - i.leading_zeros() as usize,
+            PScalar::I64(i) => bit_width - i.leading_zeros() as usize,
+            PScalar::F16(_) => bit_width,
+            PScalar::F32(_) => bit_width,
+            PScalar::F64(_) => bit_width,
+        }
     }
 }
 
 impl<T: BitWidth> BitWidth for Option<T> {
-    fn bit_width(&self) -> usize {
+    fn bit_width(self) -> usize {
         match self {
             Some(v) => v.bit_width(),
             None => 0,
@@ -96,6 +94,7 @@ impl<T: BitWidth> BitWidth for Option<T> {
     }
 }
 
+// Define a trait to allow us to run stats over NativePType or Option<NativePType>
 trait SupportsPrimitiveStats: Into<ScalarRef> + BitWidth + PartialEq + PartialOrd + Copy {}
 impl<T> SupportsPrimitiveStats for T where T: NativePType {}
 impl<T: NativePType> SupportsPrimitiveStats for Option<T> where Option<T>: Into<ScalarRef> {}
@@ -106,9 +105,8 @@ struct StatsAccumulator<T: SupportsPrimitiveStats> {
     max: T,
     is_sorted: bool,
     is_strict_sorted: bool,
-    is_constant: bool,
     run_count: usize,
-    bit_widths: [usize; 65], // TODO(ngates): const exprs? (size_of::<T>() * 8) + 1,
+    bit_widths: [usize; 65], // We could use a const expr? (size_of::<T>() * 8) + 1,
 }
 
 impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
@@ -119,7 +117,6 @@ impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
             max: first_value.clone(),
             is_sorted: true,
             is_strict_sorted: true,
-            is_constant: true,
             run_count: 1,
             bit_widths: [0; 65],
         };
@@ -150,10 +147,10 @@ impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
         StatsSet::from(HashMap::from([
             (Stat::Min, self.min.into()),
             (Stat::Max, self.max.into()),
-            (Stat::IsConstant, self.is_constant.into()),
+            (Stat::IsConstant, (self.min == self.max).into()),
             (
                 Stat::BitWidthFreq,
-                ListScalarVec(self.bit_widths.to_vec()).into(),
+                ListScalarVec(self.bit_widths[0..(size_of::<T>() * 8) + 1].to_vec()).into(),
             ),
             (Stat::IsSorted, self.is_sorted.into()),
             (
@@ -163,128 +160,6 @@ impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
             (Stat::RunCount, self.run_count.into()),
         ]))
     }
-}
-
-struct WrappedPrimitive<'a, P>(&'a PrimitiveArray, PhantomData<P>);
-
-macro_rules! integer_stats {
-    ($T:ty) => {
-        impl StatsCompute for WrappedPrimitive<'_, $T> {
-            fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
-                integer_stats::<$T>(self.0)
-            }
-        }
-    };
-}
-
-integer_stats!(i8);
-integer_stats!(i16);
-integer_stats!(i32);
-integer_stats!(i64);
-integer_stats!(u8);
-integer_stats!(u16);
-integer_stats!(u32);
-integer_stats!(u64);
-
-macro_rules! float_stats {
-    ($T:ty) => {
-        impl StatsCompute for WrappedPrimitive<'_, $T> {
-            fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
-                float_stats::<$T>(self.0)
-            }
-        }
-    };
-}
-
-float_stats!(f16);
-float_stats!(f32);
-float_stats!(f64);
-
-fn integer_stats<T: ArrowNativeType + NumCast + PrimInt>(
-    array: &PrimitiveArray,
-) -> VortexResult<StatsSet>
-where
-    ScalarRef: From<T>,
-{
-    let typed_buf: &[T] = array.buffer().typed_data();
-    // TODO(ngates): bail out on empty stats
-
-    let bitwidth = std::mem::size_of::<T>() * 8;
-    let mut bit_widths: Vec<u64> = vec![0; bitwidth + 1];
-    bit_widths[bitwidth - typed_buf[0].leading_zeros() as usize] += 1;
-
-    let mut is_sorted = true;
-    let mut is_strict_sorted = true;
-    let mut min = typed_buf[0];
-    let mut max = typed_buf[0];
-    let mut last_val = typed_buf[0];
-    let mut run_count: usize = 0;
-
-    for v in &typed_buf[1..] {
-        bit_widths[bitwidth - v.leading_zeros() as usize] += 1;
-        if last_val == *v {
-            is_strict_sorted = false;
-        } else {
-            if *v < last_val {
-                is_sorted = false;
-            }
-            run_count += 1;
-        }
-        if *v < min {
-            min = *v;
-        } else if *v > max {
-            max = *v;
-        }
-        last_val = *v;
-    }
-    run_count += 1;
-
-    Ok(StatsSet::from(HashMap::from([
-        (Stat::Min, min.into()),
-        (Stat::Max, max.into()),
-        (Stat::IsConstant, (min == max).into()),
-        (Stat::BitWidthFreq, ListScalarVec(bit_widths).into()),
-        (Stat::IsSorted, is_sorted.into()),
-        (Stat::IsStrictSorted, (is_sorted && is_strict_sorted).into()),
-        (Stat::RunCount, run_count.into()),
-    ])))
-}
-
-fn float_stats<T: ArrowNativeType + NumCast>(array: &PrimitiveArray) -> VortexResult<StatsSet>
-where
-    ScalarRef: From<T>,
-{
-    let typed_buf: &[T] = array.buffer().typed_data();
-    // TODO: bail out on empty stats
-
-    let mut min = typed_buf[0];
-    let mut max = typed_buf[0];
-    let mut last_val: T = typed_buf[0];
-    let mut is_sorted = true;
-    let mut run_count: usize = 0;
-    for v in &typed_buf[1..] {
-        if last_val != *v {
-            run_count += 1;
-            if *v < last_val {
-                is_sorted = false;
-            }
-        }
-        if *v < min {
-            min = *v;
-        } else if *v > max {
-            max = *v;
-        }
-        last_val = *v;
-    }
-    run_count += 1;
-
-    Ok(StatsSet::from(HashMap::from([
-        (Stat::Min, min.into()),
-        (Stat::Max, max.into()),
-        (Stat::IsConstant, (min == max).into()),
-        (Stat::IsSorted, is_sorted.into()),
-        (Stat::RunCount, run_count.into()),
-    ])))
 }
 
 #[cfg(test)]

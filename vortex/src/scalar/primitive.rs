@@ -165,9 +165,15 @@ impl Scalar for PScalar {
 
 macro_rules! pscalar {
     ($T:ty, $ptype:tt) => {
+        impl From<$T> for PScalar {
+            fn from(value: $T) -> Self {
+                PScalar::$ptype(value)
+            }
+        }
+
         impl From<$T> for ScalarRef {
             fn from(value: $T) -> Self {
-                PScalar::$ptype(value).boxed()
+                PScalar::from(value).boxed()
             }
         }
 
