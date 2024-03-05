@@ -16,7 +16,7 @@ workspace = true
 
 [dependencies]
 arrow = { version = "50.0.0" }
-vortex = { "path" = "../vortex" }
+vortex-array = { path = "../vortex-array" }
 linkme = "0.3.22"
 itertools = "0.12.1"
 codecz = { path = "../codecz" }

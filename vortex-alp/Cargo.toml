@@ -13,11 +13,11 @@ rust-version = { workspace = true }
 
 [dependencies]
 arrow = { version = "50.0.0" }
-vortex = { "path" = "../vortex" }
+vortex-array = { path = "../vortex-array" }
 linkme = "0.3.22"
 itertools = "0.12.1"
 num-traits = "0.2.18"
-codecz = { version = "0.1.0", path = "../codecz" }
+codecz = { path = "../codecz" }
 log = { version = "0.4.20", features = [] }
 
 [lints]

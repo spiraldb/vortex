@@ -1,6 +1,5 @@
 import numpy as np
 import pyarrow as pa
-
 import vortex
 
 

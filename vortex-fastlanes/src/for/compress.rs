@@ -43,7 +43,7 @@ fn for_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
     let parray = array.as_primitive();
 
     let child = match_each_integer_ptype!(parray.ptype(), |$T| {
-        let min = parray.stats().get_or_compute_as::<$T>(&Stat::Min).unwrap();
+        let min = parray.stats().get_or_compute_as::<$T>(&Stat::Min).unwrap_or(<$T>::default());
         // TODO(ngates): check for overflow
         let values = parray.buffer().typed_data::<$T>().iter().map(|v| v - min)
             // TODO(ngates): cast to unsigned
