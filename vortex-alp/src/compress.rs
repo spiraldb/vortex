@@ -7,11 +7,14 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::error::{VortexError, VortexResult};
 use vortex::ptype::{NativePType, PType};
 
 use crate::alp::{ALPArray, ALPEncoding};
 use crate::downcast::DowncastALP;
 use crate::Exponents;
+
+const SAMPLE_SIZE: usize = 32;
 
 impl EncodingCompression for ALPEncoding {
     fn compressor(
@@ -49,27 +52,25 @@ fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
         _ => panic!("Unsupported ptype"),
     };
 
-    ALPArray::new(
+    let compressed_encoded = ctx
+        .next_level()
+        .compress(encoded.as_ref(), like_alp.map(|a| a.encoded()));
+
+    let compressed_patches = patches.map(|p| {
         ctx.next_level()
-            .compress(encoded.as_ref(), like_alp.map(|a| a.encoded())),
-        // .compress(encoded.as_ref(), None),
-        exponents,
-        patches.map(|p| {
-            ctx.next_level()
-                .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
-            // .compress(p.as_ref(), None)
-        }),
-    )
-    .boxed()
+            .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
+    });
+
+    ALPArray::new(compressed_encoded, exponents, compressed_patches).boxed()
 }
 
-pub fn alp_encode(parray: &PrimitiveArray) -> ALPArray {
+pub fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
     let (exponents, encoded, patches) = match parray.ptype() {
         PType::F32 => ALPFloat::encode_to_array(parray.typed_data::<f32>(), None),
         PType::F64 => ALPFloat::encode_to_array(parray.typed_data::<f64>(), None),
-        _ => panic!("Unsupported ptype"),
+        _ => return Err(VortexError::InvalidPType(parray.ptype().clone())),
     };
-    ALPArray::new(encoded, exponents, patches)
+    Ok(ALPArray::new(encoded, exponents, patches))
 }
 
 trait ALPFloat: NativePType + Float {
@@ -77,7 +78,7 @@ trait ALPFloat: NativePType + Float {
     const FRACTIONAL_BITS: u8;
     const MAX_EXPONENT: u8;
     const SWEET: Self;
-    const F10: &'static [Self]; // TODO(ngates): const exprs for these to be arrays.
+    const F10: &'static [Self];
     const IF10: &'static [Self];
 
     /// Round to the nearest floating integer by shifting in and out of the low precision range.
@@ -90,12 +91,22 @@ trait ALPFloat: NativePType + Float {
         let mut best_f: u8 = 0;
         let mut best_nbytes: usize = usize::MAX;
 
+        let sample = (values.len() > SAMPLE_SIZE).then(|| {
+            values
+                .iter()
+                .step_by(values.len() / SAMPLE_SIZE)
+                .cloned()
+                .collect_vec()
+        });
+
         // TODO(wmanning): idea, start with highest e, then find the best f
         // after that, try e's in descending order, with a gap no larger than the original e - f
         for e in 0..Self::MAX_EXPONENT {
             for f in 0..e {
-                let (_, encoded, patches) =
-                    Self::encode_to_array(values, Some(&Exponents { e, f }));
+                let (_, encoded, patches) = Self::encode_to_array(
+                    sample.as_deref().unwrap_or(values),
+                    Some(&Exponents { e, f }),
+                );
                 let size = encoded.nbytes() + patches.map_or(0, |p| p.nbytes());
                 if size < best_nbytes {
                     best_nbytes = size;
@@ -109,8 +120,8 @@ trait ALPFloat: NativePType + Float {
         }
 
         Exponents {
-            e: best_e as u8,
-            f: best_f as u8,
+            e: best_e,
+            f: best_f,
         }
     }
 
@@ -205,8 +216,8 @@ impl ALPFloat for f32 {
 
 impl ALPFloat for f64 {
     type ALPInt = i64;
-    const MAX_EXPONENT: u8 = 18; // 10^18 is the maximum i64
     const FRACTIONAL_BITS: u8 = 52;
+    const MAX_EXPONENT: u8 = 18; // 10^18 is the maximum i64
     const SWEET: Self =
         (1u64 << Self::FRACTIONAL_BITS) as Self + (1u64 << Self::FRACTIONAL_BITS - 1) as Self;
     const F10: &'static [Self] = &[
@@ -270,14 +281,26 @@ mod test {
 
     #[test]
     fn test_compress() {
-        // Create a range offset by a million
-        let array = PrimitiveArray::from_vec(vec![1.234f32; 10]);
-        let encoded = alp_encode(&array);
+        let array = PrimitiveArray::from_vec(vec![1.234f32; 1025]);
+        let encoded = alp_encode(&array).unwrap();
         println!("Encoded {:?}", encoded);
         assert!(encoded.patches().is_none());
         assert_eq!(
             encoded.encoded().as_primitive().typed_data::<i32>(),
-            vec![1234; 10]
+            vec![1234; 1025]
+        );
+        assert_eq!(encoded.exponents(), &Exponents { e: 4, f: 1 });
+    }
+
+    #[test]
+    fn test_nullable_compress() {
+        let array = PrimitiveArray::from_iter(vec![1.234f32; 1025]);
+        let encoded = alp_encode(&array).unwrap();
+        println!("Encoded {:?}", encoded);
+        assert!(encoded.patches().is_none());
+        assert_eq!(
+            encoded.encoded().as_primitive().typed_data::<i32>(),
+            vec![1234; 1025]
         );
         assert_eq!(encoded.exponents(), &Exponents { e: 4, f: 1 });
     }
