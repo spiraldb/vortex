@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use vortex::array::bool::BoolEncoding;
 use vortex::array::chunked::ChunkedEncoding;
 use vortex::array::constant::ConstantEncoding;
@@ -18,7 +17,7 @@ use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
 use vortex_zigzag::ZigZagEncoding;
 
 pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
-    let encodings: Vec<&dyn Encoding> = vec![
+    vec![
         // TODO(ngates): fix https://github.com/fulcrum-so/vortex/issues/35
         // Builtins
         &BoolEncoding,
@@ -41,9 +40,7 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         &RoaringBoolEncoding,
         &RoaringIntEncoding,
         &ZigZagEncoding,
-    ];
-    println!("{}", encodings.iter().map(|e| e.id()).format(", "));
-    encodings
+    ]
 }
 
 #[cfg(test)]
