@@ -13,7 +13,12 @@ pub fn patch(array: &dyn Array, patch: &dyn Array) -> VortexResult<ArrayRef> {
         ));
     }
 
-    // TODO(ngates): check the dtype matches
+    if array.dtype().as_nullable() != patch.dtype().as_nullable() {
+        return Err(VortexError::MismatchedTypes(
+            array.dtype().clone(),
+            patch.dtype().clone(),
+        ));
+    }
 
     array
         .patch()

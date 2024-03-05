@@ -110,6 +110,7 @@ struct StatsAccumulator<T: NativePType> {
     is_sorted: bool,
     is_strict_sorted: bool,
     run_count: usize,
+    null_count: usize,
     bit_widths: Vec<usize>,
 }
 
@@ -122,6 +123,7 @@ impl<T: NativePType> StatsAccumulator<T> {
             is_sorted: true,
             is_strict_sorted: true,
             run_count: 1,
+            null_count: 0,
             bit_widths: vec![0; size_of::<T>() * 8 + 1],
         };
         stats.bit_widths[first_value.bit_width()] += 1;
@@ -133,6 +135,7 @@ impl<T: NativePType> StatsAccumulator<T> {
             Some(n) => self.next(n),
             None => {
                 self.bit_widths[0] += 1;
+                self.null_count += 1;
             }
         }
     }
@@ -160,6 +163,7 @@ impl<T: NativePType> StatsAccumulator<T> {
         StatsSet::from(HashMap::from([
             (Stat::Min, self.min.into()),
             (Stat::Max, self.max.into()),
+            (Stat::NullCount, self.null_count.into()),
             (Stat::IsConstant, (self.min == self.max).into()),
             (Stat::BitWidthFreq, ListScalarVec(self.bit_widths).into()),
             (Stat::IsSorted, self.is_sorted.into()),
