@@ -7,7 +7,7 @@ use crate::compute::cast::cast_bool;
 use crate::error::VortexResult;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
-use crate::scalar::{ListScalarVec, PScalar, ScalarRef};
+use crate::scalar::{ListScalarVec, NullableScalar, PScalar, Scalar};
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for PrimitiveArray {
@@ -44,19 +44,37 @@ impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
             return Ok(StatsSet::default());
         }
 
-        let first = if self.1.value(0) {
-            Some(values[0])
-        } else {
-            None
-        };
-        let mut stats = StatsAccumulator::new(first);
+        let first_non_null = self
+            .1
+            .iter()
+            .enumerate()
+            .skip_while(|(_, valid)| !*valid)
+            .map(|(idx, _)| values[idx])
+            .next();
 
+        if first_non_null.is_none() {
+            return Ok(StatsSet::from(HashMap::from([
+                (Stat::Min, NullableScalar::None(T::PTYPE.into()).boxed()),
+                (Stat::Max, NullableScalar::None(T::PTYPE.into()).boxed()),
+                (Stat::IsConstant, true.into()),
+                (Stat::IsSorted, true.into()),
+                (Stat::IsStrictSorted, true.into()),
+                (Stat::RunCount, 1.into()),
+                (Stat::NullCount, 1.into()),
+                (
+                    Stat::BitWidthFreq,
+                    ListScalarVec(vec![0; size_of::<T>() * 8 + 1]).into(),
+                ),
+            ])));
+        }
+
+        let mut stats = StatsAccumulator::new(first_non_null.unwrap());
         values
             .iter()
             .zip(self.1.iter())
             .skip(1)
-            .map(|(next, valid)| if valid { Some(*next) } else { None })
-            .for_each(|next| stats.next(next));
+            .map(|(next, valid)| valid.then_some(*next))
+            .for_each(|next| stats.nullable_next(next));
         Ok(stats.into_set())
     }
 }
@@ -85,21 +103,7 @@ impl<T: NativePType + Into<PScalar>> BitWidth for T {
     }
 }
 
-impl<T: BitWidth> BitWidth for Option<T> {
-    fn bit_width(self) -> usize {
-        match self {
-            Some(v) => v.bit_width(),
-            None => 0,
-        }
-    }
-}
-
-// Define a trait to allow us to run stats over NativePType or Option<NativePType>
-trait SupportsPrimitiveStats: Into<ScalarRef> + BitWidth + PartialEq + PartialOrd + Copy {}
-impl<T> SupportsPrimitiveStats for T where T: NativePType {}
-impl<T: NativePType> SupportsPrimitiveStats for Option<T> where Option<T>: Into<ScalarRef> {}
-
-struct StatsAccumulator<T: SupportsPrimitiveStats> {
+struct StatsAccumulator<T: NativePType> {
     prev: T,
     min: T,
     max: T,
@@ -109,7 +113,7 @@ struct StatsAccumulator<T: SupportsPrimitiveStats> {
     bit_widths: Vec<usize>,
 }
 
-impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
+impl<T: NativePType> StatsAccumulator<T> {
     fn new(first_value: T) -> Self {
         let mut stats = Self {
             prev: first_value,
@@ -122,6 +126,15 @@ impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
         };
         stats.bit_widths[first_value.bit_width()] += 1;
         stats
+    }
+
+    pub fn nullable_next(&mut self, next: Option<T>) {
+        match next {
+            Some(n) => self.next(n),
+            None => {
+                self.bit_widths[0] += 1;
+            }
+        }
     }
 
     pub fn next(&mut self, next: T) {
@@ -200,10 +213,19 @@ mod test {
 
     #[test]
     fn stats_u8() {
-        let arr = PrimitiveArray::from_vec::<u8>(vec![1, 2, 3, 4, 5]);
+        let arr = PrimitiveArray::from_vec(vec![1u8, 2, 3, 4, 5]);
         let min: u8 = arr.stats().get_or_compute_as(&Stat::Min).unwrap();
         let max: u8 = arr.stats().get_or_compute_as(&Stat::Max).unwrap();
         assert_eq!(min, 1);
         assert_eq!(max, 5);
+    }
+
+    #[test]
+    fn nullable_stats_u8() {
+        let arr = PrimitiveArray::from_iter(vec![None, Some(1i32), None, Some(2)]);
+        let min: Option<i32> = arr.stats().get_or_compute_as(&Stat::Min);
+        let max: Option<i32> = arr.stats().get_or_compute_as(&Stat::Max);
+        assert_eq!(min, Some(1));
+        assert_eq!(max, Some(2));
     }
 }
