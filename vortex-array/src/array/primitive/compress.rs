@@ -36,7 +36,7 @@ mod test {
 
     #[test]
     pub fn compress_constant() {
-        let arr = PrimitiveArray::from_vec(vec![1, 1, 1, 1]);
+        let arr = PrimitiveArray::from(vec![1, 1, 1, 1]);
         let res = CompressCtx::default().compress(arr.as_ref(), None);
         assert_eq!(res.encoding().id(), ConstantEncoding.id());
         assert_eq!(scalar_at(res.as_ref(), 3).unwrap().try_into(), Ok(1));

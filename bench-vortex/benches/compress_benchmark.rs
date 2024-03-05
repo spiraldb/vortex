@@ -77,7 +77,7 @@ fn gen_primitive_dict(len: usize, uniqueness: f64) -> PrimitiveArray {
     let range = Uniform::new(-(value_range / 2.0) as i32, (value_range / 2.0) as i32);
     let data: Vec<i32> = (0..len).map(|_| rng.sample(range)).collect();
 
-    PrimitiveArray::from_vec(data)
+    PrimitiveArray::from(data)
 }
 
 fn gen_varbin_dict(len: usize, uniqueness: f64) -> VarBinArray {

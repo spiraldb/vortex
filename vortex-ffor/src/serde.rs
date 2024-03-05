@@ -71,7 +71,7 @@ mod test {
 
     #[test]
     fn roundtrip() {
-        let arr = ffor_encode(&PrimitiveArray::from_vec(vec![-7i64, -13, 17, 23]));
+        let arr = ffor_encode(&PrimitiveArray::from(vec![-7i64, -13, 17, 23]));
         let read_arr = roundtrip_array(arr.as_ref()).unwrap();
 
         assert_eq!(

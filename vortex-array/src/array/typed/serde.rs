@@ -21,7 +21,6 @@ impl EncodingSerde for TypedEncoding {
 #[cfg(test)]
 mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
-    use crate::array::primitive::PrimitiveArray;
     use crate::array::typed::TypedArray;
     use crate::array::Array;
     use crate::dtype::{DType, IntWidth, Nullability, Signedness};
@@ -30,7 +29,7 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = TypedArray::new(
-            PrimitiveArray::from_vec(vec![7u8, 37, 71, 97]).boxed(),
+            vec![7u8, 37, 71, 97].into(),
             DType::Int(IntWidth::_64, Signedness::Signed, Nullability::NonNullable),
         );
 

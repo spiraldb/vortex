@@ -126,7 +126,7 @@ fn dict_encode_typed_primitive<
 
     (
         PrimitiveArray::from_nullable(codes, array.validity().clone_optional()),
-        PrimitiveArray::from_vec(values),
+        PrimitiveArray::from(values),
     )
 }
 
@@ -257,8 +257,8 @@ where
     (
         PrimitiveArray::from_nullable(codes, validity.clone_optional()),
         VarBinArray::new(
-            PrimitiveArray::from_vec(offsets).boxed(),
-            PrimitiveArray::from_vec(bytes).boxed(),
+            PrimitiveArray::from(offsets).boxed(),
+            PrimitiveArray::from(bytes).boxed(),
             dtype,
             None,
         ),
@@ -275,7 +275,7 @@ mod test {
 
     #[test]
     fn encode_primitive() {
-        let arr = PrimitiveArray::from_vec(vec![1, 1, 3, 3, 3]);
+        let arr = PrimitiveArray::from(vec![1, 1, 3, 3, 3]);
         let (codes, values) = dict_encode_typed_primitive::<u8, i32>(&arr);
         assert_eq!(codes.buffer().typed_data::<u8>(), &[0, 0, 1, 1, 1]);
         assert_eq!(values.buffer().typed_data::<i32>(), &[1, 3]);

@@ -181,7 +181,7 @@ mod test {
 
     #[test]
     fn stats() {
-        let arr = PrimitiveArray::from_vec(vec![1, 2, 3, 4, 5]);
+        let arr = PrimitiveArray::from(vec![1, 2, 3, 4, 5]);
         let min: i32 = arr.stats().get_or_compute_as(&Stat::Min).unwrap();
         let max: i32 = arr.stats().get_or_compute_as(&Stat::Max).unwrap();
         let is_sorted: bool = arr.stats().get_or_compute_as(&Stat::IsSorted).unwrap();
@@ -213,7 +213,7 @@ mod test {
 
     #[test]
     fn stats_u8() {
-        let arr = PrimitiveArray::from_vec(vec![1u8, 2, 3, 4, 5]);
+        let arr = PrimitiveArray::from(vec![1u8, 2, 3, 4, 5]);
         let min: u8 = arr.stats().get_or_compute_as(&Stat::Min).unwrap();
         let max: u8 = arr.stats().get_or_compute_as(&Stat::Max).unwrap();
         assert_eq!(min, 1);
