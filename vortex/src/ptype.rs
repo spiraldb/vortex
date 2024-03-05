@@ -31,6 +31,7 @@ pub trait NativePType:
     + Debug
     + Display
     + PartialEq
+    + PartialOrd
     + Default
     + ArrowNativeType
     + RefUnwindSafe

@@ -1,36 +1,158 @@
-use std::collections::HashMap;
-use std::marker::PhantomData;
-
 use arrow::datatypes::ArrowNativeType;
 use half::f16;
 use num_traits::{NumCast, PrimInt};
+use std::collections::HashMap;
+use std::marker::PhantomData;
+use std::mem::size_of;
+use std::slice::Iter;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::compute::cast::cast_bool;
 use crate::error::VortexResult;
-use crate::ptype::match_each_native_ptype;
+use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, ScalarRef};
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
-impl StatsCompute for PrimitiveArray {
-    fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {
-        match_each_native_ptype!(self.ptype(), |$P| {
-            WrappedPrimitive::<$P>::new(self).compute(stat)
-        })
+impl StatsCompute for &PrimitiveArray {
+    fn compute(self, stat: &Stat) -> VortexResult<StatsSet> {
+        // let mut iter = self.typed_data::<i16>().iter().peekable();
+        // match iter.peek() {
+        //     // No values at all
+        //     None => return Ok(StatsSet::default()),
+        //     Some(first) => {
+        //         StatsAccumulator::new(**first);
+        //     }
+        // }
+
+        match self.validity() {
+            None => Iter::<u16>::compute(self.typed_data::<u16>().iter(), stat),
+            //self.typed_data::<u16>().iter().compute(stat),
+            Some(validity_array) => {
+                let validity = cast_bool(validity_array)?;
+                self.typed_data::<u16>()
+                    .iter()
+                    .zip(validity.buffer().iter())
+                    .compute(stat)
+            }
+        }
+    }
+}
+
+impl<'a, T: SupportsPrimitiveStats> StatsCompute for Iter<'a, T> {
+    fn compute(self, stat: &Stat) -> VortexResult<StatsSet> {
+        let mut iter = self.clone().peekable();
+        match iter.peek() {
+            // Empty iterator.
+            None => return Ok(StatsSet::default()),
+            Some(first) => {
+                let stats = StatsAccumulator::new(**first);
+                iter.for_each(|next| stats.next(*next));
+                Ok(stats.into_set())
+            }
+        }
+    }
+}
+
+trait BitWidth {
+    fn bit_width(&self) -> usize;
+}
+//
+// impl<T: PrimInt> BitWidth for PInt<T> {
+//     fn bit_width(&self) -> usize {
+//         (size_of::<T>() * 8) - self.leading_zeros() as usize
+//     }
+// }
+
+impl<T: NativePType> BitWidth for T {
+    fn bit_width(&self) -> usize {
+        size_of::<T>() * 8
+    }
+}
+
+impl<T: BitWidth> BitWidth for Option<T> {
+    fn bit_width(&self) -> usize {
+        match self {
+            Some(v) => v.bit_width(),
+            None => 0,
+        }
+    }
+}
+
+trait SupportsPrimitiveStats: Into<ScalarRef> + BitWidth + PartialEq + PartialOrd + Copy {}
+impl<T> SupportsPrimitiveStats for T where T: NativePType {}
+impl<T: NativePType> SupportsPrimitiveStats for Option<T> {}
+
+struct StatsAccumulator<T: SupportsPrimitiveStats> {
+    prev: T,
+    min: T,
+    max: T,
+    is_sorted: bool,
+    is_strict_sorted: bool,
+    is_constant: bool,
+    run_count: usize,
+    bit_widths: [usize; 65], // TODO(ngates): const exprs? (size_of::<T>() * 8) + 1,
+}
+
+impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
+    fn new(first_value: T) -> Self {
+        let mut stats = Self {
+            prev: first_value.clone(),
+            min: first_value.clone(),
+            max: first_value.clone(),
+            is_sorted: true,
+            is_strict_sorted: true,
+            is_constant: true,
+            run_count: 1,
+            bit_widths: [0; 65],
+        };
+        stats.bit_widths[first_value.bit_width()] += 1;
+        stats
+    }
+
+    pub fn next(self: &mut Self, next: T) {
+        self.bit_widths[next.bit_width()] += 1;
+
+        if self.prev == next {
+            self.is_strict_sorted = false;
+        } else {
+            if next < self.prev {
+                self.is_sorted = false;
+            }
+            self.run_count += 1;
+        }
+        if next < self.min {
+            self.min = next;
+        } else if next > self.max {
+            self.max = next;
+        }
+        self.prev = next;
+    }
+
+    pub fn into_set(self: Self) -> StatsSet {
+        StatsSet::from(HashMap::from([
+            (Stat::Min, self.min.into()),
+            (Stat::Max, self.max.into()),
+            (Stat::IsConstant, self.is_constant.into()),
+            (
+                Stat::BitWidthFreq,
+                ListScalarVec(self.bit_widths.to_vec()).into(),
+            ),
+            (Stat::IsSorted, self.is_sorted.into()),
+            (
+                Stat::IsStrictSorted,
+                (self.is_sorted && self.is_strict_sorted).into(),
+            ),
+            (Stat::RunCount, self.run_count.into()),
+        ]))
     }
 }
 
 struct WrappedPrimitive<'a, P>(&'a PrimitiveArray, PhantomData<P>);
 
-impl<'a, P> WrappedPrimitive<'a, P> {
-    pub fn new(array: &'a PrimitiveArray) -> Self {
-        Self(array, PhantomData)
-    }
-}
-
 macro_rules! integer_stats {
     ($T:ty) => {
-        impl StatsCompute for WrappedPrimitive<'_, $T> {
-            fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+        impl StatsCompute for &WrappedPrimitive<'_, $T> {
+            fn compute(self, _stat: &Stat) -> VortexResult<StatsSet> {
                 integer_stats::<$T>(self.0)
             }
         }
@@ -48,8 +170,8 @@ integer_stats!(u64);
 
 macro_rules! float_stats {
     ($T:ty) => {
-        impl StatsCompute for WrappedPrimitive<'_, $T> {
-            fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+        impl StatsCompute for &WrappedPrimitive<'_, $T> {
+            fn compute(self, _stat: &Stat) -> VortexResult<StatsSet> {
                 float_stats::<$T>(self.0)
             }
         }

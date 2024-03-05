@@ -123,7 +123,7 @@ impl Array for ChunkedArray {
 
     #[inline]
     fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
+        Stats::new(&self.stats, &self)
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

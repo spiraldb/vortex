@@ -12,11 +12,11 @@ pub trait BinaryArray {
     fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>>;
 }
 
-impl<T> StatsCompute for T
+impl<T> StatsCompute for &T
 where
     T: BinaryArray + Array,
 {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+    fn compute(self, _stat: &Stat) -> VortexResult<StatsSet> {
         let mut min = vec![0xFF];
         let mut max = vec![0x00];
         let mut is_constant = true;

@@ -5,8 +5,8 @@ use crate::array::Array;
 use crate::error::VortexResult;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
-impl StatsCompute for BoolArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+impl StatsCompute for &BoolArray {
+    fn compute(self, _stat: &Stat) -> VortexResult<StatsSet> {
         if self.len() == 0 {
             return Ok(StatsSet::from(HashMap::from([
                 (Stat::TrueCount, 0.into()),

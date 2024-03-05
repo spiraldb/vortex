@@ -208,7 +208,7 @@ impl StatsSet {
 }
 
 pub trait StatsCompute {
-    fn compute(&self, stat: &Stat) -> VortexResult<StatsSet>;
+    fn compute(self, stat: &Stat) -> VortexResult<StatsSet>;
 }
 
 pub struct Stats<'a> {
