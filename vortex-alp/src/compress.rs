@@ -1,16 +1,17 @@
+use itertools::Itertools;
 use log::debug;
+use num_traits::{cast, Float, PrimInt};
 
-use codecz::alp;
-use codecz::alp::{ALPEncoded, ALPExponents, SupportsALP};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::array::{Array, ArrayRef, CloneOptionalArray};
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 
 use crate::alp::{ALPArray, ALPEncoding};
 use crate::downcast::DowncastALP;
+use crate::Exponents;
 
 impl EncodingCompression for ALPEncoding {
     fn compressor(
@@ -38,9 +39,15 @@ fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
     let like_alp = like.map(|like_array| like_array.as_alp());
 
     let parray = array.as_primitive();
-    let (encoded, exponents, patches) = like_alp
-        .map(|alp_like| alp_encode_like_parts(parray, alp_like))
-        .unwrap_or_else(|| alp_encode_parts(parray));
+    let (exponents, encoded, patches) = match parray.ptype() {
+        PType::F32 => {
+            ALPFloat::encode_to_array(parray.typed_data::<f32>(), like_alp.map(|a| a.exponents()))
+        }
+        PType::F64 => {
+            ALPFloat::encode_to_array(parray.typed_data::<f64>(), like_alp.map(|a| a.exponents()))
+        }
+        _ => panic!("Unsupported ptype"),
+    };
 
     ALPArray::new(
         ctx.next_level()
@@ -55,91 +62,196 @@ fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
 }
 
 pub fn alp_encode(parray: &PrimitiveArray) -> ALPArray {
-    let (encoded, exponents, patches) = alp_encode_parts(parray);
+    let (exponents, encoded, patches) = match parray.ptype() {
+        PType::F32 => ALPFloat::encode_to_array(parray.typed_data::<f32>(), None),
+        PType::F64 => ALPFloat::encode_to_array(parray.typed_data::<f64>(), None),
+        _ => panic!("Unsupported ptype"),
+    };
     ALPArray::new(encoded, exponents, patches)
 }
 
-fn alp_encode_parts(parray: &PrimitiveArray) -> (ArrayRef, ALPExponents, Option<ArrayRef>) {
-    match parray.ptype() {
-        PType::F32 => {
-            alp_encode_primitive(parray.buffer().typed_data::<f32>(), parray.validity(), None)
-        }
-        PType::F64 => {
-            alp_encode_primitive(parray.buffer().typed_data::<f64>(), parray.validity(), None)
-        }
-        _ => panic!("Unsupported ptype"),
+trait ALPFloat: NativePType + Float {
+    type ALPInt: NativePType + PrimInt;
+    const FRACTIONAL_BITS: u8;
+    const SWEET: Self;
+    const F10: &'static [Self]; // TODO(ngates): const exprs for these to be arrays.
+    const IF10: &'static [Self];
+
+    /// Round to the nearest floating integer by shifting in and out of the low precision range.
+    fn fast_round(self) -> Self {
+        (self + Self::SWEET) - Self::SWEET
     }
-}
 
-fn alp_encode_like_parts(
-    parray: &PrimitiveArray,
-    sample: &ALPArray,
-) -> (ArrayRef, ALPExponents, Option<ArrayRef>) {
-    match parray.ptype() {
-        PType::F32 => alp_encode_primitive(
-            parray.buffer().typed_data::<f32>(),
-            parray.validity(),
-            Some(sample.exponents()),
-        ),
-        PType::F64 => alp_encode_primitive(
-            parray.buffer().typed_data::<f64>(),
-            parray.validity(),
-            Some(sample.exponents()),
-        ),
-        _ => panic!("Unsupported ptype"),
+    fn find_best_exponents(_values: &[Self]) -> Exponents {
+        Exponents { e: 16, f: 13 }
     }
-}
 
-fn alp_encode_primitive<T: SupportsALP + NativePType>(
-    values: &[T],
-    validity: Option<&dyn Array>,
-    exponents: Option<ALPExponents>,
-) -> (ArrayRef, ALPExponents, Option<ArrayRef>)
-where
-    T::EncInt: NativePType,
-{
-    // TODO: actually handle CodecErrors instead of blindly unwrapping
-    let ALPEncoded {
-        values,
-        exponents,
-        exceptions_idx,
-        num_exceptions,
-    } = exponents
-        .map(|exp| alp::encode_with(values, exp))
-        .unwrap_or_else(|| alp::encode(values))
-        .unwrap();
-    let values = PrimitiveArray::from_nullable_in(values, validity.clone_optional()); // move and re-alias
-
-    let patches = if num_exceptions == 0 {
-        None
-    } else {
-        let patch_indices = codecz::utils::into_u64_vec(&exceptions_idx, num_exceptions);
-        let patch_values = codecz::utils::gather_patches(
-            values.buffer().typed_data::<T>(),
-            patch_indices.as_slice(),
-        );
-        Some(
-            SparseArray::new(
-                PrimitiveArray::from_vec_in(patch_indices).boxed(),
-                PrimitiveArray::from_vec_in(patch_values).boxed(),
-                values.len(),
-            )
-            .boxed(),
+    fn encode_to_array(
+        values: &[Self],
+        exponents: Option<&Exponents>,
+    ) -> (Exponents, ArrayRef, Option<ArrayRef>) {
+        let best_exponents =
+            exponents.map_or_else(|| Self::find_best_exponents(values), Exponents::clone);
+        let (values, exc_pos, exc) = Self::encode(values, &best_exponents);
+        let len = values.len();
+        (
+            best_exponents,
+            PrimitiveArray::from_vec(values).boxed(),
+            (exc.len() > 0).then(|| {
+                SparseArray::new(
+                    PrimitiveArray::from_vec(exc_pos).boxed(),
+                    PrimitiveArray::from_vec(exc).boxed(),
+                    len,
+                )
+                .boxed()
+            }),
         )
-    };
+    }
 
-    (values.boxed(), exponents, patches)
+    fn encode(values: &[Self], exponents: &Exponents) -> (Vec<Self::ALPInt>, Vec<u64>, Vec<Self>) {
+        let mut exc_pos = Vec::new();
+        let mut exc_value = Vec::new();
+        let encoded = values
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                let encoded =
+                    (*v * Self::F10[exponents.e as usize] * Self::IF10[exponents.f as usize])
+                        .fast_round();
+                let decoded =
+                    encoded * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize];
+
+                if encoded != decoded {
+                    exc_pos.push(i as u64);
+                    exc_value.push(*v);
+                    // TODO(ngates): we could find previous?
+                    Self::default()
+                } else {
+                    *v
+                }
+            })
+            .map(|v| cast(v).unwrap())
+            .collect_vec();
+
+        (encoded, exc_pos, exc_value)
+    }
 }
 
-#[allow(dead_code)]
-pub fn alp_decode(parray: &PrimitiveArray, exp: ALPExponents) -> PrimitiveArray {
-    match parray.ptype() {
-        PType::I32 => PrimitiveArray::from_vec_in(
-            alp::decode::<f32>(parray.buffer().typed_data::<i32>(), exp).unwrap(),
-        ),
-        PType::I64 => PrimitiveArray::from_vec_in(
-            alp::decode::<f64>(parray.buffer().typed_data::<i64>(), exp).unwrap(),
-        ),
-        _ => panic!("Unsupported ptype"),
+impl ALPFloat for f32 {
+    type ALPInt = i32;
+    const FRACTIONAL_BITS: u8 = 23;
+    const SWEET: Self =
+        (1 << Self::FRACTIONAL_BITS) as Self + (1 << Self::FRACTIONAL_BITS - 1) as Self;
+
+    const F10: &'static [Self] = &[
+        1.0,
+        10.0,
+        100.0,
+        1000.0,
+        10000.0,
+        100000.0,
+        1000000.0,
+        10000000.0,
+        100000000.0,
+        1000000000.0,
+        10000000000.0,
+    ];
+    const IF10: &'static [Self] = &[
+        1.0,
+        0.1,
+        0.01,
+        0.001,
+        0.0001,
+        0.00001,
+        0.000001,
+        0.0000001,
+        0.00000001,
+        0.000000001,
+        0.0000000001,
+    ];
+}
+
+impl ALPFloat for f64 {
+    type ALPInt = i64;
+    const FRACTIONAL_BITS: u8 = 52;
+    const SWEET: Self =
+        (1u64 << Self::FRACTIONAL_BITS) as Self + (1u64 << Self::FRACTIONAL_BITS - 1) as Self;
+    const F10: &'static [Self] = &[
+        1.0,
+        10.0,
+        100.0,
+        1000.0,
+        10000.0,
+        100000.0,
+        1000000.0,
+        10000000.0,
+        100000000.0,
+        1000000000.0,
+        10000000000.0,
+        100000000000.0,
+        1000000000000.0,
+        10000000000000.0,
+        100000000000000.0,
+        1000000000000000.0,
+        10000000000000000.0,
+        100000000000000000.0,
+        1000000000000000000.0,
+        10000000000000000000.0,
+        100000000000000000000.0,
+        1000000000000000000000.0,
+        10000000000000000000000.0,
+        100000000000000000000000.0,
+    ];
+
+    const IF10: &'static [Self] = &[
+        1.0,
+        0.1,
+        0.01,
+        0.001,
+        0.0001,
+        0.00001,
+        0.000001,
+        0.0000001,
+        0.00000001,
+        0.000000001,
+        0.0000000001,
+        0.00000000001,
+        0.000000000001,
+        0.0000000000001,
+        0.00000000000001,
+        0.000000000000001,
+        0.0000000000000001,
+        0.00000000000000001,
+        0.000000000000000001,
+        0.0000000000000000001,
+        0.00000000000000000001,
+    ];
+}
+
+//
+// #[allow(dead_code)]
+// pub fn alp_decode(parray: &PrimitiveArray, exp: ALPExponents) -> PrimitiveArray {
+//     match parray.ptype() {
+//         PType::I32 => PrimitiveArray::from_vec_in(
+//             alp::decode::<f32>(parray.buffer().typed_data::<i32>(), exp).unwrap(),
+//         ),
+//         PType::I64 => PrimitiveArray::from_vec_in(
+//             alp::decode::<f64>(parray.buffer().typed_data::<i64>(), exp).unwrap(),
+//         ),
+//         _ => panic!("Unsupported ptype"),
+//     }
+// }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_compress() {
+        // Create a range offset by a million
+        let array = PrimitiveArray::from_vec(vec![1.234; 1024]);
+        let encoded = alp_encode(&array);
+        println!("Encoded {:?}", encoded);
+        assert_eq!(encoded.exponents(), &Exponents { e: 0, f: 0 });
     }
 }

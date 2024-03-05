@@ -12,23 +12,29 @@ use vortex::stats::{Stats, StatsSet};
 
 use crate::compress::alp_encode;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Exponents {
+    pub e: u8,
+    pub f: u8,
+}
+
 #[derive(Debug, Clone)]
 pub struct ALPArray {
     encoded: ArrayRef,
-    exponents: ALPExponents,
+    exponents: Exponents,
     patches: Option<ArrayRef>,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl ALPArray {
-    pub fn new(encoded: ArrayRef, exponents: ALPExponents, patches: Option<ArrayRef>) -> Self {
+    pub fn new(encoded: ArrayRef, exponents: Exponents, patches: Option<ArrayRef>) -> Self {
         Self::try_new(encoded, exponents, patches).unwrap()
     }
 
     pub fn try_new(
         encoded: ArrayRef,
-        exponents: ALPExponents,
+        exponents: Exponents,
         patches: Option<ArrayRef>,
     ) -> VortexResult<Self> {
         let dtype = match encoded.dtype() {
@@ -59,8 +65,8 @@ impl ALPArray {
         self.encoded.as_ref()
     }
 
-    pub fn exponents(&self) -> ALPExponents {
-        self.exponents
+    pub fn exponents(&self) -> &Exponents {
+        &self.exponents
     }
 
     pub fn patches(&self) -> Option<&dyn Array> {
@@ -111,7 +117,7 @@ impl Array for ALPArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         Ok(Self::try_new(
             self.encoded().slice(start, stop)?,
-            self.exponents(),
+            self.exponents().clone(),
             self.patches().map(|p| p.slice(start, stop)).transpose()?,
         )?
         .boxed())
@@ -140,7 +146,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ALPArray {
 
 impl ArrayDisplay for ALPArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("exponents: {}", self.exponents()))?;
+        f.writeln(format!("exponents: {:?}", self.exponents()))?;
         if let Some(p) = self.patches() {
             f.writeln("patches:")?;
             f.indent(|indent| indent.array(p.as_ref()))?;

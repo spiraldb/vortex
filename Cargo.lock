@@ -2833,6 +2833,7 @@ dependencies = [
  "itertools 0.12.1",
  "linkme",
  "log",
+ "num-traits",
  "vortex",
 ]
 
