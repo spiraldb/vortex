@@ -29,12 +29,7 @@ impl EncodingCompression for FoREncoding {
         }
 
         // Nothing for us to do if the min is already zero.
-        if parray
-            .stats()
-            .get_or_compute_cast::<i64>(&Stat::Min)
-            .unwrap()
-            == 0
-        {
+        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? == 0 {
             debug!("Skipping BitPacking: min is zero");
             return None;
         }

@@ -6,8 +6,8 @@ use half::f16;
 
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
-use crate::ptype::PType;
-use crate::scalar::{LocalTimeScalar, Scalar, ScalarRef};
+use crate::ptype::{NativePType, PType};
+use crate::scalar::{LocalTimeScalar, NullableScalar, Scalar, ScalarRef};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum PScalar {
@@ -165,10 +165,15 @@ impl Scalar for PScalar {
 
 macro_rules! pscalar {
     ($T:ty, $ptype:tt) => {
-        impl From<$T> for ScalarRef {
-            #[inline]
+        impl From<$T> for PScalar {
             fn from(value: $T) -> Self {
-                PScalar::$ptype(value).boxed()
+                PScalar::$ptype(value)
+            }
+        }
+
+        impl From<$T> for ScalarRef {
+            fn from(value: $T) -> Self {
+                PScalar::from(value).boxed()
             }
         }
 
@@ -212,6 +217,15 @@ pscalar!(i64, I64);
 pscalar!(f16, F16);
 pscalar!(f32, F32);
 pscalar!(f64, F64);
+
+impl<T: NativePType> From<Option<T>> for ScalarRef {
+    fn from(value: Option<T>) -> Self {
+        match value {
+            Some(value) => value.into(),
+            None => Box::new(NullableScalar::None(DType::from(T::PTYPE))),
+        }
+    }
+}
 
 impl From<usize> for ScalarRef {
     #[inline]
