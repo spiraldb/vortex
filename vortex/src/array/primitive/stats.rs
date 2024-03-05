@@ -1,10 +1,10 @@
+use arrow::buffer::BooleanBuffer;
 use arrow::datatypes::ArrowNativeType;
 use half::f16;
 use num_traits::{NumCast, PrimInt};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::mem::size_of;
-use std::slice::Iter;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::cast::cast_bool;
@@ -13,8 +13,8 @@ use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, ScalarRef};
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
-impl StatsCompute for &PrimitiveArray {
-    fn compute(self, stat: &Stat) -> VortexResult<StatsSet> {
+impl StatsCompute for PrimitiveArray {
+    fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {
         // let mut iter = self.typed_data::<i16>().iter().peekable();
         // match iter.peek() {
         //     // No values at all
@@ -25,31 +25,49 @@ impl StatsCompute for &PrimitiveArray {
         // }
 
         match self.validity() {
-            None => Iter::<u16>::compute(self.typed_data::<u16>().iter(), stat),
-            //self.typed_data::<u16>().iter().compute(stat),
+            None => self.typed_data::<u16>().compute(stat),
             Some(validity_array) => {
                 let validity = cast_bool(validity_array)?;
-                self.typed_data::<u16>()
-                    .iter()
-                    .zip(validity.buffer().iter())
-                    .compute(stat)
+                NullableValues(self.typed_data::<u16>(), validity.buffer()).compute(stat)
             }
         }
     }
 }
 
-impl<'a, T: SupportsPrimitiveStats> StatsCompute for Iter<'a, T> {
-    fn compute(self, stat: &Stat) -> VortexResult<StatsSet> {
-        let mut iter = self.clone().peekable();
-        match iter.peek() {
-            // Empty iterator.
-            None => return Ok(StatsSet::default()),
-            Some(first) => {
-                let stats = StatsAccumulator::new(**first);
-                iter.for_each(|next| stats.next(*next));
-                Ok(stats.into_set())
-            }
+impl<'a, T: NativePType> StatsCompute for &[T] {
+    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+        if self.is_empty() {
+            return Ok(StatsSet::default());
         }
+        let mut stats = StatsAccumulator::new(self[0]);
+        self.iter().skip(1).for_each(|next| stats.next(*next));
+        Ok(stats.into_set())
+    }
+}
+
+struct NullableValues<'a, T: NativePType>(&'a [T], &'a BooleanBuffer);
+
+impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
+    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+        let values = self.0;
+        if values.is_empty() {
+            return Ok(StatsSet::default());
+        }
+
+        let first = if self.1.value(0) {
+            Some(values[0])
+        } else {
+            None
+        };
+        let mut stats = StatsAccumulator::new(first);
+
+        values
+            .iter()
+            .zip(self.1.iter())
+            .skip(1)
+            .map(|(next, valid)| if valid { Some(*next) } else { None })
+            .for_each(|next| stats.next(next));
+        Ok(stats.into_set())
     }
 }
 
@@ -80,7 +98,7 @@ impl<T: BitWidth> BitWidth for Option<T> {
 
 trait SupportsPrimitiveStats: Into<ScalarRef> + BitWidth + PartialEq + PartialOrd + Copy {}
 impl<T> SupportsPrimitiveStats for T where T: NativePType {}
-impl<T: NativePType> SupportsPrimitiveStats for Option<T> {}
+impl<T: NativePType> SupportsPrimitiveStats for Option<T> where Option<T>: Into<ScalarRef> {}
 
 struct StatsAccumulator<T: SupportsPrimitiveStats> {
     prev: T,
@@ -151,8 +169,8 @@ struct WrappedPrimitive<'a, P>(&'a PrimitiveArray, PhantomData<P>);
 
 macro_rules! integer_stats {
     ($T:ty) => {
-        impl StatsCompute for &WrappedPrimitive<'_, $T> {
-            fn compute(self, _stat: &Stat) -> VortexResult<StatsSet> {
+        impl StatsCompute for WrappedPrimitive<'_, $T> {
+            fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
                 integer_stats::<$T>(self.0)
             }
         }
@@ -170,8 +188,8 @@ integer_stats!(u64);
 
 macro_rules! float_stats {
     ($T:ty) => {
-        impl StatsCompute for &WrappedPrimitive<'_, $T> {
-            fn compute(self, _stat: &Stat) -> VortexResult<StatsSet> {
+        impl StatsCompute for WrappedPrimitive<'_, $T> {
+            fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
                 float_stats::<$T>(self.0)
             }
         }

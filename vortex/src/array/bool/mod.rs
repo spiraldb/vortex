@@ -103,7 +103,7 @@ impl Array for BoolArray {
 
     #[inline]
     fn stats(&self) -> Stats {
-        Stats::new(&self.stats, &self)
+        Stats::new(&self.stats, self)
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {

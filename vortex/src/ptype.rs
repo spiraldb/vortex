@@ -36,6 +36,7 @@ pub trait NativePType:
     + ArrowNativeType
     + RefUnwindSafe
     + NumCast
+    + Into<ScalarRef>
     + TryFrom<ScalarRef, Error = VortexError>
 {
     const PTYPE: PType;

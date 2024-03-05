@@ -7,7 +7,7 @@ use half::f16;
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::{NativePType, PType};
-use crate::scalar::{LocalTimeScalar, Scalar, ScalarRef};
+use crate::scalar::{LocalTimeScalar, NullableScalar, Scalar, ScalarRef};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum PScalar {
@@ -165,6 +165,12 @@ impl Scalar for PScalar {
 
 macro_rules! pscalar {
     ($T:ty, $ptype:tt) => {
+        impl From<$T> for ScalarRef {
+            fn from(value: $T) -> Self {
+                PScalar::$ptype(value).boxed()
+            }
+        }
+
         impl TryFrom<ScalarRef> for $T {
             type Error = VortexError;
 
@@ -206,28 +212,19 @@ pscalar!(f16, F16);
 pscalar!(f32, F32);
 pscalar!(f64, F64);
 
+impl<T: NativePType> From<Option<T>> for ScalarRef {
+    fn from(value: Option<T>) -> Self {
+        match value {
+            Some(value) => value.into(),
+            None => Box::new(NullableScalar::None(DType::from(T::PTYPE))),
+        }
+    }
+}
+
 impl From<usize> for ScalarRef {
     #[inline]
     fn from(value: usize) -> Self {
         PScalar::U64(value as u64).boxed()
-    }
-}
-
-impl<T: NativePType> From<T> for ScalarRef {
-    fn from(value: T) -> Self {
-        match T::PTYPE {
-            PType::U8 => PScalar::U8(value).boxed(),
-            PType::U16 => PScalar::U16(value).boxed(),
-            PType::U32 => PScalar::U32(value).boxed(),
-            PType::U64 => PScalar::U64(value).boxed(),
-            PType::I8 => PScalar::I8(value).boxed(),
-            PType::I16 => PScalar::I16(value).boxed(),
-            PType::I32 => PScalar::I32(value).boxed(),
-            PType::I64 => PScalar::I64(value).boxed(),
-            PType::F16 => PScalar::F16(f16::from_f32(value as f32)).boxed(),
-            PType::F32 => PScalar::F32(value as f32).boxed(),
-            PType::F64 => PScalar::F64(value as f64).boxed(),
-        }
     }
 }
 

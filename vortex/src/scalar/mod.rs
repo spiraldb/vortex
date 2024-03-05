@@ -59,18 +59,6 @@ pub trait AsBytes {
     fn as_bytes(&self) -> &[u8];
 }
 
-impl<T: NativePType> From<Option<T>> for Box<dyn Scalar>
-where
-    Box<dyn Scalar>: From<T>,
-{
-    fn from(value: Option<T>) -> Self {
-        match value {
-            Some(value) => value.into(),
-            None => Box::new(NullableScalar::None(DType::from(T::PTYPE))),
-        }
-    }
-}
-
 impl<T: NativePType> AsBytes for [T] {
     #[inline]
     fn as_bytes(&self) -> &[u8] {
