@@ -96,7 +96,6 @@ mod test {
 
     #[test]
     fn compression_ratio() {
-        enumerate_arrays();
         setup_logger();
 
         let file = File::open(download_taxi_data()).unwrap();
