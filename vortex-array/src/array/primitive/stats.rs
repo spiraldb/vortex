@@ -54,8 +54,8 @@ impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
 
         if first_non_null.is_none() {
             return Ok(StatsSet::from(HashMap::from([
-                (Stat::Min, NullableScalar::None(T::PTYPE.into()).boxed()),
-                (Stat::Max, NullableScalar::None(T::PTYPE.into()).boxed()),
+                (Stat::Min, NullableScalar::none(T::PTYPE.into()).boxed()),
+                (Stat::Max, NullableScalar::none(T::PTYPE.into()).boxed()),
                 (Stat::IsConstant, true.into()),
                 (Stat::IsSorted, true.into()),
                 (Stat::IsStrictSorted, true.into()),
@@ -205,7 +205,7 @@ mod test {
             bit_width_freq,
             vec![
                 0u64, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0
+                0, 0, 0, 0, 0, 0,
             ]
         );
         assert_eq!(run_count, 5);
@@ -227,5 +227,14 @@ mod test {
         let max: Option<i32> = arr.stats().get_or_compute_as(&Stat::Max);
         assert_eq!(min, Some(1));
         assert_eq!(max, Some(2));
+    }
+
+    #[test]
+    fn all_null() {
+        let arr = PrimitiveArray::from_iter(vec![Option::<i32>::None, None, None]);
+        let min: Option<i32> = arr.stats().get_or_compute_as(&Stat::Min);
+        let max: Option<i32> = arr.stats().get_or_compute_as(&Stat::Max);
+        assert_eq!(min, None);
+        assert_eq!(max, None);
     }
 }

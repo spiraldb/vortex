@@ -2053,8 +2053,8 @@ dependencies = [
  "paste",
  "pyo3",
  "pyo3-log",
- "vortex",
  "vortex-alp",
+ "vortex-array",
  "vortex-dict",
  "vortex-fastlanes",
  "vortex-ffor",
@@ -2792,7 +2792,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
-name = "vortex"
+name = "vortex-alloc"
+version = "0.1.0"
+dependencies = [
+ "allocator-api2",
+]
+
+[[package]]
+name = "vortex-alp"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "codecz",
+ "itertools 0.12.1",
+ "linkme",
+ "log",
+ "vortex-array",
+]
+
+[[package]]
+name = "vortex-array"
 version = "0.1.0"
 dependencies = [
  "allocator-api2",
@@ -2818,25 +2837,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vortex-alloc"
-version = "0.1.0"
-dependencies = [
- "allocator-api2",
-]
-
-[[package]]
-name = "vortex-alp"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "codecz",
- "itertools 0.12.1",
- "linkme",
- "log",
- "vortex",
-]
-
-[[package]]
 name = "vortex-bench"
 version = "0.1.0"
 dependencies = [
@@ -2848,8 +2848,8 @@ dependencies = [
  "rand",
  "reqwest",
  "simplelog",
- "vortex",
  "vortex-alp",
+ "vortex-array",
  "vortex-dict",
  "vortex-fastlanes",
  "vortex-ffor",
@@ -2868,7 +2868,7 @@ dependencies = [
  "linkme",
  "log",
  "num-traits",
- "vortex",
+ "vortex-array",
 ]
 
 [[package]]
@@ -2880,7 +2880,7 @@ dependencies = [
  "itertools 0.12.1",
  "linkme",
  "log",
- "vortex",
+ "vortex-array",
 ]
 
 [[package]]
@@ -2892,7 +2892,7 @@ dependencies = [
  "itertools 0.12.1",
  "linkme",
  "log",
- "vortex",
+ "vortex-array",
 ]
 
 [[package]]
@@ -2902,10 +2902,10 @@ dependencies = [
  "arrow",
  "codecz",
  "half",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "linkme",
  "num-traits",
- "vortex",
+ "vortex-array",
 ]
 
 [[package]]
@@ -2916,7 +2916,7 @@ dependencies = [
  "linkme",
  "log",
  "num-traits",
- "vortex",
+ "vortex-array",
 ]
 
 [[package]]
@@ -2924,8 +2924,8 @@ name = "vortex-zigzag"
 version = "0.1.0"
 dependencies = [
  "linkme",
- "vortex",
  "vortex-alloc",
+ "vortex-array",
  "zigzag",
 ]
 
