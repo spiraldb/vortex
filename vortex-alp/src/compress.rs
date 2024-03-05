@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use log::debug;
-use num_traits::{cast, Float, PrimInt};
+use num_traits::{Float, NumCast, PrimInt};
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -51,13 +51,13 @@ fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
 
     ALPArray::new(
         ctx.next_level()
-            //.compress(encoded.as_ref(), like_alp.map(|a| a.encoded())),
-            .compress(encoded.as_ref(), None),
+            .compress(encoded.as_ref(), like_alp.map(|a| a.encoded())),
+        // .compress(encoded.as_ref(), None),
         exponents,
         patches.map(|p| {
             ctx.next_level()
-                //.compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
-                .compress(p.as_ref(), None)
+                .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
+            // .compress(p.as_ref(), None)
         }),
     )
     .boxed()
@@ -75,6 +75,7 @@ pub fn alp_encode(parray: &PrimitiveArray) -> ALPArray {
 trait ALPFloat: NativePType + Float {
     type ALPInt: NativePType + PrimInt;
     const FRACTIONAL_BITS: u8;
+    const MAX_EXPONENT: u8;
     const SWEET: Self;
     const F10: &'static [Self]; // TODO(ngates): const exprs for these to be arrays.
     const IF10: &'static [Self];
@@ -85,21 +86,16 @@ trait ALPFloat: NativePType + Float {
     }
 
     fn find_best_exponents(values: &[Self]) -> Exponents {
-        let mut best_e: usize = 0;
-        let mut best_f: usize = 0;
+        let mut best_e: u8 = 0;
+        let mut best_f: u8 = 0;
         let mut best_nbytes: usize = usize::MAX;
 
         // TODO(wmanning): idea, start with highest e, then find the best f
         // after that, try e's in descending order, with a gap no larger than the original e - f
-        for e in 0..Self::F10.len() - 1 {
+        for e in 0..Self::MAX_EXPONENT {
             for f in 0..e {
-                let (_, encoded, patches) = Self::encode_to_array(
-                    values,
-                    Some(&Exponents {
-                        e: e as u8,
-                        f: f as u8,
-                    }),
-                );
+                let (_, encoded, patches) =
+                    Self::encode_to_array(values, Some(&Exponents { e, f }));
                 let size = encoded.nbytes() + patches.map_or(0, |p| p.nbytes());
                 if size < best_nbytes {
                     best_nbytes = size;
@@ -143,6 +139,7 @@ trait ALPFloat: NativePType + Float {
     fn encode(values: &[Self], exponents: &Exponents) -> (Vec<Self::ALPInt>, Vec<u64>, Vec<Self>) {
         let mut exc_pos = Vec::new();
         let mut exc_value = Vec::new();
+        let mut prev = Self::ALPInt::default();
         let encoded = values
             .iter()
             .enumerate()
@@ -153,16 +150,18 @@ trait ALPFloat: NativePType + Float {
                 let decoded =
                     encoded * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize];
 
-                if decoded != *v {
-                    exc_pos.push(i as u64);
-                    exc_value.push(*v);
-                    // TODO(ngates): we could find previous?
-                    Self::default()
-                } else {
-                    *v
+                if decoded == *v {
+                    if let Some(e) = <<Self as ALPFloat>::ALPInt as NumCast>::from(encoded) {
+                        prev = e;
+                        return e;
+                    }
                 }
+
+                exc_pos.push(i as u64);
+                exc_value.push(*v);
+                // Emit the last known good value. This helps with run-end encoding.
+                prev
             })
-            .map(|v| cast(v).unwrap())
             .collect_vec();
 
         (encoded, exc_pos, exc_value)
@@ -172,6 +171,7 @@ trait ALPFloat: NativePType + Float {
 impl ALPFloat for f32 {
     type ALPInt = i32;
     const FRACTIONAL_BITS: u8 = 23;
+    const MAX_EXPONENT: u8 = 10;
     const SWEET: Self =
         (1 << Self::FRACTIONAL_BITS) as Self + (1 << Self::FRACTIONAL_BITS - 1) as Self;
 
@@ -205,6 +205,7 @@ impl ALPFloat for f32 {
 
 impl ALPFloat for f64 {
     type ALPInt = i64;
+    const MAX_EXPONENT: u8 = 18; // 10^18 is the maximum i64
     const FRACTIONAL_BITS: u8 = 52;
     const SWEET: Self =
         (1u64 << Self::FRACTIONAL_BITS) as Self + (1u64 << Self::FRACTIONAL_BITS - 1) as Self;
@@ -263,20 +264,6 @@ impl ALPFloat for f64 {
     ];
 }
 
-//
-// #[allow(dead_code)]
-// pub fn alp_decode(parray: &PrimitiveArray, exp: ALPExponents) -> PrimitiveArray {
-//     match parray.ptype() {
-//         PType::I32 => PrimitiveArray::from_vec_in(
-//             alp::decode::<f32>(parray.buffer().typed_data::<i32>(), exp).unwrap(),
-//         ),
-//         PType::I64 => PrimitiveArray::from_vec_in(
-//             alp::decode::<f64>(parray.buffer().typed_data::<i64>(), exp).unwrap(),
-//         ),
-//         _ => panic!("Unsupported ptype"),
-//     }
-// }
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -284,10 +271,14 @@ mod test {
     #[test]
     fn test_compress() {
         // Create a range offset by a million
-        let array = PrimitiveArray::from_vec(vec![1.234; 1024]);
+        let array = PrimitiveArray::from_vec(vec![1.234f32; 10]);
         let encoded = alp_encode(&array);
         println!("Encoded {:?}", encoded);
-        assert_eq!(encoded.patches(), None);
-        assert_eq!(encoded.exponents(), &Exponents { e: 0, f: 0 });
+        assert!(encoded.patches().is_none());
+        assert_eq!(
+            encoded.encoded().as_primitive().typed_data::<i32>(),
+            vec![1234; 10]
+        );
+        assert_eq!(encoded.exponents(), &Exponents { e: 4, f: 1 });
     }
 }
