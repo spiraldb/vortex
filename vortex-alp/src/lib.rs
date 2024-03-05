@@ -1,4 +1,6 @@
+pub use alp::*;
 pub use array::*;
+
 use linkme::distributed_slice;
 use vortex::array::{EncodingRef, ENCODINGS};
 

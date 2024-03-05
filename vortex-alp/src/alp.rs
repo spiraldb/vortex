@@ -1,10 +1,6 @@
 use itertools::Itertools;
-use num_traits::{Float, NumCast, PrimInt};
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::sparse::SparseArray;
-use vortex::ptype::NativePType;
-
-use vortex::array::{Array, ArrayRef};
+use num_traits::{Float, NumCast, PrimInt, Zero};
+use std::mem::size_of;
 
 const SAMPLE_SIZE: usize = 32;
 
@@ -14,8 +10,9 @@ pub struct Exponents {
     pub f: u8,
 }
 
-pub trait ALPFloat: NativePType + Float {
-    type ALPInt: NativePType + PrimInt;
+pub trait ALPFloat: Float + 'static {
+    type ALPInt: PrimInt;
+
     const FRACTIONAL_BITS: u8;
     const MAX_EXPONENT: u8;
     const SWEET: Self;
@@ -32,8 +29,7 @@ pub trait ALPFloat: NativePType + Float {
     }
 
     fn find_best_exponents(values: &[Self]) -> Exponents {
-        let mut best_e: u8 = 0;
-        let mut best_f: u8 = 0;
+        let mut best_exp = Exponents { e: 0, f: 0 };
         let mut best_nbytes: usize = usize::MAX;
 
         let sample = (values.len() > SAMPLE_SIZE).then(|| {
@@ -45,66 +41,43 @@ pub trait ALPFloat: NativePType + Float {
         });
 
         // TODO(wmanning): idea, start with highest e, then find the best f
-        // after that, try e's in descending order, with a gap no larger than the original e - f
+        //  after that, try e's in descending order, with a gap no larger than the original e - f
         for e in 0..Self::MAX_EXPONENT {
             for f in 0..e {
-                let (_, encoded, patches) = Self::encode_to_array(
+                let (_, encoded, exc_pos, exc_patches) = Self::encode(
                     sample.as_deref().unwrap_or(values),
                     Some(&Exponents { e, f }),
                 );
-                let size = encoded.nbytes() + patches.map_or(0, |p| p.nbytes());
+                let size =
+                    (encoded.len() + exc_patches.len()) * size_of::<Self>() + (exc_pos.len() * 4);
                 if size < best_nbytes {
                     best_nbytes = size;
-                    best_e = e;
-                    best_f = f;
-                } else if size == best_nbytes && e - f < best_e - best_f {
-                    best_e = e;
-                    best_f = f;
+                    best_exp = Exponents { e, f };
+                } else if size == best_nbytes && e - f < best_exp.e - best_exp.f {
+                    best_exp = Exponents { e, f };
                 }
             }
         }
 
-        Exponents {
-            e: best_e,
-            f: best_f,
-        }
+        best_exp
     }
 
-    fn encode_to_array(
+    fn encode(
         values: &[Self],
         exponents: Option<&Exponents>,
-    ) -> (Exponents, ArrayRef, Option<ArrayRef>) {
-        let best_exponents =
-            exponents.map_or_else(|| Self::find_best_exponents(values), Exponents::clone);
-        let (values, exc_pos, exc) = Self::encode(values, &best_exponents);
-        let len = values.len();
-        (
-            best_exponents,
-            PrimitiveArray::from_vec(values).boxed(),
-            (exc.len() > 0).then(|| {
-                SparseArray::new(
-                    PrimitiveArray::from_vec(exc_pos).boxed(),
-                    PrimitiveArray::from_vec(exc).boxed(),
-                    len,
-                )
-                .boxed()
-            }),
-        )
-    }
+    ) -> (Exponents, Vec<Self::ALPInt>, Vec<u64>, Vec<Self>) {
+        let exp = exponents.map_or_else(|| Self::find_best_exponents(values), Exponents::clone);
 
-    fn encode(values: &[Self], exponents: &Exponents) -> (Vec<Self::ALPInt>, Vec<u64>, Vec<Self>) {
         let mut exc_pos = Vec::new();
         let mut exc_value = Vec::new();
-        let mut prev = Self::ALPInt::default();
+        let mut prev = Self::ALPInt::zero();
         let encoded = values
             .iter()
             .enumerate()
             .map(|(i, v)| {
                 let encoded =
-                    (*v * Self::F10[exponents.e as usize] * Self::IF10[exponents.f as usize])
-                        .fast_round();
-                let decoded =
-                    encoded * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize];
+                    (*v * Self::F10[exp.e as usize] * Self::IF10[exp.f as usize]).fast_round();
+                let decoded = encoded * Self::F10[exp.f as usize] * Self::IF10[exp.e as usize];
 
                 if decoded == *v {
                     if let Some(e) = encoded.as_int() {
@@ -120,7 +93,7 @@ pub trait ALPFloat: NativePType + Float {
             })
             .collect_vec();
 
-        (encoded, exc_pos, exc_value)
+        (exp, encoded, exc_pos, exc_value)
     }
 
     fn decode_single(encoded: Self::ALPInt, exponents: &Exponents) -> Self {
