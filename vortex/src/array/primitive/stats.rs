@@ -106,7 +106,7 @@ struct StatsAccumulator<T: SupportsPrimitiveStats> {
     is_sorted: bool,
     is_strict_sorted: bool,
     run_count: usize,
-    bit_widths: [usize; 65], // We could use a const expr? (size_of::<T>() * 8) + 1,
+    bit_widths: Vec<usize>,
 }
 
 impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
@@ -118,7 +118,7 @@ impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
             is_sorted: true,
             is_strict_sorted: true,
             run_count: 1,
-            bit_widths: [0; 65],
+            bit_widths: vec![0; size_of::<T>() * 8 + 1],
         };
         stats.bit_widths[first_value.bit_width()] += 1;
         stats
@@ -148,10 +148,7 @@ impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
             (Stat::Min, self.min.into()),
             (Stat::Max, self.max.into()),
             (Stat::IsConstant, (self.min == self.max).into()),
-            (
-                Stat::BitWidthFreq,
-                ListScalarVec(self.bit_widths[0..(size_of::<T>() * 8) + 1].to_vec()).into(),
-            ),
+            (Stat::BitWidthFreq, ListScalarVec(self.bit_widths).into()),
             (Stat::IsSorted, self.is_sorted.into()),
             (
                 Stat::IsStrictSorted,
