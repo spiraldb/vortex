@@ -288,7 +288,7 @@ impl<T: NativePType> FromIterator<Option<T>> for PrimitiveArray {
 
         PrimitiveArray::from_nullable(
             values,
-            if validity.is_empty() {
+            if !validity.is_empty() {
                 Some(validity.into())
             } else {
                 None
