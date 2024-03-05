@@ -24,7 +24,7 @@ impl StatsCompute for PrimitiveArray {
     }
 }
 
-impl<'a, T: NativePType> StatsCompute for &[T] {
+impl<T: NativePType> StatsCompute for &[T] {
     fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
         if self.is_empty() {
             return Ok(StatsSet::default());
@@ -112,9 +112,9 @@ struct StatsAccumulator<T: SupportsPrimitiveStats> {
 impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
     fn new(first_value: T) -> Self {
         let mut stats = Self {
-            prev: first_value.clone(),
-            min: first_value.clone(),
-            max: first_value.clone(),
+            prev: first_value,
+            min: first_value,
+            max: first_value,
             is_sorted: true,
             is_strict_sorted: true,
             run_count: 1,
@@ -124,7 +124,7 @@ impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
         stats
     }
 
-    pub fn next(self: &mut Self, next: T) {
+    pub fn next(&mut self, next: T) {
         self.bit_widths[next.bit_width()] += 1;
 
         if self.prev == next {
@@ -143,7 +143,7 @@ impl<T: SupportsPrimitiveStats> StatsAccumulator<T> {
         self.prev = next;
     }
 
-    pub fn into_set(self: Self) -> StatsSet {
+    pub fn into_set(self) -> StatsSet {
         StatsSet::from(HashMap::from([
             (Stat::Min, self.min.into()),
             (Stat::Max, self.max.into()),
