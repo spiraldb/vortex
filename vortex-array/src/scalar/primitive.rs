@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
@@ -7,9 +6,81 @@ use half::f16;
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::{NativePType, PType};
-use crate::scalar::{LocalTimeScalar, NullableScalar, Scalar, ScalarRef};
+use crate::scalar::{LocalTimeScalar, Scalar};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct PrimitiveScalar {
+    ptype: PType,
+    value: Option<PScalar>,
+}
+
+impl PrimitiveScalar {
+    pub fn new(ptype: PType, value: Option<PScalar>) -> Self {
+        Self { ptype, value }
+    }
+
+    pub fn some(value: PScalar) -> Self {
+        Self {
+            ptype: value.ptype(),
+            value: Some(value),
+        }
+    }
+
+    pub fn none(ptype: PType) -> Self {
+        Self { ptype, value: None }
+    }
+
+    #[inline]
+    pub fn value(&self) -> Option<PScalar> {
+        self.value
+    }
+
+    #[inline]
+    pub fn ptype(&self) -> PType {
+        self.ptype
+    }
+
+    #[inline]
+    pub fn dtype(&self) -> &DType {
+        self.ptype.into()
+    }
+
+    pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
+        let ptype: VortexResult<PType> = dtype.try_into();
+        ptype
+            .and_then(|p| match self.value() {
+                None => Ok(PrimitiveScalar::none(p).into()),
+                Some(ps) => ps.cast_ptype(p),
+            })
+            .or_else(|_| self.cast_dtype(dtype))
+    }
+
+    // General conversion function that handles casting primitive scalar to non-primitive.
+    // If target dtype can be converted to ptype you should use cast_ptype.
+    pub fn cast_dtype(&self, dtype: &DType) -> VortexResult<Scalar> {
+        match dtype {
+            DType::LocalTime(w, Nullability::NonNullable) => {
+                Ok(LocalTimeScalar::new(self.clone(), *w).into())
+            }
+            _ => Err(VortexError::InvalidDType(dtype.clone())),
+        }
+    }
+
+    pub fn nbytes(&self) -> usize {
+        size_of::<Self>()
+    }
+}
+
+impl Display for PrimitiveScalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.value() {
+            None => write!(f, "<none>({}?)", self.ptype),
+            Some(v) => write!(f, "{}({})", v, self.ptype),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum PScalar {
     U8(u8),
     U16(u16),
@@ -41,30 +112,7 @@ impl PScalar {
         }
     }
 
-    // General conversion function that handles casting primitive scalar to non primitive.
-    // If target dtype can be converted to ptype you should use cast_ptype.
-    pub fn cast_dtype(&self, dtype: DType) -> VortexResult<ScalarRef> {
-        macro_rules! from_int {
-            ($dtype:ident , $ps:ident) => {
-                match $dtype {
-                    DType::LocalTime(w, Nullability::NonNullable) => {
-                        Ok(LocalTimeScalar::new($ps.clone(), w.clone()).boxed())
-                    }
-                    _ => Err(VortexError::InvalidDType($dtype.clone())),
-                }
-            };
-        }
-
-        match self {
-            p @ PScalar::U32(_)
-            | p @ PScalar::U64(_)
-            | p @ PScalar::I32(_)
-            | p @ PScalar::I64(_) => from_int!(dtype, p),
-            _ => Err(VortexError::InvalidDType(dtype.clone())),
-        }
-    }
-
-    pub fn cast_ptype(&self, ptype: PType) -> VortexResult<ScalarRef> {
+    pub fn cast_ptype(&self, ptype: PType) -> VortexResult<Scalar> {
         macro_rules! from_int {
             ($ptype:ident , $v:ident) => {
                 match $ptype {
@@ -120,49 +168,6 @@ fn is_negative<T: Default + PartialOrd>(value: T) -> bool {
     value < T::default()
 }
 
-impl Scalar for PScalar {
-    #[inline]
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    #[inline]
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
-
-    #[inline]
-    fn as_nonnull(&self) -> Option<&dyn Scalar> {
-        Some(self)
-    }
-
-    #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
-        Some(self)
-    }
-
-    #[inline]
-    fn boxed(self) -> ScalarRef {
-        Box::new(self)
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
-        self.ptype().into()
-    }
-
-    fn cast(&self, dtype: &DType) -> VortexResult<ScalarRef> {
-        let ptype: VortexResult<PType> = dtype.try_into();
-        ptype
-            .and_then(|p| self.cast_ptype(p))
-            .or_else(|_| self.cast_dtype(dtype.clone()))
-    }
-
-    fn nbytes(&self) -> usize {
-        size_of::<Self>()
-    }
-}
-
 macro_rules! pscalar {
     ($T:ty, $ptype:tt) => {
         impl From<$T> for PScalar {
@@ -171,35 +176,42 @@ macro_rules! pscalar {
             }
         }
 
-        impl From<$T> for ScalarRef {
+        impl From<$T> for Scalar {
             fn from(value: $T) -> Self {
-                PScalar::from(value).boxed()
+                PrimitiveScalar::some(PScalar::from(value)).into()
             }
         }
 
-        impl TryFrom<ScalarRef> for $T {
+        impl TryFrom<&Scalar> for $T {
             type Error = VortexError;
 
-            #[inline]
-            fn try_from(value: ScalarRef) -> VortexResult<Self> {
-                value.as_ref().try_into()
-            }
-        }
-
-        impl TryFrom<&dyn Scalar> for $T {
-            type Error = VortexError;
-
-            fn try_from(value: &dyn Scalar) -> VortexResult<Self> {
-                if let Some(pscalar) = value
-                    .as_nonnull()
-                    .and_then(|v| v.as_any().downcast_ref::<PScalar>())
-                {
-                    match pscalar {
+            fn try_from(value: &Scalar) -> VortexResult<Self> {
+                match value {
+                    Scalar::Primitive(PrimitiveScalar {
+                        ptype: _,
+                        value: Some(pscalar),
+                    }) => match pscalar {
                         PScalar::$ptype(v) => Ok(*v),
                         _ => Err(VortexError::InvalidDType(pscalar.ptype().into())),
-                    }
-                } else {
-                    Err(VortexError::InvalidDType(value.dtype().clone()))
+                    },
+                    _ => Err(VortexError::InvalidDType(value.dtype().clone())),
+                }
+            }
+        }
+
+        impl TryFrom<Scalar> for $T {
+            type Error = VortexError;
+
+            fn try_from(value: Scalar) -> VortexResult<Self> {
+                match value {
+                    Scalar::Primitive(PrimitiveScalar {
+                        ptype: _,
+                        value: Some(pscalar),
+                    }) => match pscalar {
+                        PScalar::$ptype(v) => Ok(v),
+                        _ => Err(VortexError::InvalidDType(pscalar.ptype().into())),
+                    },
+                    _ => Err(VortexError::InvalidDType(value.dtype().clone())),
                 }
             }
         }
@@ -218,34 +230,26 @@ pscalar!(f16, F16);
 pscalar!(f32, F32);
 pscalar!(f64, F64);
 
-impl<T: NativePType> From<Option<T>> for ScalarRef {
+impl<T: NativePType> From<Option<T>> for Scalar {
     fn from(value: Option<T>) -> Self {
         match value {
             Some(value) => value.into(),
-            None => Box::new(NullableScalar::None(DType::from(T::PTYPE))),
+            None => PrimitiveScalar::new(T::PTYPE, None).into(),
         }
     }
 }
 
-impl From<usize> for ScalarRef {
+impl From<usize> for Scalar {
     #[inline]
     fn from(value: usize) -> Self {
-        PScalar::U64(value as u64).boxed()
+        PrimitiveScalar::new(PType::U64, Some(PScalar::U64(value as u64))).into()
     }
 }
 
-impl TryFrom<ScalarRef> for usize {
+impl TryFrom<Scalar> for usize {
     type Error = VortexError;
 
-    fn try_from(value: ScalarRef) -> VortexResult<Self> {
-        value.as_ref().try_into()
-    }
-}
-
-impl TryFrom<&dyn Scalar> for usize {
-    type Error = VortexError;
-
-    fn try_from(value: &dyn Scalar) -> VortexResult<Self> {
+    fn try_from(value: Scalar) -> VortexResult<Self> {
         macro_rules! match_each_pscalar_integer {
             ($self:expr, | $_:tt $pscalar:ident | $($body:tt)*) => ({
                 macro_rules! __with_pscalar__ {( $_ $pscalar:ident ) => ( $($body)* )}
@@ -263,18 +267,53 @@ impl TryFrom<&dyn Scalar> for usize {
             })
         }
 
-        if let Some(pscalar) = value
-            .as_nonnull()
-            .and_then(|v| v.as_any().downcast_ref::<PScalar>())
-        {
-            match_each_pscalar_integer!(pscalar, |$V| {
+        match value {
+            Scalar::Primitive(PrimitiveScalar {
+                ptype: _,
+                value: Some(pscalar),
+            }) => match_each_pscalar_integer!(pscalar, |$V| {
+                if is_negative($V) {
+                    return Err(VortexError::ComputeError("required positive integer".into()));
+                }
+                Ok($V as usize)
+            }),
+            _ => Err(VortexError::InvalidDType(value.dtype().clone())),
+        }
+    }
+}
+
+impl TryFrom<&Scalar> for usize {
+    type Error = VortexError;
+
+    fn try_from(value: &Scalar) -> VortexResult<Self> {
+        macro_rules! match_each_pscalar_integer {
+            ($self:expr, | $_:tt $pscalar:ident | $($body:tt)*) => ({
+                macro_rules! __with_pscalar__ {( $_ $pscalar:ident ) => ( $($body)* )}
+                match $self {
+                    PScalar::U8(v) => __with_pscalar__! { v },
+                    PScalar::U16(v) => __with_pscalar__! { v },
+                    PScalar::U32(v) => __with_pscalar__! { v },
+                    PScalar::U64(v) => __with_pscalar__! { v },
+                    PScalar::I8(v) => __with_pscalar__! { v },
+                    PScalar::I16(v) => __with_pscalar__! { v },
+                    PScalar::I32(v) => __with_pscalar__! { v },
+                    PScalar::I64(v) => __with_pscalar__! { v },
+                    _ => Err(VortexError::InvalidDType($self.ptype().into())),
+                }
+            })
+        }
+
+        match value {
+            Scalar::Primitive(PrimitiveScalar {
+                ptype: _,
+                value: Some(pscalar),
+            }) => match_each_pscalar_integer!(pscalar, |$V| {
                 if is_negative(*$V) {
                     return Err(VortexError::ComputeError("required positive integer".into()));
                 }
                 Ok(*$V as usize)
-            })
-        } else {
-            Err(VortexError::InvalidDType(value.dtype().clone()))
+            }),
+            _ => Err(VortexError::InvalidDType(value.dtype().clone())),
         }
     }
 }
@@ -302,18 +341,18 @@ mod test {
     use crate::dtype::{DType, IntWidth, Nullability, Signedness};
     use crate::error::VortexError;
     use crate::ptype::PType;
-    use crate::scalar::ScalarRef;
+    use crate::scalar::Scalar;
 
     #[test]
     fn into_from() {
-        let scalar: ScalarRef = 10u16.into();
-        assert_eq!(scalar.as_ref().try_into(), Ok(10u16));
+        let scalar: Scalar = 10u16.into();
+        assert_eq!(scalar.clone().try_into(), Ok(10u16));
         // All integers should be convertible to usize
-        assert_eq!(scalar.as_ref().try_into(), Ok(10usize));
+        assert_eq!(scalar.try_into(), Ok(10usize));
 
-        let scalar: ScalarRef = (-10i16).into();
+        let scalar: Scalar = (-10i16).into();
         assert_eq!(
-            scalar.as_ref().try_into(),
+            scalar.try_into(),
             Err::<usize, VortexError>(VortexError::ComputeError(
                 "required positive integer".into()
             ))
@@ -322,7 +361,7 @@ mod test {
 
     #[test]
     fn cast() {
-        let scalar: ScalarRef = 10u16.into();
+        let scalar: Scalar = 10u16.into();
         let u32_scalar = scalar
             .cast(&DType::Int(
                 IntWidth::_32,

@@ -11,6 +11,7 @@ use arrow::array::{make_array, ArrayData, AsArray};
 use arrow::buffer::{Buffer, NullBuffer, ScalarBuffer};
 use linkme::distributed_slice;
 
+use crate::array::bool::BoolArray;
 use crate::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
     EncodingId, EncodingRef, ENCODINGS,
@@ -96,6 +97,17 @@ impl PrimitiveArray {
             .as_deref()
             .map(|v| scalar_at(v, index).unwrap().try_into().unwrap())
             .unwrap_or(true)
+    }
+
+    pub fn from_value<T: NativePType>(value: T, n: usize) -> Self {
+        PrimitiveArray::from(iter::repeat(value).take(n).collect::<Vec<_>>())
+    }
+
+    pub fn null<T: NativePType>(n: usize) -> Self {
+        PrimitiveArray::from_nullable(
+            iter::repeat(T::zero()).take(n).collect::<Vec<_>>(),
+            Some(BoolArray::from(vec![false; n]).boxed()),
+        )
     }
 
     #[inline]

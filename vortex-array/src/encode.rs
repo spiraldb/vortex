@@ -29,7 +29,7 @@ use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
 use crate::arrow::convert::TryIntoDType;
 use crate::ptype::PType;
-use crate::scalar::{NullScalar, Scalar};
+use crate::scalar::NullScalar;
 
 impl From<&Buffer> for ArrayRef {
     fn from(value: &Buffer) -> Self {
@@ -110,7 +110,7 @@ impl From<&ArrowStructArray> for ArrayRef {
 
 impl From<&ArrowNullArray> for ArrayRef {
     fn from(value: &ArrowNullArray) -> Self {
-        ConstantArray::new(NullScalar::new().boxed(), value.len()).boxed()
+        ConstantArray::new(NullScalar::new().into(), value.len()).boxed()
     }
 }
 

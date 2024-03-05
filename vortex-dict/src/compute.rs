@@ -1,8 +1,9 @@
-use crate::DictArray;
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
 use vortex::error::VortexResult;
-use vortex::scalar::ScalarRef;
+use vortex::scalar::Scalar;
+
+use crate::DictArray;
 
 impl ArrayCompute for DictArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -11,7 +12,7 @@ impl ArrayCompute for DictArray {
 }
 
 impl ScalarAtFn for DictArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let dict_index: usize = scalar_at(self.codes(), index)?.try_into()?;
         scalar_at(self.dict(), dict_index)
     }

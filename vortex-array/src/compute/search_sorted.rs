@@ -1,6 +1,6 @@
 use crate::array::Array;
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::{Scalar, ScalarRef};
+use crate::scalar::Scalar;
 
 pub enum SearchSortedSide {
     Left,
@@ -8,10 +8,10 @@ pub enum SearchSortedSide {
 }
 
 pub trait SearchSortedFn {
-    fn search_sorted(&self, value: &dyn Scalar, side: SearchSortedSide) -> VortexResult<usize>;
+    fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<usize>;
 }
 
-pub fn search_sorted<T: Into<ScalarRef>>(
+pub fn search_sorted<T: Into<Scalar>>(
     array: &dyn Array,
     target: T,
     side: SearchSortedSide,
@@ -19,7 +19,7 @@ pub fn search_sorted<T: Into<ScalarRef>>(
     let scalar = target.into().cast(array.dtype())?;
     array
         .search_sorted()
-        .map(|f| f.search_sorted(scalar.as_ref(), side))
+        .map(|f| f.search_sorted(&scalar, side))
         .unwrap_or_else(|| {
             Err(VortexError::NotImplemented(
                 "search_sorted",

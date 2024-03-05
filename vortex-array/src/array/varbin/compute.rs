@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
@@ -10,8 +12,7 @@ use crate::compute::ArrayCompute;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::ptype::PType;
-use crate::scalar::{NullableScalar, Scalar, ScalarRef};
-use itertools::Itertools;
+use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 
 impl ArrayCompute for VarBinArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
@@ -66,7 +67,7 @@ impl AsContiguousFn for VarBinArray {
 }
 
 impl ScalarAtFn for VarBinArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
             self.bytes_at(index).map(|bytes| {
                 if matches!(self.dtype, DType::Utf8(_)) {
@@ -75,8 +76,10 @@ impl ScalarAtFn for VarBinArray {
                     bytes.into()
                 }
             })
+        } else if matches!(self.dtype, DType::Utf8(_)) {
+            Ok(Utf8Scalar::new(None).into())
         } else {
-            Ok(NullableScalar::none(self.dtype.clone()).boxed())
+            Ok(BinaryScalar::new(None).into())
         }
     }
 }

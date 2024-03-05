@@ -53,6 +53,13 @@ impl BoolArray {
             .unwrap_or(true)
     }
 
+    pub fn null(n: usize) -> Self {
+        BoolArray::new(
+            BooleanBuffer::from(vec![false; n]),
+            Some(BoolArray::from(vec![false; n]).boxed()),
+        )
+    }
+
     #[inline]
     pub fn buffer(&self) -> &BooleanBuffer {
         &self.buffer
