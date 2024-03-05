@@ -30,6 +30,8 @@ mod serde;
 mod struct_;
 mod utf8;
 
+pub type ScalarRef = Box<dyn Scalar>;
+
 pub trait Scalar: Display + Debug + dyn_clone::DynClone + Send + Sync + 'static {
     fn as_any(&self) -> &dyn Any;
 
@@ -37,14 +39,14 @@ pub trait Scalar: Display + Debug + dyn_clone::DynClone + Send + Sync + 'static 
 
     fn as_nonnull(&self) -> Option<&dyn Scalar>;
 
-    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>>;
+    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef>;
 
-    fn boxed(self) -> Box<dyn Scalar>;
+    fn boxed(self) -> ScalarRef;
 
     /// the logical type.
     fn dtype(&self) -> &DType;
 
-    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>>;
+    fn cast(&self, dtype: &DType) -> VortexResult<ScalarRef>;
 
     fn nbytes(&self) -> usize;
 }

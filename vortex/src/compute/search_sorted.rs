@@ -2,7 +2,7 @@ use crate::array::Array;
 use crate::error::VortexResult;
 use crate::polars::IntoPolarsSeries;
 use crate::polars::IntoPolarsValue;
-use crate::scalar::Scalar;
+use crate::scalar::ScalarRef;
 use polars_core::prelude::*;
 use polars_ops::prelude::*;
 
@@ -25,7 +25,7 @@ pub fn search_sorted_usize(
     index: usize,
     side: SearchSortedSide,
 ) -> VortexResult<usize> {
-    let enc_scalar: Box<dyn Scalar> = index.into();
+    let enc_scalar: ScalarRef = index.into();
     // Convert index into correctly typed Arrow scalar.
     let enc_scalar = enc_scalar.cast(indices.dtype())?;
 

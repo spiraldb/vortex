@@ -1,6 +1,6 @@
 use crate::scalar::{
-    BinaryScalar, BoolScalar, LocalTimeScalar, NullableScalar, PScalar, Scalar, StructScalar,
-    Utf8Scalar,
+    BinaryScalar, BoolScalar, LocalTimeScalar, NullableScalar, PScalar, Scalar, ScalarRef,
+    StructScalar, Utf8Scalar,
 };
 use std::cmp::Ordering;
 use std::sync::Arc;
@@ -51,7 +51,7 @@ impl PartialOrd for dyn Scalar {
     }
 }
 
-impl PartialOrd<dyn Scalar> for Box<dyn Scalar> {
+impl PartialOrd<dyn Scalar> for ScalarRef {
     fn partial_cmp(&self, that: &dyn Scalar) -> Option<Ordering> {
         cmp(self.as_ref(), that)
     }

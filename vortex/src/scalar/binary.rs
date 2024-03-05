@@ -1,6 +1,6 @@
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::Scalar;
+use crate::scalar::{Scalar, ScalarRef};
 use std::any::Any;
 use std::fmt::{Display, Formatter};
 
@@ -36,12 +36,12 @@ impl Scalar for BinaryScalar {
     }
 
     #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
         Some(self)
     }
 
     #[inline]
-    fn boxed(self) -> Box<dyn Scalar> {
+    fn boxed(self) -> ScalarRef {
         Box::new(self)
     }
 
@@ -50,7 +50,7 @@ impl Scalar for BinaryScalar {
         &DType::Binary(Nullability::NonNullable)
     }
 
-    fn cast(&self, _dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+    fn cast(&self, _dtype: &DType) -> VortexResult<ScalarRef> {
         todo!()
     }
 
@@ -59,16 +59,16 @@ impl Scalar for BinaryScalar {
     }
 }
 
-impl From<Vec<u8>> for Box<dyn Scalar> {
+impl From<Vec<u8>> for ScalarRef {
     fn from(value: Vec<u8>) -> Self {
         BinaryScalar::new(value).boxed()
     }
 }
 
-impl TryFrom<Box<dyn Scalar>> for Vec<u8> {
+impl TryFrom<ScalarRef> for Vec<u8> {
     type Error = VortexError;
 
-    fn try_from(value: Box<dyn Scalar>) -> Result<Self, Self::Error> {
+    fn try_from(value: ScalarRef) -> Result<Self, Self::Error> {
         let dtype = value.dtype().clone();
         let scalar = value
             .into_any()

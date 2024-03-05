@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::dtype::DType;
 use crate::error::VortexResult;
-use crate::scalar::{NullableScalar, Scalar};
+use crate::scalar::{NullableScalar, Scalar, ScalarRef};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NullScalar;
@@ -38,12 +38,12 @@ impl Scalar for NullScalar {
     }
 
     #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<Box<dyn Scalar>> {
+    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
         None
     }
 
     #[inline]
-    fn boxed(self) -> Box<dyn Scalar> {
+    fn boxed(self) -> ScalarRef {
         Box::new(self)
     }
 
@@ -52,7 +52,7 @@ impl Scalar for NullScalar {
         &DType::Null
     }
 
-    fn cast(&self, dtype: &DType) -> VortexResult<Box<dyn Scalar>> {
+    fn cast(&self, dtype: &DType) -> VortexResult<ScalarRef> {
         Ok(NullableScalar::none(dtype.clone()).boxed())
     }
 

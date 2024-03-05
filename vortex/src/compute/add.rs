@@ -1,7 +1,7 @@
 use crate::array::constant::ConstantArray;
 use crate::array::{Array, ArrayKind, ArrayRef};
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::Scalar;
+use crate::scalar::{Scalar, ScalarRef};
 
 // TODO(ngates): convert this to arithmetic operations with macro over the kernel.
 pub fn add(lhs: &dyn Array, rhs: &dyn Array) -> VortexResult<ArrayRef> {
@@ -30,7 +30,7 @@ pub fn add_scalar(lhs: &dyn Array, rhs: &dyn Scalar) -> VortexResult<ArrayRef> {
     }
 }
 
-pub fn add_scalars(_lhs: &dyn Scalar, _rhs: &dyn Scalar) -> VortexResult<Box<dyn Scalar>> {
+pub fn add_scalars(_lhs: &dyn Scalar, _rhs: &dyn Scalar) -> VortexResult<ScalarRef> {
     // Might need to improve this implementation...
     Ok(24.into())
 }

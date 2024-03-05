@@ -8,7 +8,7 @@ use itertools::Itertools;
 
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::NativePType;
-use crate::scalar::{ListScalarVec, Scalar};
+use crate::scalar::{ListScalarVec, ScalarRef};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stat {
@@ -24,29 +24,29 @@ pub enum Stat {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct StatsSet(HashMap<Stat, Box<dyn Scalar>>);
+pub struct StatsSet(HashMap<Stat, ScalarRef>);
 
 impl StatsSet {
     pub fn new() -> Self {
         StatsSet(HashMap::new())
     }
 
-    pub fn from(map: HashMap<Stat, Box<dyn Scalar>>) -> Self {
+    pub fn from(map: HashMap<Stat, ScalarRef>) -> Self {
         StatsSet(map)
     }
 
-    pub fn of(stat: Stat, value: Box<dyn Scalar>) -> Self {
+    pub fn of(stat: Stat, value: ScalarRef) -> Self {
         StatsSet(HashMap::from([(stat, value)]))
     }
 
-    fn get_as<T: TryFrom<Box<dyn Scalar>, Error = VortexError>>(
+    fn get_as<T: TryFrom<ScalarRef, Error = VortexError>>(
         &self,
         stat: &Stat,
     ) -> VortexResult<Option<T>> {
         self.0.get(stat).map(|v| T::try_from(v.clone())).transpose()
     }
 
-    pub fn set(&mut self, stat: Stat, value: Box<dyn Scalar>) {
+    pub fn set(&mut self, stat: Stat, value: ScalarRef) {
         self.0.insert(stat, value);
     }
 
@@ -230,7 +230,7 @@ impl<'a> Stats<'a> {
         });
     }
 
-    pub fn set(&self, stat: Stat, value: Box<dyn Scalar>) {
+    pub fn set(&self, stat: Stat, value: ScalarRef) {
         self.cache.write().unwrap().set(stat, value);
     }
 
@@ -238,18 +238,15 @@ impl<'a> Stats<'a> {
         self.cache.read().unwrap().clone()
     }
 
-    pub fn get(&self, stat: &Stat) -> Option<Box<dyn Scalar>> {
+    pub fn get(&self, stat: &Stat) -> Option<ScalarRef> {
         self.cache.read().unwrap().0.get(stat).cloned()
     }
 
-    pub fn get_as<T: TryFrom<Box<dyn Scalar>, Error = VortexError>>(
-        &self,
-        stat: &Stat,
-    ) -> Option<T> {
+    pub fn get_as<T: TryFrom<ScalarRef, Error = VortexError>>(&self, stat: &Stat) -> Option<T> {
         self.get(stat).map(|v| T::try_from(v).unwrap())
     }
 
-    pub fn get_or_compute(&self, stat: &Stat) -> Option<Box<dyn Scalar>> {
+    pub fn get_or_compute(&self, stat: &Stat) -> Option<ScalarRef> {
         if let Some(value) = self.cache.read().unwrap().0.get(stat) {
             return Some(value.clone());
         }
@@ -269,14 +266,14 @@ impl<'a> Stats<'a> {
             .and_then(|v| T::try_from(v).ok())
     }
 
-    pub fn get_or_compute_as<T: TryFrom<Box<dyn Scalar>, Error = VortexError>>(
+    pub fn get_or_compute_as<T: TryFrom<ScalarRef, Error = VortexError>>(
         &self,
         stat: &Stat,
     ) -> Option<T> {
         self.get_or_compute(stat).map(|v| T::try_from(v).unwrap())
     }
 
-    pub fn get_or_compute_or<T: TryFrom<Box<dyn Scalar>, Error = VortexError>>(
+    pub fn get_or_compute_or<T: TryFrom<ScalarRef, Error = VortexError>>(
         &self,
         default: T,
         stat: &Stat,

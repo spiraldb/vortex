@@ -4,7 +4,7 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
 use vortex::dtype::{DType, IntWidth, Signedness};
 use vortex::error::{VortexError, VortexResult};
-use vortex::scalar::{NullableScalar, Scalar};
+use vortex::scalar::{NullableScalar, Scalar, ScalarRef};
 use zigzag::ZigZag;
 
 impl ArrayCompute for ZigZagArray {
@@ -14,7 +14,7 @@ impl ArrayCompute for ZigZagArray {
 }
 
 impl ScalarAtFn for ZigZagArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
+    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
         let scalar = scalar_at(self.encoded(), index)?;
         let Some(scalar) = scalar.as_nonnull() else {
             return Ok(NullableScalar::none(self.dtype().clone()).boxed());
