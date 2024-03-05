@@ -1,5 +1,5 @@
-use crate::compute::fill_forward::FillForwardFn;
 use cast::{CastBoolFn, CastPrimitiveFn};
+use fill::FillForwardFn;
 use patch::PatchFn;
 use scalar_at::ScalarAtFn;
 use take::TakeFn;
@@ -7,7 +7,7 @@ use take::TakeFn;
 pub mod add;
 pub mod as_contiguous;
 pub mod cast;
-pub mod fill_forward;
+pub mod fill;
 pub mod patch;
 pub mod repeat;
 pub mod scalar_at;
@@ -23,6 +23,10 @@ pub trait ArrayCompute {
         None
     }
 
+    fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
+        None
+    }
+
     fn patch(&self) -> Option<&dyn PatchFn> {
         None
     }
@@ -32,10 +36,6 @@ pub trait ArrayCompute {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
-        None
-    }
-
-    fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
         None
     }
 }
