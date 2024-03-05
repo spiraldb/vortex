@@ -51,11 +51,13 @@ fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
 
     ALPArray::new(
         ctx.next_level()
-            .compress(encoded.as_ref(), like_alp.map(|a| a.encoded())),
+            //.compress(encoded.as_ref(), like_alp.map(|a| a.encoded())),
+            .compress(encoded.as_ref(), None),
         exponents,
         patches.map(|p| {
             ctx.next_level()
-                .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
+                //.compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
+                .compress(p.as_ref(), None)
         }),
     )
     .boxed()
