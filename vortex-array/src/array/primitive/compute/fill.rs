@@ -1,9 +1,7 @@
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{ArrayRef, CloneOptionalArray};
-use crate::compute::cast::CastPrimitiveFn;
+use crate::array::ArrayRef;
 use crate::compute::fill::FillForwardFn;
 use crate::error::VortexResult;
-use crate::ptype::NativePType;
 
 impl FillForwardFn for PrimitiveArray {
     fn fill_forward(&self) -> VortexResult<ArrayRef> {
@@ -18,10 +16,11 @@ mod test {
     use crate::compute;
 
     #[test]
-    fn cast_u32_u8() {
-        let arr = PrimitiveArray::from_iter(vec![None, Some(0u8), None, Some(10), None]);
-        let filled = compute::fill::fill_forward(&arr).unwrap().as_primitive();
-        assert_eq!(filled.typed_data::<u8>(), vec![0, 8, 8, 10, 10]);
-        assert_eq!(filled.validity(), None);
+    fn leading_none() {
+        let arr = PrimitiveArray::from_iter(vec![None, Some(8u8), None, Some(10), None]);
+        let filled = compute::fill::fill_forward(arr.as_ref()).unwrap();
+        let filled_primitive = filled.as_primitive();
+        assert_eq!(filled_primitive.typed_data::<u8>(), vec![0, 8, 8, 10, 10]);
+        assert!(filled_primitive.validity().is_none());
     }
 }
