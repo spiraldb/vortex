@@ -48,4 +48,7 @@ runs:
 
     - name: Export PYO3 Path
       shell: bash
-      run: echo "PYO3_PYTHON=./.venv/bin/python" >> $GITHUB_ENV
+      # Figure out a way to dynamically get python version
+      run: |
+        echo "PYO3_PYTHON=./.venv/bin/python" >> $GITHUB_ENV
+        echo "PYO3_ENVIRONMENT_SIGNATURE=cpython-3.11-64bit" >> $GITHUB_ENV
