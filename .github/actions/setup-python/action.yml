@@ -34,6 +34,13 @@ runs:
         path: .venv
         key: "venv-${{ runner.os }}-${{ hashFiles('requirements**.lock') }}"
 
+    - name: Export PYO3 Path
+      shell: bash
+      # Figure out a way to dynamically get python version
+      run: |
+        echo "PYO3_PYTHON=/home/runner/work/vortex/vortex/.venv/bin/python" >> $GITHUB_ENV
+        echo "PYO3_ENVIRONMENT_SIGNATURE=cpython-3.11-64bit" >> $GITHUB_ENV
+
     - name: Rye Sync
       shell: bash
       # --no-lock prevents resolution of the lock file. The locks are still respected.
@@ -45,3 +52,4 @@ runs:
     - name: Export Path
       shell: bash
       run: echo "PATH=$PATH" >> $GITHUB_ENV
+
