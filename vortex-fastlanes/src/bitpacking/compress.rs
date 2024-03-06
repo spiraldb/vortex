@@ -224,10 +224,12 @@ mod test {
         );
         let ctx = CompressCtx::new(&cfg);
 
-        let compressed = ctx.compress(
-            &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
-            None,
-        )?;
+        let compressed = ctx
+            .compress(
+                &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
+                None,
+            )
+            .unwrap();
         assert_eq!(compressed.encoding().id(), BitPackedEncoding.id());
         let bp = compressed
             .as_any()
