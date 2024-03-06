@@ -13,7 +13,6 @@ use arrow::buffer::{Buffer, NullBuffer, ScalarBuffer};
 use linkme::distributed_slice;
 use log::debug;
 
-use crate::array::bool::BoolArray;
 use crate::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
     EncodingId, EncodingRef, ENCODINGS,
@@ -70,11 +69,6 @@ impl PrimitiveArray {
             validity,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
-    }
-
-    #[inline]
-    pub fn from_vec<T: NativePType>(values: Vec<T>) -> Self {
-        Self::from_nullable(values, None)
     }
 
     /// Allocate buffer from allocator-api2 vector. This would be easier when arrow gets https://github.com/apache/arrow-rs/issues/3960
@@ -262,18 +256,15 @@ impl Encoding for PrimitiveEncoding {
     }
 }
 
-/// Wrapper struct to create primitive array from Vec<Option<T>>, this would conflict with Vec<T>
-pub struct NullableVec<T>(Vec<Option<T>>);
-
-impl<T: NativePType> From<NullableVec<T>> for ArrayRef {
-    fn from(value: NullableVec<T>) -> Self {
-        PrimitiveArray::from_iter(value.0).boxed()
+impl<T: NativePType> From<Vec<T>> for ArrayRef {
+    fn from(values: Vec<T>) -> Self {
+        PrimitiveArray::from(values).boxed()
     }
 }
 
-impl<T: NativePType> From<Vec<T>> for ArrayRef {
+impl<T: NativePType> From<Vec<T>> for PrimitiveArray {
     fn from(values: Vec<T>) -> Self {
-        PrimitiveArray::from_vec(values).boxed()
+        Self::from_nullable(values, None)
     }
 }
 
@@ -295,11 +286,14 @@ impl<T: NativePType> FromIterator<Option<T>> for PrimitiveArray {
             })
             .collect::<Vec<_>>();
 
-        if validity.is_empty() {
-            PrimitiveArray::from_vec(values)
-        } else {
-            PrimitiveArray::from_nullable(values, Some(BoolArray::from(validity).boxed()))
-        }
+        PrimitiveArray::from_nullable(
+            values,
+            if !validity.is_empty() {
+                Some(validity.into())
+            } else {
+                None
+            },
+        )
     }
 }
 
@@ -321,7 +315,7 @@ mod test {
 
     #[test]
     fn from_arrow() {
-        let arr = PrimitiveArray::from_vec::<i32>(vec![1, 2, 3]);
+        let arr = PrimitiveArray::from(vec![1, 2, 3]);
         assert_eq!(arr.len(), 3);
         assert_eq!(arr.ptype, PType::I32);
         assert_eq!(
@@ -337,7 +331,7 @@ mod test {
 
     #[test]
     fn slice() {
-        let arr = PrimitiveArray::from_vec(vec![1, 2, 3, 4, 5])
+        let arr = PrimitiveArray::from(vec![1, 2, 3, 4, 5])
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);

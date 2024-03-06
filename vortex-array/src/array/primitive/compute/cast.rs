@@ -44,26 +44,26 @@ mod test {
 
     #[test]
     fn cast_u32_u8() {
-        let arr = PrimitiveArray::from_vec(vec![0u32, 10, 200]);
+        let arr = PrimitiveArray::from(vec![0u32, 10, 200]);
         let u8arr = compute::cast::cast_primitive(&arr, &PType::U8).unwrap();
         assert_eq!(u8arr.typed_data::<u8>(), vec![0u8, 10, 200]);
     }
 
     #[test]
     fn cast_u32_f32() {
-        let arr = PrimitiveArray::from_vec(vec![0u32, 10, 200]);
+        let arr = PrimitiveArray::from(vec![0u32, 10, 200]);
         let u8arr = compute::cast::cast_primitive(&arr, &PType::F32).unwrap();
         assert_eq!(u8arr.typed_data::<f32>(), vec![0.0f32, 10., 200.]);
     }
 
     #[test]
     fn cast_i32_u32() {
-        let arr = PrimitiveArray::from_vec(vec![-1i32]);
+        let arr = PrimitiveArray::from(vec![-1i32]);
         assert_eq!(
             compute::cast::cast_primitive(&arr, &PType::U32)
                 .err()
                 .unwrap(),
-            VortexError::ComputeError("Failed to cast -1 to U32".into(),)
+            VortexError::ComputeError("Failed to cast -1 to U32".into())
         )
     }
 }

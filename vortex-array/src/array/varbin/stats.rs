@@ -86,12 +86,12 @@ mod test {
     use crate::stats::Stat;
 
     fn array(dtype: DType) -> VarBinArray {
-        let values = PrimitiveArray::from_vec(
+        let values = PrimitiveArray::from(
             "hello worldhello world this is a long string"
                 .as_bytes()
                 .to_vec(),
         );
-        let offsets = PrimitiveArray::from_vec(vec![0, 11, 44]);
+        let offsets = PrimitiveArray::from(vec![0, 11, 44]);
 
         VarBinArray::new(offsets.boxed(), values.boxed(), dtype, None)
     }
