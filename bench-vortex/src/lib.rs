@@ -81,7 +81,7 @@ mod test {
 
     fn setup_logger() {
         TermLogger::init(
-            LevelFilter::Info,
+            LevelFilter::Debug,
             Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto,

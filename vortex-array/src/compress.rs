@@ -11,7 +11,7 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, ENCODINGS};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
-use crate::error::VortexResult;
+use crate::error::{VortexError, VortexResult};
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
 
@@ -42,7 +42,7 @@ impl Default for CompressConfig {
             block_size: 65536,
             sample_size: 1024,
             sample_count: 10,
-            max_depth: 6,
+            max_depth: 4,
             ree_average_run_threshold: 2.0,
             encodings: HashSet::new(),
             disabled_encodings: HashSet::new(),
@@ -94,6 +94,12 @@ impl<'a> CompressCtx<'a> {
     }
 
     pub fn compress(&self, arr: &dyn Array, like: Option<&dyn Array>) -> VortexResult<ArrayRef> {
+        debug!(
+            "Compressing {} like {} at depth={}",
+            arr.encoding().id(),
+            like.map(|l| l.encoding().id().name()).unwrap_or(&"<none>"),
+            self.depth
+        );
         if arr.is_empty() {
             return Ok(dyn_clone::clone_box(arr));
         }
@@ -125,11 +131,19 @@ impl<'a> CompressCtx<'a> {
                 .encoding()
                 .compression()
                 .and_then(|c| c.compressor(arr, self.options))
-                .and_then(|compressor| compressor(arr, Some(l), self.clone()).ok())
-                .unwrap_or_else(|| dyn_clone::clone_box(arr)));
-            // .ok_or(VortexError::ComputeError(
-            //     "No compressors for like array".into(),
-            // ))?(arr, like, self.clone());
+                .unwrap_or_else(|| {
+                    debug!(
+                        "Cannot encoding {} like {}, no compressors found",
+                        arr.encoding().id(),
+                        arr.encoding().id()
+                    );
+                    dyn_clone::clone_box(arr)
+                }
+                //.and_then(|compressor| compressor(arr, Some(l), self.clone()).ok())
+                // .unwrap_or_else(|| dyn_clone::clone_box(arr)));
+            .ok_or(VortexError::ComputeError(
+                "No compressors for like array".into(),
+            ))?(arr, like, self.clone());
         }
 
         // Otherwise, fall back to sampled compression
@@ -242,7 +256,6 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
                 array.encoding().id(),
                 s.encoding().id()
             );
-            // TODO(ngates): is this next_level?
             ctx.next_level().compress(array, Some(s.as_ref()))
         })
         .unwrap_or_else(|| Ok(dyn_clone::clone_box(array)))
