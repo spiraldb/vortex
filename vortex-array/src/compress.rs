@@ -107,7 +107,9 @@ impl<'a> CompressCtx<'a> {
                 .and_then(|c| c.compressor(arr, self.options))
                 .map(|compressor| compressor(arr, like, self.clone()))
                 .unwrap_or_else(|| Ok(dyn_clone::clone_box(arr))),
-            None => sampled_compression(arr, self.clone()),
+            None => match  {  }
+                sampled_compression(arr, self.clone())
+            },
         }
     }
 

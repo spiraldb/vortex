@@ -1,8 +1,12 @@
+use std::async_iter::FromIter;
 use std::iter::zip;
 use std::sync::Arc;
 
 use arrow::array::RecordBatch;
-use arrow::datatypes::{DataType, Field, FieldRef, Fields, SchemaRef, TimeUnit as ArrowTimeUnit};
+use arrow::array::RecordBatchReader;
+use arrow::datatypes::{
+    DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit as ArrowTimeUnit,
+};
 
 use crate::array::struct_::StructArray;
 use crate::array::typed::TypedArray;
@@ -11,6 +15,16 @@ use crate::dtype::DType::*;
 use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, TimeUnit};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
+
+trait CollectRecordBatches: IntoIterator<Item = RecordBatch> {
+    fn collect_record_batches(&self, schema: &Schema) -> ArrayRef;
+}
+
+impl Into<ArrayRef> for Box<dyn RecordBatchReader + Send> {
+    fn into(self) -> ArrayRef {
+        todo!()
+    }
+}
 
 impl From<RecordBatch> for ArrayRef {
     fn from(value: RecordBatch) -> Self {
