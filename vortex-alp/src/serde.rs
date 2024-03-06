@@ -72,7 +72,7 @@ mod test {
 
     #[test]
     fn roundtrip() {
-        let arr = alp_encode(&PrimitiveArray::from_vec(vec![
+        let arr = alp_encode(&PrimitiveArray::from(vec![
             0.00001f64,
             0.0004f64,
             1000000.0f64,

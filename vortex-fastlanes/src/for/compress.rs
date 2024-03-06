@@ -54,7 +54,7 @@ fn for_compressor(
             // TODO(ngates): cast to unsigned
             // .map(|v| v as parray.ptype().to_unsigned()::T)
             .collect_vec();
-        PrimitiveArray::from_vec(values)
+        PrimitiveArray::from(values)
     });
 
     // TODO(ngates): remove FoR as a potential encoding from the ctx
@@ -91,7 +91,7 @@ mod test {
         let ctx = CompressCtx::new(&cfg);
 
         // Create a range offset by a million
-        let array = PrimitiveArray::from_vec((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
+        let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
 
         let compressed = ctx.compress(&array, None).unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());

@@ -77,7 +77,7 @@ fn bitpacked_compressor(
 
     // If we pack into zero bits, then we have an empty byte array.
     let packed = if bit_width == 0 {
-        PrimitiveArray::from_vec(Vec::<u8>::new()).boxed()
+        PrimitiveArray::from(Vec::<u8>::new()).boxed()
     } else {
         bitpack(parray, bit_width)
     };
@@ -118,7 +118,7 @@ fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
         I64 | U64 => bitpack_primitive(parray.buffer().typed_data::<u64>(), bit_width),
         _ => panic!("Unsupported ptype {:?}", parray.ptype()),
     };
-    PrimitiveArray::from_vec(bytes).boxed()
+    PrimitiveArray::from(bytes).boxed()
 }
 
 fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize) -> Vec<u8> {
@@ -160,8 +160,8 @@ fn bitpack_patches(
         }
         let len = indices.len();
         SparseArray::new(
-            PrimitiveArray::from_vec(indices).boxed(),
-            PrimitiveArray::from_vec(values).boxed(),
+            PrimitiveArray::from(indices).boxed(),
+            PrimitiveArray::from(values).boxed(),
             len,
         ).boxed()
     })
@@ -224,12 +224,10 @@ mod test {
         );
         let ctx = CompressCtx::new(&cfg);
 
-        let compressed = ctx
-            .compress(
-                &PrimitiveArray::from_vec(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
-                None,
-            )
-            .unwrap();
+        let compressed = ctx.compress(
+            &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
+            None,
+        )?;
         assert_eq!(compressed.encoding().id(), BitPackedEncoding.id());
         let bp = compressed
             .as_any()
