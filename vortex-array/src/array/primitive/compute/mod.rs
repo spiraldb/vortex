@@ -3,7 +3,7 @@ use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::cast::CastPrimitiveFn;
 use crate::compute::fill::FillForwardFn;
 use crate::compute::patch::PatchFn;
-use crate::compute::scalar_at::ScalarAtFn;
+use crate::compute::scalar_at::{ScalarAtFn, UsizeAtFn};
 use crate::compute::ArrayCompute;
 
 mod as_contiguous;
@@ -30,6 +30,10 @@ impl ArrayCompute for PrimitiveArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn usize_at(&self) -> Option<&dyn UsizeAtFn> {
         Some(self)
     }
 }

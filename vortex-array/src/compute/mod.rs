@@ -3,6 +3,7 @@ use cast::{CastBoolFn, CastPrimitiveFn};
 use fill::FillForwardFn;
 use patch::PatchFn;
 use scalar_at::ScalarAtFn;
+use scalar_at::UsizeAtFn;
 use take::TakeFn;
 
 pub mod add;
@@ -37,6 +38,10 @@ pub trait ArrayCompute {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        None
+    }
+
+    fn usize_at(&self) -> Option<&dyn UsizeAtFn> {
         None
     }
 
