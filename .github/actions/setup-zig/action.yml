@@ -12,11 +12,6 @@ runs:
       uses: goto-bus-stop/setup-zig@v2
       with:
         version: "${{ steps.zig-version.outputs.version }}"
-      
-    # TODO(ngates): should we cache zig-cache? Or zig-out?
-    - name: Zig Build
-      shell: bash
-      run: zig build
 
     - name: Export Path
       shell: bash
