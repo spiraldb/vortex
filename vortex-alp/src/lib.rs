@@ -1,8 +1,11 @@
 pub use alp::*;
+pub use array::*;
+
 use linkme::distributed_slice;
 use vortex::array::{EncodingRef, ENCODINGS};
 
 mod alp;
+mod array;
 mod compress;
 mod compute;
 mod downcast;

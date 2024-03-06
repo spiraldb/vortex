@@ -1,12 +1,13 @@
 use std::io;
 use std::io::ErrorKind;
 
-use codecz::alp::ALPExponents;
+use crate::alp::Exponents;
 use vortex::array::{Array, ArrayRef};
 use vortex::dtype::{DType, FloatWidth, Signedness};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
-use crate::{ALPArray, ALPEncoding};
+use crate::ALPArray;
+use crate::ALPEncoding;
 
 impl ArraySerde for ALPArray {
     fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
@@ -39,7 +40,7 @@ impl EncodingSerde for ALPEncoding {
         let encoded = ctx.with_schema(&encoded_dtype).read()?;
         Ok(ALPArray::new(
             encoded,
-            ALPExponents {
+            Exponents {
                 e: exponents[0],
                 f: exponents[1],
             },
@@ -77,7 +78,8 @@ mod test {
             0.0004f64,
             1000000.0f64,
             0.33f64,
-        ]));
+        ]))
+        .unwrap();
         let read_arr = roundtrip_array(arr.as_ref()).unwrap();
 
         let read_alp = read_arr.as_alp();
