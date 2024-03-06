@@ -87,7 +87,7 @@ fn ree_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
     }
 
     // Run-end encode the values
-    let mut last = values[0];
+    let mut last = elements[0];
     let mut end = 1;
     for &e in elements.iter().skip(1) {
         if e != last {
@@ -97,8 +97,9 @@ fn ree_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
         last = e;
         end += 1;
     }
-
     ends.push(end);
+    values.push(last);
+
     (ends, values)
 }
 
@@ -131,13 +132,35 @@ mod test {
 
     use vortex::array::bool::BoolArray;
     use vortex::array::downcast::DowncastArrayBuiltin;
+    use vortex::array::primitive::PrimitiveArray;
     use vortex::array::{Array, CloneOptionalArray};
 
-    use crate::compress::ree_decode;
+    use crate::compress::{ree_decode, ree_encode};
     use crate::REEArray;
 
     #[test]
-    fn encode_nullable() {
+    fn encode() {
+        let arr = PrimitiveArray::from_vec(vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3]);
+        let (ends, values) = ree_encode(&arr);
+
+        assert_eq!(ends.typed_data::<u64>(), vec![2, 5, 10]);
+        assert_eq!(values.typed_data::<i32>(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn decode() {
+        let ends = PrimitiveArray::from_vec(vec![2, 5, 10]);
+        let values = PrimitiveArray::from_vec(vec![1i32, 2, 3]);
+        let decoded = ree_decode(&ends, &values, None).unwrap();
+
+        assert_eq!(
+            decoded.typed_data::<i32>(),
+            vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3]
+        );
+    }
+
+    #[test]
+    fn decode_nullable() {
         let validity = {
             let mut validity = vec![true; 10];
             validity[2] = false;
