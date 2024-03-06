@@ -82,6 +82,10 @@ fn ree_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
     let mut ends = Vec::new();
     let mut values = Vec::new();
 
+    if elements.is_empty() {
+        return (ends, values);
+    }
+
     // Run-end encode the values
     let mut last = values[0];
     let mut end = 1;
