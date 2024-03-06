@@ -13,8 +13,7 @@ use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
-use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
-use vortex_zigzag::ZigZagEncoding;
+use vortex_roaring::RoaringBoolEncoding;
 
 pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
     vec![
@@ -38,8 +37,8 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         //&FFoREncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
-        &RoaringIntEncoding,
-        &ZigZagEncoding,
+        //&RoaringIntEncoding,
+        //&ZigZagEncoding,
     ]
 }
 
@@ -98,10 +97,11 @@ mod test {
 
         let file = File::open(download_taxi_data()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-        let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
+        let _mask = ProjectionMask::roots(builder.parquet_schema(), [9]);
         let reader = builder
             //.with_projection(mask)
-            .with_batch_size(64_000)
+            //.with_batch_size(64_000)
+            .with_batch_size(5_000_000)
             .build()
             .unwrap();
 

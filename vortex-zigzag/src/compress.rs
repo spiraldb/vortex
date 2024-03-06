@@ -4,7 +4,7 @@ use crate::downcast::DowncastZigzag;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
-use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::error::VortexResult;
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
@@ -13,17 +13,17 @@ use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 use crate::zigzag::{ZigZagArray, ZigZagEncoding};
 
 impl EncodingCompression for ZigZagEncoding {
-    fn compressor(
+    fn can_compress(
         &self,
         array: &dyn Array,
         _config: &CompressConfig,
-    ) -> Option<&'static Compressor> {
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let parray = array.maybe_primitive()?;
 
         // Only supports signed integers
         if !parray.ptype().is_signed_int() {
-            return None;
+            return Some(self);
         }
 
         // Only compress if the array has negative values
@@ -31,27 +31,28 @@ impl EncodingCompression for ZigZagEncoding {
         parray
             .stats()
             .get_or_compute_cast::<i64>(&Stat::Min)
-            .filter(|min| min < &0)
-            .map(|_| &(zigzag_compressor as Compressor))
+            .filter(|&min| min < 0)
+            .map(|_| self)
     }
-}
 
-fn zigzag_compressor(
-    array: &dyn Array,
-    like: Option<&dyn Array>,
-    ctx: CompressCtx,
-) -> VortexResult<ArrayRef> {
-    let zigzag_like = like.map(|like_arr| like_arr.as_zigzag());
-    let encoded = match ArrayKind::from(array) {
-        ArrayKind::Primitive(p) => zigzag_encode(p),
-        _ => unreachable!("This array kind should have been filtered out"),
-    };
+    fn compress(
+        &self,
+        array: &dyn Array,
+        like: Option<&dyn Array>,
+        ctx: CompressCtx,
+    ) -> VortexResult<ArrayRef> {
+        let zigzag_like = like.map(|like_arr| like_arr.as_zigzag());
+        let encoded = match ArrayKind::from(array) {
+            ArrayKind::Primitive(p) => zigzag_encode(p),
+            _ => unreachable!("This array kind should have been filtered out"),
+        };
 
-    Ok(ZigZagArray::new(
-        ctx.next_level()
-            .compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded()))?,
-    )
-    .boxed())
+        Ok(ZigZagArray::new(
+            ctx.next_level()
+                .compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded()))?,
+        )
+        .boxed())
+    }
 }
 
 pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {

@@ -7,11 +7,9 @@ use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
 use allocator_api2::alloc::Allocator;
-use arrow::alloc::ALIGNMENT as ARROW_ALIGNMENT;
 use arrow::array::{make_array, ArrayData, AsArray};
 use arrow::buffer::{Buffer, NullBuffer, ScalarBuffer};
 use linkme::distributed_slice;
-use log::debug;
 
 use crate::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
@@ -52,13 +50,6 @@ impl PrimitiveArray {
         } else {
             DType::from(ptype)
         };
-
-        if buffer.as_ptr().align_offset(ARROW_ALIGNMENT) != 0 {
-            debug!(
-                "Arrow buffer is not aligned to {} bytes and thus may require a copy to realign.",
-                ARROW_ALIGNMENT
-            );
-        }
 
         Ok(Self {
             buffer,

@@ -1,11 +1,9 @@
-use log::debug;
-
 use crate::alp::ALPFloat;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::error::{VortexError, VortexResult};
 use vortex::ptype::{NativePType, PType};
 
@@ -14,55 +12,58 @@ use crate::downcast::DowncastALP;
 use crate::Exponents;
 
 impl EncodingCompression for ALPEncoding {
-    fn compressor(
+    fn can_compress(
         &self,
         array: &dyn Array,
         _config: &CompressConfig,
-    ) -> Option<&'static Compressor> {
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
-            debug!("Skipping ALP: not primitive");
             return None;
         };
 
         // Only supports f32 and f64
         if !matches!(parray.ptype(), PType::F32 | PType::F64) {
-            debug!("Skipping ALP: only supports f32 and f64");
             return None;
         }
 
-        Some(&(alp_compressor as Compressor))
+        Some(self)
     }
-}
 
-fn alp_compressor(
-    array: &dyn Array,
-    like: Option<&dyn Array>,
-    ctx: CompressCtx,
-) -> VortexResult<ArrayRef> {
-    let like_alp = like.map(|like_array| like_array.as_alp());
+    fn compress(
+        &self,
+        array: &dyn Array,
+        like: Option<&dyn Array>,
+        ctx: CompressCtx,
+    ) -> VortexResult<ArrayRef> {
+        let like_alp = like.map(|like_array| like_array.as_alp());
 
-    // TODO(ngates): fill forward nulls
-    let parray = array.as_primitive();
+        // TODO(ngates): fill forward nulls
+        let parray = array.as_primitive();
 
-    let (exponents, encoded, patches) = match parray.ptype() {
-        PType::F32 => encode_to_array(parray.typed_data::<f32>(), like_alp.map(|a| a.exponents())),
-        PType::F64 => encode_to_array(parray.typed_data::<f64>(), like_alp.map(|a| a.exponents())),
-        _ => panic!("Unsupported ptype"),
-    };
+        let (exponents, encoded, patches) = match parray.ptype() {
+            PType::F32 => {
+                encode_to_array(parray.typed_data::<f32>(), like_alp.map(|a| a.exponents()))
+            }
+            PType::F64 => {
+                encode_to_array(parray.typed_data::<f64>(), like_alp.map(|a| a.exponents()))
+            }
+            _ => panic!("Unsupported ptype"),
+        };
 
-    let compressed_encoded = ctx
-        .next_level()
-        .compress(encoded.as_ref(), like_alp.map(|a| a.encoded()))?;
+        let compressed_encoded = ctx
+            .next_level()
+            .compress(encoded.as_ref(), like_alp.map(|a| a.encoded()))?;
 
-    let compressed_patches = patches
-        .map(|p| {
-            ctx.next_level()
-                .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
-        })
-        .transpose()?;
+        let compressed_patches = patches
+            .map(|p| {
+                ctx.next_level()
+                    .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
+            })
+            .transpose()?;
 
-    Ok(ALPArray::new(compressed_encoded, exponents, compressed_patches).boxed())
+        Ok(ALPArray::new(compressed_encoded, exponents, compressed_patches).boxed())
+    }
 }
 
 fn encode_to_array<T>(

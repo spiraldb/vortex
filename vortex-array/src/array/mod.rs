@@ -138,7 +138,7 @@ impl Display for EncodingId {
 pub trait Encoding: Debug + Send + Sync + 'static {
     fn id(&self) -> &EncodingId;
 
-    /// Implementation of the array compression trait
+    /// Whether this encoding provides a compressor.
     fn compression(&self) -> Option<&dyn EncodingCompression> {
         None
     }
@@ -146,6 +146,12 @@ pub trait Encoding: Debug + Send + Sync + 'static {
     /// Array serialization
     fn serde(&self) -> Option<&dyn EncodingSerde> {
         None
+    }
+}
+
+impl Display for dyn Encoding {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.id())
     }
 }
 
