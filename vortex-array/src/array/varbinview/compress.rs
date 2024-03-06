@@ -3,6 +3,7 @@ use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use crate::error::VortexResult;
+use itertools::Itertools;
 use std::ops::Deref;
 
 impl EncodingCompression for VarBinViewEncoding {

@@ -55,10 +55,12 @@ fn alp_compressor(
         .next_level()
         .compress(encoded.as_ref(), like_alp.map(|a| a.encoded()))?;
 
-    let compressed_patches = patches.map(|p| {
-        ctx.next_level()
-            .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))?
-    });
+    let compressed_patches = patches
+        .map(|p| {
+            ctx.next_level()
+                .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
+        })
+        .transpose()?;
 
     Ok(ALPArray::new(compressed_encoded, exponents, compressed_patches).boxed())
 }

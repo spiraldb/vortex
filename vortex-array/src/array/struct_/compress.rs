@@ -3,6 +3,7 @@ use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use crate::error::VortexResult;
+use itertools::Itertools;
 use std::ops::Deref;
 
 impl EncodingCompression for StructEncoding {
