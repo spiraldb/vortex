@@ -46,6 +46,7 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
 #[cfg(test)]
 mod test {
     use arrow_array::RecordBatchReader;
+    use itertools::Itertools;
     use std::collections::HashSet;
     use std::fs::create_dir_all;
     use std::fs::File;
@@ -56,7 +57,8 @@ mod test {
     use parquet::arrow::ProjectionMask;
     use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 
-    use vortex::array::ArrayRef;
+    use vortex::array::chunked::ChunkedArray;
+    use vortex::array::{Array, ArrayRef};
     use vortex::compress::{CompressConfig, CompressCtx};
 
     use crate::enumerate_arrays;
@@ -96,26 +98,42 @@ mod test {
         let file = File::open(download_taxi_data()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
         let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
-        let mut reader = builder
+        let reader = builder
             //.with_projection(mask)
-            .with_batch_size(200_000_000)
+            .with_batch_size(64_000)
             .build()
             .unwrap();
 
-        let array = ArrayRef::try_from((&mut reader) as &mut dyn RecordBatchReader).unwrap();
+        // let array = ArrayRef::try_from((&mut reader) as &mut dyn RecordBatchReader).unwrap();
         let cfg = CompressConfig::new(
             HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
             HashSet::default(),
         );
         println!("Compression config {cfg:?}");
-        let compressed = CompressCtx::new(&cfg)
-            .compress(array.as_ref(), None)
-            .unwrap();
+        let ctx = CompressCtx::new(&cfg);
+
+        let schema = reader.schema();
+        let mut uncompressed_size = 0;
+        let chunks = reader
+            .into_iter()
+            .map(|batch_result| batch_result.unwrap())
+            .map(|batch| ArrayRef::from(batch))
+            .map(|array| {
+                uncompressed_size += array.nbytes();
+                ctx.compress(array.as_ref(), None).unwrap()
+            })
+            .collect_vec();
+
+        let compressed = ChunkedArray::new(chunks, schema.try_into().unwrap()).boxed();
+
+        // let compressed = CompressCtx::new(&cfg)
+        //     .compress(array.as_ref(), None)
+        //     .unwrap();
         println!("Compressed array {compressed}");
         println!(
             "NBytes {}, Ratio {}",
             compressed.nbytes(),
-            compressed.nbytes() as f32 / array.nbytes() as f32
+            compressed.nbytes() as f32 / uncompressed_size as f32
         );
     }
 }

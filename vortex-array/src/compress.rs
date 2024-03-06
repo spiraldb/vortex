@@ -2,7 +2,7 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
-use log::debug;
+use log::{debug, warn};
 use once_cell::sync::Lazy;
 
 use crate::array::chunked::ChunkedArray;
@@ -11,9 +11,19 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, ENCODINGS};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
-use crate::error::{VortexError, VortexResult};
+use crate::error::VortexResult;
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
+
+pub trait ArrayCompression<'a>
+where
+    &'a dyn Array: From<&'a Self>,
+    Self: 'static,
+{
+    fn compress(&'a self, ctx: CompressCtx) -> VortexResult<ArrayRef> {
+        sampled_compression(self.into(), ctx)
+    }
+}
 
 pub trait EncodingCompression {
     fn compressor(&self, array: &dyn Array, config: &CompressConfig)
@@ -40,8 +50,8 @@ impl Default for CompressConfig {
         // TODO(ngates): we should ensure that sample_size * sample_count <= block_size
         Self {
             block_size: 65536,
-            sample_size: 1024,
-            sample_count: 10,
+            sample_size: 128,
+            sample_count: 8,
             max_depth: 4,
             ree_average_run_threshold: 2.0,
             encodings: HashSet::new(),
@@ -131,19 +141,16 @@ impl<'a> CompressCtx<'a> {
                 .encoding()
                 .compression()
                 .and_then(|c| c.compressor(arr, self.options))
+                .map(|compressor| compressor(arr, Some(l), self.clone()))
+                .transpose()?
                 .unwrap_or_else(|| {
-                    debug!(
+                    warn!(
                         "Cannot encoding {} like {}, no compressors found",
                         arr.encoding().id(),
-                        arr.encoding().id()
+                        l.encoding().id()
                     );
                     dyn_clone::clone_box(arr)
-                }
-                //.and_then(|compressor| compressor(arr, Some(l), self.clone()).ok())
-                // .unwrap_or_else(|| dyn_clone::clone_box(arr)));
-            .ok_or(VortexError::ComputeError(
-                "No compressors for like array".into(),
-            ))?(arr, like, self.clone());
+                }));
         }
 
         // Otherwise, fall back to sampled compression
@@ -251,10 +258,10 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
     best_sample
         .map(|s| {
             println!(
-                "Compressing array with dtype: {} and encoding: {}, using: {}",
+                "Compressing array with dtype: {} and encoding: {}, like: {}",
                 array.dtype(),
                 array.encoding().id(),
-                s.encoding().id()
+                s
             );
             ctx.next_level().compress(array, Some(s.as_ref()))
         })
