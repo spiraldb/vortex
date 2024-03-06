@@ -7,6 +7,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::{ListScalarVec, NullableScalar, Scalar, ScalarRef};
@@ -42,7 +43,11 @@ impl EncodingCompression for FFoREncoding {
 // lightweight encodings for integers, as the output is essentially an array
 // of opaque bytes. At that point, the only available schemes are general-purpose
 // compression algorithms, which we would apply at the file level instead (if at all)
-fn ffor_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+fn ffor_compressor(
+    array: &dyn Array,
+    like: Option<&dyn Array>,
+    ctx: CompressCtx,
+) -> VortexResult<ArrayRef> {
     let like_ffor = like.map(|like_array| like_array.as_ffor());
     let parray = array.as_primitive();
 
@@ -56,18 +61,20 @@ fn ffor_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx
         min_val
     };
 
-    FFORArray::new(
+    Ok(FFORArray::new(
         encoded,
         parray.validity().clone_optional(),
-        patches.map(|p| {
-            ctx.next_level()
-                .compress(p.as_ref(), like_ffor.and_then(|lf| lf.patches()))
-        }),
+        patches
+            .map(|p| {
+                ctx.next_level()
+                    .compress(p.as_ref(), like_ffor.and_then(|lf| lf.patches()))
+            })
+            .transpose()?,
         min_val,
         num_bits,
         parray.len(),
     )
-    .boxed()
+    .boxed())
 }
 
 pub fn ffor_encode(parray: &PrimitiveArray) -> FFORArray {

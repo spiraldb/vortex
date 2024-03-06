@@ -7,7 +7,6 @@ use arrow::buffer::{BooleanBuffer, NullBuffer};
 use linkme::distributed_slice;
 
 use crate::arrow::CombineChunks;
-use crate::compress::EncodingCompression;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, Nullability};
 use crate::error::VortexResult;
@@ -20,7 +19,6 @@ use super::{
     EncodingId, EncodingRef, ENCODINGS,
 };
 
-mod compress;
 mod compute;
 mod serde;
 mod stats;
@@ -164,10 +162,6 @@ static ENCODINGS_BOOL: EncodingRef = &BoolEncoding;
 impl Encoding for BoolEncoding {
     fn id(&self) -> &EncodingId {
         &Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {

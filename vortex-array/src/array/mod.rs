@@ -139,10 +139,14 @@ pub trait Encoding: Debug + Send + Sync + 'static {
     fn id(&self) -> &EncodingId;
 
     /// Implementation of the array compression trait
-    fn compression(&self) -> Option<&dyn EncodingCompression>;
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        None
+    }
 
     /// Array serialization
-    fn serde(&self) -> Option<&dyn EncodingSerde>;
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
+        None
+    }
 }
 
 pub type EncodingRef = &'static dyn Encoding;

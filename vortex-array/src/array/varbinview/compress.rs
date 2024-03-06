@@ -2,7 +2,8 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
-use rayon::prelude::*;
+use crate::error::VortexResult;
+use std::ops::Deref;
 
 impl EncodingCompression for VarBinViewEncoding {
     fn compressor(
@@ -10,11 +11,7 @@ impl EncodingCompression for VarBinViewEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &Self::ID {
-            Some(&(varbinview_compressor as Compressor))
-        } else {
-            None
-        }
+        (array.encoding().id() == &Self::ID).then_some(&(varbinview_compressor as Compressor))
     }
 }
 
@@ -22,36 +19,36 @@ fn varbinview_compressor(
     array: &dyn Array,
     like: Option<&dyn Array>,
     ctx: CompressCtx,
-) -> ArrayRef {
+) -> VortexResult<ArrayRef> {
     let varbinview_array = array.as_varbinview();
     let varbinview_like = like.map(|like_array| like_array.as_varbinview());
 
-    VarBinViewArray::new(
+    Ok(VarBinViewArray::new(
         // TODO(robert): Can we compress views? Not right now
         dyn_clone::clone_box(varbinview_array.views()),
-        varbinview_like
-            .map(|vbvlike| {
-                varbinview_array
-                    .data()
-                    .par_iter()
-                    .zip_eq(vbvlike.data())
-                    .map(|(d, dlike)| ctx.compress(d.as_ref(), Some(dlike.as_ref())))
-                    .collect()
+        varbinview_array
+            .data()
+            .iter()
+            .enumerate()
+            .map(|(i, d)| {
+                ctx.compress(
+                    d.as_ref(),
+                    varbinview_like
+                        .and_then(|v| v.data().get(i))
+                        .map(Deref::deref),
+                )
             })
-            .unwrap_or_else(|| {
-                varbinview_array
-                    .data()
-                    .par_iter()
-                    .map(|d| ctx.compress(d.as_ref(), None))
-                    .collect()
-            }),
+            .try_collect()?,
         array.dtype().clone(),
-        varbinview_array.validity().map(|v| {
-            ctx.compress(
-                v.as_ref(),
-                varbinview_like.and_then(|vbvlike| vbvlike.validity()),
-            )
-        }),
+        varbinview_array
+            .validity()
+            .map(|v| {
+                ctx.compress(
+                    v.as_ref(),
+                    varbinview_like.and_then(|vbvlike| vbvlike.validity()),
+                )
+            })
+            .transpose()?,
     )
-    .boxed()
+    .boxed())
 }

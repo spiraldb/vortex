@@ -19,7 +19,6 @@ use crate::array::{
     EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::arrow::CombineChunks;
-use crate::compress::EncodingCompression;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::DType;
 use crate::error::VortexResult;
@@ -28,7 +27,6 @@ use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
-mod compress;
 mod compute;
 mod serde;
 mod stats;
@@ -251,10 +249,6 @@ static ENCODINGS_PRIMITIVE: EncodingRef = &PrimitiveEncoding;
 impl Encoding for PrimitiveEncoding {
     fn id(&self) -> &EncodingId {
         &Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {

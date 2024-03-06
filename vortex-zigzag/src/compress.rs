@@ -36,18 +36,22 @@ impl EncodingCompression for ZigZagEncoding {
     }
 }
 
-fn zigzag_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+fn zigzag_compressor(
+    array: &dyn Array,
+    like: Option<&dyn Array>,
+    ctx: CompressCtx,
+) -> VortexResult<ArrayRef> {
     let zigzag_like = like.map(|like_arr| like_arr.as_zigzag());
     let encoded = match ArrayKind::from(array) {
         ArrayKind::Primitive(p) => zigzag_encode(p),
         _ => unreachable!("This array kind should have been filtered out"),
     };
 
-    ZigZagArray::new(
+    Ok(ZigZagArray::new(
         ctx.next_level()
-            .compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded())),
+            .compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded()))?,
     )
-    .boxed()
+    .boxed())
 }
 
 pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {

@@ -6,6 +6,7 @@ use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
 use vortex::dtype::DType;
 use vortex::dtype::Nullability::NonNullable;
+use vortex::error::VortexResult;
 
 use crate::boolean::{RoaringBoolArray, RoaringBoolEncoding};
 
@@ -33,8 +34,12 @@ impl EncodingCompression for RoaringBoolEncoding {
     }
 }
 
-fn roaring_compressor(array: &dyn Array, _like: Option<&dyn Array>, _ctx: CompressCtx) -> ArrayRef {
-    roaring_encode(array.as_bool()).boxed()
+fn roaring_compressor(
+    array: &dyn Array,
+    _like: Option<&dyn Array>,
+    _ctx: CompressCtx,
+) -> VortexResult<ArrayRef> {
+    Ok(roaring_encode(array.as_bool()).boxed())
 }
 
 pub fn roaring_encode(bool_array: &BoolArray) -> RoaringBoolArray {

@@ -5,6 +5,7 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::stats::Stat;
 
@@ -39,7 +40,11 @@ impl EncodingCompression for FoREncoding {
     }
 }
 
-fn for_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+fn for_compressor(
+    array: &dyn Array,
+    like: Option<&dyn Array>,
+    ctx: CompressCtx,
+) -> VortexResult<ArrayRef> {
     let parray = array.as_primitive();
 
     let child = match_each_integer_ptype!(parray.ptype(), |$T| {
@@ -56,11 +61,9 @@ fn for_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
     let compressed_child = ctx.compress(
         child.as_ref(),
         like.map(|l| l.as_any().downcast_ref::<FoRArray>().unwrap().child()),
-    );
+    )?;
     let reference = parray.stats().get(&Stat::Min).unwrap();
-    FoRArray::try_new(compressed_child, reference)
-        .unwrap()
-        .boxed()
+    Ok(FoRArray::try_new(compressed_child, reference)?.boxed())
 }
 
 #[cfg(test)]
