@@ -225,7 +225,7 @@ fn dict_encode_typed_varbin<O, K, V, U>(
     validity: Option<&dyn Array>,
 ) -> (PrimitiveArray, VarBinArray)
 where
-    O: NativePType + Unsigned + FromPrimitive,
+    O: NativePType + Unsigned + FromPrimitive + AsPrimitive<usize>,
     K: NativePType + Unsigned + FromPrimitive + AsPrimitive<usize>,
     V: Fn(usize) -> U,
     U: AsRef<[u8]>,
@@ -242,7 +242,7 @@ where
         let byte_ref = byte_val.as_ref();
         let value_hash = hasher.hash_one(byte_ref);
         let raw_entry = lookup_dict.raw_entry_mut().from_hash(value_hash, |idx| {
-            byte_ref == value_lookup(idx.as_()).as_ref()
+            byte_ref == bytes_at_primitive(offsets.as_slice(), bytes.as_slice(), idx.as_())
         });
 
         let code: K = match raw_entry {
@@ -252,7 +252,11 @@ where
                 bytes.extend_from_slice(byte_ref);
                 offsets.push(<O as FromPrimitive>::from_usize(bytes.len()).unwrap());
                 vac.insert_with_hasher(value_hash, next_code, (), |idx| {
-                    hasher.hash_one(value_lookup(idx.as_()).as_ref())
+                    hasher.hash_one(bytes_at_primitive(
+                        offsets.as_slice(),
+                        bytes.as_slice(),
+                        idx.as_(),
+                    ))
                 });
                 next_code
             }
@@ -272,6 +276,7 @@ where
 
 #[cfg(test)]
 mod test {
+    use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
@@ -358,5 +363,20 @@ mod test {
             String::from_utf8(values.bytes_at(3).unwrap()).unwrap(),
             "again"
         );
+    }
+
+    #[test]
+    fn repeated_values() {
+        let arr = VarBinArray::from(vec!["a", "a", "b", "b", "a", "b", "a", "b"]);
+        let (codes, values) = dict_encode_varbin(&arr);
+        assert_eq!(
+            values.bytes().as_primitive().typed_data::<u8>(),
+            "ab".as_bytes()
+        );
+        assert_eq!(
+            values.offsets().as_primitive().typed_data::<u32>(),
+            &[0, 1, 2]
+        );
+        assert_eq!(codes.typed_data::<u8>(), &[0u8, 0, 1, 1, 0, 1, 0, 1]);
     }
 }
