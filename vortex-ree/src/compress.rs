@@ -60,14 +60,14 @@ pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     match_each_native_ptype!(array.ptype(), |$P| {
         let (ends, values) = ree_encode_primitive(array.typed_data::<$P>());
 
-        let compressed_values = PrimitiveArray::from_vec(values);
+        let compressed_values = PrimitiveArray::from(values);
         compressed_values.stats().set(Stat::IsConstant, false.into());
         compressed_values.stats().set(Stat::RunCount, compressed_values.len().into());
         compressed_values.stats().set_many(&array.stats(), vec![
             &Stat::Min, &Stat::Max, &Stat::IsSorted, &Stat::IsStrictSorted,
         ]);
 
-        let compressed_ends = PrimitiveArray::from_vec(ends);
+        let compressed_ends = PrimitiveArray::from(ends);
         compressed_ends.stats().set(Stat::IsSorted, true.into());
         compressed_ends.stats().set(Stat::IsStrictSorted, true.into());
         compressed_ends.stats().set(Stat::IsConstant, false.into());
@@ -140,7 +140,7 @@ mod test {
 
     #[test]
     fn encode() {
-        let arr = PrimitiveArray::from_vec(vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3]);
+        let arr = PrimitiveArray::from(vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3]);
         let (ends, values) = ree_encode(&arr);
 
         assert_eq!(ends.typed_data::<u64>(), vec![2, 5, 10]);
@@ -149,8 +149,8 @@ mod test {
 
     #[test]
     fn decode() {
-        let ends = PrimitiveArray::from_vec(vec![2, 5, 10]);
-        let values = PrimitiveArray::from_vec(vec![1i32, 2, 3]);
+        let ends = PrimitiveArray::from(vec![2, 5, 10]);
+        let values = PrimitiveArray::from(vec![1i32, 2, 3]);
         let decoded = ree_decode(&ends, &values, None).unwrap();
 
         assert_eq!(

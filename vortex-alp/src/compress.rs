@@ -71,11 +71,11 @@ where
     let len = values.len();
     (
         exponents,
-        PrimitiveArray::from_vec(values).boxed(),
+        PrimitiveArray::from(values).boxed(),
         (!exc.is_empty()).then(|| {
             SparseArray::new(
-                PrimitiveArray::from_vec(exc_pos).boxed(),
-                PrimitiveArray::from_vec(exc).boxed(),
+                PrimitiveArray::from(exc_pos).boxed(),
+                PrimitiveArray::from(exc).boxed(),
                 len,
             )
             .boxed()
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_compress() {
-        let array = PrimitiveArray::from_vec(vec![1.234f32; 1025]);
+        let array = PrimitiveArray::from(vec![1.234f32; 1025]);
         let encoded = alp_encode(&array).unwrap();
         println!("Encoded {:?}", encoded);
         assert!(encoded.patches().is_none());

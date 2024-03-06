@@ -15,6 +15,6 @@ fn alp_compress<T: ALPFloat>(n: usize) -> (Exponents, Vec<T::ALPInt>, Vec<u64>, 
 // TODO(ngates): remove this
 #[divan::bench(args = [100_000, 10_000_000])]
 fn alp_compress_array(n: usize) -> ArrayRef {
-    let array = PrimitiveArray::from_vec(vec![1.234f64; n]);
+    let array = PrimitiveArray::from(vec![1.234f64; n]);
     ALPArray::encode(&array).unwrap()
 }
