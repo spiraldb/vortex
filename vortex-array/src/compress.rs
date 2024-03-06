@@ -173,7 +173,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
             );
         let (_, compressed_sample) = sampling_result?;
 
-        return compressed_sample
+        return Ok(compressed_sample
             .map(|s| {
                 debug!(
                     "Compressed small array with dtype: {} and encoding: {}, using: {}",
@@ -181,9 +181,9 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
                     array.encoding().id(),
                     s.encoding().id()
                 );
-                Ok(s)
+                s
             })
-            .unwrap_or_else(|| Ok(dyn_clone::clone_box(array)));
+            .unwrap_or_else(|| dyn_clone::clone_box(array)));
     }
 
     // Otherwise, take the sample and try each compressor on it.
@@ -212,7 +212,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
     best_sample
         .map(|s| {
             debug!(
-                "Compressed sample with dtype: {} and encoding: {}, using: {}",
+                "Compressing array with dtype: {} and encoding: {}, using: {}",
                 array.dtype(),
                 array.encoding().id(),
                 s.encoding().id()
