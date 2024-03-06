@@ -1,8 +1,6 @@
 [workspace]
 members = [
     "bench-vortex",
-    "codecz",
-    "codecz-sys",
     "fastlanez-sys",
     "pyvortex",
     "vortex-array",
@@ -10,7 +8,6 @@ members = [
     "vortex-alp",
     "vortex-dict",
     "vortex-fastlanes",
-    "vortex-ffor",
     "vortex-ree",
     "vortex-roaring",
     "vortex-zigzag",

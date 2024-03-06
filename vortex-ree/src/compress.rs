@@ -123,7 +123,7 @@ pub fn ree_decode(
     })
 }
 
-fn ree_decode_primitive<T: NativePType>(run_ends: &[u64], values: &[T]) -> Vec<T> {
+pub fn ree_decode_primitive<T: NativePType>(run_ends: &[u64], values: &[T]) -> Vec<T> {
     let mut decoded = Vec::with_capacity(run_ends.last().map(|x| *x as usize).unwrap_or(0_usize));
     for (&end, &value) in run_ends.iter().zip_eq(values) {
         decoded.extend(std::iter::repeat(value).take(end as usize - decoded.len()));
