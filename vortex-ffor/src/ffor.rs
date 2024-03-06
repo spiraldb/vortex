@@ -13,7 +13,7 @@ use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::scalar::{Scalar, ScalarRef};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stats, StatsSet};
+use vortex::stats::{Stats, StatsCompute, StatsSet};
 
 use crate::compress::ffor_encode;
 
@@ -167,6 +167,8 @@ impl Array for FFORArray {
         self
     }
 }
+
+impl StatsCompute for FFORArray {}
 
 impl ArrayCompute for FFORArray {}
 

@@ -23,7 +23,7 @@ use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::ptype::NativePType;
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stat, Stats, StatsSet};
+use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 
 use crate::compress::ree_encode;
 
@@ -217,6 +217,8 @@ impl Array for REEArray {
         self
     }
 }
+
+impl StatsCompute for REEArray {}
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {

@@ -13,7 +13,7 @@ use crate::dtype::{DType, FieldNames};
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
+use crate::stats::{Stats, StatsCompute, StatsSet};
 
 use super::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
@@ -23,7 +23,6 @@ use super::{
 mod compress;
 mod compute;
 mod serde;
-mod stats;
 
 #[derive(Debug, Clone)]
 pub struct StructArray {
@@ -166,6 +165,8 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for StructArray {
         self
     }
 }
+
+impl StatsCompute for StructArray {}
 
 #[derive(Debug)]
 pub struct StructEncoding;

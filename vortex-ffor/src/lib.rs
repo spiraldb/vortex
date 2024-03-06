@@ -7,7 +7,6 @@ mod compress;
 mod downcast;
 mod ffor;
 mod serde;
-mod stats;
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_FFOR: EncodingRef = &FFoREncoding;

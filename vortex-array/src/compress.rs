@@ -131,7 +131,7 @@ impl Default for CompressCtx<'_> {
 
 pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<ArrayRef> {
     // First, we try constant compression and shortcut any sampling.
-    if array.len() > 0
+    if !array.is_empty()
         && array
             .stats()
             .get_or_compute_as::<bool>(&Stat::IsConstant)

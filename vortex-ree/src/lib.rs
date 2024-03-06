@@ -8,7 +8,6 @@ mod compute;
 mod downcast;
 mod ree;
 mod serde;
-mod stats;
 
 #[distributed_slice(ENCODINGS)]
 static ENCODINGS_REE: EncodingRef = &REEEncoding;

@@ -93,7 +93,7 @@ mod test {
         // Create a range offset by a million
         let array = PrimitiveArray::from_vec((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
 
-        let compressed = ctx.compress(&array, None);
+        let compressed = ctx.compress(&array, None).unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
         let fa = compressed.as_any().downcast_ref::<FoRArray>().unwrap();
         assert_eq!(fa.reference().try_into(), Ok(1_000_000u32));
