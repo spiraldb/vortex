@@ -95,7 +95,6 @@ pub fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::alp::Exponents;
 
     #[test]
     fn test_compress() {
