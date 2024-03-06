@@ -193,14 +193,10 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ChunkedArray {
 
 impl ArrayDisplay for ChunkedArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln("chunks:")?;
-        f.indent(|indent| {
-            for chunk in self.chunks() {
-                indent
-                    .new_total_size(chunk.nbytes(), |new_total| new_total.array(chunk.as_ref()))?;
-            }
-            Ok(())
-        })
+        for (i, c) in self.chunks().iter().enumerate() {
+            f.child(&format!("{}", i), c.as_ref())?
+        }
+        Ok(())
     }
 }
 

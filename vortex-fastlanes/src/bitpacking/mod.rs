@@ -150,12 +150,10 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for BitPackedArray {
 
 impl ArrayDisplay for BitPackedArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("packed: u{}", self.bit_width()))?;
-        if let Some(p) = self.patches() {
-            f.writeln("patches:")?;
-            f.indent(|indent| indent.array(p.as_ref()))?;
-        }
-        f.array(self.encoded())
+        f.property("packed", format!("u{}", self.bit_width()))?;
+        f.child("encoded", self.encoded())?;
+        f.maybe_child("patches", self.patches())?;
+        f.maybe_child("validity", self.validity())
     }
 }
 

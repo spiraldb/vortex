@@ -116,8 +116,8 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for FoRArray {
 
 impl ArrayDisplay for FoRArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("reference: {}", self.reference))?;
-        f.indent(|indent| indent.array(self.child()))
+        f.property("reference", self.reference())?;
+        f.child("shifted", self.child())
     }
 }
 

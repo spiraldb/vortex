@@ -294,7 +294,7 @@ impl<T: NativePType> FromIterator<Option<T>> for PrimitiveArray {
 impl ArrayDisplay for PrimitiveArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         match_each_native_ptype!(self.ptype(), |$P| {
-            f.writeln(format!("{:?}{}",
+            f.property("values", format!("{:?}{}",
                 &self.buffer().typed_data::<$P>()[..min(10, self.len())],
                 if self.len() > 10 { "..." } else { "" }))
         })

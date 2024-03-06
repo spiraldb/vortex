@@ -116,8 +116,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ZigZagArray {
 
 impl ArrayDisplay for ZigZagArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln("zigzag:")?;
-        f.indent(|indent| indent.array(self.encoded.as_ref()))
+        f.child("zigzag", self.encoded())
     }
 }
 
