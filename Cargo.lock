@@ -560,35 +560,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98cc8fbded0c607b7ba9dd60cd98df59af97e84d24e49c8557331cfc26d301ce"
 
 [[package]]
-name = "codecz"
-version = "0.1.0"
-dependencies = [
- "arrow-buffer",
- "codecz-sys",
- "criterion",
- "enum-display",
- "half",
- "itertools 0.12.1",
- "num-traits",
- "paste",
- "rand",
- "rand_chacha",
- "safe-transmute",
- "thiserror",
- "vortex-alloc",
-]
-
-[[package]]
-name = "codecz-sys"
-version = "0.1.0"
-dependencies = [
- "bindgen",
- "safe-transmute",
- "vortex-alloc",
- "walkdir",
-]
-
-[[package]]
 name = "condtype"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -612,15 +583,6 @@ dependencies = [
  "getrandom",
  "once_cell",
  "tiny-keccak",
-]
-
-[[package]]
-name = "convert_case"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
-dependencies = [
- "unicode-segmentation",
 ]
 
 [[package]]
@@ -808,26 +770,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7268b386296a025e474d5140678f75d6de9493ae55a5d709eeb9dd08149945e1"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "enum-display"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02058bb25d8d0605829af88230427dd5cd50661590bd2b09d1baf7c64c417f24"
-dependencies = [
- "enum-display-macro",
-]
-
-[[package]]
-name = "enum-display-macro"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4be2cf2fe7b971b1865febbacd4d8df544aa6bd377cca011a6d69dcf4c60d94"
-dependencies = [
- "convert_case",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -2099,7 +2041,6 @@ dependencies = [
  "vortex-array",
  "vortex-dict",
  "vortex-fastlanes",
- "vortex-ffor",
  "vortex-ree",
  "vortex-roaring",
  "vortex-zigzag",
@@ -2306,12 +2247,6 @@ name = "ryu"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e86697c916019a8588c99b5fac3cead74ec0b4b819707a682fd4d23fa0ce1ba1"
-
-[[package]]
-name = "safe-transmute"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98a01dab6acf992653be49205bdd549f32f17cb2803e8eacf1560bf97259aae8"
 
 [[package]]
 name = "same-file"
@@ -2809,12 +2744,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "unicode-segmentation"
-version = "1.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4c87d22b6e3f4a18d4d40ef354e97c90fcb14dd91d7dc0aa9d8a1172ebf7202"
-
-[[package]]
 name = "unindent"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2910,7 +2839,6 @@ dependencies = [
  "vortex-array",
  "vortex-dict",
  "vortex-fastlanes",
- "vortex-ffor",
  "vortex-ree",
  "vortex-roaring",
  "vortex-zigzag",
@@ -2942,23 +2870,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "vortex-ffor"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "codecz",
- "itertools 0.12.1",
- "linkme",
- "log",
- "vortex-array",
-]
-
-[[package]]
 name = "vortex-ree"
 version = "0.1.0"
 dependencies = [
  "arrow",
- "codecz",
  "half",
  "itertools 0.12.1",
  "linkme",
