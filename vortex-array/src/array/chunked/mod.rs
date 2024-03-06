@@ -10,14 +10,12 @@ use crate::array::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
     ENCODINGS,
 };
-use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
-mod compress;
 mod compute;
 mod serde;
 mod stats;
@@ -217,10 +215,6 @@ static ENCODINGS_CHUNKED: EncodingRef = &ChunkedEncoding;
 impl Encoding for ChunkedEncoding {
     fn id(&self) -> &EncodingId {
         &Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {

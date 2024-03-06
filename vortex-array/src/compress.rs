@@ -1,10 +1,13 @@
+use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
 use log::debug;
 use once_cell::sync::Lazy;
 
+use crate::array::chunked::ChunkedArray;
 use crate::array::constant::{ConstantArray, ConstantEncoding};
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, ENCODINGS};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
@@ -99,16 +102,38 @@ impl<'a> CompressCtx<'a> {
             return Ok(dyn_clone::clone_box(arr));
         }
 
+        if like.is_some() && like.unwrap().maybe_chunked().is_some() {
+            panic!("Canot compress like chunked")
+        }
+
+        // If we're compressing a chunked array, compress each chunk like the given array.
+        if let Some(chunked) = arr.maybe_chunked() {
+            return Ok(ChunkedArray::new(
+                chunked
+                    .chunks()
+                    .into_iter()
+                    .map(|c| self.compress((*c).as_ref(), like))
+                    .try_collect()?,
+                chunked.dtype().clone(),
+            )
+            .boxed());
+        }
+
         // Attempt to compress using the "like" array, otherwise fall back to sampled compression
-        match like {
-            Some(l) => l
+        if let Some(l) = like {
+            return Ok(l
                 .encoding()
                 .compression()
                 .and_then(|c| c.compressor(arr, self.options))
-                .map(|compressor| compressor(arr, like, self.clone()))
-                .unwrap_or_else(|| Ok(dyn_clone::clone_box(arr))),
-            None => sampled_compression(arr, self.clone()),
+                .and_then(|compressor| compressor(arr, Some(l), self.clone()).ok())
+                .unwrap_or_else(|| dyn_clone::clone_box(arr)));
+            // .ok_or(VortexError::ComputeError(
+            //     "No compressors for like array".into(),
+            // ))?(arr, like, self.clone());
         }
+
+        // Otherwise, fall back to sampled compression
+        sampled_compression(arr, self.clone())
     }
 
     pub fn next_level(&self) -> Self {
@@ -211,7 +236,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
 
     best_sample
         .map(|s| {
-            debug!(
+            println!(
                 "Compressing array with dtype: {} and encoding: {}, using: {}",
                 array.dtype(),
                 array.encoding().id(),

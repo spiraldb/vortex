@@ -6,16 +6,16 @@ use hashbrown::HashMap;
 use log::debug;
 use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
 
-use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::compute::cast::cast_primitive;
 use vortex::compute::scalar_at::scalar_at;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::match_each_native_ptype;
-use vortex::ptype::NativePType;
+use vortex::ptype::{NativePType, PType};
 use vortex::scalar::AsBytes;
 
 use crate::dict::{DictArray, DictEncoding};
@@ -135,6 +135,7 @@ fn dict_encode_typed_primitive<
     )
 }
 
+#[allow(unused_macros)]
 // TODO(robert): Estimation of offsets array width could be better if we had average size and distinct count
 macro_rules! dict_encode_offsets_codes {
     ($bytes_len:expr, $offsets_len:expr, | $_1:tt $codes:ident, $_2:tt $offsets:ident | $($body:tt)*) => ({
@@ -165,43 +166,58 @@ macro_rules! dict_encode_offsets_codes {
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying
 pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
-    if let Some(bytes) = array.bytes().maybe_primitive() {
-        let bytes = bytes.buffer().typed_data::<u8>();
-        return if let Some(offsets) = array.offsets().maybe_primitive() {
-            match_each_native_ptype!(offsets.ptype(), |$P| {
-                let offsets = offsets.buffer().typed_data::<$P>();
+    let offsets_array = cast_primitive(array.offsets(), &PType::U64).unwrap();
+    let offsets = offsets_array.typed_data::<u64>();
+    let data_array = cast_primitive(array.bytes(), &PType::U8).unwrap();
+    let data = data_array.typed_data::<u8>();
 
-                dict_encode_offsets_codes!(bytes.len(), array.offsets().len(), |$O, $C| {
-                    dict_encode_typed_varbin::<$O, $C, _, &[u8]>(
-                        array.dtype().clone(),
-                        |idx| bytes_at_primitive(offsets, bytes, idx),
-                        array.len(),
-                        array.validity()
-                    )
-                })
-            })
-        } else {
-            dict_encode_offsets_codes!(bytes.len(), array.offsets().len(), |$O, $C| {
-                dict_encode_typed_varbin::<$O, $C, _, &[u8]>(
-                    array.dtype().clone(),
-                    |idx| bytes_at(array.offsets(), bytes, idx),
-                    array.len(),
-                    array.validity()
-                )
-            })
-        };
-    }
+    dict_encode_typed_varbin::<u64, u64, &[u8]>(
+        array.dtype().clone(),
+        offsets,
+        data,
+        array.len(),
+        None,
+    )
 
-    dict_encode_offsets_codes!(array.bytes().len(), array.offsets().len(), |$O, $C| {
-        dict_encode_typed_varbin::<$O, $C, _, Vec<u8>>(
-            array.dtype().clone(),
-            |idx| array.bytes_at(idx).unwrap(),
-            array.len(),
-            array.validity()
-        )
-    })
+    // if let Some(bytes) = array.bytes().maybe_primitive() {
+    //     let bytes = bytes.buffer().typed_data::<u8>();
+    //     return if let Some(offsets) = array.offsets().maybe_primitive() {
+    //         match_each_native_ptype!(offsets.ptype(), |$P| {
+    //             let offsets = offsets.buffer().typed_data::<$P>();
+    //
+    //             dict_encode_offsets_codes!(bytes.len(), array.offsets().len(), |$O, $C| {
+    //                 dict_encode_typed_varbin::<$O, $C, _, &[u8]>(
+    //                     array.dtype().clone(),
+    //                     |idx| bytes_at_primitive(offsets, bytes, idx),
+    //                     array.len(),
+    //                     array.validity()
+    //                 )
+    //             })
+    //         })
+    //     } else {
+    //         dict_encode_offsets_codes!(bytes.len(), array.offsets().len(), |$O, $C| {
+    //             dict_encode_typed_varbin::<$O, $C, _, &[u8]>(
+    //                 array.dtype().clone(),
+    //                 |idx| bytes_at(array.offsets(), bytes, idx),
+    //                 array.len(),
+    //                 array.validity()
+    //             )
+    //         })
+    //     };
+    // }
+    //
+    // dict_encode_offsets_codes!(array.bytes().len(), array.offsets().len(), |$O, $C| {
+    //     dict_encode_typed_varbin::<$O, $C, _, Vec<u8>>(
+    //         array.dtype().clone(),
+    //         |idx| array.bytes_at(idx).unwrap(),
+    //         array.len(),
+    //         array.validity()
+    //     )
+    // })
 }
 
+#[allow(dead_code)]
+#[inline(always)]
 fn bytes_at_primitive<'a, T: NativePType + AsPrimitive<usize>>(
     offsets: &'a [T],
     bytes: &'a [u8],
@@ -212,49 +228,49 @@ fn bytes_at_primitive<'a, T: NativePType + AsPrimitive<usize>>(
     &bytes[begin..end]
 }
 
+#[allow(dead_code)]
 fn bytes_at<'a>(offsets: &'a dyn Array, bytes: &'a [u8], idx: usize) -> &'a [u8] {
     let start: usize = scalar_at(offsets, idx).unwrap().try_into().unwrap();
     let stop: usize = scalar_at(offsets, idx + 1).unwrap().try_into().unwrap();
     &bytes[start..stop]
 }
 
-fn dict_encode_typed_varbin<O, K, V, U>(
+fn dict_encode_typed_varbin<O, K, U>(
     dtype: DType,
-    value_lookup: V,
+    prim_offsets: &[O],
+    prim_data: &[u8],
     len: usize,
     validity: Option<&dyn Array>,
 ) -> (PrimitiveArray, VarBinArray)
 where
-    O: NativePType + Unsigned + FromPrimitive,
+    O: NativePType + Unsigned + FromPrimitive + AsPrimitive<usize>,
     K: NativePType + Unsigned + FromPrimitive + AsPrimitive<usize>,
-    V: Fn(usize) -> U,
     U: AsRef<[u8]>,
 {
     let hasher = RandomState::new();
-    let mut lookup_dict: HashMap<K, (), ()> = HashMap::with_hasher(());
+    let mut lookup_dict: HashMap<usize, (), ()> = HashMap::with_hasher(());
     let mut codes: Vec<K> = Vec::with_capacity(len);
     let mut bytes: Vec<u8> = Vec::new();
     let mut offsets: Vec<O> = Vec::new();
     offsets.push(O::zero());
 
     for i in 0..len {
-        let byte_val = value_lookup(i);
-        let byte_ref = byte_val.as_ref();
-        let value_hash = hasher.hash_one(byte_ref);
-        let raw_entry = lookup_dict.raw_entry_mut().from_hash(value_hash, |idx| {
-            byte_ref == value_lookup(idx.as_()).as_ref()
+        let byte_val = bytes_at_primitive(prim_offsets, prim_data, i);
+        let value_hash = hasher.hash_one(byte_val);
+        let raw_entry = lookup_dict.raw_entry_mut().from_hash(value_hash, |&idx| {
+            byte_val == bytes_at_primitive(&offsets, &bytes, idx.as_())
         });
 
         let code: K = match raw_entry {
-            RawEntryMut::Occupied(o) => *o.into_key(),
+            RawEntryMut::Occupied(o) => <K as FromPrimitive>::from_usize(*o.into_key()).unwrap(),
             RawEntryMut::Vacant(vac) => {
-                let next_code = <K as FromPrimitive>::from_usize(offsets.len() - 1).unwrap();
-                bytes.extend_from_slice(byte_ref);
+                let next_code = offsets.len() - 1;
+                bytes.extend_from_slice(byte_val);
                 offsets.push(<O as FromPrimitive>::from_usize(bytes.len()).unwrap());
                 vac.insert_with_hasher(value_hash, next_code, (), |idx| {
-                    hasher.hash_one(value_lookup(idx.as_()).as_ref())
+                    hasher.hash_one(bytes_at_primitive(prim_offsets, prim_data, idx.as_()).as_ref())
                 });
-                next_code
+                <K as FromPrimitive>::from_usize(next_code).unwrap()
             }
         };
         codes.push(code)
@@ -275,6 +291,8 @@ mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
+    use vortex::dtype::DType;
+    use vortex::dtype::Nullability::NonNullable;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
 
@@ -309,7 +327,10 @@ mod test {
 
     #[test]
     fn encode_varbin() {
-        let arr = VarBinArray::from(vec!["hello", "world", "hello", "again", "world"]);
+        let arr = VarBinArray::from(
+            vec!["hello", "world", "hello", "again", "world"],
+            DType::Utf8(NonNullable),
+        );
         let (codes, values) = dict_encode_varbin(&arr);
         assert_eq!(codes.buffer().typed_data::<u8>(), &[0, 1, 0, 2, 1]);
         assert_eq!(
