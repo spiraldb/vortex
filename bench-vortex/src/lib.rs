@@ -45,13 +45,12 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
 
 #[cfg(test)]
 mod test {
+    use arrow_array::RecordBatchReader;
     use std::collections::HashSet;
     use std::fs::create_dir_all;
     use std::fs::File;
-    use std::ops::Deref;
     use std::path::Path;
 
-    use arrow_array::RecordBatchReader;
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use parquet::arrow::ProjectionMask;
@@ -59,7 +58,6 @@ mod test {
 
     use vortex::array::ArrayRef;
     use vortex::compress::{CompressConfig, CompressCtx};
-    use vortex::error::{VortexError, VortexResult};
 
     use crate::enumerate_arrays;
 
@@ -98,32 +96,21 @@ mod test {
         let file = File::open(download_taxi_data()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
         let mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
-        let reader = builder
+        let mut reader = builder
             .with_projection(mask)
             .with_batch_size(200_000_000)
             .build()
             .unwrap();
 
-        let _ = reader.schema();
-        // let dtype: DType = schema.try_into().unwrap();
-        let chunks = reader
-            .map(|batch_result| batch_result.map_err(VortexError::from))
-            .map(|batch| batch.map(|b| b.into()))
-            .collect::<VortexResult<Vec<ArrayRef>>>()
-            .unwrap();
-        // let chunked = ChunkedArray::new(chunks, dtype);
-        // println!(
-        //     "{} rows in {} chunks",
-        //     chunked.len(),
-        //     chunked.chunks().len()
-        // );
-        let array = chunks[0].deref();
+        let array = ArrayRef::try_from((&mut reader) as &mut dyn RecordBatchReader).unwrap();
         let cfg = CompressConfig::new(
             HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
             HashSet::default(),
         );
         println!("Compression config {cfg:?}");
-        let compressed = CompressCtx::new(&cfg).compress(array.as_ref(), None);
+        let compressed = CompressCtx::new(&cfg)
+            .compress(array.as_ref(), None)
+            .unwrap();
         println!("Compressed array {compressed}");
         println!(
             "NBytes {}, Ratio {}",

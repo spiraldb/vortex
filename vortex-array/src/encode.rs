@@ -30,6 +30,7 @@ use crate::array::{Array, ArrayRef};
 use crate::arrow::convert::TryIntoDType;
 use crate::ptype::PType;
 use crate::scalar::{NullScalar, Scalar};
+
 impl From<&Buffer> for ArrayRef {
     fn from(value: &Buffer) -> Self {
         PrimitiveArray::new(PType::U8, value.to_owned(), None).boxed()
