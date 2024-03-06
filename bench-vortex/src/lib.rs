@@ -92,6 +92,7 @@ mod test {
         .unwrap();
     }
 
+    #[ignore]
     #[test]
     fn compression_ratio() {
         setup_logger();

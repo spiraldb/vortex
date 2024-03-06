@@ -115,6 +115,6 @@ mod test {
     #[test]
     fn tree_display_primitive() {
         let arr: ArrayRef = (0..100).collect::<Vec<i32>>().into();
-        assert_eq!(display_tree(arr.as_ref()), "root: vortex.primitive(signed_int(32), len=100) nbytes=400 B (100.00%)\n  values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]...\n")
+        assert_eq!(display_tree(arr.as_ref()), "root: vortex.primitive(signed_int(32), len=100) nbytes=400 B (100.00%)\n  values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]...\n  validity: None\n")
     }
 }
