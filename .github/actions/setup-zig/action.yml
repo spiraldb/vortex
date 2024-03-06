@@ -5,9 +5,11 @@ runs:
   steps:
     - name: Zig Version
       id: zig-version
+      shell: bash
       run: echo "version=$(cat .zig-version | tr -d '\n ')" >> $GITHUB_OUTPUT
 
     - name: Setup Zig
+      shell: bash
       run: |
         curl -sL "https://ziglang.org/builds/zig-linux-x86_64-${{ steps.zig-version.outputs.version }}.tar.xz" > ${{ runner.temp }}/zig.tar.xz
         tar -xf ${{ runner.temp }}/zig.tar.xz -C ${{ runner.temp }}

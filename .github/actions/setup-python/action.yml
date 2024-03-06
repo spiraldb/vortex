@@ -16,6 +16,7 @@ runs:
         key: "rye-${{ runner.os }}-${{ inputs.rye-version }}"
 
     - name: Rye Install
+      shell: bash
       run: curl -sSf https://rye-up.com/get | bash
       if: steps.rye-cache.outputs.cache-hit != 'true'
       env:
@@ -23,6 +24,7 @@ runs:
         RYE_INSTALL_OPTION: "--yes"
 
     - name: Rye Shims
+      shell: bash
       run: echo "~/.rye/shims" >> $GITHUB_PATH
 
     - name: Venv Cache
@@ -33,6 +35,7 @@ runs:
         key: "venv-${{ runner.os }}-${{ hashFiles('requirements**.lock') }}"
 
     - name: Rye Sync
+      shell: bash
       # --no-lock prevents resolution of the lock file. The locks are still respected.
       # We always run `rye sync` even if the cache fetch was successful since it builds our Rust extensions for us.
       run: rye sync --no-lock
@@ -40,7 +43,9 @@ runs:
         MATURIN_PEP517_ARGS: "--profile dev"
 
     - name: Export Path
+      shell: bash
       run: echo "PATH=$PATH" >> $GITHUB_ENV
 
     - name: Export PYO3 Path
+      shell: bash
       run: echo "PYO3_PYTHON=./.venv/bin/python" >> $GITHUB_ENV
