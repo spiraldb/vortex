@@ -17,6 +17,7 @@ use vortex::error::VortexResult;
 use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::AsBytes;
+use vortex::stats::Stat;
 
 use crate::dict::{DictArray, DictEncoding};
 use crate::downcast::DowncastDict;
@@ -25,7 +26,7 @@ impl EncodingCompression for DictEncoding {
     fn can_compress(
         &self,
         array: &dyn Array,
-        config: &CompressConfig,
+        _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // TODO(robert): Add support for VarBinView
         if !matches!(
@@ -35,6 +36,17 @@ impl EncodingCompression for DictEncoding {
             debug!("Skipping Dict: not primitive or varbin");
             return None;
         };
+
+        // No point dictionary coding if the array is unique.
+        // We don't have a unique stat yet, but strict-sorted implies unique.
+        if array
+            .stats()
+            .get_or_compute_as(&Stat::IsStrictSorted)
+            .unwrap_or(false)
+        {
+            debug!("Skipping Dict: array is strict_sorted");
+            return None;
+        }
 
         Some(self)
     }

@@ -103,7 +103,7 @@ impl<'a> CompressCtx<'a> {
     pub fn compress(&self, arr: &dyn Array, like: Option<&dyn Array>) -> VortexResult<ArrayRef> {
         debug!(
             "Compressing {} like {} at depth={}",
-            arr.encoding().id(),
+            arr,
             like.map(|l| l.encoding().id().name()).unwrap_or(&"<none>"),
             self.depth
         );
@@ -196,14 +196,9 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
         .iter()
         .filter(|encoding| ctx.options().is_enabled(encoding.id()))
         .filter_map(|encoding| encoding.compression())
-        .filter_map(|compression| {
-            compression.can_compress(array, ctx.options()).or_else(|| {
-                warn!("{}::can_compress failed for {}", compression.id(), array);
-                None
-            })
-        })
+        .filter_map(|compression| compression.can_compress(array, ctx.options()))
         .collect();
-    println!("Candidates for {}:\n    {:?}", array, candidates);
+    debug!("Candidates for {}: {:?}", array, candidates);
 
     if candidates.is_empty() {
         debug!(
@@ -214,8 +209,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
         return Ok(dyn_clone::clone_box(array));
     }
 
-    // FIXME(ngates): <=
-    if array.len() < ctx.options.block_size as usize {
+    if array.len() <= ctx.options.block_size as usize {
         // We're either in a sample or we're operating over a sufficiently small array.
         let sampling_result: VortexResult<(usize, Option<ArrayRef>)> = candidates.iter().try_fold(
             (array.nbytes(), None),

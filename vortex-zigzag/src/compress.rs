@@ -32,7 +32,7 @@ impl EncodingCompression for ZigZagEncoding {
             .stats()
             .get_or_compute_cast::<i64>(&Stat::Min)
             .filter(|&min| min < 0)
-            .map(|_| self)
+            .map(|_| self as &dyn EncodingCompression)
     }
 
     fn compress(

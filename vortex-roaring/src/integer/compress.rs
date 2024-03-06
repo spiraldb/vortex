@@ -54,8 +54,8 @@ impl EncodingCompression for RoaringIntEncoding {
     fn compress(
         &self,
         array: &dyn Array,
-        like: Option<&dyn Array>,
-        ctx: CompressCtx,
+        _like: Option<&dyn Array>,
+        _ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         Ok(roaring_encode(array.as_primitive()).boxed())
     }

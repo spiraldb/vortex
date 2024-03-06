@@ -19,7 +19,7 @@ impl EncodingCompression for BitPackedEncoding {
     fn can_compress(
         &self,
         array: &dyn Array,
-        config: &CompressConfig,
+        _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
@@ -33,9 +33,9 @@ impl EncodingCompression for BitPackedEncoding {
             return None;
         }
 
-        // Check that the min > zero
+        // Check that the min >= zero
         if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? < 0 {
-            debug!("Skipping BitPacking: min is zero");
+            debug!("Skipping BitPacking: min is negative");
             return None;
         }
 
@@ -47,7 +47,7 @@ impl EncodingCompression for BitPackedEncoding {
 
         // Check that the bit width is less than the type's bit width
         if bit_width == parray.ptype().bit_width() {
-            debug!("Skipping BitPacking: bit packing has no effect");
+            debug!("Skipping BitPacking: best == current bit width");
             return None;
         }
 

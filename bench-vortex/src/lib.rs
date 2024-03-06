@@ -100,8 +100,8 @@ mod test {
         let _mask = ProjectionMask::roots(builder.parquet_schema(), [9]);
         let reader = builder
             //.with_projection(mask)
-            //.with_batch_size(64_000)
-            .with_batch_size(5_000_000)
+            .with_batch_size(64_000)
+            //.with_batch_size(5_000_000)
             .build()
             .unwrap();
 

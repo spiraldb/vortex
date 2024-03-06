@@ -23,7 +23,7 @@ impl AsContiguousFn for ChunkedArray {
         // Combine all the chunks into one, then call as_contiguous again.
         let chunks = arrays
             .iter()
-            .flat_map(|a| a.as_chunked().chunks().into_iter())
+            .flat_map(|a| a.as_chunked().chunks().iter())
             .cloned()
             .collect_vec();
         as_contiguous(chunks)

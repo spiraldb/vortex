@@ -6,7 +6,6 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::error::VortexResult;
-use vortex::formatter::display_tree;
 use vortex::match_each_integer_ptype;
 use vortex::stats::Stat;
 
@@ -16,7 +15,7 @@ impl EncodingCompression for FoREncoding {
     fn can_compress(
         &self,
         array: &dyn Array,
-        config: &CompressConfig,
+        _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
@@ -31,10 +30,8 @@ impl EncodingCompression for FoREncoding {
         }
 
         // Nothing for us to do if the min is already zero.
-        #[allow(unused_variables)]
-        let arr = format!("{}", display_tree(array));
         if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? == 0 {
-            debug!("Skipping BitPacking: min is zero");
+            debug!("Skipping FoR: min is zero");
             return None;
         }
 

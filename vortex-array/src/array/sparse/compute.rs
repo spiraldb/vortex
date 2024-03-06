@@ -26,14 +26,14 @@ impl AsContiguousFn for SparseArray {
                 arrays
                     .iter()
                     .map(|a| a.as_sparse().indices())
-                    .map(|a| dyn_clone::clone_box(a))
+                    .map(dyn_clone::clone_box)
                     .collect_vec(),
             )?,
             as_contiguous(
                 arrays
                     .iter()
                     .map(|a| a.as_sparse().values())
-                    .map(|a| dyn_clone::clone_box(a))
+                    .map(dyn_clone::clone_box)
                     .collect_vec(),
             )?,
             arrays.iter().map(|a| a.len()).sum(),
