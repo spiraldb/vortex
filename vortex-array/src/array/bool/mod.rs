@@ -180,7 +180,8 @@ impl ArrayDisplay for BoolArray {
         let true_count = self.stats().get_or_compute_or(0usize, &Stat::TrueCount);
         let false_count = self.len() - true_count;
         f.property("n_true", true_count)?;
-        f.property("n_false", false_count)
+        f.property("n_false", false_count)?;
+        f.maybe_child("validity", self.validity())
     }
 }
 

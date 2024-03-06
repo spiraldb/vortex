@@ -343,7 +343,7 @@ impl ArrayDisplay for VarBinViewArray {
         for (i, d) in self.data().iter().enumerate() {
             f.child(&format!("data_{}", i), d.as_ref())?;
         }
-        Ok(())
+        f.maybe_child("validity", self.validity())
     }
 }
 

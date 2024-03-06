@@ -297,7 +297,8 @@ impl ArrayDisplay for PrimitiveArray {
             f.property("values", format!("{:?}{}",
                 &self.buffer().typed_data::<$P>()[..min(10, self.len())],
                 if self.len() > 10 { "..." } else { "" }))
-        })
+        })?;
+        f.maybe_child("validity", self.validity())
     }
 }
 

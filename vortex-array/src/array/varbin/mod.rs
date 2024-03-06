@@ -321,7 +321,8 @@ impl Encoding for VarBinEncoding {
 impl ArrayDisplay for VarBinArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.child("offsets", self.offsets())?;
-        f.child("bytes", self.bytes())
+        f.child("bytes", self.bytes())?;
+        f.maybe_child("validity", self.validity())
     }
 }
 
