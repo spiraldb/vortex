@@ -13,4 +13,4 @@ runs:
       with:
         name: zig
         url: "https://ziglang.org/builds/zig-linux-x86_64-${{ steps.zig-version.outputs.version }}.tar.xz"
-        pathInArchive: zig
+        pathInArchive: "zig-linux-x86_64-${{ steps.zig-version.outputs.version }}/zig"
