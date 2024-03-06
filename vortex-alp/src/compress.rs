@@ -72,7 +72,7 @@ where
     (
         exponents,
         PrimitiveArray::from_vec(values).boxed(),
-        (exc.len() > 0).then(|| {
+        (!exc.is_empty()).then(|| {
             SparseArray::new(
                 PrimitiveArray::from_vec(exc_pos).boxed(),
                 PrimitiveArray::from_vec(exc).boxed(),
@@ -87,7 +87,7 @@ pub fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
     let (exponents, encoded, patches) = match parray.ptype() {
         PType::F32 => encode_to_array(parray.typed_data::<f32>(), None),
         PType::F64 => encode_to_array(parray.typed_data::<f64>(), None),
-        _ => return Err(VortexError::InvalidPType(parray.ptype().clone())),
+        _ => return Err(VortexError::InvalidPType(*parray.ptype())),
     };
     Ok(ALPArray::new(encoded, exponents, patches))
 }

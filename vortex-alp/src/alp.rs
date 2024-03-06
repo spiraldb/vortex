@@ -107,7 +107,7 @@ impl ALPFloat for f32 {
     const FRACTIONAL_BITS: u8 = 23;
     const MAX_EXPONENT: u8 = 10;
     const SWEET: Self =
-        (1 << Self::FRACTIONAL_BITS) as Self + (1 << Self::FRACTIONAL_BITS - 1) as Self;
+        (1 << Self::FRACTIONAL_BITS) as Self + (1 << (Self::FRACTIONAL_BITS - 1)) as Self;
 
     const F10: &'static [Self] = &[
         1.0,
@@ -142,7 +142,7 @@ impl ALPFloat for f64 {
     const FRACTIONAL_BITS: u8 = 52;
     const MAX_EXPONENT: u8 = 18; // 10^18 is the maximum i64
     const SWEET: Self =
-        (1u64 << Self::FRACTIONAL_BITS) as Self + (1u64 << Self::FRACTIONAL_BITS - 1) as Self;
+        (1u64 << Self::FRACTIONAL_BITS) as Self + (1u64 << (Self::FRACTIONAL_BITS - 1)) as Self;
     const F10: &'static [Self] = &[
         1.0,
         10.0,
