@@ -38,6 +38,7 @@ fn download_taxi_data() -> &'static Path {
 fn compress(array: ArrayRef) -> usize {
     CompressCtx::default()
         .compress(array.as_ref(), None)
+        .unwrap()
         .nbytes()
 }
 
