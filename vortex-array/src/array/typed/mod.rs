@@ -10,12 +10,11 @@ use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
+use crate::stats::{Stats, StatsCompute, StatsSet};
 
 mod compress;
 mod compute;
 mod serde;
-mod stats;
 
 #[derive(Debug, Clone)]
 pub struct TypedArray {
@@ -113,6 +112,8 @@ impl Array for TypedArray {
         self
     }
 }
+
+impl StatsCompute for TypedArray {}
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for TypedArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {

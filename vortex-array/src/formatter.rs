@@ -29,10 +29,11 @@ impl<'a, 'b: 'a> ArrayFormatter<'a, 'b> {
 
     pub fn array(&mut self, array: &dyn Array) -> std::fmt::Result {
         self.writeln(format!(
-            "{}({}), len={}, nbytes={} ({:.2}%)",
+            "{}({}), len={}, nbytes={} ({}) ({:.2}%)",
             array.encoding().id(),
             array.dtype(),
             array.len(),
+            array.nbytes(),
             format_size(array.nbytes(), DECIMAL),
             100f64 * array.nbytes() as f64 / self.total_size as f64
         ))?;

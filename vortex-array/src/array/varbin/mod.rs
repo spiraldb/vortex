@@ -277,14 +277,13 @@ impl Array for VarBinArray {
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
-
         Ok(VarBinArray::new(
             self.offsets.slice(start, stop + 1)?,
             self.bytes.clone(),
             self.dtype.clone(),
             self.validity
                 .as_ref()
-                .map(|v| v.slice(start, stop + 1))
+                .map(|v| v.slice(start, stop))
                 .transpose()?,
         )
         .boxed())

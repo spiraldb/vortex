@@ -45,6 +45,7 @@ impl AsContiguousFn for VarBinArray {
         )?;
 
         let mut offsets = Vec::new();
+        offsets.push(0);
         for a in arrays.iter().map(|a| a.as_varbin()) {
             let first_offset: u64 = a.first_offset()?;
             let offsets_array = cast_primitive(a.offsets(), &PType::U64)?;
@@ -53,6 +54,7 @@ impl AsContiguousFn for VarBinArray {
                 offsets_array
                     .typed_data::<u64>()
                     .iter()
+                    .skip(1) // Ignore the zero offset for each array
                     .map(|o| o + shift - first_offset),
             );
         }

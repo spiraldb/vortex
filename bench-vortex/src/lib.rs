@@ -95,9 +95,9 @@ mod test {
 
         let file = File::open(download_taxi_data()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-        let mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
+        let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
         let mut reader = builder
-            .with_projection(mask)
+            //.with_projection(mask)
             .with_batch_size(200_000_000)
             .build()
             .unwrap();

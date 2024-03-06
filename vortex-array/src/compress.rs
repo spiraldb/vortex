@@ -40,9 +40,9 @@ impl Default for CompressConfig {
         // TODO(ngates): we should ensure that sample_size * sample_count <= block_size
         Self {
             block_size: 65536,
-            sample_size: 64,
+            sample_size: 1024,
             sample_count: 10,
-            max_depth: 4,
+            max_depth: 6,
             ree_average_run_threshold: 2.0,
             encodings: HashSet::new(),
             disabled_encodings: HashSet::new(),

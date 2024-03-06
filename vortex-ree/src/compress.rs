@@ -42,12 +42,8 @@ fn ree_compressor(
     let primitive_array = array.as_primitive();
 
     let (ends, values) = ree_encode(primitive_array);
-    let compressed_ends = ctx
-        .next_level()
-        .compress(ends.as_ref(), ree_like.map(|ree| ree.ends()))?;
-    let compressed_values = ctx
-        .next_level()
-        .compress(values.as_ref(), ree_like.map(|ree| ree.values()))?;
+    let compressed_ends = ctx.compress(ends.as_ref(), ree_like.map(|ree| ree.ends()))?;
+    let compressed_values = ctx.compress(values.as_ref(), ree_like.map(|ree| ree.values()))?;
 
     Ok(REEArray::new(
         compressed_ends,
