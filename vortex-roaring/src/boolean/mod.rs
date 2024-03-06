@@ -126,7 +126,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for RoaringBoolArray {
 
 impl ArrayDisplay for RoaringBoolArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.indent(|indent| indent.writeln(format!("{:?}", self.bitmap())))
+        f.property("bitmap", format!("{:?}", self.bitmap()))
     }
 }
 

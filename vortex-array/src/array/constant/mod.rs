@@ -111,7 +111,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ConstantArray {
 
 impl ArrayDisplay for ConstantArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("{}", self.scalar()))
+        f.property("scalar", self.scalar())
     }
 }
 

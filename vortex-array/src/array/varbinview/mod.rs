@@ -339,15 +339,11 @@ impl Encoding for VarBinViewEncoding {
 
 impl ArrayDisplay for VarBinViewArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln("views:")?;
-        f.indent(|ind| ind.array(self.views()))?;
-        f.writeln("data:")?;
-        f.indent(|ind| {
-            for d in self.data() {
-                ind.array(d.as_ref())?;
-            }
-            Ok(())
-        })
+        f.child("views", self.views())?;
+        for (i, d) in self.data().iter().enumerate() {
+            f.child(&format!("data_{}", i), d.as_ref())?;
+        }
+        f.maybe_child("validity", self.validity())
     }
 }
 

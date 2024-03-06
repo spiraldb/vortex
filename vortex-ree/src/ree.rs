@@ -247,10 +247,8 @@ impl Encoding for REEEncoding {
 
 impl ArrayDisplay for REEArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln("values:")?;
-        f.indent(|indented| indented.array(self.values()))?;
-        f.writeln("ends:")?;
-        f.indent(|indented| indented.array(self.ends()))
+        f.child("values", self.values())?;
+        f.child("ends", self.ends())
     }
 }
 

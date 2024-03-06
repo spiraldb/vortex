@@ -60,6 +60,7 @@ mod test {
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::{Array, ArrayRef};
     use vortex::compress::{CompressConfig, CompressCtx};
+    use vortex::formatter::display_tree;
 
     use crate::enumerate_arrays;
 
@@ -129,7 +130,7 @@ mod test {
         // let compressed = CompressCtx::new(&cfg)
         //     .compress(array.as_ref(), None)
         //     .unwrap();
-        println!("Compressed array {compressed}");
+        println!("Compressed array {}", display_tree(compressed.as_ref()));
         println!(
             "NBytes {}, Ratio {}",
             compressed.nbytes(),

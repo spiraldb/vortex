@@ -18,7 +18,7 @@ use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
-use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::formatter::ArrayDisplay;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::Stats;
 
@@ -187,6 +187,12 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
 
 impl Display for dyn Array {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        ArrayFormatter::new(f, "".to_string(), self.nbytes()).array(self)
+        write!(
+            f,
+            "{}({}, len={})",
+            self.encoding().id(),
+            self.dtype(),
+            self.len()
+        )
     }
 }

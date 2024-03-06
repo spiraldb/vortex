@@ -199,11 +199,9 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for SparseArray {
 
 impl ArrayDisplay for SparseArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("offset: {}", self.indices_offset()))?;
-        f.writeln("indices:")?;
-        f.indent(|indented| indented.array(self.indices()))?;
-        f.writeln("values:")?;
-        f.indent(|indented| indented.array(self.values()))
+        f.property("offset", self.indices_offset())?;
+        f.child("indices", self.indices())?;
+        f.child("values", self.values())
     }
 }
 
