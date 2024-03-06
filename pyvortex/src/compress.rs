@@ -4,6 +4,7 @@ use pyo3::{pyclass, pyfunction, pymethods, Py, PyResult, Python};
 use vortex::compress::{CompressConfig, CompressCtx};
 
 use crate::array::PyArray;
+use crate::error::PyVortexError;
 
 #[derive(Clone)]
 #[pyclass(name = "CompressConfig", module = "vortex")]
@@ -33,6 +34,8 @@ pub fn compress(
 ) -> PyResult<Py<PyArray>> {
     let compress_opts = opts.map(|o| o.inner).unwrap_or_default();
     let ctx = CompressCtx::new(&compress_opts);
-    let compressed = py.allow_threads(|| ctx.compress(arr.unwrap(), None));
+    let compressed = py
+        .allow_threads(|| ctx.compress(arr.unwrap(), None))
+        .map_err(PyVortexError::map_err)?;
     PyArray::wrap(py, compressed)
 }

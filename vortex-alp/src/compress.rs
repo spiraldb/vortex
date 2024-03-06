@@ -35,7 +35,11 @@ impl EncodingCompression for ALPEncoding {
     }
 }
 
-fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+fn alp_compressor(
+    array: &dyn Array,
+    like: Option<&dyn Array>,
+    ctx: CompressCtx,
+) -> VortexResult<ArrayRef> {
     let like_alp = like.map(|like_array| like_array.as_alp());
 
     // TODO(ngates): fill forward nulls
@@ -49,14 +53,16 @@ fn alp_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx)
 
     let compressed_encoded = ctx
         .next_level()
-        .compress(encoded.as_ref(), like_alp.map(|a| a.encoded()));
+        .compress(encoded.as_ref(), like_alp.map(|a| a.encoded()))?;
 
-    let compressed_patches = patches.map(|p| {
-        ctx.next_level()
-            .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
-    });
+    let compressed_patches = patches
+        .map(|p| {
+            ctx.next_level()
+                .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
+        })
+        .transpose()?;
 
-    ALPArray::new(compressed_encoded, exponents, compressed_patches).boxed()
+    Ok(ALPArray::new(compressed_encoded, exponents, compressed_patches).boxed())
 }
 
 fn encode_to_array<T>(

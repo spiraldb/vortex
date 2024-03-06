@@ -21,12 +21,11 @@ use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_arrow_numeric_type;
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
+use crate::stats::{Stats, StatsCompute, StatsSet};
 
 mod compress;
 mod compute;
 mod serde;
-mod stats;
 
 #[derive(Debug, Clone)]
 pub struct SparseArray {
@@ -189,6 +188,8 @@ impl Array for SparseArray {
         self
     }
 }
+
+impl StatsCompute for SparseArray {}
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for SparseArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {

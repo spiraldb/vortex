@@ -9,6 +9,7 @@ use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompress
 use vortex::dtype::DType;
 use vortex::dtype::Nullability::NonNullable;
 use vortex::dtype::Signedness::Unsigned;
+use vortex::error::VortexResult;
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
 
@@ -55,8 +56,8 @@ fn roaring_int_compressor(
     array: &dyn Array,
     _like: Option<&dyn Array>,
     _ctx: CompressCtx,
-) -> ArrayRef {
-    roaring_encode(array.as_primitive()).boxed()
+) -> VortexResult<ArrayRef> {
+    Ok(roaring_encode(array.as_primitive()).boxed())
 }
 
 pub fn roaring_encode(primitive_array: &PrimitiveArray) -> RoaringIntArray {

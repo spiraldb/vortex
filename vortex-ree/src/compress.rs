@@ -33,27 +33,32 @@ impl EncodingCompression for REEEncoding {
     }
 }
 
-fn ree_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+fn ree_compressor(
+    array: &dyn Array,
+    like: Option<&dyn Array>,
+    ctx: CompressCtx,
+) -> VortexResult<ArrayRef> {
     let ree_like = like.map(|like_arr| like_arr.as_ree());
     let primitive_array = array.as_primitive();
 
     let (ends, values) = ree_encode(primitive_array);
     let compressed_ends = ctx
         .next_level()
-        .compress(ends.as_ref(), ree_like.map(|ree| ree.ends()));
+        .compress(ends.as_ref(), ree_like.map(|ree| ree.ends()))?;
     let compressed_values = ctx
         .next_level()
-        .compress(values.as_ref(), ree_like.map(|ree| ree.values()));
+        .compress(values.as_ref(), ree_like.map(|ree| ree.values()))?;
 
-    REEArray::new(
+    Ok(REEArray::new(
         compressed_ends,
         compressed_values,
         primitive_array
             .validity()
-            .map(|v| ctx.compress(v, ree_like.and_then(|r| r.validity()))),
+            .map(|v| ctx.compress(v, ree_like.and_then(|r| r.validity())))
+            .transpose()?,
         array.len(),
     )
-    .boxed()
+    .boxed())
 }
 
 pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {

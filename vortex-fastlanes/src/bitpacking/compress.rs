@@ -7,6 +7,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
@@ -55,7 +56,11 @@ impl EncodingCompression for BitPackedEncoding {
     }
 }
 
-fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+fn bitpacked_compressor(
+    array: &dyn Array,
+    like: Option<&dyn Array>,
+    ctx: CompressCtx,
+) -> VortexResult<ArrayRef> {
     let parray = array.as_primitive();
     let bit_width_freq = parray
         .stats()
@@ -79,27 +84,27 @@ fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: Compre
 
     let validity = parray
         .validity()
-        .map(|v| ctx.compress(v.as_ref(), like_bp.and_then(|bp| bp.validity())));
+        .map(|v| ctx.compress(v.as_ref(), like_bp.and_then(|bp| bp.validity())))
+        .transpose()?;
 
     let patches = if num_exceptions > 0 {
         Some(ctx.compress(
             bitpack_patches(parray, bit_width, num_exceptions).as_ref(),
             like_bp.and_then(|bp| bp.patches()),
-        ))
+        )?)
     } else {
         None
     };
 
-    return BitPackedArray::try_new(
+    Ok(BitPackedArray::try_new(
         packed,
         validity,
         patches,
         bit_width,
         parray.dtype().clone(),
         parray.len(),
-    )
-    .unwrap()
-    .boxed();
+    )?
+    .boxed())
 }
 
 fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
@@ -219,10 +224,12 @@ mod test {
         );
         let ctx = CompressCtx::new(&cfg);
 
-        let compressed = ctx.compress(
-            &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
-            None,
-        );
+        let compressed = ctx
+            .compress(
+                &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
+                None,
+            )
+            .unwrap();
         assert_eq!(compressed.encoding().id(), BitPackedEncoding.id());
         let bp = compressed
             .as_any()

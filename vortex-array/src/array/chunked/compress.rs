@@ -1,8 +1,11 @@
+use itertools::Itertools;
+use std::ops::Deref;
+
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
-use itertools::Itertools;
+use crate::error::VortexResult;
 
 impl EncodingCompression for ChunkedEncoding {
     fn compressor(
@@ -10,34 +13,29 @@ impl EncodingCompression for ChunkedEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&'static Compressor> {
-        if array.encoding().id() == &Self::ID {
-            Some(&(chunked_compressor as Compressor))
-        } else {
-            None
-        }
+        (array.encoding().id() == &Self::ID).then_some(&(chunked_compressor as Compressor))
     }
 }
 
-fn chunked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
+fn chunked_compressor(
+    array: &dyn Array,
+    like: Option<&dyn Array>,
+    ctx: CompressCtx,
+) -> VortexResult<ArrayRef> {
     let chunked_array = array.as_chunked();
     let chunked_like = like.map(|like_array| like_array.as_chunked());
 
-    let compressed_chunks = chunked_like
-        .map(|c_like| {
-            chunked_array
-                .chunks()
-                .iter()
-                .zip_eq(c_like.chunks())
-                .map(|(chunk, chunk_like)| ctx.compress(chunk.as_ref(), Some(chunk_like.as_ref())))
-                .collect()
+    let compressed_chunks = chunked_array
+        .chunks()
+        .iter()
+        .enumerate()
+        .map(|(i, chunk)| {
+            let like_chunk = chunked_like
+                .and_then(|c_like| c_like.chunks().get(i))
+                .map(Deref::deref);
+            ctx.compress(chunk.deref(), like_chunk)
         })
-        .unwrap_or_else(|| {
-            chunked_array
-                .chunks()
-                .iter()
-                .map(|chunk| ctx.compress(chunk.as_ref(), None))
-                .collect()
-        });
+        .try_collect()?;
 
-    ChunkedArray::new(compressed_chunks, array.dtype().clone()).boxed()
+    Ok(ChunkedArray::new(compressed_chunks, array.dtype().clone()).boxed())
 }

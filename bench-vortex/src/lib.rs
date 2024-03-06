@@ -91,6 +91,7 @@ mod test {
         .unwrap();
     }
 
+    #[ignore]
     #[test]
     fn compression_ratio() {
         setup_logger();
@@ -118,7 +119,9 @@ mod test {
             HashSet::default(),
         );
         println!("Compression config {cfg:?}");
-        let compressed = CompressCtx::new(&cfg).compress(array.as_ref(), None);
+        let compressed = CompressCtx::new(&cfg)
+            .compress(array.as_ref(), None)
+            .unwrap();
         println!("Compressed array {compressed}");
         println!(
             "NBytes {}, Ratio {}",

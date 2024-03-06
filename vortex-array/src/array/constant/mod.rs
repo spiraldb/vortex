@@ -9,7 +9,6 @@ use crate::array::{
     ENCODINGS,
 };
 use crate::arrow::compute::repeat;
-use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -17,7 +16,6 @@ use crate::scalar::{Scalar, ScalarRef};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
-mod compress;
 mod compute;
 mod serde;
 mod stats;
@@ -130,10 +128,6 @@ static ENCODINGS_CONSTANT: EncodingRef = &ConstantEncoding;
 impl Encoding for ConstantEncoding {
     fn id(&self) -> &EncodingId {
         &Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
