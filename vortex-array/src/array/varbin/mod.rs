@@ -136,8 +136,8 @@ impl VarBinArray {
         }
 
         VarBinArray::new(
-            PrimitiveArray::from_vec(offsets).boxed(),
-            PrimitiveArray::from_vec(values).boxed(),
+            PrimitiveArray::from(offsets).boxed(),
+            PrimitiveArray::from(values).boxed(),
             dtype,
             None,
         )
@@ -165,8 +165,8 @@ impl VarBinArray {
             }
         }
 
-        let offsets_ref = PrimitiveArray::from_vec(offsets).boxed();
-        let bytes_ref = PrimitiveArray::from_vec(bytes).boxed();
+        let offsets_ref = PrimitiveArray::from(offsets).boxed();
+        let bytes_ref = PrimitiveArray::from(bytes).boxed();
         if validity.is_empty() {
             VarBinArray::new(offsets_ref, bytes_ref, dtype, None)
         } else {
@@ -387,12 +387,12 @@ mod test {
     use crate::dtype::{DType, Nullability};
 
     fn binary_array() -> VarBinArray {
-        let values = PrimitiveArray::from_vec(
+        let values = PrimitiveArray::from(
             "hello worldhello world this is a long string"
                 .as_bytes()
                 .to_vec(),
         );
-        let offsets = PrimitiveArray::from_vec(vec![0, 11, 44]);
+        let offsets = PrimitiveArray::from(vec![0, 11, 44]);
 
         VarBinArray::new(
             offsets.boxed(),

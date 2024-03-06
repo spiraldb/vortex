@@ -43,7 +43,7 @@ fn bool_as_contiguous(arrays: Vec<&BoolArray>) -> VortexResult<BoolArray> {
                 .map(|a| {
                     a.validity()
                         .clone_optional()
-                        .unwrap_or_else(|| BoolArray::from(vec![true; a.len()]).boxed())
+                        .unwrap_or_else(|| vec![true; a.len()].into())
                 })
                 .collect(),
         )?)
@@ -77,7 +77,7 @@ fn primitive_as_contiguous(arrays: Vec<&PrimitiveArray>) -> VortexResult<Primiti
                 .map(|a| {
                     a.validity()
                         .clone_optional()
-                        .unwrap_or_else(|| BoolArray::from(vec![true; a.len()]).boxed())
+                        .unwrap_or_else(|| vec![true; a.len()].into())
                 })
                 .collect(),
         )?)

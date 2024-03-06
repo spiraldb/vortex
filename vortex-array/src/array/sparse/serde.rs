@@ -39,7 +39,7 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = SparseArray::new(
-            PrimitiveArray::from_vec(vec![7u64, 37, 71, 97]).boxed(),
+            vec![7u64, 37, 71, 97].into(),
             PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]).boxed(),
             100,
         );

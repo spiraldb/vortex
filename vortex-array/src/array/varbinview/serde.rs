@@ -45,8 +45,7 @@ mod test {
     use crate::serde::test::roundtrip_array;
 
     fn binary_array() -> VarBinViewArray {
-        let values =
-            PrimitiveArray::from_vec("hello world this is a long string".as_bytes().to_vec());
+        let values = PrimitiveArray::from("hello world this is a long string".as_bytes().to_vec());
         let view1 = BinaryView {
             inlined: Inlined::new("hello world"),
         };
@@ -58,7 +57,7 @@ mod test {
                 offset: 0,
             },
         };
-        let view_arr = PrimitiveArray::from_vec(
+        let view_arr = PrimitiveArray::from(
             vec![view1.to_le_bytes(), view2.to_le_bytes()]
                 .into_iter()
                 .flatten()

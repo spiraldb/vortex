@@ -195,6 +195,12 @@ impl From<Vec<bool>> for BoolArray {
     }
 }
 
+impl From<Vec<bool>> for ArrayRef {
+    fn from(values: Vec<bool>) -> Self {
+        BoolArray::from(values).boxed()
+    }
+}
+
 impl FromIterator<Option<bool>> for BoolArray {
     fn from_iter<I: IntoIterator<Item = Option<bool>>>(iter: I) -> Self {
         let iter = iter.into_iter();

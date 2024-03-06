@@ -52,7 +52,7 @@ mod test {
                 Arc::new("nullable".to_string()),
             ],
             vec![
-                PrimitiveArray::from_vec(vec![7u8, 37, 71, 97]).boxed(),
+                vec![7u8, 37, 71, 97].into(),
                 PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]).boxed(),
             ],
         );
