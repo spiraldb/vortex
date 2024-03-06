@@ -140,12 +140,9 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ALPArray {
 
 impl ArrayDisplay for ALPArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln(format!("exponents: {:?}", self.exponents()))?;
-        if let Some(p) = self.patches() {
-            f.writeln("patches:")?;
-            f.indent(|indent| indent.array(p.as_ref()))?;
-        }
-        f.indent(|indent| indent.array(self.encoded()))
+        f.property("exponents", format!("{:?}", self.exponents()))?;
+        f.child("encoded", self.encoded())?;
+        f.maybe_child("patches", self.patches())
     }
 }
 

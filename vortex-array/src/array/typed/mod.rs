@@ -146,7 +146,7 @@ impl Encoding for TypedEncoding {
 
 impl ArrayDisplay for TypedArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.indent(|indented| indented.array(self.untyped_array()))
+        f.child("untyped", self.untyped_array())
     }
 }
 

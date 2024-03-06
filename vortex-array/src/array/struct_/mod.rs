@@ -198,8 +198,7 @@ impl ArrayDisplay for StructArray {
             unreachable!()
         };
         for (name, field) in n.iter().zip(self.fields()) {
-            f.writeln(format!("{}:", &**name))?;
-            f.indent(|indented| indented.array(field.as_ref()))?;
+            f.child(name, field.as_ref())?;
         }
         Ok(())
     }

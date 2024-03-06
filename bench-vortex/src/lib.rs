@@ -60,6 +60,7 @@ mod test {
     use vortex::compress::{CompressConfig, CompressCtx};
     use vortex::dtype::DType;
     use vortex::error::{VortexError, VortexResult};
+    use vortex::formatter::display_tree;
 
     use crate::enumerate_arrays;
 
@@ -114,6 +115,9 @@ mod test {
             chunked.chunks().len()
         );
         let array = chunked.boxed();
+
+        println!("{}", display_tree(array.as_ref()));
+
         let cfg = CompressConfig::new(
             HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
             HashSet::default(),
