@@ -8,9 +8,9 @@ runs:
       shell: bash
       run: echo "version=$(cat .zig-version | tr -d '\n ')" >> $GITHUB_OUTPUT
 
-    - name: Zig Setup
-      uses: engineerd/configurator@v0.0.9
-      with:
-        name: zig
-        url: "https://ziglang.org/builds/zig-linux-x86_64-${{ steps.zig-version.outputs.version }}.tar.xz"
-        pathInArchive: "zig-linux-x86_64-${{ steps.zig-version.outputs.version }}/zig"
+    - name: Setup Zig
+      shell: bash
+      run: |
+        curl -sL "https://ziglang.org/builds/zig-linux-x86_64-${{ steps.zig-version.outputs.version }}.tar.xz" > ${{ runner.temp }}/zig.tar.xz
+        tar -xf ${{ runner.temp }}/zig.tar.xz -C ${{ runner.temp }}
+        echo "PATH=${{ runner.temp }}/zig-linux-x86_64-${{ steps.zig-version.outputs.version }}:$PATH" >> $GITHUB_ENV
