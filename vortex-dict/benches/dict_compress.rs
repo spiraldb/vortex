@@ -44,8 +44,8 @@ fn dict_encode_varbin(arr: &VarBinArray) -> usize {
 }
 
 fn dict_encode(c: &mut Criterion) {
-    let primitive_arr = gen_primitive_dict(1_000_000, 0.05);
-    let varbin_arr = gen_varbin_dict(1_000_000, 0.05);
+    let primitive_arr = gen_primitive_dict(1_000_000, 0.00005);
+    let varbin_arr = gen_varbin_dict(1_000_000, 0.00005);
 
     c.bench_function("dict_encode_primitives", |b| {
         b.iter(|| black_box(dict_encode_primitive(&primitive_arr)));

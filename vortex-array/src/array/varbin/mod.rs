@@ -17,7 +17,7 @@ use crate::array::{
     EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::arrow::CombineChunks;
-use crate::compute::scalar_at::{scalar_at, usize_at};
+use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -193,10 +193,11 @@ impl VarBinArray {
     pub fn iter_primitive(&self) -> VortexResult<VarBinPrimitiveIter> {
         self.bytes()
             .maybe_primitive()
+            .zip(self.offsets().maybe_primitive())
             .ok_or_else(|| {
                 VortexError::ComputeError("Bytes array was not a primitive array".into())
             })
-            .map(|b| VarBinPrimitiveIter::new(b.typed_data::<u8>(), self.offsets()))
+            .map(|(b, o)| VarBinPrimitiveIter::new(b.typed_data::<u8>(), o))
     }
 
     pub fn iter(&self) -> VarBinIter {
@@ -204,8 +205,8 @@ impl VarBinArray {
     }
 
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
-        let start = usize_at(self.offsets(), index)?;
-        let end = usize_at(self.offsets(), index + 1)?;
+        let start = scalar_at(self.offsets(), index)?.try_into()?;
+        let end = scalar_at(self.offsets(), index + 1)?.try_into()?;
         let sliced = self.bytes().slice(start, end)?;
         let arr_ref = sliced.iter_arrow().combine_chunks();
         Ok(arr_ref.as_primitive::<UInt8Type>().values().to_vec())
