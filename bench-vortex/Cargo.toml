@@ -31,7 +31,6 @@ log = "0.4.20"
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports"] }
 simplelog = { version = "0.12.1", features = ["paris"] }
-rand = "0.8.5"
 
 [[bench]]
 name = "compress_benchmark"

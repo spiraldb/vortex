@@ -26,8 +26,8 @@ fn cast<T: NativePType>(array: &PrimitiveArray) -> VortexResult<Vec<T>> {
             .typed_data::<$E>()
             .iter()
             // TODO(ngates): allow configurable checked/unchecked casting
-            .map(|v| {
-                T::from(*v).ok_or_else(|| {
+            .map(|&v| {
+                T::from(v).ok_or_else(|| {
                     VortexError::ComputeError(format!("Failed to cast {} to {:?}", v, T::PTYPE).into())
                 })
             })

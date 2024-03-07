@@ -6,11 +6,12 @@ use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::buffer::NullBuffer;
 use arrow::datatypes::UInt8Type;
 use linkme::distributed_slice;
-use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
+use num_traits::{FromPrimitive, Unsigned};
 
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
+use crate::array::varbin::values_iter::{VarBinIter, VarBinPrimitiveIter};
 use crate::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
     EncodingId, EncodingRef, ENCODINGS,
@@ -20,7 +21,6 @@ use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
@@ -28,6 +28,7 @@ use crate::stats::{Stats, StatsSet};
 mod compute;
 mod serde;
 mod stats;
+mod values_iter;
 
 #[derive(Debug, Clone)]
 pub struct VarBinArray {
@@ -189,20 +190,23 @@ impl VarBinArray {
         }
     }
 
-    pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
-        // check_index_bounds(self, index)?;
-
-        let (start, end): (usize, usize) = if let Some(p) = self.offsets.maybe_primitive() {
-            match_each_native_ptype!(p.ptype(), |$P| {
-                let buf = p.buffer().typed_data::<$P>();
-                (buf[index].as_(), buf[index + 1].as_())
+    pub fn iter_primitive(&self) -> VortexResult<VarBinPrimitiveIter> {
+        self.bytes()
+            .maybe_primitive()
+            .zip(self.offsets().maybe_primitive())
+            .ok_or_else(|| {
+                VortexError::ComputeError("Bytes array was not a primitive array".into())
             })
-        } else {
-            (
-                scalar_at(self.offsets(), index)?.try_into()?,
-                scalar_at(self.offsets(), index + 1)?.try_into()?,
-            )
-        };
+            .map(|(b, o)| VarBinPrimitiveIter::new(b.typed_data::<u8>(), o))
+    }
+
+    pub fn iter(&self) -> VarBinIter {
+        VarBinIter::new(self.bytes(), self.offsets())
+    }
+
+    pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
+        let start = scalar_at(self.offsets(), index)?.try_into()?;
+        let end = scalar_at(self.offsets(), index + 1)?.try_into()?;
         let sliced = self.bytes().slice(start, end)?;
         let arr_ref = sliced.iter_arrow().combine_chunks();
         Ok(arr_ref.as_primitive::<UInt8Type>().values().to_vec())
@@ -382,11 +386,11 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
 
 #[cfg(test)]
 mod test {
-    use crate::array::Array;
     use arrow::array::{AsArray, GenericStringArray as ArrowStringArray};
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;
+    use crate::array::Array;
     use crate::arrow::CombineChunks;
     use crate::compute::scalar_at::scalar_at;
     use crate::dtype::{DType, Nullability};

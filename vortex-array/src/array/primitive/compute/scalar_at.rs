@@ -8,14 +8,7 @@ use crate::scalar::{NullableScalar, Scalar, ScalarRef};
 impl ScalarAtFn for PrimitiveArray {
     fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
         if self.is_valid(index) {
-            Ok(
-                match_each_native_ptype!(self.ptype, |$T| self.buffer.typed_data::<$T>()
-                    .get(index)
-                    .unwrap()
-                    .clone()
-                    .into()
-                ),
-            )
+            Ok(match_each_native_ptype!(self.ptype, |$T| self.typed_data::<$T>()[index].into()))
         } else {
             Ok(NullableScalar::none(self.dtype().clone()).boxed())
         }

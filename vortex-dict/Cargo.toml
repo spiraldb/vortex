@@ -24,7 +24,10 @@ num-traits = "0.2.17"
 workspace = true
 
 [dev-dependencies]
-divan = "0.1.14"
+criterion = { version = "0.5.1", features = ["html_reports"] }
+log = "0.4.20"
+rand = "0.8.5"
+simplelog = { version = "0.12.1", features = ["paris"] }
 
 [[bench]]
 name = "dict_compress"
