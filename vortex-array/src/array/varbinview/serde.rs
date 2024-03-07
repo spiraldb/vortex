@@ -30,51 +30,24 @@ impl EncodingSerde for VarBinViewEncoding {
         for _ in 0..num_data {
             data_bufs.push(ctx.bytes().read()?);
         }
-        Ok(VarBinViewArray::new(views, data_bufs, ctx.schema().clone(), validity).into_array())
+        Ok(
+            VarBinViewArray::try_new(views, data_bufs, ctx.schema().clone(), validity)
+                .unwrap()
+                .into_array(),
+        )
     }
 }
 
 #[cfg(test)]
 mod test {
-    use vortex_schema::{DType, Nullability};
-
     use crate::array::downcast::DowncastArrayBuiltin;
-    use crate::array::primitive::PrimitiveArray;
-    use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray};
-    use crate::array::Array;
+    use crate::array::varbinview::VarBinViewArray;
     use crate::serde::test::roundtrip_array;
-
-    fn binary_array() -> VarBinViewArray {
-        let values = PrimitiveArray::from("hello world this is a long string".as_bytes().to_vec());
-        let view1 = BinaryView {
-            inlined: Inlined::new("hello world"),
-        };
-        let view2 = BinaryView {
-            _ref: Ref {
-                size: 33,
-                prefix: "hell".as_bytes().try_into().unwrap(),
-                buffer_index: 0,
-                offset: 0,
-            },
-        };
-        let view_arr = PrimitiveArray::from(
-            vec![view1.to_le_bytes(), view2.to_le_bytes()]
-                .into_iter()
-                .flatten()
-                .collect::<Vec<u8>>(),
-        );
-
-        VarBinViewArray::new(
-            view_arr.into_array(),
-            vec![values.into_array()],
-            DType::Utf8(Nullability::NonNullable),
-            None,
-        )
-    }
 
     #[test]
     fn roundtrip() {
-        let arr = binary_array();
+        let arr = VarBinViewArray::from(vec!["hello world", "hello world this is a long string"]);
+
         let read_arr = roundtrip_array(&arr).unwrap();
 
         assert_eq!(

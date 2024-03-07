@@ -4,77 +4,140 @@ use std::collections::HashMap;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array::varbin::VarBinArray;
-use crate::array::varbinview::VarBinViewArray;
+use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::array::Array;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
-pub trait BinaryArray {
-    fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>>;
+impl StatsCompute for VarBinArray {
+    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+        self.iter_primitive()
+            .map(|prim_iter| {
+                let mut acc = VarBinAccumulator::<&[u8]>::default();
+                for next_val in prim_iter {
+                    acc.nullable_next(next_val);
+                }
+                Ok(acc.finish(self.dtype()))
+            })
+            .unwrap_or_else(|_| {
+                let mut acc = VarBinAccumulator::<Vec<u8>>::default();
+                for next_val in self.iter() {
+                    acc.nullable_next(next_val);
+                }
+                Ok(acc.finish(self.dtype()))
+            })
+    }
 }
 
-impl<T> StatsCompute for T
-where
-    T: BinaryArray + Array,
-{
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
-        let mut min = vec![0xFF];
-        let mut max = vec![0x00];
-        let mut is_constant = true;
-        let mut is_sorted = true;
-        let mut last_value = vec![0x00];
-        let mut runs: usize = 0;
-        for i in 0..self.len() {
-            let next_val = self.bytes_at(i).unwrap();
-            if next_val < min {
-                min.clone_from(&next_val);
-            }
-            if next_val > max {
-                max.clone_from(&next_val);
-            }
-            match next_val.cmp(&last_value) {
-                Ordering::Less => is_sorted = false,
-                Ordering::Equal => continue,
-                Ordering::Greater => {}
-            }
-            is_constant = false;
-            last_value = next_val;
-            runs += 1;
+pub struct VarBinAccumulator<T> {
+    min: T,
+    max: T,
+    is_constant: bool,
+    is_sorted: bool,
+    is_strict_sorted: bool,
+    last_value: T,
+    null_count: usize,
+    runs: usize,
+}
+
+impl Default for VarBinAccumulator<Vec<u8>> {
+    fn default() -> Self {
+        Self {
+            min: vec![0xFF],
+            max: vec![0x00],
+            is_constant: true,
+            is_sorted: true,
+            is_strict_sorted: true,
+            last_value: vec![0x00],
+            runs: 0,
+            null_count: 0,
+        }
+    }
+}
+
+impl VarBinAccumulator<Vec<u8>> {
+    pub fn nullable_next(&mut self, val: Option<Vec<u8>>) {
+        match val {
+            None => self.null_count += 1,
+            Some(v) => self.next(v),
+        }
+    }
+
+    pub fn next(&mut self, val: Vec<u8>) {
+        if val < self.min {
+            self.min.clone_from(&val);
+        } else if val > self.max {
+            self.max.clone_from(&val);
         }
 
-        Ok(StatsSet::from(HashMap::from([
-            (
-                Stat::Min,
-                if matches!(self.dtype(), DType::Utf8(_)) {
-                    unsafe { String::from_utf8_unchecked(min.to_vec()) }.into()
-                } else {
-                    min.into()
-                },
-            ),
-            (
-                Stat::Max,
-                if matches!(self.dtype(), DType::Utf8(_)) {
-                    unsafe { String::from_utf8_unchecked(max.to_vec()) }.into()
-                } else {
-                    max.into()
-                },
-            ),
-            (Stat::RunCount, runs.into()),
-            (Stat::IsSorted, is_sorted.into()),
-            (Stat::IsConstant, is_constant.into()),
-        ])))
+        match val.cmp(&self.last_value) {
+            Ordering::Less => self.is_sorted = false,
+            Ordering::Equal => {
+                self.is_strict_sorted = false;
+                return;
+            }
+            Ordering::Greater => {}
+        }
+        self.is_constant = false;
+        self.last_value = val;
+        self.runs += 1;
     }
 }
 
-impl BinaryArray for VarBinArray {
-    fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
-        VarBinArray::bytes_at(self, index)
+impl<'a> Default for VarBinAccumulator<&'a [u8]> {
+    fn default() -> Self {
+        Self {
+            min: &[0xFF],
+            max: &[0x00],
+            is_constant: true,
+            is_sorted: true,
+            is_strict_sorted: true,
+            last_value: &[0x00],
+            runs: 0,
+            null_count: 0,
+        }
     }
 }
 
-impl BinaryArray for VarBinViewArray {
-    fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
-        VarBinViewArray::bytes_at(self, index)
+impl<'a> VarBinAccumulator<&'a [u8]> {
+    pub fn nullable_next(&mut self, val: Option<&'a [u8]>) {
+        match val {
+            None => self.null_count += 1,
+            Some(v) => self.next(v),
+        }
+    }
+
+    pub fn next(&mut self, val: &'a [u8]) {
+        if val < self.min {
+            self.min = val;
+        } else if val > self.max {
+            self.max = val;
+        }
+
+        match val.cmp(self.last_value) {
+            Ordering::Less => self.is_sorted = false,
+            Ordering::Equal => {
+                self.is_strict_sorted = false;
+                return;
+            }
+            Ordering::Greater => {}
+        }
+        self.is_constant = false;
+        self.last_value = val;
+        self.runs += 1;
+    }
+}
+
+impl<T: AsRef<[u8]>> VarBinAccumulator<T> {
+    pub fn finish(&self, dtype: &DType) -> StatsSet {
+        StatsSet::from(HashMap::from([
+            (Stat::Min, varbin_scalar(self.min.as_ref().to_vec(), dtype)),
+            (Stat::Max, varbin_scalar(self.max.as_ref().to_vec(), dtype)),
+            (Stat::RunCount, self.runs.into()),
+            (Stat::IsSorted, self.is_sorted.into()),
+            (Stat::IsStrictSorted, self.is_strict_sorted.into()),
+            (Stat::IsConstant, self.is_constant.into()),
+            (Stat::NullCount, self.null_count.into()),
+        ]))
     }
 }
 
@@ -82,20 +145,15 @@ impl BinaryArray for VarBinViewArray {
 mod test {
     use vortex_schema::{DType, Nullability};
 
-    use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;
     use crate::array::Array;
     use crate::stats::Stat;
 
     fn array(dtype: DType) -> VarBinArray {
-        let values = PrimitiveArray::from(
-            "hello worldhello world this is a long string"
-                .as_bytes()
-                .to_vec(),
-        );
-        let offsets = PrimitiveArray::from(vec![0, 11, 44]);
-
-        VarBinArray::new(offsets.into_array(), values.into_array(), dtype, None)
+        VarBinArray::from_vec(
+            vec!["hello world", "hello world this is a long string"],
+            dtype,
+        )
     }
 
     #[test]

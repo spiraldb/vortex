@@ -81,7 +81,7 @@ impl<T: TryFrom<Scalar, Error = VortexError>> TryFrom<Scalar> for ListScalarVec<
                     vs.into_iter().map(|v| v.try_into()).try_collect()?,
                 ))
             } else {
-                Err(vortex_err!("can't extract present value from null scalar",))
+                Err(vortex_err!("can't extract present value from null scalar"))
             }
         } else {
             Err(vortex_err!(MismatchedTypes: "any list", value.dtype()))
@@ -99,7 +99,7 @@ impl<'a, T: TryFrom<&'a Scalar, Error = VortexError>> TryFrom<&'a Scalar> for Li
                     vs.iter().map(|v| v.try_into()).try_collect()?,
                 ))
             } else {
-                Err(vortex_err!("can't extract present value from null scalar",))
+                Err(vortex_err!("can't extract present value from null scalar"))
             }
         } else {
             Err(vortex_err!(MismatchedTypes: "any list", value.dtype()))

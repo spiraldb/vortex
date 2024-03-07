@@ -1,7 +1,9 @@
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
+use num_traits::AsPrimitive;
 use num_traits::{FromPrimitive, Unsigned};
+pub use stats::VarBinAccumulator;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
@@ -15,7 +17,9 @@ use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
+use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
+use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::OwnedValidity;
@@ -185,13 +189,24 @@ impl VarBinArray {
         ArrayIter::new(self)
     }
 
+    pub(self) fn offset_at(&self, index: usize) -> usize {
+        if let Some(parray) = self.offsets().maybe_primitive() {
+            match_each_native_ptype!(parray.ptype(), |$P| {
+                parray.typed_data::<$P>()[index].as_()
+            })
+        } else {
+            scalar_at(self.offsets(), index)
+                .unwrap()
+                .try_into()
+                .unwrap()
+        }
+    }
+
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
-        let start = scalar_at(self.offsets(), index)?.try_into()?;
-        let end = scalar_at(self.offsets(), index + 1)?.try_into()?;
+        let start = self.offset_at(index);
+        let end = self.offset_at(index + 1);
         let sliced = self.bytes().slice(start, end)?;
-        Ok(flatten_primitive(sliced.as_ref())?
-            .typed_data::<u8>()
-            .to_vec())
+        Ok(flatten_primitive(sliced.as_ref())?.buffer().to_vec())
     }
 }
 
@@ -342,6 +357,14 @@ impl FromIterator<Option<String>> for VarBinArray {
 impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a str>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
+    }
+}
+
+pub fn varbin_scalar(value: Vec<u8>, dtype: &DType) -> Scalar {
+    if matches!(dtype, DType::Utf8(_)) {
+        unsafe { String::from_utf8_unchecked(value) }.into()
+    } else {
+        value.into()
     }
 }
 

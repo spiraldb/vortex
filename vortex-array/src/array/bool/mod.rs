@@ -203,14 +203,15 @@ impl FromIterator<Option<bool>> for BoolArray {
         if validity.is_empty() {
             BoolArray::from(values)
         } else {
-            BoolArray::new(BooleanBuffer::from(values), Some(Validity::from(validity)))
+            BoolArray::new(BooleanBuffer::from(values), Some(validity.into()))
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use crate::array::bool::BoolArray;
+    use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
 
     #[test]

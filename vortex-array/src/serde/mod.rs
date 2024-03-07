@@ -238,7 +238,7 @@ impl<'a> ReadCtx<'a> {
         {
             serde.read(self)
         } else {
-            Err(vortex_err!("Failed to recognize encoding ID",))
+            Err(vortex_err!("Failed to recognize encoding ID"))
         }
     }
 }
