@@ -18,9 +18,7 @@ impl EncodingCompression for ALPEncoding {
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
-        let Some(parray) = array.maybe_primitive() else {
-            return None;
-        };
+        let parray = array.maybe_primitive()?;
 
         // Only supports f32 and f64
         if !matches!(parray.ptype(), PType::F32 | PType::F64) {

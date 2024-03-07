@@ -104,7 +104,7 @@ impl<'a> CompressCtx<'a> {
         debug!(
             "Compressing {} like {} at depth={}",
             arr,
-            like.map(|l| l.encoding().id().name()).unwrap_or(&"<none>"),
+            like.map(|l| l.encoding().id().name()).unwrap_or("<none>"),
             self.depth
         );
         if arr.is_empty() {

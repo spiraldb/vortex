@@ -97,7 +97,7 @@ pub fn compress_taxi_data() -> ArrayRef {
     let chunks = reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
-        .map(|batch| ArrayRef::from(batch))
+        .map(ArrayRef::from)
         .map(|array| {
             uncompressed_size += array.nbytes();
             ctx.compress(array.as_ref(), None).unwrap()
