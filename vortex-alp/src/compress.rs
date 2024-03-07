@@ -32,7 +32,7 @@ impl EncodingCompression for ALPEncoding {
         &self,
         array: &dyn Array,
         like: Option<&dyn Array>,
-        ctx: CompressCtx,
+        ctx: &CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let like_alp = like.map(|like_array| like_array.as_alp());
 

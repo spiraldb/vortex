@@ -23,7 +23,7 @@ use vortex::dtype::DType;
 use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
-use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
+use vortex_fastlanes::FFoREncoding;
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 
@@ -43,9 +43,10 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         // Encodings
         &ALPEncoding,
         &DictEncoding,
-        &BitPackedEncoding,
+        // &BitPackedEncoding,
+        // &FoREncoding,
         // &DeltaEncoding,
-        &FoREncoding,
+        &FFoREncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
         // &RoaringIntEncoding,
@@ -76,7 +77,7 @@ pub fn download_taxi_data() -> PathBuf {
 pub fn compress_taxi_data() -> ArrayRef {
     let file = File::open(download_taxi_data()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let _mask = ProjectionMask::roots(builder.parquet_schema(), [10]);
+    let _mask = ProjectionMask::roots(builder.parquet_schema(), [16]);
     let reader = builder
         // .with_projection(mask)
         .with_batch_size(65_536)
@@ -148,7 +149,7 @@ mod test {
 
     #[test]
     fn compression_ratio() {
-        setup_logger(LevelFilter::Info);
+        setup_logger(LevelFilter::Debug);
         _ = compress_taxi_data();
     }
 }

@@ -28,12 +28,12 @@ impl EncodingCompression for FoREncoding {
             debug!("Skipping FoR: not int");
             return None;
         }
-
-        // Nothing for us to do if the min is already zero.
-        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? == 0 {
-            debug!("Skipping FoR: min is zero");
-            return None;
-        }
+        //
+        // // Nothing for us to do if the min is already zero.
+        // if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? == 0 {
+        //     debug!("Skipping FoR: min is zero");
+        //     return None;
+        // }
 
         Some(self)
     }
@@ -42,17 +42,19 @@ impl EncodingCompression for FoREncoding {
         &self,
         array: &dyn Array,
         like: Option<&dyn Array>,
-        ctx: CompressCtx,
+        ctx: &CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let parray = array.as_primitive();
 
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
             let min = parray.stats().get_or_compute_as::<$T>(&Stat::Min).unwrap_or(<$T>::default());
+
             // TODO(ngates): check for overflow
             let values = parray.buffer().typed_data::<$T>().iter().map(|v| v - min)
                 // TODO(ngates): cast to unsigned
                 // .map(|v| v as parray.ptype().to_unsigned()::T)
                 .collect_vec();
+
             PrimitiveArray::from(values)
         });
 

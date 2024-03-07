@@ -55,7 +55,7 @@ impl EncodingCompression for DictEncoding {
         &self,
         array: &dyn Array,
         like: Option<&dyn Array>,
-        ctx: CompressCtx,
+        ctx: &CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let dict_like = like.map(|like_arr| like_arr.as_dict());
 
