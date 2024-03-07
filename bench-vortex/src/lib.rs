@@ -1,5 +1,6 @@
 use arrow_array::RecordBatchReader;
 use itertools::Itertools;
+use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use std::collections::HashSet;
@@ -75,11 +76,11 @@ pub fn download_taxi_data() -> PathBuf {
 pub fn compress_taxi_data() -> ArrayRef {
     let file = File::open(download_taxi_data()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let mask = ProjectionMask::roots(builder.parquet_schema(), [10]);
+    let _mask = ProjectionMask::roots(builder.parquet_schema(), [10]);
     let reader = builder
-        .with_projection(mask)
-        .with_batch_size(32_000)
-        // .with_limit(1_000_000)
+        // .with_projection(mask)
+        .with_batch_size(65_536)
+        //.with_limit(100_000)
         .build()
         .unwrap();
 
@@ -106,11 +107,8 @@ pub fn compress_taxi_data() -> ArrayRef {
     let dtype: DType = schema.clone().try_into().unwrap();
     let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
 
-    // let compressed = CompressCtx::new(&cfg)
-    //     .compress(array.as_ref(), None)
-    //     .unwrap();
-    println!("Compressed array {}", display_tree(compressed.as_ref()));
-    println!(
+    info!("Compressed array {}", display_tree(compressed.as_ref()));
+    info!(
         "NBytes {}, Ratio {}",
         compressed.nbytes(),
         compressed.nbytes() as f32 / uncompressed_size as f32
@@ -124,7 +122,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         }
     }
     field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
-        println!("{},{}", schema.field(i).name(), nbytes);
+        info!("{},{}", schema.field(i).name(), nbytes);
     });
 
     compressed
@@ -138,9 +136,9 @@ mod test {
     use crate::compress_taxi_data;
 
     #[allow(dead_code)]
-    fn setup_logger() {
+    fn setup_logger(level: LevelFilter) {
         TermLogger::init(
-            LevelFilter::Debug,
+            level,
             Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto,
@@ -150,7 +148,7 @@ mod test {
 
     #[test]
     fn compression_ratio() {
-        setup_logger();
+        setup_logger(LevelFilter::Info);
         _ = compress_taxi_data();
     }
 }

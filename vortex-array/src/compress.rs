@@ -32,6 +32,7 @@ pub trait EncodingCompression: Encoding {
 
 #[derive(Debug, Clone)]
 pub struct CompressConfig {
+    #[allow(dead_code)]
     block_size: u32,
     sample_size: u16,
     sample_count: u16,
@@ -46,7 +47,8 @@ impl Default for CompressConfig {
     fn default() -> Self {
         // TODO(ngates): we should ensure that sample_size * sample_count <= block_size
         Self {
-            block_size: 65536,
+            block_size: 65_536,
+            // Sample length should always be multiple of 1024
             sample_size: 128,
             sample_count: 8,
             max_depth: 4,
@@ -125,6 +127,9 @@ impl<'a> CompressCtx<'a> {
                 return compression.compress(arr, Some(l), self.clone());
             } else {
                 warn!("Cannot find compressor to compress {} like {}", arr, l);
+                // TODO(ngates): we shouldn't just bail, but we also probably don't want to fully
+                //  re-sample.
+                return Ok(dyn_clone::clone_box(arr));
             }
         }
 
@@ -211,7 +216,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
         return Ok(None);
     }
 
-    if array.len() < ctx.options.block_size as usize {
+    if array.len() < (ctx.options.sample_size as usize * ctx.options.sample_count as usize) {
         // We're either already within a sample, or we're operating over a sufficiently small array.
         find_best_compression(candidates, array, ctx)
     } else {

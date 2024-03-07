@@ -105,7 +105,8 @@ impl EncodingCompression for BitPackedEncoding {
             bit_width,
             parray.dtype().clone(),
             parray.len(),
-        )?
+        )
+        .unwrap()
         .boxed())
     }
 }

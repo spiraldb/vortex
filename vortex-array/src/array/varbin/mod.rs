@@ -277,7 +277,7 @@ impl Array for VarBinArray {
             self.dtype.clone(),
             self.validity
                 .as_ref()
-                .map(|v| v.slice(start, stop + 1))
+                .map(|v| v.slice(start, stop))
                 .transpose()?,
         )
         .boxed())

@@ -109,7 +109,8 @@ pub fn check_validity_buffer(
         if v.len() != expected_len {
             return Err(VortexError::InvalidArgument(
                 format!(
-                    "Validity buffer has incorrect length {}, expected {}",
+                    "Validity buffer {} has incorrect length {}, expected {}",
+                    v,
                     v.len(),
                     expected_len
                 )
