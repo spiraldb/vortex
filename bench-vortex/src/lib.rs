@@ -75,10 +75,10 @@ pub fn download_taxi_data() -> PathBuf {
 pub fn compress_taxi_data() -> ArrayRef {
     let file = File::open(download_taxi_data()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let _mask = ProjectionMask::roots(builder.parquet_schema(), [9]);
+    let mask = ProjectionMask::roots(builder.parquet_schema(), [10]);
     let reader = builder
-        //.with_projection(mask)
-        .with_batch_size(4_000)
+        .with_projection(mask)
+        .with_batch_size(100_000)
         //.with_batch_size(5_000_000)
         .with_limit(100_000)
         .build()
@@ -151,7 +151,7 @@ mod test {
 
     #[test]
     fn compression_ratio() {
-        //setup_logger();
+        setup_logger();
         _ = compress_taxi_data();
     }
 }

@@ -192,7 +192,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ChunkedArray {
 impl ArrayDisplay for ChunkedArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         for (i, c) in self.chunks().iter().enumerate() {
-            f.child(&format!("{}", i), c.as_ref())?
+            f.child(&format!("[{}]", i), c.as_ref())?
         }
         Ok(())
     }

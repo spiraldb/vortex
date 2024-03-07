@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
 
-use log::{debug, warn};
+use log::{debug, info, warn};
 use once_cell::sync::Lazy;
 
 use crate::array::chunked::ChunkedArray;
@@ -262,7 +262,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
 
     best_sample
         .map(|s| {
-            println!(
+            info!(
                 "Compressing array with dtype: {} and encoding: {}, like: {}",
                 array.dtype(),
                 array.encoding().id(),
