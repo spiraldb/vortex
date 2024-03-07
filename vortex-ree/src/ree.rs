@@ -52,7 +52,7 @@ impl REEArray {
         validity: Option<ArrayRef>,
         length: usize,
     ) -> VortexResult<Self> {
-        check_validity_buffer(validity.as_deref(), values.len())?;
+        check_validity_buffer(validity.as_deref(), length)?;
 
         if !matches!(
             ends.dtype(),
