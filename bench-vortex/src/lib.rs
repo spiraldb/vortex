@@ -4,7 +4,7 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use std::collections::HashSet;
 use std::fs::{create_dir_all, File};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use vortex::array::bool::BoolEncoding;
 use vortex::array::chunked::{ChunkedArray, ChunkedEncoding};
 use vortex::array::constant::ConstantEncoding;
@@ -24,7 +24,7 @@ use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
-use vortex_roaring::RoaringBoolEncoding;
+use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
 
 pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
     vec![
@@ -45,22 +45,23 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         &BitPackedEncoding,
         // &DeltaEncoding,
         &FoREncoding,
-        //&FFoREncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
-        //&RoaringIntEncoding,
+        &RoaringIntEncoding,
+        // Doesn't offer anything more than FoR really
         //&ZigZagEncoding,
     ]
 }
 
-pub fn download_taxi_data() -> &'static Path {
-    let download_path = Path::new("data/yellow-tripdata-2023-11.parquet");
+pub fn download_taxi_data() -> PathBuf {
+    let download_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("data/yellow-tripdata-2023-11.parquet");
     if download_path.exists() {
         return download_path;
     }
 
     create_dir_all(download_path.parent().unwrap()).unwrap();
-    let mut download_file = File::create(download_path).unwrap();
+    let mut download_file = File::create(&download_path).unwrap();
     reqwest::blocking::get(
         "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-11.parquet",
     )
