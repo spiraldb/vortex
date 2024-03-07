@@ -24,7 +24,6 @@ impl EncodingSerde for FoREncoding {
 mod test {
     use crate::FoRArray;
     use std::io;
-    use vortex::array::primitive::PrimitiveArray;
     use vortex::array::{Array, ArrayRef};
     use vortex::scalar::ScalarRef;
     use vortex::serde::{ReadCtx, WriteCtx};
@@ -41,7 +40,7 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = FoRArray::try_new(
-            PrimitiveArray::from_vec(vec![-7i64, -13, 17, 23]).boxed(),
+            vec![-7i64, -13, 17, 23].into(),
             <i64 as Into<ScalarRef>>::into(-7i64),
         )
         .unwrap();

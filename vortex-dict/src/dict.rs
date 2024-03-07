@@ -103,10 +103,8 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for DictArray {
 
 impl ArrayDisplay for DictArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln("dict:")?;
-        f.indent(|indent| indent.array(self.dict()))?;
-        f.writeln("codes:")?;
-        f.indent(|indent| indent.array(self.codes()))
+        f.child("values", self.dict())?;
+        f.child("codes", self.codes())
     }
 }
 

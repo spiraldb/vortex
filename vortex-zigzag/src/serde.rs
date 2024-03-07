@@ -52,7 +52,7 @@ mod test {
 
     #[test]
     fn roundtrip() {
-        let arr = zigzag_encode(&PrimitiveArray::from_vec(vec![-7i64, -13, 17, 23])).unwrap();
+        let arr = zigzag_encode(&PrimitiveArray::from(vec![-7i64, -13, 17, 23])).unwrap();
         let read_arr = roundtrip_array(arr.as_ref()).unwrap();
 
         let read_zigzag = read_arr.as_zigzag();

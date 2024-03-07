@@ -5,21 +5,22 @@ use num_traits::NumCast;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::dtype::DType;
 use vortex::dtype::Nullability::NonNullable;
 use vortex::dtype::Signedness::Unsigned;
+use vortex::error::VortexResult;
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
 
 use crate::{RoaringIntArray, RoaringIntEncoding};
 
 impl EncodingCompression for RoaringIntEncoding {
-    fn compressor(
+    fn can_compress(
         &self,
         array: &dyn Array,
         _config: &CompressConfig,
-    ) -> Option<&'static Compressor> {
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive enc arrays
         if array.encoding().id() != &PrimitiveEncoding::ID {
             debug!("Skipping roaring int, not primitive");
@@ -47,16 +48,17 @@ impl EncodingCompression for RoaringIntEncoding {
         }
 
         debug!("Using roaring int");
-        Some(&(roaring_int_compressor as Compressor))
+        Some(self)
     }
-}
 
-fn roaring_int_compressor(
-    array: &dyn Array,
-    _like: Option<&dyn Array>,
-    _ctx: CompressCtx,
-) -> ArrayRef {
-    roaring_encode(array.as_primitive()).boxed()
+    fn compress(
+        &self,
+        array: &dyn Array,
+        _like: Option<&dyn Array>,
+        _ctx: CompressCtx,
+    ) -> VortexResult<ArrayRef> {
+        Ok(roaring_encode(array.as_primitive()).boxed())
+    }
 }
 
 pub fn roaring_encode(primitive_array: &PrimitiveArray) -> RoaringIntArray {

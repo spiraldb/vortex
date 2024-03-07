@@ -28,7 +28,6 @@ mod test {
     use std::io;
 
     use vortex::array::downcast::DowncastArrayBuiltin;
-    use vortex::array::primitive::PrimitiveArray;
     use vortex::array::{Array, ArrayRef};
     use vortex::serde::{ReadCtx, WriteCtx};
 
@@ -47,8 +46,8 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = DictArray::new(
-            PrimitiveArray::from_vec(vec![0u8, 0, 1, 2, 3]).boxed(),
-            PrimitiveArray::from_vec(vec![-7i64, -13, 17, 23]).boxed(),
+            vec![0u8, 0, 1, 2, 3].into(),
+            vec![-7i64, -13, 17, 23].into(),
         );
         let read_arr = roundtrip_array(arr.as_ref()).unwrap();
 

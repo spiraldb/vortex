@@ -7,7 +7,6 @@ use arrow::array::ArrowPrimitiveType;
 use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef, AsArray};
 use num_traits::AsPrimitive;
 
-use codecz::ree::SupportsREE;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayKind, ArrayRef, ArrowIterator,
@@ -23,9 +22,9 @@ use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::ptype::NativePType;
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stat, Stats, StatsSet};
+use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 
-use crate::compress::ree_encode;
+use crate::compress::{ree_decode_primitive, ree_encode};
 
 #[derive(Debug, Clone)]
 pub struct REEArray {
@@ -53,7 +52,7 @@ impl REEArray {
         validity: Option<ArrayRef>,
         length: usize,
     ) -> VortexResult<Self> {
-        check_validity_buffer(validity.as_deref())?;
+        check_validity_buffer(validity.as_deref(), length)?;
 
         if !matches!(
             ends.dtype(),
@@ -159,8 +158,7 @@ impl Array for REEArray {
     }
 
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        // TODO(robert): Plumb offset rewriting to zig to fuse with REE decompression
-        let ends: Vec<u32> = self
+        let ends: Vec<u64> = self
             .ends
             .iter_arrow()
             .flat_map(|c| {
@@ -168,11 +166,11 @@ impl Array for REEArray {
                     let ends = c.as_primitive::<$E>()
                         .values()
                         .iter()
-                        .map(|v| AsPrimitive::<u32>::as_(*v))
-                        .map(|v| v - self.offset as u32)
-                        .map(|v| min(v, self.length as u32))
-                        .take_while(|v| *v <= (self.length as u32))
-                        .collect::<Vec<u32>>();
+                        .map(|v| AsPrimitive::<u64>::as_(*v))
+                        .map(|v| v - self.offset as u64)
+                        .map(|v| min(v, self.length as u64))
+                        .take_while(|v| *v <= (self.length as u64))
+                        .collect::<Vec<u64>>();
                     ends.into_iter()
                 })
             })
@@ -218,6 +216,8 @@ impl Array for REEArray {
     }
 }
 
+impl StatsCompute for REEArray {}
+
 impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self
@@ -247,18 +247,16 @@ impl Encoding for REEEncoding {
 
 impl ArrayDisplay for REEArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln("values:")?;
-        f.indent(|indented| indented.array(self.values()))?;
-        f.writeln("ends:")?;
-        f.indent(|indented| indented.array(self.ends()))
+        f.child("values", self.values())?;
+        f.child("ends", self.ends())
     }
 }
 
 pub struct REEArrowIterator<T: ArrowPrimitiveType>
 where
-    T::Native: NativePType + SupportsREE,
+    T::Native: NativePType,
 {
-    ends: Vec<u32>,
+    ends: Vec<u64>,
     values: Box<ArrowIterator>,
     current_idx: usize,
     _marker: PhantomData<T>,
@@ -266,9 +264,9 @@ where
 
 impl<T: ArrowPrimitiveType> REEArrowIterator<T>
 where
-    T::Native: NativePType + SupportsREE,
+    T::Native: NativePType,
 {
-    pub fn new(ends: Vec<u32>, values: Box<ArrowIterator>) -> Self {
+    pub fn new(ends: Vec<u64>, values: Box<ArrowIterator>) -> Self {
         Self {
             ends,
             values,
@@ -280,7 +278,7 @@ where
 
 impl<T: ArrowPrimitiveType> Iterator for REEArrowIterator<T>
 where
-    T::Native: NativePType + SupportsREE,
+    T::Native: NativePType,
 {
     type Item = ArrowArrayRef;
 
@@ -289,10 +287,9 @@ where
             let batch_ends = &self.ends[self.current_idx..self.current_idx + vs.len()];
             self.current_idx += vs.len();
             let decoded =
-                codecz::ree::decode::<T::Native>(vs.as_primitive::<T>().values(), batch_ends)
-                    .unwrap();
-            // TODO(robert): Is there a better way to construct a primitive arrow array
-            PrimitiveArray::from_vec_in(decoded).iter_arrow().next()
+                ree_decode_primitive(batch_ends, vs.as_primitive::<T>().values().as_ref());
+            // TODO(ngates): avoid going back into PrimitiveArray?
+            PrimitiveArray::from(decoded).iter_arrow().next()
         })
     }
 }

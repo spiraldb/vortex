@@ -6,7 +6,8 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
@@ -15,11 +16,11 @@ use vortex::stats::Stat;
 use crate::{BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
-    fn compressor(
+    fn can_compress(
         &self,
         array: &dyn Array,
         _config: &CompressConfig,
-    ) -> Option<&'static Compressor> {
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
             debug!("Skipping BitPacking: not primitive");
@@ -32,9 +33,9 @@ impl EncodingCompression for BitPackedEncoding {
             return None;
         }
 
-        // Check that the min > zero
-        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? < 0 {
-            debug!("Skipping BitPacking: min is zero");
+        // Check that the min == zero. Otherwise, we can assume that FoR will run first.
+        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? != 0 {
+            debug!("Skipping BitPacking: min != 0");
             return None;
         }
 
@@ -46,60 +47,68 @@ impl EncodingCompression for BitPackedEncoding {
 
         // Check that the bit width is less than the type's bit width
         if bit_width == parray.ptype().bit_width() {
-            debug!("Skipping BitPacking: bit packing has no effect");
+            debug!("Skipping BitPacking: best == current bit width");
             return None;
         }
 
-        debug!("Compressing with BitPacking");
-        Some(&(bitpacked_compressor as Compressor))
+        Some(self)
     }
-}
 
-fn bitpacked_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let parray = array.as_primitive();
-    let bit_width_freq = parray
-        .stats()
-        .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)
+    fn compress(
+        &self,
+        array: &dyn Array,
+        like: Option<&dyn Array>,
+        ctx: CompressCtx,
+    ) -> VortexResult<ArrayRef> {
+        let parray = array.as_primitive();
+        let bit_width_freq = parray
+            .stats()
+            .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)
+            .unwrap()
+            .0;
+
+        let like_bp = like.map(|l| l.as_any().downcast_ref::<BitPackedArray>().unwrap());
+
+        let bit_width = like_bp
+            .map(|bp| bp.bit_width())
+            .unwrap_or_else(|| best_bit_width(parray.ptype(), &bit_width_freq));
+        let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
+
+        // If we pack into zero bits, then we have an empty byte array.
+        let packed = if bit_width == 0 {
+            PrimitiveArray::from(Vec::<u8>::new()).boxed()
+        } else {
+            bitpack(parray, bit_width)
+        };
+
+        let validity = parray
+            .validity()
+            .map(|v| {
+                ctx.next_level()
+                    .compress(v.as_ref(), like_bp.and_then(|bp| bp.validity()))
+            })
+            .transpose()?;
+
+        let patches = if num_exceptions > 0 {
+            Some(ctx.next_level().compress(
+                bitpack_patches(parray, bit_width, num_exceptions).as_ref(),
+                like_bp.and_then(|bp| bp.patches()),
+            )?)
+        } else {
+            None
+        };
+
+        Ok(BitPackedArray::try_new(
+            packed,
+            validity,
+            patches,
+            bit_width,
+            parray.dtype().clone(),
+            parray.len(),
+        )
         .unwrap()
-        .0;
-
-    let like_bp = like.map(|l| l.as_any().downcast_ref::<BitPackedArray>().unwrap());
-
-    let bit_width = like_bp
-        .map(|bp| bp.bit_width())
-        .unwrap_or_else(|| best_bit_width(parray.ptype(), &bit_width_freq));
-    let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
-
-    // If we pack into zero bits, then we have an empty byte array.
-    let packed = if bit_width == 0 {
-        PrimitiveArray::from_vec(Vec::<u8>::new()).boxed()
-    } else {
-        bitpack(parray, bit_width)
-    };
-
-    let validity = parray
-        .validity()
-        .map(|v| ctx.compress(v.as_ref(), like_bp.and_then(|bp| bp.validity())));
-
-    let patches = if num_exceptions > 0 {
-        Some(ctx.compress(
-            bitpack_patches(parray, bit_width, num_exceptions).as_ref(),
-            like_bp.and_then(|bp| bp.patches()),
-        ))
-    } else {
-        None
-    };
-
-    return BitPackedArray::try_new(
-        packed,
-        validity,
-        patches,
-        bit_width,
-        parray.dtype().clone(),
-        parray.len(),
-    )
-    .unwrap()
-    .boxed();
+        .boxed())
+    }
 }
 
 fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
@@ -113,7 +122,7 @@ fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
         I64 | U64 => bitpack_primitive(parray.buffer().typed_data::<u64>(), bit_width),
         _ => panic!("Unsupported ptype {:?}", parray.ptype()),
     };
-    PrimitiveArray::from_vec(bytes).boxed()
+    PrimitiveArray::from(bytes).boxed()
 }
 
 fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize) -> Vec<u8> {
@@ -155,8 +164,8 @@ fn bitpack_patches(
         }
         let len = indices.len();
         SparseArray::new(
-            PrimitiveArray::from_vec(indices).boxed(),
-            PrimitiveArray::from_vec(values).boxed(),
+            PrimitiveArray::from(indices).boxed(),
+            PrimitiveArray::from(values).boxed(),
             len,
         ).boxed()
     })
@@ -219,10 +228,12 @@ mod test {
         );
         let ctx = CompressCtx::new(&cfg);
 
-        let compressed = ctx.compress(
-            &PrimitiveArray::from_vec(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
-            None,
-        );
+        let compressed = ctx
+            .compress(
+                &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
+                None,
+            )
+            .unwrap();
         assert_eq!(compressed.encoding().id(), BitPackedEncoding.id());
         let bp = compressed
             .as_any()

@@ -1,7 +1,6 @@
 import pyarrow as pa
-from pyarrow import fs
-
 import vortex
+from pyarrow import fs
 
 local = fs.LocalFileSystem()
 

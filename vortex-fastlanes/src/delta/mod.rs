@@ -122,11 +122,8 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for DeltaArray {
 
 impl ArrayDisplay for DeltaArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        if let Some(v) = self.validity() {
-            f.writeln("validity:")?;
-            f.indent(|indent| indent.array(v.as_ref()))?;
-        }
-        f.indent(|indent| indent.array(self.encoded()))
+        f.child("deltas", self.encoded())?;
+        f.maybe_child("validity", self.validity())
     }
 }
 

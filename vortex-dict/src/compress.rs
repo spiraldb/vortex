@@ -10,22 +10,24 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
-use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::scalar_at::scalar_at;
 use vortex::dtype::DType;
+use vortex::error::VortexResult;
 use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::AsBytes;
+use vortex::stats::Stat;
 
 use crate::dict::{DictArray, DictEncoding};
 use crate::downcast::DowncastDict;
 
 impl EncodingCompression for DictEncoding {
-    fn compressor(
+    fn can_compress(
         &self,
         array: &dyn Array,
         _config: &CompressConfig,
-    ) -> Option<&'static Compressor> {
+    ) -> Option<&dyn EncodingCompression> {
         // TODO(robert): Add support for VarBinView
         if !matches!(
             ArrayKind::from(array),
@@ -35,7 +37,52 @@ impl EncodingCompression for DictEncoding {
             return None;
         };
 
-        Some(&(dict_compressor as Compressor))
+        // No point dictionary coding if the array is unique.
+        // We don't have a unique stat yet, but strict-sorted implies unique.
+        if array
+            .stats()
+            .get_or_compute_as(&Stat::IsStrictSorted)
+            .unwrap_or(false)
+        {
+            debug!("Skipping Dict: array is strict_sorted");
+            return None;
+        }
+
+        Some(self)
+    }
+
+    fn compress(
+        &self,
+        array: &dyn Array,
+        like: Option<&dyn Array>,
+        ctx: CompressCtx,
+    ) -> VortexResult<ArrayRef> {
+        let dict_like = like.map(|like_arr| like_arr.as_dict());
+
+        let (codes, dict) = match ArrayKind::from(array) {
+            ArrayKind::Primitive(p) => {
+                let (codes, dict) = dict_encode_primitive(p);
+                (
+                    ctx.next_level()
+                        .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
+                    ctx.next_level()
+                        .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
+                )
+            }
+            ArrayKind::VarBin(vb) => {
+                let (codes, dict) = dict_encode_varbin(vb);
+                (
+                    ctx.next_level()
+                        .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
+                    ctx.next_level()
+                        .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
+                )
+            }
+
+            _ => unreachable!("This array kind should have been filtered out"),
+        };
+
+        Ok(DictArray::new(codes, dict).boxed())
     }
 }
 
@@ -55,35 +102,6 @@ impl<T: AsBytes> PartialEq<Self> for Value<T> {
 }
 
 impl<T: AsBytes> Eq for Value<T> {}
-
-fn dict_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let dict_like = like.map(|like_arr| like_arr.as_dict());
-
-    let (codes, dict) = match ArrayKind::from(array) {
-        ArrayKind::Primitive(p) => {
-            let (codes, dict) = dict_encode_primitive(p);
-            (
-                ctx.next_level()
-                    .compress(codes.as_ref(), dict_like.map(|dict| dict.codes())),
-                ctx.next_level()
-                    .compress(dict.as_ref(), dict_like.map(|dict| dict.dict())),
-            )
-        }
-        ArrayKind::VarBin(vb) => {
-            let (codes, dict) = dict_encode_varbin(vb);
-            (
-                ctx.next_level()
-                    .compress(codes.as_ref(), dict_like.map(|dict| dict.codes())),
-                ctx.next_level()
-                    .compress(dict.as_ref(), dict_like.map(|dict| dict.dict())),
-            )
-        }
-
-        _ => unreachable!("This array kind should have been filtered out"),
-    };
-
-    DictArray::new(codes, dict).boxed()
-}
 
 // TODO(robert): Use distinct count instead of len for width estimation
 pub fn dict_encode_primitive(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
@@ -126,7 +144,7 @@ fn dict_encode_typed_primitive<
 
     (
         PrimitiveArray::from_nullable(codes, array.validity().clone_optional()),
-        PrimitiveArray::from_vec(values),
+        PrimitiveArray::from(values),
     )
 }
 
@@ -220,7 +238,7 @@ fn dict_encode_typed_varbin<O, K, V, U>(
     validity: Option<&dyn Array>,
 ) -> (PrimitiveArray, VarBinArray)
 where
-    O: NativePType + Unsigned + FromPrimitive,
+    O: NativePType + Unsigned + FromPrimitive + AsPrimitive<usize>,
     K: NativePType + Unsigned + FromPrimitive + AsPrimitive<usize>,
     V: Fn(usize) -> U,
     U: AsRef<[u8]>,
@@ -237,7 +255,7 @@ where
         let byte_ref = byte_val.as_ref();
         let value_hash = hasher.hash_one(byte_ref);
         let raw_entry = lookup_dict.raw_entry_mut().from_hash(value_hash, |idx| {
-            byte_ref == value_lookup(idx.as_()).as_ref()
+            byte_ref == bytes_at_primitive(offsets.as_slice(), bytes.as_slice(), idx.as_())
         });
 
         let code: K = match raw_entry {
@@ -247,7 +265,11 @@ where
                 bytes.extend_from_slice(byte_ref);
                 offsets.push(<O as FromPrimitive>::from_usize(bytes.len()).unwrap());
                 vac.insert_with_hasher(value_hash, next_code, (), |idx| {
-                    hasher.hash_one(value_lookup(idx.as_()).as_ref())
+                    hasher.hash_one(bytes_at_primitive(
+                        offsets.as_slice(),
+                        bytes.as_slice(),
+                        idx.as_(),
+                    ))
                 });
                 next_code
             }
@@ -257,8 +279,8 @@ where
     (
         PrimitiveArray::from_nullable(codes, validity.clone_optional()),
         VarBinArray::new(
-            PrimitiveArray::from_vec(offsets).boxed(),
-            PrimitiveArray::from_vec(bytes).boxed(),
+            PrimitiveArray::from(offsets).boxed(),
+            PrimitiveArray::from(bytes).boxed(),
             dtype,
             None,
         ),
@@ -267,6 +289,7 @@ where
 
 #[cfg(test)]
 mod test {
+    use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
@@ -275,7 +298,7 @@ mod test {
 
     #[test]
     fn encode_primitive() {
-        let arr = PrimitiveArray::from_vec(vec![1, 1, 3, 3, 3]);
+        let arr = PrimitiveArray::from(vec![1, 1, 3, 3, 3]);
         let (codes, values) = dict_encode_typed_primitive::<u8, i32>(&arr);
         assert_eq!(codes.buffer().typed_data::<u8>(), &[0, 0, 1, 1, 1]);
         assert_eq!(values.buffer().typed_data::<i32>(), &[1, 3]);
@@ -353,5 +376,20 @@ mod test {
             String::from_utf8(values.bytes_at(3).unwrap()).unwrap(),
             "again"
         );
+    }
+
+    #[test]
+    fn repeated_values() {
+        let arr = VarBinArray::from(vec!["a", "a", "b", "b", "a", "b", "a", "b"]);
+        let (codes, values) = dict_encode_varbin(&arr);
+        assert_eq!(
+            values.bytes().as_primitive().typed_data::<u8>(),
+            "ab".as_bytes()
+        );
+        assert_eq!(
+            values.offsets().as_primitive().typed_data::<u32>(),
+            &[0, 1, 2]
+        );
+        assert_eq!(codes.typed_data::<u8>(), &[0u8, 0, 1, 1, 0, 1, 0, 1]);
     }
 }

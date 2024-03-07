@@ -6,18 +6,19 @@ use fastlanez_sys::{transpose, Delta};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::error::VortexResult;
 use vortex::match_each_signed_integer_ptype;
 use vortex::ptype::NativePType;
 
 use crate::{DeltaArray, DeltaEncoding};
 
 impl EncodingCompression for DeltaEncoding {
-    fn compressor(
+    fn can_compress(
         &self,
         array: &dyn Array,
         _config: &CompressConfig,
-    ) -> Option<&'static Compressor> {
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
             debug!("Skipping Delta: not primitive");
@@ -31,30 +32,36 @@ impl EncodingCompression for DeltaEncoding {
         }
 
         debug!("Compressing with Delta");
-        Some(&(delta_compressor as Compressor))
+        Some(self)
     }
-}
 
-fn delta_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let parray = array.as_primitive();
-    let like_delta = like.map(|l| l.as_any().downcast_ref::<DeltaArray>().unwrap());
+    fn compress(
+        &self,
+        array: &dyn Array,
+        like: Option<&dyn Array>,
+        ctx: CompressCtx,
+    ) -> VortexResult<ArrayRef> {
+        let parray = array.as_primitive();
+        let like_delta = like.map(|l| l.as_any().downcast_ref::<DeltaArray>().unwrap());
 
-    let validity = parray
-        .validity()
-        .map(|v| ctx.compress(v.as_ref(), like_delta.and_then(|d| d.validity())));
+        let validity = parray
+            .validity()
+            .map(|v| ctx.compress(v.as_ref(), like_delta.and_then(|d| d.validity())))
+            .transpose()?;
 
-    let delta_encoded = match_each_signed_integer_ptype!(parray.ptype(), |$T| {
-        PrimitiveArray::from_vec(delta_primitive(parray.buffer().typed_data::<$T>()))
-    });
+        let delta_encoded = match_each_signed_integer_ptype!(parray.ptype(), |$T| {
+            PrimitiveArray::from(delta_primitive(parray.buffer().typed_data::<$T>()))
+        });
 
-    let encoded = ctx.next_level().compress(
-        delta_encoded.as_ref(),
-        like_delta.map(|d| d.encoded().as_ref()),
-    );
+        let encoded = ctx.next_level().compress(
+            delta_encoded.as_ref(),
+            like_delta.map(|d| d.encoded().as_ref()),
+        )?;
 
-    return DeltaArray::try_new(array.len(), encoded, validity)
-        .unwrap()
-        .boxed();
+        return Ok(DeltaArray::try_new(array.len(), encoded, validity)
+            .unwrap()
+            .boxed());
+    }
 }
 
 fn delta_primitive<T: NativePType + Delta>(array: &[T]) -> Vec<T>

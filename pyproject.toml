@@ -17,7 +17,7 @@ packages = ["dummy"] # Required for workspace project
 [tool.rye]
 managed = true
 dev-dependencies = [
-    "pytest==7.4.0",
+    "pytest>=7.4.0",
     "pytest-benchmark>=4.0.0",
     "ruff>=0.1.11",
     "pip>=23.3.2",

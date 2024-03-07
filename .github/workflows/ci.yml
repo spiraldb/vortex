@@ -23,6 +23,9 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: ./.github/actions/setup-python
 
+      - name: Rust Build
+        run: cargo build --all-targets
+
       - name: Python Lint - Format
         run: rye run ruff format --check .
       - name: Python Lint - Ruff
@@ -32,15 +35,8 @@ jobs:
         run: cargo fmt --all --check
       - name: Rust Lint - Clippy
         run: cargo clippy --all-targets
-
-      - name: Zig Lint - Fmt
-        run: zig fmt --check zig/
-
       - name: Rust Test
         run: cargo test --all
-
-      - name: Zig Test
-        run: zig build test
 
       - name: Pytest - PyVortex
         run: rye run pytest --benchmark-disable test/

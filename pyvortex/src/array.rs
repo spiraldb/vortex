@@ -15,7 +15,6 @@ use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex_alp::{ALPArray, ALPEncoding};
 use vortex_dict::{DictArray, DictEncoding};
 use vortex_fastlanes::{BitPackedArray, BitPackedEncoding, FoRArray, FoREncoding};
-use vortex_ffor::{FFORArray, FFoREncoding};
 use vortex_ree::{REEArray, REEEncoding};
 use vortex_roaring::{RoaringBoolArray, RoaringBoolEncoding, RoaringIntArray, RoaringIntEncoding};
 use vortex_zigzag::{ZigZagArray, ZigZagEncoding};
@@ -66,7 +65,6 @@ pyarray!(ALPArray, "ALPArray");
 pyarray!(BitPackedArray, "BitPackedArray");
 pyarray!(FoRArray, "FoRArray");
 pyarray!(DictArray, "DictArray");
-pyarray!(FFORArray, "FFORArray");
 pyarray!(REEArray, "REEArray");
 pyarray!(RoaringBoolArray, "RoaringBoolArray");
 pyarray!(RoaringIntArray, "RoaringIntArray");
@@ -133,10 +131,6 @@ impl PyArray {
                     inner.into_any().downcast::<BitPackedArray>().unwrap(),
                 )?
                 .extract(py),
-                FFoREncoding::ID => {
-                    PyFFORArray::wrap(py, inner.into_any().downcast::<FFORArray>().unwrap())?
-                        .extract(py)
-                }
                 REEEncoding::ID => {
                     PyREEArray::wrap(py, inner.into_any().downcast::<REEArray>().unwrap())?
                         .extract(py)

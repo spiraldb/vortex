@@ -128,7 +128,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for RoaringIntArray {
 
 impl ArrayDisplay for RoaringIntArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.indent(|indent| indent.writeln(format!("{:?}", self.bitmap())))
+        f.property("bitmap", format!("{:?}", self.bitmap()))
     }
 }
 
@@ -156,7 +156,6 @@ impl Encoding for RoaringIntEncoding {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::Array;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::error::VortexResult;
 
@@ -164,8 +163,8 @@ mod test {
 
     #[test]
     pub fn test_scalar_at() -> VortexResult<()> {
-        let ints: &dyn Array = &PrimitiveArray::from_vec::<u32>(vec![2, 12, 22, 32]);
-        let array = RoaringIntArray::encode(ints)?;
+        let ints = PrimitiveArray::from(vec![2u32, 12, 22, 32]);
+        let array = RoaringIntArray::encode(ints.as_ref())?;
 
         assert_eq!(scalar_at(array.as_ref(), 0), Ok(2u32.into()));
         assert_eq!(scalar_at(array.as_ref(), 1), Ok(12u32.into()));

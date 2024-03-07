@@ -1,5 +1,5 @@
 [package]
-name = "vortex-bench"
+name = "bench-vortex"
 version = { workspace = true }
 description = "End to end vortex benchmarks"
 homepage = { workspace = true }
@@ -16,23 +16,22 @@ workspace = true
 
 [dependencies]
 arrow-array = "50.0.0"
-vortex = { path = "../vortex" }
+vortex-array = { path = "../vortex-array" }
 vortex-alp = { path = "../vortex-alp" }
 vortex-dict = { path = "../vortex-dict" }
 vortex-fastlanes = { path = "../vortex-fastlanes" }
-vortex-ffor = { path = "../vortex-ffor" }
 vortex-ree = { path = "../vortex-ree" }
 vortex-roaring = { path = "../vortex-roaring" }
 vortex-zigzag = { path = "../vortex-zigzag" }
 itertools = "0.12.1"
+reqwest = { version = "0.11.24", features = ["blocking"] }
+parquet = "50.0.0"
+log = "0.4.20"
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports"] }
-log = "0.4.20"
-parquet = "50.0.0"
-rand = "0.8.5"
-reqwest = { version = "0.11.24", features = ["blocking"] }
 simplelog = { version = "0.12.1", features = ["paris"] }
+rand = "0.8.5"
 
 [[bench]]
 name = "compress_benchmark"
