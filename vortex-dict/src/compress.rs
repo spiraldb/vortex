@@ -10,23 +10,24 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
-use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::scalar_at::scalar_at;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::AsBytes;
+use vortex::stats::Stat;
 
 use crate::dict::{DictArray, DictEncoding};
 use crate::downcast::DowncastDict;
 
 impl EncodingCompression for DictEncoding {
-    fn compressor(
+    fn can_compress(
         &self,
         array: &dyn Array,
         _config: &CompressConfig,
-    ) -> Option<&'static Compressor> {
+    ) -> Option<&dyn EncodingCompression> {
         // TODO(robert): Add support for VarBinView
         if !matches!(
             ArrayKind::from(array),
@@ -36,7 +37,52 @@ impl EncodingCompression for DictEncoding {
             return None;
         };
 
-        Some(&(dict_compressor as Compressor))
+        // No point dictionary coding if the array is unique.
+        // We don't have a unique stat yet, but strict-sorted implies unique.
+        if array
+            .stats()
+            .get_or_compute_as(&Stat::IsStrictSorted)
+            .unwrap_or(false)
+        {
+            debug!("Skipping Dict: array is strict_sorted");
+            return None;
+        }
+
+        Some(self)
+    }
+
+    fn compress(
+        &self,
+        array: &dyn Array,
+        like: Option<&dyn Array>,
+        ctx: CompressCtx,
+    ) -> VortexResult<ArrayRef> {
+        let dict_like = like.map(|like_arr| like_arr.as_dict());
+
+        let (codes, dict) = match ArrayKind::from(array) {
+            ArrayKind::Primitive(p) => {
+                let (codes, dict) = dict_encode_primitive(p);
+                (
+                    ctx.next_level()
+                        .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
+                    ctx.next_level()
+                        .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
+                )
+            }
+            ArrayKind::VarBin(vb) => {
+                let (codes, dict) = dict_encode_varbin(vb);
+                (
+                    ctx.next_level()
+                        .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
+                    ctx.next_level()
+                        .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
+                )
+            }
+
+            _ => unreachable!("This array kind should have been filtered out"),
+        };
+
+        Ok(DictArray::new(codes, dict).boxed())
     }
 }
 
@@ -56,39 +102,6 @@ impl<T: AsBytes> PartialEq<Self> for Value<T> {
 }
 
 impl<T: AsBytes> Eq for Value<T> {}
-
-fn dict_compressor(
-    array: &dyn Array,
-    like: Option<&dyn Array>,
-    ctx: CompressCtx,
-) -> VortexResult<ArrayRef> {
-    let dict_like = like.map(|like_arr| like_arr.as_dict());
-
-    let (codes, dict) = match ArrayKind::from(array) {
-        ArrayKind::Primitive(p) => {
-            let (codes, dict) = dict_encode_primitive(p);
-            (
-                ctx.next_level()
-                    .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
-                ctx.next_level()
-                    .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
-            )
-        }
-        ArrayKind::VarBin(vb) => {
-            let (codes, dict) = dict_encode_varbin(vb);
-            (
-                ctx.next_level()
-                    .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
-                ctx.next_level()
-                    .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
-            )
-        }
-
-        _ => unreachable!("This array kind should have been filtered out"),
-    };
-
-    Ok(DictArray::new(codes, dict).boxed())
-}
 
 // TODO(robert): Use distinct count instead of len for width estimation
 pub fn dict_encode_primitive(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {

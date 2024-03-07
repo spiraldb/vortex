@@ -16,7 +16,6 @@ use crate::array::{
     EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::arrow::CombineChunks;
-use crate::compress::EncodingCompression;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
@@ -26,7 +25,6 @@ use crate::ptype::NativePType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
-mod compress;
 mod compute;
 mod serde;
 mod stats;
@@ -74,7 +72,7 @@ impl VarBinArray {
         }
 
         let validity = validity.filter(|v| !v.is_empty());
-        check_validity_buffer(validity.as_deref())?;
+        check_validity_buffer(validity.as_deref(), offsets.len() - 1)?;
 
         let dtype = if validity.is_some() && !dtype.is_nullable() {
             dtype.as_nullable()
@@ -103,9 +101,21 @@ impl VarBinArray {
         self.offsets.as_ref()
     }
 
+    pub fn first_offset<T: NativePType>(&self) -> VortexResult<T> {
+        scalar_at(self.offsets(), 0)?
+            .cast(&DType::from(T::PTYPE))?
+            .try_into()
+    }
+
     #[inline]
     pub fn bytes(&self) -> &dyn Array {
         self.bytes.as_ref()
+    }
+
+    pub fn sliced_bytes(&self) -> VortexResult<ArrayRef> {
+        let first_offset: usize = scalar_at(self.offsets(), 0)?.try_into()?;
+        let last_offset: usize = scalar_at(self.offsets(), self.offsets().len() - 1)?.try_into()?;
+        self.bytes().slice(first_offset, last_offset)
     }
 
     #[inline]
@@ -267,7 +277,7 @@ impl Array for VarBinArray {
             self.dtype.clone(),
             self.validity
                 .as_ref()
-                .map(|v| v.slice(start, stop + 1))
+                .map(|v| v.slice(start, stop))
                 .transpose()?,
         )
         .boxed())
@@ -307,10 +317,6 @@ static ENCODINGS_VARBIN: EncodingRef = &VarBinEncoding;
 impl Encoding for VarBinEncoding {
     fn id(&self) -> &EncodingId {
         &Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {

@@ -10,14 +10,12 @@ use crate::array::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
     ENCODINGS,
 };
-use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
-mod compress;
 mod compute;
 mod serde;
 mod stats;
@@ -194,7 +192,7 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for ChunkedArray {
 impl ArrayDisplay for ChunkedArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         for (i, c) in self.chunks().iter().enumerate() {
-            f.child(&format!("{}", i), c.as_ref())?
+            f.child(&format!("[{}]", i), c.as_ref())?
         }
         Ok(())
     }
@@ -213,10 +211,6 @@ static ENCODINGS_CHUNKED: EncodingRef = &ChunkedEncoding;
 impl Encoding for ChunkedEncoding {
     fn id(&self) -> &EncodingId {
         &Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {

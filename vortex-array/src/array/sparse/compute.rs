@@ -1,13 +1,44 @@
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::sparse::SparseArray;
+use crate::array::{Array, ArrayRef};
+use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
 use crate::scalar::{NullableScalar, Scalar, ScalarRef};
+use itertools::Itertools;
 
 impl ArrayCompute for SparseArray {
+    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
+        Some(self)
+    }
+
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
+    }
+}
+
+impl AsContiguousFn for SparseArray {
+    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+        Ok(SparseArray::new(
+            as_contiguous(
+                arrays
+                    .iter()
+                    .map(|a| a.as_sparse().indices())
+                    .map(dyn_clone::clone_box)
+                    .collect_vec(),
+            )?,
+            as_contiguous(
+                arrays
+                    .iter()
+                    .map(|a| a.as_sparse().values())
+                    .map(dyn_clone::clone_box)
+                    .collect_vec(),
+            )?,
+            arrays.iter().map(|a| a.len()).sum(),
+        )
+        .boxed())
     }
 }
 

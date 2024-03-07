@@ -359,6 +359,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
+name = "bench-vortex"
+version = "0.1.0"
+dependencies = [
+ "arrow-array",
+ "criterion",
+ "itertools 0.12.1",
+ "log",
+ "parquet",
+ "rand",
+ "reqwest",
+ "simplelog",
+ "vortex-alp",
+ "vortex-array",
+ "vortex-dict",
+ "vortex-fastlanes",
+ "vortex-ree",
+ "vortex-roaring",
+ "vortex-zigzag",
+]
+
+[[package]]
 name = "bindgen"
 version = "0.69.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2824,31 +2845,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "vortex-bench"
-version = "0.1.0"
-dependencies = [
- "arrow-array",
- "criterion",
- "itertools 0.12.1",
- "log",
- "parquet",
- "rand",
- "reqwest",
- "simplelog",
- "vortex-alp",
- "vortex-array",
- "vortex-dict",
- "vortex-fastlanes",
- "vortex-ree",
- "vortex-roaring",
- "vortex-zigzag",
-]
-
-[[package]]
 name = "vortex-dict"
 version = "0.1.0"
 dependencies = [
  "ahash",
+ "divan",
  "half",
  "hashbrown",
  "linkme",

@@ -2,8 +2,13 @@ use std::iter::zip;
 use std::sync::Arc;
 
 use arrow::array::RecordBatch;
-use arrow::datatypes::{DataType, Field, FieldRef, Fields, SchemaRef, TimeUnit as ArrowTimeUnit};
+use arrow::array::RecordBatchReader;
+use arrow::datatypes::{
+    DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit as ArrowTimeUnit,
+};
+use itertools::Itertools;
 
+use crate::array::chunked::ChunkedArray;
 use crate::array::struct_::StructArray;
 use crate::array::typed::TypedArray;
 use crate::array::{Array, ArrayRef};
@@ -11,6 +16,47 @@ use crate::dtype::DType::*;
 use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, TimeUnit};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
+
+#[allow(dead_code)]
+trait CollectRecordBatches: IntoIterator<Item = RecordBatch> {
+    fn collect_record_batches(&self, schema: &Schema) -> ArrayRef;
+}
+
+#[allow(dead_code)]
+impl TryFrom<&mut dyn RecordBatchReader> for ArrayRef {
+    type Error = VortexError;
+
+    fn try_from(reader: &mut dyn RecordBatchReader) -> Result<Self, Self::Error> {
+        let schema = reader.schema();
+        let mut fields = vec![Vec::new(); schema.fields().len()];
+
+        for batch_result in reader {
+            let batch = batch_result?;
+            for f in 0..schema.fields().len() {
+                let col = batch.column(f).clone();
+                fields[f].push(ArrayRef::from(col));
+            }
+        }
+
+        let names = schema
+            .fields()
+            .iter()
+            .map(|f| f.name())
+            .cloned()
+            .map(Arc::new)
+            .collect_vec();
+
+        let chunks: VortexResult<Vec<ArrayRef>> = fields
+            .into_iter()
+            .zip(schema.fields())
+            .map(|(field_chunks, arrow_type)| {
+                Ok(ChunkedArray::try_new(field_chunks, DType::try_from(arrow_type)?)?.boxed())
+            })
+            .try_collect();
+
+        Ok(StructArray::new(names, chunks?).boxed())
+    }
+}
 
 impl From<RecordBatch> for ArrayRef {
     fn from(value: RecordBatch) -> Self {
