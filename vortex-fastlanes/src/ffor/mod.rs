@@ -22,6 +22,7 @@ pub struct FFoRArray {
     validity: Option<ArrayRef>,
     patches: Option<ArrayRef>,
     bit_width: usize,
+    bit_shift: usize,
     reference: Option<ScalarRef>,
     len: usize,
     dtype: DType,
@@ -34,6 +35,7 @@ impl FFoRArray {
         validity: Option<ArrayRef>,
         patches: Option<ArrayRef>,
         bit_width: usize,
+        bit_shift: usize,
         reference: Option<ScalarRef>,
         dtype: DType,
         len: usize,
@@ -46,6 +48,7 @@ impl FFoRArray {
             validity,
             patches,
             bit_width,
+            bit_shift,
             reference,
             len,
             dtype,
@@ -61,6 +64,11 @@ impl FFoRArray {
     #[inline]
     pub fn bit_width(&self) -> usize {
         self.bit_width
+    }
+
+    #[inline]
+    pub fn bit_shift(&self) -> usize {
+        self.bit_shift
     }
 
     #[inline]

@@ -23,7 +23,6 @@ impl EncodingCompression for BitPackedEncoding {
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
-            debug!("Skipping BitPacking: not primitive");
             return None;
         };
 
@@ -68,10 +67,11 @@ impl EncodingCompression for BitPackedEncoding {
             .0;
 
         let like_bp = like.map(|l| l.as_any().downcast_ref::<BitPackedArray>().unwrap());
-
-        let bit_width = like_bp
-            .map(|bp| bp.bit_width())
-            .unwrap_or_else(|| best_bit_width(parray.ptype(), &bit_width_freq));
+        //
+        // let bit_width = like_bp
+        //     .map(|bp| bp.bit_width())
+        //     .unwrap_or_else(|| best_bit_width(parray.ptype(), &bit_width_freq));
+        let bit_width = best_bit_width(parray.ptype(), &bit_width_freq);
         let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
         // If we pack into zero bits, then we have an empty byte array.

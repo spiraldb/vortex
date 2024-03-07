@@ -23,7 +23,6 @@ impl EncodingCompression for RoaringIntEncoding {
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive enc arrays
         if array.encoding().id() != &PrimitiveEncoding::ID {
-            debug!("Skipping roaring int, not primitive");
             return None;
         }
 

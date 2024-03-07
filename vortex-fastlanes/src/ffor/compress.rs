@@ -1,6 +1,6 @@
 use arrayref::array_ref;
+use itertools::Itertools;
 use log::debug;
-use num_traits::PrimInt;
 
 use fastlanez_sys::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
@@ -11,7 +11,7 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
-use vortex::scalar::{ListScalarVec, ScalarRef};
+use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
 
 use crate::{FFoRArray, FFoREncoding};
@@ -24,7 +24,6 @@ impl EncodingCompression for FFoREncoding {
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
-            debug!("Skipping FFoR: not primitive");
             return None;
         };
 
@@ -43,7 +42,19 @@ impl EncodingCompression for FFoREncoding {
         like: Option<&dyn Array>,
         ctx: &CompressCtx,
     ) -> VortexResult<ArrayRef> {
-        let parray = array.as_primitive();
+        let mut parray = array.as_primitive().clone();
+
+        let tz_freq = parray
+            .stats()
+            .get_or_compute_as::<ListScalarVec<usize>>(&Stat::TZFreq)
+            .unwrap()
+            .0;
+        let _right_shift = tz_freq
+            .iter()
+            .enumerate()
+            .find_or_first(|(_, &v)| v > 0)
+            .map(|(i, _)| i)
+            .unwrap_or(0);
 
         // TODO(ngates): adjust bit width freq for reference value.
         let bit_width_freq = parray
@@ -52,22 +63,29 @@ impl EncodingCompression for FFoREncoding {
             .unwrap()
             .0;
         let like_bp = like.map(|l| l.as_any().downcast_ref::<FFoRArray>().unwrap());
-        let bit_width = like_bp
-            .map(|bp| bp.bit_width())
-            .unwrap_or_else(|| best_bit_width(parray.ptype(), &bit_width_freq));
+        let mut bit_width = best_bit_width(parray.ptype(), &bit_width_freq);
         let _num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
+        let _str = match_each_integer_ptype!(parray.ptype(), |$T| format!("{:?}", parray.typed_data::<$T>()));
         let min = parray
             .stats()
             .get_or_compute_cast::<i64>(&Stat::Min)
-            .unwrap_or_else(0);
-        let max = parray
-            .stats()
-            .get_or_compute_cast::<i64>(&Stat::Max)
-            .unwrap_or_else(0);
+            .unwrap_or(0);
+        let reference = (min != 0).then(|| parray.stats().get_or_compute(&Stat::Min).unwrap());
 
         if min != 0 {
+            let bit_width_change = min.trailing_zeros() as i8;
+            if bit_width as i8 - bit_width_change >= 0 {
+                bit_width = (bit_width as i8 - bit_width_change) as usize;
+            }
 
+            parray = match_each_integer_ptype!(parray.ptype(), |$T| PrimitiveArray::from(
+                parray
+                    .typed_data::<$T>()
+                    .iter()
+                    .map(|&v| v - min as $T)
+                    .collect_vec(),
+            ));
         }
 
         if bit_width == parray.ptype().bit_width() {
@@ -75,19 +93,11 @@ impl EncodingCompression for FFoREncoding {
             return Ok(parray.clone().boxed());
         }
 
-        let (values, new_bit_width, reference) = match_each_integer_ptype!(parray.ptype(), |$T| {
-            something::<$T>(parray, bit_width as i8)
-        });
-
         // If we pack into zero bits, then we have an empty byte array.
-        let (packed, new_bit_width, reference) = if new_bit_width == 0 {
-            (
-                PrimitiveArray::from(Vec::<u8>::new()).boxed(),
-                new_bit_width,
-                None,
-            )
+        let packed = if bit_width == 0 {
+            PrimitiveArray::from(Vec::<u8>::new()).boxed()
         } else {
-            (bitpack(&values, new_bit_width), new_bit_width, reference)
+            bitpack(&parray, bit_width)
         };
 
         let validity = parray
@@ -99,7 +109,7 @@ impl EncodingCompression for FFoREncoding {
             .transpose()?;
 
         // FIXME(ngates): num_exceptions is wrong
-        let patches = bitpack_patches(parray, new_bit_width, parray.len());
+        let patches = bitpack_patches(&parray, bit_width, parray.len());
         let patches = if patches.len() > 0 {
             Some(
                 ctx.next_level()
@@ -109,58 +119,21 @@ impl EncodingCompression for FFoREncoding {
             None
         };
 
+        let bit_shift = 0;
+        let _len = parray.len();
+
         Ok(FFoRArray::try_new(
             packed,
             validity,
             patches,
-            new_bit_width,
+            bit_width,
+            bit_shift,
             reference,
             parray.dtype().clone(),
             parray.len(),
         )
         .unwrap()
         .boxed())
-    }
-}
-
-fn something<T: NativePType + PrimInt>(
-    parray: &PrimitiveArray,
-    bit_width: i8,
-) -> (PrimitiveArray, usize, Option<ScalarRef>)
-where
-    ScalarRef: From<T>,
-{
-    let min = parray
-        .stats()
-        .get_or_compute_as::<T>(&Stat::Min)
-        .and_then(|m| (m != T::zero()).then_some(m));
-    let max = parray.stats().get_or_compute_as::<T>(&Stat::Max);
-
-    if let Some(m) = min {
-        let new_max = max.unwrap() - m;
-        let _bits_saved = new_max.leading_zeros() as i8 - max.unwrap().leading_zeros() as i8;
-
-        let shifted = PrimitiveArray::from(
-            parray
-                .buffer()
-                .typed_data::<T>()
-                .iter()
-                .map(|&v| v - m)
-                .collect::<Vec<_>>(),
-        );
-
-        let bits_saved: i8 = T::PTYPE.bit_width() as i8 - m.leading_zeros() as i8 - 1;
-
-        let new_bits = if bits_saved > bit_width {
-            0
-        } else {
-            bit_width - bits_saved
-        };
-
-        let reference = Some(ScalarRef::from(m));
-        (shifted, new_bits as usize, reference)
-    } else {
-        (parray.clone(), bit_width as usize, None)
     }
 }
 
@@ -249,6 +222,10 @@ fn best_bit_width(ptype: &PType, bit_width_freq: &[usize]) -> usize {
             best_cost = cost;
             best_width = bit_width;
         }
+    }
+
+    if count_exceptions(best_width, bit_width_freq) > 0 {
+        print!("");
     }
 
     best_width
