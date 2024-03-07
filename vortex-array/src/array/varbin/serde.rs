@@ -39,7 +39,7 @@ mod test {
 
     #[test]
     fn roundtrip() {
-        let arr = VarBinArray::from(
+        let arr = VarBinArray::from_vec(
             vec!["a", "def", "hello", "this", "is", "a", "test"],
             DType::Utf8(Nullability::NonNullable),
         );

@@ -5,23 +5,23 @@ use std::sync::{Arc, RwLock};
 use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
 use arrow::buffer::NullBuffer;
 use arrow::datatypes::UInt8Type;
-use itertools::Itertools;
 use linkme::distributed_slice;
-use num_traits::{FromPrimitive, Unsigned};
+use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
 
 use crate::array::bool::BoolArray;
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
     EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::arrow::CombineChunks;
-use crate::compute::cast::cast_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::ptype::{NativePType, PType};
+use crate::match_each_native_ptype;
+use crate::ptype::NativePType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
@@ -72,7 +72,7 @@ impl VarBinArray {
         }
 
         let validity = validity.filter(|v| !v.is_empty());
-        check_validity_buffer(validity.as_deref())?;
+        check_validity_buffer(validity.as_deref(), offsets.len() - 1)?;
 
         let dtype = if validity.is_some() && !dtype.is_nullable() {
             dtype.as_nullable()
@@ -98,7 +98,6 @@ impl VarBinArray {
 
     #[inline]
     pub fn offsets(&self) -> &dyn Array {
-        // FIXME(ngates): given our zero-copy slicing, this is kind of a useless array...
         self.offsets.as_ref()
     }
 
@@ -108,20 +107,8 @@ impl VarBinArray {
             .try_into()
     }
 
-    pub fn sliced_offsets(&self) -> VortexResult<ArrayRef> {
-        // TODO(ngates): cast arrow offsets into u64
-        let first_offset: i64 = self.first_offset()?;
-        let offsets = cast_primitive(self.offsets(), &PType::I64)?
-            .typed_data::<i64>()
-            .iter()
-            .map(|o| o - first_offset)
-            .collect_vec();
-        Ok(PrimitiveArray::from(offsets).boxed())
-    }
-
     #[inline]
     pub fn bytes(&self) -> &dyn Array {
-        // FIXME(ngates): given our zero-copy slicing, this is kind of a useless array...
         self.bytes.as_ref()
     }
 
@@ -136,16 +123,16 @@ impl VarBinArray {
         self.validity.as_deref()
     }
 
-    pub fn from<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
+    pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
         let size: usize = vec.iter().map(|v| v.as_ref().len()).sum();
         if size < u32::MAX as usize {
-            Self::from_sized::<u32, T>(vec, dtype)
+            Self::from_vec_sized::<u32, T>(vec, dtype)
         } else {
-            Self::from_sized::<u64, T>(vec, dtype)
+            Self::from_vec_sized::<u64, T>(vec, dtype)
         }
     }
 
-    fn from_sized<K, T>(vec: Vec<T>, dtype: DType) -> Self
+    fn from_vec_sized<K, T>(vec: Vec<T>, dtype: DType) -> Self
     where
         K: NativePType + FromPrimitive + Unsigned,
         T: AsRef<[u8]>,
@@ -204,10 +191,18 @@ impl VarBinArray {
 
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         // check_index_bounds(self, index)?;
-        let (start, end): (usize, usize) = (
-            scalar_at(self.offsets(), index)?.try_into()?,
-            scalar_at(self.offsets(), index + 1)?.try_into()?,
-        );
+
+        let (start, end): (usize, usize) = if let Some(p) = self.offsets.maybe_primitive() {
+            match_each_native_ptype!(p.ptype(), |$P| {
+                let buf = p.buffer().typed_data::<$P>();
+                (buf[index].as_(), buf[index + 1].as_())
+            })
+        } else {
+            (
+                scalar_at(self.offsets(), index)?.try_into()?,
+                scalar_at(self.offsets(), index + 1)?.try_into()?,
+            )
+        };
         let sliced = self.bytes().slice(start, end)?;
         let arr_ref = sliced.iter_arrow().combine_chunks();
         Ok(arr_ref.as_primitive::<UInt8Type>().values().to_vec())
@@ -275,13 +270,14 @@ impl Array for VarBinArray {
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
+
         Ok(VarBinArray::new(
             self.offsets.slice(start, stop + 1)?,
             self.bytes.clone(),
             self.dtype.clone(),
             self.validity
                 .as_ref()
-                .map(|v| v.slice(start, stop))
+                .map(|v| v.slice(start, stop + 1))
                 .transpose()?,
         )
         .boxed())
@@ -338,25 +334,25 @@ impl ArrayDisplay for VarBinArray {
 
 impl From<Vec<&[u8]>> for VarBinArray {
     fn from(value: Vec<&[u8]>) -> Self {
-        VarBinArray::from(value, DType::Binary(Nullability::NonNullable))
+        VarBinArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
 impl From<Vec<Vec<u8>>> for VarBinArray {
     fn from(value: Vec<Vec<u8>>) -> Self {
-        VarBinArray::from(value, DType::Binary(Nullability::NonNullable))
+        VarBinArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
 impl From<Vec<String>> for VarBinArray {
     fn from(value: Vec<String>) -> Self {
-        VarBinArray::from(value, DType::Utf8(Nullability::NonNullable))
+        VarBinArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
 impl From<Vec<&str>> for VarBinArray {
     fn from(value: Vec<&str>) -> Self {
-        VarBinArray::from(value, DType::Utf8(Nullability::NonNullable))
+        VarBinArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 

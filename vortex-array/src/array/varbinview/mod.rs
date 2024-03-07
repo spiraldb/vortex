@@ -125,7 +125,7 @@ impl VarBinViewArray {
             return Err(VortexError::InvalidDType(dtype));
         }
         let validity = validity.filter(|v| !v.is_empty());
-        check_validity_buffer(validity.as_deref())?;
+        check_validity_buffer(validity.as_deref(), views.len())?;
 
         let dtype = if validity.is_some() && !dtype.is_nullable() {
             dtype.as_nullable()

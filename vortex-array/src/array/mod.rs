@@ -95,17 +95,29 @@ pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> Vorte
     Ok(())
 }
 
-pub fn check_validity_buffer(validity: Option<&dyn Array>) -> VortexResult<()> {
-    // TODO(ngates): take a length parameter and check that the length of the validity buffer matches
-    if validity
-        .map(|v| !matches!(v.dtype(), DType::Bool(Nullability::NonNullable)))
-        .unwrap_or(false)
-    {
-        return Err(VortexError::MismatchedTypes(
-            validity.unwrap().dtype().clone(),
-            DType::Bool(Nullability::NonNullable),
-        ));
+pub fn check_validity_buffer(
+    validity: Option<&dyn Array>,
+    expected_len: usize,
+) -> VortexResult<()> {
+    if let Some(v) = validity {
+        if !matches!(v.dtype(), DType::Bool(Nullability::NonNullable)) {
+            return Err(VortexError::MismatchedTypes(
+                validity.unwrap().dtype().clone(),
+                DType::Bool(Nullability::NonNullable),
+            ));
+        }
+        if v.len() != expected_len {
+            return Err(VortexError::InvalidArgument(
+                format!(
+                    "Validity buffer has incorrect length {}, expected {}",
+                    v.len(),
+                    expected_len
+                )
+                .into(),
+            ));
+        }
     }
+
     Ok(())
 }
 
