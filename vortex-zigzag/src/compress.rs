@@ -23,7 +23,7 @@ impl EncodingCompression for ZigZagEncoding {
 
         // Only supports signed integers
         if !parray.ptype().is_signed_int() {
-            return Some(self);
+            return None;
         }
 
         // Only compress if the array has negative values

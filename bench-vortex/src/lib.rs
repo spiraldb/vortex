@@ -78,8 +78,8 @@ pub fn compress_taxi_data() -> ArrayRef {
     let mask = ProjectionMask::roots(builder.parquet_schema(), [10]);
     let reader = builder
         .with_projection(mask)
-        .with_batch_size(5_000_000)
-        .with_limit(500_000)
+        .with_batch_size(32_000)
+        // .with_limit(1_000_000)
         .build()
         .unwrap();
 
