@@ -57,7 +57,9 @@ impl EncodingCompression for FoREncoding {
         });
 
         // TODO(ngates): remove FoR as a potential encoding from the ctx
-        let compressed_child = ctx.next_level().compress(
+        // NOTE(ngates): we don't invoke next_level here since we know bit-packing is always
+        //  worth trying.
+        let compressed_child = ctx.compress(
             child.as_ref(),
             like.map(|l| l.as_any().downcast_ref::<FoRArray>().unwrap().child()),
         )?;

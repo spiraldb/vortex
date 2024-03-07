@@ -33,9 +33,9 @@ impl EncodingCompression for BitPackedEncoding {
             return None;
         }
 
-        // Check that the min >= zero
-        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? < 0 {
-            debug!("Skipping BitPacking: min is negative");
+        // Check that the min == zero. Otherwise, we can assume that FoR will run first.
+        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? != 0 {
+            debug!("Skipping BitPacking: min != 0");
             return None;
         }
 
