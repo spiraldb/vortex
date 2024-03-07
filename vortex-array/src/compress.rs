@@ -213,7 +213,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
 
     if array.len() < ctx.options.block_size as usize {
         // We're either already within a sample, or we're operating over a sufficiently small array.
-        return Ok(find_best_compression(candidates, array, ctx)?);
+        find_best_compression(candidates, array, ctx)
     } else {
         let sample = compute::as_contiguous::as_contiguous(
             stratified_slices(

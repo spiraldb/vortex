@@ -24,7 +24,7 @@ use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
-use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
+use vortex_roaring::RoaringBoolEncoding;
 
 pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
     vec![
