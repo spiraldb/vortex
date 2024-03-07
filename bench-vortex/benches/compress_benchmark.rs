@@ -1,8 +1,8 @@
 use std::fs::{create_dir_all, File};
 use std::path::Path;
 
+use bench_vortex::compress_taxi_data;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use vortex_bench::compress_taxi_data;
 
 fn download_taxi_data() -> &'static Path {
     let download_path = Path::new("data/yellow-tripdata-2023-11.parquet");

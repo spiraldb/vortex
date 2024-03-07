@@ -157,8 +157,8 @@ impl<'a> CompressCtx<'a> {
                 Ok(StructArray::new(strct.names().clone(), compressed_fields?).boxed())
             }
             _ => {
-                // Otherwise, we run sampled compression over pluggabla encodings
-                sampled_compression(arr, self.clone())
+                // Otherwise, we run sampled compression over pluggable encodings
+                Ok(sampled_compression(arr, self)?.unwrap_or_else(|| dyn_clone::clone_box(arr)))
             }
         }
     }
@@ -181,7 +181,7 @@ impl Default for CompressCtx<'_> {
     }
 }
 
-pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<ArrayRef> {
+pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult<Option<ArrayRef>> {
     // First, we try constant compression and shortcut any sampling.
     if !array.is_empty()
         && array
@@ -189,7 +189,9 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
             .get_or_compute_as::<bool>(&Stat::IsConstant)
             .unwrap_or(false)
     {
-        return Ok(ConstantArray::new(scalar_at(array, 0)?, array.len()).boxed());
+        return Ok(Some(
+            ConstantArray::new(scalar_at(array, 0)?, array.len()).boxed(),
+        ));
     }
 
     let candidates: Vec<&dyn EncodingCompression> = ENCODINGS
@@ -206,49 +208,38 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
             array.dtype(),
             array.encoding().id(),
         );
-        return Ok(dyn_clone::clone_box(array));
+        return Ok(None);
     }
 
-    if array.len() <= ctx.options.block_size as usize {
-        // We're either in a sample or we're operating over a sufficiently small array.
-        let sampling_result: VortexResult<(usize, Option<ArrayRef>)> = candidates.iter().try_fold(
-            (array.nbytes(), None),
-            |(compressed_bytes, curr_best), compression| {
-                let compressed = compression.compress(array, None, ctx.clone())?;
-                if compressed.nbytes() < compressed_bytes {
-                    Ok((compressed.nbytes(), Some(compressed)))
-                } else {
-                    Ok((compressed_bytes, curr_best))
-                }
-            },
-        );
-        let (_, compressed_sample) = sampling_result?;
+    if array.len() < ctx.options.block_size as usize {
+        // We're either already within a sample, or we're operating over a sufficiently small array.
+        return Ok(find_best_compression(candidates, array, ctx)?);
+    } else {
+        let sample = compute::as_contiguous::as_contiguous(
+            stratified_slices(
+                array.len(),
+                ctx.options.sample_size,
+                ctx.options.sample_count,
+            )
+            .into_iter()
+            .map(|(start, stop)| array.slice(start, stop).unwrap())
+            .collect(),
+        )?;
 
-        return Ok(compressed_sample
-            .map(|s| {
-                debug!(
-                    "Compressed small array with dtype: {} and encoding: {}, using: {}",
-                    array.dtype(),
-                    array.encoding().id(),
-                    s.encoding().id()
-                );
-                s
+        find_best_compression(candidates, sample.as_ref(), ctx)?
+            .map(|best| {
+                info!("Compressing array {} like {}", array, best);
+                ctx.compress(array, Some(best.as_ref()))
             })
-            .unwrap_or_else(|| dyn_clone::clone_box(array)));
+            .transpose()
     }
+}
 
-    // Otherwise, take the sample and try each compressor on it.
-    let sample = compute::as_contiguous::as_contiguous(
-        stratified_slices(
-            array.len(),
-            ctx.options.sample_size,
-            ctx.options.sample_count,
-        )
-        .into_iter()
-        .map(|(start, stop)| array.slice(start, stop).unwrap())
-        .collect(),
-    )?;
-
+fn find_best_compression(
+    candidates: Vec<&'static dyn EncodingCompression>,
+    sample: &dyn Array,
+    ctx: &CompressCtx,
+) -> VortexResult<Option<ArrayRef>> {
     let mut best_sample = None;
     let mut best_ratio = 1.0;
     for compression in candidates {
@@ -259,16 +250,5 @@ pub fn sampled_compression(array: &dyn Array, ctx: CompressCtx) -> VortexResult<
             best_ratio = compression_ratio;
         }
     }
-
-    best_sample
-        .map(|s| {
-            info!(
-                "Compressing array with dtype: {} and encoding: {}, like: {}",
-                array.dtype(),
-                array.encoding().id(),
-                s
-            );
-            ctx.compress(array, Some(s.as_ref()))
-        })
-        .unwrap_or_else(|| Ok(dyn_clone::clone_box(array)))
+    Ok(best_sample)
 }

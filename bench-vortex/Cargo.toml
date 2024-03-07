@@ -1,5 +1,5 @@
 [package]
-name = "vortex-bench"
+name = "bench-vortex"
 version = { workspace = true }
 description = "End to end vortex benchmarks"
 homepage = { workspace = true }

@@ -47,7 +47,7 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         &FoREncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
-        &RoaringIntEncoding,
+        // &RoaringIntEncoding,
         // Doesn't offer anything more than FoR really
         //&ZigZagEncoding,
     ]
@@ -78,9 +78,8 @@ pub fn compress_taxi_data() -> ArrayRef {
     let mask = ProjectionMask::roots(builder.parquet_schema(), [10]);
     let reader = builder
         .with_projection(mask)
-        .with_batch_size(100_000)
-        //.with_batch_size(5_000_000)
-        .with_limit(100_000)
+        .with_batch_size(5_000_000)
+        .with_limit(500_000)
         .build()
         .unwrap();
 

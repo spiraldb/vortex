@@ -17,10 +17,12 @@ use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, TimeUnit};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 
+#[allow(dead_code)]
 trait CollectRecordBatches: IntoIterator<Item = RecordBatch> {
     fn collect_record_batches(&self, schema: &Schema) -> ArrayRef;
 }
 
+#[allow(dead_code)]
 impl TryFrom<&mut dyn RecordBatchReader> for ArrayRef {
     type Error = VortexError;
 
