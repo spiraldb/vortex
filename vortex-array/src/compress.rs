@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -15,41 +15,6 @@ use crate::error::VortexResult;
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
 
-#[derive(Debug)]
-pub struct CompressionEstimate {
-    ratio: f32,
-    compressed_sample: Option<ArrayRef>,
-}
-
-impl Default for CompressionEstimate {
-    fn default() -> Self {
-        CompressionEstimate::new(1.0, None)
-    }
-}
-
-impl CompressionEstimate {
-    pub fn new(ratio: f32, compressed_sample: Option<ArrayRef>) -> Self {
-        Self {
-            ratio,
-            compressed_sample,
-        }
-    }
-}
-
-impl Display for CompressionEstimate {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "ratio: {}, sample: {}",
-            self.ratio,
-            match self.compressed_sample {
-                Some(ref sample) => format!("{}", sample),
-                None => "None".to_string(),
-            }
-        )
-    }
-}
-
 pub trait EncodingCompression: Encoding {
     // TODO(ngates): we could return a weighted score here to allow for better selection?
     fn can_compress(
@@ -58,33 +23,17 @@ pub trait EncodingCompression: Encoding {
         config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression>;
 
-    fn estimate_compression(
-        &self,
-        _array: &dyn Array,
-        sample: &dyn Array,
-        ctx: &CompressCtx,
-    ) -> Option<CompressionEstimate> {
-        self.compress(sample, None, ctx)
-            .ok()
-            .map(|compressed_sample| {
-                CompressionEstimate::new(
-                    compressed_sample.nbytes() as f32 / sample.nbytes() as f32,
-                    Some(compressed_sample),
-                )
-            })
-    }
-
-    // BitPacking -> array.bit_width => best bit width, count exceptions => estimate.
-    // REE -> array avg run length
-    // Dict -> array.
-    // Roaring -> array.nbytes * compressed_sample.nbytes / sample.nbytes
-
     fn compress(
         &self,
         array: &dyn Array,
         like: Option<&dyn Array>,
         ctx: &CompressCtx,
     ) -> VortexResult<ArrayRef>;
+
+    // Given a sample returned by this encoding, estimate the compression ratio of the full array.
+    fn estimate_ratio(&self, array: &dyn Array, sample: &dyn Array) -> f32 {
+        sample.nbytes() as f32 / array.nbytes() as f32
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -149,7 +98,7 @@ impl CompressConfig {
 #[derive(Debug, Clone)]
 pub struct CompressCtx {
     options: Arc<CompressConfig>,
-    in_sample: bool,
+    sample_pct: f32, // The percentage of the overall array that has been sampled.
     depth: u8,
 }
 
@@ -157,7 +106,7 @@ impl CompressCtx {
     pub fn new(options: Arc<CompressConfig>) -> Self {
         Self {
             options,
-            in_sample: false,
+            sample_pct: 1.0,
             depth: 0,
         }
     }
@@ -170,31 +119,20 @@ impl CompressCtx {
         cloned
     }
 
-    pub fn sampled(&self) -> Self {
+    pub fn for_sample(&self, sample: &dyn Array, array: &dyn Array) -> Self {
         let mut cloned = self.clone();
-        cloned.in_sample = true;
+        cloned.sample_pct = sample.len() as f32 / array.len() as f32;
         cloned
-    }
-
-    fn estimate_compression(
-        &self,
-        array: &dyn Array,
-        sample: &dyn Array,
-        ctx: &CompressCtx,
-    ) -> CompressionEstimate {
-        debug!(
-            "Estimating compression for array {} and sample {} at depth={}",
-            array, sample, self.depth
-        );
-        if self.depth >= self.options.max_depth {
-            return CompressionEstimate::default();
-        }
     }
 
     pub fn compress(&self, arr: &dyn Array, like: Option<&dyn Array>) -> VortexResult<ArrayRef> {
         debug!(
             "Compressing {} array {} like {} at depth={}",
-            if self.in_sample { "sample" } else { "full" },
+            if self.sample_pct < 1.0 {
+                "sample"
+            } else {
+                "full"
+            },
             arr,
             like.map(|l| l.encoding().id().name()).unwrap_or("<none>"),
             self.depth
@@ -264,6 +202,10 @@ impl CompressCtx {
         cloned
     }
 
+    pub fn sample_pct(&self) -> f32 {
+        self.sample_pct
+    }
+
     #[inline]
     pub fn options(&self) -> Arc<CompressConfig> {
         self.options.clone()
@@ -278,8 +220,7 @@ impl Default for CompressCtx {
 
 pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult<Option<ArrayRef>> {
     // First, we try constant compression and shortcut any sampling.
-    if !ctx.in_sample
-        && !array.is_empty()
+    if !array.is_empty()
         && array
             .stats()
             .get_or_compute_as::<bool>(&Stat::IsConstant)
@@ -307,20 +248,9 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
         return Ok(None);
     }
 
-    if ctx.in_sample
-        || array.len() <= (ctx.options.sample_size as usize * ctx.options.sample_count as usize)
-    {
+    if array.len() <= (ctx.options.sample_size as usize * ctx.options.sample_count as usize) {
         // We're either already within a sample, or we're operating over a sufficiently small array.
-        return find_best_compression(candidates, array, array, ctx.clone())?
-            .map(|(best_compression, best_estimate)| {
-                best_estimate
-                    .compressed_sample
-                    // Using the compressed sample if it exists since sample == array
-                    .map(|sample| Ok(Some(sample)))
-                    // Otherwise, compress the array
-                    .unwrap_or_else(|| best_compression.compress(array, None, ctx).map(Some))
-            })
-            .unwrap_or(Ok(None));
+        return find_best_compression(candidates, array, array, ctx.clone());
     }
 
     // Take a sample of the array, then ask codecs for their best compression estimate.
@@ -335,12 +265,17 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
         .collect(),
     )?;
 
-    find_best_compression(candidates, array.as_ref(), sample.as_ref(), ctx.sampled())?
-        .map(|(best_compression, best_estimate)| {
-            info!("Compressing array {} like {:?}", array, best_estimate);
-            best_compression.compress(array, best_estimate.compressed_sample.as_deref(), ctx)
-        })
-        .transpose()
+    find_best_compression(
+        candidates,
+        array,
+        sample.as_ref(),
+        ctx.for_sample(sample.as_ref(), array),
+    )?
+    .map(|best| {
+        info!("Compressing array {} like {}", array, best);
+        ctx.compress(array, Some(best.as_ref()))
+    })
+    .transpose()
 }
 
 fn find_best_compression(
@@ -348,16 +283,16 @@ fn find_best_compression(
     array: &dyn Array,
     sample: &dyn Array,
     ctx: CompressCtx,
-) -> VortexResult<Option<(&'static dyn EncodingCompression, CompressionEstimate)>> {
+) -> VortexResult<Option<ArrayRef>> {
     let mut best = None;
     let mut best_ratio = 1.0;
     for compression in candidates {
-        if let Some(estimate) = compression.estimate_compression(array, sample, &ctx) {
-            debug!("Estimate for {}: {}", compression.id(), estimate);
-            if estimate.ratio < best_ratio {
-                best_ratio = estimate.ratio;
-                best = Some((compression, estimate));
-            }
+        let compressed_sample = compression.compress(sample, None, &ctx)?;
+        let ratio = compression.estimate_ratio(array, compressed_sample.as_ref());
+        debug!("Ratio for {}: {}", compression.id(), ratio);
+        if ratio < best_ratio {
+            best_ratio = ratio;
+            best = Some(compressed_sample)
         }
     }
     Ok(best)

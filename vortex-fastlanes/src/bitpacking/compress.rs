@@ -28,15 +28,14 @@ impl EncodingCompression for BitPackedEncoding {
 
         // Only supports ints
         if !parray.ptype().is_int() {
-            debug!("Skipping BitPacking: not int");
             return None;
         }
 
-        // Check that the min == zero. Otherwise, we can assume that FoR will run first.
-        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? != 0 {
-            debug!("Skipping BitPacking: min != 0");
-            return None;
-        }
+        // // Check that the min == zero. Otherwise, we can assume that FoR will run first.
+        // if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? != 0 {
+        //     debug!("Skipping BitPacking: min != 0");
+        //     return None;
+        // }
 
         let bit_width_freq = parray
             .stats()
@@ -108,6 +107,24 @@ impl EncodingCompression for BitPackedEncoding {
         )
         .unwrap()
         .boxed())
+    }
+
+    fn estimate_ratio(&self, array: &dyn Array, _sample: &dyn Array) -> f32 {
+        let parray = array.as_primitive();
+        let bit_width_freq = parray
+            .stats()
+            .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)
+            .unwrap()
+            .0;
+
+        let bit_width = best_bit_width(parray.ptype(), &bit_width_freq);
+        let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
+        let bytes_per_exception = parray.ptype().byte_width() + 4;
+
+        let compressed_size =
+            (((bit_width * array.len()) + 7) / 8) + (num_exceptions * bytes_per_exception);
+
+        compressed_size as f32 / array.nbytes() as f32
     }
 }
 

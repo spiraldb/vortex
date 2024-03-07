@@ -78,9 +78,14 @@ pub fn download_taxi_data() -> PathBuf {
 pub fn compress_taxi_data() -> ArrayRef {
     let file = File::open(download_taxi_data()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let mask = ProjectionMask::roots(builder.parquet_schema(), [16]);
+    let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
+    let no_datetime_mask = ProjectionMask::roots(
+        builder.parquet_schema(),
+        [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    );
     let reader = builder
-        .with_projection(mask)
+        // .with_projection(mask)
+        .with_projection(no_datetime_mask)
         .with_batch_size(65_536)
         // .with_batch_size(5_000_000)
         //.with_limit(100_000)
@@ -99,7 +104,8 @@ pub fn compress_taxi_data() -> ArrayRef {
     let mut uncompressed_size = 0;
     let chunks = reader
         .into_iter()
-        .take(1)
+        //.skip(39)
+        //.take(1)
         .map(|batch_result| batch_result.unwrap())
         .map(ArrayRef::from)
         .map(|array| {

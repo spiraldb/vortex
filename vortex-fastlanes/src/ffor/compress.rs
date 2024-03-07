@@ -1,6 +1,5 @@
 use arrayref::array_ref;
 use itertools::Itertools;
-use log::debug;
 
 use fastlanez_sys::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
@@ -29,7 +28,6 @@ impl EncodingCompression for FFoREncoding {
 
         // Only supports ints
         if !parray.ptype().is_int() {
-            debug!("Skipping FFoR: not int");
             return None;
         }
 

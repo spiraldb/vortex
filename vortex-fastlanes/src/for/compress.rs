@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use log::debug;
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -24,13 +23,11 @@ impl EncodingCompression for FoREncoding {
 
         // Only supports integers
         if !parray.ptype().is_int() {
-            debug!("Skipping FoR: not int");
             return None;
         }
 
-        // Nothing for us to do if the min is already zero.
-        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? == 0 {
-            debug!("Skipping FoR: min is zero");
+        // Nothing for us to do if the min is already zero
+        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? != 0 {
             return None;
         }
 
