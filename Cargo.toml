@@ -1,20 +1,37 @@
 [workspace]
 members = [
     "bench-vortex",
-    "codecz",
-    "codecz-sys",
+    "fastlanez-sys",
     "pyvortex",
-    "vortex",
+    "vortex-array",
     "vortex-alloc",
     "vortex-alp",
     "vortex-datetime",
     "vortex-dict",
-    "vortex-ffor",
+    "vortex-fastlanes",
     "vortex-ree",
     "vortex-roaring",
     "vortex-zigzag",
 ]
 resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+homepage = "https://github.com/fulcrum-so/vortex"
+repository = "https://github.com/fulcrum-so/vortex"
+authors = ["Robert Kruszewski <robert@fulcrum.so>, Nicholas Gates <nick@fulcrum.so>, Will Manning <will@fulcrum.so>"]
+license = "Apache-2.0"
+keywords = ["vortex"]
+include = [
+    "benches/*.rs",
+    "src/**/*.rs",
+    "Carsgo.toml",
+]
+edition = "2021"
+rust-version = "1.76"
+
+[workspace.lints.rust]
+warnings = "deny"
 
 [workspace.lints.clippy]
 all = "deny"

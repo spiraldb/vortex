@@ -1,42 +1,28 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use croaring::Bitmap;
 use log::debug;
 use num_traits::NumCast;
 
 use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::primitive::{PrimitiveArray, PRIMITIVE_ENCODING};
+use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::dtype::DType;
 use vortex::dtype::Nullability::NonNullable;
 use vortex::dtype::Signedness::Unsigned;
+use vortex::error::VortexResult;
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
 
 use crate::{RoaringIntArray, RoaringIntEncoding};
 
 impl EncodingCompression for RoaringIntEncoding {
-    fn compressor(
+    fn can_compress(
         &self,
         array: &dyn Array,
         _config: &CompressConfig,
-    ) -> Option<&'static Compressor> {
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive enc arrays
-        if array.encoding().id() != &PRIMITIVE_ENCODING {
-            debug!("Skipping roaring int, not primitive");
+        if array.encoding().id() != &PrimitiveEncoding::ID {
             return None;
         }
 
@@ -61,16 +47,17 @@ impl EncodingCompression for RoaringIntEncoding {
         }
 
         debug!("Using roaring int");
-        Some(&(roaring_int_compressor as Compressor))
+        Some(self)
     }
-}
 
-fn roaring_int_compressor(
-    array: &dyn Array,
-    _like: Option<&dyn Array>,
-    _ctx: CompressCtx,
-) -> ArrayRef {
-    roaring_encode(array.as_primitive()).boxed()
+    fn compress(
+        &self,
+        array: &dyn Array,
+        _like: Option<&dyn Array>,
+        _ctx: CompressCtx,
+    ) -> VortexResult<ArrayRef> {
+        Ok(roaring_encode(array.as_primitive()).boxed())
+    }
 }
 
 pub fn roaring_encode(primitive_array: &PrimitiveArray) -> RoaringIntArray {

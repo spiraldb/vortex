@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::any::Any;
 use std::cmp::min;
 use std::marker::PhantomData;
@@ -21,25 +7,24 @@ use arrow::array::ArrowPrimitiveType;
 use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef, AsArray};
 use num_traits::AsPrimitive;
 
-use codecz::ree::SupportsREE;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{
-    check_index_bounds, check_slice_bounds, check_validity_buffer, Array, ArrayKind, ArrayRef,
-    ArrowIterator, Encoding, EncodingId, EncodingRef,
+    check_slice_bounds, check_validity_buffer, Array, ArrayKind, ArrayRef, ArrowIterator,
+    CloneOptionalArray, Encoding, EncodingId, EncodingRef,
 };
 use vortex::arrow::match_arrow_numeric_type;
 use vortex::compress::EncodingCompression;
 use vortex::compute;
+use vortex::compute::scalar_at::scalar_at;
 use vortex::compute::search_sorted::SearchSortedSide;
 use vortex::dtype::{DType, Nullability, Signedness};
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::ptype::NativePType;
-use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stat, Stats, StatsSet};
+use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 
-use crate::compress::ree_encode;
+use crate::compress::{ree_decode_primitive, ree_encode};
 
 #[derive(Debug, Clone)]
 pub struct REEArray {
@@ -67,7 +52,7 @@ impl REEArray {
         validity: Option<ArrayRef>,
         length: usize,
     ) -> VortexResult<Self> {
-        check_validity_buffer(validity.as_ref())?;
+        check_validity_buffer(validity.as_deref(), length)?;
 
         if !matches!(
             ends.dtype(),
@@ -108,10 +93,13 @@ impl REEArray {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => {
                 let (ends, values) = ree_encode(p);
-                Ok(
-                    REEArray::new(ends.boxed(), values.boxed(), p.validity().cloned(), p.len())
-                        .boxed(),
+                Ok(REEArray::new(
+                    ends.boxed(),
+                    values.boxed(),
+                    p.validity().clone_optional(),
+                    p.len(),
                 )
+                .boxed())
             }
             _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
         }
@@ -128,8 +116,8 @@ impl REEArray {
     }
 
     #[inline]
-    pub fn validity(&self) -> Option<&ArrayRef> {
-        self.validity.as_ref()
+    pub fn validity(&self) -> Option<&dyn Array> {
+        self.validity.as_deref()
     }
 }
 
@@ -169,14 +157,8 @@ impl Array for REEArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-        self.values.scalar_at(self.find_physical_index(index)?)
-    }
-
     fn iter_arrow(&self) -> Box<ArrowIterator> {
-        // TODO(robert): Plumb offset rewriting to zig to fuse with REE decompression
-        let ends: Vec<u32> = self
+        let ends: Vec<u64> = self
             .ends
             .iter_arrow()
             .flat_map(|c| {
@@ -184,11 +166,11 @@ impl Array for REEArray {
                     let ends = c.as_primitive::<$E>()
                         .values()
                         .iter()
-                        .map(|v| AsPrimitive::<u32>::as_(*v))
-                        .map(|v| v - self.offset as u32)
-                        .map(|v| min(v, self.length as u32))
-                        .take_while(|v| *v <= (self.length as u32))
-                        .collect::<Vec<u32>>();
+                        .map(|v| AsPrimitive::<u64>::as_(*v))
+                        .map(|v| v - self.offset as u64)
+                        .map(|v| min(v, self.length as u64))
+                        .take_while(|v| *v <= (self.length as u64))
+                        .collect::<Vec<u64>>();
                     ends.into_iter()
                 })
             })
@@ -234,6 +216,8 @@ impl Array for REEArray {
     }
 }
 
+impl StatsCompute for REEArray {}
+
 impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self
@@ -243,11 +227,13 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
 #[derive(Debug)]
 pub struct REEEncoding;
 
-pub const REE_ENCODING: EncodingId = EncodingId::new("vortex.ree");
+impl REEEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.ree");
+}
 
 impl Encoding for REEEncoding {
     fn id(&self) -> &EncodingId {
-        &REE_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
@@ -261,18 +247,16 @@ impl Encoding for REEEncoding {
 
 impl ArrayDisplay for REEArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.writeln("values:")?;
-        f.indent(|indented| indented.array(self.values()))?;
-        f.writeln("ends:")?;
-        f.indent(|indented| indented.array(self.ends()))
+        f.child("values", self.values())?;
+        f.child("ends", self.ends())
     }
 }
 
 pub struct REEArrowIterator<T: ArrowPrimitiveType>
 where
-    T::Native: NativePType + SupportsREE,
+    T::Native: NativePType,
 {
-    ends: Vec<u32>,
+    ends: Vec<u64>,
     values: Box<ArrowIterator>,
     current_idx: usize,
     _marker: PhantomData<T>,
@@ -280,9 +264,9 @@ where
 
 impl<T: ArrowPrimitiveType> REEArrowIterator<T>
 where
-    T::Native: NativePType + SupportsREE,
+    T::Native: NativePType,
 {
-    pub fn new(ends: Vec<u32>, values: Box<ArrowIterator>) -> Self {
+    pub fn new(ends: Vec<u64>, values: Box<ArrowIterator>) -> Self {
         Self {
             ends,
             values,
@@ -294,7 +278,7 @@ where
 
 impl<T: ArrowPrimitiveType> Iterator for REEArrowIterator<T>
 where
-    T::Native: NativePType + SupportsREE,
+    T::Native: NativePType,
 {
     type Item = ArrowArrayRef;
 
@@ -303,10 +287,9 @@ where
             let batch_ends = &self.ends[self.current_idx..self.current_idx + vs.len()];
             self.current_idx += vs.len();
             let decoded =
-                codecz::ree::decode::<T::Native>(vs.as_primitive::<T>().values(), batch_ends)
-                    .unwrap();
-            // TODO(robert): Is there a better way to construct a primitive arrow array
-            PrimitiveArray::from_vec_in(decoded).iter_arrow().next()
+                ree_decode_primitive(batch_ends, vs.as_primitive::<T>().values().as_ref());
+            // TODO(ngates): avoid going back into PrimitiveArray?
+            PrimitiveArray::from(decoded).iter_arrow().next()
         })
     }
 }
@@ -317,8 +300,7 @@ fn run_ends_logical_length<T: AsRef<dyn Array>>(ends: &T) -> usize {
     if ends.as_ref().is_empty() {
         0
     } else {
-        ends.as_ref()
-            .scalar_at(ends.as_ref().len() - 1)
+        scalar_at(ends.as_ref(), ends.as_ref().len() - 1)
             .and_then(|end| end.try_into())
             .unwrap_or_else(|_| panic!("Couldn't convert ends to usize"))
     }
@@ -330,6 +312,7 @@ mod test {
     use arrow::array::types::Int32Type;
     use itertools::Itertools;
     use vortex::array::Array;
+    use vortex::compute::scalar_at::scalar_at;
 
     use crate::REEArray;
     use vortex::dtype::{DType, IntWidth, Nullability, Signedness};
@@ -346,10 +329,10 @@ mod test {
         // 0, 1 => 1
         // 2, 3, 4 => 2
         // 5, 6, 7, 8, 9 => 3
-        assert_eq!(arr.scalar_at(0).unwrap().try_into(), Ok(1));
-        assert_eq!(arr.scalar_at(2).unwrap().try_into(), Ok(2));
-        assert_eq!(arr.scalar_at(5).unwrap().try_into(), Ok(3));
-        assert_eq!(arr.scalar_at(9).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(1));
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(arr.as_ref(), 5).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(arr.as_ref(), 9).unwrap().try_into(), Ok(3));
     }
 
     #[test]

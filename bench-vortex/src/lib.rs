@@ -1,79 +1,154 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+use arrow_array::RecordBatchReader;
 use itertools::Itertools;
+use log::info;
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use parquet::arrow::ProjectionMask;
+use std::collections::HashSet;
+use std::fs::{create_dir_all, File};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use vortex::array::bool::BoolEncoding;
+use vortex::array::chunked::{ChunkedArray, ChunkedEncoding};
+use vortex::array::constant::ConstantEncoding;
 
-use vortex::array::Encoding;
+use vortex::array::downcast::DowncastArrayBuiltin;
+use vortex::array::primitive::PrimitiveEncoding;
+use vortex::array::sparse::SparseEncoding;
+use vortex::array::struct_::StructEncoding;
+use vortex::array::typed::TypedEncoding;
+use vortex::array::varbin::VarBinEncoding;
+use vortex::array::varbinview::VarBinViewEncoding;
+use vortex::array::{Array, ArrayRef, Encoding};
+use vortex::compress::{CompressConfig, CompressCtx};
+use vortex::dtype::DType;
+use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
-use vortex_ffor::FFoREncoding;
+use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
-use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
-use vortex_zigzag::ZigZagEncoding;
+use vortex_roaring::RoaringBoolEncoding;
 
-pub fn enumerate_arrays() {
-    let encodings: Vec<&dyn Encoding> = vec![
+pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
+    vec![
+        // TODO(ngates): fix https://github.com/fulcrum-so/vortex/issues/35
+        // Builtins
+        &BoolEncoding,
+        &ChunkedEncoding,
+        &ConstantEncoding,
+        &PrimitiveEncoding,
+        &SparseEncoding,
+        &StructEncoding,
+        &TypedEncoding,
+        &VarBinEncoding,
+        &VarBinViewEncoding,
+        // Encodings
         &ALPEncoding,
         &DictEncoding,
-        &FFoREncoding,
+        &BitPackedEncoding,
+        &FoREncoding,
+        // &DeltaEncoding,
+        // &FFoREncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
-        &RoaringIntEncoding,
-        &ZigZagEncoding,
-    ];
-    println!("{}", encodings.iter().map(|e| e.id()).format(", "));
+        // &RoaringIntEncoding,
+        // Doesn't offer anything more than FoR really
+        // &ZigZagEncoding,
+    ]
+}
+
+pub fn download_taxi_data() -> PathBuf {
+    let download_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("data/yellow-tripdata-2023-11.parquet");
+    if download_path.exists() {
+        return download_path;
+    }
+
+    create_dir_all(download_path.parent().unwrap()).unwrap();
+    let mut download_file = File::create(&download_path).unwrap();
+    reqwest::blocking::get(
+        "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-11.parquet",
+    )
+    .unwrap()
+    .copy_to(&mut download_file)
+    .unwrap();
+
+    download_path
+}
+
+pub fn compress_taxi_data() -> ArrayRef {
+    let file = File::open(download_taxi_data()).unwrap();
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+    let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
+    let _no_datetime_mask = ProjectionMask::roots(
+        builder.parquet_schema(),
+        [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    );
+    let reader = builder
+        //.with_projection(mask)
+        //.with_projection(no_datetime_mask)
+        .with_batch_size(65_536)
+        // .with_batch_size(5_000_000)
+        // .with_limit(100_000)
+        .build()
+        .unwrap();
+
+    // let array = ArrayRef::try_from((&mut reader) as &mut dyn RecordBatchReader).unwrap();
+    let cfg = CompressConfig::new(
+        HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
+        HashSet::default(),
+    );
+    info!("Compression config {cfg:?}");
+    let ctx = CompressCtx::new(Arc::new(cfg));
+
+    let schema = reader.schema();
+    let mut uncompressed_size = 0;
+    let chunks = reader
+        .into_iter()
+        //.skip(39)
+        //.take(1)
+        .map(|batch_result| batch_result.unwrap())
+        .map(ArrayRef::from)
+        .map(|array| {
+            uncompressed_size += array.nbytes();
+            ctx.clone().compress(array.as_ref(), None).unwrap()
+        })
+        .collect_vec();
+
+    let dtype: DType = schema.clone().try_into().unwrap();
+    let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
+
+    info!("Compressed array {}", display_tree(compressed.as_ref()));
+
+    let mut field_bytes = vec![0; schema.fields().len()];
+    for chunk in chunks {
+        let str = chunk.as_struct();
+        for (i, field) in str.fields().iter().enumerate() {
+            field_bytes[i] += field.nbytes();
+        }
+    }
+    field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
+        println!("{},{}", schema.field(i).name(), nbytes);
+    });
+    println!(
+        "NBytes {}, Ratio {}",
+        compressed.nbytes(),
+        compressed.nbytes() as f32 / uncompressed_size as f32
+    );
+
+    compressed
 }
 
 #[cfg(test)]
 mod test {
-    use std::fs::create_dir_all;
-    use std::fs::File;
-    use std::path::Path;
-
-    use arrow_array::RecordBatchReader;
     use log::LevelFilter;
-    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 
-    use crate::enumerate_arrays;
-    use vortex::array::chunked::ChunkedArray;
-    use vortex::array::{Array, ArrayRef};
-    use vortex::compress::CompressCtx;
-    use vortex::dtype::DType;
-    use vortex::error::{VortexError, VortexResult};
+    use crate::compress_taxi_data;
 
-    pub fn download_taxi_data() -> &'static Path {
-        let download_path = Path::new("../../pyspiral/bench/.data/https-d37ci6vzurychx-cloudfront-net-trip-data-yellow-tripdata-2023-11.parquet");
-        if download_path.exists() {
-            return download_path;
-        }
-
-        create_dir_all(download_path.parent().unwrap()).unwrap();
-        let mut download_file = File::create(download_path).unwrap();
-        reqwest::blocking::get(
-            "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-11.parquet",
-        )
-        .unwrap()
-        .copy_to(&mut download_file)
-        .unwrap();
-
-        download_path
-    }
-
-    fn setup_logger() {
+    #[allow(dead_code)]
+    fn setup_logger(level: LevelFilter) {
         TermLogger::init(
-            LevelFilter::Info,
+            level,
             Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto,
@@ -81,35 +156,10 @@ mod test {
         .unwrap();
     }
 
+    #[ignore]
     #[test]
     fn compression_ratio() {
-        enumerate_arrays();
-        setup_logger();
-
-        let file = File::open(download_taxi_data()).unwrap();
-        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-        let reader = builder.with_batch_size(128_000).build().unwrap();
-
-        let schema = reader.schema();
-        let dtype: DType = schema.try_into().unwrap();
-        let chunks = reader
-            .map(|batch_result| batch_result.map_err(VortexError::from))
-            .map(|batch| batch.map(|b| b.into()))
-            .collect::<VortexResult<Vec<ArrayRef>>>()
-            .unwrap();
-        let chunked = ChunkedArray::new(chunks, dtype);
-        println!(
-            "{} rows in {} chunks",
-            chunked.len(),
-            chunked.chunks().len()
-        );
-        let array = chunked.boxed();
-        let compressed = CompressCtx::default().compress(array.as_ref(), None);
-        println!("Compressed array {compressed}");
-        println!(
-            "NBytes {}, Ratio {}",
-            compressed.nbytes(),
-            compressed.nbytes() as f32 / array.nbytes() as f32
-        );
+        setup_logger(LevelFilter::Warn);
+        _ = compress_taxi_data();
     }
 }

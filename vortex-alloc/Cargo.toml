@@ -1,9 +1,15 @@
 [package]
 name = "vortex-alloc"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version = { workspace = true }
+description = "Vortex allocator"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 
 [dependencies]
 allocator-api2 = "0.2.16"

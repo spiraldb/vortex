@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use paste::paste;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -26,14 +12,12 @@ use vortex::array::typed::TypedArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::varbinview::VarBinViewArray;
 use vortex::array::{Array, ArrayKind, ArrayRef};
-use vortex_alp::{ALPArray, ALP_ENCODING};
-use vortex_dict::{DictArray, DICT_ENCODING};
-use vortex_ffor::{FFORArray, FFOR_ENCODING};
-use vortex_ree::{REEArray, REE_ENCODING};
-use vortex_roaring::{
-    RoaringBoolArray, RoaringIntArray, ROARING_BOOL_ENCODING, ROARING_INT_ENCODING,
-};
-use vortex_zigzag::{ZigZagArray, ZIGZAG_ENCODING};
+use vortex_alp::{ALPArray, ALPEncoding};
+use vortex_dict::{DictArray, DictEncoding};
+use vortex_fastlanes::{BitPackedArray, BitPackedEncoding, FoRArray, FoREncoding};
+use vortex_ree::{REEArray, REEEncoding};
+use vortex_roaring::{RoaringBoolArray, RoaringBoolEncoding, RoaringIntArray, RoaringIntEncoding};
+use vortex_zigzag::{ZigZagArray, ZigZagEncoding};
 
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
@@ -78,8 +62,9 @@ pyarray!(VarBinArray, "VarBinArray");
 pyarray!(VarBinViewArray, "VarBinViewArray");
 
 pyarray!(ALPArray, "ALPArray");
+pyarray!(BitPackedArray, "BitPackedArray");
+pyarray!(FoRArray, "FoRArray");
 pyarray!(DictArray, "DictArray");
-pyarray!(FFORArray, "FFORArray");
 pyarray!(REEArray, "REEArray");
 pyarray!(RoaringBoolArray, "RoaringBoolArray");
 pyarray!(RoaringIntArray, "RoaringIntArray");
@@ -129,33 +114,38 @@ impl PyArray {
             ArrayKind::Other(other) => match *other.encoding().id() {
                 // PyEnc chooses to expose certain encodings as first-class objects.
                 // For the remainder, we should have a generic EncArray implementation that supports basic functions.
-                ALP_ENCODING => {
+                ALPEncoding::ID => {
                     PyALPArray::wrap(py, inner.into_any().downcast::<ALPArray>().unwrap())?
                         .extract(py)
                 }
-                DICT_ENCODING => {
+                DictEncoding::ID => {
                     PyDictArray::wrap(py, inner.into_any().downcast::<DictArray>().unwrap())?
                         .extract(py)
                 }
-                FFOR_ENCODING => {
-                    PyFFORArray::wrap(py, inner.into_any().downcast::<FFORArray>().unwrap())?
+                FoREncoding::ID => {
+                    PyFoRArray::wrap(py, inner.into_any().downcast::<FoRArray>().unwrap())?
                         .extract(py)
                 }
-                REE_ENCODING => {
+                BitPackedEncoding::ID => PyBitPackedArray::wrap(
+                    py,
+                    inner.into_any().downcast::<BitPackedArray>().unwrap(),
+                )?
+                .extract(py),
+                REEEncoding::ID => {
                     PyREEArray::wrap(py, inner.into_any().downcast::<REEArray>().unwrap())?
                         .extract(py)
                 }
-                ROARING_BOOL_ENCODING => PyRoaringBoolArray::wrap(
+                RoaringBoolEncoding::ID => PyRoaringBoolArray::wrap(
                     py,
                     inner.into_any().downcast::<RoaringBoolArray>().unwrap(),
                 )?
                 .extract(py),
-                ROARING_INT_ENCODING => PyRoaringIntArray::wrap(
+                RoaringIntEncoding::ID => PyRoaringIntArray::wrap(
                     py,
                     inner.into_any().downcast::<RoaringIntArray>().unwrap(),
                 )?
                 .extract(py),
-                ZIGZAG_ENCODING => {
+                ZigZagEncoding::ID => {
                     PyZigZagArray::wrap(py, inner.into_any().downcast::<ZigZagArray>().unwrap())?
                         .extract(py)
                 }

@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use log::debug;
 use pyo3::prelude::*;
 
@@ -49,9 +35,10 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<PyArray>()?;
     m.add_class::<PyBoolArray>()?;
+    m.add_class::<PyBitPackedArray>()?;
     m.add_class::<PyChunkedArray>()?;
     m.add_class::<PyConstantArray>()?;
-    m.add_class::<PyFFORArray>()?;
+    m.add_class::<PyFoRArray>()?;
     m.add_class::<PyPrimitiveArray>()?;
     m.add_class::<PyREEArray>()?;
     m.add_class::<PySparseArray>()?;

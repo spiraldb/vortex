@@ -1,24 +1,10 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use zigzag::ZigZag;
 
 use crate::downcast::DowncastZigzag;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayKind, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, Compressor, EncodingCompression};
+use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::error::VortexResult;
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
@@ -27,11 +13,11 @@ use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 use crate::zigzag::{ZigZagArray, ZigZagEncoding};
 
 impl EncodingCompression for ZigZagEncoding {
-    fn compressor(
+    fn can_compress(
         &self,
         array: &dyn Array,
         _config: &CompressConfig,
-    ) -> Option<&'static Compressor> {
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let parray = array.maybe_primitive()?;
 
@@ -45,23 +31,27 @@ impl EncodingCompression for ZigZagEncoding {
         parray
             .stats()
             .get_or_compute_cast::<i64>(&Stat::Min)
-            .filter(|min| min < &0)
-            .map(|_| &(zigzag_compressor as Compressor))
+            .filter(|&min| min < 0)
+            .map(|_| self as &dyn EncodingCompression)
     }
-}
 
-fn zigzag_compressor(array: &dyn Array, like: Option<&dyn Array>, ctx: CompressCtx) -> ArrayRef {
-    let zigzag_like = like.map(|like_arr| like_arr.as_zigzag());
-    let encoded = match ArrayKind::from(array) {
-        ArrayKind::Primitive(p) => zigzag_encode(p),
-        _ => unreachable!("This array kind should have been filtered out"),
-    };
+    fn compress(
+        &self,
+        array: &dyn Array,
+        like: Option<&dyn Array>,
+        ctx: CompressCtx,
+    ) -> VortexResult<ArrayRef> {
+        let zigzag_like = like.map(|like_arr| like_arr.as_zigzag());
+        let encoded = match ArrayKind::from(array) {
+            ArrayKind::Primitive(p) => zigzag_encode(p),
+            _ => unreachable!("This array kind should have been filtered out"),
+        };
 
-    ZigZagArray::new(
-        ctx.next_level()
-            .compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded())),
-    )
-    .boxed()
+        Ok(ZigZagArray::new(
+            ctx.compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded()))?,
+        )
+        .boxed())
+    }
 }
 
 pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
@@ -83,14 +73,14 @@ pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
 
 fn zigzag_encode_primitive<T: ZigZag + NativePType>(
     values: &[T],
-    validity: Option<&ArrayRef>,
+    validity: Option<&dyn Array>,
 ) -> PrimitiveArray
 where
     <T as ZigZag>::UInt: NativePType,
 {
     let mut encoded = AlignedVec::with_capacity_in(values.len(), ALIGNED_ALLOCATOR);
     encoded.extend(values.iter().map(|v| T::encode(*v)));
-    PrimitiveArray::from_nullable_in(encoded, validity.cloned())
+    PrimitiveArray::from_nullable_in(encoded, validity.clone_optional())
 }
 
 #[allow(dead_code)]
@@ -113,12 +103,12 @@ pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
 #[allow(dead_code)]
 fn zigzag_decode_primitive<T: ZigZag + NativePType>(
     values: &[T::UInt],
-    validity: Option<&ArrayRef>,
+    validity: Option<&dyn Array>,
 ) -> PrimitiveArray
 where
     <T as ZigZag>::UInt: NativePType,
 {
     let mut encoded: AlignedVec<T> = AlignedVec::with_capacity_in(values.len(), ALIGNED_ALLOCATOR);
     encoded.extend(values.iter().map(|v| T::decode(*v)));
-    PrimitiveArray::from_nullable_in(encoded, validity.cloned())
+    PrimitiveArray::from_nullable_in(encoded, validity.clone_optional())
 }

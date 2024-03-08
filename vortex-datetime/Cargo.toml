@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-vortex = { "path" = "../vortex" }
+vortex-array = { "path" = "../vortex-array" }
 linkme = "0.3.22"
 log = "0.4.20"

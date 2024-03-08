@@ -1,17 +1,3 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
@@ -19,19 +5,19 @@ use croaring::{Bitmap, Native};
 
 use compress::roaring_encode;
 use vortex::array::{
-    check_index_bounds, check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef,
+    check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
+    EncodingRef,
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::DType;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::ptype::PType;
-use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 mod stats;
 
@@ -110,20 +96,6 @@ impl Array for RoaringIntArray {
         Stats::new(&self.stats, self)
     }
 
-    fn scalar_at(&self, index: usize) -> VortexResult<Box<dyn Scalar>> {
-        check_index_bounds(self, index)?;
-        // Unwrap since we know the index is valid
-        let bitmap_value = self.bitmap.select(index as u32).unwrap();
-        let scalar: Box<dyn Scalar> = match self.ptype {
-            PType::U8 => (bitmap_value as u8).into(),
-            PType::U16 => (bitmap_value as u16).into(),
-            PType::U32 => bitmap_value.into(),
-            PType::U64 => (bitmap_value as u64).into(),
-            _ => unreachable!("RoaringIntArray constructor should have disallowed this type"),
-        };
-        Ok(scalar)
-    }
-
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         todo!()
     }
@@ -156,18 +128,20 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for RoaringIntArray {
 
 impl ArrayDisplay for RoaringIntArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.indent(|indent| indent.writeln(format!("{:?}", self.bitmap())))
+        f.property("bitmap", format!("{:?}", self.bitmap()))
     }
 }
 
 #[derive(Debug)]
 pub struct RoaringIntEncoding;
 
-pub const ROARING_INT_ENCODING: EncodingId = EncodingId::new("roaring.int");
+impl RoaringIntEncoding {
+    pub const ID: EncodingId = EncodingId::new("roaring.int");
+}
 
 impl Encoding for RoaringIntEncoding {
     fn id(&self) -> &EncodingId {
-        &ROARING_INT_ENCODING
+        &Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
@@ -182,18 +156,18 @@ impl Encoding for RoaringIntEncoding {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::Array;
+    use vortex::compute::scalar_at::scalar_at;
     use vortex::error::VortexResult;
 
     use crate::RoaringIntArray;
 
     #[test]
-    pub fn scalar_at() -> VortexResult<()> {
-        let ints: &dyn Array = &PrimitiveArray::from_vec::<u32>(vec![2, 12, 22, 32]);
-        let array = RoaringIntArray::encode(ints)?;
+    pub fn test_scalar_at() -> VortexResult<()> {
+        let ints = PrimitiveArray::from(vec![2u32, 12, 22, 32]);
+        let array = RoaringIntArray::encode(ints.as_ref())?;
 
-        assert_eq!(array.scalar_at(0), Ok(2u32.into()));
-        assert_eq!(array.scalar_at(1), Ok(12u32.into()));
+        assert_eq!(scalar_at(array.as_ref(), 0), Ok(2u32.into()));
+        assert_eq!(scalar_at(array.as_ref(), 1), Ok(12u32.into()));
 
         Ok(())
     }

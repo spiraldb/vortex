@@ -17,13 +17,11 @@ packages = ["dummy"] # Required for workspace project
 [tool.rye]
 managed = true
 dev-dependencies = [
-    "pytest==7.4.0",
+    "pytest>=7.4.0",
     "pytest-benchmark>=4.0.0",
     "ruff>=0.1.11",
     "pip>=23.3.2",
     "maturin>=1.4.0",
-    "snakeviz>=2.2.0",
-    "py-spy>=0.3.14",
     "mkdocs>=1.5.3",
     "mkdocs-material>=9.5.11",
     "mkdocs-include-markdown-plugin>=6.0.4",

@@ -1,13 +1,34 @@
 [package]
 name = "vortex-dict"
-version = "0.1.0"
-edition = "2021"
+version = { workspace = true }
+description = "Vortex dictionary array"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 
 [dependencies]
 ahash = "0.8.7"
-vortex = { "path" = "../vortex" }
+vortex-array = { path = "../vortex-array" }
 half = { version = "2.3.1", features = ["std", "num-traits"] }
 hashbrown = "0.14.3"
 linkme = "0.3.22"
 log = "0.4.20"
 num-traits = "0.2.17"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
+log = "0.4.20"
+rand = "0.8.5"
+simplelog = { version = "0.12.1", features = ["paris"] }
+
+[[bench]]
+name = "dict_compress"
+harness = false

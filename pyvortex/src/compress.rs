@@ -1,23 +1,11 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use pyo3::types::PyType;
 use pyo3::{pyclass, pyfunction, pymethods, Py, PyResult, Python};
+use std::sync::Arc;
 
 use vortex::compress::{CompressConfig, CompressCtx};
 
 use crate::array::PyArray;
+use crate::error::PyVortexError;
 
 #[derive(Clone)]
 #[pyclass(name = "CompressConfig", module = "vortex")]
@@ -46,7 +34,9 @@ pub fn compress(
     opts: Option<PyCompressConfig>,
 ) -> PyResult<Py<PyArray>> {
     let compress_opts = opts.map(|o| o.inner).unwrap_or_default();
-    let ctx = CompressCtx::new(&compress_opts);
-    let compressed = py.allow_threads(|| ctx.compress(arr.unwrap(), None));
+    let ctx = CompressCtx::new(Arc::new(compress_opts));
+    let compressed = py
+        .allow_threads(|| ctx.compress(arr.unwrap(), None))
+        .map_err(PyVortexError::map_err)?;
     PyArray::wrap(py, compressed)
 }

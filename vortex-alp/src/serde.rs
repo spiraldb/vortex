@@ -1,26 +1,13 @@
-// (c) Copyright 2024 Fulcrum Technologies, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use std::io;
 use std::io::ErrorKind;
 
-use codecz::alp::ALPExponents;
+use crate::alp::Exponents;
 use vortex::array::{Array, ArrayRef};
 use vortex::dtype::{DType, FloatWidth, Signedness};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
-use crate::{ALPArray, ALPEncoding};
+use crate::ALPArray;
+use crate::ALPEncoding;
 
 impl ArraySerde for ALPArray {
     fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
@@ -53,7 +40,7 @@ impl EncodingSerde for ALPEncoding {
         let encoded = ctx.with_schema(&encoded_dtype).read()?;
         Ok(ALPArray::new(
             encoded,
-            ALPExponents {
+            Exponents {
                 e: exponents[0],
                 f: exponents[1],
             },
@@ -86,12 +73,13 @@ mod test {
 
     #[test]
     fn roundtrip() {
-        let arr = alp_encode(&PrimitiveArray::from_vec(vec![
+        let arr = alp_encode(&PrimitiveArray::from(vec![
             0.00001f64,
             0.0004f64,
             1000000.0f64,
             0.33f64,
-        ]));
+        ]))
+        .unwrap();
         let read_arr = roundtrip_array(arr.as_ref()).unwrap();
 
         let read_alp = read_arr.as_alp();
