@@ -1,14 +1,18 @@
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
+use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use crate::error::VortexResult;
 use itertools::Itertools;
 use std::ops::Deref;
 
 impl EncodingCompression for StructEncoding {
-    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
-        (array.encoding().id() == &Self::ID).then_some(Estimate::default())
+    fn can_compress(
+        &self,
+        array: &dyn Array,
+        _config: &CompressConfig,
+    ) -> Option<&dyn EncodingCompression> {
+        (array.encoding().id() == &Self::ID).then_some(self)
     }
 
     fn compress(

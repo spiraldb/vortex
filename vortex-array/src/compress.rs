@@ -14,35 +14,16 @@ use crate::error::VortexResult;
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
 
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub struct Estimate {
-    cost: u8,
-    ratio: Option<f32>,
-}
-
-impl Estimate {
-    pub fn new(cost: u8, ratio: Option<f32>) -> Self {
-        Self { cost, ratio }
-    }
-}
-
-impl Default for Estimate {
-    fn default() -> Self {
-        Self {
-            cost: 1,
-            ratio: None,
-        }
-    }
-}
-
 pub trait EncodingCompression: Encoding {
     fn cost(&self) -> u8 {
         1
     }
 
-    // TODO(ngates): we could return a weighted score here to allow for better selection?
-    fn can_compress(&self, array: &dyn Array, config: &CompressConfig) -> Option<Estimate>;
+    fn can_compress(
+        &self,
+        array: &dyn Array,
+        config: &CompressConfig,
+    ) -> Option<&dyn EncodingCompression>;
 
     fn compress(
         &self,
@@ -156,7 +137,7 @@ impl CompressCtx {
         cloned
     }
 
-    pub fn for_encoding(&self, compression: &'static dyn EncodingCompression) -> Self {
+    pub fn for_encoding(&self, compression: &dyn EncodingCompression) -> Self {
         let mut cloned = self.clone();
         cloned.depth += compression.cost();
         cloned
@@ -251,14 +232,14 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
         ));
     }
 
-    let mut candidates: Vec<(&dyn EncodingCompression, Estimate)> = ENCODINGS
+    let mut candidates: Vec<&dyn EncodingCompression> = ENCODINGS
         .iter()
         .filter(|encoding| ctx.options().is_enabled(encoding.id()))
         .filter(|encoding| !ctx.disabled_encodings.contains(encoding.id()))
         .filter_map(|encoding| encoding.compression())
         .filter_map(|compression| {
-            if let Some(estimate) = compression.can_compress(array, ctx.options().as_ref()) {
-                if ctx.depth + estimate.cost > ctx.options.max_depth {
+            if let Some(_) = compression.can_compress(array, ctx.options().as_ref()) {
+                if ctx.depth + compression.cost() > ctx.options.max_depth {
                     debug!(
                         "{} skipping encoding {} due to depth",
                         ctx,
@@ -267,7 +248,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
                     return None;
                 }
 
-                Some((compression, estimate))
+                Some(compression)
             } else {
                 None
             }
@@ -295,7 +276,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
     if candidates.len() > 1 {
         candidates = candidates
             .into_iter()
-            .filter(|(compression, _estimate)| compression.id() != array.encoding().id())
+            .filter(|compression| compression.id() != array.encoding().id())
             .collect();
     }
 
@@ -326,14 +307,14 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
         .transpose()
 }
 
-fn find_best_compression(
-    candidates: Vec<(&'static dyn EncodingCompression, Estimate)>,
+fn find_best_compression<'a>(
+    candidates: Vec<&'a dyn EncodingCompression>,
     sample: &dyn Array,
     ctx: &CompressCtx,
-) -> VortexResult<Option<(&'static dyn EncodingCompression, ArrayRef)>> {
+) -> VortexResult<Option<(&'a dyn EncodingCompression, ArrayRef)>> {
     let mut best = None;
     let mut best_ratio = 1.0;
-    for (compression, _estimate) in candidates {
+    for compression in candidates {
         debug!(
             "{} trying candidate {} for {}",
             ctx,

@@ -65,10 +65,6 @@ impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
                     Stat::BitWidthFreq,
                     ListScalarVec(vec![0; size_of::<T>() * 8 + 1]).into(),
                 ),
-                (
-                    Stat::TZFreq,
-                    ListScalarVec(vec![0; size_of::<T>() * 8 + 1]).into(),
-                ),
             ])));
         }
 
@@ -85,7 +81,6 @@ impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
 
 trait BitWidth {
     fn bit_width(self) -> usize;
-    fn ctz(self) -> usize;
 }
 
 impl<T: NativePType + Into<PScalar>> BitWidth for T {
@@ -106,23 +101,6 @@ impl<T: NativePType + Into<PScalar>> BitWidth for T {
             PScalar::F64(_) => bit_width,
         }
     }
-
-    fn ctz(self) -> usize {
-        let scalar: PScalar = self.into();
-        match scalar {
-            PScalar::U8(i) => i.trailing_zeros() as usize,
-            PScalar::U16(i) => i.trailing_zeros() as usize,
-            PScalar::U32(i) => i.trailing_zeros() as usize,
-            PScalar::U64(i) => i.trailing_zeros() as usize,
-            PScalar::I8(i) => i.trailing_zeros() as usize,
-            PScalar::I16(i) => i.trailing_zeros() as usize,
-            PScalar::I32(i) => i.trailing_zeros() as usize,
-            PScalar::I64(i) => i.trailing_zeros() as usize,
-            PScalar::F16(_) => 0,
-            PScalar::F32(_) => 0,
-            PScalar::F64(_) => 0,
-        }
-    }
 }
 
 struct StatsAccumulator<T: NativePType> {
@@ -134,7 +112,6 @@ struct StatsAccumulator<T: NativePType> {
     run_count: usize,
     null_count: usize,
     bit_widths: Vec<usize>,
-    ctz: Vec<usize>,
 }
 
 impl<T: NativePType> StatsAccumulator<T> {
@@ -148,10 +125,8 @@ impl<T: NativePType> StatsAccumulator<T> {
             run_count: 1,
             null_count: 0,
             bit_widths: vec![0; size_of::<T>() * 8 + 1],
-            ctz: vec![0; size_of::<T>() * 8 + 1],
         };
         stats.bit_widths[first_value.bit_width()] += 1;
-        stats.ctz[first_value.ctz()] += 1;
         stats
     }
 
@@ -160,7 +135,6 @@ impl<T: NativePType> StatsAccumulator<T> {
             Some(n) => self.next(n),
             None => {
                 self.bit_widths[0] += 1;
-                self.ctz[0] += 1;
                 self.null_count += 1;
             }
         }
@@ -168,7 +142,6 @@ impl<T: NativePType> StatsAccumulator<T> {
 
     pub fn next(&mut self, next: T) {
         self.bit_widths[next.bit_width()] += 1;
-        self.ctz[next.ctz()] += 1;
 
         if self.prev == next {
             self.is_strict_sorted = false;
@@ -193,7 +166,6 @@ impl<T: NativePType> StatsAccumulator<T> {
             (Stat::NullCount, self.null_count.into()),
             (Stat::IsConstant, (self.min == self.max).into()),
             (Stat::BitWidthFreq, ListScalarVec(self.bit_widths).into()),
-            (Stat::TZFreq, ListScalarVec(self.ctz).into()),
             (Stat::IsSorted, self.is_sorted.into()),
             (
                 Stat::IsStrictSorted,
@@ -222,7 +194,7 @@ mod test {
             .get_or_compute_as(&Stat::IsStrictSorted)
             .unwrap();
         let is_constant: bool = arr.stats().get_or_compute_as(&Stat::IsConstant).unwrap();
-        let leading_zeros_freq: Vec<u64> = arr
+        let bit_width_freq: Vec<u64> = arr
             .stats()
             .get_or_compute_as::<ListScalarVec<u64>>(&Stat::BitWidthFreq)
             .unwrap()
@@ -234,7 +206,7 @@ mod test {
         assert!(is_strict_sorted);
         assert!(!is_constant);
         assert_eq!(
-            leading_zeros_freq,
+            bit_width_freq,
             vec![
                 0u64, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0,

@@ -8,7 +8,7 @@ use num_traits::AsPrimitive;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::varbin::{VarBinArray, VarBinEncoding};
 use vortex::array::{Array, ArrayKind, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
@@ -21,7 +21,11 @@ use crate::dict::{DictArray, DictEncoding};
 use crate::downcast::DowncastDict;
 
 impl EncodingCompression for DictEncoding {
-    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
+    fn can_compress(
+        &self,
+        array: &dyn Array,
+        _config: &CompressConfig,
+    ) -> Option<&dyn EncodingCompression> {
         // TODO(robert): Add support for VarBinView
         if array.encoding().id() != &PrimitiveEncoding::ID
             && array.encoding().id() != &VarBinEncoding::ID
@@ -39,7 +43,7 @@ impl EncodingCompression for DictEncoding {
             return None;
         }
 
-        Some(Estimate::default())
+        Some(self)
     }
 
     fn compress(

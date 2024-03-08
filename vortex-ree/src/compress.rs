@@ -2,7 +2,7 @@ use itertools::Itertools;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef, Encoding};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast_primitive;
 use vortex::error::VortexResult;
 use vortex::ptype::{match_each_native_ptype, NativePType};
@@ -12,7 +12,11 @@ use crate::downcast::DowncastREE;
 use crate::{REEArray, REEEncoding};
 
 impl EncodingCompression for REEEncoding {
-    fn can_compress(&self, array: &dyn Array, config: &CompressConfig) -> Option<Estimate> {
+    fn can_compress(
+        &self,
+        array: &dyn Array,
+        config: &CompressConfig,
+    ) -> Option<&dyn EncodingCompression> {
         if array.encoding().id() != PrimitiveEncoding.id() {
             return None;
         }
@@ -25,7 +29,7 @@ impl EncodingCompression for REEEncoding {
             return None;
         }
 
-        Some(Estimate::default())
+        Some(self)
     }
 
     fn compress(

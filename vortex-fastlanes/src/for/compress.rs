@@ -3,7 +3,7 @@ use itertools::Itertools;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::stats::Stat;
@@ -15,7 +15,11 @@ impl EncodingCompression for FoREncoding {
         0
     }
 
-    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
+    fn can_compress(
+        &self,
+        array: &dyn Array,
+        _config: &CompressConfig,
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
             return None;
@@ -31,7 +35,7 @@ impl EncodingCompression for FoREncoding {
             return None;
         }
 
-        Some(Estimate::default())
+        Some(self)
     }
 
     fn compress(

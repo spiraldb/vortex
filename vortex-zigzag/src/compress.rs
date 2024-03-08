@@ -4,7 +4,7 @@ use crate::downcast::DowncastZigzag;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::error::VortexResult;
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
@@ -13,7 +13,11 @@ use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 use crate::zigzag::{ZigZagArray, ZigZagEncoding};
 
 impl EncodingCompression for ZigZagEncoding {
-    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
+    fn can_compress(
+        &self,
+        array: &dyn Array,
+        _config: &CompressConfig,
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let parray = array.maybe_primitive()?;
 
@@ -28,7 +32,7 @@ impl EncodingCompression for ZigZagEncoding {
             .stats()
             .get_or_compute_cast::<i64>(&Stat::Min)
             .filter(|&min| min < 0)
-            .map(|_| Estimate::default())
+            .map(|_| self as &dyn EncodingCompression)
     }
 
     fn compress(

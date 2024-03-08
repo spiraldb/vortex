@@ -3,7 +3,7 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::error::{VortexError, VortexResult};
 use vortex::ptype::{NativePType, PType};
 
@@ -12,7 +12,11 @@ use crate::downcast::DowncastALP;
 use crate::Exponents;
 
 impl EncodingCompression for ALPEncoding {
-    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
+    fn can_compress(
+        &self,
+        array: &dyn Array,
+        _config: &CompressConfig,
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let parray = array.maybe_primitive()?;
 
@@ -21,7 +25,7 @@ impl EncodingCompression for ALPEncoding {
             return None;
         }
 
-        Some(Estimate::default())
+        Some(self)
     }
 
     fn compress(

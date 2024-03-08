@@ -6,7 +6,7 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
@@ -20,7 +20,11 @@ impl EncodingCompression for BitPackedEncoding {
         0
     }
 
-    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
+    fn can_compress(
+        &self,
+        array: &dyn Array,
+        _config: &CompressConfig,
+    ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
             return None;
@@ -50,14 +54,7 @@ impl EncodingCompression for BitPackedEncoding {
             return None;
         }
 
-        let compressed_size = ((bit_width * array.len()) + 7) / 8;
-        let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
-        let estimated_size = compressed_size + (num_exceptions * bytes_per_exception);
-
-        Some(Estimate::new(
-            0,
-            Some(estimated_size as f32 / array.nbytes() as f32),
-        ))
+        Some(self)
     }
 
     fn compress(

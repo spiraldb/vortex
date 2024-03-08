@@ -1,7 +1,7 @@
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
+use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use crate::error::VortexResult;
 
 impl EncodingCompression for SparseEncoding {
@@ -9,8 +9,12 @@ impl EncodingCompression for SparseEncoding {
         0
     }
 
-    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
-        (array.encoding().id() == &Self::ID).then_some(Estimate::default())
+    fn can_compress(
+        &self,
+        array: &dyn Array,
+        _config: &CompressConfig,
+    ) -> Option<&dyn EncodingCompression> {
+        (array.encoding().id() == &Self::ID).then_some(self)
     }
 
     fn compress(
