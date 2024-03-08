@@ -97,7 +97,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
         HashSet::default(),
     );
-    println!("Compression config {cfg:?}");
+    info!("Compression config {cfg:?}");
     let ctx = CompressCtx::new(Arc::new(cfg));
 
     let schema = reader.schema();
@@ -131,9 +131,9 @@ pub fn compress_taxi_data() -> ArrayRef {
             field_bytes[i] += field.nbytes();
         }
     }
-    field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
-        println!("{},{}", schema.field(i).name(), nbytes);
-    });
+    // field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
+    //     println!("{},{}", schema.field(i).name(), nbytes);
+    // });
 
     compressed
 }
@@ -158,7 +158,7 @@ mod test {
 
     #[test]
     fn compression_ratio() {
-        setup_logger(LevelFilter::Debug);
+        setup_logger(LevelFilter::Warn);
         _ = compress_taxi_data();
     }
 }
