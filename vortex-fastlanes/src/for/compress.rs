@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use log::debug;
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -12,26 +11,25 @@ use vortex::stats::Stat;
 use crate::{FoRArray, FoREncoding};
 
 impl EncodingCompression for FoREncoding {
+    fn cost(&self) -> u8 {
+        0
+    }
+
     fn can_compress(
         &self,
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
-        let Some(parray) = array.maybe_primitive() else {
-            debug!("Skipping FoR: not primitive");
-            return None;
-        };
+        let parray = array.maybe_primitive()?;
 
         // Only supports integers
         if !parray.ptype().is_int() {
-            debug!("Skipping FoR: not int");
             return None;
         }
 
-        // Nothing for us to do if the min is already zero.
+        // Nothing for us to do if the min is already zero
         if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? == 0 {
-            debug!("Skipping FoR: min is zero");
             return None;
         }
 
@@ -48,18 +46,20 @@ impl EncodingCompression for FoREncoding {
 
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
             let min = parray.stats().get_or_compute_as::<$T>(&Stat::Min).unwrap_or(<$T>::default());
+
             // TODO(ngates): check for overflow
             let values = parray.buffer().typed_data::<$T>().iter().map(|v| v - min)
                 // TODO(ngates): cast to unsigned
                 // .map(|v| v as parray.ptype().to_unsigned()::T)
                 .collect_vec();
+
             PrimitiveArray::from(values)
         });
 
         // TODO(ngates): remove FoR as a potential encoding from the ctx
         // NOTE(ngates): we don't invoke next_level here since we know bit-packing is always
         //  worth trying.
-        let compressed_child = ctx.compress(
+        let compressed_child = ctx.named("for").excluding(&FoREncoding::ID).compress(
             child.as_ref(),
             like.map(|l| l.as_any().downcast_ref::<FoRArray>().unwrap().child()),
         )?;
@@ -70,7 +70,10 @@ impl EncodingCompression for FoREncoding {
 
 #[cfg(test)]
 mod test {
+    use log::LevelFilter;
+    use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
     use std::collections::HashSet;
+    use std::sync::Arc;
 
     use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
@@ -81,6 +84,14 @@ mod test {
 
     #[test]
     fn test_compress() {
+        TermLogger::init(
+            LevelFilter::Debug,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        )
+        .unwrap();
+
         let cfg = CompressConfig::new(
             // We need some BitPacking else we will need choose FoR.
             HashSet::from([
@@ -90,7 +101,7 @@ mod test {
             ]),
             HashSet::default(),
         );
-        let ctx = CompressCtx::new(&cfg);
+        let ctx = CompressCtx::new(Arc::new(cfg));
 
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());

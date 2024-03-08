@@ -3,13 +3,13 @@ use std::hash::{Hash, Hasher};
 use ahash::RandomState;
 use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
-use log::debug;
 use num_traits::AsPrimitive;
 
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::varbin::{VarBinArray, VarBinEncoding};
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::match_each_native_ptype;
@@ -30,7 +30,6 @@ impl EncodingCompression for DictEncoding {
         if array.encoding().id() != &PrimitiveEncoding::ID
             && array.encoding().id() != &VarBinEncoding::ID
         {
-            debug!("Skipping Dict: not primitive or varbin");
             return None;
         };
 
@@ -41,7 +40,6 @@ impl EncodingCompression for DictEncoding {
             .get_or_compute_as(&Stat::IsStrictSorted)
             .unwrap_or(false)
         {
-            debug!("Skipping Dict: array is strict_sorted");
             return None;
         }
 
@@ -60,18 +58,22 @@ impl EncodingCompression for DictEncoding {
             ArrayKind::Primitive(p) => {
                 let (codes, dict) = dict_encode_primitive(p);
                 (
-                    ctx.next_level()
+                    ctx.auxiliary("codes")
+                        .excluding(&DictEncoding::ID)
                         .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
-                    ctx.next_level()
+                    ctx.named("values")
+                        .excluding(&DictEncoding::ID)
                         .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
                 )
             }
             ArrayKind::VarBin(vb) => {
                 let (codes, dict) = dict_encode_varbin(vb);
                 (
-                    ctx.next_level()
+                    ctx.auxiliary("codes")
+                        .excluding(&DictEncoding::ID)
                         .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
-                    ctx.next_level()
+                    ctx.named("values")
+                        .excluding(&DictEncoding::ID)
                         .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
                 )
             }

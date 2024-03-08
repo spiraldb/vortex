@@ -26,10 +26,10 @@ where
         for i in 0..self.len() {
             let next_val = self.bytes_at(i).unwrap();
             if next_val < min {
-                min = next_val.clone();
+                min.clone_from(&next_val);
             }
             if next_val > max {
-                max = next_val.clone();
+                max.clone_from(&next_val);
             }
             match next_val.cmp(&last_value) {
                 Ordering::Less => is_sorted = false,

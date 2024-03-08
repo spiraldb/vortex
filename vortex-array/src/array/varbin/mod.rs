@@ -17,6 +17,7 @@ use crate::array::{
     EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::arrow::CombineChunks;
+use crate::compress::EncodingCompression;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
@@ -25,6 +26,7 @@ use crate::ptype::NativePType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
+mod compress;
 mod compute;
 mod serde;
 mod stats;
@@ -321,6 +323,10 @@ static ENCODINGS_VARBIN: EncodingRef = &VarBinEncoding;
 impl Encoding for VarBinEncoding {
     fn id(&self) -> &EncodingId {
         &Self::ID
+    }
+
+    fn compression(&self) -> Option<&dyn EncodingCompression> {
+        Some(self)
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {

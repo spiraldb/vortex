@@ -5,6 +5,10 @@ use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use crate::error::VortexResult;
 
 impl EncodingCompression for TypedEncoding {
+    fn cost(&self) -> u8 {
+        0
+    }
+
     fn can_compress(
         &self,
         array: &dyn Array,
