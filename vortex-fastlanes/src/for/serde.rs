@@ -16,7 +16,9 @@ impl EncodingSerde for FoREncoding {
     fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
         let reference = ctx.scalar()?;
         let child = ctx.read()?;
-        Ok(FoRArray::try_new(child, reference).unwrap().boxed())
+        Ok(FoRArray::try_new(child.clone(), child, reference, 0)
+            .unwrap()
+            .boxed())
     }
 }
 

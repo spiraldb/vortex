@@ -1,12 +1,15 @@
 use std::any::Any;
+use std::cmp::min;
 use std::sync::{Arc, RwLock};
 
+use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
+use vortex::match_each_native_ptype;
 use vortex::scalar::{Scalar, ScalarRef};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
@@ -16,17 +19,26 @@ mod serde;
 
 #[derive(Debug, Clone)]
 pub struct FoRArray {
+    original: ArrayRef,
     child: ArrayRef,
     reference: ScalarRef,
+    shift: u8,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl FoRArray {
-    pub fn try_new(child: ArrayRef, reference: ScalarRef) -> VortexResult<Self> {
+    pub fn try_new(
+        original: ArrayRef,
+        child: ArrayRef,
+        reference: ScalarRef,
+        shift: u8,
+    ) -> VortexResult<Self> {
         // TODO(ngates): check the dtype of reference == child.dtype()
         Ok(Self {
+            original,
             child,
             reference,
+            shift,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
@@ -39,6 +51,11 @@ impl FoRArray {
     #[inline]
     pub fn reference(&self) -> &dyn Scalar {
         self.reference.as_ref()
+    }
+
+    #[inline]
+    pub fn shift(&self) -> u8 {
+        self.shift
     }
 }
 
@@ -84,8 +101,10 @@ impl Array for FoRArray {
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         Ok(Self {
+            original: self.original.clone(),
             child: self.child.slice(start, stop)?,
             reference: self.reference.clone(),
+            shift: self.shift,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
         .boxed())
@@ -117,7 +136,14 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for FoRArray {
 impl ArrayDisplay for FoRArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("reference", self.reference())?;
-        f.child("shifted", self.child())
+        f.property("shift", self.shift())?;
+        f.child("encoded", self.child())?;
+        let c = self.original.as_primitive();
+        match_each_native_ptype!(c.ptype(), |$P| {
+            f.property("values", format!("{:?}{}",
+                &c.typed_data::<$P>()[..min(10, self.len())],
+                if self.len() > 10 { "..." } else { "" }))
+        })
     }
 }
 
