@@ -40,9 +40,12 @@ impl EncodingCompression for ALPEncoding {
         let parray = array.as_primitive();
 
         let (exponents, encoded, patches) = match parray.ptype() {
-            // TODO(ngates): reuse exponents from like?
-            PType::F32 => encode_to_array(parray.typed_data::<f32>(), None),
-            PType::F64 => encode_to_array(parray.typed_data::<f64>(), None),
+            PType::F32 => {
+                encode_to_array(parray.typed_data::<f32>(), like_alp.map(|l| l.exponents()))
+            }
+            PType::F64 => {
+                encode_to_array(parray.typed_data::<f64>(), like_alp.map(|l| l.exponents()))
+            }
             _ => panic!("Unsupported ptype"),
         };
 

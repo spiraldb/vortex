@@ -237,20 +237,22 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
         .filter(|encoding| ctx.options().is_enabled(encoding.id()))
         .filter(|encoding| !ctx.disabled_encodings.contains(encoding.id()))
         .filter_map(|encoding| encoding.compression())
-        .filter_map(|compression| {
-            if let Some(_) = compression.can_compress(array, ctx.options().as_ref()) {
+        .filter(|compression| {
+            if compression
+                .can_compress(array, ctx.options().as_ref())
+                .is_some()
+            {
                 if ctx.depth + compression.cost() > ctx.options.max_depth {
                     debug!(
                         "{} skipping encoding {} due to depth",
                         ctx,
                         compression.id()
                     );
-                    return None;
+                    return false;
                 }
-
-                Some(compression)
+                true
             } else {
-                None
+                false
             }
         })
         .collect();
@@ -274,10 +276,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
     // TODO(ngates): we actually probably want some way to prefer dict encoding over other varbin
     //  encodings, e.g. FSST.
     if candidates.len() > 1 {
-        candidates = candidates
-            .into_iter()
-            .filter(|compression| compression.id() != array.encoding().id())
-            .collect();
+        candidates.retain(|&compression| compression.id() != array.encoding().id());
     }
 
     if array.len() <= (ctx.options.sample_size as usize * ctx.options.sample_count as usize) {

@@ -1,5 +1,4 @@
 use arrayref::array_ref;
-use log::debug;
 
 use fastlanez_sys::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
@@ -26,20 +25,12 @@ impl EncodingCompression for BitPackedEncoding {
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
-        let Some(parray) = array.maybe_primitive() else {
-            return None;
-        };
+        let parray = array.maybe_primitive()?;
 
         // Only supports ints
         if !parray.ptype().is_int() {
             return None;
         }
-
-        // // Check that the min == zero. Otherwise, we can assume that FoR will run first.
-        // if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? != 0 {
-        //     debug!("Skipping BitPacking: min != 0");
-        //     return None;
-        // }
 
         let bytes_per_exception = bytes_per_exception(parray.ptype());
         let bit_width_freq = parray
@@ -50,7 +41,6 @@ impl EncodingCompression for BitPackedEncoding {
 
         // Check that the bit width is less than the type's bit width
         if bit_width == parray.ptype().bit_width() {
-            debug!("Skipping BitPacking: best == current bit width");
             return None;
         }
 
