@@ -29,7 +29,7 @@ impl EncodingCompression for FoREncoding {
         }
 
         // Nothing for us to do if the min is already zero
-        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? != 0 {
+        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? == 0 {
             return None;
         }
 
@@ -70,6 +70,8 @@ impl EncodingCompression for FoREncoding {
 
 #[cfg(test)]
 mod test {
+    use log::LevelFilter;
+    use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
     use std::collections::HashSet;
     use std::sync::Arc;
 
@@ -82,6 +84,14 @@ mod test {
 
     #[test]
     fn test_compress() {
+        TermLogger::init(
+            LevelFilter::Debug,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        )
+        .unwrap();
+
         let cfg = CompressConfig::new(
             // We need some BitPacking else we will need choose FoR.
             HashSet::from([
