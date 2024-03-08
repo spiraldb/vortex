@@ -86,7 +86,7 @@ pub fn compress_taxi_data() -> ArrayRef {
     let reader = builder
         //.with_projection(mask)
         //.with_projection(no_datetime_mask)
-        .with_batch_size(16_384)
+        .with_batch_size(65_536)
         // .with_batch_size(5_000_000)
         // .with_limit(100_000)
         .build()
