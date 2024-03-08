@@ -3,7 +3,7 @@ use croaring::Bitmap;
 use vortex::array::bool::{BoolArray, BoolEncoding};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
 use vortex::dtype::DType;
 use vortex::dtype::Nullability::NonNullable;
 use vortex::error::VortexResult;
@@ -11,11 +11,7 @@ use vortex::error::VortexResult;
 use crate::boolean::{RoaringBoolArray, RoaringBoolEncoding};
 
 impl EncodingCompression for RoaringBoolEncoding {
-    fn can_compress(
-        &self,
-        array: &dyn Array,
-        _config: &CompressConfig,
-    ) -> Option<&dyn EncodingCompression> {
+    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
         // Only support bool enc arrays
         if array.encoding().id() != &BoolEncoding::ID {
             return None;
@@ -30,14 +26,14 @@ impl EncodingCompression for RoaringBoolEncoding {
             return None;
         }
 
-        Some(self)
+        Some(Estimate::default())
     }
 
     fn compress(
         &self,
         array: &dyn Array,
         _like: Option<&dyn Array>,
-        _ctx: &CompressCtx,
+        _ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         Ok(roaring_encode(array.as_bool()).boxed())
     }

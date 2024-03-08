@@ -6,7 +6,7 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
 use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
@@ -16,11 +16,11 @@ use vortex::stats::Stat;
 use crate::{BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
-    fn can_compress(
-        &self,
-        array: &dyn Array,
-        _config: &CompressConfig,
-    ) -> Option<&dyn EncodingCompression> {
+    fn cost(&self) -> u8 {
+        0
+    }
+
+    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
             return None;
@@ -37,11 +37,12 @@ impl EncodingCompression for BitPackedEncoding {
         //     return None;
         // }
 
+        let bytes_per_exception = bytes_per_exception(parray.ptype());
         let bit_width_freq = parray
             .stats()
             .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)?
             .0;
-        let bit_width = best_bit_width(parray.ptype(), &bit_width_freq);
+        let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception);
 
         // Check that the bit width is less than the type's bit width
         if bit_width == parray.ptype().bit_width() {
@@ -49,14 +50,21 @@ impl EncodingCompression for BitPackedEncoding {
             return None;
         }
 
-        Some(self)
+        let compressed_size = ((bit_width * array.len()) + 7) / 8;
+        let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
+        let estimated_size = compressed_size + (num_exceptions * bytes_per_exception);
+
+        Some(Estimate::new(
+            0,
+            Some(estimated_size as f32 / array.nbytes() as f32),
+        ))
     }
 
     fn compress(
         &self,
         array: &dyn Array,
         like: Option<&dyn Array>,
-        ctx: &CompressCtx,
+        ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let parray = array.as_primitive();
         let bit_width_freq = parray
@@ -66,30 +74,26 @@ impl EncodingCompression for BitPackedEncoding {
             .0;
 
         let like_bp = like.map(|l| l.as_any().downcast_ref::<BitPackedArray>().unwrap());
-        //
-        // let bit_width = like_bp
-        //     .map(|bp| bp.bit_width())
-        //     .unwrap_or_else(|| best_bit_width(parray.ptype(), &bit_width_freq));
-        let bit_width = best_bit_width(parray.ptype(), &bit_width_freq);
+        let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception(parray.ptype()));
         let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
-        // If we pack into zero bits, then we have an empty byte array.
-        let packed = if bit_width == 0 {
-            PrimitiveArray::from(Vec::<u8>::new()).boxed()
-        } else {
-            bitpack(parray, bit_width)
-        };
+        if bit_width == parray.ptype().bit_width() {
+            // Nothing we can do
+            return Ok(parray.clone().boxed());
+        }
+
+        let packed = bitpack(parray, bit_width);
 
         let validity = parray
             .validity()
             .map(|v| {
-                ctx.next_level()
+                ctx.auxiliary("validity")
                     .compress(v.as_ref(), like_bp.and_then(|bp| bp.validity()))
             })
             .transpose()?;
 
         let patches = if num_exceptions > 0 {
-            Some(ctx.next_level().compress(
+            Some(ctx.auxiliary("patches").compress(
                 bitpack_patches(parray, bit_width, num_exceptions).as_ref(),
                 like_bp.and_then(|bp| bp.patches()),
             )?)
@@ -108,24 +112,6 @@ impl EncodingCompression for BitPackedEncoding {
         .unwrap()
         .boxed())
     }
-
-    fn estimate_ratio(&self, array: &dyn Array, _sample: &dyn Array) -> f32 {
-        let parray = array.as_primitive();
-        let bit_width_freq = parray
-            .stats()
-            .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)
-            .unwrap()
-            .0;
-
-        let bit_width = best_bit_width(parray.ptype(), &bit_width_freq);
-        let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
-        let bytes_per_exception = parray.ptype().byte_width() + 4;
-
-        let compressed_size =
-            (((bit_width * array.len()) + 7) / 8) + (num_exceptions * bytes_per_exception);
-
-        compressed_size as f32 / array.nbytes() as f32
-    }
 }
 
 fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
@@ -143,6 +129,10 @@ fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
 }
 
 fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize) -> Vec<u8> {
+    if bit_width == 0 {
+        return Vec::new();
+    }
+
     // How many fastlanes vectors we will process.
     let num_chunks = (array.len() + 1023) / 1024;
 
@@ -190,9 +180,8 @@ fn bitpack_patches(
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
 /// We could try to be clever, but we can never really predict how the exceptions will compress.
-fn best_bit_width(ptype: &PType, bit_width_freq: &[usize]) -> usize {
+fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> usize {
     let len: usize = bit_width_freq.iter().sum();
-    let bytes_per_exception = ptype.byte_width() + 4;
 
     if bit_width_freq.len() > u8::MAX as usize {
         panic!("Too many bit widths");
@@ -213,6 +202,10 @@ fn best_bit_width(ptype: &PType, bit_width_freq: &[usize]) -> usize {
     }
 
     best_width
+}
+
+fn bytes_per_exception(ptype: &PType) -> usize {
+    ptype.byte_width() + 4
 }
 
 fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {

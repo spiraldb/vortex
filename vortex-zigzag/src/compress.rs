@@ -4,7 +4,7 @@ use crate::downcast::DowncastZigzag;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
 use vortex::error::VortexResult;
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
@@ -13,11 +13,7 @@ use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 use crate::zigzag::{ZigZagArray, ZigZagEncoding};
 
 impl EncodingCompression for ZigZagEncoding {
-    fn can_compress(
-        &self,
-        array: &dyn Array,
-        _config: &CompressConfig,
-    ) -> Option<&dyn EncodingCompression> {
+    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
         // Only support primitive arrays
         let parray = array.maybe_primitive()?;
 
@@ -32,14 +28,14 @@ impl EncodingCompression for ZigZagEncoding {
             .stats()
             .get_or_compute_cast::<i64>(&Stat::Min)
             .filter(|&min| min < 0)
-            .map(|_| self as &dyn EncodingCompression)
+            .map(|_| Estimate::default())
     }
 
     fn compress(
         &self,
         array: &dyn Array,
         like: Option<&dyn Array>,
-        ctx: &CompressCtx,
+        ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let zigzag_like = like.map(|like_arr| like_arr.as_zigzag());
         let encoded = match ArrayKind::from(array) {
@@ -48,8 +44,7 @@ impl EncodingCompression for ZigZagEncoding {
         };
 
         Ok(ZigZagArray::new(
-            ctx.next_level()
-                .compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded()))?,
+            ctx.compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded()))?,
         )
         .boxed())
     }

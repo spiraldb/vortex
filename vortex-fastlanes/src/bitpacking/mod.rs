@@ -130,7 +130,9 @@ impl Array for BitPackedArray {
 
     #[inline]
     fn nbytes(&self) -> usize {
-        self.encoded().nbytes()
+        // Ignore any overheads like padding or the bit-width flag.
+        let packed_size = ((self.bit_width * self.len()) + 7) / 8;
+        packed_size
             + self.patches().map(|p| p.nbytes()).unwrap_or(0)
             + self.validity().map(|v| v.nbytes()).unwrap_or(0)
     }

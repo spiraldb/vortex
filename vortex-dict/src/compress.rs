@@ -3,14 +3,13 @@ use std::hash::{Hash, Hasher};
 use ahash::RandomState;
 use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
-use log::debug;
 use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
 use vortex::compute::scalar_at::scalar_at;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
@@ -23,11 +22,7 @@ use crate::dict::{DictArray, DictEncoding};
 use crate::downcast::DowncastDict;
 
 impl EncodingCompression for DictEncoding {
-    fn can_compress(
-        &self,
-        array: &dyn Array,
-        _config: &CompressConfig,
-    ) -> Option<&dyn EncodingCompression> {
+    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
         // TODO(robert): Add support for VarBinView
         if !matches!(
             ArrayKind::from(array),
@@ -43,37 +38,41 @@ impl EncodingCompression for DictEncoding {
             .get_or_compute_as(&Stat::IsStrictSorted)
             .unwrap_or(false)
         {
-            debug!("Skipping Dict: array is strict_sorted");
             return None;
         }
 
-        Some(self)
+        Some(Estimate::default())
     }
 
     fn compress(
         &self,
         array: &dyn Array,
         like: Option<&dyn Array>,
-        ctx: &CompressCtx,
+        ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let dict_like = like.map(|like_arr| like_arr.as_dict());
-
-        // Exclude dict encoding from the next level
-        let ctx = ctx.next_level().excluding(&DictEncoding::ID);
 
         let (codes, dict) = match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => {
                 let (codes, dict) = dict_encode_primitive(p);
                 (
-                    ctx.compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
-                    ctx.compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
+                    ctx.auxiliary("codes")
+                        .excluding(&DictEncoding::ID)
+                        .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
+                    ctx.named("values")
+                        .excluding(&DictEncoding::ID)
+                        .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
                 )
             }
             ArrayKind::VarBin(vb) => {
                 let (codes, dict) = dict_encode_varbin(vb);
                 (
-                    ctx.compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
-                    ctx.compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
+                    ctx.auxiliary("codes")
+                        .excluding(&DictEncoding::ID)
+                        .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
+                    ctx.named("values")
+                        .excluding(&DictEncoding::ID)
+                        .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
                 )
             }
 

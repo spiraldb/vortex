@@ -3,7 +3,7 @@ use itertools::Itertools;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
 use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::stats::Stat;
@@ -11,11 +11,11 @@ use vortex::stats::Stat;
 use crate::{FoRArray, FoREncoding};
 
 impl EncodingCompression for FoREncoding {
-    fn can_compress(
-        &self,
-        array: &dyn Array,
-        _config: &CompressConfig,
-    ) -> Option<&dyn EncodingCompression> {
+    fn cost(&self) -> u8 {
+        0
+    }
+
+    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
             return None;
@@ -31,14 +31,14 @@ impl EncodingCompression for FoREncoding {
             return None;
         }
 
-        Some(self)
+        Some(Estimate::default())
     }
 
     fn compress(
         &self,
         array: &dyn Array,
         like: Option<&dyn Array>,
-        ctx: &CompressCtx,
+        ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let parray = array.as_primitive();
 
@@ -57,7 +57,7 @@ impl EncodingCompression for FoREncoding {
         // TODO(ngates): remove FoR as a potential encoding from the ctx
         // NOTE(ngates): we don't invoke next_level here since we know bit-packing is always
         //  worth trying.
-        let compressed_child = ctx.excluding(&FoREncoding::ID).compress(
+        let compressed_child = ctx.named("for").excluding(&FoREncoding::ID).compress(
             child.as_ref(),
             like.map(|l| l.as_any().downcast_ref::<FoRArray>().unwrap().child()),
         )?;

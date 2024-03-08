@@ -3,7 +3,7 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
 use vortex::error::{VortexError, VortexResult};
 use vortex::ptype::{NativePType, PType};
 
@@ -12,11 +12,7 @@ use crate::downcast::DowncastALP;
 use crate::Exponents;
 
 impl EncodingCompression for ALPEncoding {
-    fn can_compress(
-        &self,
-        array: &dyn Array,
-        _config: &CompressConfig,
-    ) -> Option<&dyn EncodingCompression> {
+    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
         // Only support primitive arrays
         let parray = array.maybe_primitive()?;
 
@@ -25,14 +21,14 @@ impl EncodingCompression for ALPEncoding {
             return None;
         }
 
-        Some(self)
+        Some(Estimate::default())
     }
 
     fn compress(
         &self,
         array: &dyn Array,
         like: Option<&dyn Array>,
-        ctx: &CompressCtx,
+        ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let like_alp = like.map(|like_array| like_array.as_alp());
 
@@ -47,12 +43,13 @@ impl EncodingCompression for ALPEncoding {
         };
 
         let compressed_encoded = ctx
-            .next_level()
+            .named("packed")
+            .excluding(&ALPEncoding::ID)
             .compress(encoded.as_ref(), like_alp.map(|a| a.encoded()))?;
 
         let compressed_patches = patches
             .map(|p| {
-                ctx.next_level()
+                ctx.auxiliary("patches")
                     .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
             })
             .transpose()?;

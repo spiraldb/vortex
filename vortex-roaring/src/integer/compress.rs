@@ -5,7 +5,7 @@ use num_traits::NumCast;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
 use vortex::dtype::DType;
 use vortex::dtype::Nullability::NonNullable;
 use vortex::dtype::Signedness::Unsigned;
@@ -16,11 +16,7 @@ use vortex::stats::Stat;
 use crate::{RoaringIntArray, RoaringIntEncoding};
 
 impl EncodingCompression for RoaringIntEncoding {
-    fn can_compress(
-        &self,
-        array: &dyn Array,
-        _config: &CompressConfig,
-    ) -> Option<&dyn EncodingCompression> {
+    fn can_compress(&self, array: &dyn Array, _config: &CompressConfig) -> Option<Estimate> {
         // Only support primitive enc arrays
         if array.encoding().id() != &PrimitiveEncoding::ID {
             return None;
@@ -47,14 +43,14 @@ impl EncodingCompression for RoaringIntEncoding {
         }
 
         debug!("Using roaring int");
-        Some(self)
+        Some(Estimate::default())
     }
 
     fn compress(
         &self,
         array: &dyn Array,
         _like: Option<&dyn Array>,
-        _ctx: &CompressCtx,
+        _ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         Ok(roaring_encode(array.as_primitive()).boxed())
     }

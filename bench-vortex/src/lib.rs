@@ -79,16 +79,16 @@ pub fn compress_taxi_data() -> ArrayRef {
     let file = File::open(download_taxi_data()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
     let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
-    let no_datetime_mask = ProjectionMask::roots(
+    let _no_datetime_mask = ProjectionMask::roots(
         builder.parquet_schema(),
         [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
     );
     let reader = builder
-        // .with_projection(mask)
-        .with_projection(no_datetime_mask)
-        .with_batch_size(65_536)
+        //.with_projection(mask)
+        //.with_projection(no_datetime_mask)
+        .with_batch_size(16_384)
         // .with_batch_size(5_000_000)
-        //.with_limit(100_000)
+        // .with_limit(100_000)
         .build()
         .unwrap();
 
@@ -110,7 +110,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         .map(ArrayRef::from)
         .map(|array| {
             uncompressed_size += array.nbytes();
-            ctx.compress(array.as_ref(), None).unwrap()
+            ctx.clone().compress(array.as_ref(), None).unwrap()
         })
         .collect_vec();
 
@@ -132,7 +132,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         }
     }
     field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
-        info!("{},{}", schema.field(i).name(), nbytes);
+        println!("{},{}", schema.field(i).name(), nbytes);
     });
 
     compressed

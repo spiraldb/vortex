@@ -2,7 +2,7 @@ use itertools::Itertools;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef, Encoding};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
 use vortex::compute::cast::cast_primitive;
 use vortex::error::VortexResult;
 use vortex::ptype::{match_each_native_ptype, NativePType};
@@ -12,11 +12,7 @@ use crate::downcast::DowncastREE;
 use crate::{REEArray, REEEncoding};
 
 impl EncodingCompression for REEEncoding {
-    fn can_compress(
-        &self,
-        array: &dyn Array,
-        config: &CompressConfig,
-    ) -> Option<&dyn EncodingCompression> {
+    fn can_compress(&self, array: &dyn Array, config: &CompressConfig) -> Option<Estimate> {
         if array.encoding().id() != PrimitiveEncoding.id() {
             return None;
         }
@@ -29,24 +25,25 @@ impl EncodingCompression for REEEncoding {
             return None;
         }
 
-        Some(self)
+        Some(Estimate::default())
     }
 
     fn compress(
         &self,
         array: &dyn Array,
         like: Option<&dyn Array>,
-        ctx: &CompressCtx,
+        ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let ree_like = like.map(|like_arr| like_arr.as_ree());
         let primitive_array = array.as_primitive();
 
         let (ends, values) = ree_encode(primitive_array);
         let compressed_ends = ctx
-            .next_level()
+            .auxiliary("ends")
             .compress(ends.as_ref(), ree_like.map(|ree| ree.ends()))?;
         let compressed_values = ctx
-            .next_level()
+            .named("values")
+            .excluding(&REEEncoding::ID)
             .compress(values.as_ref(), ree_like.map(|ree| ree.values()))?;
 
         Ok(REEArray::new(
@@ -54,10 +51,7 @@ impl EncodingCompression for REEEncoding {
             compressed_values,
             primitive_array
                 .validity()
-                .map(|v| {
-                    ctx.next_level()
-                        .compress(v, ree_like.and_then(|r| r.validity()))
-                })
+                .map(|v| ctx.compress(v, ree_like.and_then(|r| r.validity())))
                 .transpose()?,
             array.len(),
         )
