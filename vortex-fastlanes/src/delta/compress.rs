@@ -1,5 +1,4 @@
 use arrayref::array_ref;
-use log::debug;
 use std::mem::size_of;
 
 use fastlanez_sys::{transpose, Delta};
@@ -7,9 +6,11 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compute::fill::fill_forward;
 use vortex::error::VortexResult;
 use vortex::match_each_signed_integer_ptype;
 use vortex::ptype::NativePType;
+use vortex::stats::Stat;
 
 use crate::{DeltaArray, DeltaEncoding};
 
@@ -21,18 +22,34 @@ impl EncodingCompression for DeltaEncoding {
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
         let Some(parray) = array.maybe_primitive() else {
-            debug!("Skipping Delta: not primitive");
             return None;
         };
 
         // Only supports signed ints
         if !parray.ptype().is_signed_int() {
-            debug!("Skipping Delta: not int");
             return None;
         }
 
-        debug!("Compressing with Delta");
+        if parray
+            .stats()
+            .get_or_compute_cast::<i64>(&Stat::Min)
+            .unwrap_or(0)
+            != 0
+        {
+            return None;
+        }
+
         Some(self)
+        //
+        // // For now, only consider delta on sorted arrays
+        // if parray
+        //     .stats()
+        //     .get_or_compute_as::<bool>(&Stat::IsSorted)
+        //     .unwrap_or(false)
+        // {
+        //     return Some(self);
+        // }
+        // None
     }
 
     fn compress(
@@ -46,14 +63,19 @@ impl EncodingCompression for DeltaEncoding {
 
         let validity = parray
             .validity()
-            .map(|v| ctx.compress(v.as_ref(), like_delta.and_then(|d| d.validity())))
+            .map(|v| {
+                ctx.auxiliary("validity")
+                    .compress(v.as_ref(), like_delta.and_then(|d| d.validity()))
+            })
             .transpose()?;
 
+        // Fill forward nulls
+        let filled = fill_forward(array)?;
         let delta_encoded = match_each_signed_integer_ptype!(parray.ptype(), |$T| {
-            PrimitiveArray::from(delta_primitive(parray.buffer().typed_data::<$T>()))
+            PrimitiveArray::from(delta_primitive(filled.as_primitive().typed_data::<$T>()))
         });
 
-        let encoded = ctx.next_level().compress(
+        let encoded = ctx.named("deltas").compress(
             delta_encoded.as_ref(),
             like_delta.map(|d| d.encoded().as_ref()),
         )?;
@@ -85,11 +107,17 @@ where
         Delta::delta(&transposed, &mut base, &mut output);
     });
 
-    // Pad the last chunk with zeros to a full 1024 elements.
-    let last_chunk_size = array.len() % 1024;
-    let mut last_chunk: [T; 1024] = [T::default(); 1024];
-    last_chunk[..last_chunk_size].copy_from_slice(&array[array.len() - last_chunk_size..]);
-    Delta::delta(&last_chunk, &mut base, &mut output);
+    // To avoid padding, the remainder is encoded with scalar logic.
+    let mut base_scalar = base[base.len() - 1];
+    let last_chunk_size = array.len() - ((num_chunks - 1) * 1024);
+    for i in array.len() - last_chunk_size..array.len() {
+        let next = array[i];
+        output.push(next - base_scalar);
+        base_scalar = next;
+    }
+    // let mut last_chunk: [T; 1024] = [T::default(); 1024];
+    // last_chunk[..last_chunk_size].copy_from_slice(&array[array.len() - last_chunk_size..]);
+    // Delta::delta(&last_chunk, &mut base, &mut output);
 
     output
 }

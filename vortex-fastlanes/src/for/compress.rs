@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use num_traits::CheckedSub;
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -6,13 +7,14 @@ use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
+use vortex::ptype::NativePType;
 use vortex::stats::Stat;
 
 use crate::{FoRArray, FoREncoding};
 
 impl EncodingCompression for FoREncoding {
     fn cost(&self) -> u8 {
-        0
+        1
     }
 
     fn can_compress(
@@ -28,10 +30,26 @@ impl EncodingCompression for FoREncoding {
             return None;
         }
 
-        // Nothing for us to do if the min is already zero
-        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? == 0 {
-            return None;
-        }
+        match_each_integer_ptype!(parray.ptype(), |$T| {
+            let min = parray
+                .stats()
+                .get_or_compute_as::<$T>(&Stat::Min)
+                .unwrap_or(<$T>::default());
+
+            // Nothing for us to do if the min is already zero
+            if min == 0 {
+                return None;
+            }
+
+            // Check for overflow
+            let max = parray
+                .stats()
+                .get_or_compute_as::<$T>(&Stat::Max)
+                .unwrap_or(<$T>::default());
+            if max.checked_sub(min).is_none() {
+                return None;
+            }
+        });
 
         Some(self)
     }
@@ -45,15 +63,7 @@ impl EncodingCompression for FoREncoding {
         let parray = array.as_primitive();
 
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
-            let min = parray.stats().get_or_compute_as::<$T>(&Stat::Min).unwrap_or(<$T>::default());
-
-            // TODO(ngates): check for overflow
-            let values = parray.buffer().typed_data::<$T>().iter().map(|v| v - min)
-                // TODO(ngates): cast to unsigned
-                // .map(|v| v as parray.ptype().to_unsigned()::T)
-                .collect_vec();
-
-            PrimitiveArray::from(values)
+            compress_primitive::<$T>(parray)
         });
 
         // TODO(ngates): remove FoR as a potential encoding from the ctx
@@ -66,6 +76,36 @@ impl EncodingCompression for FoREncoding {
         let reference = parray.stats().get(&Stat::Min).unwrap();
         Ok(FoRArray::try_new(compressed_child, reference)?.boxed())
     }
+}
+fn compress_primitive<T: NativePType + CheckedSub>(parray: &PrimitiveArray) -> PrimitiveArray {
+    let min = parray
+        .stats()
+        .get_or_compute_as::<T>(&Stat::Min)
+        .unwrap_or(<T>::default());
+    let max = parray
+        .stats()
+        .get_or_compute_as::<T>(&Stat::Max)
+        .unwrap_or(<T>::default());
+
+    let _buffer = parray.typed_data::<T>();
+    if max.checked_sub(&min).is_none() {
+        // Delta would cause overflow
+        return parray.clone();
+    }
+
+    // TODO(ngates): check for overflow
+    let values = parray
+        .typed_data::<T>()
+        .iter()
+        .map(|&v| {
+            v.checked_sub(&min)
+                .unwrap_or_else(|| panic!("Underflow when compressing FoR"))
+        })
+        // TODO(ngates): cast to unsigned
+        // .map(|v| v as parray.ptype().to_unsigned()::T)
+        .collect_vec();
+
+    PrimitiveArray::from(values)
 }
 
 #[cfg(test)]

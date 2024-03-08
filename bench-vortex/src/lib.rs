@@ -1,6 +1,6 @@
 use arrow_array::RecordBatchReader;
 use itertools::Itertools;
-use log::info;
+use log::{info, warn};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use std::collections::HashSet;
@@ -24,7 +24,7 @@ use vortex::dtype::DType;
 use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
-use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
+use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 
@@ -46,8 +46,7 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         &DictEncoding,
         &BitPackedEncoding,
         &FoREncoding,
-        // &DeltaEncoding,
-        // &FFoREncoding,
+        &DeltaEncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
         // &RoaringIntEncoding,
@@ -117,7 +116,7 @@ pub fn compress_taxi_data() -> ArrayRef {
     let dtype: DType = schema.clone().try_into().unwrap();
     let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
 
-    info!("Compressed array {}", display_tree(compressed.as_ref()));
+    warn!("Compressed array {}\n", display_tree(compressed.as_ref()));
 
     let mut field_bytes = vec![0; schema.fields().len()];
     for chunk in chunks {
@@ -156,10 +155,10 @@ mod test {
         .unwrap();
     }
 
-    #[ignore]
+    // #[ignore]
     #[test]
     fn compression_ratio() {
-        setup_logger(LevelFilter::Warn);
+        setup_logger(LevelFilter::Debug);
         _ = compress_taxi_data();
     }
 }

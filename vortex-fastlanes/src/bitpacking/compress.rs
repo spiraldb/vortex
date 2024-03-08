@@ -134,7 +134,7 @@ fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize)
     });
 
     // Pad the last chunk with zeros to a full 1024 elements.
-    let last_chunk_size = array.len() % 1024;
+    let last_chunk_size = array.len() - ((num_chunks - 1) * 1024);
     let mut last_chunk: [T; 1024] = [T::default(); 1024];
     last_chunk[..last_chunk_size].copy_from_slice(&array[array.len() - last_chunk_size..]);
     TryBitPack::try_bitpack_into(&last_chunk, bit_width, &mut output).unwrap();
