@@ -71,6 +71,7 @@ impl EncodingCompression for FoREncoding {
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
+    use std::sync::Arc;
 
     use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
@@ -90,7 +91,7 @@ mod test {
             ]),
             HashSet::default(),
         );
-        let ctx = CompressCtx::new(&cfg);
+        let ctx = CompressCtx::new(Arc::new(cfg));
 
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());

@@ -202,6 +202,7 @@ fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
+    use std::sync::Arc;
 
     use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
@@ -213,7 +214,7 @@ mod test {
         // 10 1-bit values, 20 2-bit, etc.
         let freq = vec![0, 10, 20, 15, 1, 0, 0, 0];
         // 3-bits => (46 * 3) + (8 * 1 * 5) => 178 bits => 23 bytes and zero exceptions
-        assert_eq!(best_bit_width(&PType::U8, &freq), 3);
+        assert_eq!(best_bit_width(&freq, 8), 3);
     }
 
     #[test]
@@ -223,7 +224,7 @@ mod test {
             HashSet::from([PrimitiveEncoding.id(), BitPackedEncoding.id()]),
             HashSet::default(),
         );
-        let ctx = CompressCtx::new(&cfg);
+        let ctx = CompressCtx::new(Arc::new(cfg));
 
         let compressed = ctx
             .compress(

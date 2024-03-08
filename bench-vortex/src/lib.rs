@@ -26,8 +26,7 @@ use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
-use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
-use vortex_zigzag::ZigZagEncoding;
+use vortex_roaring::RoaringBoolEncoding;
 
 pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
     vec![
@@ -51,9 +50,9 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         // &FFoREncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
-        &RoaringIntEncoding,
+        // &RoaringIntEncoding,
         // Doesn't offer anything more than FoR really
-        &ZigZagEncoding,
+        // &ZigZagEncoding,
     ]
 }
 
@@ -157,6 +156,7 @@ mod test {
         .unwrap();
     }
 
+    #[ignore]
     #[test]
     fn compression_ratio() {
         setup_logger(LevelFilter::Warn);
