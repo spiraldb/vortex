@@ -3,14 +3,12 @@ use std::hash::{Hash, Hasher};
 use ahash::RandomState;
 use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
-use num_traits::{AsPrimitive, FromPrimitive, Unsigned};
+use num_traits::AsPrimitive;
 
-use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::varbin::{VarBinArray, VarBinEncoding};
-use vortex::array::{Array, ArrayKind, ArrayRef, CloneOptionalArray};
+use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression, Estimate};
-use vortex::compute::scalar_at::scalar_at;
 
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
