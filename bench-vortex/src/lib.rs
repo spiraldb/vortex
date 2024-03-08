@@ -26,7 +26,8 @@ use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
-use vortex_roaring::RoaringBoolEncoding;
+use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
+use vortex_zigzag::ZigZagEncoding;
 
 pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
     vec![
@@ -50,9 +51,9 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         // &FFoREncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
-        // &RoaringIntEncoding,
+        &RoaringIntEncoding,
         // Doesn't offer anything more than FoR really
-        //&ZigZagEncoding,
+        &ZigZagEncoding,
     ]
 }
 
@@ -118,11 +119,6 @@ pub fn compress_taxi_data() -> ArrayRef {
     let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
 
     info!("Compressed array {}", display_tree(compressed.as_ref()));
-    info!(
-        "NBytes {}, Ratio {}",
-        compressed.nbytes(),
-        compressed.nbytes() as f32 / uncompressed_size as f32
-    );
 
     let mut field_bytes = vec![0; schema.fields().len()];
     for chunk in chunks {
@@ -131,9 +127,14 @@ pub fn compress_taxi_data() -> ArrayRef {
             field_bytes[i] += field.nbytes();
         }
     }
-    // field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
-    //     println!("{},{}", schema.field(i).name(), nbytes);
-    // });
+    field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
+        println!("{},{}", schema.field(i).name(), nbytes);
+    });
+    println!(
+        "NBytes {}, Ratio {}",
+        compressed.nbytes(),
+        compressed.nbytes() as f32 / uncompressed_size as f32
+    );
 
     compressed
 }

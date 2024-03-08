@@ -13,7 +13,6 @@ use crate::scalar::{ListScalarVec, ScalarRef};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stat {
     BitWidthFreq,
-    TZFreq,
     IsConstant,
     IsSorted,
     IsStrictSorted,
