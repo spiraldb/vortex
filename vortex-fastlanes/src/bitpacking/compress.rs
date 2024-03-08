@@ -204,7 +204,6 @@ mod test {
     use std::collections::HashSet;
     use std::sync::Arc;
 
-    use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
 
     use super::*;
@@ -214,16 +213,12 @@ mod test {
         // 10 1-bit values, 20 2-bit, etc.
         let freq = vec![0, 10, 20, 15, 1, 0, 0, 0];
         // 3-bits => (46 * 3) + (8 * 1 * 5) => 178 bits => 23 bytes and zero exceptions
-        assert_eq!(best_bit_width(&freq, 8), 3);
+        assert_eq!(best_bit_width(&freq, bytes_per_exception(&PType::U8)), 3);
     }
 
     #[test]
     fn test_compress() {
-        // FIXME(ngates): remove PrimitiveEncoding https://github.com/fulcrum-so/vortex/issues/35
-        let cfg = CompressConfig::new(
-            HashSet::from([PrimitiveEncoding.id(), BitPackedEncoding.id()]),
-            HashSet::default(),
-        );
+        let cfg = CompressConfig::new(HashSet::from([BitPackedEncoding.id()]), HashSet::default());
         let ctx = CompressCtx::new(Arc::new(cfg));
 
         let compressed = ctx
