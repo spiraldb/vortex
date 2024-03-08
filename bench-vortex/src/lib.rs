@@ -23,6 +23,7 @@ use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::dtype::DType;
 use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
+use vortex_datetime::DateTimeEncoding;
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
@@ -46,6 +47,7 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         &DictEncoding,
         &BitPackedEncoding,
         &FoREncoding,
+        &DateTimeEncoding,
         // &DeltaEncoding,
         // &FFoREncoding,
         &REEEncoding,
@@ -156,7 +158,7 @@ mod test {
         .unwrap();
     }
 
-    #[ignore]
+    //#[ignore]
     #[test]
     fn compression_ratio() {
         setup_logger(LevelFilter::Warn);
