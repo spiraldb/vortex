@@ -5,6 +5,10 @@ use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use crate::error::VortexResult;
 
 impl EncodingCompression for SparseEncoding {
+    fn cost(&self) -> u8 {
+        0
+    }
+
     fn can_compress(
         &self,
         array: &dyn Array,
@@ -22,8 +26,10 @@ impl EncodingCompression for SparseEncoding {
         let sparse_array = array.as_sparse();
         let sparse_like = like.map(|la| la.as_sparse());
         Ok(SparseArray::new(
-            ctx.compress(sparse_array.indices(), sparse_like.map(|sa| sa.indices()))?,
-            ctx.compress(sparse_array.values(), sparse_like.map(|sa| sa.values()))?,
+            ctx.auxiliary("indices")
+                .compress(sparse_array.indices(), sparse_like.map(|sa| sa.indices()))?,
+            ctx.named("values")
+                .compress(sparse_array.values(), sparse_like.map(|sa| sa.values()))?,
             sparse_array.len(),
         )
         .boxed())

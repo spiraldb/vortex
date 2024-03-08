@@ -1,5 +1,6 @@
 use pyo3::types::PyType;
 use pyo3::{pyclass, pyfunction, pymethods, Py, PyResult, Python};
+use std::sync::Arc;
 
 use vortex::compress::{CompressConfig, CompressCtx};
 
@@ -33,7 +34,7 @@ pub fn compress(
     opts: Option<PyCompressConfig>,
 ) -> PyResult<Py<PyArray>> {
     let compress_opts = opts.map(|o| o.inner).unwrap_or_default();
-    let ctx = CompressCtx::new(&compress_opts);
+    let ctx = CompressCtx::new(Arc::new(compress_opts));
     let compressed = py
         .allow_threads(|| ctx.compress(arr.unwrap(), None))
         .map_err(PyVortexError::map_err)?;

@@ -32,7 +32,8 @@ impl EncodingCompression for StructEncoding {
                 let like_chunk = struct_like
                     .and_then(|c_like| c_like.fields().get(i))
                     .map(Deref::deref);
-                ctx.compress(chunk.deref(), like_chunk)
+                ctx.auxiliary(&format!("[{}]", i))
+                    .compress(chunk.deref(), like_chunk)
             })
             .try_collect()?;
 

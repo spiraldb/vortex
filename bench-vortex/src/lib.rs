@@ -6,6 +6,7 @@ use parquet::arrow::ProjectionMask;
 use std::collections::HashSet;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use vortex::array::bool::BoolEncoding;
 use vortex::array::chunked::{ChunkedArray, ChunkedEncoding};
 use vortex::array::constant::ConstantEncoding;
@@ -23,7 +24,7 @@ use vortex::dtype::DType;
 use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
-use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
+use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 
@@ -44,13 +45,14 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         &ALPEncoding,
         &DictEncoding,
         &BitPackedEncoding,
-        &DeltaEncoding,
         &FoREncoding,
+        // &DeltaEncoding,
+        // &FFoREncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
         // &RoaringIntEncoding,
         // Doesn't offer anything more than FoR really
-        //&ZigZagEncoding,
+        // &ZigZagEncoding,
     ]
 }
 
@@ -76,11 +78,17 @@ pub fn download_taxi_data() -> PathBuf {
 pub fn compress_taxi_data() -> ArrayRef {
     let file = File::open(download_taxi_data()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let _mask = ProjectionMask::roots(builder.parquet_schema(), [10]);
+    let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
+    let _no_datetime_mask = ProjectionMask::roots(
+        builder.parquet_schema(),
+        [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    );
     let reader = builder
-        // .with_projection(mask)
+        //.with_projection(mask)
+        //.with_projection(no_datetime_mask)
         .with_batch_size(65_536)
-        //.with_limit(100_000)
+        // .with_batch_size(5_000_000)
+        // .with_limit(100_000)
         .build()
         .unwrap();
 
@@ -89,18 +97,20 @@ pub fn compress_taxi_data() -> ArrayRef {
         HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
         HashSet::default(),
     );
-    println!("Compression config {cfg:?}");
-    let ctx = CompressCtx::new(&cfg);
+    info!("Compression config {cfg:?}");
+    let ctx = CompressCtx::new(Arc::new(cfg));
 
     let schema = reader.schema();
     let mut uncompressed_size = 0;
     let chunks = reader
         .into_iter()
+        //.skip(39)
+        //.take(1)
         .map(|batch_result| batch_result.unwrap())
         .map(ArrayRef::from)
         .map(|array| {
             uncompressed_size += array.nbytes();
-            ctx.compress(array.as_ref(), None).unwrap()
+            ctx.clone().compress(array.as_ref(), None).unwrap()
         })
         .collect_vec();
 
@@ -108,11 +118,6 @@ pub fn compress_taxi_data() -> ArrayRef {
     let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
 
     info!("Compressed array {}", display_tree(compressed.as_ref()));
-    info!(
-        "NBytes {}, Ratio {}",
-        compressed.nbytes(),
-        compressed.nbytes() as f32 / uncompressed_size as f32
-    );
 
     let mut field_bytes = vec![0; schema.fields().len()];
     for chunk in chunks {
@@ -122,8 +127,13 @@ pub fn compress_taxi_data() -> ArrayRef {
         }
     }
     field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
-        info!("{},{}", schema.field(i).name(), nbytes);
+        println!("{},{}", schema.field(i).name(), nbytes);
     });
+    println!(
+        "NBytes {}, Ratio {}",
+        compressed.nbytes(),
+        compressed.nbytes() as f32 / uncompressed_size as f32
+    );
 
     compressed
 }
@@ -146,9 +156,10 @@ mod test {
         .unwrap();
     }
 
+    #[ignore]
     #[test]
     fn compression_ratio() {
-        setup_logger(LevelFilter::Info);
+        setup_logger(LevelFilter::Warn);
         _ = compress_taxi_data();
     }
 }

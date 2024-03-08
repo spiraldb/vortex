@@ -48,8 +48,7 @@ impl EncodingCompression for ZigZagEncoding {
         };
 
         Ok(ZigZagArray::new(
-            ctx.next_level()
-                .compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded()))?,
+            ctx.compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded()))?,
         )
         .boxed())
     }
