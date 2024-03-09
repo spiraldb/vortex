@@ -71,8 +71,6 @@ pub enum VortexError {
     MismatchedTypes(DType, DType),
     #[error("unexpected arrow data type: {0:?}")]
     InvalidArrowDataType(arrow::datatypes::DataType),
-    #[error("polars error: {0:?}")]
-    PolarsError(PolarsError),
     #[error("arrow error: {0:?}")]
     ArrowError(ArrowError),
     #[error("patch values may not be null for base dtype {0}")]
@@ -100,21 +98,5 @@ impl PartialEq for ArrowError {
 impl From<arrow::error::ArrowError> for VortexError {
     fn from(err: arrow::error::ArrowError) -> Self {
         VortexError::ArrowError(ArrowError(err))
-    }
-}
-
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct PolarsError(polars_core::error::PolarsError);
-
-impl PartialEq for PolarsError {
-    fn eq(&self, _other: &Self) -> bool {
-        false
-    }
-}
-
-impl From<polars_core::error::PolarsError> for VortexError {
-    fn from(err: polars_core::error::PolarsError) -> Self {
-        VortexError::PolarsError(PolarsError(err))
     }
 }

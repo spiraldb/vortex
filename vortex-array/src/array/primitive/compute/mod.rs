@@ -11,6 +11,7 @@ mod cast;
 mod fill;
 mod patch;
 mod scalar_at;
+mod search_sorted;
 
 impl ArrayCompute for PrimitiveArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
