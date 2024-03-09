@@ -16,7 +16,7 @@ pub fn search_sorted<T: Into<ScalarRef>>(
     target: T,
     side: SearchSortedSide,
 ) -> VortexResult<usize> {
-    let scalar = target.into();
+    let scalar = target.into().cast(array.dtype())?;
     array
         .search_sorted()
         .map(|f| f.search_sorted(scalar.as_ref(), side))
