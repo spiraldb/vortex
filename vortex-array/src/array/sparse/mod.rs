@@ -15,7 +15,7 @@ use crate::array::{
     check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
 };
 use crate::compress::EncodingCompression;
-use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
+use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -161,8 +161,8 @@ impl Array for SparseArray {
         check_slice_bounds(self, start, stop)?;
 
         // Find the index of the first patch index that is greater than or equal to the offset of this array
-        let index_start_index = search_sorted_usize(self.indices(), start, SearchSortedSide::Left)?;
-        let index_end_index = search_sorted_usize(self.indices(), stop, SearchSortedSide::Left)?;
+        let index_start_index = search_sorted(self.indices(), start, SearchSortedSide::Left)?;
+        let index_end_index = search_sorted(self.indices(), stop, SearchSortedSide::Left)?;
 
         Ok(SparseArray {
             indices_offset: self.indices_offset + start,
