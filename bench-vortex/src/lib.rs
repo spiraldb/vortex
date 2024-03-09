@@ -1,6 +1,6 @@
 use arrow_array::RecordBatchReader;
 use itertools::Itertools;
-use log::info;
+use log::{info, warn};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use std::collections::HashSet;
@@ -119,7 +119,7 @@ pub fn compress_taxi_data() -> ArrayRef {
     let dtype: DType = schema.clone().try_into().unwrap();
     let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
 
-    info!("Compressed array {}", display_tree(compressed.as_ref()));
+    warn!("Compressed array {}", display_tree(compressed.as_ref()));
 
     let mut field_bytes = vec![0; schema.fields().len()];
     for chunk in chunks {

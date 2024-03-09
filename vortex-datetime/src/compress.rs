@@ -58,17 +58,17 @@ impl EncodingCompression for DateTimeEncoding {
                             subsecond.push((t % 86_400_000_000) % 1_000_000);
                         }
 
-                        let days_array = PrimitiveArray::from(days);
-                        let seconds_array = PrimitiveArray::from(seconds);
-                        let subsecond_array = PrimitiveArray::from(subsecond);
-
                         Ok(DateTimeArray::new(
                             ctx.named("days")
-                                .compress(days_array.as_ref(), ld.map(|l| l.days()))?,
-                            ctx.named("seconds")
-                                .compress(seconds_array.as_ref(), ld.map(|l| l.seconds()))?,
-                            ctx.named("subsecond")
-                                .compress(subsecond_array.as_ref(), ld.map(|l| l.subsecond()))?,
+                                .compress(&PrimitiveArray::from(days), ld.map(|l| l.days()))?,
+                            ctx.named("seconds").compress(
+                                &PrimitiveArray::from(seconds).as_ref(),
+                                ld.map(|l| l.seconds()),
+                            )?,
+                            ctx.named("subsecond").compress(
+                                &PrimitiveArray::from(subsecond).as_ref(),
+                                ld.map(|l| l.subsecond()),
+                            )?,
                             array.dtype().clone(),
                         )
                         .boxed())
