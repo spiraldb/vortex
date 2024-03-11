@@ -8,7 +8,6 @@ pub mod dtype;
 pub mod encode;
 pub mod error;
 pub mod formatter;
-mod polars;
 pub mod ptype;
 mod sampling;
 pub mod serde;

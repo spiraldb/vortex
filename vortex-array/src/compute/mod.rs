@@ -1,4 +1,5 @@
 use crate::compute::as_contiguous::AsContiguousFn;
+use crate::compute::search_sorted::SearchSortedFn;
 use cast::{CastBoolFn, CastPrimitiveFn};
 use fill::FillForwardFn;
 use patch::PatchFn;
@@ -37,6 +38,10 @@ pub trait ArrayCompute {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        None
+    }
+
+    fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
         None
     }
 

@@ -82,7 +82,7 @@ impl REEArray {
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
-        compute::search_sorted::search_sorted_usize(
+        compute::search_sorted::search_sorted(
             self.ends(),
             index + self.offset,
             SearchSortedSide::Right,
