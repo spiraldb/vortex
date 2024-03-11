@@ -251,7 +251,9 @@ mod test {
         assert_eq!(
             trailing_zeros_freq,
             vec![
-                0u64, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                // 1, 3, 5 have 0 trailing zeros
+                // 2 has 1 trailing zero, 4 has 2 trailing zeros
+                3u64, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0,
             ]
         );
