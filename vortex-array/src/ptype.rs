@@ -124,27 +124,27 @@ macro_rules! match_each_unsigned_integer_ptype {
 pub use match_each_unsigned_integer_ptype;
 
 impl PType {
-    pub fn is_unsigned_int(self) -> bool {
+    pub const fn is_unsigned_int(self) -> bool {
         matches!(self, PType::U8 | PType::U16 | PType::U32 | PType::U64)
     }
 
-    pub fn is_signed_int(self) -> bool {
+    pub const fn is_signed_int(self) -> bool {
         matches!(self, PType::I8 | PType::I16 | PType::I32 | PType::I64)
     }
 
-    pub fn is_int(self) -> bool {
+    pub const fn is_int(self) -> bool {
         self.is_unsigned_int() || self.is_signed_int()
     }
 
-    pub fn is_float(self) -> bool {
+    pub const fn is_float(self) -> bool {
         matches!(self, PType::F16 | PType::F32 | PType::F64)
     }
 
-    pub fn byte_width(&self) -> usize {
+    pub const fn byte_width(&self) -> usize {
         match_each_native_ptype!(self, |$T| std::mem::size_of::<$T>())
     }
 
-    pub fn bit_width(&self) -> usize {
+    pub const fn bit_width(&self) -> usize {
         self.byte_width() * 8
     }
 }

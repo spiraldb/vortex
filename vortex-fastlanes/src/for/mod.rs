@@ -18,15 +18,17 @@ mod serde;
 pub struct FoRArray {
     child: ArrayRef,
     reference: Scalar,
+    shift: u8,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl FoRArray {
-    pub fn try_new(child: ArrayRef, reference: Scalar) -> VortexResult<Self> {
+    pub fn try_new(child: ArrayRef, reference: Scalar, shift: u8) -> VortexResult<Self> {
         // TODO(ngates): check the dtype of reference == child.dtype()
         Ok(Self {
             child,
             reference,
+            shift,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
@@ -39,6 +41,11 @@ impl FoRArray {
     #[inline]
     pub fn reference(&self) -> &Scalar {
         &self.reference
+    }
+
+    #[inline]
+    pub fn shift(&self) -> u8 {
+        self.shift
     }
 }
 
@@ -86,6 +93,7 @@ impl Array for FoRArray {
         Ok(Self {
             child: self.child.slice(start, stop)?,
             reference: self.reference.clone(),
+            shift: self.shift,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
         .boxed())
@@ -117,7 +125,8 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for FoRArray {
 impl ArrayDisplay for FoRArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("reference", self.reference())?;
-        f.child("shifted", self.child())
+        f.property("shift", self.shift())?;
+        f.child("encoded", self.child())
     }
 }
 

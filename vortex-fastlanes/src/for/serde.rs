@@ -8,6 +8,7 @@ use crate::{FoRArray, FoREncoding};
 impl ArraySerde for FoRArray {
     fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
         ctx.scalar(self.reference())?;
+        ctx.write_usize(self.shift() as usize)?;
         ctx.write(self.child())
     }
 }
@@ -15,8 +16,9 @@ impl ArraySerde for FoRArray {
 impl EncodingSerde for FoREncoding {
     fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
         let reference = ctx.scalar()?;
+        let shift = ctx.read_usize()? as u8;
         let child = ctx.read()?;
-        Ok(FoRArray::try_new(child, reference).unwrap().boxed())
+        Ok(FoRArray::try_new(child, reference, shift).unwrap().boxed())
     }
 }
 
@@ -44,6 +46,7 @@ mod test {
         let arr = FoRArray::try_new(
             vec![-7i64, -13, 17, 23].into(),
             <i64 as Into<Scalar>>::into(-7i64),
+            2,
         )
         .unwrap();
         roundtrip_array(arr.as_ref()).unwrap();
