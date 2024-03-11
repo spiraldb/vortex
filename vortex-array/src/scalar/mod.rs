@@ -169,3 +169,15 @@ impl<T: NativePType> AsBytes for T {
         unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of::<T>()) }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::mem;
+
+    use crate::scalar::Scalar;
+
+    #[test]
+    fn size_of() {
+        assert_eq!(mem::size_of::<Scalar>(), 80);
+    }
+}
