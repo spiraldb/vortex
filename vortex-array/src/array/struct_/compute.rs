@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::struct_::StructArray;
 use crate::array::{Array, ArrayRef};
@@ -5,8 +7,7 @@ use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
-use crate::scalar::{Scalar, ScalarRef, StructScalar};
-use itertools::Itertools;
+use crate::scalar::{Scalar, StructScalar};
 
 impl ArrayCompute for StructArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
@@ -38,7 +39,7 @@ impl AsContiguousFn for StructArray {
 }
 
 impl ScalarAtFn for StructArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         Ok(StructScalar::new(
             self.dtype.clone(),
             self.fields
@@ -46,6 +47,6 @@ impl ScalarAtFn for StructArray {
                 .map(|field| scalar_at(field.as_ref(), index))
                 .try_collect()?,
         )
-        .boxed())
+        .into())
     }
 }

@@ -5,7 +5,7 @@ use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
-use crate::scalar::ScalarRef;
+use crate::scalar::Scalar;
 use itertools::Itertools;
 
 impl ArrayCompute for TypedArray {
@@ -34,8 +34,8 @@ impl AsContiguousFn for TypedArray {
 }
 
 impl ScalarAtFn for TypedArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let underlying = scalar_at(self.array.as_ref(), index)?;
-        underlying.as_ref().cast(self.dtype())
+        underlying.cast(self.dtype())
     }
 }

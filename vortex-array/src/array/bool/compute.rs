@@ -1,3 +1,6 @@
+use arrow::buffer::BooleanBuffer;
+use itertools::Itertools;
+
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef, CloneOptionalArray};
@@ -7,9 +10,7 @@ use crate::compute::fill::FillForwardFn;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
-use crate::scalar::{NullableScalar, Scalar, ScalarRef};
-use arrow::buffer::BooleanBuffer;
-use itertools::Itertools;
+use crate::scalar::{BoolScalar, Scalar};
 
 impl ArrayCompute for BoolArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
@@ -68,11 +69,11 @@ impl CastBoolFn for BoolArray {
 }
 
 impl ScalarAtFn for BoolArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
             Ok(self.buffer.value(index).into())
         } else {
-            Ok(NullableScalar::none(self.dtype().clone()).boxed())
+            Ok(BoolScalar::new(None).into())
         }
     }
 }

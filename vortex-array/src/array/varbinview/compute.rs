@@ -1,9 +1,10 @@
 use crate::array::varbinview::VarBinViewArray;
+use crate::array::Array;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::dtype::DType;
 use crate::error::VortexResult;
-use crate::scalar::{NullableScalar, Scalar, ScalarRef};
+use crate::scalar::Scalar;
 
 impl ArrayCompute for VarBinViewArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -12,7 +13,7 @@ impl ArrayCompute for VarBinViewArray {
 }
 
 impl ScalarAtFn for VarBinViewArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
             self.bytes_at(index).map(|bytes| {
                 if matches!(self.dtype, DType::Utf8(_)) {
@@ -22,7 +23,7 @@ impl ScalarAtFn for VarBinViewArray {
                 }
             })
         } else {
-            Ok(NullableScalar::none(self.dtype.clone()).boxed())
+            Ok(Scalar::null(self.dtype()))
         }
     }
 }

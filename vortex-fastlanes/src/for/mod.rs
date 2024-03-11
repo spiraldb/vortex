@@ -7,7 +7,7 @@ use vortex::compute::ArrayCompute;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::scalar::{Scalar, ScalarRef};
+use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 
@@ -17,12 +17,12 @@ mod serde;
 #[derive(Debug, Clone)]
 pub struct FoRArray {
     child: ArrayRef,
-    reference: ScalarRef,
+    reference: Scalar,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl FoRArray {
-    pub fn try_new(child: ArrayRef, reference: ScalarRef) -> VortexResult<Self> {
+    pub fn try_new(child: ArrayRef, reference: Scalar) -> VortexResult<Self> {
         // TODO(ngates): check the dtype of reference == child.dtype()
         Ok(Self {
             child,
@@ -37,8 +37,8 @@ impl FoRArray {
     }
 
     #[inline]
-    pub fn reference(&self) -> &dyn Scalar {
-        self.reference.as_ref()
+    pub fn reference(&self) -> &Scalar {
+        &self.reference
     }
 }
 

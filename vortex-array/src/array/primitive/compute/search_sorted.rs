@@ -6,7 +6,7 @@ use crate::ptype::NativePType;
 use crate::scalar::Scalar;
 
 impl SearchSortedFn for PrimitiveArray {
-    fn search_sorted(&self, value: &dyn Scalar, side: SearchSortedSide) -> VortexResult<usize> {
+    fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<usize> {
         match_each_native_ptype!(self.ptype(), |$T| {
             let pvalue: $T = value.try_into()?;
             Ok(search_sorted(self.typed_data::<$T>(), pvalue, side))

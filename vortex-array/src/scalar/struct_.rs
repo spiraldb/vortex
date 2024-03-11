@@ -1,70 +1,50 @@
-use std::any::Any;
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 use itertools::Itertools;
 
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::{Scalar, ScalarRef};
+use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructScalar {
     dtype: DType,
-    values: Vec<ScalarRef>,
+    values: Vec<Scalar>,
 }
 
 impl StructScalar {
     #[inline]
-    pub fn new(dtype: DType, values: Vec<ScalarRef>) -> Self {
+    pub fn new(dtype: DType, values: Vec<Scalar>) -> Self {
         Self { dtype, values }
     }
 
     #[inline]
-    pub fn values(&self) -> &[ScalarRef] {
-        &self.values
-    }
-}
-
-impl Scalar for StructScalar {
-    #[inline]
-    fn as_any(&self) -> &dyn Any {
-        self
+    pub fn values(&self) -> &[Scalar] {
+        self.values.as_ref()
     }
 
     #[inline]
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
-
-    #[inline]
-    fn as_nonnull(&self) -> Option<&dyn Scalar> {
-        Some(self)
-    }
-
-    #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
-        Some(self)
-    }
-
-    #[inline]
-    fn boxed(self) -> ScalarRef {
-        Box::new(self)
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
+    pub fn dtype(&self) -> &DType {
         &self.dtype
     }
 
-    fn cast(&self, dtype: &DType) -> VortexResult<ScalarRef> {
+    pub fn names(&self) -> &[Arc<String>] {
+        let DType::Struct(ns, _) = self.dtype() else {
+            unreachable!("Not a scalar dtype");
+        };
+        ns.as_slice()
+    }
+
+    pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
         match dtype {
             DType::Struct(names, field_dtypes) => {
                 if field_dtypes.len() != self.values.len() {
                     return Err(VortexError::InvalidDType(dtype.clone()));
                 }
 
-                let new_fields: Vec<ScalarRef> = self
+                let new_fields: Vec<Scalar> = self
                     .values
                     .iter()
                     .zip_eq(field_dtypes.iter())
@@ -75,14 +55,14 @@ impl Scalar for StructScalar {
                     names.clone(),
                     new_fields.iter().map(|x| x.dtype().clone()).collect(),
                 );
-                Ok(StructScalar::new(new_type, new_fields).boxed())
+                Ok(StructScalar::new(new_type, new_fields).into())
             }
             _ => Err(VortexError::InvalidDType(dtype.clone())),
         }
     }
 
-    fn nbytes(&self) -> usize {
-        self.values.iter().map(|s| s.nbytes()).sum()
+    pub fn nbytes(&self) -> usize {
+        self.values().iter().map(|s| s.nbytes()).sum()
     }
 }
 

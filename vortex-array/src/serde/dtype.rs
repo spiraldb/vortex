@@ -17,15 +17,21 @@ impl<'a> DTypeReader<'a> {
         Self { reader }
     }
 
-    fn read_byte(&mut self) -> io::Result<u8> {
-        let mut buf: [u8; 1] = [0; 1];
-        self.reader.read_exact(&mut buf)?;
-        Ok(buf[0])
+    fn read_nbytes<const N: usize>(&mut self) -> io::Result<[u8; N]> {
+        let mut bytes: [u8; N] = [0; N];
+        self.reader.read_exact(&mut bytes)?;
+        Ok(bytes)
+    }
+
+    fn read_usize(&mut self) -> io::Result<usize> {
+        leb128::read::unsigned(self.reader)
+            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+            .map(|u| u as usize)
     }
 
     pub fn read(&mut self) -> io::Result<DType> {
-        let dtype = DTypeTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))?;
+        let dtype = DTypeTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         match dtype {
             DTypeTag::Null => Ok(Null),
             DTypeTag::Bool => Ok(Bool(self.read_nullability()?)),
@@ -45,8 +51,7 @@ impl<'a> DTypeReader<'a> {
             DTypeTag::Binary => Ok(Binary(self.read_nullability()?)),
             DTypeTag::Decimal => {
                 let nullability = self.read_nullability()?;
-                let mut precision_scale: [u8; 2] = [0; 2];
-                self.reader.read_exact(&mut precision_scale)?;
+                let precision_scale: [u8; 2] = self.read_nbytes()?;
                 Ok(Decimal(
                     precision_scale[0],
                     precision_scale[1] as i8,
@@ -79,18 +84,16 @@ impl<'a> DTypeReader<'a> {
                 ))
             }
             DTypeTag::Struct => {
-                let field_num = leb128::read::unsigned(self.reader)
-                    .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
-                let mut names = Vec::<Arc<String>>::with_capacity(field_num as usize);
+                let field_num = self.read_usize()?;
+                let mut names = Vec::with_capacity(field_num);
                 for _ in 0..field_num {
-                    let len = leb128::read::unsigned(self.reader)
-                        .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
-                    let mut name = String::with_capacity(len as usize);
-                    self.reader.take(len).read_to_string(&mut name)?;
+                    let len = self.read_usize()?;
+                    let mut name = String::with_capacity(len);
+                    self.reader.take(len as u64).read_to_string(&mut name)?;
                     names.push(Arc::new(name));
                 }
 
-                let mut fields = Vec::<DType>::with_capacity(field_num as usize);
+                let mut fields = Vec::with_capacity(field_num);
                 for _ in 0..field_num {
                     fields.push(self.read()?);
                 }
@@ -100,32 +103,32 @@ impl<'a> DTypeReader<'a> {
     }
 
     fn read_signedness(&mut self) -> io::Result<Signedness> {
-        SignednessTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+        SignednessTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .map(Signedness::from)
     }
 
     fn read_nullability(&mut self) -> io::Result<Nullability> {
-        NullabilityTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+        NullabilityTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .map(Nullability::from)
     }
 
     fn read_int_width(&mut self) -> io::Result<IntWidth> {
-        IntWidthTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+        IntWidthTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .map(IntWidth::from)
     }
 
     fn read_float_width(&mut self) -> io::Result<FloatWidth> {
-        FloatWidthTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+        FloatWidthTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .map(FloatWidth::from)
     }
 
     fn read_time_unit(&mut self) -> io::Result<TimeUnit> {
-        TimeUnitTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+        TimeUnitTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .map(TimeUnit::from)
     }
 }
