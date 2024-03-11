@@ -46,6 +46,7 @@ mod test {
         let arr = FoRArray::try_new(
             vec![-7i64, -13, 17, 23].into(),
             <i64 as Into<Scalar>>::into(-7i64),
+            2,
         )
         .unwrap();
         roundtrip_array(arr.as_ref()).unwrap();
