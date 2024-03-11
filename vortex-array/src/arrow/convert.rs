@@ -1,9 +1,8 @@
+use arrow_array::{RecordBatch, RecordBatchReader};
 use std::iter::zip;
 use std::sync::Arc;
 
-use arrow::array::RecordBatch;
-use arrow::array::RecordBatchReader;
-use arrow::datatypes::{
+use arrow_schema::{
     DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit as ArrowTimeUnit,
 };
 use itertools::Itertools;

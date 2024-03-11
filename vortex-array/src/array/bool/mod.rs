@@ -2,8 +2,9 @@ use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::{ArrayRef as ArrowArrayRef, AsArray, BooleanArray};
-use arrow::buffer::{BooleanBuffer, NullBuffer};
+use arrow_array::array::{ArrayRef as ArrowArrayRef, BooleanArray};
+use arrow_array::cast::AsArray;
+use arrow_buffer::buffer::{BooleanBuffer, NullBuffer};
 use linkme::distributed_slice;
 
 use crate::arrow::CombineChunks;

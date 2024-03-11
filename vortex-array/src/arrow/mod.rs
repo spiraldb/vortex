@@ -1,4 +1,5 @@
-use arrow::array::ArrayRef;
+use arrow_array::array::ArrayRef;
+use arrow_select::concat::concat;
 use itertools::Itertools;
 
 use crate::array::ArrowIterator;
@@ -14,7 +15,7 @@ impl CombineChunks for Box<ArrowIterator> {
     fn combine_chunks(self) -> ArrayRef {
         let chunks = self.collect_vec();
         let chunk_refs = chunks.iter().map(|a| a.as_ref()).collect_vec();
-        arrow::compute::concat(&chunk_refs).unwrap()
+        concat(&chunk_refs).unwrap()
     }
 }
 
@@ -26,7 +27,7 @@ macro_rules! match_arrow_numeric_type {
         use $crate::dtype::IntWidth::*;
         use $crate::dtype::Signedness::*;
         use $crate::dtype::FloatWidth;
-        use arrow::datatypes::*;
+        use arrow_array::types::*;
         match $self {
             Int(_8, Unsigned, _) => __with__! {UInt8Type},
             Int(_16, Unsigned, _) => __with__!{UInt16Type},

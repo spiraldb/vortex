@@ -1,24 +1,24 @@
 use std::sync::Arc;
 
-use arrow::array::cast::AsArray;
-use arrow::array::types::{
+use arrow_array::array::{
+    Array as ArrowArray, ArrayRef as ArrowArrayRef, BooleanArray as ArrowBooleanArray,
+    GenericByteArray, NullArray as ArrowNullArray, PrimitiveArray as ArrowPrimitiveArray,
+    StructArray as ArrowStructArray,
+};
+use arrow_array::array::{ArrowPrimitiveType, OffsetSizeTrait};
+use arrow_array::cast::{as_null_array, AsArray};
+use arrow_array::types::{
+    ByteArrayType, Date32Type, Date64Type, DurationMicrosecondType, DurationMillisecondType,
+    DurationNanosecondType, DurationSecondType, Time32MillisecondType, Time32SecondType,
+    Time64MicrosecondType, Time64NanosecondType, TimestampMicrosecondType,
+    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType,
+};
+use arrow_array::types::{
     Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
     UInt32Type, UInt64Type, UInt8Type,
 };
-use arrow::array::{
-    as_null_array, Array as ArrowArray, ArrayRef as ArrowArrayRef,
-    BooleanArray as ArrowBooleanArray, GenericByteArray, NullArray as ArrowNullArray,
-    PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
-};
-use arrow::array::{ArrowPrimitiveType, OffsetSizeTrait};
-use arrow::buffer::{Buffer, NullBuffer, OffsetBuffer};
-use arrow::datatypes::{
-    ByteArrayType, DataType, Date32Type, Date64Type, DurationMicrosecondType,
-    DurationMillisecondType, DurationNanosecondType, DurationSecondType, Time32MillisecondType,
-    Time32SecondType, Time64MicrosecondType, Time64NanosecondType, TimeUnit,
-    TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
-    TimestampSecondType,
-};
+use arrow_buffer::buffer::{Buffer, NullBuffer, OffsetBuffer};
+use arrow_schema::{DataType, TimeUnit};
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;

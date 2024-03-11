@@ -2,7 +2,7 @@ use std::any::Any;
 use std::sync::{Arc, RwLock};
 use std::vec::IntoIter;
 
-use arrow::array::ArrayRef as ArrowArrayRef;
+use arrow_array::array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
 use linkme::distributed_slice;
 
@@ -252,10 +252,10 @@ impl Iterator for ChunkedArrowIterator {
 
 #[cfg(test)]
 mod test {
-    use arrow::array::cast::AsArray;
-    use arrow::array::types::UInt64Type;
-    use arrow::array::ArrayRef as ArrowArrayRef;
-    use arrow::array::ArrowPrimitiveType;
+    use arrow_array::array::ArrayRef as ArrowArrayRef;
+    use arrow_array::array::ArrowPrimitiveType;
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::UInt64Type;
     use itertools::Itertools;
 
     use crate::array::chunked::ChunkedArray;

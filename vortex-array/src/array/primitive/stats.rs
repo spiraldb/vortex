@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::mem::size_of;
 
-use arrow::buffer::BooleanBuffer;
+use arrow_buffer::buffer::BooleanBuffer;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::cast::cast_bool;

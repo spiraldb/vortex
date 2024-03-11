@@ -20,7 +20,12 @@ workspace = true
 
 [dependencies]
 allocator-api2 = "0.2.16"
-arrow = { version = "50.0.0", features = ["pyarrow"] }
+arrow-array = { version = "50.0.0" }
+arrow-buffer = { version = "50.0.0" }
+arrow-schema = { version = "50.0.0" }
+arrow-data = { version = "50.0.0" }
+arrow-cast = { version = "50.0.0" }
+arrow-select = { version = "50.0.0" }
 dyn-clone = "1.0.16"
 half = "2.3.1"
 humansize = "2.1.3"

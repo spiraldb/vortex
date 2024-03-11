@@ -6,9 +6,10 @@ use std::str::from_utf8_unchecked;
 use std::sync::{Arc, RwLock};
 use std::{iter, mem};
 
-use arrow::array::cast::AsArray;
-use arrow::array::types::UInt8Type;
-use arrow::array::{ArrayRef as ArrowArrayRef, BinaryBuilder, StringBuilder};
+use arrow_array::array::ArrayRef as ArrowArrayRef;
+use arrow_array::builder::{BinaryBuilder, StringBuilder};
+use arrow_array::cast::AsArray;
+use arrow_array::types::UInt8Type;
 use linkme::distributed_slice;
 
 use crate::array::{
@@ -343,7 +344,7 @@ impl ArrayDisplay for VarBinViewArray {
 
 #[cfg(test)]
 mod test {
-    use arrow::array::GenericStringArray as ArrowStringArray;
+    use arrow_array::array::GenericStringArray as ArrowStringArray;
 
     use crate::array::primitive::PrimitiveArray;
 

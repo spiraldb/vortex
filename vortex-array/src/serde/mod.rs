@@ -1,7 +1,7 @@
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 
-use arrow::buffer::{Buffer, MutableBuffer};
+use arrow_buffer::buffer::{Buffer, MutableBuffer};
 
 use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};

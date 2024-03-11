@@ -1,11 +1,12 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::StructArray as ArrowStructArray;
-use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
-use arrow::datatypes::{Field, Fields};
 use itertools::Itertools;
 use linkme::distributed_slice;
+
+use arrow_array::array::StructArray as ArrowStructArray;
+use arrow_array::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
+use arrow_schema::{Field, Fields};
 
 use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
 use crate::compress::EncodingCompression;
@@ -208,10 +209,10 @@ impl ArrayDisplay for StructArray {
 mod test {
     use std::sync::Arc;
 
-    use arrow::array::types::UInt64Type;
-    use arrow::array::PrimitiveArray as ArrowPrimitiveArray;
-    use arrow::array::StructArray as ArrowStructArray;
-    use arrow::array::{Array as ArrowArray, GenericStringArray as ArrowStringArray};
+    use arrow_array::array::PrimitiveArray as ArrowPrimitiveArray;
+    use arrow_array::array::StructArray as ArrowStructArray;
+    use arrow_array::array::{Array as ArrowArray, GenericStringArray as ArrowStringArray};
+    use arrow_array::types::UInt64Type;
 
     use crate::array::struct_::StructArray;
     use crate::array::Array;
