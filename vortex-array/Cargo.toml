@@ -31,9 +31,6 @@ log = "0.4.20"
 num-traits = "0.2.18"
 num_enum = "0.7.2"
 once_cell = "1.19.0"
-polars-arrow = { version = "0.37.0", features = ["arrow_rs"] }
-polars-core = "0.37.0"
-polars-ops = { version = "0.37.0", features = ["search_sorted"] }
 rand = { version = "0.8.5", features = [] }
 rayon = "1.8.1"
 roaring = "0.10.3"
