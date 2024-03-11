@@ -1,12 +1,12 @@
 use crate::array::Array;
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::ScalarRef;
+use crate::scalar::Scalar;
 
 pub trait ScalarAtFn {
-    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef>;
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar>;
 }
 
-pub fn scalar_at(array: &dyn Array, index: usize) -> VortexResult<ScalarRef> {
+pub fn scalar_at(array: &dyn Array, index: usize) -> VortexResult<Scalar> {
     if index >= array.len() {
         return Err(VortexError::OutOfBounds(index, 0, array.len()));
     }

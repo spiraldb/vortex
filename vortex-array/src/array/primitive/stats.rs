@@ -1,13 +1,14 @@
-use arrow::buffer::BooleanBuffer;
 use std::collections::HashMap;
 use std::mem::size_of;
+
+use arrow::buffer::BooleanBuffer;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::cast::cast_bool;
 use crate::error::VortexResult;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
-use crate::scalar::{ListScalarVec, NullableScalar, PScalar, Scalar};
+use crate::scalar::{ListScalarVec, PScalar};
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for PrimitiveArray {
@@ -54,8 +55,8 @@ impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
 
         if first_non_null.is_none() {
             return Ok(StatsSet::from(HashMap::from([
-                (Stat::Min, NullableScalar::none(T::PTYPE.into()).boxed()),
-                (Stat::Max, NullableScalar::none(T::PTYPE.into()).boxed()),
+                (Stat::Min, Option::<T>::None.into()),
+                (Stat::Max, Option::<T>::None.into()),
                 (Stat::IsConstant, true.into()),
                 (Stat::IsSorted, true.into()),
                 (Stat::IsStrictSorted, true.into()),

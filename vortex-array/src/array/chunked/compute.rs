@@ -5,7 +5,7 @@ use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
-use crate::scalar::ScalarRef;
+use crate::scalar::Scalar;
 use itertools::Itertools;
 
 impl ArrayCompute for ChunkedArray {
@@ -31,7 +31,7 @@ impl AsContiguousFn for ChunkedArray {
 }
 
 impl ScalarAtFn for ChunkedArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let (chunk_index, chunk_offset) = self.find_physical_location(index);
         scalar_at(self.chunks[chunk_index].as_ref(), chunk_offset)
     }

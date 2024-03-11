@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Formatter};
 use std::panic::RefUnwindSafe;
 
 use arrow::datatypes::ArrowNativeType;
@@ -7,7 +7,7 @@ use num_traits::{Num, NumCast};
 
 use crate::dtype::{DType, FloatWidth, IntWidth, Signedness};
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::{PScalar, ScalarRef};
+use crate::scalar::{PScalar, Scalar};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub enum PType {
@@ -37,8 +37,8 @@ pub trait NativePType:
     + RefUnwindSafe
     + Num
     + NumCast
-    + Into<ScalarRef>
-    + TryFrom<ScalarRef, Error = VortexError>
+    + Into<Scalar>
+    + TryFrom<Scalar, Error = VortexError>
     + Into<PScalar>
 {
     const PTYPE: PType;
@@ -146,6 +146,24 @@ impl PType {
 
     pub const fn bit_width(&self) -> usize {
         self.byte_width() * 8
+    }
+}
+
+impl Display for PType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PType::U8 => write!(f, "u8"),
+            PType::U16 => write!(f, "u16"),
+            PType::U32 => write!(f, "u32"),
+            PType::U64 => write!(f, "u64"),
+            PType::I8 => write!(f, "i8"),
+            PType::I16 => write!(f, "i16"),
+            PType::I32 => write!(f, "i32"),
+            PType::I64 => write!(f, "i64"),
+            PType::F16 => write!(f, "f16"),
+            PType::F32 => write!(f, "f32"),
+            PType::F64 => write!(f, "f64"),
+        }
     }
 }
 

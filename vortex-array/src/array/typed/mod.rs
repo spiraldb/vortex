@@ -164,7 +164,7 @@ mod test {
     use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
     use crate::dtype::{DType, Nullability, TimeUnit};
-    use crate::scalar::{LocalTimeScalar, PScalar, Scalar};
+    use crate::scalar::{LocalTimeScalar, PScalar, PrimitiveScalar};
 
     #[test]
     pub fn scalar() {
@@ -173,12 +173,20 @@ mod test {
             DType::LocalTime(TimeUnit::Us, Nullability::NonNullable),
         );
         assert_eq!(
-            scalar_at(arr.as_ref(), 0).unwrap().as_ref(),
-            &LocalTimeScalar::new(PScalar::U64(64_799_000_000), TimeUnit::Us) as &dyn Scalar
+            scalar_at(arr.as_ref(), 0).unwrap(),
+            LocalTimeScalar::new(
+                PrimitiveScalar::some(PScalar::U64(64_799_000_000)),
+                TimeUnit::Us
+            )
+            .into()
         );
         assert_eq!(
-            scalar_at(arr.as_ref(), 1).unwrap().as_ref(),
-            &LocalTimeScalar::new(PScalar::U64(43_000_000_000), TimeUnit::Us) as &dyn Scalar
+            scalar_at(arr.as_ref(), 1).unwrap(),
+            LocalTimeScalar::new(
+                PrimitiveScalar::some(PScalar::U64(43_000_000_000)),
+                TimeUnit::Us
+            )
+            .into()
         );
     }
 

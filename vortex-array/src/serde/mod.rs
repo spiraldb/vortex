@@ -5,10 +5,13 @@ use arrow::buffer::{Buffer, MutableBuffer};
 
 use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
-use crate::scalar::{Scalar, ScalarReader, ScalarRef, ScalarWriter};
+use crate::ptype::PType;
+use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 pub use crate::serde::dtype::{DTypeReader, DTypeWriter, TimeUnitTag};
+use crate::serde::ptype::PTypeTag;
 
 mod dtype;
+mod ptype;
 
 pub trait ArraySerde {
     fn write(&self, ctx: &mut WriteCtx) -> io::Result<()>;
@@ -70,9 +73,20 @@ impl<'a> ReadCtx<'a> {
         DTypeReader::new(self.r).read()
     }
 
+    pub fn ptype(&mut self) -> io::Result<PType> {
+        let typetag = PTypeTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))?;
+        Ok(typetag.into())
+    }
+
     #[inline]
-    pub fn scalar(&mut self) -> io::Result<ScalarRef> {
-        ScalarReader::new(self.r).read()
+    pub fn scalar(&mut self) -> io::Result<Scalar> {
+        ScalarReader::new(self).read()
+    }
+
+    pub fn read_optional_slice(&mut self) -> io::Result<Option<Vec<u8>>> {
+        let is_present = self.read_option_tag()?;
+        is_present.then(|| self.read_slice()).transpose()
     }
 
     pub fn read_slice(&mut self) -> io::Result<Vec<u8>> {
@@ -152,7 +166,11 @@ impl<'a> WriteCtx<'a> {
         DTypeWriter::new(self).write(dtype)
     }
 
-    pub fn scalar(&mut self, scalar: &dyn Scalar) -> io::Result<()> {
+    pub fn ptype(&mut self, ptype: PType) -> io::Result<()> {
+        self.write_fixed_slice([PTypeTag::from(ptype).into()])
+    }
+
+    pub fn scalar(&mut self, scalar: &Scalar) -> io::Result<()> {
         ScalarWriter::new(self).write(scalar)
     }
 
@@ -167,6 +185,15 @@ impl<'a> WriteCtx<'a> {
     pub fn write_slice(&mut self, slice: &[u8]) -> io::Result<()> {
         self.write_usize(slice.len())?;
         self.w.write_all(slice)
+    }
+
+    pub fn write_optional_slice(&mut self, slice: Option<&[u8]>) -> io::Result<()> {
+        self.write_option_tag(slice.is_some())?;
+        if let Some(s) = slice {
+            self.write_slice(s)
+        } else {
+            Ok(())
+        }
     }
 
     pub fn write_buffer(&mut self, logical_len: usize, buf: &Buffer) -> io::Result<()> {
