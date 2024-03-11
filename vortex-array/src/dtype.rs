@@ -299,3 +299,15 @@ impl From<PType> for DType {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::mem;
+
+    use crate::dtype::DType;
+
+    #[test]
+    fn size_of() {
+        assert_eq!(mem::size_of::<DType>(), 48);
+    }
+}
