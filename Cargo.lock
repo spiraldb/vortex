@@ -2606,9 +2606,7 @@ name = "vortex-fastlanes"
 version = "0.1.0"
 dependencies = [
  "arrayref",
- "dyn-clone",
  "fastlanez-sys",
- "half",
  "itertools 0.12.1",
  "linkme",
  "log",

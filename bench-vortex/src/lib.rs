@@ -1,6 +1,6 @@
 use arrow_array::RecordBatchReader;
 use itertools::Itertools;
-use log::{info, warn};
+use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use std::collections::HashSet;
@@ -78,13 +78,13 @@ pub fn download_taxi_data() -> PathBuf {
 pub fn compress_taxi_data() -> ArrayRef {
     let file = File::open(download_taxi_data()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let _mask = ProjectionMask::roots(builder.parquet_schema(), [2]);
+    let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
     let _no_datetime_mask = ProjectionMask::roots(
         builder.parquet_schema(),
         [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
     );
     let reader = builder
-        .with_projection(_mask)
+        //.with_projection(mask)
         //.with_projection(no_datetime_mask)
         .with_batch_size(65_536)
         // .with_batch_size(5_000_000)
@@ -117,7 +117,7 @@ pub fn compress_taxi_data() -> ArrayRef {
     let dtype: DType = schema.clone().try_into().unwrap();
     let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
 
-    warn!("Compressed array {}", display_tree(compressed.as_ref()));
+    info!("Compressed array {}", display_tree(compressed.as_ref()));
 
     let mut field_bytes = vec![0; schema.fields().len()];
     for chunk in chunks {
@@ -156,7 +156,7 @@ mod test {
         .unwrap();
     }
 
-    //#[ignore]
+    #[ignore]
     #[test]
     fn compression_ratio() {
         setup_logger(LevelFilter::Warn);

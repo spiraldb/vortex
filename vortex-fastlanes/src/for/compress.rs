@@ -61,13 +61,7 @@ impl EncodingCompression for FoREncoding {
             like.map(|l| l.as_any().downcast_ref::<FoRArray>().unwrap().child()),
         )?;
         let reference = parray.stats().get(&Stat::Min).unwrap();
-        Ok(FoRArray::try_new(
-            dyn_clone::clone_box(array),
-            compressed_child,
-            reference,
-            shift,
-        )?
-        .boxed())
+        Ok(FoRArray::try_new(compressed_child, reference, shift)?.boxed())
     }
 }
 
@@ -78,7 +72,7 @@ fn compress_primitive<T: NativePType + PrimInt>(
     let min = parray
         .stats()
         .get_or_compute_as::<T>(&Stat::Min)
-        .unwrap_or(<T>::default());
+        .unwrap_or_default();
 
     let values = if shift > 0 {
         let shifted_min = min >> shift as usize;
