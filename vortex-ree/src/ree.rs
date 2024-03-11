@@ -3,8 +3,9 @@ use std::cmp::min;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::ArrowPrimitiveType;
-use arrow::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef, AsArray};
+use arrow_array::array::ArrowPrimitiveType;
+use arrow_array::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
+use arrow_array::cast::AsArray;
 use num_traits::AsPrimitive;
 
 use vortex::array::primitive::PrimitiveArray;
@@ -308,14 +309,15 @@ fn run_ends_logical_length<T: AsRef<dyn Array>>(ends: &T) -> usize {
 
 #[cfg(test)]
 mod test {
-    use arrow::array::cast::AsArray;
-    use arrow::array::types::Int32Type;
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::Int32Type;
     use itertools::Itertools;
+
     use vortex::array::Array;
     use vortex::compute::scalar_at::scalar_at;
+    use vortex::dtype::{DType, IntWidth, Nullability, Signedness};
 
     use crate::REEArray;
-    use vortex::dtype::{DType, IntWidth, Nullability, Signedness};
 
     #[test]
     fn new() {

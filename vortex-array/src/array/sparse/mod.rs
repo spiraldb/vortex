@@ -2,12 +2,11 @@ use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::AsArray;
-use arrow::array::{
-    ArrayRef as ArrowArrayRef, BooleanBufferBuilder, PrimitiveArray as ArrowPrimitiveArray,
-};
-use arrow::buffer::{NullBuffer, ScalarBuffer};
-use arrow::datatypes::UInt64Type;
+use arrow_array::array::{ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray};
+use arrow_array::cast::AsArray;
+use arrow_array::types::UInt64Type;
+use arrow_buffer::buffer::{NullBuffer, ScalarBuffer};
+use arrow_buffer::BooleanBufferBuilder;
 use linkme::distributed_slice;
 
 use crate::array::ENCODINGS;
@@ -85,7 +84,7 @@ impl SparseArray {
         let mut indices = Vec::with_capacity(self.len());
         self.indices().iter_arrow().for_each(|c| {
             indices.extend(
-                arrow::compute::cast(c.as_ref(), &arrow::datatypes::DataType::UInt64)
+                arrow_cast::cast(c.as_ref(), &arrow_schema::DataType::UInt64)
                     .unwrap()
                     .as_primitive::<UInt64Type>()
                     .values()
@@ -231,8 +230,8 @@ impl Encoding for SparseEncoding {
 
 #[cfg(test)]
 mod test {
-    use arrow::array::AsArray;
-    use arrow::datatypes::Int32Type;
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::Int32Type;
     use itertools::Itertools;
 
     use crate::array::sparse::SparseArray;

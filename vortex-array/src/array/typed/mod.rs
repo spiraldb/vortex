@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use arrow::datatypes::DataType;
+use arrow_schema::DataType;
 use linkme::distributed_slice;
 
 use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -88,9 +88,9 @@ impl Array for TypedArray {
     fn iter_arrow(&self) -> Box<ArrowIterator> {
         let datatype: DataType = self.dtype().into();
         Box::new(
-            self.array.iter_arrow().map(move |arr| {
-                arrow::compute::kernels::cast::cast(arr.as_ref(), &datatype).unwrap()
-            }),
+            self.array
+                .iter_arrow()
+                .map(move |arr| arrow_cast::cast(arr.as_ref(), &datatype).unwrap()),
         )
     }
 
@@ -153,11 +153,11 @@ impl ArrayDisplay for TypedArray {
 
 #[cfg(test)]
 mod test {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::Time64MicrosecondType;
+    use arrow_array::Time64MicrosecondArray;
     use std::iter;
 
-    use arrow::array::cast::AsArray;
-    use arrow::array::types::Time64MicrosecondType;
-    use arrow::array::Time64MicrosecondArray;
     use itertools::Itertools;
 
     use crate::array::typed::TypedArray;

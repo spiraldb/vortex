@@ -1,6 +1,6 @@
 use std::io;
 
-use arrow::buffer::BooleanBuffer;
+use arrow_buffer::buffer::BooleanBuffer;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::{Array, ArrayRef};

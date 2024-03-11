@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
 
-use arrow::array::ArrayRef as ArrowArrayRef;
+use arrow_array::array::ArrayRef as ArrowArrayRef;
 use linkme::distributed_slice;
 
 use crate::array::bool::{BoolArray, BoolEncoding};

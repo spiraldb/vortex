@@ -1,11 +1,10 @@
-use arrow::array::AsArray;
-use arrow::datatypes::UInt8Type;
-
 use crate::array::primitive::PrimitiveArray;
 use crate::array::Array;
 use crate::arrow::CombineChunks;
 use crate::compute::scalar_at::scalar_at;
 use crate::match_each_native_ptype;
+use arrow_array::cast::AsArray;
+use arrow_array::types::UInt8Type;
 use num_traits::AsPrimitive;
 
 #[derive(Debug)]

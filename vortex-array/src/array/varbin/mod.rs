@@ -2,9 +2,11 @@ use std::any::Any;
 use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::{make_array, Array as ArrowArray, ArrayData, AsArray};
-use arrow::buffer::NullBuffer;
-use arrow::datatypes::UInt8Type;
+use arrow_array::array::{make_array, Array as ArrowArray};
+use arrow_array::cast::AsArray;
+use arrow_array::types::UInt8Type;
+use arrow_buffer::buffer::NullBuffer;
+use arrow_data::ArrayData;
 use linkme::distributed_slice;
 use num_traits::{FromPrimitive, Unsigned};
 
@@ -392,7 +394,8 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
 
 #[cfg(test)]
 mod test {
-    use arrow::array::{AsArray, GenericStringArray as ArrowStringArray};
+    use arrow_array::array::GenericStringArray as ArrowStringArray;
+    use arrow_array::cast::AsArray;
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;

@@ -1,4 +1,4 @@
-use arrow::array::{Array as ArrowArray, ArrayRef};
+use arrow_array::array::{Array as ArrowArray, ArrayRef};
 
 pub struct AlignedArray {
     iter: Box<dyn Iterator<Item = ArrayRef>>,

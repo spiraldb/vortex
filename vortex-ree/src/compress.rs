@@ -135,7 +135,7 @@ pub fn ree_decode_primitive<T: NativePType>(run_ends: &[u64], values: &[T]) -> V
 
 #[cfg(test)]
 mod test {
-    use arrow::buffer::BooleanBuffer;
+    use arrow_buffer::buffer::BooleanBuffer;
 
     use vortex::array::bool::BoolArray;
     use vortex::array::downcast::DowncastArrayBuiltin;

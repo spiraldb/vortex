@@ -7,8 +7,10 @@ use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
 use allocator_api2::alloc::Allocator;
-use arrow::array::{make_array, ArrayData, AsArray};
-use arrow::buffer::{Buffer, NullBuffer, ScalarBuffer};
+use arrow_array::array::make_array;
+use arrow_array::cast::AsArray;
+use arrow_buffer::buffer::{Buffer, NullBuffer, ScalarBuffer};
+use arrow_data::ArrayData;
 use linkme::distributed_slice;
 
 use crate::array::bool::BoolArray;

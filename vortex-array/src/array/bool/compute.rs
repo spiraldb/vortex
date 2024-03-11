@@ -1,4 +1,4 @@
-use arrow::buffer::BooleanBuffer;
+use arrow_buffer::buffer::BooleanBuffer;
 use itertools::Itertools;
 
 use crate::array::bool::BoolArray;

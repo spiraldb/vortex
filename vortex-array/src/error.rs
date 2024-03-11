@@ -70,7 +70,7 @@ pub enum VortexError {
     #[error("Expected type {0} but found type {1}")]
     MismatchedTypes(DType, DType),
     #[error("unexpected arrow data type: {0:?}")]
-    InvalidArrowDataType(arrow::datatypes::DataType),
+    InvalidArrowDataType(arrow_schema::DataType),
     #[error("arrow error: {0:?}")]
     ArrowError(ArrowError),
     #[error("patch values may not be null for base dtype {0}")]
@@ -87,7 +87,7 @@ pub type VortexResult<T> = Result<T, VortexError>;
 
 // Wrap up external errors so that we can implement a dumb PartialEq
 #[derive(Debug)]
-pub struct ArrowError(pub arrow::error::ArrowError);
+pub struct ArrowError(pub arrow_schema::ArrowError);
 
 impl PartialEq for ArrowError {
     fn eq(&self, _other: &Self) -> bool {
@@ -95,8 +95,8 @@ impl PartialEq for ArrowError {
     }
 }
 
-impl From<arrow::error::ArrowError> for VortexError {
-    fn from(err: arrow::error::ArrowError) -> Self {
+impl From<arrow_schema::ArrowError> for VortexError {
+    fn from(err: arrow_schema::ArrowError) -> Self {
         VortexError::ArrowError(ArrowError(err))
     }
 }

@@ -1,7 +1,7 @@
+use arrow_buffer::ArrowNativeType;
 use std::fmt::{Debug, Display, Formatter};
 use std::panic::RefUnwindSafe;
 
-use arrow::datatypes::ArrowNativeType;
 use half::f16;
 use num_traits::{Num, NumCast};
 
