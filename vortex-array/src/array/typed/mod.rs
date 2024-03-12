@@ -153,38 +153,40 @@ impl ArrayDisplay for TypedArray {
 
 #[cfg(test)]
 mod test {
+    use std::iter;
+
     use arrow_array::cast::AsArray;
     use arrow_array::types::Time64MicrosecondType;
     use arrow_array::Time64MicrosecondArray;
-    use std::iter;
-
     use itertools::Itertools;
 
     use crate::array::typed::TypedArray;
     use crate::array::Array;
+    use crate::composite_dtypes::{localtime, TimeUnit};
     use crate::compute::scalar_at::scalar_at;
-    use crate::dtype::{DType, Nullability, TimeUnit};
-    use crate::scalar::{LocalTimeScalar, PScalar, PrimitiveScalar};
+    use crate::dtype::{IntWidth, Nullability};
+    use crate::scalar::{CompositeScalar, PScalar, PrimitiveScalar};
 
     #[test]
     pub fn scalar() {
+        let dtype = localtime(TimeUnit::Us, IntWidth::_64, Nullability::NonNullable);
         let arr = TypedArray::new(
             vec![64_799_000_000_u64, 43_000_000_000].into(),
-            DType::LocalTime(TimeUnit::Us, Nullability::NonNullable),
+            dtype.clone(),
         );
         assert_eq!(
             scalar_at(arr.as_ref(), 0).unwrap(),
-            LocalTimeScalar::new(
-                PrimitiveScalar::some(PScalar::U64(64_799_000_000)),
-                TimeUnit::Us
+            CompositeScalar::new(
+                dtype.clone(),
+                Box::new(PrimitiveScalar::some(PScalar::U64(64_799_000_000)).into()),
             )
             .into()
         );
         assert_eq!(
             scalar_at(arr.as_ref(), 1).unwrap(),
-            LocalTimeScalar::new(
-                PrimitiveScalar::some(PScalar::U64(43_000_000_000)),
-                TimeUnit::Us
+            CompositeScalar::new(
+                dtype.clone(),
+                Box::new(PrimitiveScalar::some(PScalar::U64(43_000_000_000)).into()),
             )
             .into()
         );
@@ -192,10 +194,9 @@ mod test {
 
     #[test]
     pub fn iter() {
-        let arr = TypedArray::new(
-            vec![64_799_000_000_i64, 43_000_000_000].into(),
-            DType::LocalTime(TimeUnit::Us, Nullability::NonNullable),
-        );
+        let dtype = localtime(TimeUnit::Us, IntWidth::_64, Nullability::NonNullable);
+
+        let arr = TypedArray::new(vec![64_799_000_000_i64, 43_000_000_000].into(), dtype);
         arr.iter_arrow()
             .zip_eq(iter::once(Box::new(Time64MicrosecondArray::from(vec![
                 64_799_000_000i64,

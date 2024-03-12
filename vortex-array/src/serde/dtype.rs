@@ -5,7 +5,7 @@ use std::sync::Arc;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::dtype::DType::*;
-use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness, TimeUnit};
+use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness};
 use crate::serde::WriteCtx;
 
 pub struct DTypeReader<'a> {
@@ -58,30 +58,9 @@ impl<'a> DTypeReader<'a> {
                     nullability,
                 ))
             }
-            DTypeTag::LocalTime => {
-                let nullability = self.read_nullability()?;
-                Ok(LocalTime(self.read_time_unit()?, nullability))
-            }
-            DTypeTag::LocalDate => Ok(LocalDate(self.read_nullability()?)),
-            DTypeTag::Instant => {
-                let nullability = self.read_nullability()?;
-                Ok(Instant(self.read_time_unit()?, nullability))
-            }
-            DTypeTag::ZonedDateTime => {
-                let nullability = self.read_nullability()?;
-                Ok(ZonedDateTime(self.read_time_unit()?, nullability))
-            }
             DTypeTag::List => {
                 let nullability = self.read_nullability()?;
                 Ok(List(Box::new(self.read()?), nullability))
-            }
-            DTypeTag::Map => {
-                let nullability = self.read_nullability()?;
-                Ok(Map(
-                    Box::new(self.read()?),
-                    Box::new(self.read()?),
-                    nullability,
-                ))
             }
             DTypeTag::Struct => {
                 let field_num = self.read_usize()?;
@@ -98,6 +77,13 @@ impl<'a> DTypeReader<'a> {
                     fields.push(self.read()?);
                 }
                 Ok(Struct(names, fields))
+            }
+            DTypeTag::Composite => {
+                let len = self.read_usize()?;
+                let mut name = String::with_capacity(len);
+                self.reader.take(len as u64).read_to_string(&mut name)?;
+                let dtype = self.read()?;
+                Ok(Composite(Arc::new(name), Box::new(dtype), vec![]))
             }
         }
     }
@@ -124,12 +110,6 @@ impl<'a> DTypeReader<'a> {
         FloatWidthTag::try_from(self.read_nbytes::<1>()?[0])
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .map(FloatWidth::from)
-    }
-
-    fn read_time_unit(&mut self) -> io::Result<TimeUnit> {
-        TimeUnitTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-            .map(TimeUnit::from)
     }
 }
 
@@ -163,19 +143,6 @@ impl<'a, 'b> DTypeWriter<'a, 'b> {
             }
             Utf8(n) => self.write_nullability(*n)?,
             Binary(n) => self.write_nullability(*n)?,
-            LocalTime(u, n) => {
-                self.write_nullability(*n)?;
-                self.write_time_unit(*u)?
-            }
-            LocalDate(n) => self.write_nullability(*n)?,
-            Instant(u, n) => {
-                self.write_nullability(*n)?;
-                self.write_time_unit(*u)?
-            }
-            ZonedDateTime(u, n) => {
-                self.write_nullability(*n)?;
-                self.write_time_unit(*u)?
-            }
             Struct(ns, fs) => {
                 self.writer.write_usize(ns.len())?;
                 for name in ns {
@@ -189,10 +156,9 @@ impl<'a, 'b> DTypeWriter<'a, 'b> {
                 self.write_nullability(*n)?;
                 self.write(e.as_ref())?
             }
-            Map(k, v, n) => {
-                self.write_nullability(*n)?;
-                self.write(k.as_ref())?;
-                self.write(v.as_ref())?
+            Composite(n, d, _) => {
+                self.writer.write_slice(n.as_bytes())?;
+                self.writer.dtype(d)?
             }
         }
 
@@ -218,11 +184,6 @@ impl<'a, 'b> DTypeWriter<'a, 'b> {
         self.writer
             .write_fixed_slice([FloatWidthTag::from(float_width).into()])
     }
-
-    fn write_time_unit(&mut self, time_unit: TimeUnit) -> io::Result<()> {
-        self.writer
-            .write_fixed_slice([TimeUnitTag::from(time_unit).into()])
-    }
 }
 
 #[derive(IntoPrimitive, TryFromPrimitive)]
@@ -235,13 +196,9 @@ enum DTypeTag {
     Utf8,
     Binary,
     Decimal,
-    LocalTime,
-    LocalDate,
-    Instant,
-    ZonedDateTime,
     List,
-    Map,
     Struct,
+    Composite,
 }
 
 impl From<&DType> for DTypeTag {
@@ -254,13 +211,9 @@ impl From<&DType> for DTypeTag {
             Utf8(_) => DTypeTag::Utf8,
             Binary(_) => DTypeTag::Binary,
             Decimal(_, _, _) => DTypeTag::Decimal,
-            LocalTime(_, _) => DTypeTag::LocalTime,
-            LocalDate(_) => DTypeTag::LocalDate,
-            Instant(_, _) => DTypeTag::Instant,
-            ZonedDateTime(_, _) => DTypeTag::ZonedDateTime,
             List(_, _) => DTypeTag::List,
-            Map(_, _, _) => DTypeTag::Map,
             Struct(_, _) => DTypeTag::Struct,
+            Composite(_, _, _) => DTypeTag::Composite,
         }
     }
 }
@@ -389,39 +342,6 @@ impl From<IntWidthTag> for IntWidth {
             IntWidthTag::_16 => _16,
             IntWidthTag::_32 => _32,
             IntWidthTag::_64 => _64,
-        }
-    }
-}
-
-#[derive(IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-pub enum TimeUnitTag {
-    Ns,
-    Us,
-    Ms,
-    S,
-}
-
-impl From<TimeUnit> for TimeUnitTag {
-    fn from(value: TimeUnit) -> Self {
-        use TimeUnit::*;
-        match value {
-            Ns => TimeUnitTag::Ns,
-            Us => TimeUnitTag::Us,
-            Ms => TimeUnitTag::Ms,
-            S => TimeUnitTag::S,
-        }
-    }
-}
-
-impl From<TimeUnitTag> for TimeUnit {
-    fn from(value: TimeUnitTag) -> Self {
-        use TimeUnit::*;
-        match value {
-            TimeUnitTag::Ns => Ns,
-            TimeUnitTag::Us => Us,
-            TimeUnitTag::Ms => Ms,
-            TimeUnitTag::S => S,
         }
     }
 }
