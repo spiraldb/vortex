@@ -41,3 +41,4 @@ rayon = "1.8.1"
 roaring = "0.10.3"
 vortex-alloc = { path = "../vortex-alloc" }
 thiserror = "1.0.57"
+vortex-flatbuffers = { path = "../vortex-flatbuffers" }

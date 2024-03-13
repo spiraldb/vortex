@@ -1,0 +1,21 @@
+[package]
+name = "vortex-flatbuffers"
+version = { workspace = true }
+description = "Flatbuffers for Vortex arrays"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+flatbuffers = "23.5.26"
+
+[build-dependencies]
+walkdir = "2.4.0"

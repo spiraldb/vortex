@@ -2588,6 +2588,7 @@ dependencies = [
  "roaring",
  "thiserror",
  "vortex-alloc",
+ "vortex-flatbuffers",
 ]
 
 [[package]]
@@ -2618,6 +2619,14 @@ dependencies = [
  "num-traits",
  "simplelog",
  "vortex-array",
+]
+
+[[package]]
+name = "vortex-flatbuffers"
+version = "0.1.0"
+dependencies = [
+ "flatbuffers",
+ "walkdir",
 ]
 
 [[package]]

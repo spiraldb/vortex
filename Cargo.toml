@@ -8,6 +8,7 @@ members = [
     "vortex-alp",
     "vortex-dict",
     "vortex-fastlanes",
+    "vortex-flatbuffers",
     "vortex-ree",
     "vortex-roaring",
     "vortex-zigzag",
