@@ -5,7 +5,7 @@
 [![Documentation](https://docs.rs/vortex-rs/badge.svg)](https://docs.rs/vortex-array)
 [![Rust](https://img.shields.io/badge/rust-1.76.0%2B-blue.svg?maxAge=3600)](https://github.com/fulcrum-so/vortex)
 
-Vortex is an experimental toolkit for working with compressed array data.
+Vortex is a toolkit for working with compressed array data.
 
 > [!CAUTION]
 > This library is very much a work in progress!
