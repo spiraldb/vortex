@@ -29,6 +29,13 @@ impl<'a> DTypeReader<'a> {
             .map(|u| u as usize)
     }
 
+    fn read_slice(&mut self) -> io::Result<Vec<u8>> {
+        let len = self.read_usize()?;
+        let mut slice = Vec::with_capacity(len);
+        self.reader.take(len as u64).read_to_end(&mut slice)?;
+        Ok(slice)
+    }
+
     pub fn read(&mut self) -> io::Result<DType> {
         let dtype = DTypeTag::try_from(self.read_nbytes::<1>()?[0])
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
@@ -66,9 +73,7 @@ impl<'a> DTypeReader<'a> {
                 let field_num = self.read_usize()?;
                 let mut names = Vec::with_capacity(field_num);
                 for _ in 0..field_num {
-                    let len = self.read_usize()?;
-                    let mut name = String::with_capacity(len);
-                    self.reader.take(len as u64).read_to_string(&mut name)?;
+                    let name = unsafe { String::from_utf8_unchecked(self.read_slice()?) };
                     names.push(Arc::new(name));
                 }
 
@@ -79,11 +84,10 @@ impl<'a> DTypeReader<'a> {
                 Ok(Struct(names, fields))
             }
             DTypeTag::Composite => {
-                let len = self.read_usize()?;
-                let mut name = String::with_capacity(len);
-                self.reader.take(len as u64).read_to_string(&mut name)?;
+                let name = unsafe { String::from_utf8_unchecked(self.read_slice()?) };
                 let dtype = self.read()?;
-                Ok(Composite(Arc::new(name), Box::new(dtype), vec![]))
+                let metadata = self.read_slice()?;
+                Ok(Composite(Arc::new(name), Box::new(dtype), metadata))
             }
         }
     }
@@ -156,9 +160,10 @@ impl<'a, 'b> DTypeWriter<'a, 'b> {
                 self.write_nullability(*n)?;
                 self.write(e.as_ref())?
             }
-            Composite(n, d, _) => {
+            Composite(n, d, m) => {
                 self.writer.write_slice(n.as_bytes())?;
-                self.writer.dtype(d)?
+                self.writer.dtype(d)?;
+                self.writer.write_slice(m)?
             }
         }
 
