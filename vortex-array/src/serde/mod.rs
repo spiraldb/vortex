@@ -8,7 +8,7 @@ use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
-pub use crate::serde::dtype::{DTypeReader, DTypeWriter, TimeUnitTag};
+pub use crate::serde::dtype::{DTypeReader, DTypeWriter};
 use crate::serde::ptype::PTypeTag;
 
 mod dtype;

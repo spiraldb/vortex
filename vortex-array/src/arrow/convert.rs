@@ -1,61 +1,19 @@
-use arrow_array::{RecordBatch, RecordBatchReader};
 use std::iter::zip;
 use std::sync::Arc;
 
-use arrow_schema::{
-    DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit as ArrowTimeUnit,
-};
-use itertools::Itertools;
+use arrow_array::RecordBatch;
+use arrow_schema::{DataType, Field, FieldRef, SchemaRef, TimeUnit as ArrowTimeUnit};
 
-use crate::array::chunked::ChunkedArray;
 use crate::array::struct_::StructArray;
 use crate::array::typed::TypedArray;
 use crate::array::{Array, ArrayRef};
+use crate::composite_dtypes::{
+    localdate, localtime, map, zoneddatetime, TimeUnit, TimeUnitSerializer,
+};
 use crate::dtype::DType::*;
-use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, TimeUnit};
+use crate::dtype::{DType, FloatWidth, IntWidth, Nullability};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
-
-#[allow(dead_code)]
-trait CollectRecordBatches: IntoIterator<Item = RecordBatch> {
-    fn collect_record_batches(&self, schema: &Schema) -> ArrayRef;
-}
-
-#[allow(dead_code)]
-impl TryFrom<&mut dyn RecordBatchReader> for ArrayRef {
-    type Error = VortexError;
-
-    fn try_from(reader: &mut dyn RecordBatchReader) -> Result<Self, Self::Error> {
-        let schema = reader.schema();
-        let mut fields = vec![Vec::new(); schema.fields().len()];
-
-        for batch_result in reader {
-            let batch = batch_result?;
-            for f in 0..schema.fields().len() {
-                let col = batch.column(f).clone();
-                fields[f].push(ArrayRef::from(col));
-            }
-        }
-
-        let names = schema
-            .fields()
-            .iter()
-            .map(|f| f.name())
-            .cloned()
-            .map(Arc::new)
-            .collect_vec();
-
-        let chunks: VortexResult<Vec<ArrayRef>> = fields
-            .into_iter()
-            .zip(schema.fields())
-            .map(|(field_chunks, arrow_type)| {
-                Ok(ChunkedArray::try_new(field_chunks, DType::try_from(arrow_type)?)?.boxed())
-            })
-            .try_collect();
-
-        Ok(StructArray::new(names, chunks?).boxed())
-    }
-}
 
 impl From<RecordBatch> for ArrayRef {
     fn from(value: RecordBatch) -> Self {
@@ -135,7 +93,6 @@ pub trait TryIntoDType {
 
 impl TryIntoDType for &DataType {
     fn try_into_dtype(self, is_nullable: bool) -> VortexResult<DType> {
-        use crate::dtype::Nullability::*;
         use crate::dtype::Signedness::*;
 
         let nullability: Nullability = is_nullable.into();
@@ -159,9 +116,11 @@ impl TryIntoDType for &DataType {
                 Ok(Binary(nullability))
             }
             // TODO(robert): what to do about this timezone?
-            DataType::Timestamp(u, _) => Ok(ZonedDateTime(u.into(), nullability)),
-            DataType::Date32 | DataType::Date64 => Ok(LocalDate(nullability)),
-            DataType::Time32(u) | DataType::Time64(u) => Ok(LocalTime(u.into(), nullability)),
+            DataType::Timestamp(u, _) => Ok(zoneddatetime(u.into(), nullability)),
+            DataType::Date32 => Ok(localdate(IntWidth::_32, nullability)),
+            DataType::Date64 => Ok(localdate(IntWidth::_64, nullability)),
+            DataType::Time32(u) => Ok(localtime(u.into(), IntWidth::_32, nullability)),
+            DataType::Time64(u) => Ok(localtime(u.into(), IntWidth::_64, nullability)),
             DataType::List(e) | DataType::FixedSizeList(e, _) | DataType::LargeList(e) => {
                 Ok(List(Box::new(e.try_into()?), nullability))
             }
@@ -176,10 +135,9 @@ impl TryIntoDType for &DataType {
                 Ok(Decimal(*p, *s, nullability))
             }
             DataType::Map(e, _) => match e.data_type() {
-                DataType::Struct(f) => Ok(Map(
-                    Box::new(f.first().unwrap().try_into()?),
-                    Box::new(f.get(1).unwrap().try_into()?),
-                    Nullable,
+                DataType::Struct(f) => Ok(map(
+                    f.first().unwrap().try_into()?,
+                    f.get(1).unwrap().try_into()?,
                 )),
                 _ => Err(VortexError::InvalidArrowDataType(e.data_type().clone())),
             },
@@ -259,25 +217,6 @@ impl From<&DType> for DataType {
             },
             Utf8(_) => DataType::Utf8,
             Binary(_) => DataType::Binary,
-            LocalTime(u, _) => DataType::Time64(match u {
-                TimeUnit::Ns => ArrowTimeUnit::Nanosecond,
-                TimeUnit::Us => ArrowTimeUnit::Microsecond,
-                TimeUnit::Ms => ArrowTimeUnit::Millisecond,
-                TimeUnit::S => ArrowTimeUnit::Second,
-            }),
-            LocalDate(_) => DataType::Date64,
-            Instant(u, _) => DataType::Timestamp(
-                match u {
-                    TimeUnit::Ns => ArrowTimeUnit::Nanosecond,
-                    TimeUnit::Us => ArrowTimeUnit::Microsecond,
-                    TimeUnit::Ms => ArrowTimeUnit::Millisecond,
-                    TimeUnit::S => ArrowTimeUnit::Second,
-                },
-                None,
-            ),
-            ZonedDateTime(_, _) => {
-                unimplemented!("Converting ZoneDateTime to arrow datatype is not supported")
-            }
             Struct(names, dtypes) => DataType::Struct(
                 zip(names, dtypes)
                     .map(|(n, dt)| Field::new((**n).clone(), dt.into(), dt.is_nullable()))
@@ -288,17 +227,42 @@ impl From<&DType> for DataType {
                 c.as_ref().into(),
                 c.is_nullable(),
             ))),
-            Map(k, v, _) => DataType::Map(
-                Arc::new(Field::new(
-                    "entries",
-                    DataType::Struct(Fields::from(vec![
-                        Field::new("key", k.as_ref().into(), false),
-                        Field::new("value", v.as_ref().into(), v.is_nullable()),
-                    ])),
+            Composite(n, d, m) => match n.as_str() {
+                "instant" => DataType::Timestamp(TimeUnitSerializer::deserialize(m).into(), None),
+                "localtime" => match d.as_ref() {
+                    Int(IntWidth::_32, _, _) => {
+                        DataType::Time32(TimeUnitSerializer::deserialize(m).into())
+                    }
+                    Int(IntWidth::_64, _, _) => {
+                        DataType::Time64(TimeUnitSerializer::deserialize(m).into())
+                    }
+                    _ => panic!("unexpected storage type"),
+                },
+                "localdate" => match d.as_ref() {
+                    Int(IntWidth::_32, _, _) => DataType::Date32,
+                    Int(IntWidth::_64, _, _) => DataType::Date64,
+                    _ => panic!("unexpected storage type"),
+                },
+                "zoneddatetime" => {
+                    DataType::Timestamp(TimeUnitSerializer::deserialize(m).into(), None)
+                }
+                "map" => DataType::Map(
+                    Arc::new(Field::new("entries", d.as_ref().into(), false)),
                     false,
-                )),
-                false,
-            ),
+                ),
+                _ => panic!("unknown composite type"),
+            },
+        }
+    }
+}
+
+impl From<TimeUnit> for ArrowTimeUnit {
+    fn from(value: TimeUnit) -> Self {
+        match value {
+            TimeUnit::S => ArrowTimeUnit::Second,
+            TimeUnit::Ms => ArrowTimeUnit::Millisecond,
+            TimeUnit::Us => ArrowTimeUnit::Microsecond,
+            TimeUnit::Ns => ArrowTimeUnit::Nanosecond,
         }
     }
 }
