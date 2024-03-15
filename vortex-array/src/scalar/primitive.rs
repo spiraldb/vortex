@@ -3,36 +3,52 @@ use std::mem::size_of;
 
 use half::f16;
 
-use crate::dtype::{DType, Nullability};
+use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::{NativePType, PType};
-use crate::scalar::{LocalTimeScalar, Scalar};
+use crate::scalar::composite::CompositeScalar;
+use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct PrimitiveScalar {
     ptype: PType,
     value: Option<PScalar>,
+    exponent: u8,
 }
 
 impl PrimitiveScalar {
     pub fn new(ptype: PType, value: Option<PScalar>) -> Self {
-        Self { ptype, value }
+        Self {
+            ptype,
+            value,
+            exponent: 0,
+        }
     }
 
     pub fn some(value: PScalar) -> Self {
         Self {
             ptype: value.ptype(),
             value: Some(value),
+            exponent: 0,
         }
     }
 
     pub fn none(ptype: PType) -> Self {
-        Self { ptype, value: None }
+        Self {
+            ptype,
+            value: None,
+            exponent: 0,
+        }
     }
 
     #[inline]
     pub fn value(&self) -> Option<PScalar> {
         self.value
+    }
+
+    #[inline]
+    pub fn factor(&self) -> u8 {
+        self.exponent
     }
 
     #[inline]
@@ -56,14 +72,9 @@ impl PrimitiveScalar {
     }
 
     // General conversion function that handles casting primitive scalar to non-primitive.
-    // If target dtype can be converted to ptype you should use cast_ptype.
-    pub fn cast_dtype(&self, dtype: &DType) -> VortexResult<Scalar> {
-        match dtype {
-            DType::LocalTime(w, Nullability::NonNullable) => {
-                Ok(LocalTimeScalar::new(self.clone(), *w).into())
-            }
-            _ => Err(VortexError::InvalidDType(dtype.clone())),
-        }
+    // TODO(robert): Implement storage conversions
+    fn cast_dtype(&self, dtype: &DType) -> VortexResult<Scalar> {
+        Ok(CompositeScalar::new(dtype.clone(), Box::new(self.clone().into())).into())
     }
 
     pub fn nbytes(&self) -> usize {
@@ -188,8 +199,8 @@ macro_rules! pscalar {
             fn try_from(value: &Scalar) -> VortexResult<Self> {
                 match value {
                     Scalar::Primitive(PrimitiveScalar {
-                        ptype: _,
                         value: Some(pscalar),
+                        ..
                     }) => match pscalar {
                         PScalar::$ptype(v) => Ok(*v),
                         _ => Err(VortexError::InvalidDType(pscalar.ptype().into())),
@@ -205,8 +216,8 @@ macro_rules! pscalar {
             fn try_from(value: Scalar) -> VortexResult<Self> {
                 match value {
                     Scalar::Primitive(PrimitiveScalar {
-                        ptype: _,
                         value: Some(pscalar),
+                        ..
                     }) => match pscalar {
                         PScalar::$ptype(v) => Ok(v),
                         _ => Err(VortexError::InvalidDType(pscalar.ptype().into())),
@@ -269,8 +280,8 @@ impl TryFrom<Scalar> for usize {
 
         match value {
             Scalar::Primitive(PrimitiveScalar {
-                ptype: _,
                 value: Some(pscalar),
+                ..
             }) => match_each_pscalar_integer!(pscalar, |$V| {
                 if is_negative($V) {
                     return Err(VortexError::ComputeError("required positive integer".into()));
@@ -305,8 +316,8 @@ impl TryFrom<&Scalar> for usize {
 
         match value {
             Scalar::Primitive(PrimitiveScalar {
-                ptype: _,
                 value: Some(pscalar),
+                ..
             }) => match_each_pscalar_integer!(pscalar, |$V| {
                 if is_negative(*$V) {
                     return Err(VortexError::ComputeError("required positive integer".into()));

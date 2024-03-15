@@ -301,8 +301,8 @@ impl Array for VarBinArray {
         self.bytes.nbytes() + self.offsets.nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

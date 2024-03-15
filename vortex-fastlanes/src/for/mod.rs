@@ -109,8 +109,8 @@ impl Array for FoRArray {
         self.child.nbytes() + self.reference.nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 
