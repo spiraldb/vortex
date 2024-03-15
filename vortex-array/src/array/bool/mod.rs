@@ -21,6 +21,7 @@ use super::{
 };
 
 mod compute;
+mod flatten;
 mod serde;
 mod stats;
 

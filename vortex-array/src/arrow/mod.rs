@@ -5,6 +5,7 @@ use itertools::Itertools;
 use crate::array::ArrowIterator;
 
 pub mod aligned_iter;
+pub mod as_arrow;
 pub mod convert;
 
 pub trait CombineChunks {

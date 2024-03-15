@@ -6,12 +6,11 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef, CloneOptionalArray};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
-use crate::compute::cast::cast_primitive;
+use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::dtype::DType;
 use crate::error::VortexResult;
-use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 
 impl ArrayCompute for VarBinArray {
@@ -49,7 +48,8 @@ impl AsContiguousFn for VarBinArray {
         offsets.push(0);
         for a in arrays.iter().map(|a| a.as_varbin()) {
             let first_offset: u64 = a.first_offset()?;
-            let offsets_array = cast_primitive(a.offsets(), &PType::U64)?;
+            // FIXME(ngates): cast to u64, or iterate over the offsets as any?
+            let offsets_array = flatten_primitive(a.offsets())?;
             let shift = offsets.last().copied().unwrap_or(0);
             offsets.extend(
                 offsets_array

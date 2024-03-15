@@ -27,6 +27,7 @@ use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 
+mod as_arrow;
 mod compute;
 mod serde;
 mod stats;

@@ -4,7 +4,7 @@ use std::mem::size_of;
 use arrow_buffer::buffer::BooleanBuffer;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::cast::cast_bool;
+use crate::compute::flatten::flatten_bool;
 use crate::error::VortexResult;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
@@ -17,7 +17,7 @@ impl StatsCompute for PrimitiveArray {
             match self.validity() {
                 None => self.typed_data::<$P>().compute(stat),
                 Some(validity_array) => {
-                    let validity = cast_bool(validity_array)?;
+                    let validity = flatten_bool(validity_array)?;
                     NullableValues(self.typed_data::<$P>(), validity.buffer()).compute(stat)
                 }
             }
