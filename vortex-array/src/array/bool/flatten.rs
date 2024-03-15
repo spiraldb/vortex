@@ -7,7 +7,7 @@ use arrow_buffer::NullBuffer;
 use std::sync::Arc;
 
 impl AsArrowArray for BoolArray {
-    fn as_arrow_array(&self) -> VortexResult<ArrowArrayRef> {
+    fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         let validity = self
             .validity()
             .map(|v| flatten_bool(v))

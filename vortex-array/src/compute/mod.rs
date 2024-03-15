@@ -1,7 +1,7 @@
 use as_contiguous::AsContiguousFn;
 use cast::CastFn;
 use fill::FillForwardFn;
-use flatten::{FlattenBoolFn, FlattenPrimitiveFn};
+use flatten::*;
 use patch::PatchFn;
 use scalar_at::ScalarAtFn;
 use search_sorted::SearchSortedFn;
@@ -32,6 +32,10 @@ pub trait ArrayCompute {
     }
 
     fn flatten_primitive(&self) -> Option<&dyn FlattenPrimitiveFn> {
+        None
+    }
+
+    fn flatten_struct(&self) -> Option<&dyn FlattenStructFn> {
         None
     }
 

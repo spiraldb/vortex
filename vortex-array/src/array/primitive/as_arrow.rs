@@ -11,7 +11,7 @@ use arrow_buffer::{NullBuffer, ScalarBuffer};
 use std::sync::Arc;
 
 impl AsArrowArray for PrimitiveArray {
-    fn as_arrow_array(&self) -> VortexResult<ArrowArrayRef> {
+    fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         use arrow_array::types::*;
         Ok(match self.ptype() {
             PType::U8 => Arc::new(as_arrow_array_primitive::<UInt8Type>(self)?),
