@@ -103,8 +103,8 @@ impl Array for ZigZagArray {
         self.encoded.nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

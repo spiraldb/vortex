@@ -5,6 +5,7 @@ use half::f16;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::dtype::DType;
+use crate::error::VortexResult;
 use crate::ptype::PType;
 use crate::scalar::composite::CompositeScalar;
 use crate::scalar::{
@@ -22,7 +23,7 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
         Self { reader }
     }
 
-    pub fn read(&mut self) -> io::Result<Scalar> {
+    pub fn read(&mut self) -> VortexResult<Scalar> {
         let tag = ScalarTag::try_from(self.reader.read_nbytes::<1>()?[0])
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         match tag {
@@ -85,7 +86,7 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
         }
     }
 
-    fn read_primitive_scalar(&mut self) -> io::Result<PrimitiveScalar> {
+    fn read_primitive_scalar(&mut self) -> VortexResult<PrimitiveScalar> {
         let ptype = self.reader.ptype()?;
         let is_present = self.reader.read_option_tag()?;
         if is_present {
@@ -140,7 +141,7 @@ impl<'a, 'b> ScalarWriter<'a, 'b> {
         Self { writer }
     }
 
-    pub fn write(&mut self, scalar: &Scalar) -> io::Result<()> {
+    pub fn write(&mut self, scalar: &Scalar) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([ScalarTag::from(scalar).into()])?;
         match scalar {
@@ -187,7 +188,7 @@ impl<'a, 'b> ScalarWriter<'a, 'b> {
         }
     }
 
-    fn write_primitive_scalar(&mut self, scalar: &PrimitiveScalar) -> io::Result<()> {
+    fn write_primitive_scalar(&mut self, scalar: &PrimitiveScalar) -> VortexResult<()> {
         self.writer.ptype(scalar.ptype())?;
         self.writer.write_option_tag(scalar.value().is_some())?;
         if let Some(ps) = scalar.value() {

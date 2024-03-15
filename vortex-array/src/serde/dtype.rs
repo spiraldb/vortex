@@ -1,11 +1,12 @@
-use std::io;
-use std::io::{ErrorKind, Read};
+use leb128::read::Error;
+use std::io::Read;
 use std::sync::Arc;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::dtype::DType::*;
 use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness};
+use crate::error::{VortexError, VortexResult};
 use crate::serde::WriteCtx;
 
 pub struct DTypeReader<'a> {
@@ -17,28 +18,34 @@ impl<'a> DTypeReader<'a> {
         Self { reader }
     }
 
-    fn read_nbytes<const N: usize>(&mut self) -> io::Result<[u8; N]> {
+    fn read_nbytes<const N: usize>(&mut self) -> VortexResult<[u8; N]> {
         let mut bytes: [u8; N] = [0; N];
         self.reader.read_exact(&mut bytes)?;
         Ok(bytes)
     }
 
-    fn read_usize(&mut self) -> io::Result<usize> {
+    fn read_usize(&mut self) -> VortexResult<usize> {
         leb128::read::unsigned(self.reader)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+            .map_err(|e| match e {
+                Error::IoError(io_err) => io_err.into(),
+                Error::Overflow => VortexError::InvalidArgument("overflow".into()),
+            })
             .map(|u| u as usize)
     }
 
-    fn read_slice(&mut self) -> io::Result<Vec<u8>> {
+    fn read_slice(&mut self) -> VortexResult<Vec<u8>> {
         let len = self.read_usize()?;
         let mut slice = Vec::with_capacity(len);
-        self.reader.take(len as u64).read_to_end(&mut slice)?;
+        self.reader
+            .take(len as u64)
+            .read_to_end(&mut slice)
+            .map_err(VortexError::from)?;
         Ok(slice)
     }
 
-    pub fn read(&mut self) -> io::Result<DType> {
+    pub fn read(&mut self) -> VortexResult<DType> {
         let dtype = DTypeTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse dtype tag".into()))?;
         match dtype {
             DTypeTag::Null => Ok(Null),
             DTypeTag::Bool => Ok(Bool(self.read_nullability()?)),
@@ -92,27 +99,27 @@ impl<'a> DTypeReader<'a> {
         }
     }
 
-    fn read_signedness(&mut self) -> io::Result<Signedness> {
+    fn read_signedness(&mut self) -> VortexResult<Signedness> {
         SignednessTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse signedness tag".into()))
             .map(Signedness::from)
     }
 
-    fn read_nullability(&mut self) -> io::Result<Nullability> {
+    fn read_nullability(&mut self) -> VortexResult<Nullability> {
         NullabilityTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse nullability tag".into()))
             .map(Nullability::from)
     }
 
-    fn read_int_width(&mut self) -> io::Result<IntWidth> {
+    fn read_int_width(&mut self) -> VortexResult<IntWidth> {
         IntWidthTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse int width tag".into()))
             .map(IntWidth::from)
     }
 
-    fn read_float_width(&mut self) -> io::Result<FloatWidth> {
+    fn read_float_width(&mut self) -> VortexResult<FloatWidth> {
         FloatWidthTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse float width tag".into()))
             .map(FloatWidth::from)
     }
 }
@@ -126,7 +133,7 @@ impl<'a, 'b> DTypeWriter<'a, 'b> {
         Self { writer }
     }
 
-    pub fn write(&mut self, dtype: &DType) -> io::Result<()> {
+    pub fn write(&mut self, dtype: &DType) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([DTypeTag::from(dtype).into()])?;
         match dtype {
@@ -170,22 +177,22 @@ impl<'a, 'b> DTypeWriter<'a, 'b> {
         Ok(())
     }
 
-    fn write_signedness(&mut self, signedness: Signedness) -> io::Result<()> {
+    fn write_signedness(&mut self, signedness: Signedness) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([SignednessTag::from(signedness).into()])
     }
 
-    fn write_nullability(&mut self, nullability: Nullability) -> io::Result<()> {
+    fn write_nullability(&mut self, nullability: Nullability) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([NullabilityTag::from(nullability).into()])
     }
 
-    fn write_int_width(&mut self, int_width: IntWidth) -> io::Result<()> {
+    fn write_int_width(&mut self, int_width: IntWidth) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([IntWidthTag::from(int_width).into()])
     }
 
-    fn write_float_width(&mut self, float_width: FloatWidth) -> io::Result<()> {
+    fn write_float_width(&mut self, float_width: FloatWidth) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([FloatWidthTag::from(float_width).into()])
     }

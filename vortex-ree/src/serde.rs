@@ -1,12 +1,11 @@
-use std::io;
-
 use vortex::array::{Array, ArrayRef};
+use vortex::error::VortexResult;
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 use crate::{REEArray, REEEncoding};
 
 impl ArraySerde for REEArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.write_usize(self.len())?;
         if let Some(v) = self.validity() {
             ctx.write(v.as_ref())?;
@@ -19,7 +18,7 @@ impl ArraySerde for REEArray {
 }
 
 impl EncodingSerde for REEEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let len = ctx.read_usize()?;
         let validity = if ctx.schema().is_nullable() {
             Some(ctx.validity().read()?)
@@ -35,16 +34,16 @@ impl EncodingSerde for REEEncoding {
 
 #[cfg(test)]
 mod test {
-    use std::io;
 
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::{Array, ArrayRef};
+    use vortex::error::VortexResult;
     use vortex::serde::{ReadCtx, WriteCtx};
 
     use crate::downcast::DowncastREE;
     use crate::REEArray;
 
-    fn roundtrip_array(array: &dyn Array) -> io::Result<ArrayRef> {
+    fn roundtrip_array(array: &dyn Array) -> VortexResult<ArrayRef> {
         let mut buf = Vec::<u8>::new();
         let mut write_ctx = WriteCtx::new(&mut buf);
         write_ctx.write(array)?;

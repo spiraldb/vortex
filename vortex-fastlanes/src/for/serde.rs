@@ -1,12 +1,11 @@
-use std::io;
-
 use vortex::array::{Array, ArrayRef};
+use vortex::error::VortexResult;
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 use crate::{FoRArray, FoREncoding};
 
 impl ArraySerde for FoRArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.scalar(self.reference())?;
         ctx.write_usize(self.shift() as usize)?;
         ctx.write(self.child())
@@ -14,7 +13,7 @@ impl ArraySerde for FoRArray {
 }
 
 impl EncodingSerde for FoREncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let reference = ctx.scalar()?;
         let shift = ctx.read_usize()? as u8;
         let child = ctx.read()?;
@@ -24,15 +23,15 @@ impl EncodingSerde for FoREncoding {
 
 #[cfg(test)]
 mod test {
-    use std::io;
 
     use vortex::array::{Array, ArrayRef};
+    use vortex::error::VortexResult;
     use vortex::scalar::Scalar;
     use vortex::serde::{ReadCtx, WriteCtx};
 
     use crate::FoRArray;
 
-    fn roundtrip_array(array: &dyn Array) -> io::Result<ArrayRef> {
+    fn roundtrip_array(array: &dyn Array) -> VortexResult<ArrayRef> {
         let mut buf = Vec::<u8>::new();
         let mut write_ctx = WriteCtx::new(&mut buf);
         write_ctx.write(array)?;

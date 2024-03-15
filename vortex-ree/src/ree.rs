@@ -212,8 +212,8 @@ impl Array for REEArray {
         self.values.nbytes() + self.ends.nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

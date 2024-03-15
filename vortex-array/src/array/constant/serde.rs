@@ -1,18 +1,17 @@
-use std::io;
-
 use crate::array::constant::{ConstantArray, ConstantEncoding};
 use crate::array::{Array, ArrayRef};
+use crate::error::VortexResult;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for ConstantArray {
-    fn write(&self, ctx: &mut WriteCtx<'_>) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx<'_>) -> VortexResult<()> {
         ctx.write_usize(self.len())?;
         ctx.scalar(self.scalar())
     }
 }
 
 impl EncodingSerde for ConstantEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let len = ctx.read_usize()?;
         let scalar = ctx.scalar()?;
         Ok(ConstantArray::new(scalar, len).boxed())

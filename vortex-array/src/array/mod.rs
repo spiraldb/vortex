@@ -70,7 +70,9 @@ pub trait Array:
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
 
-    fn serde(&self) -> &dyn ArraySerde;
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        None
+    }
 }
 
 dyn_clone::clone_trait_object!(Array);

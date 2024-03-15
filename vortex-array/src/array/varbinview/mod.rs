@@ -301,8 +301,8 @@ impl Array for VarBinViewArray {
         self.views.nbytes() + self.data.iter().map(|arr| arr.nbytes()).sum::<usize>()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

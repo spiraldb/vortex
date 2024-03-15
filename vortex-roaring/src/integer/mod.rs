@@ -115,8 +115,8 @@ impl Array for RoaringIntArray {
         self.bitmap.get_serialized_size_in_bytes::<Native>()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

@@ -152,8 +152,8 @@ impl Array for BoolArray {
         (self.len() + 7) / 8
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

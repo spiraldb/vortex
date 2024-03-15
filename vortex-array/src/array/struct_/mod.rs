@@ -156,8 +156,8 @@ impl Array for StructArray {
         self.fields.iter().map(|arr| arr.nbytes()).sum()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

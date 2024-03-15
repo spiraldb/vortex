@@ -1,12 +1,11 @@
-use std::io;
-
 use vortex::array::{Array, ArrayRef};
+use vortex::error::VortexResult;
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 use crate::{BitPackedArray, BitPackedEncoding};
 
 impl ArraySerde for BitPackedArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.write(self.encoded())?;
         ctx.write_optional_array(self.validity())?;
         ctx.write_optional_array(self.patches())?;
@@ -17,7 +16,7 @@ impl ArraySerde for BitPackedArray {
 }
 
 impl EncodingSerde for BitPackedEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let encoded = ctx.read()?;
         let validity = ctx.read_optional_array()?;
         let patches = ctx.read_optional_array()?;
