@@ -183,8 +183,8 @@ impl Array for SparseArray {
         self.indices.nbytes() + self.values.nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

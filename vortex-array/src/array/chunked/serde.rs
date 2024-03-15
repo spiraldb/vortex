@@ -1,11 +1,10 @@
-use std::io;
-
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::{Array, ArrayRef};
+use crate::error::VortexResult;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for ChunkedArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.write_usize(self.chunks().len())?;
         for c in self.chunks() {
             ctx.write(c.as_ref())?;
@@ -15,7 +14,7 @@ impl ArraySerde for ChunkedArray {
 }
 
 impl EncodingSerde for ChunkedEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let chunk_len = ctx.read_usize()?;
         let mut chunks = Vec::<ArrayRef>::with_capacity(chunk_len);
         // TODO(robert): Use read_vectored

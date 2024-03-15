@@ -224,8 +224,8 @@ impl Array for PrimitiveArray {
         self.buffer.len()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

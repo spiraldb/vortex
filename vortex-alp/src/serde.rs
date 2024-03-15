@@ -1,16 +1,14 @@
-use std::io;
-use std::io::ErrorKind;
-
 use crate::alp::Exponents;
 use vortex::array::{Array, ArrayRef};
 use vortex::dtype::{DType, FloatWidth, Signedness};
+use vortex::error::{VortexError, VortexResult};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 use crate::ALPArray;
 use crate::ALPEncoding;
 
 impl ArraySerde for ALPArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.write_option_tag(self.patches().is_some())?;
         if let Some(p) = self.patches() {
             ctx.write(p.as_ref())?;
@@ -21,7 +19,7 @@ impl ArraySerde for ALPArray {
 }
 
 impl EncodingSerde for ALPEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let patches_tag = ctx.read_nbytes::<1>()?[0];
         let patches = if patches_tag == 0x01 {
             Some(ctx.read()?)
@@ -33,9 +31,9 @@ impl EncodingSerde for ALPEncoding {
             DType::Float(width, nullability) => match width {
                 FloatWidth::_32 => DType::Int(32.into(), Signedness::Signed, *nullability),
                 FloatWidth::_64 => DType::Int(64.into(), Signedness::Signed, *nullability),
-                _ => return Err(io::Error::new(ErrorKind::InvalidData, "invalid dtype")),
+                _ => return Err(VortexError::InvalidDType(ctx.schema().clone())),
             },
-            _ => return Err(io::Error::new(ErrorKind::InvalidData, "invalid dtype")),
+            _ => return Err(VortexError::InvalidDType(ctx.schema().clone())),
         };
         let encoded = ctx.with_schema(&encoded_dtype).read()?;
         Ok(ALPArray::new(
@@ -52,17 +50,16 @@ impl EncodingSerde for ALPEncoding {
 
 #[cfg(test)]
 mod test {
-    use std::io;
-
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::{Array, ArrayRef};
+    use vortex::error::VortexResult;
     use vortex::serde::{ReadCtx, WriteCtx};
 
     use crate::compress::alp_encode;
     use crate::downcast::DowncastALP;
 
-    fn roundtrip_array(array: &dyn Array) -> io::Result<ArrayRef> {
+    fn roundtrip_array(array: &dyn Array) -> VortexResult<ArrayRef> {
         let mut buf = Vec::<u8>::new();
         let mut write_ctx = WriteCtx::new(&mut buf);
         write_ctx.write(array)?;
