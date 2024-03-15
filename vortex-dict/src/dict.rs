@@ -90,8 +90,8 @@ impl Array for DictArray {
         self.codes().nbytes() + self.dict().nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

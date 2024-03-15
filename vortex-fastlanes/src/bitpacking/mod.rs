@@ -137,8 +137,8 @@ impl Array for BitPackedArray {
             + self.validity().map(|v| v.nbytes()).unwrap_or(0)
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

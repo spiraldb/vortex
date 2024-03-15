@@ -1,18 +1,17 @@
-use std::io;
-
 use crate::array::typed::{TypedArray, TypedEncoding};
 use crate::array::{Array, ArrayRef};
+use crate::error::VortexResult;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for TypedArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.dtype(self.untyped_array().dtype())?;
         ctx.write(self.untyped_array())
     }
 }
 
 impl EncodingSerde for TypedEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let inner_dtype = ctx.dtype()?;
         Ok(TypedArray::new(ctx.with_schema(&inner_dtype).read()?, ctx.schema().clone()).boxed())
     }

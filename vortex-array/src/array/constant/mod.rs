@@ -129,8 +129,8 @@ impl Array for ConstantArray {
         self.scalar.nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 
