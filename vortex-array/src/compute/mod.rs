@@ -1,3 +1,4 @@
+use as_arrow::AsArrowArray;
 use as_contiguous::AsContiguousFn;
 use cast::CastFn;
 use fill::FillForwardFn;
@@ -8,6 +9,7 @@ use search_sorted::SearchSortedFn;
 use take::TakeFn;
 
 pub mod add;
+pub mod as_arrow;
 pub mod as_contiguous;
 pub mod cast;
 pub mod fill;
@@ -19,6 +21,10 @@ pub mod search_sorted;
 pub mod take;
 
 pub trait ArrayCompute {
+    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
+        None
+    }
+
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         None
     }
@@ -27,15 +33,15 @@ pub trait ArrayCompute {
         None
     }
 
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
+        None
+    }
+
     fn flatten_bool(&self) -> Option<&dyn FlattenBoolFn> {
         None
     }
 
     fn flatten_primitive(&self) -> Option<&dyn FlattenPrimitiveFn> {
-        None
-    }
-
-    fn flatten_struct(&self) -> Option<&dyn FlattenStructFn> {
         None
     }
 

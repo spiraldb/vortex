@@ -21,7 +21,6 @@ use super::{
     ENCODINGS,
 };
 
-mod as_arrow;
 mod compress;
 mod compute;
 mod serde;

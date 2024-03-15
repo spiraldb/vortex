@@ -1,32 +1,28 @@
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::struct_::StructArray;
-use crate::array::Array;
-use crate::arrow::as_arrow::AsArrowArray;
-use crate::dtype::DType;
+use crate::array::{Array, ArrayRef};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 
-pub trait FlattenedArray: Array + AsArrowArray {
-    fn as_array(self: Box<Self>) -> Box<dyn Array>;
-}
-impl<T: Array + AsArrowArray> FlattenedArray for T {
-    fn as_array(self: Box<T>) -> Box<dyn Array> {
-        self
-    }
+pub trait FlattenFn {
+    fn flatten(&self) -> VortexResult<ArrayRef>;
 }
 
 /// Flatten an array into only flat encodings. This is the set of encodings that can be converted
 /// to Arrow with zero-copy. Each DType has a canonical flattened representation.
-pub fn flatten(array: &dyn Array) -> VortexResult<Box<dyn FlattenedArray>> {
-    match array.dtype() {
-        DType::Bool(_) => Ok(Box::new(flatten_bool(array)?)),
-        DType::Int(_, _, _) | DType::Float(_, _) => Ok(Box::new(flatten_primitive(array)?)),
-        DType::Struct(_, _) => Ok(Box::new(flatten_struct(array)?)),
-        _ => {
-            unimplemented!("Flatten not implemented for DType {}", array.dtype())
-        }
+pub fn flatten(array: &dyn Array) -> VortexResult<ArrayRef> {
+    if let Some(f) = array.flatten_bool() {
+        return f.flatten_bool().map(Array::boxed);
     }
+    if let Some(f) = array.flatten_primitive() {
+        return f.flatten_primitive().map(Array::boxed);
+    }
+    array.flatten().map(|f| f.flatten()).unwrap_or_else(|| {
+        Err(VortexError::NotImplemented(
+            "flatten",
+            array.encoding().id(),
+        ))
+    })
 }
 
 pub trait FlattenBoolFn {
@@ -57,22 +53,6 @@ pub fn flatten_primitive(array: &dyn Array) -> VortexResult<PrimitiveArray> {
         .unwrap_or_else(|| {
             Err(VortexError::NotImplemented(
                 "flatten_primitive",
-                array.encoding().id(),
-            ))
-        })
-}
-
-pub trait FlattenStructFn {
-    fn flatten_struct(&self) -> VortexResult<StructArray>;
-}
-
-pub fn flatten_struct(array: &dyn Array) -> VortexResult<StructArray> {
-    array
-        .flatten_struct()
-        .map(|t| t.flatten_struct())
-        .unwrap_or_else(|| {
-            Err(VortexError::NotImplemented(
-                "flatten_struct",
                 array.encoding().id(),
             ))
         })

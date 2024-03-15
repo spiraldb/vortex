@@ -1,6 +1,6 @@
 use crate::array::primitive::PrimitiveArray;
 use crate::array::Array;
-use crate::arrow::as_arrow::AsArrowArray;
+use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::flatten::flatten_bool;
 use crate::error::VortexResult;
 use crate::ptype::PType;

@@ -1,7 +1,9 @@
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::typed::TypedArray;
 use crate::array::{Array, ArrayRef};
+use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
+use crate::compute::flatten::{flatten, FlattenFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
@@ -9,7 +11,15 @@ use crate::scalar::Scalar;
 use itertools::Itertools;
 
 impl ArrayCompute for TypedArray {
+    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
+        Some(self)
+    }
+
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
+        Some(self)
+    }
+
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 
@@ -30,6 +40,12 @@ impl AsContiguousFn for TypedArray {
             self.dtype().clone(),
         )
         .boxed())
+    }
+}
+
+impl FlattenFn for TypedArray {
+    fn flatten(&self) -> VortexResult<ArrayRef> {
+        Ok(TypedArray::new(flatten(self.array.as_ref())?, self.dtype().clone()).boxed())
     }
 }
 

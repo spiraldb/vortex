@@ -1,5 +1,5 @@
 use crate::array::bool::BoolArray;
-use crate::arrow::as_arrow::AsArrowArray;
+use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::flatten::flatten_bool;
 use crate::error::VortexResult;
 use arrow_array::{ArrayRef as ArrowArrayRef, BooleanArray as ArrowBoolArray};

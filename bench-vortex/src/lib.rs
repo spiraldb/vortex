@@ -148,7 +148,7 @@ mod test {
     use std::ops::Deref;
     use std::sync::Arc;
     use vortex::array::ArrayRef;
-    use vortex::arrow::as_arrow::as_arrow;
+    use vortex::compute::as_arrow::as_arrow;
 
     use crate::{compress_taxi_data, download_taxi_data};
 

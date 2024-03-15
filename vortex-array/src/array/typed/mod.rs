@@ -12,6 +12,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 
+mod as_arrow;
 mod compress;
 mod compute;
 mod serde;
