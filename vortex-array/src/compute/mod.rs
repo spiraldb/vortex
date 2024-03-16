@@ -45,6 +45,10 @@ pub trait ArrayCompute {
         None
     }
 
+    fn flatten_struct(&self) -> Option<&dyn FlattenStructFn> {
+        None
+    }
+
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
         None
     }

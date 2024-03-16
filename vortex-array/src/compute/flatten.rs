@@ -1,5 +1,6 @@
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
+use crate::array::struct_::StructArray;
 use crate::array::{Array, ArrayRef};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
@@ -16,6 +17,9 @@ pub fn flatten(array: &dyn Array) -> VortexResult<ArrayRef> {
     }
     if let Some(f) = array.flatten_primitive() {
         return f.flatten_primitive().map(Array::boxed);
+    }
+    if let Some(f) = array.flatten_struct() {
+        return f.flatten_struct().map(Array::boxed);
     }
     array.flatten().map(|f| f.flatten()).unwrap_or_else(|| {
         Err(VortexError::NotImplemented(
@@ -53,6 +57,22 @@ pub fn flatten_primitive(array: &dyn Array) -> VortexResult<PrimitiveArray> {
         .unwrap_or_else(|| {
             Err(VortexError::NotImplemented(
                 "flatten_primitive",
+                array.encoding().id(),
+            ))
+        })
+}
+
+pub trait FlattenStructFn {
+    fn flatten_struct(&self) -> VortexResult<StructArray>;
+}
+
+pub fn flatten_struct(array: &dyn Array) -> VortexResult<StructArray> {
+    array
+        .flatten_struct()
+        .map(|t| t.flatten_struct())
+        .unwrap_or_else(|| {
+            Err(VortexError::NotImplemented(
+                "flatten_struct",
                 array.encoding().id(),
             ))
         })

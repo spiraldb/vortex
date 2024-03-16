@@ -8,7 +8,7 @@ pub trait AsArrowArray {
 }
 
 pub fn as_arrow(array: &dyn Array) -> VortexResult<ArrowArrayRef> {
-    // First we flatten the array
+    // FIXME(ngates): don't fully flatten this first
     flatten(array)?
         .as_arrow()
         .map(|a| a.as_arrow())
