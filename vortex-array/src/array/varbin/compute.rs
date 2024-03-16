@@ -89,6 +89,8 @@ impl AsArrowArray for VarBinArray {
         let offsets = flatten_primitive(self.offsets())?;
         let offsets = match offsets.ptype() {
             &PType::I32 | &PType::I64 => offsets,
+            // Unless it's u64, everything else can be converted into an i32.
+            &PType::U64 => flatten_primitive(cast(offsets.as_ref(), &PType::I64.into())?.as_ref())?,
             _ => flatten_primitive(cast(offsets.as_ref(), &PType::I32.into())?.as_ref())?,
         };
         let nulls = as_nulls(offsets.validity())?;

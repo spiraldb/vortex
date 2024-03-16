@@ -1,14 +1,16 @@
-use crate::array::primitive::PrimitiveArray;
-use crate::array::Array;
-use crate::compute::as_arrow::AsArrowArray;
-use crate::compute::flatten::flatten_bool;
-use crate::error::VortexResult;
-use crate::ptype::PType;
+use std::sync::Arc;
+
 use arrow_array::{
     ArrayRef as ArrowArrayRef, ArrowPrimitiveType, PrimitiveArray as ArrowPrimitiveArray,
 };
-use arrow_buffer::{NullBuffer, ScalarBuffer};
-use std::sync::Arc;
+use arrow_buffer::ScalarBuffer;
+
+use crate::array::primitive::PrimitiveArray;
+use crate::array::Array;
+use crate::arrow::wrappers::as_nulls;
+use crate::compute::as_arrow::AsArrowArray;
+use crate::error::VortexResult;
+use crate::ptype::PType;
 
 impl AsArrowArray for PrimitiveArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
@@ -32,14 +34,8 @@ impl AsArrowArray for PrimitiveArray {
 fn as_arrow_array_primitive<T: ArrowPrimitiveType>(
     array: &PrimitiveArray,
 ) -> VortexResult<ArrowPrimitiveArray<T>> {
-    let nulls = array
-        .validity()
-        .map(|v| flatten_bool(v))
-        .transpose()?
-        .map(|b| NullBuffer::new(b.buffer().clone()));
-
     Ok(ArrowPrimitiveArray::new(
         ScalarBuffer::<T::Native>::new(array.buffer().clone(), 0, array.len()),
-        nulls,
+        as_nulls(array.validity())?,
     ))
 }
