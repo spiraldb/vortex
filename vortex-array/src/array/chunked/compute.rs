@@ -3,7 +3,6 @@ use itertools::Itertools;
 use crate::array::chunked::ChunkedArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::ArrayRef;
-use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
