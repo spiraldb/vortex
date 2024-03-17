@@ -59,7 +59,6 @@ def test_table_encode():
         }
     )
     encoded = vortex.encode(table)
-    print(encoded)
     assert isinstance(encoded, vortex.ChunkedArray)
     assert encoded.to_pyarrow().combine_chunks() == pa.StructArray.from_arrays(
         [pa.array([0, 1, 2, 3, 4, 5]), pa.array(["a", "b", "c", "d", "e", "f"])], names=["number", "string"]

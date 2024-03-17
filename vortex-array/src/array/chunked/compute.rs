@@ -1,23 +1,17 @@
+use itertools::Itertools;
+
 use crate::array::chunked::ChunkedArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::ArrayRef;
-use crate::arrow::chunked::ChunkedArray as ArrowChunkedArray;
-use crate::compute::as_arrow::{as_arrow, AsArrowArray};
+use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
 use crate::scalar::Scalar;
-use arrow_array::ArrayRef as ArrowArrayRef;
-use itertools::Itertools;
-use std::sync::Arc;
 
 impl ArrayCompute for ChunkedArray {
-    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        Some(self)
-    }
-
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
@@ -28,17 +22,6 @@ impl ArrayCompute for ChunkedArray {
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
-    }
-}
-
-impl AsArrowArray for ChunkedArray {
-    fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
-        Ok(Arc::new(ArrowChunkedArray::new(
-            self.chunks()
-                .iter()
-                .map(|c| as_arrow(c.as_ref()))
-                .try_collect()?,
-        )))
     }
 }
 
