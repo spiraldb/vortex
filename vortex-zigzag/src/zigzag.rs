@@ -85,10 +85,6 @@ impl Array for ZigZagArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!()
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         Ok(Self::try_new(self.encoded.slice(start, stop)?)?.boxed())
     }

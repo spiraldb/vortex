@@ -141,7 +141,6 @@ mod test {
     use itertools::Itertools;
 
     use crate::array::typed::TypedArray;
-    use crate::array::Array;
     use crate::composite_dtypes::{localtime, TimeUnit};
     use crate::compute::scalar_at::scalar_at;
     use crate::dtype::{IntWidth, Nullability};

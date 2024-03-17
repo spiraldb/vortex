@@ -2,14 +2,13 @@ use std::any::Any;
 use std::mem;
 use std::sync::{Arc, RwLock};
 
-use arrow_array::cast::AsArray;
-use arrow_array::types::UInt8Type;
 use linkme::distributed_slice;
 
 use crate::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
     ENCODINGS,
 };
+use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
@@ -154,15 +153,14 @@ impl VarBinViewArray {
     }
 
     pub(self) fn view_at(&self, index: usize) -> BinaryView {
-        let view_slice = self
-            .views
-            .slice(index * VIEW_SIZE, (index + 1) * VIEW_SIZE)
-            .unwrap()
-            .iter_arrow()
-            .next()
-            .unwrap();
-        let view_vec: &[u8] = view_slice.as_primitive::<UInt8Type>().values();
-        BinaryView::from_le_bytes(view_vec.try_into().unwrap())
+        let view_vec = flatten_primitive(
+            self.views
+                .slice(index * VIEW_SIZE, (index + 1) * VIEW_SIZE)
+                .unwrap()
+                .as_ref(),
+        )
+        .unwrap();
+        BinaryView::from_le_bytes(view_vec.typed_data::<u8>().try_into().unwrap())
     }
 
     #[inline]
@@ -184,21 +182,18 @@ impl VarBinViewArray {
         let view = self.view_at(index);
         unsafe {
             if view.inlined.size > 12 {
-                let arrow_data_buffer = self
-                    .data
-                    .get(view._ref.buffer_index as usize)
-                    .unwrap()
-                    .slice(
-                        view._ref.offset as usize,
-                        (view._ref.size + view._ref.offset) as usize,
-                    )?
-                    .iter_arrow()
-                    .combine_chunks();
-
-                Ok(arrow_data_buffer
-                    .as_primitive::<UInt8Type>()
-                    .values()
-                    .to_vec())
+                let arrow_data_buffer = flatten_primitive(
+                    self.data
+                        .get(view._ref.buffer_index as usize)
+                        .unwrap()
+                        .slice(
+                            view._ref.offset as usize,
+                            (view._ref.size + view._ref.offset) as usize,
+                        )?
+                        .as_ref(),
+                )?;
+                // TODO(ngates): can we avoid returning a copy?
+                Ok(arrow_data_buffer.typed_data::<u8>().to_vec())
             } else {
                 Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
             }

@@ -1,9 +1,6 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use arrow_array::array::Array as ArrowArray;
-use arrow_array::cast::AsArray;
-use arrow_array::types::UInt8Type;
 use linkme::distributed_slice;
 use num_traits::{FromPrimitive, Unsigned};
 
@@ -16,6 +13,7 @@ use crate::array::{
     ENCODINGS,
 };
 use crate::compress::EncodingCompression;
+use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
@@ -208,8 +206,9 @@ impl VarBinArray {
         let start = scalar_at(self.offsets(), index)?.try_into()?;
         let end = scalar_at(self.offsets(), index + 1)?.try_into()?;
         let sliced = self.bytes().slice(start, end)?;
-        let arr_ref = sliced.iter_arrow().combine_chunks();
-        Ok(arr_ref.as_primitive::<UInt8Type>().values().to_vec())
+        Ok(flatten_primitive(sliced.as_ref())?
+            .typed_data::<u8>()
+            .to_vec())
     }
 }
 

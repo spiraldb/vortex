@@ -1,8 +1,6 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use arrow_array::array::Array as ArrowArray;
-use arrow_schema::{Field, Fields};
 use itertools::Itertools;
 use linkme::distributed_slice;
 
@@ -59,15 +57,6 @@ impl StructArray {
         } else {
             panic!("dtype is not a struct")
         }
-    }
-
-    fn arrow_fields(&self) -> Fields {
-        self.names()
-            .iter()
-            .zip(self.field_dtypes())
-            .map(|(name, dtype)| Field::new(name.as_str(), dtype.into(), dtype.is_nullable()))
-            .map(Arc::new)
-            .collect()
     }
 }
 

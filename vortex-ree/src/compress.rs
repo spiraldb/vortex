@@ -111,7 +111,6 @@ fn ree_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
     (ends, values)
 }
 
-#[allow(dead_code)]
 pub fn ree_decode(
     ends: &PrimitiveArray,
     values: &PrimitiveArray,

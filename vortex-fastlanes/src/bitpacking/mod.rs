@@ -113,10 +113,6 @@ impl Array for BitPackedArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!()
-    }
-
     fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {
         unimplemented!("BitPackedArray::slice")
     }
