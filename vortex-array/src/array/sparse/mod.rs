@@ -52,7 +52,9 @@ impl SparseArray {
         indices_offset: usize,
     ) -> VortexResult<Self> {
         if !matches!(indices.dtype(), &DType::IDX) {
-            return Err(VortexError::InvalidDType(indices.dtype().clone()));
+            return Err(VortexError::InvalidArgument(
+                format!("Cannot use {} as indices", indices.dtype().clone()).into(),
+            ));
         }
 
         Ok(Self {

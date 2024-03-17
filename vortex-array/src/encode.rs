@@ -62,6 +62,7 @@ impl<T: ArrowPrimitiveType> From<&ArrowPrimitiveArray<T>> for ArrayRef {
         if T::DATA_TYPE.is_numeric() {
             arr
         } else {
+            println!("T::DATA_TYPE: {:?}", T::DATA_TYPE);
             TypedArray::new(
                 arr,
                 T::DATA_TYPE.try_into_dtype(value.is_nullable()).unwrap(),

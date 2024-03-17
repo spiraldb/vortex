@@ -37,3 +37,20 @@ pub fn as_arrow_chunks(array: &dyn Array) -> VortexResult<Vec<ArrowArrayRef>> {
         as_arrow(array).map(|a| vec![a])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::array::chunked::ChunkedArray;
+    use crate::array::primitive::PrimitiveArray;
+    use crate::array::Array;
+    use crate::compute::as_arrow::as_arrow;
+
+    #[test]
+    fn test_chunked() {
+        let c1 = PrimitiveArray::from(vec![1i64, 2, 3]);
+        let c2 = PrimitiveArray::from(vec![4i64, 5, 6]);
+        let array = ChunkedArray::new(vec![c1.clone().boxed(), c2.boxed()], c1.dtype().clone());
+
+        as_arrow(array.as_ref()).unwrap();
+    }
+}

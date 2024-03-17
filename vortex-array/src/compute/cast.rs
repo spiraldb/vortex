@@ -7,6 +7,10 @@ pub trait CastFn {
 }
 
 pub fn cast(array: &dyn Array, dtype: &DType) -> VortexResult<ArrayRef> {
+    if array.dtype() == dtype {
+        return Ok(dyn_clone::clone_box(array));
+    }
+
     // TODO(ngates): check for null_count if dtype is non-nullable
     array
         .cast()

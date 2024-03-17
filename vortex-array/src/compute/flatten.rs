@@ -76,7 +76,7 @@ pub trait FlattenPrimitiveFn {
 }
 
 pub fn flatten_primitive(array: &dyn Array) -> VortexResult<PrimitiveArray> {
-    PType::try_from(array.dtype()).map_err(|_| VortexError::InvalidDType(array.dtype().clone()))?;
+    PType::try_from(array.dtype())?;
     array
         .flatten_primitive()
         .map(|t| t.flatten_primitive())

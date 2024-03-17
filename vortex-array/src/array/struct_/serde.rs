@@ -22,10 +22,10 @@ impl EncodingSerde for StructEncoding {
         for i in 0..num_fields {
             fields.push(ctx.subfield(i).read()?);
         }
-        let DType::Struct(ns, _) = ctx.schema() else {
+        let DType::Struct(names, _) = ctx.schema() else {
             return Err(VortexError::InvalidDType(ctx.schema().clone()));
         };
-        Ok(StructArray::new(ns.clone(), fields).boxed())
+        Ok(StructArray::new(names.clone(), fields).boxed())
     }
 }
 

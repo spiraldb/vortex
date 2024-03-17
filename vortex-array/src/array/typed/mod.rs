@@ -33,16 +33,6 @@ impl TypedArray {
         }
     }
 
-    /// Possibly wrap an array in a TypedArray if the dtype is different
-    pub fn maybe_wrap(array: ArrayRef, dtype: &DType) -> ArrayRef {
-        if array.dtype() == dtype {
-            array
-        } else {
-            // Should we check the DType is compatible...?
-            Self::new(array, dtype.clone()).boxed()
-        }
-    }
-
     #[inline]
     pub fn untyped_array(&self) -> &dyn Array {
         self.array.as_ref()

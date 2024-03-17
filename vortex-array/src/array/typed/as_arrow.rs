@@ -26,7 +26,9 @@ impl AsArrowArray for TypedArray {
                     format!("Cannot convert composite DType {} to arrow", id).into(),
                 )),
             },
-            _ => Err(VortexError::InvalidDType(self.dtype().clone())),
+            _ => Err(VortexError::InvalidArgument(
+                format!("Cannot convert {} into Arrow array", self.dtype().clone()).into(),
+            )),
         }
     }
 }
