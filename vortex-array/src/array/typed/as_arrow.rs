@@ -1,5 +1,6 @@
 use crate::array::typed::TypedArray;
 use crate::array::Array;
+use crate::arrow::wrappers::as_nulls;
 use crate::composite_dtypes::{TimeUnit, TimeUnitSerializer};
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::cast::cast;
@@ -38,11 +39,7 @@ fn hacky_zoneddatetime_as_arrow(array: &dyn Array, metadata: &[u8]) -> VortexRes
     let array = flatten_primitive(cast(array, &PType::I64.into())?.as_ref())?;
 
     let values = array.scalar_buffer::<i64>();
-    let validity = array
-        .validity()
-        .map(flatten_bool)
-        .transpose()?
-        .map(|b| NullBuffer::new(b.buffer().clone()));
+    let validity = as_nulls(array.validity())?;
 
     let time_unit = TimeUnitSerializer::deserialize(metadata);
     Ok(match time_unit {
