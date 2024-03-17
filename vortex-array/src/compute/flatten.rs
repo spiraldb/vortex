@@ -1,25 +1,51 @@
 use crate::array::bool::BoolArray;
+use crate::array::chunked::ChunkedArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
+use crate::array::typed::TypedArray;
+use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 
 pub trait FlattenFn {
-    fn flatten(&self) -> VortexResult<ArrayRef>;
+    fn flatten(&self) -> VortexResult<FlattenedArray>;
 }
 
-/// Flatten an array into only flat encodings. This is the set of encodings that can be converted
-/// to Arrow with zero-copy. Each DType has a canonical flattened representation.
-pub fn flatten(array: &dyn Array) -> VortexResult<ArrayRef> {
+/// The set of encodings that can be converted to Arrow with zero-copy.
+pub enum FlattenedArray {
+    Bool(BoolArray),
+    Chunked(ChunkedArray),
+    Primitive(PrimitiveArray),
+    Struct(StructArray),
+    Typed(TypedArray),
+    VarBin(VarBinArray),
+}
+
+impl FlattenedArray {
+    pub fn into_array(self) -> ArrayRef {
+        match self {
+            FlattenedArray::Bool(array) => array.boxed(),
+            FlattenedArray::Chunked(array) => array.boxed(),
+            FlattenedArray::Primitive(array) => array.boxed(),
+            FlattenedArray::Struct(array) => array.boxed(),
+            FlattenedArray::Typed(array) => array.boxed(),
+            FlattenedArray::VarBin(array) => array.boxed(),
+        }
+    }
+}
+
+/// Flatten an array into one of the flat encodings.
+/// This does not guarantee that the array is recursively flattened.
+pub fn flatten(array: &dyn Array) -> VortexResult<FlattenedArray> {
     if let Some(f) = array.flatten_bool() {
-        return f.flatten_bool().map(Array::boxed);
+        return f.flatten_bool().map(FlattenedArray::Bool);
     }
     if let Some(f) = array.flatten_primitive() {
-        return f.flatten_primitive().map(Array::boxed);
+        return f.flatten_primitive().map(FlattenedArray::Primitive);
     }
     if let Some(f) = array.flatten_struct() {
-        return f.flatten_struct().map(Array::boxed);
+        return f.flatten_struct().map(FlattenedArray::Struct);
     }
     array.flatten().map(|f| f.flatten()).unwrap_or_else(|| {
         Err(VortexError::NotImplemented(

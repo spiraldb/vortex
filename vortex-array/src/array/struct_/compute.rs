@@ -1,16 +1,17 @@
+use std::sync::Arc;
+
 use arrow_array::{
     Array as ArrowArray, ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray,
 };
 use arrow_schema::{Field, Fields};
 use itertools::Itertools;
-use std::sync::Arc;
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::struct_::StructArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_arrow::{as_arrow, AsArrowArray};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
-use crate::compute::flatten::{flatten, FlattenFn};
+use crate::compute::flatten::{flatten, FlattenStructFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
@@ -25,7 +26,7 @@ impl ArrayCompute for StructArray {
         Some(self)
     }
 
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
+    fn flatten_struct(&self) -> Option<&dyn FlattenStructFn> {
         Some(self)
     }
 
@@ -85,16 +86,15 @@ impl AsContiguousFn for StructArray {
     }
 }
 
-impl FlattenFn for StructArray {
-    fn flatten(&self) -> VortexResult<ArrayRef> {
+impl FlattenStructFn for StructArray {
+    fn flatten_struct(&self) -> VortexResult<StructArray> {
         Ok(StructArray::new(
             self.names().clone(),
             self.fields()
                 .iter()
-                .map(|field| flatten(field.as_ref()))
+                .map(|field| flatten(field.as_ref()).map(FlattenedArray::into_array))
                 .try_collect()?,
-        )
-        .boxed())
+        ))
     }
 }
 

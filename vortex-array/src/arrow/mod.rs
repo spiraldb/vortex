@@ -5,6 +5,7 @@ use itertools::Itertools;
 use crate::array::ArrowIterator;
 
 pub mod aligned_iter;
+pub mod chunked;
 pub mod convert;
 pub mod wrappers;
 

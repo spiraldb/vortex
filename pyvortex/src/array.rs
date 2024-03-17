@@ -164,7 +164,7 @@ impl PyArray {
 
 #[pymethods]
 impl PyArray {
-    fn to_pyarrow(self_: PyRef<'_, Self>) -> PyResult<PyObject> {
+    fn to_pyarrow(self_: PyRef<'_, Self>) -> PyResult<&PyAny> {
         vortex_arrow::export_array(self_.py(), &self_.inner)
     }
 

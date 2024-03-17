@@ -14,7 +14,7 @@ use crate::arrow::wrappers::{as_nulls, as_offset_buffer};
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::cast::cast;
-use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn};
+use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::dtype::DType;
@@ -133,11 +133,19 @@ impl AsArrowArray for VarBinArray {
 }
 
 impl FlattenFn for VarBinArray {
-    fn flatten(&self) -> VortexResult<ArrayRef> {
-        let bytes = flatten(self.bytes())?;
-        let offsets = flatten(self.offsets())?;
-        let validity = self.validity().map(|v| flatten(v)).transpose()?;
-        Ok(VarBinArray::new(offsets, bytes, self.dtype.clone(), validity).boxed())
+    fn flatten(&self) -> VortexResult<FlattenedArray> {
+        let bytes = flatten(self.bytes())?.into_array();
+        let offsets = flatten(self.offsets())?.into_array();
+        let validity = self
+            .validity()
+            .map(|v| flatten(v).map(FlattenedArray::into_array))
+            .transpose()?;
+        Ok(FlattenedArray::VarBin(VarBinArray::new(
+            offsets,
+            bytes,
+            self.dtype.clone(),
+            validity,
+        )))
     }
 }
 
