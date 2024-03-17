@@ -225,11 +225,8 @@ impl ArrayDisplay for REEArray {
 
 #[cfg(test)]
 mod test {
-    use arrow_array::cast::AsArray;
-    use arrow_array::types::Int32Type;
-    use itertools::Itertools;
-
     use vortex::array::Array;
+    use vortex::compute::flatten::flatten_primitive;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::dtype::{DType, IntWidth, Nullability, Signedness};
 
@@ -264,20 +261,18 @@ mod test {
         );
         assert_eq!(arr.len(), 5);
 
-        arr.iter_arrow()
-            .zip_eq([vec![2, 2, 3, 3, 3]])
-            .for_each(|(from_iter, orig)| {
-                assert_eq!(*from_iter.as_primitive::<Int32Type>().values(), orig);
-            });
+        assert_eq!(
+            flatten_primitive(arr.as_ref()).unwrap().typed_data::<u32>(),
+            vec![2, 2, 3, 3, 3]
+        );
     }
 
     #[test]
-    fn iter_arrow() {
+    fn flatten() {
         let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1, 2, 3].into(), None, 10);
-        arr.iter_arrow()
-            .zip_eq([vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]])
-            .for_each(|(from_iter, orig)| {
-                assert_eq!(*from_iter.as_primitive::<Int32Type>().values(), orig);
-            });
+        assert_eq!(
+            flatten_primitive(arr.as_ref()).unwrap().typed_data::<u32>(),
+            vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]
+        );
     }
 }
