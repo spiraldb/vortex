@@ -40,7 +40,7 @@ fn hacky_zoneddatetime_as_arrow(array: &dyn Array, metadata: &[u8]) -> VortexRes
     let values = array.scalar_buffer::<i64>();
     let validity = array
         .validity()
-        .map(|v| flatten_bool(v))
+        .map(flatten_bool)
         .transpose()?
         .map(|b| NullBuffer::new(b.buffer().clone()));
 
@@ -63,14 +63,14 @@ fn zoneddatetime_as_arrow(array: &dyn Array, metadata: &[u8]) -> VortexResult<Ar
     assert_eq!(array.names()[1].as_str(), "timezone");
 
     // Map the instant into an i64 primitive
-    let instant = array.fields().get(0).unwrap();
+    let instant = array.fields().first().unwrap();
     let instant = flatten_primitive(cast(instant.as_ref(), &PType::I64.into())?.as_ref())?;
 
     // Extract the values and validity buffer
     let values = instant.scalar_buffer::<i64>();
     let validity = instant
         .validity()
-        .map(|v| flatten_bool(v))
+        .map(flatten_bool)
         .transpose()?
         .map(|b| NullBuffer::new(b.buffer().clone()));
 

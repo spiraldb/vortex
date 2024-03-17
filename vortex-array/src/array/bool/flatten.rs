@@ -10,7 +10,7 @@ impl AsArrowArray for BoolArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         let validity = self
             .validity()
-            .map(|v| flatten_bool(v))
+            .map(flatten_bool)
             .transpose()?
             .map(|b| NullBuffer::new(b.buffer));
         Ok(Arc::new(ArrowBoolArray::new(
