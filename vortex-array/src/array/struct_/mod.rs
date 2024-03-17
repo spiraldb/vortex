@@ -1,14 +1,11 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
+use arrow_array::array::Array as ArrowArray;
+use arrow_schema::{Field, Fields};
 use itertools::Itertools;
 use linkme::distributed_slice;
 
-use arrow_array::array::StructArray as ArrowStructArray;
-use arrow_array::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
-use arrow_schema::{Field, Fields};
-
-use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
 use crate::compress::EncodingCompression;
 use crate::dtype::{DType, FieldNames};
 use crate::error::VortexResult;
@@ -16,10 +13,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 
-use super::{
-    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
-    ENCODINGS,
-};
+use super::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
 
 mod compress;
 mod compute;
@@ -110,25 +104,6 @@ impl Array for StructArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let fields = self.arrow_fields();
-        Box::new(
-            AlignedArrowArrayIterator::new(
-                self.fields
-                    .iter()
-                    .map(|f| f.iter_arrow())
-                    .collect::<Vec<_>>(),
-            )
-            .map(move |items| {
-                Arc::new(ArrowStructArray::new(
-                    fields.clone(),
-                    items.into_iter().map(ArrowArrayRef::from).collect(),
-                    None,
-                )) as Arc<dyn ArrowArray>
-            }),
-        )
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {

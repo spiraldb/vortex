@@ -1,17 +1,26 @@
+use arrow_buffer::BooleanBufferBuilder;
 use itertools::Itertools;
 
+use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
+use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
+use crate::compute::flatten::{flatten, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::ArrayCompute;
-use crate::error::VortexResult;
+use crate::error::{VortexError, VortexResult};
+use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
 
 impl ArrayCompute for SparseArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
+        Some(self)
+    }
+
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 
@@ -40,6 +49,42 @@ impl AsContiguousFn for SparseArray {
             arrays.iter().map(|a| a.len()).sum(),
         )
         .boxed())
+    }
+}
+
+impl FlattenFn for SparseArray {
+    fn flatten(&self) -> VortexResult<FlattenedArray> {
+        // Resolve our indices into a vector of usize applying the offset
+        let indices = self.resolved_indices();
+
+        let mut validity = BooleanBufferBuilder::new(self.len());
+        validity.append_n(self.len(), false);
+
+        let values = flatten(self.values())?;
+        if let FlattenedArray::Primitive(parray) = values {
+            match_each_native_ptype!(parray.ptype(), |$P| {
+                let mut values = vec![$P::default(); self.len()];
+                let mut offset = 0;
+
+                for v in parray.typed_data::<$P>() {
+                    let idx = indices[offset];
+                    values[idx] = *v;
+                    validity.set_bit(idx, true);
+                    offset += 1;
+                }
+
+                let validity = BoolArray::new(validity.finish(), None);
+
+                Ok(FlattenedArray::Primitive(PrimitiveArray::from_nullable(
+                    values,
+                    Some(validity.boxed()),
+                )))
+            })
+        } else {
+            Err(VortexError::InvalidArgument(
+                "Cannot flatten SparseArray with non-primitive values".into(),
+            ))
+        }
     }
 }
 

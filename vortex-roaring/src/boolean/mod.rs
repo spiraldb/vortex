@@ -5,8 +5,7 @@ use croaring::{Bitmap, Native};
 
 use compress::roaring_encode;
 use vortex::array::{
-    check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef,
+    check_slice_bounds, Array, ArrayKind, ArrayRef, Encoding, EncodingId, EncodingRef,
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::DType;

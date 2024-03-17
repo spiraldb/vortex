@@ -1,6 +1,5 @@
 use crate::array::primitive::PrimitiveArray;
 use crate::array::Array;
-use crate::arrow::CombineChunks;
 use crate::compute::scalar_at::scalar_at;
 use crate::match_each_native_ptype;
 use arrow_array::cast::AsArray;

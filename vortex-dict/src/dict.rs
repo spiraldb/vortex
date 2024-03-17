@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId};
+use vortex::array::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId};
 use vortex::compress::EncodingCompression;
 use vortex::dtype::{DType, Signedness};
 use vortex::error::{VortexError, VortexResult};

@@ -7,18 +7,14 @@ use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
 use allocator_api2::alloc::Allocator;
-use arrow_array::array::make_array;
-use arrow_array::cast::AsArray;
-use arrow_buffer::buffer::{Buffer, NullBuffer, ScalarBuffer};
-use arrow_data::ArrayData;
+use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
 
 use crate::array::bool::BoolArray;
 use crate::array::{
-    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef, ENCODINGS,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
+    ENCODINGS,
 };
-use crate::arrow::CombineChunks;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::DType;
 use crate::error::VortexResult;
@@ -173,25 +169,6 @@ impl Array for PrimitiveArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        Box::new(iter::once(make_array(
-            ArrayData::builder(self.dtype().into())
-                .len(self.len())
-                .nulls(self.validity().map(|v| {
-                    NullBuffer::new(
-                        v.iter_arrow()
-                            .combine_chunks()
-                            .as_boolean()
-                            .values()
-                            .clone(),
-                    )
-                }))
-                .add_buffer(self.buffer.clone())
-                .build()
-                .unwrap(),
-        )))
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {

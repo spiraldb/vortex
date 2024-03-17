@@ -1,28 +1,24 @@
-mod compute;
-mod serde;
-
 use std::any::Any;
-use std::str::from_utf8_unchecked;
+use std::mem;
 use std::sync::{Arc, RwLock};
-use std::{iter, mem};
 
-use arrow_array::array::ArrayRef as ArrowArrayRef;
-use arrow_array::builder::{BinaryBuilder, StringBuilder};
 use arrow_array::cast::AsArray;
 use arrow_array::types::UInt8Type;
 use linkme::distributed_slice;
 
 use crate::array::{
-    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef, ENCODINGS,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
+    ENCODINGS,
 };
-use crate::arrow::CombineChunks;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+
+mod compute;
+mod serde;
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
@@ -244,35 +240,6 @@ impl Array for VarBinViewArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let data_arr: ArrowArrayRef = if matches!(self.dtype, DType::Utf8(_)) {
-            let mut data_buf = StringBuilder::with_capacity(self.len(), self.plain_size());
-            for i in 0..self.views.len() / VIEW_SIZE {
-                if !self.is_valid(i) {
-                    data_buf.append_null()
-                } else {
-                    unsafe {
-                        data_buf.append_value(from_utf8_unchecked(
-                            self.bytes_at(i).unwrap().as_slice(),
-                        ));
-                    }
-                }
-            }
-            Arc::new(data_buf.finish())
-        } else {
-            let mut data_buf = BinaryBuilder::with_capacity(self.len(), self.plain_size());
-            for i in 0..self.views.len() / VIEW_SIZE {
-                if !self.is_valid(i) {
-                    data_buf.append_null()
-                } else {
-                    data_buf.append_value(self.bytes_at(i).unwrap())
-                }
-            }
-            Arc::new(data_buf.finish())
-        };
-        Box::new(iter::once(data_arr))
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {

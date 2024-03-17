@@ -1,14 +1,11 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
-use std::vec::IntoIter;
 
-use arrow_array::array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
 use linkme::distributed_slice;
 
 use crate::array::{
-    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
-    ENCODINGS,
+    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
@@ -124,10 +121,6 @@ impl Array for ChunkedArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        Box::new(ChunkedArrowIterator::new(self))
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -218,38 +211,6 @@ impl Encoding for ChunkedEncoding {
     }
 }
 
-struct ChunkedArrowIterator {
-    chunks_iter: IntoIter<ArrayRef>,
-    arrow_iter: Option<Box<ArrowIterator>>,
-}
-
-impl ChunkedArrowIterator {
-    fn new(array: &ChunkedArray) -> Self {
-        let mut chunks_iter = array.chunks.clone().into_iter();
-        let arrow_iter = chunks_iter.next().map(|c| c.iter_arrow());
-        Self {
-            chunks_iter,
-            arrow_iter,
-        }
-    }
-}
-
-impl Iterator for ChunkedArrowIterator {
-    type Item = ArrowArrayRef;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.arrow_iter
-            .as_mut()
-            .and_then(|iter| iter.next())
-            .or_else(|| {
-                self.chunks_iter.next().and_then(|next_chunk| {
-                    self.arrow_iter = Some(next_chunk.iter_arrow());
-                    self.next()
-                })
-            })
-    }
-}
-
 #[cfg(test)]
 mod test {
     use arrow_array::array::ArrayRef as ArrowArrayRef;
@@ -279,23 +240,6 @@ mod test {
 
     fn assert_equal_slices<T: ArrowPrimitiveType>(arr: ArrowArrayRef, slice: &[T::Native]) {
         assert_eq!(*arr.as_primitive::<T>().values(), slice);
-    }
-
-    #[test]
-    pub fn iter() {
-        let chunked = ChunkedArray::new(
-            vec![vec![1u64, 2, 3].into(), vec![4u64, 5, 6].into()],
-            DType::Int(
-                IntWidth::_64,
-                Signedness::Unsigned,
-                Nullability::NonNullable,
-            ),
-        );
-
-        chunked
-            .iter_arrow()
-            .zip_eq([[1u64, 2, 3], [4, 5, 6]])
-            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
     }
 
     #[test]

@@ -2,7 +2,7 @@ use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use crate::alp::Exponents;
-use vortex::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use vortex::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::dtype::{DType, IntWidth, Signedness};
 use vortex::error::{VortexError, VortexResult};

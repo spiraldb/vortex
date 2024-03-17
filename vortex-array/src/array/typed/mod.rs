@@ -1,10 +1,9 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use arrow_schema::DataType;
 use linkme::distributed_slice;
 
-use crate::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef, ENCODINGS};
+use crate::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::VortexResult;
@@ -73,16 +72,6 @@ impl Array for TypedArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    // TODO(robert): Have cast happen in enc space and not in arrow space
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let datatype: DataType = self.dtype().into();
-        Box::new(
-            self.array
-                .iter_arrow()
-                .map(move |arr| arrow_cast::cast(arr.as_ref(), &datatype).unwrap()),
-        )
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
