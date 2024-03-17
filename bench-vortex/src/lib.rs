@@ -149,6 +149,7 @@ mod test {
     use std::sync::Arc;
     use vortex::array::ArrayRef;
     use vortex::compute::as_arrow::as_arrow;
+    use vortex::encode::FromArrow;
 
     use crate::{compress_taxi_data, download_taxi_data};
 
@@ -179,7 +180,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayRef::from(arrow_array.clone());
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
             let vortex_as_arrow = as_arrow(vortex_array.as_ref()).unwrap();
             assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
         }

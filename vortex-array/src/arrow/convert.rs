@@ -12,6 +12,7 @@ use crate::composite_dtypes::{
 use crate::compute::cast::cast;
 use crate::dtype::DType::*;
 use crate::dtype::{DType, FloatWidth, IntWidth, Nullability};
+use crate::encode::FromArrow;
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 
@@ -33,7 +34,7 @@ impl From<RecordBatch> for ArrayRef {
                 .map(|(array, field)| {
                     // The dtype of the child arrays infer their nullability from the array itself.
                     // In case the schema says something different, we cast into the schema's dtype.
-                    let vortex_array: ArrayRef = array.clone().into();
+                    let vortex_array = ArrayRef::from_arrow(array.clone(), field.is_nullable());
                     cast(vortex_array.as_ref(), &field.try_into().unwrap()).unwrap()
                 })
                 .collect(),

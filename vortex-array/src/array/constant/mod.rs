@@ -15,7 +15,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::match_each_native_ptype;
 use crate::scalar::{PScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
+use crate::stats::{Stat, Stats, StatsSet};
 
 mod compute;
 mod serde;
@@ -30,10 +30,20 @@ pub struct ConstantArray {
 
 impl ConstantArray {
     pub fn new(scalar: Scalar, length: usize) -> Self {
+        let stats = StatsSet::from(
+            [
+                (Stat::Max, scalar.clone()),
+                (Stat::Min, scalar.clone()),
+                (Stat::IsConstant, true.into()),
+                (Stat::IsSorted, true.into()),
+                (Stat::RunCount, 1.into()),
+            ]
+            .into(),
+        );
         Self {
             scalar,
             length,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(stats)),
         }
     }
 
