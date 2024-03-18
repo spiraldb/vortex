@@ -86,7 +86,7 @@ compression. These are:
 
 ### Compression
 
-A compression algorithm has been built based on
+Vortex compression is built based on
 the [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
 
 Roughly, for each chunk of data a sample is taken and a set of encodings are attempted. The best performing encoding
@@ -104,8 +104,9 @@ implement basic compute operations as may be required for efficient scanning.
 
 ### Statistics
 
-Each array carries around lazily computed summary statistics. This allows statistics to be populated from disk formats
-if they exist, and to be subsequently used by the compressor and compute kernels.
+Vortex arrays carry lazily computed summary statistics. Unlike other array libraries, these statistics can be populated
+from disk formats such as Parquet and preserved all the way into a compute engine. Statistics are available to compute
+kernels as well as to the compressor.
 
 The current statistics are:
 
@@ -126,21 +127,21 @@ TODO
 
 ## Vs Apache Arrow
 
-It is important to note that Vortex and Arrow have been designed with different goals in mind. As such, it is somewhat
+It is important to note that Vortex and Arrow have different design goals. As such, it is somewhat
 unfair to make any comparison at all. But given both can be used as array libraries, it is worth noting the differences.
 
 Vortex is designed to be maximally compatible with Apache Arrow. All Arrow arrays can be converted into Vortex arrays
 with zero-copy. And a Vortex array constructed from an Arrow array can be converted back to Arrow, again with zero-copy.
 
-Where Vortex differs from Arrow is that it explicitly separates logical types from physical encodings. This allows
+Vortex explicitly separates logical types from physical encodings, distinguishing it from Arrow. This allows
 Vortex to model more complex arrays while still exposing a logical interface. For example, Vortex can model a UTF8
 `ChunkedArray` where the first chunk is run-length encoded and the second chunk is dictionary encoded.
 In Arrow, `RunLengthArray` and `DictionaryArray` are separate logical types, and so cannot be combined in this way.
 
 ## Contributing
 
-While we hope to turn Vortex into a community project, it is currently changing so rapidly that it would be infeasible
-to take contributions without prior discussion.
+While we hope to turn Vortex into a community project, its rapid rate of change makes taking contributions without prior
+discussion infeasible. If you are interested in contributing, please open an issue to discuss your ideas.
 
 ## License
 
