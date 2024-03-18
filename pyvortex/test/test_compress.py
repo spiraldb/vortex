@@ -76,4 +76,4 @@ def test_taxi():
     table = pq.read_table(curdir / "bench-vortex/data/yellow-tripdata-2023-11.parquet")
     compressed = vortex.compress(vortex.encode(table[:100]))
     decompressed = compressed.to_pyarrow()
-    assert not table
+    assert not decompressed
