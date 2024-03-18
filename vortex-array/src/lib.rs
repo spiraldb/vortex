@@ -9,6 +9,7 @@ pub mod dtype;
 pub mod encode;
 pub mod error;
 pub mod formatter;
+pub mod iterator;
 pub mod ptype;
 mod sampling;
 pub mod serde;

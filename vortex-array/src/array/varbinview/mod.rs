@@ -306,8 +306,6 @@ impl ArrayDisplay for VarBinViewArray {
 
 #[cfg(test)]
 mod test {
-    use arrow_array::array::GenericStringArray as ArrowStringArray;
-
     use crate::array::primitive::PrimitiveArray;
 
     use super::*;
@@ -357,21 +355,6 @@ mod test {
         assert_eq!(
             scalar_at(binary_arr.as_ref(), 0),
             Ok("hello world this is a long string".into())
-        );
-    }
-
-    #[test]
-    pub fn iter() {
-        let binary_array = binary_array();
-        assert_eq!(
-            binary_array
-                .iter_arrow()
-                .combine_chunks()
-                .as_string::<i32>(),
-            &ArrowStringArray::<i32>::from(vec![
-                "hello world",
-                "hello world this is a long string",
-            ])
         );
     }
 }

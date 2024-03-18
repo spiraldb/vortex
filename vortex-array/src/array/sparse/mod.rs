@@ -203,6 +203,7 @@ mod test {
 
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
+    use crate::compute::flatten::flatten_primitive;
     use crate::compute::scalar_at::scalar_at;
     use crate::error::VortexError;
 
@@ -212,7 +213,9 @@ mod test {
     }
 
     fn assert_sparse_array(sparse: &dyn Array, values: &[Option<i32>]) {
-        let sparse_arrow = sparse
+        let sparse_arrow = flatten_primitive(sparse)
+            .unwrap()
+            .typed_data::<i32>()
             .as_ref()
             .iter_arrow()
             .next()

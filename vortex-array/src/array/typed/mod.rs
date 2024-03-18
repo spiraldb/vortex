@@ -135,10 +135,8 @@ impl ArrayDisplay for TypedArray {
 mod test {
     use std::iter;
 
-    use arrow_array::cast::AsArray;
     use arrow_array::types::Time64MicrosecondType;
-    use arrow_array::Time64MicrosecondArray;
-    use itertools::Itertools;
+    use arrow_array::{PrimitiveArray, Time64MicrosecondArray};
 
     use crate::array::typed::TypedArray;
     use crate::composite_dtypes::{localtime, TimeUnit};
@@ -174,6 +172,8 @@ mod test {
     #[test]
     pub fn iter() {
         let dtype = localtime(TimeUnit::Us, IntWidth::_64, Nullability::NonNullable);
+
+        PrimitiveArray::new().into_iter()
 
         let arr = TypedArray::new(vec![64_799_000_000_i64, 43_000_000_000].into(), dtype);
         arr.iter_arrow()
