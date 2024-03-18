@@ -5,26 +5,24 @@
 [![Documentation](https://docs.rs/vortex-rs/badge.svg)](https://docs.rs/vortex-array)
 [![Rust](https://img.shields.io/badge/rust-1.76.0%2B-blue.svg?maxAge=3600)](https://github.com/fulcrum-so/vortex)
 
-Vortex is a toolkit for working with compressed array data.
+Vortex is an Arrow-compatible toolkit for working with compressed array data. We are using Vortex to develop a
+next-generation n-dimensional file format called Spiral.
 
 > [!CAUTION]
 > This library is very much a work in progress!
 
 The major components of Vortex are (will be!):
 
-* **Logical Types** - a schema definition making no assertions about physical layout.
-* **Encodings** - a pluggable set of physical layouts. Vortex ships with several state-of-the-art lightweight codecs
-  that have the potential to support GPU decompression.
+* **Logical Types** - a schema definition that makes no assertions about physical layout.
+* **Encodings** - a pluggable set of physical layouts called encodings. Vortex ships with several state-of-the-art
+  lightweight codecs that have the potential to support GPU decompression.
 * **Compression** - recursive compression based on stratified sampling.
-* **Compute** - compute kernels that can operate over compressed data.
-* **Statistics** - each array carries around lazily computed summary statistics, optionally populated from disk. These
-  are available to compute kernels as well as to the compressor.
+* **Compute** - basic compute kernels that can operate over compressed data. Note that Vortex does not intend to become
+  a full-fledged compute engine, but rather to provide the ability to implement basic compute operations as may be
+  required for efficient scanning.
+* **Statistics** - each array carries around lazily computed summary statistics, optionally populated at read-time.
+  These are available to compute kernels as well as to the compressor.
 * **Serde** - zero-copy serialization. Designed to work well both on-disk and over-the-wire.
-
-At Fulcrum, we are working to build infrastructure for next-generation data processing. We believe in leaving no stone
-unturned and are looking closely at every single level of the data stack.
-Vortex provides the framework upon which we can experiment and develop solutions to the first level of the stack:
-storage and IO.
 
 ## Overview: Logical vs Physical
 
@@ -57,9 +55,10 @@ The Vortex type-system is still in flux. The current set of logical types is:
 * FixedList: TODO
 * Union: TODO
 
-### Plain Encodings
+### Canonical/Flat Encodings
 
-Vortex includes a base set of encodings that are designed to be compatible with Apache Arrow. These are:
+Vortex includes a base set of encodings that are designed to be zero-copy with Apache Arrow. These are the canonical
+representations of each of the logical data types. The canonical encodings currently supported are:
 
 * Null
 * Bool
@@ -69,15 +68,17 @@ Vortex includes a base set of encodings that are designed to be compatible with 
 * VarBinView
 * ...with more to come
 
-### Extension Encodings
+### Compressed Encodings
 
-Vortex includes a set of extension encodings that are designed to model compressed in-memory arrays. These are:
+Vortex includes a set of compressed encodings that can hold compression in-memory arrays allowing us to defer
+compression. These are:
 
 * BitPacking
 * Constant
 * Chunked
 * Dictionary
 * Frame-of-Reference
+* Run-end
 * RoaringUInt
 * RoaringBool
 * Sparse
@@ -97,6 +98,9 @@ about a chunk, it is possible to cheaply rule out many encodings and ensure the 
 Vortex provides the ability for each encoding to provide override the implementation of a compute function to avoid
 decompressing where possible. For example, filtering a dictionary-encoded UTF8 array can be more cheaply performed by
 filtering the dictionary first.
+
+Note that Vortex does not intend to become a full-fledged compute engine, but rather to provide the ability to
+implement basic compute operations as may be required for efficient scanning.
 
 ### Statistics
 
