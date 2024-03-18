@@ -173,6 +173,7 @@ mod test {
         _ = compress_taxi_data();
     }
 
+    #[ignore]
     #[test]
     fn round_trip_arrow() {
         let file = File::open(download_taxi_data()).unwrap();

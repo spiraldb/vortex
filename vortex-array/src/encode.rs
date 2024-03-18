@@ -19,7 +19,7 @@ use arrow_array::types::{
 };
 use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::Buffer;
-use arrow_schema::{DataType, TimeUnit};
+use arrow_schema::{DataType, Field, TimeUnit};
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
@@ -28,7 +28,6 @@ use crate::array::struct_::StructArray;
 use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
-use crate::arrow::convert::TryIntoDType;
 use crate::dtype::DType;
 use crate::ptype::PType;
 use crate::scalar::NullScalar;
@@ -68,7 +67,7 @@ impl<T: ArrowPrimitiveType> FromArrow<&ArrowPrimitiveArray<T>> for ArrayRef {
         if T::DATA_TYPE.is_numeric() {
             arr
         } else {
-            TypedArray::new(arr, T::DATA_TYPE.try_into_dtype(nullable).unwrap()).boxed()
+            TypedArray::new(arr, (&Field::new("_", T::DATA_TYPE, false)).into()).boxed()
         }
     }
 }

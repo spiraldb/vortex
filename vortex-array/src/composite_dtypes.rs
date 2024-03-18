@@ -88,16 +88,3 @@ pub fn zoneddatetime(unit: TimeUnit, nullability: Nullability) -> DType {
         TimeUnitSerializer::serialize(unit),
     )
 }
-
-const MAP_DTYPE: &str = "map";
-
-pub fn map(key_type: DType, value_type: DType) -> DType {
-    DType::Composite(
-        Arc::new(MAP_DTYPE.to_string()),
-        Box::new(DType::Struct(
-            vec![Arc::new("key".to_string()), Arc::new("value".to_string())],
-            vec![key_type, value_type],
-        )),
-        vec![],
-    )
-}
