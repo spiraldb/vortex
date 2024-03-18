@@ -213,14 +213,13 @@ impl Encoding for ChunkedEncoding {
 
 #[cfg(test)]
 mod test {
-    use arrow_array::array::ArrayRef as ArrowArrayRef;
-    use arrow_array::array::ArrowPrimitiveType;
-    use arrow_array::cast::AsArray;
+    use crate::array::{Array, ArrayRef};
 
     use crate::array::chunked::ChunkedArray;
+    use crate::compute::flatten::flatten_primitive;
     use crate::dtype::{DType, IntWidth, Nullability, Signedness};
+    use crate::ptype::NativePType;
 
-    #[allow(dead_code)]
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::new(
             vec![
@@ -236,58 +235,35 @@ mod test {
         )
     }
 
-    #[allow(dead_code)]
-    fn assert_equal_slices<T: ArrowPrimitiveType>(arr: ArrowArrayRef, slice: &[T::Native]) {
-        assert_eq!(*arr.as_primitive::<T>().values(), slice);
+    fn assert_equal_slices<T: NativePType>(arr: ArrayRef, slice: &[T]) {
+        assert_eq!(
+            flatten_primitive(arr.as_ref()).unwrap().typed_data::<T>(),
+            slice
+        );
     }
 
-    // #[test]
-    // pub fn slice_middle() {
-    //     chunked_array()
-    //         .slice(2, 5)
-    //         .unwrap()
-    //         .iter_arrow()
-    //         .zip_eq([vec![3u64], vec![4, 5]])
-    //         .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
-    // }
-    //
-    // #[test]
-    // pub fn slice_begin() {
-    //     chunked_array()
-    //         .slice(1, 3)
-    //         .unwrap()
-    //         .iter_arrow()
-    //         .zip_eq([[2u64, 3]])
-    //         .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
-    // }
-    //
-    // #[test]
-    // pub fn slice_aligned() {
-    //     chunked_array()
-    //         .slice(3, 6)
-    //         .unwrap()
-    //         .iter_arrow()
-    //         .zip_eq([[4u64, 5, 6]])
-    //         .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
-    // }
-    //
-    // #[test]
-    // pub fn slice_many_aligned() {
-    //     chunked_array()
-    //         .slice(0, 6)
-    //         .unwrap()
-    //         .iter_arrow()
-    //         .zip_eq([[1u64, 2, 3], [4, 5, 6]])
-    //         .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
-    // }
-    //
-    // #[test]
-    // pub fn slice_end() {
-    //     chunked_array()
-    //         .slice(7, 8)
-    //         .unwrap()
-    //         .iter_arrow()
-    //         .zip_eq([[8u64]])
-    //         .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
-    // }
+    #[test]
+    pub fn slice_middle() {
+        assert_equal_slices(chunked_array().slice(2, 5).unwrap(), &[3u64, 4, 5])
+    }
+
+    #[test]
+    pub fn slice_begin() {
+        assert_equal_slices(chunked_array().slice(1, 3).unwrap(), &[2u64, 3]);
+    }
+
+    #[test]
+    pub fn slice_aligned() {
+        assert_equal_slices(chunked_array().slice(3, 6).unwrap(), &[4u64, 5, 6]);
+    }
+
+    #[test]
+    pub fn slice_many_aligned() {
+        assert_equal_slices(chunked_array().slice(0, 6).unwrap(), &[1u64, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    pub fn slice_end() {
+        assert_equal_slices(chunked_array().slice(7, 8).unwrap(), &[8u64]);
+    }
 }
