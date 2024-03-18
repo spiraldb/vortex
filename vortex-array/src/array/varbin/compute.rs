@@ -65,7 +65,6 @@ impl AsContiguousFn for VarBinArray {
         offsets.push(0);
         for a in arrays.iter().map(|a| a.as_varbin()) {
             let first_offset: u64 = a.first_offset()?;
-            // FIXME(ngates): cast to u64, or iterate over the offsets as any?
             let offsets_array = flatten_primitive(cast(a.offsets(), &PType::U64.into())?.as_ref())?;
             let shift = offsets.last().copied().unwrap_or(0);
             offsets.extend(
