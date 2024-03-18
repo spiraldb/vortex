@@ -87,6 +87,12 @@ pub enum VortexError {
 
 pub type VortexResult<T> = Result<T, VortexError>;
 
+impl From<&str> for VortexError {
+    fn from(value: &str) -> Self {
+        VortexError::InvalidArgument(value.to_string().into())
+    }
+}
+
 macro_rules! wrapped_error {
     ($E:ty, $e:ident) => {
         #[derive(Debug)]

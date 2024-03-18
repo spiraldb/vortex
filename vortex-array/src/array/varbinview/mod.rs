@@ -1,28 +1,23 @@
-mod compute;
-mod serde;
-
 use std::any::Any;
-use std::str::from_utf8_unchecked;
+use std::mem;
 use std::sync::{Arc, RwLock};
-use std::{iter, mem};
 
-use arrow_array::array::ArrayRef as ArrowArrayRef;
-use arrow_array::builder::{BinaryBuilder, StringBuilder};
-use arrow_array::cast::AsArray;
-use arrow_array::types::UInt8Type;
 use linkme::distributed_slice;
 
 use crate::array::{
-    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef, ENCODINGS,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
+    ENCODINGS,
 };
-use crate::arrow::CombineChunks;
+use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+
+mod compute;
+mod serde;
 
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
@@ -158,15 +153,14 @@ impl VarBinViewArray {
     }
 
     pub(self) fn view_at(&self, index: usize) -> BinaryView {
-        let view_slice = self
-            .views
-            .slice(index * VIEW_SIZE, (index + 1) * VIEW_SIZE)
-            .unwrap()
-            .iter_arrow()
-            .next()
-            .unwrap();
-        let view_vec: &[u8] = view_slice.as_primitive::<UInt8Type>().values();
-        BinaryView::from_le_bytes(view_vec.try_into().unwrap())
+        let view_vec = flatten_primitive(
+            self.views
+                .slice(index * VIEW_SIZE, (index + 1) * VIEW_SIZE)
+                .unwrap()
+                .as_ref(),
+        )
+        .unwrap();
+        BinaryView::from_le_bytes(view_vec.typed_data::<u8>().try_into().unwrap())
     }
 
     #[inline]
@@ -188,21 +182,18 @@ impl VarBinViewArray {
         let view = self.view_at(index);
         unsafe {
             if view.inlined.size > 12 {
-                let arrow_data_buffer = self
-                    .data
-                    .get(view._ref.buffer_index as usize)
-                    .unwrap()
-                    .slice(
-                        view._ref.offset as usize,
-                        (view._ref.size + view._ref.offset) as usize,
-                    )?
-                    .iter_arrow()
-                    .combine_chunks();
-
-                Ok(arrow_data_buffer
-                    .as_primitive::<UInt8Type>()
-                    .values()
-                    .to_vec())
+                let arrow_data_buffer = flatten_primitive(
+                    self.data
+                        .get(view._ref.buffer_index as usize)
+                        .unwrap()
+                        .slice(
+                            view._ref.offset as usize,
+                            (view._ref.size + view._ref.offset) as usize,
+                        )?
+                        .as_ref(),
+                )?;
+                // TODO(ngates): can we avoid returning a copy?
+                Ok(arrow_data_buffer.typed_data::<u8>().to_vec())
             } else {
                 Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
             }
@@ -244,35 +235,6 @@ impl Array for VarBinViewArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let data_arr: ArrowArrayRef = if matches!(self.dtype, DType::Utf8(_)) {
-            let mut data_buf = StringBuilder::with_capacity(self.len(), self.plain_size());
-            for i in 0..self.views.len() / VIEW_SIZE {
-                if !self.is_valid(i) {
-                    data_buf.append_null()
-                } else {
-                    unsafe {
-                        data_buf.append_value(from_utf8_unchecked(
-                            self.bytes_at(i).unwrap().as_slice(),
-                        ));
-                    }
-                }
-            }
-            Arc::new(data_buf.finish())
-        } else {
-            let mut data_buf = BinaryBuilder::with_capacity(self.len(), self.plain_size());
-            for i in 0..self.views.len() / VIEW_SIZE {
-                if !self.is_valid(i) {
-                    data_buf.append_null()
-                } else {
-                    data_buf.append_value(self.bytes_at(i).unwrap())
-                }
-            }
-            Arc::new(data_buf.finish())
-        };
-        Box::new(iter::once(data_arr))
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
@@ -344,8 +306,6 @@ impl ArrayDisplay for VarBinViewArray {
 
 #[cfg(test)]
 mod test {
-    use arrow_array::array::GenericStringArray as ArrowStringArray;
-
     use crate::array::primitive::PrimitiveArray;
 
     use super::*;
@@ -395,21 +355,6 @@ mod test {
         assert_eq!(
             scalar_at(binary_arr.as_ref(), 0),
             Ok("hello world this is a long string".into())
-        );
-    }
-
-    #[test]
-    pub fn iter() {
-        let binary_array = binary_array();
-        assert_eq!(
-            binary_array
-                .iter_arrow()
-                .combine_chunks()
-                .as_string::<i32>(),
-            &ArrowStringArray::<i32>::from(vec![
-                "hello world",
-                "hello world this is a long string",
-            ])
         );
     }
 }

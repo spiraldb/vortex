@@ -1,14 +1,11 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
-use std::vec::IntoIter;
 
-use arrow_array::array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
 use linkme::distributed_slice;
 
 use crate::array::{
-    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
-    ENCODINGS,
+    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
@@ -124,10 +121,6 @@ impl Array for ChunkedArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        Box::new(ChunkedArrowIterator::new(self))
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -218,49 +211,14 @@ impl Encoding for ChunkedEncoding {
     }
 }
 
-struct ChunkedArrowIterator {
-    chunks_iter: IntoIter<ArrayRef>,
-    arrow_iter: Option<Box<ArrowIterator>>,
-}
-
-impl ChunkedArrowIterator {
-    fn new(array: &ChunkedArray) -> Self {
-        let mut chunks_iter = array.chunks.clone().into_iter();
-        let arrow_iter = chunks_iter.next().map(|c| c.iter_arrow());
-        Self {
-            chunks_iter,
-            arrow_iter,
-        }
-    }
-}
-
-impl Iterator for ChunkedArrowIterator {
-    type Item = ArrowArrayRef;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.arrow_iter
-            .as_mut()
-            .and_then(|iter| iter.next())
-            .or_else(|| {
-                self.chunks_iter.next().and_then(|next_chunk| {
-                    self.arrow_iter = Some(next_chunk.iter_arrow());
-                    self.next()
-                })
-            })
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use arrow_array::array::ArrayRef as ArrowArrayRef;
-    use arrow_array::array::ArrowPrimitiveType;
-    use arrow_array::cast::AsArray;
-    use arrow_array::types::UInt64Type;
-    use itertools::Itertools;
+    use crate::array::{Array, ArrayRef};
 
     use crate::array::chunked::ChunkedArray;
-    use crate::array::Array;
+    use crate::compute::flatten::{flatten, flatten_primitive, FlattenedArray};
     use crate::dtype::{DType, IntWidth, Nullability, Signedness};
+    use crate::ptype::NativePType;
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::new(
@@ -277,74 +235,41 @@ mod test {
         )
     }
 
-    fn assert_equal_slices<T: ArrowPrimitiveType>(arr: ArrowArrayRef, slice: &[T::Native]) {
-        assert_eq!(*arr.as_primitive::<T>().values(), slice);
-    }
-
-    #[test]
-    pub fn iter() {
-        let chunked = ChunkedArray::new(
-            vec![vec![1u64, 2, 3].into(), vec![4u64, 5, 6].into()],
-            DType::Int(
-                IntWidth::_64,
-                Signedness::Unsigned,
-                Nullability::NonNullable,
-            ),
-        );
-
+    fn assert_equal_slices<T: NativePType>(arr: ArrayRef, slice: &[T]) {
+        let FlattenedArray::Chunked(chunked) = flatten(arr.as_ref()).unwrap() else {
+            unreachable!()
+        };
+        let mut values = Vec::with_capacity(arr.len());
         chunked
-            .iter_arrow()
-            .zip_eq([[1u64, 2, 3], [4, 5, 6]])
-            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
+            .chunks()
+            .iter()
+            .map(|a| flatten_primitive(a.as_ref()).unwrap())
+            .for_each(|a| values.extend_from_slice(a.typed_data::<T>()));
+        assert_eq!(values, slice);
     }
 
     #[test]
     pub fn slice_middle() {
-        chunked_array()
-            .slice(2, 5)
-            .unwrap()
-            .iter_arrow()
-            .zip_eq([vec![3u64], vec![4, 5]])
-            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
+        assert_equal_slices(chunked_array().slice(2, 5).unwrap(), &[3u64, 4, 5])
     }
 
     #[test]
     pub fn slice_begin() {
-        chunked_array()
-            .slice(1, 3)
-            .unwrap()
-            .iter_arrow()
-            .zip_eq([[2u64, 3]])
-            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
+        assert_equal_slices(chunked_array().slice(1, 3).unwrap(), &[2u64, 3]);
     }
 
     #[test]
     pub fn slice_aligned() {
-        chunked_array()
-            .slice(3, 6)
-            .unwrap()
-            .iter_arrow()
-            .zip_eq([[4u64, 5, 6]])
-            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
+        assert_equal_slices(chunked_array().slice(3, 6).unwrap(), &[4u64, 5, 6]);
     }
 
     #[test]
     pub fn slice_many_aligned() {
-        chunked_array()
-            .slice(0, 6)
-            .unwrap()
-            .iter_arrow()
-            .zip_eq([[1u64, 2, 3], [4, 5, 6]])
-            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
+        assert_equal_slices(chunked_array().slice(0, 6).unwrap(), &[1u64, 2, 3, 4, 5, 6]);
     }
 
     #[test]
     pub fn slice_end() {
-        chunked_array()
-            .slice(7, 8)
-            .unwrap()
-            .iter_arrow()
-            .zip_eq([[8u64]])
-            .for_each(|(arr, slice)| assert_equal_slices::<UInt64Type>(arr, &slice));
+        assert_equal_slices(chunked_array().slice(7, 8).unwrap(), &[8u64]);
     }
 }

@@ -1,9 +1,7 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{
-    check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
-};
+use vortex::array::{check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::scalar_at::scalar_at;
 use vortex::compute::ArrayCompute;
@@ -113,10 +111,6 @@ impl Array for BitPackedArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!()
     }
 
     fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {

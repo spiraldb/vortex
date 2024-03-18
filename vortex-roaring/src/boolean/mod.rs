@@ -5,8 +5,7 @@ use croaring::{Bitmap, Native};
 
 use compress::roaring_encode;
 use vortex::array::{
-    check_slice_bounds, Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId,
-    EncodingRef,
+    check_slice_bounds, Array, ArrayKind, ArrayRef, Encoding, EncodingId, EncodingRef,
 };
 use vortex::compress::EncodingCompression;
 use vortex::dtype::DType;
@@ -82,10 +81,6 @@ impl Array for RoaringBoolArray {
 
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!()
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {

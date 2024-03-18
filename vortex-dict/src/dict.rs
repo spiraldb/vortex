@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId};
+use vortex::array::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId};
 use vortex::compress::EncodingCompression;
 use vortex::dtype::{DType, Signedness};
 use vortex::error::{VortexError, VortexResult};
@@ -70,10 +70,6 @@ impl Array for DictArray {
 
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!()
     }
 
     // TODO(robert): Add function to trim the dictionary
