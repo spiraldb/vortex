@@ -2,7 +2,7 @@ use std::cmp::min;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, CloneOptionalArray};
 use vortex::compute::cast::cast;
-use vortex::compute::flatten::{flatten, flatten_primitive, FlattenPrimitiveFn, FlattenedArray};
+use vortex::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
 use vortex::error::{VortexError, VortexResult};
@@ -13,7 +13,7 @@ use crate::compress::ree_decode;
 use crate::REEArray;
 
 impl ArrayCompute for REEArray {
-    fn flatten_primitive(&self) -> Option<&dyn FlattenPrimitiveFn> {
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 
@@ -22,8 +22,8 @@ impl ArrayCompute for REEArray {
     }
 }
 
-impl FlattenPrimitiveFn for REEArray {
-    fn flatten_primitive(&self) -> VortexResult<PrimitiveArray> {
+impl FlattenFn for REEArray {
+    fn flatten(&self) -> VortexResult<FlattenedArray> {
         let ends: PrimitiveArray =
             flatten_primitive(cast(self.ends(), &PType::U64.into())?.as_ref())?
                 .typed_data::<u64>()
@@ -37,6 +37,7 @@ impl FlattenPrimitiveFn for REEArray {
         let values = flatten(self.values())?;
         if let FlattenedArray::Primitive(pvalues) = values {
             ree_decode(&ends, &pvalues, self.validity().clone_optional())
+                .map(FlattenedArray::Primitive)
         } else {
             Err(VortexError::InvalidArgument(
                 "Cannot yet flatten non-primitive REE array".into(),
