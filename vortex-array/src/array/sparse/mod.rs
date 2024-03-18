@@ -197,8 +197,6 @@ impl Encoding for SparseEncoding {
 
 #[cfg(test)]
 mod test {
-    use arrow_array::cast::AsArray;
-    use arrow_array::types::Int32Type;
     use itertools::Itertools;
 
     use crate::array::sparse::SparseArray;
@@ -215,13 +213,7 @@ mod test {
     fn assert_sparse_array(sparse: &dyn Array, values: &[Option<i32>]) {
         let sparse_arrow = flatten_primitive(sparse)
             .unwrap()
-            .typed_data::<i32>()
-            .as_ref()
-            .iter_arrow()
-            .next()
-            .unwrap()
-            .as_primitive::<Int32Type>()
-            .into_iter()
+            .iter::<i32>()
             .collect_vec();
         assert_eq!(sparse_arrow, values);
     }

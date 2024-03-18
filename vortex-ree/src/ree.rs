@@ -8,7 +8,7 @@ use vortex::array::{
 use vortex::compress::EncodingCompression;
 use vortex::compute;
 use vortex::compute::search_sorted::SearchSortedSide;
-use vortex::dtype::{DType, Nullability, Signedness};
+use vortex::dtype::DType;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
@@ -43,13 +43,6 @@ impl REEArray {
         length: usize,
     ) -> VortexResult<Self> {
         check_validity_buffer(validity.as_deref(), length)?;
-
-        if !matches!(
-            ends.dtype(),
-            DType::Int(_, Signedness::Unsigned, Nullability::NonNullable)
-        ) {
-            return Err(VortexError::InvalidDType(ends.dtype().clone()));
-        }
 
         if !ends
             .stats()
@@ -234,7 +227,7 @@ mod test {
 
     #[test]
     fn new() {
-        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1, 2, 3].into(), None, 10);
+        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1i32, 2, 3].into(), None, 10);
         assert_eq!(arr.len(), 10);
         assert_eq!(
             arr.dtype(),
@@ -252,7 +245,7 @@ mod test {
 
     #[test]
     fn slice() {
-        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1, 2, 3].into(), None, 10)
+        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1i32, 2, 3].into(), None, 10)
             .slice(3, 8)
             .unwrap();
         assert_eq!(
@@ -262,14 +255,14 @@ mod test {
         assert_eq!(arr.len(), 5);
 
         assert_eq!(
-            flatten_primitive(arr.as_ref()).unwrap().typed_data::<u32>(),
+            flatten_primitive(arr.as_ref()).unwrap().typed_data::<i32>(),
             vec![2, 2, 3, 3, 3]
         );
     }
 
     #[test]
     fn flatten() {
-        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1, 2, 3].into(), None, 10);
+        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1i32, 2, 3].into(), None, 10);
         assert_eq!(
             flatten_primitive(arr.as_ref()).unwrap().typed_data::<u32>(),
             vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]

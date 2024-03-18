@@ -6,6 +6,7 @@ use std::panic::RefUnwindSafe;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
+use crate::accessor::ArrayAccessor;
 use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
@@ -19,6 +20,7 @@ use crate::compute::scalar_at::scalar_at;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
@@ -211,6 +213,24 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for PrimitiveArray {
         self
     }
 }
+
+impl<T: NativePType> ArrayAccessor<T> for PrimitiveArray {
+    fn value(&self, index: usize) -> Option<T> {
+        if self.is_valid(index) {
+            Some(self.typed_data::<T>()[index])
+        } else {
+            None
+        }
+    }
+}
+
+impl PrimitiveArray {
+    pub fn iter<T: NativePType>(&self) -> ArrayIter<PrimitiveArray, T> {
+        ArrayIter::new(self.clone())
+    }
+}
+
+pub type PrimitiveIter<'a, T> = ArrayIter<dyn ArrayAccessor<T>, T>;
 
 #[derive(Debug)]
 pub struct PrimitiveEncoding;

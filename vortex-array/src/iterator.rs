@@ -1,69 +1,35 @@
-use crate::array::Array;
-use arrow_buffer::{BooleanBuffer, NullBuffer};
+use crate::accessor::ArrayAccessor;
 
-pub trait ArrayAccessor: Array {
-    /// The type of the element being accessed.
-    type Item: Send + Sync;
-
-    /// Returns the element at index.
-    /// Panics if the value is outside the bounds of the array
-    fn value(&self, index: usize) -> Self::Item;
-
-    /// Returns the element at index.
-    /// # Safety
-    /// Caller is responsible for ensuring that the index is within the bounds of the array
-    unsafe fn value_unchecked(&self, index: usize) -> Self::Item;
-}
-
-#[derive(Debug)]
-pub struct ArrayIter<T: ArrayAccessor> {
-    array: T,
-    logical_nulls: Option<BooleanBuffer>,
+pub struct ArrayIter<A: ArrayAccessor<T>, T> {
+    array: A,
     current: usize,
-    current_end: usize,
+    end: usize,
+    phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: ArrayAccessor> ArrayIter<T> {
-    /// create a new iterator
-    pub fn new(array: T) -> Self {
+impl<A: ArrayAccessor<T>, T> ArrayIter<A, T> {
+    pub fn new(array: A) -> Self {
         let len = array.len();
-        let logical_nulls = array.l();
         ArrayIter {
             array,
-            logical_nulls,
             current: 0,
-            current_end: len,
+            end: len,
+            phantom: std::marker::PhantomData,
         }
-    }
-
-    #[inline]
-    fn is_null(&self, idx: usize) -> bool {
-        self.logical_nulls
-            .as_ref()
-            .map(|x| x.is_null(idx))
-            .unwrap_or_default()
     }
 }
 
-impl<T: ArrayAccessor> Iterator for arrow_array::iterator::ArrayIter<T> {
-    type Item = Option<T::Item>;
+impl<A: ArrayAccessor<T>, T> Iterator for ArrayIter<A, T> {
+    type Item = Option<T>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current == self.current_end {
+        if self.current == self.end {
             None
-        } else if self.is_null(self.current) {
-            self.current += 1;
-            Some(None)
         } else {
             let old = self.current;
             self.current += 1;
-            // Safety:
-            // we just checked bounds in `self.current_end == self.current`
-            // this is safe on the premise that this struct is initialized with
-            // current = array.len()
-            // and that current_end is ever only decremented
-            unsafe { Some(Some(self.array.value_unchecked(old))) }
+            Some(self.array.value(old))
         }
     }
 
@@ -74,3 +40,16 @@ impl<T: ArrayAccessor> Iterator for arrow_array::iterator::ArrayIter<T> {
         )
     }
 }
+
+impl<A: ArrayAccessor<T>, T> DoubleEndedIterator for ArrayIter<A, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.end == self.current {
+            None
+        } else {
+            self.end -= 1;
+            Some(self.array.value(self.end))
+        }
+    }
+}
+
+impl<A: ArrayAccessor<T>, T> ExactSizeIterator for ArrayIter<A, T> {}

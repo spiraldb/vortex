@@ -220,6 +220,7 @@ mod test {
     use crate::array::chunked::ChunkedArray;
     use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 
+    #[allow(dead_code)]
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::new(
             vec![
@@ -235,6 +236,7 @@ mod test {
         )
     }
 
+    #[allow(dead_code)]
     fn assert_equal_slices<T: ArrowPrimitiveType>(arr: ArrowArrayRef, slice: &[T::Native]) {
         assert_eq!(*arr.as_primitive::<T>().values(), slice);
     }

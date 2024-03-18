@@ -366,8 +366,6 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
 
 #[cfg(test)]
 mod test {
-    use arrow_array::cast::AsArray;
-
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;
     use crate::array::Array;

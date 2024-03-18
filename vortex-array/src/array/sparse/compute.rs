@@ -7,7 +7,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
-use crate::compute::flatten::{flatten, FlattenFn, FlattenedArray};
+use crate::compute::flatten::{flatten, FlattenPrimitiveFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::ArrayCompute;
@@ -20,7 +20,7 @@ impl ArrayCompute for SparseArray {
         Some(self)
     }
 
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
+    fn flatten_primitive(&self) -> Option<&dyn FlattenPrimitiveFn> {
         Some(self)
     }
 
@@ -52,8 +52,8 @@ impl AsContiguousFn for SparseArray {
     }
 }
 
-impl FlattenFn for SparseArray {
-    fn flatten(&self) -> VortexResult<FlattenedArray> {
+impl FlattenPrimitiveFn for SparseArray {
+    fn flatten_primitive(&self) -> VortexResult<PrimitiveArray> {
         // Resolve our indices into a vector of usize applying the offset
         let indices = self.resolved_indices();
 
@@ -75,10 +75,10 @@ impl FlattenFn for SparseArray {
 
                 let validity = BoolArray::new(validity.finish(), None);
 
-                Ok(FlattenedArray::Primitive(PrimitiveArray::from_nullable(
+                Ok(PrimitiveArray::from_nullable(
                     values,
                     Some(validity.boxed()),
-                )))
+                ))
             })
         } else {
             Err(VortexError::InvalidArgument(
@@ -95,7 +95,7 @@ impl ScalarAtFn for SparseArray {
         // greater than or equal to the true index
         let true_patch_index = index + self.indices_offset;
         search_sorted(self.indices(), true_patch_index, SearchSortedSide::Left).and_then(|idx| {
-            // If the value at this index is equal to the true index, then it exists in the patch index array
+            // If the value at this index is equal to the true index, then it exists in the patch index array,
             // and we should return the value at the corresponding index in the patch values array
             scalar_at(self.indices(), idx)
                 .or_else(|_| Ok(Scalar::null(self.values().dtype())))
