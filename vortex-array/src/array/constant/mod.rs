@@ -3,19 +3,15 @@ use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
 
-use crate::array::bool::BoolArray;
-use crate::array::primitive::PrimitiveArray;
 use crate::array::{
-    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
-    ENCODINGS,
+    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::match_each_native_ptype;
-use crate::scalar::{PScalar, Scalar};
+use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
+use crate::stats::{Stat, Stats, StatsSet};
 
 mod compute;
 mod serde;
@@ -30,10 +26,20 @@ pub struct ConstantArray {
 
 impl ConstantArray {
     pub fn new(scalar: Scalar, length: usize) -> Self {
+        let stats = StatsSet::from(
+            [
+                (Stat::Max, scalar.clone()),
+                (Stat::Min, scalar.clone()),
+                (Stat::IsConstant, true.into()),
+                (Stat::IsSorted, true.into()),
+                (Stat::RunCount, 1.into()),
+            ]
+            .into(),
+        );
         Self {
             scalar,
             length,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(stats)),
         }
     }
 
@@ -78,41 +84,6 @@ impl Array for ConstantArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let plain_array = match self.scalar() {
-            Scalar::Bool(b) => {
-                if let Some(bv) = b.value() {
-                    BoolArray::from(vec![bv; self.len()]).boxed()
-                } else {
-                    BoolArray::null(self.len()).boxed()
-                }
-            }
-            Scalar::Primitive(p) => {
-                if let Some(ps) = p.value() {
-                    match ps {
-                        PScalar::U8(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                        PScalar::U16(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                        PScalar::U32(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                        PScalar::U64(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                        PScalar::I8(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                        PScalar::I16(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                        PScalar::I32(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                        PScalar::I64(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                        PScalar::F16(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                        PScalar::F32(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                        PScalar::F64(p) => PrimitiveArray::from_value(p, self.len()).boxed(),
-                    }
-                } else {
-                    match_each_native_ptype!(p.ptype(), |$P| {
-                        PrimitiveArray::null::<$P>(self.len()).boxed()
-                    })
-                }
-            }
-            _ => panic!("Unsupported scalar type {}", self.dtype()),
-        };
-        plain_array.iter_arrow()
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -129,8 +100,8 @@ impl Array for ConstantArray {
         self.scalar.nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

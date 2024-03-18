@@ -2,7 +2,7 @@ use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use crate::alp::Exponents;
-use vortex::array::{Array, ArrayKind, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use vortex::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::dtype::{DType, IntWidth, Signedness};
 use vortex::error::{VortexError, VortexResult};
@@ -104,10 +104,6 @@ impl Array for ALPArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!()
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         Ok(Self::try_new(
             self.encoded().slice(start, stop)?,
@@ -127,8 +123,8 @@ impl Array for ALPArray {
         self.encoded().nbytes() + self.patches().map(|p| p.nbytes()).unwrap_or(0)
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

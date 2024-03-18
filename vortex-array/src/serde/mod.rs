@@ -5,20 +5,21 @@ use arrow_buffer::buffer::{Buffer, MutableBuffer};
 
 use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
+use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
-pub use crate::serde::dtype::{DTypeReader, DTypeWriter, TimeUnitTag};
+pub use crate::serde::dtype::{DTypeReader, DTypeWriter};
 use crate::serde::ptype::PTypeTag;
 
 mod dtype;
 mod ptype;
 
 pub trait ArraySerde {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()>;
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;
 }
 
 pub trait EncodingSerde {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef>;
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef>;
 }
 
 pub struct ReadCtx<'a> {
@@ -69,27 +70,27 @@ impl<'a> ReadCtx<'a> {
     }
 
     #[inline]
-    pub fn dtype(&mut self) -> io::Result<DType> {
+    pub fn dtype(&mut self) -> VortexResult<DType> {
         DTypeReader::new(self.r).read()
     }
 
-    pub fn ptype(&mut self) -> io::Result<PType> {
+    pub fn ptype(&mut self) -> VortexResult<PType> {
         let typetag = PTypeTag::try_from(self.read_nbytes::<1>()?[0])
             .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))?;
         Ok(typetag.into())
     }
 
     #[inline]
-    pub fn scalar(&mut self) -> io::Result<Scalar> {
+    pub fn scalar(&mut self) -> VortexResult<Scalar> {
         ScalarReader::new(self).read()
     }
 
-    pub fn read_optional_slice(&mut self) -> io::Result<Option<Vec<u8>>> {
+    pub fn read_optional_slice(&mut self) -> VortexResult<Option<Vec<u8>>> {
         let is_present = self.read_option_tag()?;
         is_present.then(|| self.read_slice()).transpose()
     }
 
-    pub fn read_slice(&mut self) -> io::Result<Vec<u8>> {
+    pub fn read_slice(&mut self) -> VortexResult<Vec<u8>> {
         let len = self.read_usize()?;
         let mut data = Vec::<u8>::with_capacity(len);
         self.r.take(len as u64).read_to_end(&mut data)?;
@@ -99,7 +100,7 @@ impl<'a> ReadCtx<'a> {
     pub fn read_buffer<F: Fn(usize) -> usize>(
         &mut self,
         byte_len: F,
-    ) -> io::Result<(usize, Buffer)> {
+    ) -> VortexResult<(usize, Buffer)> {
         let logical_len = self.read_usize()?;
         let buffer_len = byte_len(logical_len);
         let mut buffer = MutableBuffer::from_len_zeroed(buffer_len);
@@ -107,25 +108,25 @@ impl<'a> ReadCtx<'a> {
         Ok((logical_len, buffer.into()))
     }
 
-    pub fn read_nbytes<const N: usize>(&mut self) -> io::Result<[u8; N]> {
+    pub fn read_nbytes<const N: usize>(&mut self) -> VortexResult<[u8; N]> {
         let mut bytes: [u8; N] = [0; N];
         self.r.read_exact(&mut bytes)?;
         Ok(bytes)
     }
 
-    pub fn read_usize(&mut self) -> io::Result<usize> {
+    pub fn read_usize(&mut self) -> VortexResult<usize> {
         leb128::read::unsigned(self.r)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse leb128 usize".into()))
             .map(|u| u as usize)
     }
 
-    pub fn read_option_tag(&mut self) -> io::Result<bool> {
+    pub fn read_option_tag(&mut self) -> VortexResult<bool> {
         let mut tag = [0; 1];
         self.r.read_exact(&mut tag)?;
         Ok(tag[0] == 0x01)
     }
 
-    pub fn read_optional_array(&mut self) -> io::Result<Option<ArrayRef>> {
+    pub fn read_optional_array(&mut self) -> VortexResult<Option<ArrayRef>> {
         if self.read_option_tag()? {
             self.read().map(Some)
         } else {
@@ -133,7 +134,7 @@ impl<'a> ReadCtx<'a> {
         }
     }
 
-    pub fn read(&mut self) -> io::Result<ArrayRef> {
+    pub fn read(&mut self) -> VortexResult<ArrayRef> {
         let encoding_id = self.read_usize()?;
         if let Some(serde) = ENCODINGS
             .iter()
@@ -143,7 +144,9 @@ impl<'a> ReadCtx<'a> {
         {
             serde.read(self)
         } else {
-            Err(io::Error::new(ErrorKind::InvalidData, "unknown encoding"))
+            Err(VortexError::InvalidArgument(
+                "Failed to recognize encoding ID".into(),
+            ))
         }
     }
 }
@@ -162,32 +165,34 @@ impl<'a> WriteCtx<'a> {
         }
     }
 
-    pub fn dtype(&mut self, dtype: &DType) -> io::Result<()> {
+    pub fn dtype(&mut self, dtype: &DType) -> VortexResult<()> {
         DTypeWriter::new(self).write(dtype)
     }
 
-    pub fn ptype(&mut self, ptype: PType) -> io::Result<()> {
+    pub fn ptype(&mut self, ptype: PType) -> VortexResult<()> {
         self.write_fixed_slice([PTypeTag::from(ptype).into()])
     }
 
-    pub fn scalar(&mut self, scalar: &Scalar) -> io::Result<()> {
+    pub fn scalar(&mut self, scalar: &Scalar) -> VortexResult<()> {
         ScalarWriter::new(self).write(scalar)
     }
 
-    pub fn write_usize(&mut self, u: usize) -> io::Result<()> {
-        leb128::write::unsigned(self.w, u as u64).map(|_| ())
+    pub fn write_usize(&mut self, u: usize) -> VortexResult<()> {
+        leb128::write::unsigned(self.w, u as u64)
+            .map_err(|_| VortexError::InvalidArgument("Failed to write leb128 usize".into()))
+            .map(|_| ())
     }
 
-    pub fn write_fixed_slice<const N: usize>(&mut self, slice: [u8; N]) -> io::Result<()> {
-        self.w.write_all(&slice)
+    pub fn write_fixed_slice<const N: usize>(&mut self, slice: [u8; N]) -> VortexResult<()> {
+        self.w.write_all(&slice).map_err(|e| e.into())
     }
 
-    pub fn write_slice(&mut self, slice: &[u8]) -> io::Result<()> {
+    pub fn write_slice(&mut self, slice: &[u8]) -> VortexResult<()> {
         self.write_usize(slice.len())?;
-        self.w.write_all(slice)
+        self.w.write_all(slice).map_err(|e| e.into())
     }
 
-    pub fn write_optional_slice(&mut self, slice: Option<&[u8]>) -> io::Result<()> {
+    pub fn write_optional_slice(&mut self, slice: Option<&[u8]>) -> VortexResult<()> {
         self.write_option_tag(slice.is_some())?;
         if let Some(s) = slice {
             self.write_slice(s)
@@ -196,16 +201,18 @@ impl<'a> WriteCtx<'a> {
         }
     }
 
-    pub fn write_buffer(&mut self, logical_len: usize, buf: &Buffer) -> io::Result<()> {
+    pub fn write_buffer(&mut self, logical_len: usize, buf: &Buffer) -> VortexResult<()> {
         self.write_usize(logical_len)?;
-        self.w.write_all(buf.as_slice())
+        self.w.write_all(buf.as_slice()).map_err(|e| e.into())
     }
 
-    pub fn write_option_tag(&mut self, present: bool) -> io::Result<()> {
-        self.w.write_all(&[if present { 0x01 } else { 0x00 }])
+    pub fn write_option_tag(&mut self, present: bool) -> VortexResult<()> {
+        self.w
+            .write_all(&[if present { 0x01 } else { 0x00 }])
+            .map_err(|e| e.into())
     }
 
-    pub fn write_optional_array(&mut self, array: Option<&dyn Array>) -> io::Result<()> {
+    pub fn write_optional_array(&mut self, array: Option<&dyn Array>) -> VortexResult<()> {
         self.write_option_tag(array.is_some())?;
         if let Some(array) = array {
             self.write(array)
@@ -214,25 +221,28 @@ impl<'a> WriteCtx<'a> {
         }
     }
 
-    pub fn write(&mut self, array: &dyn Array) -> io::Result<()> {
+    pub fn write(&mut self, array: &dyn Array) -> VortexResult<()> {
         let encoding_id = self
             .available_encodings
             .iter()
             .position(|e| e.name() == array.encoding().id().name())
             .ok_or(io::Error::new(ErrorKind::InvalidInput, "unknown encoding"))?;
         self.write_usize(encoding_id)?;
-        array.serde().write(self)
+        array.serde().map(|s| s.write(self)).unwrap_or_else(|| {
+            Err(VortexError::InvalidArgument(
+                format!("Serialization not supported for {}", array.encoding().id()).into(),
+            ))
+        })
     }
 }
 
 #[cfg(test)]
 pub mod test {
-    use std::io;
-
     use crate::array::{Array, ArrayRef};
+    use crate::error::VortexResult;
     use crate::serde::{ReadCtx, WriteCtx};
 
-    pub fn roundtrip_array(array: &dyn Array) -> io::Result<ArrayRef> {
+    pub fn roundtrip_array(array: &dyn Array) -> VortexResult<ArrayRef> {
         let mut buf = Vec::<u8>::new();
         let mut write_ctx = WriteCtx::new(&mut buf);
         write_ctx.write(array)?;

@@ -1,12 +1,6 @@
 use std::any::Any;
-use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow_array::array::{make_array, Array as ArrowArray};
-use arrow_array::cast::AsArray;
-use arrow_array::types::UInt8Type;
-use arrow_buffer::buffer::NullBuffer;
-use arrow_data::ArrayData;
 use linkme::distributed_slice;
 use num_traits::{FromPrimitive, Unsigned};
 
@@ -15,11 +9,11 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::values_iter::{VarBinIter, VarBinPrimitiveIter};
 use crate::array::{
-    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef, ENCODINGS,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
+    ENCODINGS,
 };
-use crate::arrow::CombineChunks;
 use crate::compress::EncodingCompression;
+use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, IntWidth, Nullability, Signedness};
 use crate::error::{VortexError, VortexResult};
@@ -212,8 +206,9 @@ impl VarBinArray {
         let start = scalar_at(self.offsets(), index)?.try_into()?;
         let end = scalar_at(self.offsets(), index + 1)?.try_into()?;
         let sliced = self.bytes().slice(start, end)?;
-        let arr_ref = sliced.iter_arrow().combine_chunks();
-        Ok(arr_ref.as_primitive::<UInt8Type>().values().to_vec())
+        Ok(flatten_primitive(sliced.as_ref())?
+            .typed_data::<u8>()
+            .to_vec())
     }
 }
 
@@ -253,29 +248,6 @@ impl Array for VarBinArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let offsets_data = self.offsets.iter_arrow().combine_chunks().into_data();
-        let bytes_data = self.bytes.iter_arrow().combine_chunks().into_data();
-
-        let data = ArrayData::builder(self.dtype.clone().into())
-            .len(self.len())
-            .nulls(self.validity().map(|v| {
-                NullBuffer::new(
-                    v.iter_arrow()
-                        .combine_chunks()
-                        .as_boolean()
-                        .values()
-                        .clone(),
-                )
-            }))
-            .add_buffer(offsets_data.buffers()[0].to_owned())
-            .add_buffer(bytes_data.buffers()[0].to_owned())
-            .build()
-            .unwrap();
-
-        Box::new(iter::once(make_array(data)))
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -301,8 +273,8 @@ impl Array for VarBinArray {
         self.bytes.nbytes() + self.offsets.nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 
@@ -394,13 +366,9 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
 
 #[cfg(test)]
 mod test {
-    use arrow_array::array::GenericStringArray as ArrowStringArray;
-    use arrow_array::cast::AsArray;
-
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;
     use crate::array::Array;
-    use crate::arrow::CombineChunks;
     use crate::compute::scalar_at::scalar_at;
     use crate::dtype::{DType, Nullability};
 
@@ -437,21 +405,6 @@ mod test {
         assert_eq!(
             scalar_at(binary_arr.as_ref(), 0),
             Ok("hello world this is a long string".into())
-        );
-    }
-
-    #[test]
-    pub fn iter() {
-        let binary_array = binary_array();
-        assert_eq!(
-            binary_array
-                .iter_arrow()
-                .combine_chunks()
-                .as_string::<i32>(),
-            &ArrowStringArray::<i32>::from(vec![
-                "hello world",
-                "hello world this is a long string",
-            ])
         );
     }
 }

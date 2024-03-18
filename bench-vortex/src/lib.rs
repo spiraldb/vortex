@@ -56,6 +56,15 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
     ]
 }
 
+pub fn compress_ctx() -> CompressCtx {
+    let cfg = CompressConfig::new(
+        HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
+        HashSet::default(),
+    );
+    info!("Compression config {cfg:?}");
+    CompressCtx::new(Arc::new(cfg))
+}
+
 pub fn download_taxi_data() -> PathBuf {
     let download_path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("data/yellow-tripdata-2023-11.parquet");
@@ -92,14 +101,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         .build()
         .unwrap();
 
-    // let array = ArrayRef::try_from((&mut reader) as &mut dyn RecordBatchReader).unwrap();
-    let cfg = CompressConfig::new(
-        HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
-        HashSet::default(),
-    );
-    info!("Compression config {cfg:?}");
-    let ctx = CompressCtx::new(Arc::new(cfg));
-
+    let ctx = compress_ctx();
     let schema = reader.schema();
     let mut uncompressed_size = 0;
     let chunks = reader
@@ -140,10 +142,18 @@ pub fn compress_taxi_data() -> ArrayRef {
 
 #[cfg(test)]
 mod test {
+    use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+    use std::fs::File;
+    use std::ops::Deref;
+    use std::sync::Arc;
+    use vortex::array::ArrayRef;
+    use vortex::compute::as_arrow::as_arrow;
+    use vortex::encode::FromArrow;
 
-    use crate::compress_taxi_data;
+    use crate::{compress_ctx, compress_taxi_data, download_taxi_data};
 
     #[allow(dead_code)]
     fn setup_logger(level: LevelFilter) {
@@ -161,5 +171,40 @@ mod test {
     fn compression_ratio() {
         setup_logger(LevelFilter::Warn);
         _ = compress_taxi_data();
+    }
+
+    #[ignore]
+    #[test]
+    fn round_trip_arrow() {
+        let file = File::open(download_taxi_data()).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let reader = builder.with_limit(1).build().unwrap();
+
+        for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
+            let struct_arrow: ArrowStructArray = record_batch.into();
+            let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+            let vortex_as_arrow = as_arrow(vortex_array.as_ref()).unwrap();
+            assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
+        }
+    }
+
+    #[ignore]
+    #[test]
+    fn round_trip_arrow_compressed() {
+        let file = File::open(download_taxi_data()).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let reader = builder.with_limit(1).build().unwrap();
+
+        let ctx = compress_ctx();
+        for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
+            let struct_arrow: ArrowStructArray = record_batch.into();
+            let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+
+            let compressed = ctx.clone().compress(vortex_array.as_ref(), None).unwrap();
+            let compressed_as_arrow = as_arrow(compressed.as_ref()).unwrap();
+            assert_eq!(compressed_as_arrow.deref(), arrow_array.deref());
+        }
     }
 }

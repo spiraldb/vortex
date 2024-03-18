@@ -1,7 +1,6 @@
 use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
 
-use arrow_array::array::ArrayRef as ArrowArrayRef;
 use linkme::distributed_slice;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
@@ -33,7 +32,6 @@ pub mod typed;
 pub mod varbin;
 pub mod varbinview;
 
-pub type ArrowIterator = dyn Iterator<Item = ArrowArrayRef>;
 pub type ArrayRef = Box<dyn Array>;
 
 /// An Enc Array is the base object representing all arrays in enc.
@@ -61,8 +59,6 @@ pub trait Array:
     fn dtype(&self) -> &DType;
     /// Get statistics for the array
     fn stats(&self) -> Stats;
-    /// Produce arrow batches from the encoding
-    fn iter_arrow(&self) -> Box<ArrowIterator>;
     /// Limit array to start..stop range
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef>;
     /// Encoding kind of the array
@@ -70,7 +66,9 @@ pub trait Array:
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
 
-    fn serde(&self) -> &dyn ArraySerde;
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        None
+    }
 }
 
 dyn_clone::clone_trait_object!(Array);

@@ -206,7 +206,9 @@ impl TryFrom<&DType> for PType {
                 FloatWidth::_32 => Ok(PType::F32),
                 FloatWidth::_64 => Ok(PType::F64),
             },
-            _ => Err(VortexError::InvalidDType(value.clone())),
+            _ => Err(VortexError::InvalidArgument(
+                format!("Cannot convert DType {} into PType", value.clone()).into(),
+            )),
         }
     }
 }

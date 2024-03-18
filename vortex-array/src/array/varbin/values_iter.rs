@@ -1,10 +1,8 @@
 use crate::array::primitive::PrimitiveArray;
 use crate::array::Array;
-use crate::arrow::CombineChunks;
+use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::match_each_native_ptype;
-use arrow_array::cast::AsArray;
-use arrow_array::types::UInt8Type;
 use num_traits::AsPrimitive;
 
 #[derive(Debug)]
@@ -84,16 +82,12 @@ impl<'a> Iterator for VarBinIter<'a> {
             .try_into()
             .unwrap();
         let slice_bytes = self.bytes.slice(self.last_offset, next_offset).unwrap();
+        let slice_bytes = flatten_primitive(slice_bytes.as_ref())
+            .unwrap()
+            .typed_data::<u8>()
+            .to_vec();
         self.last_offset = next_offset;
         self.idx += 1;
-        // TODO(robert): iter as primitive vs arrow
-        Some(
-            slice_bytes
-                .iter_arrow()
-                .combine_chunks()
-                .as_primitive::<UInt8Type>()
-                .values()
-                .to_vec(),
-        )
+        Some(slice_bytes)
     }
 }

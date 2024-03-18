@@ -4,10 +4,11 @@ use std::io::ErrorKind;
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::dtype::DType;
+use crate::error::VortexResult;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for SparseArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.write_usize(self.len())?;
         // TODO(robert): Rewrite indices and don't store offset
         ctx.write_usize(self.indices_offset())?;
@@ -17,7 +18,7 @@ impl ArraySerde for SparseArray {
 }
 
 impl EncodingSerde for SparseEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let len = ctx.read_usize()?;
         let offset = ctx.read_usize()?;
         let indices = ctx.with_schema(&DType::IDX).read()?;

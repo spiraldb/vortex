@@ -2,8 +2,8 @@ use std::fmt::{Debug, Display, Formatter};
 
 pub use binary::*;
 pub use bool::*;
+pub use composite::*;
 pub use list::*;
-pub use localtime::*;
 pub use null::*;
 pub use primitive::*;
 pub use serde::*;
@@ -16,8 +16,8 @@ use crate::ptype::{NativePType, PType};
 
 mod binary;
 mod bool;
+mod composite;
 mod list;
-mod localtime;
 mod null;
 mod primitive;
 mod serde;
@@ -29,11 +29,11 @@ pub enum Scalar {
     Binary(BinaryScalar),
     Bool(BoolScalar),
     List(ListScalar),
-    LocalTime(LocalTimeScalar),
     Null(NullScalar),
     Primitive(PrimitiveScalar),
     Struct(StructScalar),
     Utf8(Utf8Scalar),
+    Composite(CompositeScalar),
 }
 
 macro_rules! impls_for_scalars {
@@ -49,11 +49,11 @@ macro_rules! impls_for_scalars {
 impls_for_scalars!(Binary, BinaryScalar);
 impls_for_scalars!(Bool, BoolScalar);
 impls_for_scalars!(List, ListScalar);
-impls_for_scalars!(LocalTime, LocalTimeScalar);
 impls_for_scalars!(Null, NullScalar);
 impls_for_scalars!(Primitive, PrimitiveScalar);
 impls_for_scalars!(Struct, StructScalar);
 impls_for_scalars!(Utf8, Utf8Scalar);
+impls_for_scalars!(Composite, CompositeScalar);
 
 macro_rules! match_each_scalar {
     ($self:expr, | $_:tt $scalar:ident | $($body:tt)*) => ({
@@ -62,11 +62,11 @@ macro_rules! match_each_scalar {
             Scalar::Binary(s) => __with_scalar__! { s },
             Scalar::Bool(s) => __with_scalar__! { s },
             Scalar::List(s) => __with_scalar__! { s },
-            Scalar::LocalTime(s) => __with_scalar__! { s },
             Scalar::Null(s) => __with_scalar__! { s },
             Scalar::Primitive(s) => __with_scalar__! { s },
             Scalar::Struct(s) => __with_scalar__! { s },
             Scalar::Utf8(s) => __with_scalar__! { s },
+            Scalar::Composite(s) => __with_scalar__! { s },
         }
     })
 }
@@ -121,15 +121,9 @@ impl Scalar {
             },
             DType::Utf8(_) => Utf8Scalar::new(None).into(),
             DType::Binary(_) => BinaryScalar::new(None).into(),
-            DType::LocalTime(u, _) => {
-                LocalTimeScalar::new(PrimitiveScalar::none(PType::U64), *u).into()
-            }
-            DType::LocalDate(_) => unimplemented!("LocalDateScalar"),
-            DType::Instant(_, _) => unimplemented!("InstantScalar"),
-            DType::ZonedDateTime(_, _) => unimplemented!("ZonedDateTimeScalar"),
             DType::Struct(_, _) => StructScalar::new(dtype.clone(), vec![]).into(),
             DType::List(_, _) => ListScalar::new(dtype.clone(), None).into(),
-            DType::Map(_, _, _) => unimplemented!("MapScalar"),
+            DType::Composite(_, _, _) => unimplemented!("CompositeScalar"),
         }
     }
 }
@@ -178,6 +172,6 @@ mod test {
 
     #[test]
     fn size_of() {
-        assert_eq!(mem::size_of::<Scalar>(), 80);
+        assert_eq!(mem::size_of::<Scalar>(), 88);
     }
 }
