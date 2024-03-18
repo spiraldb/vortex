@@ -5,21 +5,21 @@
 [![Documentation](https://docs.rs/vortex-rs/badge.svg)](https://docs.rs/vortex-array)
 [![Rust](https://img.shields.io/badge/rust-1.76.0%2B-blue.svg?maxAge=3600)](https://github.com/fulcrum-so/vortex)
 
-Vortex is an Arrow-compatible toolkit for working with compressed array data. We are using Vortex to develop a
-next-generation n-dimensional file format called Spiral.
+Vortex is an Apache Arrow-compatible toolkit for working with compressed array data. We are using Vortex to develop a
+next-generation file format for multidimensional arrays called Spiral.
 
 > [!CAUTION]
-> This library is very much a work in progress!
+> This library is very much a work in progress! 
 
 The major components of Vortex are (will be!):
 
 * **Logical Types** - a schema definition that makes no assertions about physical layout.
-* **Encodings** - a pluggable set of physical layouts called encodings. Vortex ships with several state-of-the-art
-  lightweight codecs that have the potential to support GPU decompression.
-* **Compression** - recursive compression based on stratified sampling.
+* **Encodings** - a pluggable set of physical layouts. Vortex ships with several state-of-the-art lightweight 
+compression codecs that have the potential to support GPU decompression.
+* **Compression** - recursive compression based on stratified samples of the input.
 * **Compute** - basic compute kernels that can operate over compressed data. Note that Vortex does not intend to become
   a full-fledged compute engine, but rather to provide the ability to implement basic compute operations as may be
-  required for efficient scanning.
+  required for efficient scanning & pushdown operations.
 * **Statistics** - each array carries around lazily computed summary statistics, optionally populated at read-time.
   These are available to compute kernels as well as to the compressor.
 * **Serde** - zero-copy serialization. Designed to work well both on-disk and over-the-wire.
@@ -28,11 +28,12 @@ The major components of Vortex are (will be!):
 
 One of the core principles in Vortex is separation of the logical from the physical.
 
-A Vortex array is defined by a logical data type as well as a physical encoding. Vortex ships with several built-in
-encodings, as well as several extension encodings.
+A Vortex array is defined by a logical data type (i.e., the type of scalar elements) as well as a physical encoding 
+(the type of the array itself). Vortex ships with several built-in encodings, as well as several extension encodings.
 
-The built-in encodings are designed to model the Apache Arrow in-memory format, enabling us to construct Vortex arrays
-with zero-copy from Arrow arrays.
+The built-in encodings are primarily designed to model the Apache Arrow in-memory format, enabling us to construct Vortex
+arrays with zero-copy from Arrow arrays. There are also several built-in encodings (e.g., `sparse` and `chunked`) that
+are useful building blocks for other encodings.
 The included extension encodings are mostly designed to model compressed in-memory arrays, such as run-length or
 dictionary encoding.
 
@@ -51,13 +52,13 @@ The Vortex type-system is still in flux. The current set of logical types is:
 * UTF8
 * List
 * Struct
-* Date/Time/DateTime/Duration: TODO
+* Date/Time/DateTime/Duration: TODO (in-progress, currently partially supported)
 * FixedList: TODO
 * Union: TODO
 
 ### Canonical/Flat Encodings
 
-Vortex includes a base set of encodings that are designed to be zero-copy with Apache Arrow. These are the canonical
+Vortex includes a base set of "flat" encodings that are designed to be zero-copy with Apache Arrow. These are the canonical
 representations of each of the logical data types. The canonical encodings currently supported are:
 
 * Null
@@ -86,25 +87,24 @@ compression. These are:
 
 ### Compression
 
-Vortex compression is built based on
-the [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
+Vortex's compression scheme is based on the [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
 
-Roughly, for each chunk of data a sample is taken and a set of encodings are attempted. The best performing encoding
+Roughly, for each chunk of data a sample is taken and a set of encodings are attempted. The best-performing encoding
 is then chosen to encode the entire chunk. This sounds like it would be very expensive, but given basic statistics
 about a chunk, it is possible to cheaply rule out many encodings and ensure the search space does not explode in size.
 
 ### Compute
 
-Vortex provides the ability for each encoding to provide override the implementation of a compute function to avoid
+Vortex provides the ability for each encoding to override the implementation of a compute function to avoid
 decompressing where possible. For example, filtering a dictionary-encoded UTF8 array can be more cheaply performed by
 filtering the dictionary first.
 
 Note that Vortex does not intend to become a full-fledged compute engine, but rather to provide the ability to
-implement basic compute operations as may be required for efficient scanning.
+implement basic compute operations as may be required for efficient scanning & operation pushdown.
 
 ### Statistics
 
-Vortex arrays carry lazily computed summary statistics. Unlike other array libraries, these statistics can be populated
+Vortex arrays carry lazily-computed summary statistics. Unlike other array libraries, these statistics can be populated
 from disk formats such as Parquet and preserved all the way into a compute engine. Statistics are available to compute
 kernels as well as to the compressor.
 
@@ -136,12 +136,12 @@ with zero-copy. And a Vortex array constructed from an Arrow array can be conver
 Vortex explicitly separates logical types from physical encodings, distinguishing it from Arrow. This allows
 Vortex to model more complex arrays while still exposing a logical interface. For example, Vortex can model a UTF8
 `ChunkedArray` where the first chunk is run-length encoded and the second chunk is dictionary encoded.
-In Arrow, `RunLengthArray` and `DictionaryArray` are separate logical types, and so cannot be combined in this way.
+In Arrow, `RunLengthArray` and `DictionaryArray` are separate incompatible types, and so cannot be combined in this way.
 
 ## Contributing
 
-While we hope to turn Vortex into a community project, its rapid rate of change makes taking contributions without prior
-discussion infeasible. If you are interested in contributing, please open an issue to discuss your ideas.
+While we hope to turn Vortex into a community project, its current rapid rate of change makes taking contributions 
+without prior discussion infeasible. If you are interested in contributing, please open an issue to discuss your ideas.
 
 ## License
 
