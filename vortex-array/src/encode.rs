@@ -29,6 +29,7 @@ use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
 use crate::arrow::convert::TryIntoDType;
+use crate::dtype::DType;
 use crate::ptype::PType;
 use crate::scalar::NullScalar;
 
@@ -74,10 +75,15 @@ impl<T: ArrowPrimitiveType> FromArrow<&ArrowPrimitiveArray<T>> for ArrayRef {
 
 impl<T: ByteArrayType> FromArrow<&GenericByteArray<T>> for ArrayRef {
     fn from_arrow(value: &GenericByteArray<T>, nullable: bool) -> Self {
+        let dtype = match T::DATA_TYPE {
+            DataType::Binary | DataType::LargeBinary => DType::Binary(nullable.into()),
+            DataType::Utf8 | DataType::LargeUtf8 => DType::Utf8(nullable.into()),
+            _ => panic!("Invalid data type for ByteArray"),
+        };
         VarBinArray::new(
             value.offsets().into(),
             value.values().into(),
-            T::DATA_TYPE.try_into_dtype(value.is_nullable()).unwrap(),
+            dtype,
             nulls(value.nulls(), nullable, value.len()),
         )
         .boxed()

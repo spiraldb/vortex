@@ -88,76 +88,76 @@ impl TryFrom<&DataType> for PType {
         }
     }
 }
-
-pub trait TryIntoDType {
-    fn try_into_dtype(self, is_nullable: bool) -> VortexResult<DType>;
-}
-
-impl TryIntoDType for &DataType {
-    fn try_into_dtype(self, is_nullable: bool) -> VortexResult<DType> {
-        use crate::dtype::Signedness::*;
-
-        let nullability: Nullability = is_nullable.into();
-
-        match self {
-            DataType::Null => Ok(Null),
-            DataType::Boolean => Ok(Bool(nullability)),
-            DataType::Int8 => Ok(Int(IntWidth::_8, Signed, nullability)),
-            DataType::Int16 => Ok(Int(IntWidth::_16, Signed, nullability)),
-            DataType::Int32 => Ok(Int(IntWidth::_32, Signed, nullability)),
-            DataType::Int64 => Ok(Int(IntWidth::_64, Signed, nullability)),
-            DataType::UInt8 => Ok(Int(IntWidth::_8, Unsigned, nullability)),
-            DataType::UInt16 => Ok(Int(IntWidth::_16, Unsigned, nullability)),
-            DataType::UInt32 => Ok(Int(IntWidth::_32, Unsigned, nullability)),
-            DataType::UInt64 => Ok(Int(IntWidth::_64, Unsigned, nullability)),
-            DataType::Float16 => Ok(Float(FloatWidth::_16, nullability)),
-            DataType::Float32 => Ok(Float(FloatWidth::_32, nullability)),
-            DataType::Float64 => Ok(Float(FloatWidth::_64, nullability)),
-            DataType::Utf8 | DataType::LargeUtf8 => Ok(Utf8(nullability)),
-            DataType::Binary | DataType::LargeBinary | DataType::FixedSizeBinary(_) => {
-                Ok(Binary(nullability))
-            }
-            // TODO(robert): what to do about this timezone?
-            DataType::Timestamp(u, _) => Ok(zoneddatetime(u.into(), nullability)),
-            DataType::Date32 => Ok(localdate(IntWidth::_32, nullability)),
-            DataType::Date64 => Ok(localdate(IntWidth::_64, nullability)),
-            DataType::Time32(u) => Ok(localtime(u.into(), IntWidth::_32, nullability)),
-            DataType::Time64(u) => Ok(localtime(u.into(), IntWidth::_64, nullability)),
-            DataType::List(e) | DataType::FixedSizeList(e, _) | DataType::LargeList(e) => {
-                Ok(List(Box::new(e.try_into()?), nullability))
-            }
-            DataType::Struct(f) => Ok(Struct(
-                f.iter().map(|f| Arc::new(f.name().clone())).collect(),
-                f.iter()
-                    .map(|f| f.data_type().try_into_dtype(f.is_nullable()))
-                    .collect::<VortexResult<Vec<DType>>>()?,
-            )),
-            DataType::Dictionary(_, v) => v.as_ref().try_into_dtype(is_nullable),
-            DataType::Decimal128(p, s) | DataType::Decimal256(p, s) => {
-                Ok(Decimal(*p, *s, nullability))
-            }
-            DataType::Map(e, _) => match e.data_type() {
-                DataType::Struct(f) => Ok(map(
-                    f.first().unwrap().try_into()?,
-                    f.get(1).unwrap().try_into()?,
-                )),
-                _ => Err(VortexError::InvalidArrowDataType(e.data_type().clone())),
-            },
-            DataType::RunEndEncoded(_, v) => v.try_into(),
-            DataType::Duration(_) | DataType::Interval(_) | DataType::Union(_, _) => {
-                Err(VortexError::InvalidArrowDataType(self.clone()))
-            }
-        }
-    }
-}
-
-impl TryFrom<&FieldRef> for DType {
-    type Error = VortexError;
-
-    fn try_from(value: &FieldRef) -> VortexResult<Self> {
-        value.data_type().try_into_dtype(value.is_nullable())
-    }
-}
+//
+// pub trait TryIntoDType {
+//     fn try_into_dtype(self, is_nullable: bool) -> VortexResult<DType>;
+// }
+//
+// impl TryIntoDType for &DataType {
+//     fn try_into_dtype(self, is_nullable: bool) -> VortexResult<DType> {
+//         use crate::dtype::Signedness::*;
+//
+//         let nullability: Nullability = is_nullable.into();
+//
+//         match self {
+//             DataType::Null => Ok(Null),
+//             DataType::Boolean => Ok(Bool(nullability)),
+//             DataType::Int8 => Ok(Int(IntWidth::_8, Signed, nullability)),
+//             DataType::Int16 => Ok(Int(IntWidth::_16, Signed, nullability)),
+//             DataType::Int32 => Ok(Int(IntWidth::_32, Signed, nullability)),
+//             DataType::Int64 => Ok(Int(IntWidth::_64, Signed, nullability)),
+//             DataType::UInt8 => Ok(Int(IntWidth::_8, Unsigned, nullability)),
+//             DataType::UInt16 => Ok(Int(IntWidth::_16, Unsigned, nullability)),
+//             DataType::UInt32 => Ok(Int(IntWidth::_32, Unsigned, nullability)),
+//             DataType::UInt64 => Ok(Int(IntWidth::_64, Unsigned, nullability)),
+//             DataType::Float16 => Ok(Float(FloatWidth::_16, nullability)),
+//             DataType::Float32 => Ok(Float(FloatWidth::_32, nullability)),
+//             DataType::Float64 => Ok(Float(FloatWidth::_64, nullability)),
+//             DataType::Utf8 | DataType::LargeUtf8 => Ok(Utf8(nullability)),
+//             DataType::Binary | DataType::LargeBinary | DataType::FixedSizeBinary(_) => {
+//                 Ok(Binary(nullability))
+//             }
+//             // TODO(robert): what to do about this timezone?
+//             DataType::Timestamp(u, _) => Ok(zoneddatetime(u.into(), nullability)),
+//             DataType::Date32 => Ok(localdate(IntWidth::_32, nullability)),
+//             DataType::Date64 => Ok(localdate(IntWidth::_64, nullability)),
+//             DataType::Time32(u) => Ok(localtime(u.into(), IntWidth::_32, nullability)),
+//             DataType::Time64(u) => Ok(localtime(u.into(), IntWidth::_64, nullability)),
+//             DataType::List(e) | DataType::FixedSizeList(e, _) | DataType::LargeList(e) => {
+//                 Ok(List(Box::new(e.try_into()?), nullability))
+//             }
+//             DataType::Struct(f) => Ok(Struct(
+//                 f.iter().map(|f| Arc::new(f.name().clone())).collect(),
+//                 f.iter()
+//                     .map(|f| f.data_type().try_into_dtype(f.is_nullable()))
+//                     .collect::<VortexResult<Vec<DType>>>()?,
+//             )),
+//             DataType::Dictionary(_, v) => v.as_ref().try_into_dtype(is_nullable),
+//             DataType::Decimal128(p, s) | DataType::Decimal256(p, s) => {
+//                 Ok(Decimal(*p, *s, nullability))
+//             }
+//             DataType::Map(e, _) => match e.data_type() {
+//                 DataType::Struct(f) => Ok(map(
+//                     f.first().unwrap().try_into()?,
+//                     f.get(1).unwrap().try_into()?,
+//                 )),
+//                 _ => Err(VortexError::InvalidArrowDataType(e.data_type().clone())),
+//             },
+//             DataType::RunEndEncoded(_, v) => v.try_into(),
+//             DataType::Duration(_) | DataType::Interval(_) | DataType::Union(_, _) => {
+//                 Err(VortexError::InvalidArrowDataType(self.clone()))
+//             }
+//         }
+//     }
+// }
+//
+// impl TryFrom<&FieldRef> for DType {
+//     type Error = VortexError;
+//
+//     fn try_from(value: &FieldRef) -> VortexResult<Self> {
+//         value.data_type().try_into_dtype(value.is_nullable())
+//     }
+// }
 
 impl From<&ArrowTimeUnit> for TimeUnit {
     fn from(value: &ArrowTimeUnit) -> Self {
