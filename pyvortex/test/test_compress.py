@@ -1,5 +1,10 @@
+import os.path
+from pathlib import Path
+
 import numpy as np
 import pyarrow as pa
+import pyarrow.parquet as pq
+import pytest
 import vortex
 
 
@@ -63,3 +68,12 @@ def test_table_encode():
     assert encoded.to_pyarrow().combine_chunks() == pa.StructArray.from_arrays(
         [pa.array([0, 1, 2, 3, 4, 5]), pa.array(["a", "b", "c", "d", "e", "f"])], names=["number", "string"]
     )
+
+
+@pytest.mark.xfail(reason="Not yet implemented")
+def test_taxi():
+    curdir = Path(os.path.dirname(__file__)).parent.parent
+    table = pq.read_table(curdir / "bench-vortex/data/yellow-tripdata-2023-11.parquet")
+    compressed = vortex.compress(vortex.encode(table[:100]))
+    decompressed = compressed.to_pyarrow()
+    assert not table

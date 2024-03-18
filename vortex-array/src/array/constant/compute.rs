@@ -1,7 +1,9 @@
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
+use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
@@ -9,8 +11,13 @@ use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
 use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
+use itertools::Itertools;
 
 impl ArrayCompute for ConstantArray {
+    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
+        Some(self)
+    }
+
     fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
@@ -21,6 +28,22 @@ impl ArrayCompute for ConstantArray {
 
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
+    }
+}
+
+impl AsContiguousFn for ConstantArray {
+    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+        let chunks = arrays.iter().map(|a| a.as_constant().clone()).collect_vec();
+        if chunks.iter().map(|c| c.scalar()).all_equal() {
+            Ok(ConstantArray::new(
+                chunks.first().unwrap().scalar().clone(),
+                chunks.iter().map(|c| c.len()).sum(),
+            )
+            .boxed())
+        } else {
+            // TODO(ngates): we need to flatten the constant arrays and then concatenate them
+            Err("Cannot concatenate constant arrays with differing scalars".into())
+        }
     }
 }
 
