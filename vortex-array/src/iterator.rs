@@ -1,10 +1,11 @@
 use crate::accessor::ArrayAccessor;
+use std::marker::PhantomData;
 
 pub struct ArrayIter<A: ArrayAccessor<T>, T> {
     array: A,
     current: usize,
     end: usize,
-    phantom: std::marker::PhantomData<T>,
+    phantom: PhantomData<T>,
 }
 
 impl<A: ArrayAccessor<T>, T> ArrayIter<A, T> {
@@ -14,7 +15,7 @@ impl<A: ArrayAccessor<T>, T> ArrayIter<A, T> {
             array,
             current: 0,
             end: len,
-            phantom: std::marker::PhantomData,
+            phantom: PhantomData,
         }
     }
 }

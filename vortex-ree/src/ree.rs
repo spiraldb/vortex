@@ -52,8 +52,7 @@ impl REEArray {
             return Err(VortexError::IndexArrayMustBeStrictSorted);
         }
 
-        // see https://github.com/fulcrum-so/spiral/issues/873
-        // let length = run_ends_logical_length(&ends);
+        // TODO(ngates): https://github.com/fulcrum-so/spiral/issues/873
         Ok(Self {
             ends,
             values,
