@@ -6,7 +6,6 @@ use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
 use crate::error::{VortexError, VortexResult};
-use crate::ptype::PType;
 
 pub trait FlattenFn {
     fn flatten(&self) -> VortexResult<FlattenedArray>;
@@ -38,15 +37,6 @@ impl FlattenedArray {
 /// Flatten an array into one of the flat encodings.
 /// This does not guarantee that the array is recursively flattened.
 pub fn flatten(array: &dyn Array) -> VortexResult<FlattenedArray> {
-    if let Some(f) = array.flatten_bool() {
-        return f.flatten_bool().map(FlattenedArray::Bool);
-    }
-    if let Some(f) = array.flatten_primitive() {
-        return f.flatten_primitive().map(FlattenedArray::Primitive);
-    }
-    if let Some(f) = array.flatten_struct() {
-        return f.flatten_struct().map(FlattenedArray::Struct);
-    }
     array.flatten().map(|f| f.flatten()).unwrap_or_else(|| {
         Err(VortexError::NotImplemented(
             "flatten",
@@ -55,51 +45,32 @@ pub fn flatten(array: &dyn Array) -> VortexResult<FlattenedArray> {
     })
 }
 
-pub trait FlattenBoolFn {
-    fn flatten_bool(&self) -> VortexResult<BoolArray>;
-}
-
 pub fn flatten_bool(array: &dyn Array) -> VortexResult<BoolArray> {
-    array
-        .flatten_bool()
-        .map(|t| t.flatten_bool())
-        .unwrap_or_else(|| {
-            Err(VortexError::NotImplemented(
-                "flatten_bool",
-                array.encoding().id(),
-            ))
-        })
-}
-
-pub trait FlattenPrimitiveFn {
-    fn flatten_primitive(&self) -> VortexResult<PrimitiveArray>;
+    if let FlattenedArray::Bool(b) = flatten(array)? {
+        Ok(b)
+    } else {
+        Err(VortexError::InvalidArgument(
+            format!("Cannot flatten array {} into bool", array).into(),
+        ))
+    }
 }
 
 pub fn flatten_primitive(array: &dyn Array) -> VortexResult<PrimitiveArray> {
-    PType::try_from(array.dtype())?;
-    array
-        .flatten_primitive()
-        .map(|t| t.flatten_primitive())
-        .unwrap_or_else(|| {
-            Err(VortexError::NotImplemented(
-                "flatten_primitive",
-                array.encoding().id(),
-            ))
-        })
-}
-
-pub trait FlattenStructFn {
-    fn flatten_struct(&self) -> VortexResult<StructArray>;
+    if let FlattenedArray::Primitive(p) = flatten(array)? {
+        Ok(p)
+    } else {
+        Err(VortexError::InvalidArgument(
+            format!("Cannot flatten array {} into primitive", array).into(),
+        ))
+    }
 }
 
 pub fn flatten_struct(array: &dyn Array) -> VortexResult<StructArray> {
-    array
-        .flatten_struct()
-        .map(|t| t.flatten_struct())
-        .unwrap_or_else(|| {
-            Err(VortexError::NotImplemented(
-                "flatten_struct",
-                array.encoding().id(),
-            ))
-        })
+    if let FlattenedArray::Struct(s) = flatten(array)? {
+        Ok(s)
+    } else {
+        Err(VortexError::InvalidArgument(
+            format!("Cannot flatten array {} into struct", array).into(),
+        ))
+    }
 }

@@ -3,7 +3,7 @@ use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::cast::CastFn;
 use crate::compute::fill::FillForwardFn;
-use crate::compute::flatten::FlattenPrimitiveFn;
+use crate::compute::flatten::FlattenFn;
 use crate::compute::patch::PatchFn;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::search_sorted::SearchSortedFn;
@@ -31,7 +31,7 @@ impl ArrayCompute for PrimitiveArray {
         Some(self)
     }
 
-    fn flatten_primitive(&self) -> Option<&dyn FlattenPrimitiveFn> {
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 

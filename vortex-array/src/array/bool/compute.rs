@@ -6,7 +6,7 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef, CloneOptionalArray};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::fill::FillForwardFn;
-use crate::compute::flatten::{flatten_bool, FlattenBoolFn};
+use crate::compute::flatten::{flatten_bool, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
@@ -17,7 +17,7 @@ impl ArrayCompute for BoolArray {
         Some(self)
     }
 
-    fn flatten_bool(&self) -> Option<&dyn FlattenBoolFn> {
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 
@@ -62,9 +62,9 @@ impl AsContiguousFn for BoolArray {
     }
 }
 
-impl FlattenBoolFn for BoolArray {
-    fn flatten_bool(&self) -> VortexResult<BoolArray> {
-        Ok(self.clone())
+impl FlattenFn for BoolArray {
+    fn flatten(&self) -> VortexResult<FlattenedArray> {
+        Ok(FlattenedArray::Bool(self.clone()))
     }
 }
 
