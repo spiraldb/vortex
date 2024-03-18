@@ -264,7 +264,7 @@ mod test {
     fn flatten() {
         let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1i32, 2, 3].into(), None, 10);
         assert_eq!(
-            flatten_primitive(arr.as_ref()).unwrap().typed_data::<u32>(),
+            flatten_primitive(arr.as_ref()).unwrap().typed_data::<i32>(),
             vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]
         );
     }

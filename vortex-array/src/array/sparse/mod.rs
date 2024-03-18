@@ -81,7 +81,7 @@ impl SparseArray {
         flatten_primitive(cast(self.indices(), &PType::U64.into()).unwrap().as_ref())
             .unwrap()
             .typed_data::<u64>()
-            .into_iter()
+            .iter()
             .map(|v| (*v as usize) - self.indices_offset)
             .collect_vec()
     }
