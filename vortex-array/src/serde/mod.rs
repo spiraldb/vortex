@@ -3,11 +3,8 @@ use std::io::{ErrorKind, Read, Write};
 
 use arrow_buffer::buffer::{Buffer, MutableBuffer};
 
-use vortex_schema::{
-    DType, DTypeReader, DTypeWriter, IntWidth, Nullability, SchemaError, Signedness,
-};
+use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-use crate::array::composite::find_extension_id;
 use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
@@ -82,12 +79,7 @@ impl<'a> ReadCtx<'a> {
 
     #[inline]
     pub fn dtype(&mut self) -> VortexResult<DType> {
-        DTypeReader::new(self.r)
-            .read(find_extension_id)
-            .map_err(|e| match e {
-                SchemaError::InvalidArgument(s) => VortexError::InvalidArgument(s),
-                SchemaError::IOError(io_err) => io_err.0.into(),
-            })
+        todo!()
     }
 
     pub fn ptype(&mut self) -> VortexResult<PType> {
@@ -181,11 +173,8 @@ impl<'a> WriteCtx<'a> {
         }
     }
 
-    pub fn dtype(&mut self, dtype: &DType) -> VortexResult<()> {
-        DTypeWriter::new(self.w).write(dtype).map_err(|e| match e {
-            SchemaError::InvalidArgument(s) => VortexError::InvalidArgument(s),
-            SchemaError::IOError(io_err) => io_err.0.into(),
-        })
+    pub fn dtype(&mut self, _dtype: &DType) -> VortexResult<()> {
+        todo!()
     }
 
     pub fn ptype(&mut self, ptype: PType) -> VortexResult<()> {

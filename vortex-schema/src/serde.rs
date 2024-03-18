@@ -1,393 +1,269 @@
-use std::io::{Read, Write};
-use std::sync::Arc;
+use flatbuffers::{FlatBufferBuilder, InvalidFlatbuffer, WIPOffset};
 
-use leb128::read::Error;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use crate::generated::schema::{
+    root_as_dtype, Bool, BoolArgs, Composite, CompositeArgs, Int, IntArgs, List, ListArgs, Null,
+    NullArgs, Struct_, Struct_Args, Type,
+};
+use crate::generated::schema::{Binary, BinaryArgs, Signedness as FbSignedness};
+use crate::generated::schema::{DType as FbDType, DTypeArgs};
+use crate::generated::schema::{Decimal, DecimalArgs, FloatWidth as FbFloatWidth};
+use crate::generated::schema::{Float, FloatArgs, IntWidth as FbIntWidth};
+use crate::generated::schema::{Nullability as FbNullability, Utf8, Utf8Args};
+use crate::{DType, FloatWidth, IntWidth, Nullability, Signedness};
 
-use crate::dtype::DType::*;
-use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness};
-use crate::error::{SchemaError, SchemaResult};
-use crate::CompositeID;
+pub trait FbSerialize<'a> {
+    type OffsetType;
 
-pub struct DTypeReader<'a> {
-    reader: &'a mut dyn Read,
+    fn serialize(&self) -> Vec<u8> {
+        let mut fbb = FlatBufferBuilder::new();
+        let wip_dtype = self.write_to_builder(&mut fbb);
+        fbb.finish(wip_dtype, None);
+        fbb.finished_data().to_vec()
+    }
+
+    fn write_to_builder(&self, fbb: &mut FlatBufferBuilder<'a>) -> WIPOffset<Self::OffsetType>;
 }
 
-impl<'a> DTypeReader<'a> {
-    pub fn new(reader: &'a mut dyn Read) -> Self {
-        Self { reader }
-    }
+pub trait FbDeserialize: Sized {
+    fn deserialize(bytes: &[u8]) -> Self;
+}
 
-    fn read_nbytes<const N: usize>(&mut self) -> SchemaResult<[u8; N]> {
-        let mut bytes: [u8; N] = [0; N];
-        self.reader
-            .read_exact(&mut bytes)
-            .map_err(SchemaError::from)?;
-        Ok(bytes)
-    }
+impl<'a> FbSerialize<'a> for DType {
+    type OffsetType = FbDType<'a>;
 
-    fn read_usize(&mut self) -> SchemaResult<usize> {
-        leb128::read::unsigned(self.reader)
-            .map_err(|e| match e {
-                Error::IoError(io_err) => io_err.into(),
-                Error::Overflow => SchemaError::InvalidArgument("overflow".into()),
-            })
-            .map(|u| u as usize)
-    }
-
-    fn read_slice(&mut self) -> SchemaResult<Vec<u8>> {
-        let len = self.read_usize()?;
-        let mut slice = Vec::with_capacity(len);
-        self.reader
-            .take(len as u64)
-            .read_to_end(&mut slice)
-            .map_err(SchemaError::from)?;
-        Ok(slice)
-    }
-
-    pub fn read(&mut self, find_extension: fn(&str) -> Option<CompositeID>) -> SchemaResult<DType> {
-        let dtype = DTypeTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|_| SchemaError::InvalidArgument("Failed to parse dtype tag".into()))?;
-        match dtype {
-            DTypeTag::Null => Ok(Null),
-            DTypeTag::Bool => Ok(Bool(self.read_nullability()?)),
-            DTypeTag::Int => {
-                let nullability = self.read_nullability()?;
-                Ok(Int(
-                    self.read_int_width()?,
-                    self.read_signedness()?,
-                    nullability,
-                ))
-            }
-            DTypeTag::Float => {
-                let nullability = self.read_nullability()?;
-                Ok(Float(self.read_float_width()?, nullability))
-            }
-            DTypeTag::Utf8 => Ok(Utf8(self.read_nullability()?)),
-            DTypeTag::Binary => Ok(Binary(self.read_nullability()?)),
-            DTypeTag::Decimal => {
-                let nullability = self.read_nullability()?;
-                let precision_scale: [u8; 2] = self.read_nbytes()?;
-                Ok(Decimal(
-                    precision_scale[0],
-                    precision_scale[1] as i8,
-                    nullability,
-                ))
-            }
-            DTypeTag::List => {
-                let nullability = self.read_nullability()?;
-                Ok(List(Box::new(self.read(find_extension)?), nullability))
-            }
-            DTypeTag::Struct => {
-                let field_num = self.read_usize()?;
-                let mut names = Vec::with_capacity(field_num);
-                for _ in 0..field_num {
-                    let name = unsafe { String::from_utf8_unchecked(self.read_slice()?) };
-                    names.push(Arc::new(name));
+    fn write_to_builder(&self, fbb: &mut FlatBufferBuilder<'a>) -> WIPOffset<Self::OffsetType> {
+        let (dtype_union, dtype_union_variant) = match self {
+            DType::Null => (Null::create(fbb, &NullArgs {}).as_union_value(), Type::Null),
+            DType::Bool(n) => (
+                Bool::create(
+                    fbb,
+                    &BoolArgs {
+                        nullability: n.into(),
+                    },
+                )
+                .as_union_value(),
+                Type::Bool,
+            ),
+            DType::Int(w, s, n) => (
+                Int::create(
+                    fbb,
+                    &IntArgs {
+                        width: w.into(),
+                        signedness: s.into(),
+                        nullability: n.into(),
+                    },
+                )
+                .as_union_value(),
+                Type::Int,
+            ),
+            DType::Decimal(p, s, n) => (
+                Decimal::create(
+                    fbb,
+                    &DecimalArgs {
+                        precision: *p,
+                        scale: *s,
+                        nullability: n.into(),
+                    },
+                )
+                .as_union_value(),
+                Type::Decimal,
+            ),
+            DType::Float(w, n) => (
+                Float::create(
+                    fbb,
+                    &FloatArgs {
+                        width: w.into(),
+                        nullability: n.into(),
+                    },
+                )
+                .as_union_value(),
+                Type::Float,
+            ),
+            DType::Utf8(n) => (
+                Utf8::create(
+                    fbb,
+                    &Utf8Args {
+                        nullability: n.into(),
+                    },
+                )
+                .as_union_value(),
+                Type::Utf8,
+            ),
+            DType::Binary(n) => (
+                Binary::create(
+                    fbb,
+                    &BinaryArgs {
+                        nullability: n.into(),
+                    },
+                )
+                .as_union_value(),
+                Type::Binary,
+            ),
+            DType::Struct(ns, fs) => {
+                let name_offsets = ns
+                    .iter()
+                    .map(|n| fbb.create_string(n.as_ref()))
+                    .collect::<Vec<_>>();
+                fbb.start_vector::<WIPOffset<&str>>(ns.len());
+                for name in name_offsets {
+                    fbb.push(name);
                 }
+                let names_vector = fbb.end_vector(ns.len());
 
-                let mut fields = Vec::with_capacity(field_num);
-                for _ in 0..field_num {
-                    fields.push(self.read(find_extension)?);
+                let dtype_offsets = fs
+                    .iter()
+                    .map(|f| f.write_to_builder(fbb))
+                    .collect::<Vec<_>>();
+                fbb.start_vector::<WIPOffset<FbDType>>(fs.len());
+                for doff in dtype_offsets {
+                    fbb.push(doff);
                 }
-                Ok(Struct(names, fields))
+                let fields_vector = fbb.end_vector(fs.len());
+
+                (
+                    Struct_::create(
+                        fbb,
+                        &Struct_Args {
+                            names: Some(names_vector),
+                            fields: Some(fields_vector),
+                        },
+                    )
+                    .as_union_value(),
+                    Type::Struct_,
+                )
             }
-            DTypeTag::Composite => {
-                let nullability = self.read_nullability()?;
-                let id = unsafe { String::from_utf8_unchecked(self.read_slice()?) };
-                let extension_id = find_extension(id.as_str()).ok_or(
-                    SchemaError::InvalidArgument("Failed to find extension".into()),
-                )?;
-                Ok(Composite(extension_id, nullability))
+            DType::List(e, n) => {
+                let fb_dtype = e.as_ref().write_to_builder(fbb);
+                (
+                    List::create(
+                        fbb,
+                        &ListArgs {
+                            element_type: Some(fb_dtype),
+                            nullability: n.into(),
+                        },
+                    )
+                    .as_union_value(),
+                    Type::List,
+                )
             }
-        }
-    }
-
-    fn read_signedness(&mut self) -> SchemaResult<Signedness> {
-        SignednessTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|_| SchemaError::InvalidArgument("Failed to parse signedness tag".into()))
-            .map(Signedness::from)
-    }
-
-    fn read_nullability(&mut self) -> SchemaResult<Nullability> {
-        NullabilityTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|_| SchemaError::InvalidArgument("Failed to parse nullability tag".into()))
-            .map(Nullability::from)
-    }
-
-    fn read_int_width(&mut self) -> SchemaResult<IntWidth> {
-        IntWidthTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|_| SchemaError::InvalidArgument("Failed to parse int width tag".into()))
-            .map(IntWidth::from)
-    }
-
-    fn read_float_width(&mut self) -> SchemaResult<FloatWidth> {
-        FloatWidthTag::try_from(self.read_nbytes::<1>()?[0])
-            .map_err(|_| SchemaError::InvalidArgument("Failed to parse float width tag".into()))
-            .map(FloatWidth::from)
-    }
-}
-
-pub struct DTypeWriter<'a> {
-    writer: &'a mut dyn Write,
-}
-
-impl<'a> DTypeWriter<'a> {
-    pub fn new(writer: &'a mut dyn Write) -> Self {
-        Self { writer }
-    }
-
-    pub fn write(&mut self, dtype: &DType) -> SchemaResult<()> {
-        self.write_fixed_slice([DTypeTag::from(dtype).into()])?;
-        match dtype {
-            Null => {}
-            Bool(n) => self.write_nullability(*n)?,
-            Int(w, s, n) => {
-                self.write_nullability(*n)?;
-                self.write_int_width(*w)?;
-                self.write_signedness(*s)?
+            DType::Composite(id, n) => {
+                let id = fbb.create_string(id.0);
+                (
+                    Composite::create(
+                        fbb,
+                        &CompositeArgs {
+                            id: Some(id),
+                            nullability: n.into(),
+                        },
+                    )
+                    .as_union_value(),
+                    Type::Composite,
+                )
             }
-            Decimal(p, w, n) => {
-                self.write_nullability(*n)?;
-                self.write_fixed_slice([*p, *w as u8])?
-            }
-            Float(w, n) => {
-                self.write_nullability(*n)?;
-                self.write_float_width(*w)?
-            }
-            Utf8(n) => self.write_nullability(*n)?,
-            Binary(n) => self.write_nullability(*n)?,
-            Struct(ns, fs) => {
-                self.write_usize(ns.len())?;
-                for name in ns {
-                    self.write_slice(name.as_bytes())?;
-                }
-                for field in fs {
-                    self.write(field)?
-                }
-            }
-            List(e, n) => {
-                self.write_nullability(*n)?;
-                self.write(e.as_ref())?
-            }
-            Composite(id, n) => {
-                self.write_nullability(*n)?;
-                self.write_slice(id.0.as_bytes())?;
-            }
-        }
+        };
 
-        Ok(())
-    }
-
-    fn write_usize(&mut self, u: usize) -> SchemaResult<()> {
-        leb128::write::unsigned(self.writer, u as u64)
-            .map_err(|_| SchemaError::InvalidArgument("Failed to write leb128 usize".into()))
-            .map(|_| ())
-    }
-
-    fn write_fixed_slice<const N: usize>(&mut self, slice: [u8; N]) -> SchemaResult<()> {
-        self.writer.write_all(&slice).map_err(|e| e.into())
-    }
-
-    fn write_slice(&mut self, slice: &[u8]) -> SchemaResult<()> {
-        self.write_usize(slice.len())?;
-        self.writer.write_all(slice).map_err(|e| e.into())
-    }
-
-    fn write_signedness(&mut self, signedness: Signedness) -> SchemaResult<()> {
-        self.write_fixed_slice([SignednessTag::from(signedness).into()])
-    }
-
-    fn write_nullability(&mut self, nullability: Nullability) -> SchemaResult<()> {
-        self.write_fixed_slice([NullabilityTag::from(nullability).into()])
-    }
-
-    fn write_int_width(&mut self, int_width: IntWidth) -> SchemaResult<()> {
-        self.write_fixed_slice([IntWidthTag::from(int_width).into()])
-    }
-
-    fn write_float_width(&mut self, float_width: FloatWidth) -> SchemaResult<()> {
-        self.write_fixed_slice([FloatWidthTag::from(float_width).into()])
+        FbDType::create(
+            fbb,
+            &DTypeArgs {
+                type_type: dtype_union_variant,
+                type_: Some(dtype_union),
+            },
+        )
     }
 }
 
-#[derive(IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-enum DTypeTag {
-    Null,
-    Bool,
-    Int,
-    Float,
-    Utf8,
-    Binary,
-    Decimal,
-    List,
-    Struct,
-    Composite,
+pub fn bytes_as_dtype(bytes: &[u8]) -> Result<DType, InvalidFlatbuffer> {
+    root_as_dtype(bytes).map(fb_to_dtype)
 }
 
-impl From<&DType> for DTypeTag {
-    fn from(value: &DType) -> Self {
+pub fn fb_to_dtype(fb_dtype: FbDType) -> DType {
+    todo!()
+}
+
+impl From<&Nullability> for FbNullability {
+    fn from(value: &Nullability) -> Self {
         match value {
-            Null => DTypeTag::Null,
-            Bool(_) => DTypeTag::Bool,
-            Int(_, _, _) => DTypeTag::Int,
-            Float(_, _) => DTypeTag::Float,
-            Utf8(_) => DTypeTag::Utf8,
-            Binary(_) => DTypeTag::Binary,
-            Decimal(_, _, _) => DTypeTag::Decimal,
-            List(_, _) => DTypeTag::List,
-            Struct(_, _) => DTypeTag::Struct,
-            Composite(_, _) => DTypeTag::Composite,
+            Nullability::NonNullable => FbNullability::NonNullable,
+            Nullability::Nullable => FbNullability::Nullable,
         }
     }
 }
 
-#[derive(IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-enum NullabilityTag {
-    Nullable,
-    NonNullable,
-}
-
-impl From<Nullability> for NullabilityTag {
-    fn from(value: Nullability) -> Self {
-        use Nullability::*;
+impl From<FbNullability> for Nullability {
+    fn from(value: FbNullability) -> Self {
         match value {
-            NonNullable => NullabilityTag::NonNullable,
-            Nullable => NullabilityTag::Nullable,
+            FbNullability::NonNullable => Nullability::NonNullable,
+            FbNullability::Nullable => Nullability::Nullable,
+            _ => panic!("Unknown nullability value"),
         }
     }
 }
 
-impl From<NullabilityTag> for Nullability {
-    fn from(value: NullabilityTag) -> Self {
-        use Nullability::*;
+impl From<&IntWidth> for FbIntWidth {
+    fn from(value: &IntWidth) -> Self {
         match value {
-            NullabilityTag::Nullable => Nullable,
-            NullabilityTag::NonNullable => NonNullable,
+            IntWidth::Unknown => FbIntWidth::Unknown,
+            IntWidth::_8 => FbIntWidth::_8,
+            IntWidth::_16 => FbIntWidth::_16,
+            IntWidth::_32 => FbIntWidth::_32,
+            IntWidth::_64 => FbIntWidth::_64,
         }
     }
 }
 
-#[derive(IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-enum SignednessTag {
-    Unknown,
-    Unsigned,
-    Signed,
-}
-
-impl From<Signedness> for SignednessTag {
-    fn from(value: Signedness) -> Self {
-        use Signedness::*;
+impl From<FbIntWidth> for IntWidth {
+    fn from(value: FbIntWidth) -> Self {
         match value {
-            Unknown => SignednessTag::Unknown,
-            Unsigned => SignednessTag::Unsigned,
-            Signed => SignednessTag::Signed,
+            FbIntWidth::Unknown => IntWidth::Unknown,
+            FbIntWidth::_8 => IntWidth::_8,
+            FbIntWidth::_16 => IntWidth::_16,
+            FbIntWidth::_32 => IntWidth::_32,
+            FbIntWidth::_64 => IntWidth::_64,
+            _ => panic!("Unknown IntWidth value"),
         }
     }
 }
 
-impl From<SignednessTag> for Signedness {
-    fn from(value: SignednessTag) -> Self {
-        use Signedness::*;
+impl From<&Signedness> for FbSignedness {
+    fn from(value: &Signedness) -> Self {
         match value {
-            SignednessTag::Unknown => Unknown,
-            SignednessTag::Unsigned => Unsigned,
-            SignednessTag::Signed => Signed,
+            Signedness::Unknown => FbSignedness::Unknown,
+            Signedness::Unsigned => FbSignedness::Unsigned,
+            Signedness::Signed => FbSignedness::Signed,
         }
     }
 }
 
-#[derive(IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-enum FloatWidthTag {
-    Unknown,
-    _16,
-    _32,
-    _64,
-}
-
-#[allow(clippy::just_underscores_and_digits)]
-impl From<FloatWidth> for FloatWidthTag {
-    fn from(value: FloatWidth) -> Self {
-        use FloatWidth::*;
+impl From<FbSignedness> for Signedness {
+    fn from(value: FbSignedness) -> Self {
         match value {
-            Unknown => FloatWidthTag::Unknown,
-            _16 => FloatWidthTag::_16,
-            _32 => FloatWidthTag::_32,
-            _64 => FloatWidthTag::_64,
+            FbSignedness::Unknown => Signedness::Unknown,
+            FbSignedness::Unsigned => Signedness::Unsigned,
+            FbSignedness::Signed => Signedness::Signed,
+            _ => panic!("Unknown Signedness value"),
         }
     }
 }
 
-impl From<FloatWidthTag> for FloatWidth {
-    fn from(value: FloatWidthTag) -> Self {
-        use FloatWidth::*;
+impl From<&FloatWidth> for FbFloatWidth {
+    fn from(value: &FloatWidth) -> Self {
         match value {
-            FloatWidthTag::Unknown => Unknown,
-            FloatWidthTag::_16 => _16,
-            FloatWidthTag::_32 => _32,
-            FloatWidthTag::_64 => _64,
+            FloatWidth::Unknown => FbFloatWidth::Unknown,
+            FloatWidth::_16 => FbFloatWidth::_16,
+            FloatWidth::_32 => FbFloatWidth::_32,
+            FloatWidth::_64 => FbFloatWidth::_64,
         }
     }
 }
 
-#[derive(IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-enum IntWidthTag {
-    Unknown,
-    _8,
-    _16,
-    _32,
-    _64,
-}
-
-#[allow(clippy::just_underscores_and_digits)]
-impl From<IntWidth> for IntWidthTag {
-    fn from(value: IntWidth) -> Self {
-        use IntWidth::*;
+impl From<FbFloatWidth> for FloatWidth {
+    fn from(value: FbFloatWidth) -> Self {
         match value {
-            Unknown => IntWidthTag::Unknown,
-            _8 => IntWidthTag::_8,
-            _16 => IntWidthTag::_16,
-            _32 => IntWidthTag::_32,
-            _64 => IntWidthTag::_64,
+            FbFloatWidth::Unknown => FloatWidth::Unknown,
+            FbFloatWidth::_16 => FloatWidth::_16,
+            FbFloatWidth::_32 => FloatWidth::_32,
+            FbFloatWidth::_64 => FloatWidth::_64,
+            _ => panic!("Unknown IntWidth value"),
         }
-    }
-}
-
-impl From<IntWidthTag> for IntWidth {
-    fn from(value: IntWidthTag) -> Self {
-        use IntWidth::*;
-        match value {
-            IntWidthTag::Unknown => Unknown,
-            IntWidthTag::_8 => _8,
-            IntWidthTag::_16 => _16,
-            IntWidthTag::_32 => _32,
-            IntWidthTag::_64 => _64,
-        }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::dtype::DType::Int;
-    use crate::dtype::IntWidth::_64;
-    use crate::dtype::Nullability::NonNullable;
-    use crate::dtype::Signedness::Unsigned;
-    use crate::serde::{DTypeReader, DTypeWriter};
-
-    #[test]
-    fn roundtrip() {
-        let mut buffer: Vec<u8> = Vec::new();
-        let dtype = Int(_64, Unsigned, NonNullable);
-        DTypeWriter::new(&mut buffer).write(&dtype).unwrap();
-        assert_eq!(buffer, [0x02, 0x01, 0x04, 0x01]);
-        let read_dtype = DTypeReader::new(&mut buffer.as_slice())
-            .read(|_| panic!("no composite types"))
-            .unwrap();
-        assert_eq!(dtype, read_dtype);
     }
 }
