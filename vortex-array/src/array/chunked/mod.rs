@@ -216,7 +216,7 @@ mod test {
     use crate::array::{Array, ArrayRef};
 
     use crate::array::chunked::ChunkedArray;
-    use crate::compute::flatten::flatten_primitive;
+    use crate::compute::flatten::{flatten, flatten_primitive, FlattenedArray};
     use crate::dtype::{DType, IntWidth, Nullability, Signedness};
     use crate::ptype::NativePType;
 
@@ -236,10 +236,16 @@ mod test {
     }
 
     fn assert_equal_slices<T: NativePType>(arr: ArrayRef, slice: &[T]) {
-        assert_eq!(
-            flatten_primitive(arr.as_ref()).unwrap().typed_data::<T>(),
-            slice
-        );
+        let FlattenedArray::Chunked(chunked) = flatten(arr.as_ref()).unwrap() else {
+            unreachable!()
+        };
+        let mut values = Vec::with_capacity(arr.len());
+        chunked
+            .chunks()
+            .iter()
+            .map(|a| flatten_primitive(a.as_ref()).unwrap())
+            .for_each(|a| values.extend_from_slice(a.typed_data::<T>()));
+        assert_eq!(values, slice);
     }
 
     #[test]

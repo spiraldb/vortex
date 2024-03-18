@@ -7,7 +7,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
-use crate::compute::flatten::{flatten, FlattenPrimitiveFn, FlattenedArray};
+use crate::compute::flatten::{flatten, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::ArrayCompute;
@@ -20,7 +20,7 @@ impl ArrayCompute for SparseArray {
         Some(self)
     }
 
-    fn flatten_primitive(&self) -> Option<&dyn FlattenPrimitiveFn> {
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 
@@ -52,8 +52,8 @@ impl AsContiguousFn for SparseArray {
     }
 }
 
-impl FlattenPrimitiveFn for SparseArray {
-    fn flatten_primitive(&self) -> VortexResult<PrimitiveArray> {
+impl FlattenFn for SparseArray {
+    fn flatten(&self) -> VortexResult<FlattenedArray> {
         // Resolve our indices into a vector of usize applying the offset
         let indices = self.resolved_indices();
 
@@ -75,10 +75,10 @@ impl FlattenPrimitiveFn for SparseArray {
 
                 let validity = BoolArray::new(validity.finish(), None);
 
-                Ok(PrimitiveArray::from_nullable(
+                Ok(FlattenedArray::Primitive(PrimitiveArray::from_nullable(
                     values,
                     Some(validity.boxed()),
-                ))
+                )))
             })
         } else {
             Err(VortexError::InvalidArgument(
