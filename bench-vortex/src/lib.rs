@@ -140,10 +140,18 @@ pub fn compress_taxi_data() -> ArrayRef {
 
 #[cfg(test)]
 mod test {
+    use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+    use std::fs::File;
+    use std::ops::Deref;
+    use std::sync::Arc;
+    use vortex::array::ArrayRef;
+    use vortex::compute::as_arrow::as_arrow;
+    use vortex::encode::FromArrow;
 
-    use crate::compress_taxi_data;
+    use crate::{compress_taxi_data, download_taxi_data};
 
     #[allow(dead_code)]
     fn setup_logger(level: LevelFilter) {
@@ -161,5 +169,20 @@ mod test {
     fn compression_ratio() {
         setup_logger(LevelFilter::Warn);
         _ = compress_taxi_data();
+    }
+
+    #[test]
+    fn round_trip_arrow() {
+        let file = File::open(download_taxi_data()).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let reader = builder.with_limit(1).build().unwrap();
+
+        for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
+            let struct_arrow: ArrowStructArray = record_batch.into();
+            let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+            let vortex_as_arrow = as_arrow(vortex_array.as_ref()).unwrap();
+            assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
+        }
     }
 }

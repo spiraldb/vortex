@@ -12,6 +12,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 
+mod as_arrow;
 mod compress;
 mod compute;
 mod serde;
@@ -29,16 +30,6 @@ impl TypedArray {
             array,
             dtype,
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
-    }
-
-    /// Possibly wrap an array in a TypedArray if the dtype is different
-    pub fn maybe_wrap(array: ArrayRef, dtype: &DType) -> ArrayRef {
-        if array.dtype() == dtype {
-            array
-        } else {
-            // Should we check the DType is compatible...?
-            Self::new(array, dtype.clone()).boxed()
         }
     }
 

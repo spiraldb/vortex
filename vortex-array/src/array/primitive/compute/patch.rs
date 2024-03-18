@@ -26,7 +26,10 @@ fn patch_with_sparse(array: &PrimitiveArray, patch: &SparseArray) -> VortexResul
     let patch_indices = patch.resolved_indices();
     match_each_native_ptype!(array.ptype(), |$T| {
         let mut values = Vec::from(array.typed_data::<$T>());
-        let patch_values = compute::cast::cast_primitive(patch.values(), array.ptype())?;
+        let patch_values = compute::flatten::flatten_primitive(patch.values())?;
+        if (array.ptype() != patch_values.ptype()) {
+            return Err(VortexError::InvalidDType(patch_values.dtype().clone()))
+        }
         for (idx, value) in patch_indices.iter().zip_eq(patch_values.typed_data::<$T>().iter()) {
             values[*idx] = *value;
         }

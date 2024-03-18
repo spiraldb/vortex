@@ -6,6 +6,7 @@ use crate::array::ArrowIterator;
 
 pub mod aligned_iter;
 pub mod convert;
+pub mod wrappers;
 
 pub trait CombineChunks {
     fn combine_chunks(self) -> ArrayRef;

@@ -5,13 +5,14 @@ use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Field, FieldRef, SchemaRef, TimeUnit as ArrowTimeUnit};
 
 use crate::array::struct_::StructArray;
-use crate::array::typed::TypedArray;
 use crate::array::{Array, ArrayRef};
 use crate::composite_dtypes::{
     localdate, localtime, map, zoneddatetime, TimeUnit, TimeUnitSerializer,
 };
+use crate::compute::cast::cast;
 use crate::dtype::DType::*;
 use crate::dtype::{DType, FloatWidth, IntWidth, Nullability};
+use crate::encode::FromArrow;
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 
@@ -32,8 +33,9 @@ impl From<RecordBatch> for ArrayRef {
                 .zip(value.schema().fields())
                 .map(|(array, field)| {
                     // The dtype of the child arrays infer their nullability from the array itself.
-                    // In case the schema says something different, we wrap the array with the schema's dtype.
-                    TypedArray::maybe_wrap(array.clone().into(), &field.try_into().unwrap())
+                    // In case the schema says something different, we cast into the schema's dtype.
+                    let vortex_array = ArrayRef::from_arrow(array.clone(), field.is_nullable());
+                    cast(vortex_array.as_ref(), &field.try_into().unwrap()).unwrap()
                 })
                 .collect(),
         )

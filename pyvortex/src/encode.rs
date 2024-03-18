@@ -10,6 +10,7 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::arrow::convert::TryIntoDType;
 use vortex::dtype::DType;
+use vortex::encode::FromArrow;
 
 use crate::array::PyArray;
 use crate::error::PyVortexError;
@@ -26,7 +27,7 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
 
     if obj.is_instance(pa_array)? {
         let arrow_array = ArrayData::from_pyarrow(obj).map(make_array)?;
-        let enc_array: vortex::array::ArrayRef = arrow_array.into();
+        let enc_array = ArrayRef::from_arrow(arrow_array, false);
         PyArray::wrap(obj.py(), enc_array)
     } else if obj.is_instance(chunked_array)? {
         let chunks: Vec<&PyAny> = obj.getattr("chunks")?.extract()?;
@@ -35,7 +36,7 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
             .map(|a| {
                 ArrayData::from_pyarrow(a)
                     .map(make_array)
-                    .map(ArrayRef::from)
+                    .map(|a| ArrayRef::from_arrow(a, false))
             })
             .collect::<PyResult<Vec<ArrayRef>>>()?;
         let null_count: usize = obj.getattr("null_count")?.extract()?;

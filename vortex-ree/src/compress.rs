@@ -3,7 +3,8 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef, Encoding};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::compute::cast::cast_primitive;
+use vortex::compute::cast::cast;
+use vortex::compute::flatten::flatten_primitive;
 use vortex::error::VortexResult;
 use vortex::ptype::{match_each_native_ptype, NativePType};
 use vortex::stats::Stat;
@@ -119,7 +120,7 @@ pub fn ree_decode(
     // TODO(ngates): switch over ends without necessarily casting
     match_each_native_ptype!(values.ptype(), |$P| {
         Ok(PrimitiveArray::from_nullable(ree_decode_primitive(
-            cast_primitive(ends, &PType::U64)?.typed_data(),
+            flatten_primitive(cast(ends, &PType::U64.into())?.as_ref())?.typed_data(),
             values.typed_data::<$P>(),
         ), validity))
     })

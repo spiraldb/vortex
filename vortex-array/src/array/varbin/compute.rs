@@ -1,3 +1,8 @@
+use std::sync::Arc;
+
+use arrow_array::{
+    ArrayRef as ArrowArrayRef, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray,
+};
 use itertools::Itertools;
 
 use crate::array::bool::BoolArray;
@@ -5,17 +10,28 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef, CloneOptionalArray};
+use crate::arrow::wrappers::{as_nulls, as_offset_buffer};
+use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
-use crate::compute::cast::cast_primitive;
+use crate::compute::cast::cast;
+use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::dtype::DType;
-use crate::error::VortexResult;
+use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 
 impl ArrayCompute for VarBinArray {
+    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
+        Some(self)
+    }
+
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
+        Some(self)
+    }
+
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 
@@ -49,7 +65,8 @@ impl AsContiguousFn for VarBinArray {
         offsets.push(0);
         for a in arrays.iter().map(|a| a.as_varbin()) {
             let first_offset: u64 = a.first_offset()?;
-            let offsets_array = cast_primitive(a.offsets(), &PType::U64)?;
+            // FIXME(ngates): cast to u64, or iterate over the offsets as any?
+            let offsets_array = flatten_primitive(a.offsets())?;
             let shift = offsets.last().copied().unwrap_or(0);
             offsets.extend(
                 offsets_array
@@ -63,6 +80,72 @@ impl AsContiguousFn for VarBinArray {
         let offsets_array = PrimitiveArray::from(offsets).boxed();
 
         Ok(VarBinArray::new(offsets_array, bytes, self.dtype.clone(), Some(validity)).boxed())
+    }
+}
+
+impl AsArrowArray for VarBinArray {
+    fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
+        // Ensure the offsets are either i32 or i64
+        let offsets = flatten_primitive(self.offsets())?;
+        let offsets = match offsets.ptype() {
+            &PType::I32 | &PType::I64 => offsets,
+            // Unless it's u64, everything else can be converted into an i32.
+            &PType::U64 => flatten_primitive(cast(offsets.as_ref(), &PType::I64.into())?.as_ref())?,
+            _ => flatten_primitive(cast(offsets.as_ref(), &PType::I32.into())?.as_ref())?,
+        };
+        let nulls = as_nulls(offsets.validity())?;
+
+        let data = flatten_primitive(self.bytes())?;
+        assert_eq!(data.ptype(), &PType::U8);
+        let data = data.buffer().clone();
+
+        // Switch on Arrow DType.
+        Ok(match self.dtype() {
+            DType::Binary(_) => match offsets.ptype() {
+                PType::I32 => Arc::new(BinaryArray::new(
+                    as_offset_buffer::<i32>(offsets),
+                    data,
+                    nulls,
+                )),
+                PType::I64 => Arc::new(LargeBinaryArray::new(
+                    as_offset_buffer::<i64>(offsets),
+                    data,
+                    nulls,
+                )),
+                _ => panic!("Invalid offsets type"),
+            },
+            DType::Utf8(_) => match offsets.ptype() {
+                PType::I32 => Arc::new(StringArray::new(
+                    as_offset_buffer::<i32>(offsets),
+                    data,
+                    nulls,
+                )),
+                PType::I64 => Arc::new(LargeStringArray::new(
+                    as_offset_buffer::<i64>(offsets),
+                    data,
+                    nulls,
+                )),
+                _ => panic!("Invalid offsets type"),
+            },
+            _ => return Err(VortexError::InvalidDType(self.dtype().clone())),
+        })
+    }
+}
+
+impl FlattenFn for VarBinArray {
+    fn flatten(&self) -> VortexResult<FlattenedArray> {
+        let bytes = flatten(self.bytes())?.into_array();
+        let offsets = flatten(self.offsets())?.into_array();
+        let validity = self
+            .validity()
+            .map(|v| flatten(v).map(FlattenedArray::into_array))
+            .transpose()?;
+        Ok(FlattenedArray::VarBin(VarBinArray::new(
+            offsets,
+            bytes,
+            self.dtype.clone(),
+            validity,
+        )))
     }
 }
 
