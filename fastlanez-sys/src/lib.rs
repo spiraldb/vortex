@@ -6,7 +6,7 @@
 
 use std::mem::{size_of, MaybeUninit};
 
-use arrayref::array_mut_ref;
+use arrayref::{array_mut_ref, array_ref};
 use seq_macro::seq;
 use uninit::prelude::VecCapacity;
 
@@ -29,15 +29,7 @@ where
         input: &[Self; 1024],
         output: &'a mut [MaybeUninit<u8>; 128 * W],
     ) -> &'a [u8; 128 * W];
-}
 
-/// BitUnpack from a compile-time known bit-width.
-pub trait BitUnpack<const W: usize>
-where
-    Self: Sized,
-    Pred<{ W > 0 }>: Satisfied,
-    Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
-{
     fn bitunpack<'a>(
         input: &[u8; 128 * W],
         output: &'a mut [MaybeUninit<Self>; 1024],
@@ -67,13 +59,7 @@ where
         unsafe { output.set_len(output.len() + (width * 128)) }
         Ok(())
     }
-}
 
-/// Try to bitunpack into a runtime-known bit width.
-pub trait TryBitUnpack
-where
-    Self: Sized,
-{
     fn try_bitunpack<'a>(
         input: &[u8],
         width: usize,
@@ -85,7 +71,11 @@ where
         width: usize,
         output: &mut Vec<Self>,
     ) -> Result<(), UnsupportedBitWidth> {
-        Self::try_bitunpack(input, width, output.reserve_uninit(1024))?;
+        Self::try_bitunpack(
+            input,
+            width,
+            array_mut_ref![output.reserve_uninit(1024), 0, 1024],
+        )?;
         unsafe { output.set_len(output.len() + 1024) }
         Ok(())
     }
@@ -107,6 +97,18 @@ macro_rules! bitpack_impl {
                                 output_array
                             }
                     }
+
+                    #[inline]
+                    fn bitunpack<'a>(
+                        input: &[u8; 128 * N],
+                        output: &'a mut [MaybeUninit<Self>; 1024],
+                    ) -> &'a [Self; 1024] {
+                        unsafe {
+                            let output_array: &mut [Self; 1024] = std::mem::transmute(output);
+                            [<fl_bitunpack_ $T _u >]~N(input, output_array);
+                            output_array
+                        }
+                    }
                 }
             });
         }
@@ -124,39 +126,24 @@ macro_rules! bitpack_impl {
                     }
                 })
             }
-        }
 
+            fn try_bitunpack<'a>(
+                input: &[u8],
+                width: usize,
+                output: &'a mut [MaybeUninit<Self>; 1024],
+            ) -> Result<&'a [Self; 1024], UnsupportedBitWidth> {
+                seq!(N in 1..$W {
+                    match width {
+                        #(N => Ok(BitPack::<N>::bitunpack(array_ref![input, 0, N * 128], output)),)*
+                        _ => Err(UnsupportedBitWidth),
+                    }
+                })
+            }
+        }
     };
 }
 
-impl BitUnpack<4> for u16 {
-    #[inline]
-    fn bitunpack<'a>(
-        input: &[u8; 128 * W],
-        output: &'a mut [MaybeUninit<Self>; 1024],
-    ) -> &'a [Self; 1024] {
-        unsafe {
-            let output_array: &mut [Self; 1024] = std::mem::transmute(output);
-            fl_bitpack_u16_u4(input, output_array);
-            output_array
-        }
-    }
-}
-
-impl TryBitPack for u16 {
-    fn try_bitpack<'a>(
-        input: &[Self; 1024],
-        width: usize,
-        output: &'a mut [MaybeUninit<u8>],
-    ) -> Result<&'a [u8], UnsupportedBitWidth> {
-        match width {
-            4 => Ok(BitPack::<4>::bitpack(input, array_mut_ref![output, 0, 4 * 128]).as_slice()),
-            _ => Err(UnsupportedBitWidth),
-        }
-    }
-}
-
 bitpack_impl!(u8, 8);
-// bitpack_impl!(u16, 16);
+bitpack_impl!(u16, 16);
 bitpack_impl!(u32, 32);
 bitpack_impl!(u64, 64);
