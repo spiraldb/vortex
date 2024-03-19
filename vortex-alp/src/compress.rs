@@ -99,6 +99,8 @@ pub fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
     Ok(ALPArray::new(encoded, exponents, patches))
 }
 
+pub fn decompress(array: &ALPArray) -> VortexResult<ArrayRef>()
+
 #[cfg(test)]
 mod tests {
     use super::*;

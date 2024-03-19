@@ -1,18 +1,10 @@
-use crate::alp::ALPFloat;
-use crate::ALPArray;
 use std::f32;
 use vortex::array::Array;
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
-use vortex::compute::ArrayCompute;
 use vortex::dtype::{DType, FloatWidth};
 use vortex::error::{VortexError, VortexResult};
 use vortex::scalar::Scalar;
-
-impl ArrayCompute for ALPArray {
-    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        Some(self)
-    }
-}
+use crate::{ALPArray, ALPFloat};
 
 impl ScalarAtFn for ALPArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
