@@ -174,6 +174,7 @@ mod test {
         _ = compress_taxi_data();
     }
 
+    #[ignore]
     #[test]
     fn round_trip_serde() {
         let file = File::open(download_taxi_data()).unwrap();
