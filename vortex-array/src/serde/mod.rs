@@ -27,6 +27,7 @@ where
     Self: Sized,
 {
     fn serialize(&self) -> Vec<u8>;
+
     fn deserialize(data: &[u8]) -> VortexResult<Self>;
 }
 
@@ -193,6 +194,10 @@ impl<'a> WriteCtx<'a> {
 
     pub fn write_fixed_slice<const N: usize>(&mut self, slice: [u8; N]) -> VortexResult<()> {
         self.w.write_all(&slice).map_err(|e| e.into())
+    }
+
+    pub fn write_bytes<B: BytesSerde + ?Sized>(&mut self, bytes: &B) -> VortexResult<()> {
+        self.write_slice(bytes.serialize().as_slice())
     }
 
     pub fn write_slice(&mut self, slice: &[u8]) -> VortexResult<()> {

@@ -21,7 +21,6 @@ use crate::array::composite::CompositeID;
 ///   => LocalDateTime (tz is "unknown", not "UTC")
 /// duration
 ///   => Duration
-use crate::array::Array;
 use crate::arrow::wrappers::as_nulls;
 use crate::composite_dtypes::TimeUnit;
 use crate::compute::as_arrow::AsArrowArray;

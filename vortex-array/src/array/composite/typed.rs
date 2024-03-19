@@ -1,9 +1,9 @@
 use std::any::Any;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 
 use crate::array::composite::array::CompositeArray;
-use crate::array::composite::{CompositeEncoding, CompositeID};
+use crate::array::composite::{CompositeEncoding, CompositeID, CompositeMetadata};
 use crate::array::{Array, ArrayRef, EncodingRef};
 use crate::compute::ArrayCompute;
 use crate::dtype::DType;
@@ -20,23 +20,17 @@ pub trait CompositeExtension: Debug + Send + Sync + 'static {
 
 pub type CompositeExtensionRef = &'static dyn CompositeExtension;
 
-pub trait CompositeMetadata:
-    'static + Debug + Display + Sized + Clone + Send + Sync + BytesSerde
-{
-    const EXT: CompositeExtensionRef;
-}
-
 #[derive(Debug, Clone)]
 pub struct TypedCompositeArray<M: CompositeMetadata> {
-    metadata: Arc<M>,
+    metadata: M,
     underlying: ArrayRef,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl<M: CompositeMetadata> TypedCompositeArray<M> {
-    pub fn new(metadata: Arc<M>, underlying: ArrayRef) -> Self {
-        let dtype = DType::Composite(M::EXT.id(), underlying.dtype().is_nullable().into());
+    pub fn new(metadata: M, underlying: ArrayRef) -> Self {
+        let dtype = DType::Composite(metadata.id(), underlying.dtype().is_nullable().into());
         Self {
             metadata,
             underlying,
@@ -47,11 +41,11 @@ impl<M: CompositeMetadata> TypedCompositeArray<M> {
 
     #[inline]
     pub fn id(&self) -> CompositeID {
-        M::EXT.id()
+        self.metadata().id()
     }
 
     #[inline]
-    pub fn metadata(&self) -> &Arc<M> {
+    pub fn metadata(&self) -> &M {
         &self.metadata
     }
 
@@ -63,7 +57,7 @@ impl<M: CompositeMetadata> TypedCompositeArray<M> {
     pub fn as_untyped(&self) -> CompositeArray {
         CompositeArray::new(
             self.id(),
-            Arc::new(self.metadata.as_ref().serialize()),
+            Arc::new(self.metadata().serialize()),
             dyn_clone::clone_box(self.underlying()),
         )
     }
@@ -109,7 +103,11 @@ where
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Self::new(self.metadata.clone(), self.underlying().slice(start, stop)?).boxed())
+        Ok(Self::new(
+            self.metadata().clone(),
+            self.underlying().slice(start, stop)?,
+        )
+        .boxed())
     }
 
     #[inline]
@@ -130,6 +128,7 @@ where
 impl<'arr, M: CompositeMetadata> AsRef<(dyn Array + 'arr)> for TypedCompositeArray<M>
 where
     TypedCompositeArray<M>: ArrayCompute,
+    Arc<M>: BytesSerde,
 {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self
@@ -162,12 +161,10 @@ impl<M: CompositeMetadata> FlattenFn for TypedCompositeArray<M> {
 
 macro_rules! composite_impl {
     ($id:expr, $T:ty) => {
-        use crate::array::composite::array::CompositeArray;
-        use crate::array::composite::typed::{
-            CompositeExtension, CompositeExtensionRef, CompositeMetadata,
-        };
+        use crate::array::composite::array::{CompositeArray, CompositeMetadata};
+        use crate::array::composite::typed::CompositeExtension;
         use crate::array::composite::COMPOSITE_EXTENSIONS;
-        use crate::array::ArrayRef;
+        use crate::array::{Array, ArrayRef};
         use crate::dtype::{DType, Nullability};
         use linkme::distributed_slice;
         use paste::paste;
@@ -198,7 +195,9 @@ macro_rules! composite_impl {
             }
 
             impl CompositeMetadata for $T {
-                const EXT: CompositeExtensionRef = &[<$T Extension>];
+                fn id(&self) -> CompositeID {
+                    [<$T Extension>]::ID
+                }
             }
 
             #[distributed_slice(COMPOSITE_EXTENSIONS)]

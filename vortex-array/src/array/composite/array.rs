@@ -1,21 +1,30 @@
 use std::any::Any;
+use std::fmt::{Debug, Display};
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
 
-use crate::array::composite::typed::{CompositeExtension, TypedCompositeArray};
-use crate::array::composite::{find_extension, CompositeID, CompositeMetadata};
+use crate::array::composite::{
+    find_extension, CompositeExtensionRef, CompositeID, TypedCompositeArray,
+};
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::compress::EncodingCompression;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::serde::{ArraySerde, EncodingSerde};
+use crate::serde::{ArraySerde, BytesSerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
+
+pub trait CompositeMetadata:
+    'static + Debug + Display + Send + Sync + Sized + Clone + BytesSerde
+{
+    fn id(&self) -> CompositeID;
+}
 
 #[derive(Debug, Clone)]
 pub struct CompositeArray {
-    extension: &'static dyn CompositeExtension,
+    id: CompositeID,
+    extension: CompositeExtensionRef,
     metadata: Arc<Vec<u8>>,
     underlying: ArrayRef,
     dtype: DType,
@@ -25,8 +34,10 @@ pub struct CompositeArray {
 impl CompositeArray {
     pub fn new(id: CompositeID, metadata: Arc<Vec<u8>>, underlying: ArrayRef) -> Self {
         let dtype = DType::Composite(id, underlying.dtype().is_nullable().into());
+        let extension = find_extension(id).expect("Unrecognized composite extension");
         Self {
-            extension: find_extension(id).expect("Unknown composite extension"),
+            id,
+            extension,
             metadata,
             underlying,
             dtype,
@@ -36,11 +47,11 @@ impl CompositeArray {
 
     #[inline]
     pub fn id(&self) -> CompositeID {
-        self.extension.id()
+        self.id
     }
 
     #[inline]
-    pub fn extension(&self) -> &'static dyn CompositeExtension {
+    pub fn extension(&self) -> CompositeExtensionRef {
         self.extension
     }
 
@@ -54,16 +65,14 @@ impl CompositeArray {
     }
 
     pub fn as_typed<M: CompositeMetadata>(&self) -> TypedCompositeArray<M> {
-        if self.id() != M::EXT.id() {
-            panic!("Invalid composite metadata type")
-        }
-
-        let meta = M::deserialize(&self.metadata).expect("Invalid metadata");
-        TypedCompositeArray::new(Arc::new(meta), dyn_clone::clone_box(self.underlying()))
+        TypedCompositeArray::new(
+            M::deserialize(self.metadata().as_slice()).unwrap(),
+            dyn_clone::clone_box(self.underlying()),
+        )
     }
 
     pub fn as_typed_array(&self) -> ArrayRef {
-        self.extension().as_typed_array(self)
+        self.extension.as_typed_array(self)
     }
 }
 

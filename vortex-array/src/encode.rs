@@ -74,8 +74,7 @@ impl<T: ArrowPrimitiveType> FromArrow<&ArrowPrimitiveArray<T>> for ArrayRef {
                 // A timestamp with no timezone is the equivalent of an "unknown" timezone.
                 // Therefore, we must treat it as a LocalDateTime and not an Instant.
                 None => {
-                    LocalDateTimeArray::new(Arc::new(LocalDateTime::new((&time_unit).into())), arr)
-                        .boxed()
+                    LocalDateTimeArray::new(LocalDateTime::new((&time_unit).into()), arr).boxed()
                 }
                 Some(_tz) => todo!(),
             },
