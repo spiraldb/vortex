@@ -104,6 +104,9 @@ impl Scalar {
                 (IntWidth::_64, Signedness::Unknown | Signedness::Signed) => {
                     PrimitiveScalar::none(PType::I64).into()
                 }
+                (IntWidth::_128, Signedness::Unknown | Signedness::Signed) => {
+                    PrimitiveScalar::none(PType::I128).into()
+                }
                 (IntWidth::Unknown, Signedness::Unsigned) => {
                     PrimitiveScalar::none(PType::U64).into()
                 }
@@ -111,6 +114,7 @@ impl Scalar {
                 (IntWidth::_16, Signedness::Unsigned) => PrimitiveScalar::none(PType::U16).into(),
                 (IntWidth::_32, Signedness::Unsigned) => PrimitiveScalar::none(PType::U32).into(),
                 (IntWidth::_64, Signedness::Unsigned) => PrimitiveScalar::none(PType::U64).into(),
+                (IntWidth::_128, Signedness::Unsigned) => PrimitiveScalar::none(PType::U128).into(),
             },
             DType::Decimal(_, _, _) => unimplemented!("DecimalScalar"),
             DType::Float(w, _) => match w {

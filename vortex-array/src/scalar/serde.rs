@@ -103,6 +103,9 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
                 PType::U64 => PrimitiveScalar::some(PScalar::U64(u64::from_le_bytes(
                     self.reader.read_nbytes()?,
                 ))),
+                PType::U128 => PrimitiveScalar::some(PScalar::U128(u128::from_le_bytes(
+                    self.reader.read_nbytes()?,
+                ))),
                 PType::I8 => PrimitiveScalar::some(PScalar::I8(i8::from_le_bytes(
                     self.reader.read_nbytes()?,
                 ))),
@@ -113,6 +116,9 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
                     self.reader.read_nbytes()?,
                 ))),
                 PType::I64 => PrimitiveScalar::some(PScalar::I64(i64::from_le_bytes(
+                    self.reader.read_nbytes()?,
+                ))),
+                PType::I128 => PrimitiveScalar::some(PScalar::I128(i128::from_le_bytes(
                     self.reader.read_nbytes()?,
                 ))),
                 PType::F16 => PrimitiveScalar::some(PScalar::F16(f16::from_le_bytes(
@@ -199,10 +205,12 @@ impl<'a, 'b> ScalarWriter<'a, 'b> {
                 PScalar::I16(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
                 PScalar::I32(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
                 PScalar::I64(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
+                PScalar::I128(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
                 PScalar::I8(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
                 PScalar::U16(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
                 PScalar::U32(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
                 PScalar::U64(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
+                PScalar::U128(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
                 PScalar::U8(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
             }
         }

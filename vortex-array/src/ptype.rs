@@ -17,10 +17,12 @@ pub enum PType {
     U16,
     U32,
     U64,
+    U128,
     I8,
     I16,
     I32,
     I64,
+    I128,
     F16,
     F32,
     F64,
@@ -58,10 +60,12 @@ native_ptype!(u8, U8);
 native_ptype!(u16, U16);
 native_ptype!(u32, U32);
 native_ptype!(u64, U64);
+native_ptype!(u128, U128);
 native_ptype!(i8, I8);
 native_ptype!(i16, I16);
 native_ptype!(i32, I32);
 native_ptype!(i64, I64);
+native_ptype!(i128, I128);
 native_ptype!(f16, F16);
 native_ptype!(f32, F32);
 native_ptype!(f64, F64);
@@ -77,10 +81,12 @@ macro_rules! match_each_native_ptype {
             PType::I16 => __with__! { i16 },
             PType::I32 => __with__! { i32 },
             PType::I64 => __with__! { i64 },
+            PType::I128 => __with__! { i128},
             PType::U8 => __with__! { u8 },
             PType::U16 => __with__! { u16 },
             PType::U32 => __with__! { u32 },
             PType::U64 => __with__! { u64 },
+            PType::U128 => __with__! { u128},
             PType::F16 => __with__! { f16 },
             PType::F32 => __with__! { f32 },
             PType::F64 => __with__! { f64 },
@@ -99,10 +105,12 @@ macro_rules! match_each_integer_ptype {
             PType::I16 => __with__! { i16 },
             PType::I32 => __with__! { i32 },
             PType::I64 => __with__! { i64 },
+            PType::I128 => __with__! { i128 },
             PType::U8 => __with__! { u8 },
             PType::U16 => __with__! { u16 },
             PType::U32 => __with__! { u32 },
             PType::U64 => __with__! { u64 },
+            PType::U128 => __with__! { u128},
             _ => panic!("Unsupported ptype {:?}", $self),
         }
     })
@@ -142,10 +150,12 @@ impl Display for PType {
             PType::U16 => write!(f, "u16"),
             PType::U32 => write!(f, "u32"),
             PType::U64 => write!(f, "u64"),
+            PType::U128 => write!(f, "u128"),
             PType::I8 => write!(f, "i8"),
             PType::I16 => write!(f, "i16"),
             PType::I32 => write!(f, "i32"),
             PType::I64 => write!(f, "i64"),
+            PType::I128 => write!(f, "i128"),
             PType::F16 => write!(f, "f16"),
             PType::F32 => write!(f, "f32"),
             PType::F64 => write!(f, "f64"),
@@ -184,6 +194,11 @@ impl TryFrom<&DType> for PType {
                     Unknown => Ok(PType::I64),
                     Unsigned => Ok(PType::U64),
                     Signed => Ok(PType::I64),
+                },
+                IntWidth::_128 => match s {
+                    Unknown => Ok(PType::I128),
+                    Unsigned => Ok(PType::U128),
+                    Signed => Ok(PType::I128),
                 },
             },
             DType::Float(f, _) => match f {
