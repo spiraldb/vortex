@@ -11,7 +11,7 @@ use vortex::array::bool::BoolEncoding;
 use vortex::array::chunked::{ChunkedArray, ChunkedEncoding};
 use vortex::array::constant::ConstantEncoding;
 
-use vortex::array::composite::CompositeEncoding;
+use vortex::array::composite::untyped::CompositeEncoding;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveEncoding;
 use vortex::array::sparse::SparseEncoding;

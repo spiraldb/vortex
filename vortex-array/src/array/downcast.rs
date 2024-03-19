@@ -1,6 +1,6 @@
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
-use crate::array::composite::CompositeArray;
+use crate::array::composite::untyped::CompositeArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;

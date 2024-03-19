@@ -123,7 +123,7 @@ impl Scalar {
             DType::Binary(_) => BinaryScalar::new(None).into(),
             DType::Struct(_, _) => StructScalar::new(dtype.clone(), vec![]).into(),
             DType::List(_, _) => ListScalar::new(dtype.clone(), None).into(),
-            DType::Composite(_, _, _) => unimplemented!("CompositeScalar"),
+            DType::Composite(_, _) => unimplemented!("CompositeScalar"),
         }
     }
 }

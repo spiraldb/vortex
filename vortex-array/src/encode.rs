@@ -19,10 +19,10 @@ use arrow_array::types::{
 };
 use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::Buffer;
-use arrow_schema::{DataType, Field, TimeUnit};
+use arrow_schema::{DataType, TimeUnit};
 
 use crate::array::bool::BoolArray;
-use crate::array::composite::CompositeArray;
+use crate::array::composite::datetime::{LocalDateTime, LocalDateTimeArray};
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
@@ -64,14 +64,28 @@ impl<T: ArrowPrimitiveType> FromArrow<&ArrowPrimitiveArray<T>> for ArrayRef {
             nulls(value.nulls(), nullable, value.len()),
         )
         .boxed();
+
         if T::DATA_TYPE.is_numeric() {
-            arr
-        } else {
-            let DType::Composite(id, _, metadata) = (&Field::new("_", T::DATA_TYPE, false)).into()
-            else {
-                panic!("Expected composite DType")
-            };
-            CompositeArray::new(id, metadata, arr).boxed()
+            return arr;
+        }
+
+        match T::DATA_TYPE {
+            DataType::Timestamp(time_unit, tz) => match tz {
+                // A timestamp with no timezone is the equivalent of an "unknown" timezone.
+                // Therefore, we must treat it as a LocalDateTime and not an Instant.
+                None => {
+                    LocalDateTimeArray::new(Arc::new(LocalDateTime::new((&time_unit).into())), arr)
+                        .boxed()
+                }
+                Some(_tz) => todo!(),
+            },
+            DataType::Date32 => todo!(),
+            DataType::Date64 => todo!(),
+            DataType::Time32(_) => todo!(),
+            DataType::Time64(_) => todo!(),
+            DataType::Duration(_) => todo!(),
+            DataType::Interval(_) => todo!(),
+            _ => panic!("Invalid data type for PrimitiveArray"),
         }
     }
 }

@@ -4,7 +4,7 @@ use pyo3::prelude::*;
 
 use vortex::array::bool::BoolArray;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::composite::CompositeArray;
+use vortex::array::composite::untyped::CompositeArray;
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;

@@ -5,7 +5,7 @@ use linkme::distributed_slice;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
-use crate::array::composite::{CompositeArray, CompositeEncoding};
+use crate::array::composite::untyped::{CompositeArray, CompositeEncoding};
 use crate::array::constant::{ConstantArray, ConstantEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};

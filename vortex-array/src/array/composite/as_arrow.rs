@@ -1,4 +1,4 @@
-use crate::array::composite::CompositeArray;
+use crate::array::composite::untyped::CompositeArray;
 use crate::array::Array;
 use crate::arrow::wrappers::as_nulls;
 use crate::composite_dtypes::{TimeUnit, TimeUnitSerializer};
