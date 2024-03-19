@@ -11,11 +11,11 @@ use vortex::array::bool::BoolEncoding;
 use vortex::array::chunked::{ChunkedArray, ChunkedEncoding};
 use vortex::array::constant::ConstantEncoding;
 
+use vortex::array::composite::CompositeEncoding;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveEncoding;
 use vortex::array::sparse::SparseEncoding;
 use vortex::array::struct_::StructEncoding;
-use vortex::array::typed::TypedEncoding;
 use vortex::array::varbin::VarBinEncoding;
 use vortex::array::varbinview::VarBinViewEncoding;
 use vortex::array::{Array, ArrayRef, Encoding};
@@ -34,11 +34,11 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         // Builtins
         &BoolEncoding,
         &ChunkedEncoding,
+        &CompositeEncoding,
         &ConstantEncoding,
         &PrimitiveEncoding,
         &SparseEncoding,
         &StructEncoding,
-        &TypedEncoding,
         &VarBinEncoding,
         &VarBinViewEncoding,
         // Encodings

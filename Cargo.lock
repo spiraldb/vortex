@@ -2611,9 +2611,7 @@ dependencies = [
  "fastlanez-sys",
  "itertools 0.12.1",
  "linkme",
- "log",
  "num-traits",
- "simplelog",
  "vortex-array",
 ]
 

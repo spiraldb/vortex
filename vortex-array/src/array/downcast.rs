@@ -1,10 +1,10 @@
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
+use crate::array::composite::CompositeArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
 use crate::array::struct_::StructArray;
-use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::array::{Array, ArrayRef};
@@ -38,10 +38,10 @@ pub trait DowncastArrayBuiltin: private::Sealed {
         self.maybe_varbinview().unwrap()
     }
 
-    fn maybe_typed(&self) -> Option<&TypedArray>;
+    fn maybe_composite(&self) -> Option<&CompositeArray>;
 
-    fn as_typed(&self) -> &TypedArray {
-        self.maybe_typed().unwrap()
+    fn as_composite(&self) -> &CompositeArray {
+        self.maybe_composite().unwrap()
     }
 
     fn maybe_struct(&self) -> Option<&StructArray>;
@@ -88,7 +88,7 @@ impl DowncastArrayBuiltin for dyn Array {
         self.as_any().downcast_ref()
     }
 
-    fn maybe_typed(&self) -> Option<&TypedArray> {
+    fn maybe_composite(&self) -> Option<&CompositeArray> {
         self.as_any().downcast_ref()
     }
 
@@ -128,7 +128,7 @@ impl DowncastArrayBuiltin for ArrayRef {
         self.as_any().downcast_ref()
     }
 
-    fn maybe_typed(&self) -> Option<&TypedArray> {
+    fn maybe_composite(&self) -> Option<&CompositeArray> {
         self.as_any().downcast_ref()
     }
 

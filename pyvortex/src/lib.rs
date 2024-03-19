@@ -37,13 +37,13 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyBoolArray>()?;
     m.add_class::<PyBitPackedArray>()?;
     m.add_class::<PyChunkedArray>()?;
+    m.add_class::<PyCompositeArray>()?;
     m.add_class::<PyConstantArray>()?;
     m.add_class::<PyFoRArray>()?;
     m.add_class::<PyPrimitiveArray>()?;
     m.add_class::<PyREEArray>()?;
     m.add_class::<PySparseArray>()?;
     m.add_class::<PyStructArray>()?;
-    m.add_class::<PyTypedArray>()?;
     m.add_class::<PyVarBinArray>()?;
     m.add_class::<PyVarBinViewArray>()?;
 
