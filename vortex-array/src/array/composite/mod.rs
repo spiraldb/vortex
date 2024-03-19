@@ -5,7 +5,7 @@ use linkme::distributed_slice;
 
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::compress::EncodingCompression;
-use crate::dtype::DType;
+use crate::dtype::{DType, Metadata};
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -17,28 +17,43 @@ mod compute;
 mod serde;
 
 #[derive(Debug, Clone)]
-pub struct TypedArray {
-    array: ArrayRef,
+pub struct CompositeArray {
+    underlying: ArrayRef,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
-impl TypedArray {
-    pub fn new(array: ArrayRef, dtype: DType) -> Self {
+impl CompositeArray {
+    pub fn new(id: Arc<String>, metadata: Metadata, underlying: ArrayRef) -> Self {
+        let dtype = DType::Composite(id, Box::new(underlying.dtype().clone()), metadata);
         Self {
-            array,
+            underlying,
             dtype,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
 
+    pub fn id(&self) -> Arc<String> {
+        let DType::Composite(id, _, _) = &self.dtype else {
+            unreachable!()
+        };
+        id.clone()
+    }
+
+    pub fn metadata(&self) -> &Metadata {
+        let DType::Composite(_, _, metadata) = &self.dtype else {
+            unreachable!()
+        };
+        metadata
+    }
+
     #[inline]
-    pub fn untyped_array(&self) -> &dyn Array {
-        self.array.as_ref()
+    pub fn underlying(&self) -> &dyn Array {
+        self.underlying.as_ref()
     }
 }
 
-impl Array for TypedArray {
+impl Array for CompositeArray {
     #[inline]
     fn as_any(&self) -> &dyn Any {
         self
@@ -56,12 +71,12 @@ impl Array for TypedArray {
 
     #[inline]
     fn len(&self) -> usize {
-        self.array.len()
+        self.underlying.len()
     }
 
     #[inline]
     fn is_empty(&self) -> bool {
-        self.array.is_empty()
+        self.underlying.is_empty()
     }
 
     #[inline]
@@ -75,17 +90,22 @@ impl Array for TypedArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Self::new(self.array.slice(start, stop)?, self.dtype.clone()).boxed())
+        Ok(Self::new(
+            self.id().clone(),
+            self.metadata().clone(),
+            self.underlying.slice(start, stop)?,
+        )
+        .boxed())
     }
 
     #[inline]
     fn encoding(&self) -> EncodingRef {
-        &TypedEncoding
+        &CompositeEncoding
     }
 
     #[inline]
     fn nbytes(&self) -> usize {
-        self.array.nbytes()
+        self.underlying.nbytes()
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
@@ -93,25 +113,25 @@ impl Array for TypedArray {
     }
 }
 
-impl StatsCompute for TypedArray {}
+impl StatsCompute for CompositeArray {}
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for TypedArray {
+impl<'arr> AsRef<(dyn Array + 'arr)> for CompositeArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
         self
     }
 }
 
 #[derive(Debug)]
-pub struct TypedEncoding;
+pub struct CompositeEncoding;
 
-impl TypedEncoding {
-    pub const ID: EncodingId = EncodingId::new("vortex.typed");
+impl CompositeEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.composite");
 }
 
 #[distributed_slice(ENCODINGS)]
-static ENCODINGS_TYPED: EncodingRef = &TypedEncoding;
+static ENCODINGS_COMPOSITE: EncodingRef = &CompositeEncoding;
 
-impl Encoding for TypedEncoding {
+impl Encoding for CompositeEncoding {
     fn id(&self) -> &EncodingId {
         &Self::ID
     }
@@ -125,16 +145,16 @@ impl Encoding for TypedEncoding {
     }
 }
 
-impl ArrayDisplay for TypedArray {
+impl ArrayDisplay for CompositeArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.child("untyped", self.untyped_array())
+        f.child("composite", self.underlying())
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::array::typed::TypedArray;
-    use crate::composite_dtypes::{localtime, TimeUnit};
+    use super::*;
+    use crate::composite_dtypes::{localtime, TimeUnit, TimeUnitSerializer};
     use crate::compute::scalar_at::scalar_at;
     use crate::dtype::{IntWidth, Nullability};
     use crate::scalar::{CompositeScalar, PScalar, PrimitiveScalar};
@@ -142,15 +162,16 @@ mod test {
     #[test]
     pub fn scalar() {
         let dtype = localtime(TimeUnit::Us, IntWidth::_64, Nullability::NonNullable);
-        let arr = TypedArray::new(
-            vec![64_799_000_000_u64, 43_000_000_000].into(),
-            dtype.clone(),
+        let arr = CompositeArray::new(
+            Arc::new("localtime".into()),
+            TimeUnitSerializer::serialize(TimeUnit::Us),
+            vec![64_799_000_000_i64, 43_000_000_000].into(),
         );
         assert_eq!(
             scalar_at(arr.as_ref(), 0).unwrap(),
             CompositeScalar::new(
                 dtype.clone(),
-                Box::new(PrimitiveScalar::some(PScalar::U64(64_799_000_000)).into()),
+                Box::new(PrimitiveScalar::some(PScalar::I64(64_799_000_000)).into()),
             )
             .into()
         );
@@ -158,7 +179,7 @@ mod test {
             scalar_at(arr.as_ref(), 1).unwrap(),
             CompositeScalar::new(
                 dtype.clone(),
-                Box::new(PrimitiveScalar::some(PScalar::U64(43_000_000_000)).into()),
+                Box::new(PrimitiveScalar::some(PScalar::I64(43_000_000_000)).into()),
             )
             .into()
         );

@@ -1,4 +1,4 @@
-use crate::array::typed::TypedArray;
+use crate::array::composite::CompositeArray;
 use crate::array::Array;
 use crate::arrow::wrappers::as_nulls;
 use crate::composite_dtypes::{TimeUnit, TimeUnitSerializer};
@@ -17,12 +17,12 @@ use arrow_array::{
 use arrow_buffer::NullBuffer;
 use std::sync::Arc;
 
-impl AsArrowArray for TypedArray {
+impl AsArrowArray for CompositeArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         // Decide based on the DType if we know how to do this or not...
         match self.dtype() {
             DType::Composite(id, _dtype, metadata) => match id.as_str() {
-                "zoneddatetime" => hacky_zoneddatetime_as_arrow(self.untyped_array(), metadata),
+                "zoneddatetime" => hacky_zoneddatetime_as_arrow(self.underlying(), metadata),
                 &_ => Err(VortexError::InvalidArgument(
                     format!("Cannot convert composite DType {} to arrow", id).into(),
                 )),

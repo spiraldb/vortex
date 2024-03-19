@@ -5,12 +5,12 @@ use linkme::distributed_slice;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
+use crate::array::composite::{CompositeArray, CompositeEncoding};
 use crate::array::constant::{ConstantArray, ConstantEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::struct_::{StructArray, StructEncoding};
-use crate::array::typed::{TypedArray, TypedEncoding};
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::compress::EncodingCompression;
@@ -23,12 +23,12 @@ use crate::stats::Stats;
 
 pub mod bool;
 pub mod chunked;
+pub mod composite;
 pub mod constant;
 pub mod downcast;
 pub mod primitive;
 pub mod sparse;
 pub mod struct_;
-pub mod typed;
 pub mod varbin;
 pub mod varbinview;
 
@@ -175,11 +175,11 @@ pub static ENCODINGS: [EncodingRef] = [..];
 pub enum ArrayKind<'a> {
     Bool(&'a BoolArray),
     Chunked(&'a ChunkedArray),
+    Composite(&'a CompositeArray),
     Constant(&'a ConstantArray),
     Primitive(&'a PrimitiveArray),
     Sparse(&'a SparseArray),
     Struct(&'a StructArray),
-    Typed(&'a TypedArray),
     VarBin(&'a VarBinArray),
     VarBinView(&'a VarBinViewArray),
     Other(&'a dyn Array),
@@ -190,11 +190,11 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
         match *value.encoding().id() {
             BoolEncoding::ID => ArrayKind::Bool(value.as_bool()),
             ChunkedEncoding::ID => ArrayKind::Chunked(value.as_chunked()),
+            CompositeEncoding::ID => ArrayKind::Composite(value.as_composite()),
             ConstantEncoding::ID => ArrayKind::Constant(value.as_constant()),
             PrimitiveEncoding::ID => ArrayKind::Primitive(value.as_primitive()),
             SparseEncoding::ID => ArrayKind::Sparse(value.as_sparse()),
             StructEncoding::ID => ArrayKind::Struct(value.as_struct()),
-            TypedEncoding::ID => ArrayKind::Typed(value.as_typed()),
             VarBinEncoding::ID => ArrayKind::VarBin(value.as_varbin()),
             VarBinViewEncoding::ID => ArrayKind::VarBinView(value.as_varbinview()),
             _ => ArrayKind::Other(value),

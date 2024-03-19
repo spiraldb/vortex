@@ -22,10 +22,10 @@ use arrow_buffer::Buffer;
 use arrow_schema::{DataType, Field, TimeUnit};
 
 use crate::array::bool::BoolArray;
+use crate::array::composite::CompositeArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
-use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
 use crate::dtype::DType;
@@ -67,7 +67,11 @@ impl<T: ArrowPrimitiveType> FromArrow<&ArrowPrimitiveArray<T>> for ArrayRef {
         if T::DATA_TYPE.is_numeric() {
             arr
         } else {
-            TypedArray::new(arr, (&Field::new("_", T::DATA_TYPE, false)).into()).boxed()
+            let DType::Composite(id, _, metadata) = (&Field::new("_", T::DATA_TYPE, false)).into()
+            else {
+                panic!("Expected composite DType")
+            };
+            CompositeArray::new(id, metadata, arr).boxed()
         }
     }
 }
