@@ -93,7 +93,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
     );
     let reader = builder
-        .with_projection(_mask)
+        //.with_projection(_mask)
         //.with_projection(no_datetime_mask)
         .with_batch_size(65_536)
         // .with_batch_size(5_000_000)
@@ -167,7 +167,7 @@ mod test {
         .unwrap();
     }
 
-    // #[ignore]
+    #[ignore]
     #[test]
     fn compression_ratio() {
         setup_logger(LevelFilter::Info);
@@ -195,7 +195,7 @@ mod test {
         }
     }
 
-    // #[ignore]
+    #[ignore]
     #[test]
     fn round_trip_arrow() {
         let file = File::open(download_taxi_data()).unwrap();

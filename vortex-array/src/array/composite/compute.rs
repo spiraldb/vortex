@@ -32,7 +32,6 @@ impl ArrayCompute for CompositeArray {
 impl AsArrowArray for CompositeArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         let typed = self.extension().as_typed_array(self);
-        let _foo = format!("{:?}", typed.as_ref());
         as_arrow(typed.as_ref())
     }
 }
@@ -61,7 +60,8 @@ impl FlattenFn for CompositeArray {
 
 impl ScalarAtFn for CompositeArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        // TODO(ngates): this seems wrong...
+        // TODO(ngates): this seems wrong... I don't think we just cast scalars like this.
+        //  e.g. how do we know what a datetime is in?
         let underlying = scalar_at(self.underlying(), index)?;
         underlying.cast(self.dtype())
     }
