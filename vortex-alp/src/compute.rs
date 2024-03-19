@@ -1,13 +1,12 @@
 use vortex::array::Array;
-use vortex::compute::ArrayCompute;
-use vortex::compute::flatten::{FlattenedArray, FlattenFn};
+use vortex::compute::flatten::{FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
-use vortex::dtype::{DType, FloatWidth};
-use vortex::error::{VortexError, VortexResult};
+use vortex::compute::ArrayCompute;
+use vortex::error::VortexResult;
 use vortex::scalar::Scalar;
 
-use crate::{ALPArray, ALPFloat, match_each_alp_float_ptype};
 use crate::compress::decompress;
+use crate::{match_each_alp_float_ptype, ALPArray, ALPFloat};
 
 impl ArrayCompute for ALPArray {
     fn flatten(&self) -> Option<&dyn FlattenFn> {

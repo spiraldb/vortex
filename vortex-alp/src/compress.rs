@@ -1,20 +1,20 @@
 use itertools::Itertools;
 
-use vortex::array::{Array, ArrayRef};
-use vortex::array::CloneOptionalArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
+use vortex::array::CloneOptionalArray;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
-use vortex::compute::patch::{patch, PatchFn};
+use vortex::compute::patch::PatchFn;
 use vortex::error::{VortexError, VortexResult};
 use vortex::ptype::{NativePType, PType};
 
-use crate::{Exponents, match_each_alp_float_ptype};
 use crate::alp::ALPFloat;
 use crate::array::{ALPArray, ALPEncoding};
 use crate::downcast::DowncastALP;
+use crate::{match_each_alp_float_ptype, Exponents};
 
 impl EncodingCompression for ALPEncoding {
     fn can_compress(
@@ -106,7 +106,7 @@ pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
 
 pub fn decompress(array: &ALPArray) -> VortexResult<PrimitiveArray> {
     let encoded = flatten_primitive(array.encoded())?;
-    let decoded = match_each_alp_float_ptype!(encoded.ptype().clone(), |$T| {
+    let decoded = match_each_alp_float_ptype!(*encoded.ptype(), |$T| {
         PrimitiveArray::from_nullable(
             decompress_primitive::<$T>(encoded.typed_data(), array.exponents()),
             encoded.validity().clone_optional(),
@@ -116,7 +116,8 @@ pub fn decompress(array: &ALPArray) -> VortexResult<PrimitiveArray> {
         // TODO(#121): right now, applying patches forces an extraneous copy of the array data
         let patched = decoded.patch(patches)?;
         let patched_encoding_id = patched.encoding().id().clone();
-        patched.into_any()
+        patched
+            .into_any()
             .downcast()
             .map_err(|_| VortexError::InvalidEncoding(patched_encoding_id))
             .map(|ptr| *ptr)
@@ -125,8 +126,14 @@ pub fn decompress(array: &ALPArray) -> VortexResult<PrimitiveArray> {
     }
 }
 
-fn decompress_primitive<T: NativePType + ALPFloat>(values: &[T::ALPInt], exponents: &Exponents) -> Vec<T> {
-    values.iter().map(|&v| T::decode_single(v, exponents)).collect_vec()
+fn decompress_primitive<T: NativePType + ALPFloat>(
+    values: &[T::ALPInt],
+    exponents: &Exponents,
+) -> Vec<T> {
+    values
+        .iter()
+        .map(|&v| T::decode_single(v, exponents))
+        .collect_vec()
 }
 
 #[cfg(test)]
@@ -143,6 +150,9 @@ mod tests {
             vec![1234; 1025]
         );
         assert_eq!(encoded.exponents(), &Exponents { e: 4, f: 1 });
+
+        let decoded = decompress(&encoded).unwrap();
+        assert_eq!(array.typed_data::<f32>(), decoded.typed_data::<f32>());
     }
 
     #[test]
