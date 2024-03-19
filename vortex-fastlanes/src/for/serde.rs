@@ -8,7 +8,7 @@ impl ArraySerde for FoRArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.scalar(self.reference())?;
         ctx.write_usize(self.shift() as usize)?;
-        ctx.write(self.child())
+        ctx.write(self.encoded())
     }
 }
 

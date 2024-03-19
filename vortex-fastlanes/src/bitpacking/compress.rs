@@ -320,7 +320,7 @@ mod test {
     }
 
     #[test]
-    fn test_flatten() {
+    fn test_decompress() {
         let cfg = CompressConfig::new(HashSet::from([BitPackedEncoding.id()]), HashSet::default());
         let ctx = CompressCtx::new(Arc::new(cfg));
 
