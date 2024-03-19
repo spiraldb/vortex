@@ -4,10 +4,14 @@ use fastlanez_sys::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compute::cast::cast;
+use vortex::compute::flatten::flatten_primitive;
+use vortex::compute::patch::patch;
 use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
+use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
@@ -135,9 +139,11 @@ fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize)
 
     // Pad the last chunk with zeros to a full 1024 elements.
     let last_chunk_size = array.len() % 1024;
-    let mut last_chunk: [T; 1024] = [T::default(); 1024];
-    last_chunk[..last_chunk_size].copy_from_slice(&array[array.len() - last_chunk_size..]);
-    TryBitPack::try_bitpack_into(&last_chunk, bit_width, &mut output).unwrap();
+    if last_chunk_size > 0 {
+        let mut last_chunk: [T; 1024] = [T::default(); 1024];
+        last_chunk[..last_chunk_size].copy_from_slice(&array[array.len() - last_chunk_size..]);
+        TryBitPack::try_bitpack_into(&last_chunk, bit_width, &mut output).unwrap();
+    }
 
     output
 }
@@ -163,6 +169,84 @@ fn bitpack_patches(
             len,
         ).boxed()
     })
+}
+
+pub fn bitunpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
+    let bit_width = array.bit_width();
+    let length = array.len();
+    let encoded = flatten_primitive(cast(array.encoded(), &PType::U8.into())?.as_ref())?;
+    let ptype: PType = array.dtype().try_into()?;
+
+    let mut unpacked = match ptype {
+        I8 | U8 => PrimitiveArray::from_nullable(
+            bitunpack_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, length),
+            array.validity().clone_optional(),
+        ),
+        I16 | U16 => PrimitiveArray::from_nullable(
+            bitunpack_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, length),
+            array.validity().clone_optional(),
+        ),
+        I32 | U32 => PrimitiveArray::from_nullable(
+            bitunpack_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, length),
+            array.validity().clone_optional(),
+        ),
+        I64 | U64 => PrimitiveArray::from_nullable(
+            bitunpack_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, length),
+            array.validity().clone_optional(),
+        ),
+        _ => panic!("Unsupported ptype {:?}", ptype),
+    }
+    .boxed();
+
+    // Cast to signed if necessary
+    // TODO(ngates): do this more efficiently since we know it's a safe cast. unchecked_cast maybe?
+    if ptype.is_signed_int() {
+        unpacked = cast(unpacked.as_ref(), &ptype.into())?
+    }
+
+    if let Some(patches) = array.patches() {
+        unpacked = patch(unpacked.as_ref(), patches)?;
+    }
+
+    Ok(unpacked.as_primitive().clone())
+}
+
+fn bitunpack_primitive<T: NativePType + TryBitPack>(
+    packed: &[u8],
+    bit_width: usize,
+    length: usize,
+) -> Vec<T> {
+    if bit_width == 0 {
+        return vec![T::default(); length];
+    }
+
+    // How many fastlanes vectors we will process.
+    let num_chunks = (length + 1023) / 1024;
+
+    // Allocate a result vector.
+    let mut output = Vec::with_capacity(length);
+
+    // Loop over all but the last chunk.
+    let bytes_per_chunk = 128 * bit_width;
+    (0..num_chunks - 1).for_each(|i| {
+        let chunk: &[u8] = &packed[i * bytes_per_chunk..][0..bytes_per_chunk];
+        TryBitPack::try_bitunpack_into(chunk, bit_width, &mut output).unwrap();
+    });
+
+    // Handle the final chunk which may contain padding.
+    let last_chunk_size = length % 1024;
+    if last_chunk_size > 0 {
+        let mut last_output = Vec::with_capacity(1024);
+        TryBitPack::try_bitunpack_into(
+            &packed[(num_chunks - 1) * bytes_per_chunk..],
+            bit_width,
+            &mut last_output,
+        )
+        .unwrap();
+        output.extend_from_slice(&last_output[..last_chunk_size]);
+    }
+
+    output
 }
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
@@ -233,5 +317,18 @@ mod test {
             .downcast_ref::<BitPackedArray>()
             .unwrap();
         assert_eq!(bp.bit_width(), 6);
+    }
+
+    #[test]
+    fn test_flatten() {
+        let cfg = CompressConfig::new(HashSet::from([BitPackedEncoding.id()]), HashSet::default());
+        let ctx = CompressCtx::new(Arc::new(cfg));
+
+        let values = PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8)));
+        let compressed = ctx.compress(&values, None).unwrap();
+        assert_eq!(compressed.encoding().id(), BitPackedEncoding.id());
+
+        let decompressed = flatten_primitive(compressed.as_ref()).unwrap();
+        assert_eq!(decompressed.typed_data::<u8>(), values.typed_data::<u8>());
     }
 }
