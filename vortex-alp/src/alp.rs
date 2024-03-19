@@ -108,10 +108,11 @@ macro_rules! match_each_alp_float_ptype {
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
         use vortex::error::VortexError;
         use vortex::ptype::PType;
-        match $self {
+        let ptype: PType = $self;
+        match ptype {
             PType::F32 => Ok(__with__! { f32 }),
             PType::F64 => Ok(__with__! { f64 }),
-            _ => Err(VortexError::InvalidPType($self))
+            _ => Err(VortexError::InvalidPType(ptype))
         }
     })
 }

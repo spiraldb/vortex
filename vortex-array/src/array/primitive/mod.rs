@@ -131,7 +131,7 @@ impl PrimitiveArray {
 
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
         if self.ptype() != &T::PTYPE {
-            panic!("Invalid PType")
+            panic!("Invalid PType! Expected {}, got self.ptype {}", T::PTYPE, self.ptype());
         }
         self.buffer().typed_data()
     }

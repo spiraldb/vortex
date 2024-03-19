@@ -106,7 +106,7 @@ pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
 
 pub fn decompress(array: &ALPArray) -> VortexResult<PrimitiveArray> {
     let encoded = flatten_primitive(array.encoded())?;
-    let decoded = match_each_alp_float_ptype!(*encoded.ptype(), |$T| {
+    let decoded = match_each_alp_float_ptype!(array.dtype().try_into().unwrap(), |$T| {
         PrimitiveArray::from_nullable(
             decompress_primitive::<$T>(encoded.typed_data(), array.exponents()),
             encoded.validity().clone_optional(),
@@ -166,5 +166,27 @@ mod tests {
             vec![0, 1234, 0]
         );
         assert_eq!(encoded.exponents(), &Exponents { e: 4, f: 1 });
+
+        let decoded = decompress(&encoded).unwrap();
+        let expected = vec![0f32, 1.234f32, 0f32];
+        assert_eq!(decoded.typed_data::<f32>(), expected.as_slice());
+    }
+
+    #[test]
+    #[allow(clippy::approx_constant)]
+    fn test_patched_compress() {
+        let values = vec![1.234f64, 2.718, std::f64::consts::PI, 4.0];
+        let array = PrimitiveArray::from(values.clone());
+        let encoded = alp_encode(&array).unwrap();
+        println!("Encoded {:?}", encoded);
+        assert!(encoded.patches().is_some());
+        assert_eq!(
+            encoded.encoded().as_primitive().typed_data::<i64>(),
+            vec![1234i64, 2718, 2718, 4000] // fill forward
+        );
+        assert_eq!(encoded.exponents(), &Exponents { e: 3, f: 0 });
+
+        let decoded = decompress(&encoded).unwrap();
+        assert_eq!(values, decoded.typed_data::<f64>());
     }
 }
