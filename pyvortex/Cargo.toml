@@ -19,17 +19,17 @@ name = "pyvortex"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-arrow = { version = "50.0.0", features = ["pyarrow"] }
-vortex-alp = { path = "../vortex-alp" }
+arrow = { version = "51.0.0", features = ["pyarrow"] }
 vortex-array = { path = "../vortex-array" }
+vortex-alp = { path = "../vortex-alp" }
 vortex-dict = { path = "../vortex-dict" }
 vortex-fastlanes = { path = "../vortex-fastlanes" }
 vortex-ree = { path = "../vortex-ree" }
 vortex-roaring = { path = "../vortex-roaring" }
 vortex-schema = { path = "../vortex-schema" }
 vortex-zigzag = { path = "../vortex-zigzag" }
-itertools = "0.12.1"
-log = "0.4.20"
+itertools = { workspace = true }
+log = { workspace = true }
 paste = "1.0.14"
 pyo3 = { version = "0.20.2", features = ["extension-module", "abi3-py311"] }
 pyo3-log = "0.9.0"
