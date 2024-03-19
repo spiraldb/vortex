@@ -6,7 +6,7 @@ use vortex::dtype::{DType, FloatWidth};
 use vortex::error::{VortexError, VortexResult};
 use vortex::scalar::Scalar;
 
-use crate::{ALPArray, ALPFloat};
+use crate::{ALPArray, ALPFloat, match_each_alp_float_ptype};
 use crate::compress::decompress;
 
 impl ArrayCompute for ALPArray {
@@ -32,23 +32,12 @@ impl ScalarAtFn for ALPArray {
         }
 
         let encoded_val = scalar_at(self.encoded(), index)?;
-
-        match self.dtype() {
-            DType::Float(FloatWidth::_32, _) => {
-                let encoded_val: i32 = encoded_val.try_into().unwrap();
-                Ok(Scalar::from(<f32 as ALPFloat>::decode_single(
-                    encoded_val,
-                    self.exponents(),
-                )))
-            }
-            DType::Float(FloatWidth::_64, _) => {
-                let encoded_val: i64 = encoded_val.try_into().unwrap();
-                Ok(Scalar::from(<f64 as ALPFloat>::decode_single(
-                    encoded_val,
-                    self.exponents(),
-                )))
-            }
-            _ => Err(VortexError::InvalidDType(self.dtype().clone())),
-        }
+        match_each_alp_float_ptype!(self.dtype().try_into().unwrap(), |$T| {
+            let encoded_val: <$T as ALPFloat>::ALPInt = encoded_val.try_into().unwrap();
+            Scalar::from(<$T as ALPFloat>::decode_single(
+                encoded_val,
+                self.exponents(),
+            ))
+        })
     }
 }
