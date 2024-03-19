@@ -1,3 +1,5 @@
+use crate::error::VortexResult;
+use crate::serde::BytesSerde;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -19,20 +21,18 @@ impl Display for TimeUnit {
     }
 }
 
-pub struct TimeUnitSerializer;
-
-impl TimeUnitSerializer {
-    pub fn serialize(unit: TimeUnit) -> Vec<u8> {
-        vec![unit as u8]
+impl BytesSerde for TimeUnit {
+    fn serialize(&self) -> Vec<u8> {
+        vec![*self as u8]
     }
 
-    pub fn deserialize(bytes: &[u8]) -> TimeUnit {
-        match bytes[0] {
-            0x00 => TimeUnit::Ns,
-            0x01 => TimeUnit::Us,
-            0x02 => TimeUnit::Ms,
-            0x03 => TimeUnit::S,
-            _ => panic!("Unknown timeunit variant"),
+    fn deserialize(data: &[u8]) -> VortexResult<Self> {
+        match data[0] {
+            0x00 => Ok(TimeUnit::Ns),
+            0x01 => Ok(TimeUnit::Us),
+            0x02 => Ok(TimeUnit::Ms),
+            0x03 => Ok(TimeUnit::S),
+            _ => Err("Unknown timeunit variant".into()),
         }
     }
 }

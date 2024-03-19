@@ -16,7 +16,7 @@ impl ArraySerde for DictArray {
 impl EncodingSerde for DictEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let dict = ctx.read()?;
-        let codes_dtype = ctx.dtype()?;
+        let codes_dtype = ctx.read_dtype()?;
         let codes = ctx.with_schema(&codes_dtype).read()?;
         Ok(DictArray::new(codes, dict).boxed())
     }

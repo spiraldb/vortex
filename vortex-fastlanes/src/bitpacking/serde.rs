@@ -21,7 +21,7 @@ impl EncodingSerde for BitPackedEncoding {
         let validity = ctx.read_optional_array()?;
         let patches = ctx.read_optional_array()?;
         let bit_width = ctx.read_usize()?;
-        let dtype = ctx.dtype()?;
+        let dtype = ctx.read_dtype()?;
         let len = ctx.read_usize()?;
         Ok(
             BitPackedArray::try_new(encoded, validity, patches, bit_width, dtype, len)

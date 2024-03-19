@@ -22,6 +22,14 @@ pub trait EncodingSerde {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef>;
 }
 
+pub trait BytesSerde
+where
+    Self: Sized,
+{
+    fn serialize(&self) -> Vec<u8>;
+    fn deserialize(data: &[u8]) -> VortexResult<Self>;
+}
+
 pub struct ReadCtx<'a> {
     schema: &'a DType,
     encodings: Vec<&'static EncodingId>,
@@ -70,7 +78,7 @@ impl<'a> ReadCtx<'a> {
     }
 
     #[inline]
-    pub fn dtype(&mut self) -> VortexResult<DType> {
+    pub fn read_dtype(&mut self) -> VortexResult<DType> {
         DTypeReader::new(self.r).read()
     }
 

@@ -25,7 +25,7 @@ impl EncodingSerde for REEEncoding {
         } else {
             None
         };
-        let ends_dtype = ctx.dtype()?;
+        let ends_dtype = ctx.read_dtype()?;
         let ends = ctx.with_schema(&ends_dtype).read()?;
         let values = ctx.read()?;
         Ok(REEArray::new(ends, values, validity, len).boxed())

@@ -4,6 +4,7 @@ use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Field, SchemaRef, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
 
+use crate::array::composite::localdatetime::LocalDateTimeExtension;
 use crate::array::struct_::StructArray;
 use crate::array::{Array, ArrayRef};
 use crate::composite_dtypes::TimeUnit;
@@ -110,7 +111,10 @@ impl From<&Field> for DType {
             DataType::Utf8 | DataType::LargeUtf8 => Utf8(nullability),
             DataType::Binary | DataType::LargeBinary => Binary(nullability),
             // TODO(robert): what to do about this timezone?
-            // DataType::Timestamp(u, _) => zoneddatetime(u.into(), nullability),
+            DataType::Timestamp(_u, tz) => match tz {
+                None => LocalDateTimeExtension::dtype(nullability),
+                Some(_) => unimplemented!("Timezone not yet supported"),
+            },
             // DataType::Date32 => localdate(IntWidth::_32, nullability),
             // DataType::Date64 => localdate(IntWidth::_64, nullability),
             // DataType::Time32(u) => localtime(u.into(), IntWidth::_32, nullability),

@@ -22,7 +22,7 @@ use arrow_buffer::Buffer;
 use arrow_schema::{DataType, TimeUnit};
 
 use crate::array::bool::BoolArray;
-use crate::array::composite::datetime::{LocalDateTime, LocalDateTimeArray};
+use crate::array::composite::localdatetime::{LocalDateTime, LocalDateTimeArray};
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;

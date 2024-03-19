@@ -1,6 +1,6 @@
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
-use crate::array::composite::untyped::CompositeArray;
+use crate::array::composite::CompositeArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
@@ -51,6 +51,16 @@ pub fn flatten_bool(array: &dyn Array) -> VortexResult<BoolArray> {
     } else {
         Err(VortexError::InvalidArgument(
             format!("Cannot flatten array {} into bool", array).into(),
+        ))
+    }
+}
+
+pub fn flatten_composite(array: &dyn Array) -> VortexResult<CompositeArray> {
+    if let FlattenedArray::Composite(c) = flatten(array)? {
+        Ok(c)
+    } else {
+        Err(VortexError::InvalidArgument(
+            format!("Cannot flatten array {} into composite", array).into(),
         ))
     }
 }

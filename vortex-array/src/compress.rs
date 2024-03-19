@@ -5,10 +5,12 @@ use std::sync::Arc;
 use log::{debug, info, warn};
 
 use crate::array::chunked::ChunkedArray;
+use crate::array::composite::{CompositeArray, CompositeEncoding};
 use crate::array::constant::{ConstantArray, ConstantEncoding};
 use crate::array::struct_::StructArray;
 use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId, ENCODINGS};
 use crate::compute;
+use crate::compute::flatten::flatten_composite;
 use crate::compute::scalar_at::scalar_at;
 use crate::error::VortexResult;
 use crate::sampling::stratified_slices;
@@ -182,6 +184,14 @@ impl CompressCtx {
     }
 
     fn compress_array(&self, arr: &dyn Array) -> VortexResult<ArrayRef> {
+        // Composite arrays may be a typed implementation, so first we flatten them into the
+        // untyped CompositeArray.
+        if *arr.encoding().id() == CompositeEncoding::ID
+            && arr.as_any().downcast_ref::<CompositeArray>().is_none()
+        {
+            return self.compress_array(flatten_composite(arr)?.as_ref());
+        }
+
         match ArrayKind::from(arr) {
             ArrayKind::Chunked(chunked) => {
                 // For chunked arrays, we compress each chunk individually

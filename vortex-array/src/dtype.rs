@@ -222,7 +222,7 @@ impl Display for DType {
                     .join(", ")
             ),
             List(c, n) => write!(f, "list({}){}", c, n),
-            Composite(id, n) => write!(f, "composite({}){}", id, n),
+            Composite(id, n) => write!(f, "<{}>{}", id, n),
         }
     }
 }
@@ -277,6 +277,6 @@ mod test {
 
     #[test]
     fn size_of() {
-        assert_eq!(mem::size_of::<DType>(), 56);
+        assert_eq!(mem::size_of::<DType>(), 48);
     }
 }
