@@ -233,16 +233,18 @@ fn bitunpack_primitive<T: NativePType + TryBitPack>(
         TryBitPack::try_bitunpack_into(chunk, bit_width, &mut output).unwrap();
     });
 
-    // Handle the final chunk which may containg padding.
+    // Handle the final chunk which may contain padding.
     let last_chunk_size = length % 1024;
-    let mut last_output = Vec::with_capacity(1024);
-    TryBitPack::try_bitunpack_into(
-        &packed[(num_chunks - 1) * bytes_per_chunk..],
-        bit_width,
-        &mut last_output,
-    )
-    .unwrap();
-    output.extend_from_slice(&last_output[..last_chunk_size]);
+    if last_chunk_size > 0 {
+        let mut last_output = Vec::with_capacity(1024);
+        TryBitPack::try_bitunpack_into(
+            &packed[(num_chunks - 1) * bytes_per_chunk..],
+            bit_width,
+            &mut last_output,
+        )
+        .unwrap();
+        output.extend_from_slice(&last_output[..last_chunk_size]);
+    }
 
     output
 }
