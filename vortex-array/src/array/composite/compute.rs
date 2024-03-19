@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
+use crate::array::composite::CompositeArray;
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::typed::TypedArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
@@ -11,7 +11,7 @@ use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
 use crate::scalar::Scalar;
 
-impl ArrayCompute for TypedArray {
+impl ArrayCompute for CompositeArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }
@@ -29,30 +29,31 @@ impl ArrayCompute for TypedArray {
     }
 }
 
-impl AsContiguousFn for TypedArray {
+impl AsContiguousFn for CompositeArray {
     fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
-        Ok(TypedArray::new(
+        Ok(CompositeArray::new(
+            self.id(),
+            self.metadata().clone(),
             as_contiguous(
                 arrays
                     .into_iter()
-                    .map(|array| dyn_clone::clone_box(array.as_typed().untyped_array()))
+                    .map(|array| dyn_clone::clone_box(array.as_composite().underlying()))
                     .collect_vec(),
             )?,
-            self.dtype().clone(),
         )
         .boxed())
     }
 }
 
-impl FlattenFn for TypedArray {
+impl FlattenFn for CompositeArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
-        Ok(FlattenedArray::Typed(self.clone()))
+        Ok(FlattenedArray::Composite(self.clone()))
     }
 }
 
-impl ScalarAtFn for TypedArray {
+impl ScalarAtFn for CompositeArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let underlying = scalar_at(self.array.as_ref(), index)?;
+        let underlying = scalar_at(self.underlying(), index)?;
         underlying.cast(self.dtype())
     }
 }

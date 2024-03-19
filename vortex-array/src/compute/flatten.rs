@@ -1,8 +1,8 @@
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
+use crate::array::composite::CompositeArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
-use crate::array::typed::TypedArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
 use crate::error::{VortexError, VortexResult};
@@ -15,9 +15,9 @@ pub trait FlattenFn {
 pub enum FlattenedArray {
     Bool(BoolArray),
     Chunked(ChunkedArray),
+    Composite(CompositeArray),
     Primitive(PrimitiveArray),
     Struct(StructArray),
-    Typed(TypedArray),
     VarBin(VarBinArray),
 }
 
@@ -26,9 +26,9 @@ impl FlattenedArray {
         match self {
             FlattenedArray::Bool(array) => array.boxed(),
             FlattenedArray::Chunked(array) => array.boxed(),
+            FlattenedArray::Composite(array) => array.boxed(),
             FlattenedArray::Primitive(array) => array.boxed(),
             FlattenedArray::Struct(array) => array.boxed(),
-            FlattenedArray::Typed(array) => array.boxed(),
             FlattenedArray::VarBin(array) => array.boxed(),
         }
     }

@@ -4,11 +4,11 @@ use pyo3::prelude::*;
 
 use vortex::array::bool::BoolArray;
 use vortex::array::chunked::ChunkedArray;
+use vortex::array::composite::CompositeArray;
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::struct_::StructArray;
-use vortex::array::typed::TypedArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::varbinview::VarBinViewArray;
 use vortex::array::{Array, ArrayKind, ArrayRef};
@@ -53,11 +53,11 @@ macro_rules! pyarray {
 
 pyarray!(BoolArray, "BoolArray");
 pyarray!(ChunkedArray, "ChunkedArray");
+pyarray!(CompositeArray, "CompositeArray");
 pyarray!(ConstantArray, "ConstantArray");
 pyarray!(PrimitiveArray, "PrimitiveArray");
 pyarray!(SparseArray, "SparseArray");
 pyarray!(StructArray, "StructArray");
-pyarray!(TypedArray, "TypedArray");
 pyarray!(VarBinArray, "VarBinArray");
 pyarray!(VarBinViewArray, "VarBinViewArray");
 
@@ -82,6 +82,10 @@ impl PyArray {
                 PyChunkedArray::wrap(py, inner.into_any().downcast::<ChunkedArray>().unwrap())?
                     .extract(py)
             }
+            ArrayKind::Composite(_) => {
+                PyCompositeArray::wrap(py, inner.into_any().downcast::<CompositeArray>().unwrap())?
+                    .extract(py)
+            }
             ArrayKind::Constant(_) => {
                 PyConstantArray::wrap(py, inner.into_any().downcast::<ConstantArray>().unwrap())?
                     .extract(py)
@@ -96,10 +100,6 @@ impl PyArray {
             }
             ArrayKind::Struct(_) => {
                 PyStructArray::wrap(py, inner.into_any().downcast::<StructArray>().unwrap())?
-                    .extract(py)
-            }
-            ArrayKind::Typed(_) => {
-                PyTypedArray::wrap(py, inner.into_any().downcast::<TypedArray>().unwrap())?
                     .extract(py)
             }
             ArrayKind::VarBin(_) => {
