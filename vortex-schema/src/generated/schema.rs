@@ -8,2287 +8,2264 @@ use core::mem;
 extern crate flatbuffers;
 use self::flatbuffers::{EndianScalar, Follow};
 
-#[allow(unused_imports, dead_code)]
-pub mod vortex {
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+pub const ENUM_MIN_NULLABILITY: i8 = 0;
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+pub const ENUM_MAX_NULLABILITY: i8 = 1;
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_NULLABILITY: [Nullability; 2] =
+    [Nullability::NonNullable, Nullability::Nullable];
 
-    use core::cmp::Ordering;
-    use core::mem;
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct Nullability(pub i8);
+#[allow(non_upper_case_globals)]
+impl Nullability {
+    pub const NonNullable: Self = Self(0);
+    pub const Nullable: Self = Self(1);
 
-    extern crate flatbuffers;
-    use self::flatbuffers::{EndianScalar, Follow};
-
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    pub const ENUM_MIN_NULLABILITY: i8 = 0;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    pub const ENUM_MAX_NULLABILITY: i8 = 1;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    #[allow(non_camel_case_types)]
-    pub const ENUM_VALUES_NULLABILITY: [Nullability; 2] =
-        [Nullability::NonNullable, Nullability::Nullable];
-
-    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-    #[repr(transparent)]
-    pub struct Nullability(pub i8);
-    #[allow(non_upper_case_globals)]
-    impl Nullability {
-        pub const NonNullable: Self = Self(0);
-        pub const Nullable: Self = Self(1);
-
-        pub const ENUM_MIN: i8 = 0;
-        pub const ENUM_MAX: i8 = 1;
-        pub const ENUM_VALUES: &'static [Self] = &[Self::NonNullable, Self::Nullable];
-        /// Returns the variant's name or "" if unknown.
-        pub fn variant_name(self) -> Option<&'static str> {
-            match self {
-                Self::NonNullable => Some("NonNullable"),
-                Self::Nullable => Some("Nullable"),
-                _ => None,
-            }
+    pub const ENUM_MIN: i8 = 0;
+    pub const ENUM_MAX: i8 = 1;
+    pub const ENUM_VALUES: &'static [Self] = &[Self::NonNullable, Self::Nullable];
+    /// Returns the variant's name or "" if unknown.
+    pub fn variant_name(self) -> Option<&'static str> {
+        match self {
+            Self::NonNullable => Some("NonNullable"),
+            Self::Nullable => Some("Nullable"),
+            _ => None,
         }
     }
-    impl core::fmt::Debug for Nullability {
-        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            if let Some(name) = self.variant_name() {
-                f.write_str(name)
-            } else {
-                f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
-            }
+}
+impl core::fmt::Debug for Nullability {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Some(name) = self.variant_name() {
+            f.write_str(name)
+        } else {
+            f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
         }
     }
-    impl<'a> flatbuffers::Follow<'a> for Nullability {
-        type Inner = Self;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            let b = flatbuffers::read_scalar_at::<i8>(buf, loc);
-            Self(b)
-        }
+}
+impl<'a> flatbuffers::Follow<'a> for Nullability {
+    type Inner = Self;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        let b = flatbuffers::read_scalar_at::<i8>(buf, loc);
+        Self(b)
     }
+}
 
-    impl flatbuffers::Push for Nullability {
-        type Output = Nullability;
-        #[inline]
-        unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
-            flatbuffers::emplace_scalar::<i8>(dst, self.0);
+impl flatbuffers::Push for Nullability {
+    type Output = Nullability;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        flatbuffers::emplace_scalar::<i8>(dst, self.0);
+    }
+}
+
+impl flatbuffers::EndianScalar for Nullability {
+    type Scalar = i8;
+    #[inline]
+    fn to_little_endian(self) -> i8 {
+        self.0.to_le()
+    }
+    #[inline]
+    #[allow(clippy::wrong_self_convention)]
+    fn from_little_endian(v: i8) -> Self {
+        let b = i8::from_le(v);
+        Self(b)
+    }
+}
+
+impl<'a> flatbuffers::Verifiable for Nullability {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        i8::run_verifier(v, pos)
+    }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for Nullability {}
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+pub const ENUM_MIN_SIGNEDNESS: i8 = 0;
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+pub const ENUM_MAX_SIGNEDNESS: i8 = 2;
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_SIGNEDNESS: [Signedness; 3] = [
+    Signedness::Signed,
+    Signedness::Unsigned,
+    Signedness::Unknown,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct Signedness(pub i8);
+#[allow(non_upper_case_globals)]
+impl Signedness {
+    pub const Signed: Self = Self(0);
+    pub const Unsigned: Self = Self(1);
+    pub const Unknown: Self = Self(2);
+
+    pub const ENUM_MIN: i8 = 0;
+    pub const ENUM_MAX: i8 = 2;
+    pub const ENUM_VALUES: &'static [Self] = &[Self::Signed, Self::Unsigned, Self::Unknown];
+    /// Returns the variant's name or "" if unknown.
+    pub fn variant_name(self) -> Option<&'static str> {
+        match self {
+            Self::Signed => Some("Signed"),
+            Self::Unsigned => Some("Unsigned"),
+            Self::Unknown => Some("Unknown"),
+            _ => None,
         }
     }
-
-    impl flatbuffers::EndianScalar for Nullability {
-        type Scalar = i8;
-        #[inline]
-        fn to_little_endian(self) -> i8 {
-            self.0.to_le()
-        }
-        #[inline]
-        #[allow(clippy::wrong_self_convention)]
-        fn from_little_endian(v: i8) -> Self {
-            let b = i8::from_le(v);
-            Self(b)
+}
+impl core::fmt::Debug for Signedness {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Some(name) = self.variant_name() {
+            f.write_str(name)
+        } else {
+            f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
         }
     }
+}
+impl<'a> flatbuffers::Follow<'a> for Signedness {
+    type Inner = Self;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        let b = flatbuffers::read_scalar_at::<i8>(buf, loc);
+        Self(b)
+    }
+}
 
-    impl<'a> flatbuffers::Verifiable for Nullability {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            i8::run_verifier(v, pos)
+impl flatbuffers::Push for Signedness {
+    type Output = Signedness;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        flatbuffers::emplace_scalar::<i8>(dst, self.0);
+    }
+}
+
+impl flatbuffers::EndianScalar for Signedness {
+    type Scalar = i8;
+    #[inline]
+    fn to_little_endian(self) -> i8 {
+        self.0.to_le()
+    }
+    #[inline]
+    #[allow(clippy::wrong_self_convention)]
+    fn from_little_endian(v: i8) -> Self {
+        let b = i8::from_le(v);
+        Self(b)
+    }
+}
+
+impl<'a> flatbuffers::Verifiable for Signedness {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        i8::run_verifier(v, pos)
+    }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for Signedness {}
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+pub const ENUM_MIN_INT_WIDTH: i8 = 0;
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+pub const ENUM_MAX_INT_WIDTH: i8 = 4;
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_INT_WIDTH: [IntWidth; 5] = [
+    IntWidth::Unknown,
+    IntWidth::_8,
+    IntWidth::_16,
+    IntWidth::_32,
+    IntWidth::_64,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct IntWidth(pub i8);
+#[allow(non_upper_case_globals)]
+impl IntWidth {
+    pub const Unknown: Self = Self(0);
+    pub const _8: Self = Self(1);
+    pub const _16: Self = Self(2);
+    pub const _32: Self = Self(3);
+    pub const _64: Self = Self(4);
+
+    pub const ENUM_MIN: i8 = 0;
+    pub const ENUM_MAX: i8 = 4;
+    pub const ENUM_VALUES: &'static [Self] =
+        &[Self::Unknown, Self::_8, Self::_16, Self::_32, Self::_64];
+    /// Returns the variant's name or "" if unknown.
+    pub fn variant_name(self) -> Option<&'static str> {
+        match self {
+            Self::Unknown => Some("Unknown"),
+            Self::_8 => Some("_8"),
+            Self::_16 => Some("_16"),
+            Self::_32 => Some("_32"),
+            Self::_64 => Some("_64"),
+            _ => None,
         }
     }
+}
+impl core::fmt::Debug for IntWidth {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Some(name) = self.variant_name() {
+            f.write_str(name)
+        } else {
+            f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+        }
+    }
+}
+impl<'a> flatbuffers::Follow<'a> for IntWidth {
+    type Inner = Self;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        let b = flatbuffers::read_scalar_at::<i8>(buf, loc);
+        Self(b)
+    }
+}
 
-    impl flatbuffers::SimpleToVerifyInSlice for Nullability {}
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    pub const ENUM_MIN_SIGNEDNESS: i8 = 0;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    pub const ENUM_MAX_SIGNEDNESS: i8 = 2;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    #[allow(non_camel_case_types)]
-    pub const ENUM_VALUES_SIGNEDNESS: [Signedness; 3] = [
-        Signedness::Signed,
-        Signedness::Unsigned,
-        Signedness::Unknown,
+impl flatbuffers::Push for IntWidth {
+    type Output = IntWidth;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        flatbuffers::emplace_scalar::<i8>(dst, self.0);
+    }
+}
+
+impl flatbuffers::EndianScalar for IntWidth {
+    type Scalar = i8;
+    #[inline]
+    fn to_little_endian(self) -> i8 {
+        self.0.to_le()
+    }
+    #[inline]
+    #[allow(clippy::wrong_self_convention)]
+    fn from_little_endian(v: i8) -> Self {
+        let b = i8::from_le(v);
+        Self(b)
+    }
+}
+
+impl<'a> flatbuffers::Verifiable for IntWidth {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        i8::run_verifier(v, pos)
+    }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for IntWidth {}
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+pub const ENUM_MIN_FLOAT_WIDTH: i8 = 0;
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+pub const ENUM_MAX_FLOAT_WIDTH: i8 = 3;
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_FLOAT_WIDTH: [FloatWidth; 4] = [
+    FloatWidth::Unknown,
+    FloatWidth::_16,
+    FloatWidth::_32,
+    FloatWidth::_64,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct FloatWidth(pub i8);
+#[allow(non_upper_case_globals)]
+impl FloatWidth {
+    pub const Unknown: Self = Self(0);
+    pub const _16: Self = Self(1);
+    pub const _32: Self = Self(2);
+    pub const _64: Self = Self(3);
+
+    pub const ENUM_MIN: i8 = 0;
+    pub const ENUM_MAX: i8 = 3;
+    pub const ENUM_VALUES: &'static [Self] = &[Self::Unknown, Self::_16, Self::_32, Self::_64];
+    /// Returns the variant's name or "" if unknown.
+    pub fn variant_name(self) -> Option<&'static str> {
+        match self {
+            Self::Unknown => Some("Unknown"),
+            Self::_16 => Some("_16"),
+            Self::_32 => Some("_32"),
+            Self::_64 => Some("_64"),
+            _ => None,
+        }
+    }
+}
+impl core::fmt::Debug for FloatWidth {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Some(name) = self.variant_name() {
+            f.write_str(name)
+        } else {
+            f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+        }
+    }
+}
+impl<'a> flatbuffers::Follow<'a> for FloatWidth {
+    type Inner = Self;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        let b = flatbuffers::read_scalar_at::<i8>(buf, loc);
+        Self(b)
+    }
+}
+
+impl flatbuffers::Push for FloatWidth {
+    type Output = FloatWidth;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        flatbuffers::emplace_scalar::<i8>(dst, self.0);
+    }
+}
+
+impl flatbuffers::EndianScalar for FloatWidth {
+    type Scalar = i8;
+    #[inline]
+    fn to_little_endian(self) -> i8 {
+        self.0.to_le()
+    }
+    #[inline]
+    #[allow(clippy::wrong_self_convention)]
+    fn from_little_endian(v: i8) -> Self {
+        let b = i8::from_le(v);
+        Self(b)
+    }
+}
+
+impl<'a> flatbuffers::Verifiable for FloatWidth {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        i8::run_verifier(v, pos)
+    }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for FloatWidth {}
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+pub const ENUM_MIN_TYPE: u8 = 0;
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+pub const ENUM_MAX_TYPE: u8 = 10;
+#[deprecated(
+    since = "2.0.0",
+    note = "Use associated constants instead. This will no longer be generated in 2021."
+)]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_TYPE: [Type; 11] = [
+    Type::NONE,
+    Type::Null,
+    Type::Bool,
+    Type::Int,
+    Type::Decimal,
+    Type::Float,
+    Type::Utf8,
+    Type::Binary,
+    Type::Struct_,
+    Type::List,
+    Type::Composite,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct Type(pub u8);
+#[allow(non_upper_case_globals)]
+impl Type {
+    pub const NONE: Self = Self(0);
+    pub const Null: Self = Self(1);
+    pub const Bool: Self = Self(2);
+    pub const Int: Self = Self(3);
+    pub const Decimal: Self = Self(4);
+    pub const Float: Self = Self(5);
+    pub const Utf8: Self = Self(6);
+    pub const Binary: Self = Self(7);
+    pub const Struct_: Self = Self(8);
+    pub const List: Self = Self(9);
+    pub const Composite: Self = Self(10);
+
+    pub const ENUM_MIN: u8 = 0;
+    pub const ENUM_MAX: u8 = 10;
+    pub const ENUM_VALUES: &'static [Self] = &[
+        Self::NONE,
+        Self::Null,
+        Self::Bool,
+        Self::Int,
+        Self::Decimal,
+        Self::Float,
+        Self::Utf8,
+        Self::Binary,
+        Self::Struct_,
+        Self::List,
+        Self::Composite,
     ];
-
-    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-    #[repr(transparent)]
-    pub struct Signedness(pub i8);
-    #[allow(non_upper_case_globals)]
-    impl Signedness {
-        pub const Signed: Self = Self(0);
-        pub const Unsigned: Self = Self(1);
-        pub const Unknown: Self = Self(2);
-
-        pub const ENUM_MIN: i8 = 0;
-        pub const ENUM_MAX: i8 = 2;
-        pub const ENUM_VALUES: &'static [Self] = &[Self::Signed, Self::Unsigned, Self::Unknown];
-        /// Returns the variant's name or "" if unknown.
-        pub fn variant_name(self) -> Option<&'static str> {
-            match self {
-                Self::Signed => Some("Signed"),
-                Self::Unsigned => Some("Unsigned"),
-                Self::Unknown => Some("Unknown"),
-                _ => None,
-            }
-        }
-    }
-    impl core::fmt::Debug for Signedness {
-        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            if let Some(name) = self.variant_name() {
-                f.write_str(name)
-            } else {
-                f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
-            }
-        }
-    }
-    impl<'a> flatbuffers::Follow<'a> for Signedness {
-        type Inner = Self;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            let b = flatbuffers::read_scalar_at::<i8>(buf, loc);
-            Self(b)
-        }
-    }
-
-    impl flatbuffers::Push for Signedness {
-        type Output = Signedness;
-        #[inline]
-        unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
-            flatbuffers::emplace_scalar::<i8>(dst, self.0);
-        }
-    }
-
-    impl flatbuffers::EndianScalar for Signedness {
-        type Scalar = i8;
-        #[inline]
-        fn to_little_endian(self) -> i8 {
-            self.0.to_le()
-        }
-        #[inline]
-        #[allow(clippy::wrong_self_convention)]
-        fn from_little_endian(v: i8) -> Self {
-            let b = i8::from_le(v);
-            Self(b)
-        }
-    }
-
-    impl<'a> flatbuffers::Verifiable for Signedness {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            i8::run_verifier(v, pos)
-        }
-    }
-
-    impl flatbuffers::SimpleToVerifyInSlice for Signedness {}
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    pub const ENUM_MIN_INT_WIDTH: i8 = 0;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    pub const ENUM_MAX_INT_WIDTH: i8 = 4;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    #[allow(non_camel_case_types)]
-    pub const ENUM_VALUES_INT_WIDTH: [IntWidth; 5] = [
-        IntWidth::Unknown,
-        IntWidth::_8,
-        IntWidth::_16,
-        IntWidth::_32,
-        IntWidth::_64,
-    ];
-
-    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-    #[repr(transparent)]
-    pub struct IntWidth(pub i8);
-    #[allow(non_upper_case_globals)]
-    impl IntWidth {
-        pub const Unknown: Self = Self(0);
-        pub const _8: Self = Self(1);
-        pub const _16: Self = Self(2);
-        pub const _32: Self = Self(3);
-        pub const _64: Self = Self(4);
-
-        pub const ENUM_MIN: i8 = 0;
-        pub const ENUM_MAX: i8 = 4;
-        pub const ENUM_VALUES: &'static [Self] =
-            &[Self::Unknown, Self::_8, Self::_16, Self::_32, Self::_64];
-        /// Returns the variant's name or "" if unknown.
-        pub fn variant_name(self) -> Option<&'static str> {
-            match self {
-                Self::Unknown => Some("Unknown"),
-                Self::_8 => Some("_8"),
-                Self::_16 => Some("_16"),
-                Self::_32 => Some("_32"),
-                Self::_64 => Some("_64"),
-                _ => None,
-            }
-        }
-    }
-    impl core::fmt::Debug for IntWidth {
-        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            if let Some(name) = self.variant_name() {
-                f.write_str(name)
-            } else {
-                f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
-            }
-        }
-    }
-    impl<'a> flatbuffers::Follow<'a> for IntWidth {
-        type Inner = Self;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            let b = flatbuffers::read_scalar_at::<i8>(buf, loc);
-            Self(b)
-        }
-    }
-
-    impl flatbuffers::Push for IntWidth {
-        type Output = IntWidth;
-        #[inline]
-        unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
-            flatbuffers::emplace_scalar::<i8>(dst, self.0);
-        }
-    }
-
-    impl flatbuffers::EndianScalar for IntWidth {
-        type Scalar = i8;
-        #[inline]
-        fn to_little_endian(self) -> i8 {
-            self.0.to_le()
-        }
-        #[inline]
-        #[allow(clippy::wrong_self_convention)]
-        fn from_little_endian(v: i8) -> Self {
-            let b = i8::from_le(v);
-            Self(b)
-        }
-    }
-
-    impl<'a> flatbuffers::Verifiable for IntWidth {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            i8::run_verifier(v, pos)
-        }
-    }
-
-    impl flatbuffers::SimpleToVerifyInSlice for IntWidth {}
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    pub const ENUM_MIN_FLOAT_WIDTH: i8 = 0;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    pub const ENUM_MAX_FLOAT_WIDTH: i8 = 3;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    #[allow(non_camel_case_types)]
-    pub const ENUM_VALUES_FLOAT_WIDTH: [FloatWidth; 4] = [
-        FloatWidth::Unknown,
-        FloatWidth::_16,
-        FloatWidth::_32,
-        FloatWidth::_64,
-    ];
-
-    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-    #[repr(transparent)]
-    pub struct FloatWidth(pub i8);
-    #[allow(non_upper_case_globals)]
-    impl FloatWidth {
-        pub const Unknown: Self = Self(0);
-        pub const _16: Self = Self(1);
-        pub const _32: Self = Self(2);
-        pub const _64: Self = Self(3);
-
-        pub const ENUM_MIN: i8 = 0;
-        pub const ENUM_MAX: i8 = 3;
-        pub const ENUM_VALUES: &'static [Self] = &[Self::Unknown, Self::_16, Self::_32, Self::_64];
-        /// Returns the variant's name or "" if unknown.
-        pub fn variant_name(self) -> Option<&'static str> {
-            match self {
-                Self::Unknown => Some("Unknown"),
-                Self::_16 => Some("_16"),
-                Self::_32 => Some("_32"),
-                Self::_64 => Some("_64"),
-                _ => None,
-            }
-        }
-    }
-    impl core::fmt::Debug for FloatWidth {
-        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            if let Some(name) = self.variant_name() {
-                f.write_str(name)
-            } else {
-                f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
-            }
-        }
-    }
-    impl<'a> flatbuffers::Follow<'a> for FloatWidth {
-        type Inner = Self;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            let b = flatbuffers::read_scalar_at::<i8>(buf, loc);
-            Self(b)
-        }
-    }
-
-    impl flatbuffers::Push for FloatWidth {
-        type Output = FloatWidth;
-        #[inline]
-        unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
-            flatbuffers::emplace_scalar::<i8>(dst, self.0);
-        }
-    }
-
-    impl flatbuffers::EndianScalar for FloatWidth {
-        type Scalar = i8;
-        #[inline]
-        fn to_little_endian(self) -> i8 {
-            self.0.to_le()
-        }
-        #[inline]
-        #[allow(clippy::wrong_self_convention)]
-        fn from_little_endian(v: i8) -> Self {
-            let b = i8::from_le(v);
-            Self(b)
-        }
-    }
-
-    impl<'a> flatbuffers::Verifiable for FloatWidth {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            i8::run_verifier(v, pos)
-        }
-    }
-
-    impl flatbuffers::SimpleToVerifyInSlice for FloatWidth {}
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    pub const ENUM_MIN_TYPE: u8 = 0;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    pub const ENUM_MAX_TYPE: u8 = 10;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Use associated constants instead. This will no longer be generated in 2021."
-    )]
-    #[allow(non_camel_case_types)]
-    pub const ENUM_VALUES_TYPE: [Type; 11] = [
-        Type::NONE,
-        Type::Null,
-        Type::Bool,
-        Type::Int,
-        Type::Decimal,
-        Type::Float,
-        Type::Utf8,
-        Type::Binary,
-        Type::Struct_,
-        Type::List,
-        Type::Composite,
-    ];
-
-    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-    #[repr(transparent)]
-    pub struct Type(pub u8);
-    #[allow(non_upper_case_globals)]
-    impl Type {
-        pub const NONE: Self = Self(0);
-        pub const Null: Self = Self(1);
-        pub const Bool: Self = Self(2);
-        pub const Int: Self = Self(3);
-        pub const Decimal: Self = Self(4);
-        pub const Float: Self = Self(5);
-        pub const Utf8: Self = Self(6);
-        pub const Binary: Self = Self(7);
-        pub const Struct_: Self = Self(8);
-        pub const List: Self = Self(9);
-        pub const Composite: Self = Self(10);
-
-        pub const ENUM_MIN: u8 = 0;
-        pub const ENUM_MAX: u8 = 10;
-        pub const ENUM_VALUES: &'static [Self] = &[
-            Self::NONE,
-            Self::Null,
-            Self::Bool,
-            Self::Int,
-            Self::Decimal,
-            Self::Float,
-            Self::Utf8,
-            Self::Binary,
-            Self::Struct_,
-            Self::List,
-            Self::Composite,
-        ];
-        /// Returns the variant's name or "" if unknown.
-        pub fn variant_name(self) -> Option<&'static str> {
-            match self {
-                Self::NONE => Some("NONE"),
-                Self::Null => Some("Null"),
-                Self::Bool => Some("Bool"),
-                Self::Int => Some("Int"),
-                Self::Decimal => Some("Decimal"),
-                Self::Float => Some("Float"),
-                Self::Utf8 => Some("Utf8"),
-                Self::Binary => Some("Binary"),
-                Self::Struct_ => Some("Struct_"),
-                Self::List => Some("List"),
-                Self::Composite => Some("Composite"),
-                _ => None,
-            }
-        }
-    }
-    impl core::fmt::Debug for Type {
-        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            if let Some(name) = self.variant_name() {
-                f.write_str(name)
-            } else {
-                f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
-            }
-        }
-    }
-    impl<'a> flatbuffers::Follow<'a> for Type {
-        type Inner = Self;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            let b = flatbuffers::read_scalar_at::<u8>(buf, loc);
-            Self(b)
-        }
-    }
-
-    impl flatbuffers::Push for Type {
-        type Output = Type;
-        #[inline]
-        unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
-            flatbuffers::emplace_scalar::<u8>(dst, self.0);
-        }
-    }
-
-    impl flatbuffers::EndianScalar for Type {
-        type Scalar = u8;
-        #[inline]
-        fn to_little_endian(self) -> u8 {
-            self.0.to_le()
-        }
-        #[inline]
-        #[allow(clippy::wrong_self_convention)]
-        fn from_little_endian(v: u8) -> Self {
-            let b = u8::from_le(v);
-            Self(b)
-        }
-    }
-
-    impl<'a> flatbuffers::Verifiable for Type {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            u8::run_verifier(v, pos)
-        }
-    }
-
-    impl flatbuffers::SimpleToVerifyInSlice for Type {}
-    pub struct TypeUnionTableOffset {}
-
-    pub enum NullOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct Null<'a> {
-        pub _tab: flatbuffers::Table<'a>,
-    }
-
-    impl<'a> flatbuffers::Follow<'a> for Null<'a> {
-        type Inner = Null<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
-        }
-    }
-
-    impl<'a> Null<'a> {
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            Null { _tab: table }
-        }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            _args: &'args NullArgs,
-        ) -> flatbuffers::WIPOffset<Null<'bldr>> {
-            let mut builder = NullBuilder::new(_fbb);
-            builder.finish()
-        }
-    }
-
-    impl flatbuffers::Verifiable for Null<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?.finish();
-            Ok(())
-        }
-    }
-    pub struct NullArgs {}
-    impl<'a> Default for NullArgs {
-        #[inline]
-        fn default() -> Self {
-            NullArgs {}
-        }
-    }
-
-    pub struct NullBuilder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b> NullBuilder<'a, 'b> {
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> NullBuilder<'a, 'b> {
-            let start = _fbb.start_table();
-            NullBuilder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<Null<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
-        }
-    }
-
-    impl core::fmt::Debug for Null<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("Null");
-            ds.finish()
-        }
-    }
-    pub enum BoolOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct Bool<'a> {
-        pub _tab: flatbuffers::Table<'a>,
-    }
-
-    impl<'a> flatbuffers::Follow<'a> for Bool<'a> {
-        type Inner = Bool<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
-        }
-    }
-
-    impl<'a> Bool<'a> {
-        pub const VT_NULLABILITY: flatbuffers::VOffsetT = 4;
-
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            Bool { _tab: table }
-        }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            args: &'args BoolArgs,
-        ) -> flatbuffers::WIPOffset<Bool<'bldr>> {
-            let mut builder = BoolBuilder::new(_fbb);
-            builder.add_nullability(args.nullability);
-            builder.finish()
-        }
-
-        #[inline]
-        pub fn nullability(&self) -> Nullability {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<Nullability>(Bool::VT_NULLABILITY, Some(Nullability::NonNullable))
-                    .unwrap()
-            }
-        }
-    }
-
-    impl flatbuffers::Verifiable for Bool<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?
-                .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
-                .finish();
-            Ok(())
-        }
-    }
-    pub struct BoolArgs {
-        pub nullability: Nullability,
-    }
-    impl<'a> Default for BoolArgs {
-        #[inline]
-        fn default() -> Self {
-            BoolArgs {
-                nullability: Nullability::NonNullable,
-            }
-        }
-    }
-
-    pub struct BoolBuilder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b> BoolBuilder<'a, 'b> {
-        #[inline]
-        pub fn add_nullability(&mut self, nullability: Nullability) {
-            self.fbb_.push_slot::<Nullability>(
-                Bool::VT_NULLABILITY,
-                nullability,
-                Nullability::NonNullable,
-            );
-        }
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> BoolBuilder<'a, 'b> {
-            let start = _fbb.start_table();
-            BoolBuilder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<Bool<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
-        }
-    }
-
-    impl core::fmt::Debug for Bool<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("Bool");
-            ds.field("nullability", &self.nullability());
-            ds.finish()
-        }
-    }
-    pub enum IntOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct Int<'a> {
-        pub _tab: flatbuffers::Table<'a>,
-    }
-
-    impl<'a> flatbuffers::Follow<'a> for Int<'a> {
-        type Inner = Int<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
-        }
-    }
-
-    impl<'a> Int<'a> {
-        pub const VT_WIDTH: flatbuffers::VOffsetT = 4;
-        pub const VT_SIGNEDNESS: flatbuffers::VOffsetT = 6;
-        pub const VT_NULLABILITY: flatbuffers::VOffsetT = 8;
-
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            Int { _tab: table }
-        }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            args: &'args IntArgs,
-        ) -> flatbuffers::WIPOffset<Int<'bldr>> {
-            let mut builder = IntBuilder::new(_fbb);
-            builder.add_nullability(args.nullability);
-            builder.add_signedness(args.signedness);
-            builder.add_width(args.width);
-            builder.finish()
-        }
-
-        #[inline]
-        pub fn width(&self) -> IntWidth {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<IntWidth>(Int::VT_WIDTH, Some(IntWidth::Unknown))
-                    .unwrap()
-            }
-        }
-        #[inline]
-        pub fn signedness(&self) -> Signedness {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<Signedness>(Int::VT_SIGNEDNESS, Some(Signedness::Unknown))
-                    .unwrap()
-            }
-        }
-        #[inline]
-        pub fn nullability(&self) -> Nullability {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<Nullability>(Int::VT_NULLABILITY, Some(Nullability::NonNullable))
-                    .unwrap()
-            }
-        }
-    }
-
-    impl flatbuffers::Verifiable for Int<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?
-                .visit_field::<IntWidth>("width", Self::VT_WIDTH, false)?
-                .visit_field::<Signedness>("signedness", Self::VT_SIGNEDNESS, false)?
-                .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
-                .finish();
-            Ok(())
-        }
-    }
-    pub struct IntArgs {
-        pub width: IntWidth,
-        pub signedness: Signedness,
-        pub nullability: Nullability,
-    }
-    impl<'a> Default for IntArgs {
-        #[inline]
-        fn default() -> Self {
-            IntArgs {
-                width: IntWidth::Unknown,
-                signedness: Signedness::Unknown,
-                nullability: Nullability::NonNullable,
-            }
-        }
-    }
-
-    pub struct IntBuilder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b> IntBuilder<'a, 'b> {
-        #[inline]
-        pub fn add_width(&mut self, width: IntWidth) {
-            self.fbb_
-                .push_slot::<IntWidth>(Int::VT_WIDTH, width, IntWidth::Unknown);
-        }
-        #[inline]
-        pub fn add_signedness(&mut self, signedness: Signedness) {
-            self.fbb_
-                .push_slot::<Signedness>(Int::VT_SIGNEDNESS, signedness, Signedness::Unknown);
-        }
-        #[inline]
-        pub fn add_nullability(&mut self, nullability: Nullability) {
-            self.fbb_.push_slot::<Nullability>(
-                Int::VT_NULLABILITY,
-                nullability,
-                Nullability::NonNullable,
-            );
-        }
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> IntBuilder<'a, 'b> {
-            let start = _fbb.start_table();
-            IntBuilder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<Int<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
-        }
-    }
-
-    impl core::fmt::Debug for Int<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("Int");
-            ds.field("width", &self.width());
-            ds.field("signedness", &self.signedness());
-            ds.field("nullability", &self.nullability());
-            ds.finish()
-        }
-    }
-    pub enum DecimalOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct Decimal<'a> {
-        pub _tab: flatbuffers::Table<'a>,
-    }
-
-    impl<'a> flatbuffers::Follow<'a> for Decimal<'a> {
-        type Inner = Decimal<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
-        }
-    }
-
-    impl<'a> Decimal<'a> {
-        pub const VT_PRECISION: flatbuffers::VOffsetT = 4;
-        pub const VT_SCALE: flatbuffers::VOffsetT = 6;
-        pub const VT_NULLABILITY: flatbuffers::VOffsetT = 8;
-
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            Decimal { _tab: table }
-        }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            args: &'args DecimalArgs,
-        ) -> flatbuffers::WIPOffset<Decimal<'bldr>> {
-            let mut builder = DecimalBuilder::new(_fbb);
-            builder.add_nullability(args.nullability);
-            builder.add_scale(args.scale);
-            builder.add_precision(args.precision);
-            builder.finish()
-        }
-
-        /// Total number of decimal digits
-        #[inline]
-        pub fn precision(&self) -> u8 {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe { self._tab.get::<u8>(Decimal::VT_PRECISION, Some(0)).unwrap() }
-        }
-        /// Number of digits after the decimal point "."
-        #[inline]
-        pub fn scale(&self) -> i8 {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe { self._tab.get::<i8>(Decimal::VT_SCALE, Some(0)).unwrap() }
-        }
-        #[inline]
-        pub fn nullability(&self) -> Nullability {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<Nullability>(Decimal::VT_NULLABILITY, Some(Nullability::NonNullable))
-                    .unwrap()
-            }
-        }
-    }
-
-    impl flatbuffers::Verifiable for Decimal<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?
-                .visit_field::<u8>("precision", Self::VT_PRECISION, false)?
-                .visit_field::<i8>("scale", Self::VT_SCALE, false)?
-                .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
-                .finish();
-            Ok(())
-        }
-    }
-    pub struct DecimalArgs {
-        pub precision: u8,
-        pub scale: i8,
-        pub nullability: Nullability,
-    }
-    impl<'a> Default for DecimalArgs {
-        #[inline]
-        fn default() -> Self {
-            DecimalArgs {
-                precision: 0,
-                scale: 0,
-                nullability: Nullability::NonNullable,
-            }
-        }
-    }
-
-    pub struct DecimalBuilder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b> DecimalBuilder<'a, 'b> {
-        #[inline]
-        pub fn add_precision(&mut self, precision: u8) {
-            self.fbb_
-                .push_slot::<u8>(Decimal::VT_PRECISION, precision, 0);
-        }
-        #[inline]
-        pub fn add_scale(&mut self, scale: i8) {
-            self.fbb_.push_slot::<i8>(Decimal::VT_SCALE, scale, 0);
-        }
-        #[inline]
-        pub fn add_nullability(&mut self, nullability: Nullability) {
-            self.fbb_.push_slot::<Nullability>(
-                Decimal::VT_NULLABILITY,
-                nullability,
-                Nullability::NonNullable,
-            );
-        }
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> DecimalBuilder<'a, 'b> {
-            let start = _fbb.start_table();
-            DecimalBuilder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<Decimal<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
-        }
-    }
-
-    impl core::fmt::Debug for Decimal<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("Decimal");
-            ds.field("precision", &self.precision());
-            ds.field("scale", &self.scale());
-            ds.field("nullability", &self.nullability());
-            ds.finish()
-        }
-    }
-    pub enum FloatOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct Float<'a> {
-        pub _tab: flatbuffers::Table<'a>,
-    }
-
-    impl<'a> flatbuffers::Follow<'a> for Float<'a> {
-        type Inner = Float<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
-        }
-    }
-
-    impl<'a> Float<'a> {
-        pub const VT_WIDTH: flatbuffers::VOffsetT = 4;
-        pub const VT_NULLABILITY: flatbuffers::VOffsetT = 6;
-
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            Float { _tab: table }
-        }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            args: &'args FloatArgs,
-        ) -> flatbuffers::WIPOffset<Float<'bldr>> {
-            let mut builder = FloatBuilder::new(_fbb);
-            builder.add_nullability(args.nullability);
-            builder.add_width(args.width);
-            builder.finish()
-        }
-
-        #[inline]
-        pub fn width(&self) -> FloatWidth {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<FloatWidth>(Float::VT_WIDTH, Some(FloatWidth::Unknown))
-                    .unwrap()
-            }
-        }
-        #[inline]
-        pub fn nullability(&self) -> Nullability {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<Nullability>(Float::VT_NULLABILITY, Some(Nullability::NonNullable))
-                    .unwrap()
-            }
-        }
-    }
-
-    impl flatbuffers::Verifiable for Float<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?
-                .visit_field::<FloatWidth>("width", Self::VT_WIDTH, false)?
-                .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
-                .finish();
-            Ok(())
-        }
-    }
-    pub struct FloatArgs {
-        pub width: FloatWidth,
-        pub nullability: Nullability,
-    }
-    impl<'a> Default for FloatArgs {
-        #[inline]
-        fn default() -> Self {
-            FloatArgs {
-                width: FloatWidth::Unknown,
-                nullability: Nullability::NonNullable,
-            }
-        }
-    }
-
-    pub struct FloatBuilder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b> FloatBuilder<'a, 'b> {
-        #[inline]
-        pub fn add_width(&mut self, width: FloatWidth) {
-            self.fbb_
-                .push_slot::<FloatWidth>(Float::VT_WIDTH, width, FloatWidth::Unknown);
-        }
-        #[inline]
-        pub fn add_nullability(&mut self, nullability: Nullability) {
-            self.fbb_.push_slot::<Nullability>(
-                Float::VT_NULLABILITY,
-                nullability,
-                Nullability::NonNullable,
-            );
-        }
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> FloatBuilder<'a, 'b> {
-            let start = _fbb.start_table();
-            FloatBuilder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<Float<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
-        }
-    }
-
-    impl core::fmt::Debug for Float<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("Float");
-            ds.field("width", &self.width());
-            ds.field("nullability", &self.nullability());
-            ds.finish()
-        }
-    }
-    pub enum Utf8Offset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct Utf8<'a> {
-        pub _tab: flatbuffers::Table<'a>,
-    }
-
-    impl<'a> flatbuffers::Follow<'a> for Utf8<'a> {
-        type Inner = Utf8<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
-        }
-    }
-
-    impl<'a> Utf8<'a> {
-        pub const VT_NULLABILITY: flatbuffers::VOffsetT = 4;
-
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            Utf8 { _tab: table }
-        }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            args: &'args Utf8Args,
-        ) -> flatbuffers::WIPOffset<Utf8<'bldr>> {
-            let mut builder = Utf8Builder::new(_fbb);
-            builder.add_nullability(args.nullability);
-            builder.finish()
-        }
-
-        #[inline]
-        pub fn nullability(&self) -> Nullability {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<Nullability>(Utf8::VT_NULLABILITY, Some(Nullability::NonNullable))
-                    .unwrap()
-            }
-        }
-    }
-
-    impl flatbuffers::Verifiable for Utf8<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?
-                .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
-                .finish();
-            Ok(())
-        }
-    }
-    pub struct Utf8Args {
-        pub nullability: Nullability,
-    }
-    impl<'a> Default for Utf8Args {
-        #[inline]
-        fn default() -> Self {
-            Utf8Args {
-                nullability: Nullability::NonNullable,
-            }
-        }
-    }
-
-    pub struct Utf8Builder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b> Utf8Builder<'a, 'b> {
-        #[inline]
-        pub fn add_nullability(&mut self, nullability: Nullability) {
-            self.fbb_.push_slot::<Nullability>(
-                Utf8::VT_NULLABILITY,
-                nullability,
-                Nullability::NonNullable,
-            );
-        }
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> Utf8Builder<'a, 'b> {
-            let start = _fbb.start_table();
-            Utf8Builder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<Utf8<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
-        }
-    }
-
-    impl core::fmt::Debug for Utf8<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("Utf8");
-            ds.field("nullability", &self.nullability());
-            ds.finish()
-        }
-    }
-    pub enum BinaryOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct Binary<'a> {
-        pub _tab: flatbuffers::Table<'a>,
-    }
-
-    impl<'a> flatbuffers::Follow<'a> for Binary<'a> {
-        type Inner = Binary<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
-        }
-    }
-
-    impl<'a> Binary<'a> {
-        pub const VT_NULLABILITY: flatbuffers::VOffsetT = 4;
-
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            Binary { _tab: table }
-        }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            args: &'args BinaryArgs,
-        ) -> flatbuffers::WIPOffset<Binary<'bldr>> {
-            let mut builder = BinaryBuilder::new(_fbb);
-            builder.add_nullability(args.nullability);
-            builder.finish()
-        }
-
-        #[inline]
-        pub fn nullability(&self) -> Nullability {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<Nullability>(Binary::VT_NULLABILITY, Some(Nullability::NonNullable))
-                    .unwrap()
-            }
-        }
-    }
-
-    impl flatbuffers::Verifiable for Binary<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?
-                .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
-                .finish();
-            Ok(())
-        }
-    }
-    pub struct BinaryArgs {
-        pub nullability: Nullability,
-    }
-    impl<'a> Default for BinaryArgs {
-        #[inline]
-        fn default() -> Self {
-            BinaryArgs {
-                nullability: Nullability::NonNullable,
-            }
-        }
-    }
-
-    pub struct BinaryBuilder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b> BinaryBuilder<'a, 'b> {
-        #[inline]
-        pub fn add_nullability(&mut self, nullability: Nullability) {
-            self.fbb_.push_slot::<Nullability>(
-                Binary::VT_NULLABILITY,
-                nullability,
-                Nullability::NonNullable,
-            );
-        }
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> BinaryBuilder<'a, 'b> {
-            let start = _fbb.start_table();
-            BinaryBuilder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<Binary<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
-        }
-    }
-
-    impl core::fmt::Debug for Binary<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("Binary");
-            ds.field("nullability", &self.nullability());
-            ds.finish()
-        }
-    }
-    pub enum Struct_Offset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct Struct_<'a> {
-        pub _tab: flatbuffers::Table<'a>,
-    }
-
-    impl<'a> flatbuffers::Follow<'a> for Struct_<'a> {
-        type Inner = Struct_<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
-        }
-    }
-
-    impl<'a> Struct_<'a> {
-        pub const VT_NAMES: flatbuffers::VOffsetT = 4;
-        pub const VT_FIELDS: flatbuffers::VOffsetT = 6;
-
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            Struct_ { _tab: table }
-        }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            args: &'args Struct_Args<'args>,
-        ) -> flatbuffers::WIPOffset<Struct_<'bldr>> {
-            let mut builder = Struct_Builder::new(_fbb);
-            if let Some(x) = args.fields {
-                builder.add_fields(x);
-            }
-            if let Some(x) = args.names {
-                builder.add_names(x);
-            }
-            builder.finish()
-        }
-
-        #[inline]
-        pub fn names(
-            &self,
-        ) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<&'a str>>> {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab.get::<flatbuffers::ForwardsUOffset<
-                    flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<&'a str>>,
-                >>(Struct_::VT_NAMES, None)
-            }
-        }
-        #[inline]
-        pub fn fields(
-            &self,
-        ) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<DType<'a>>>> {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab.get::<flatbuffers::ForwardsUOffset<
-                    flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<DType>>,
-                >>(Struct_::VT_FIELDS, None)
-            }
-        }
-    }
-
-    impl flatbuffers::Verifiable for Struct_<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?
-                .visit_field::<flatbuffers::ForwardsUOffset<
-                    flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<&'_ str>>,
-                >>("names", Self::VT_NAMES, false)?
-                .visit_field::<flatbuffers::ForwardsUOffset<
-                    flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<DType>>,
-                >>("fields", Self::VT_FIELDS, false)?
-                .finish();
-            Ok(())
-        }
-    }
-    pub struct Struct_Args<'a> {
-        pub names: Option<
-            flatbuffers::WIPOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<&'a str>>>,
+    /// Returns the variant's name or "" if unknown.
+    pub fn variant_name(self) -> Option<&'static str> {
+        match self {
+            Self::NONE => Some("NONE"),
+            Self::Null => Some("Null"),
+            Self::Bool => Some("Bool"),
+            Self::Int => Some("Int"),
+            Self::Decimal => Some("Decimal"),
+            Self::Float => Some("Float"),
+            Self::Utf8 => Some("Utf8"),
+            Self::Binary => Some("Binary"),
+            Self::Struct_ => Some("Struct_"),
+            Self::List => Some("List"),
+            Self::Composite => Some("Composite"),
+            _ => None,
+        }
+    }
+}
+impl core::fmt::Debug for Type {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if let Some(name) = self.variant_name() {
+            f.write_str(name)
+        } else {
+            f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+        }
+    }
+}
+impl<'a> flatbuffers::Follow<'a> for Type {
+    type Inner = Self;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        let b = flatbuffers::read_scalar_at::<u8>(buf, loc);
+        Self(b)
+    }
+}
+
+impl flatbuffers::Push for Type {
+    type Output = Type;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        flatbuffers::emplace_scalar::<u8>(dst, self.0);
+    }
+}
+
+impl flatbuffers::EndianScalar for Type {
+    type Scalar = u8;
+    #[inline]
+    fn to_little_endian(self) -> u8 {
+        self.0.to_le()
+    }
+    #[inline]
+    #[allow(clippy::wrong_self_convention)]
+    fn from_little_endian(v: u8) -> Self {
+        let b = u8::from_le(v);
+        Self(b)
+    }
+}
+
+impl<'a> flatbuffers::Verifiable for Type {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        u8::run_verifier(v, pos)
+    }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for Type {}
+pub struct TypeUnionTableOffset {}
+
+pub enum NullOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct Null<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for Null<'a> {
+    type Inner = Null<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
+        }
+    }
+}
+
+impl<'a> Null<'a> {
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        Null { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        _args: &'args NullArgs,
+    ) -> flatbuffers::WIPOffset<Null<'bldr>> {
+        let mut builder = NullBuilder::new(_fbb);
+        builder.finish()
+    }
+}
+
+impl flatbuffers::Verifiable for Null<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?.finish();
+        Ok(())
+    }
+}
+pub struct NullArgs {}
+impl<'a> Default for NullArgs {
+    #[inline]
+    fn default() -> Self {
+        NullArgs {}
+    }
+}
+
+pub struct NullBuilder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> NullBuilder<'a, 'b> {
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> NullBuilder<'a, 'b> {
+        let start = _fbb.start_table();
+        NullBuilder {
+            fbb_: _fbb,
+            start_: start,
+        }
+    }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<Null<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
+
+impl core::fmt::Debug for Null<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("Null");
+        ds.finish()
+    }
+}
+pub enum BoolOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct Bool<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for Bool<'a> {
+    type Inner = Bool<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
+        }
+    }
+}
+
+impl<'a> Bool<'a> {
+    pub const VT_NULLABILITY: flatbuffers::VOffsetT = 4;
+
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        Bool { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args BoolArgs,
+    ) -> flatbuffers::WIPOffset<Bool<'bldr>> {
+        let mut builder = BoolBuilder::new(_fbb);
+        builder.add_nullability(args.nullability);
+        builder.finish()
+    }
+
+    #[inline]
+    pub fn nullability(&self) -> Nullability {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<Nullability>(Bool::VT_NULLABILITY, Some(Nullability::NonNullable))
+                .unwrap()
+        }
+    }
+}
+
+impl flatbuffers::Verifiable for Bool<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?
+            .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
+            .finish();
+        Ok(())
+    }
+}
+pub struct BoolArgs {
+    pub nullability: Nullability,
+}
+impl<'a> Default for BoolArgs {
+    #[inline]
+    fn default() -> Self {
+        BoolArgs {
+            nullability: Nullability::NonNullable,
+        }
+    }
+}
+
+pub struct BoolBuilder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> BoolBuilder<'a, 'b> {
+    #[inline]
+    pub fn add_nullability(&mut self, nullability: Nullability) {
+        self.fbb_.push_slot::<Nullability>(
+            Bool::VT_NULLABILITY,
+            nullability,
+            Nullability::NonNullable,
+        );
+    }
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> BoolBuilder<'a, 'b> {
+        let start = _fbb.start_table();
+        BoolBuilder {
+            fbb_: _fbb,
+            start_: start,
+        }
+    }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<Bool<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
+
+impl core::fmt::Debug for Bool<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("Bool");
+        ds.field("nullability", &self.nullability());
+        ds.finish()
+    }
+}
+pub enum IntOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct Int<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for Int<'a> {
+    type Inner = Int<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
+        }
+    }
+}
+
+impl<'a> Int<'a> {
+    pub const VT_WIDTH: flatbuffers::VOffsetT = 4;
+    pub const VT_SIGNEDNESS: flatbuffers::VOffsetT = 6;
+    pub const VT_NULLABILITY: flatbuffers::VOffsetT = 8;
+
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        Int { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args IntArgs,
+    ) -> flatbuffers::WIPOffset<Int<'bldr>> {
+        let mut builder = IntBuilder::new(_fbb);
+        builder.add_nullability(args.nullability);
+        builder.add_signedness(args.signedness);
+        builder.add_width(args.width);
+        builder.finish()
+    }
+
+    #[inline]
+    pub fn width(&self) -> IntWidth {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<IntWidth>(Int::VT_WIDTH, Some(IntWidth::Unknown))
+                .unwrap()
+        }
+    }
+    #[inline]
+    pub fn signedness(&self) -> Signedness {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<Signedness>(Int::VT_SIGNEDNESS, Some(Signedness::Unknown))
+                .unwrap()
+        }
+    }
+    #[inline]
+    pub fn nullability(&self) -> Nullability {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<Nullability>(Int::VT_NULLABILITY, Some(Nullability::NonNullable))
+                .unwrap()
+        }
+    }
+}
+
+impl flatbuffers::Verifiable for Int<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?
+            .visit_field::<IntWidth>("width", Self::VT_WIDTH, false)?
+            .visit_field::<Signedness>("signedness", Self::VT_SIGNEDNESS, false)?
+            .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
+            .finish();
+        Ok(())
+    }
+}
+pub struct IntArgs {
+    pub width: IntWidth,
+    pub signedness: Signedness,
+    pub nullability: Nullability,
+}
+impl<'a> Default for IntArgs {
+    #[inline]
+    fn default() -> Self {
+        IntArgs {
+            width: IntWidth::Unknown,
+            signedness: Signedness::Unknown,
+            nullability: Nullability::NonNullable,
+        }
+    }
+}
+
+pub struct IntBuilder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> IntBuilder<'a, 'b> {
+    #[inline]
+    pub fn add_width(&mut self, width: IntWidth) {
+        self.fbb_
+            .push_slot::<IntWidth>(Int::VT_WIDTH, width, IntWidth::Unknown);
+    }
+    #[inline]
+    pub fn add_signedness(&mut self, signedness: Signedness) {
+        self.fbb_
+            .push_slot::<Signedness>(Int::VT_SIGNEDNESS, signedness, Signedness::Unknown);
+    }
+    #[inline]
+    pub fn add_nullability(&mut self, nullability: Nullability) {
+        self.fbb_.push_slot::<Nullability>(
+            Int::VT_NULLABILITY,
+            nullability,
+            Nullability::NonNullable,
+        );
+    }
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> IntBuilder<'a, 'b> {
+        let start = _fbb.start_table();
+        IntBuilder {
+            fbb_: _fbb,
+            start_: start,
+        }
+    }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<Int<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
+
+impl core::fmt::Debug for Int<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("Int");
+        ds.field("width", &self.width());
+        ds.field("signedness", &self.signedness());
+        ds.field("nullability", &self.nullability());
+        ds.finish()
+    }
+}
+pub enum DecimalOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct Decimal<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for Decimal<'a> {
+    type Inner = Decimal<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
+        }
+    }
+}
+
+impl<'a> Decimal<'a> {
+    pub const VT_PRECISION: flatbuffers::VOffsetT = 4;
+    pub const VT_SCALE: flatbuffers::VOffsetT = 6;
+    pub const VT_NULLABILITY: flatbuffers::VOffsetT = 8;
+
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        Decimal { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args DecimalArgs,
+    ) -> flatbuffers::WIPOffset<Decimal<'bldr>> {
+        let mut builder = DecimalBuilder::new(_fbb);
+        builder.add_nullability(args.nullability);
+        builder.add_scale(args.scale);
+        builder.add_precision(args.precision);
+        builder.finish()
+    }
+
+    /// Total number of decimal digits
+    #[inline]
+    pub fn precision(&self) -> u8 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u8>(Decimal::VT_PRECISION, Some(0)).unwrap() }
+    }
+    /// Number of digits after the decimal point "."
+    #[inline]
+    pub fn scale(&self) -> i8 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<i8>(Decimal::VT_SCALE, Some(0)).unwrap() }
+    }
+    #[inline]
+    pub fn nullability(&self) -> Nullability {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<Nullability>(Decimal::VT_NULLABILITY, Some(Nullability::NonNullable))
+                .unwrap()
+        }
+    }
+}
+
+impl flatbuffers::Verifiable for Decimal<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?
+            .visit_field::<u8>("precision", Self::VT_PRECISION, false)?
+            .visit_field::<i8>("scale", Self::VT_SCALE, false)?
+            .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
+            .finish();
+        Ok(())
+    }
+}
+pub struct DecimalArgs {
+    pub precision: u8,
+    pub scale: i8,
+    pub nullability: Nullability,
+}
+impl<'a> Default for DecimalArgs {
+    #[inline]
+    fn default() -> Self {
+        DecimalArgs {
+            precision: 0,
+            scale: 0,
+            nullability: Nullability::NonNullable,
+        }
+    }
+}
+
+pub struct DecimalBuilder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> DecimalBuilder<'a, 'b> {
+    #[inline]
+    pub fn add_precision(&mut self, precision: u8) {
+        self.fbb_
+            .push_slot::<u8>(Decimal::VT_PRECISION, precision, 0);
+    }
+    #[inline]
+    pub fn add_scale(&mut self, scale: i8) {
+        self.fbb_.push_slot::<i8>(Decimal::VT_SCALE, scale, 0);
+    }
+    #[inline]
+    pub fn add_nullability(&mut self, nullability: Nullability) {
+        self.fbb_.push_slot::<Nullability>(
+            Decimal::VT_NULLABILITY,
+            nullability,
+            Nullability::NonNullable,
+        );
+    }
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> DecimalBuilder<'a, 'b> {
+        let start = _fbb.start_table();
+        DecimalBuilder {
+            fbb_: _fbb,
+            start_: start,
+        }
+    }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<Decimal<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
+
+impl core::fmt::Debug for Decimal<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("Decimal");
+        ds.field("precision", &self.precision());
+        ds.field("scale", &self.scale());
+        ds.field("nullability", &self.nullability());
+        ds.finish()
+    }
+}
+pub enum FloatOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct Float<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for Float<'a> {
+    type Inner = Float<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
+        }
+    }
+}
+
+impl<'a> Float<'a> {
+    pub const VT_WIDTH: flatbuffers::VOffsetT = 4;
+    pub const VT_NULLABILITY: flatbuffers::VOffsetT = 6;
+
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        Float { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args FloatArgs,
+    ) -> flatbuffers::WIPOffset<Float<'bldr>> {
+        let mut builder = FloatBuilder::new(_fbb);
+        builder.add_nullability(args.nullability);
+        builder.add_width(args.width);
+        builder.finish()
+    }
+
+    #[inline]
+    pub fn width(&self) -> FloatWidth {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<FloatWidth>(Float::VT_WIDTH, Some(FloatWidth::Unknown))
+                .unwrap()
+        }
+    }
+    #[inline]
+    pub fn nullability(&self) -> Nullability {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<Nullability>(Float::VT_NULLABILITY, Some(Nullability::NonNullable))
+                .unwrap()
+        }
+    }
+}
+
+impl flatbuffers::Verifiable for Float<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?
+            .visit_field::<FloatWidth>("width", Self::VT_WIDTH, false)?
+            .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
+            .finish();
+        Ok(())
+    }
+}
+pub struct FloatArgs {
+    pub width: FloatWidth,
+    pub nullability: Nullability,
+}
+impl<'a> Default for FloatArgs {
+    #[inline]
+    fn default() -> Self {
+        FloatArgs {
+            width: FloatWidth::Unknown,
+            nullability: Nullability::NonNullable,
+        }
+    }
+}
+
+pub struct FloatBuilder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> FloatBuilder<'a, 'b> {
+    #[inline]
+    pub fn add_width(&mut self, width: FloatWidth) {
+        self.fbb_
+            .push_slot::<FloatWidth>(Float::VT_WIDTH, width, FloatWidth::Unknown);
+    }
+    #[inline]
+    pub fn add_nullability(&mut self, nullability: Nullability) {
+        self.fbb_.push_slot::<Nullability>(
+            Float::VT_NULLABILITY,
+            nullability,
+            Nullability::NonNullable,
+        );
+    }
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> FloatBuilder<'a, 'b> {
+        let start = _fbb.start_table();
+        FloatBuilder {
+            fbb_: _fbb,
+            start_: start,
+        }
+    }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<Float<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
+
+impl core::fmt::Debug for Float<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("Float");
+        ds.field("width", &self.width());
+        ds.field("nullability", &self.nullability());
+        ds.finish()
+    }
+}
+pub enum Utf8Offset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct Utf8<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for Utf8<'a> {
+    type Inner = Utf8<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
+        }
+    }
+}
+
+impl<'a> Utf8<'a> {
+    pub const VT_NULLABILITY: flatbuffers::VOffsetT = 4;
+
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        Utf8 { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args Utf8Args,
+    ) -> flatbuffers::WIPOffset<Utf8<'bldr>> {
+        let mut builder = Utf8Builder::new(_fbb);
+        builder.add_nullability(args.nullability);
+        builder.finish()
+    }
+
+    #[inline]
+    pub fn nullability(&self) -> Nullability {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<Nullability>(Utf8::VT_NULLABILITY, Some(Nullability::NonNullable))
+                .unwrap()
+        }
+    }
+}
+
+impl flatbuffers::Verifiable for Utf8<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?
+            .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
+            .finish();
+        Ok(())
+    }
+}
+pub struct Utf8Args {
+    pub nullability: Nullability,
+}
+impl<'a> Default for Utf8Args {
+    #[inline]
+    fn default() -> Self {
+        Utf8Args {
+            nullability: Nullability::NonNullable,
+        }
+    }
+}
+
+pub struct Utf8Builder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> Utf8Builder<'a, 'b> {
+    #[inline]
+    pub fn add_nullability(&mut self, nullability: Nullability) {
+        self.fbb_.push_slot::<Nullability>(
+            Utf8::VT_NULLABILITY,
+            nullability,
+            Nullability::NonNullable,
+        );
+    }
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> Utf8Builder<'a, 'b> {
+        let start = _fbb.start_table();
+        Utf8Builder {
+            fbb_: _fbb,
+            start_: start,
+        }
+    }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<Utf8<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
+
+impl core::fmt::Debug for Utf8<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("Utf8");
+        ds.field("nullability", &self.nullability());
+        ds.finish()
+    }
+}
+pub enum BinaryOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct Binary<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for Binary<'a> {
+    type Inner = Binary<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
+        }
+    }
+}
+
+impl<'a> Binary<'a> {
+    pub const VT_NULLABILITY: flatbuffers::VOffsetT = 4;
+
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        Binary { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args BinaryArgs,
+    ) -> flatbuffers::WIPOffset<Binary<'bldr>> {
+        let mut builder = BinaryBuilder::new(_fbb);
+        builder.add_nullability(args.nullability);
+        builder.finish()
+    }
+
+    #[inline]
+    pub fn nullability(&self) -> Nullability {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<Nullability>(Binary::VT_NULLABILITY, Some(Nullability::NonNullable))
+                .unwrap()
+        }
+    }
+}
+
+impl flatbuffers::Verifiable for Binary<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?
+            .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
+            .finish();
+        Ok(())
+    }
+}
+pub struct BinaryArgs {
+    pub nullability: Nullability,
+}
+impl<'a> Default for BinaryArgs {
+    #[inline]
+    fn default() -> Self {
+        BinaryArgs {
+            nullability: Nullability::NonNullable,
+        }
+    }
+}
+
+pub struct BinaryBuilder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> BinaryBuilder<'a, 'b> {
+    #[inline]
+    pub fn add_nullability(&mut self, nullability: Nullability) {
+        self.fbb_.push_slot::<Nullability>(
+            Binary::VT_NULLABILITY,
+            nullability,
+            Nullability::NonNullable,
+        );
+    }
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> BinaryBuilder<'a, 'b> {
+        let start = _fbb.start_table();
+        BinaryBuilder {
+            fbb_: _fbb,
+            start_: start,
+        }
+    }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<Binary<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
+
+impl core::fmt::Debug for Binary<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("Binary");
+        ds.field("nullability", &self.nullability());
+        ds.finish()
+    }
+}
+pub enum Struct_Offset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct Struct_<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for Struct_<'a> {
+    type Inner = Struct_<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
+        }
+    }
+}
+
+impl<'a> Struct_<'a> {
+    pub const VT_NAMES: flatbuffers::VOffsetT = 4;
+    pub const VT_FIELDS: flatbuffers::VOffsetT = 6;
+
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        Struct_ { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args Struct_Args<'args>,
+    ) -> flatbuffers::WIPOffset<Struct_<'bldr>> {
+        let mut builder = Struct_Builder::new(_fbb);
+        if let Some(x) = args.fields {
+            builder.add_fields(x);
+        }
+        if let Some(x) = args.names {
+            builder.add_names(x);
+        }
+        builder.finish()
+    }
+
+    #[inline]
+    pub fn names(&self) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<&'a str>>> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab.get::<flatbuffers::ForwardsUOffset<
+                flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<&'a str>>,
+            >>(Struct_::VT_NAMES, None)
+        }
+    }
+    #[inline]
+    pub fn fields(
+        &self,
+    ) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<DType<'a>>>> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab.get::<flatbuffers::ForwardsUOffset<
+                flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<DType>>,
+            >>(Struct_::VT_FIELDS, None)
+        }
+    }
+}
+
+impl flatbuffers::Verifiable for Struct_<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?
+            .visit_field::<flatbuffers::ForwardsUOffset<
+                flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<&'_ str>>,
+            >>("names", Self::VT_NAMES, false)?
+            .visit_field::<flatbuffers::ForwardsUOffset<
+                flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<DType>>,
+            >>("fields", Self::VT_FIELDS, false)?
+            .finish();
+        Ok(())
+    }
+}
+pub struct Struct_Args<'a> {
+    pub names: Option<
+        flatbuffers::WIPOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<&'a str>>>,
+    >,
+    pub fields: Option<
+        flatbuffers::WIPOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<DType<'a>>>>,
+    >,
+}
+impl<'a> Default for Struct_Args<'a> {
+    #[inline]
+    fn default() -> Self {
+        Struct_Args {
+            names: None,
+            fields: None,
+        }
+    }
+}
+
+pub struct Struct_Builder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> Struct_Builder<'a, 'b> {
+    #[inline]
+    pub fn add_names(
+        &mut self,
+        names: flatbuffers::WIPOffset<
+            flatbuffers::Vector<'b, flatbuffers::ForwardsUOffset<&'b str>>,
         >,
-        pub fields: Option<
-            flatbuffers::WIPOffset<
-                flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<DType<'a>>>,
-            >,
+    ) {
+        self.fbb_
+            .push_slot_always::<flatbuffers::WIPOffset<_>>(Struct_::VT_NAMES, names);
+    }
+    #[inline]
+    pub fn add_fields(
+        &mut self,
+        fields: flatbuffers::WIPOffset<
+            flatbuffers::Vector<'b, flatbuffers::ForwardsUOffset<DType<'b>>>,
         >,
+    ) {
+        self.fbb_
+            .push_slot_always::<flatbuffers::WIPOffset<_>>(Struct_::VT_FIELDS, fields);
     }
-    impl<'a> Default for Struct_Args<'a> {
-        #[inline]
-        fn default() -> Self {
-            Struct_Args {
-                names: None,
-                fields: None,
-            }
-        }
-    }
-
-    pub struct Struct_Builder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b> Struct_Builder<'a, 'b> {
-        #[inline]
-        pub fn add_names(
-            &mut self,
-            names: flatbuffers::WIPOffset<
-                flatbuffers::Vector<'b, flatbuffers::ForwardsUOffset<&'b str>>,
-            >,
-        ) {
-            self.fbb_
-                .push_slot_always::<flatbuffers::WIPOffset<_>>(Struct_::VT_NAMES, names);
-        }
-        #[inline]
-        pub fn add_fields(
-            &mut self,
-            fields: flatbuffers::WIPOffset<
-                flatbuffers::Vector<'b, flatbuffers::ForwardsUOffset<DType<'b>>>,
-            >,
-        ) {
-            self.fbb_
-                .push_slot_always::<flatbuffers::WIPOffset<_>>(Struct_::VT_FIELDS, fields);
-        }
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> Struct_Builder<'a, 'b> {
-            let start = _fbb.start_table();
-            Struct_Builder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<Struct_<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> Struct_Builder<'a, 'b> {
+        let start = _fbb.start_table();
+        Struct_Builder {
+            fbb_: _fbb,
+            start_: start,
         }
     }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<Struct_<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
 
-    impl core::fmt::Debug for Struct_<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("Struct_");
-            ds.field("names", &self.names());
-            ds.field("fields", &self.fields());
-            ds.finish()
+impl core::fmt::Debug for Struct_<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("Struct_");
+        ds.field("names", &self.names());
+        ds.field("fields", &self.fields());
+        ds.finish()
+    }
+}
+pub enum ListOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct List<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for List<'a> {
+    type Inner = List<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
         }
     }
-    pub enum ListOffset {}
-    #[derive(Copy, Clone, PartialEq)]
+}
 
-    pub struct List<'a> {
-        pub _tab: flatbuffers::Table<'a>,
+impl<'a> List<'a> {
+    pub const VT_ELEMENT_TYPE: flatbuffers::VOffsetT = 4;
+    pub const VT_NULLABILITY: flatbuffers::VOffsetT = 6;
+
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        List { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args ListArgs<'args>,
+    ) -> flatbuffers::WIPOffset<List<'bldr>> {
+        let mut builder = ListBuilder::new(_fbb);
+        if let Some(x) = args.element_type {
+            builder.add_element_type(x);
+        }
+        builder.add_nullability(args.nullability);
+        builder.finish()
     }
 
-    impl<'a> flatbuffers::Follow<'a> for List<'a> {
-        type Inner = List<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
+    #[inline]
+    pub fn element_type(&self) -> Option<DType<'a>> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<flatbuffers::ForwardsUOffset<DType>>(List::VT_ELEMENT_TYPE, None)
         }
     }
-
-    impl<'a> List<'a> {
-        pub const VT_ELEMENT_TYPE: flatbuffers::VOffsetT = 4;
-        pub const VT_NULLABILITY: flatbuffers::VOffsetT = 6;
-
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            List { _tab: table }
-        }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            args: &'args ListArgs<'args>,
-        ) -> flatbuffers::WIPOffset<List<'bldr>> {
-            let mut builder = ListBuilder::new(_fbb);
-            if let Some(x) = args.element_type {
-                builder.add_element_type(x);
-            }
-            builder.add_nullability(args.nullability);
-            builder.finish()
-        }
-
-        #[inline]
-        pub fn element_type(&self) -> Option<DType<'a>> {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<flatbuffers::ForwardsUOffset<DType>>(List::VT_ELEMENT_TYPE, None)
-            }
-        }
-        #[inline]
-        pub fn nullability(&self) -> Nullability {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<Nullability>(List::VT_NULLABILITY, Some(Nullability::NonNullable))
-                    .unwrap()
-            }
+    #[inline]
+    pub fn nullability(&self) -> Nullability {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<Nullability>(List::VT_NULLABILITY, Some(Nullability::NonNullable))
+                .unwrap()
         }
     }
+}
 
-    impl flatbuffers::Verifiable for List<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?
-                .visit_field::<flatbuffers::ForwardsUOffset<DType>>(
-                    "element_type",
-                    Self::VT_ELEMENT_TYPE,
-                    false,
-                )?
-                .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
-                .finish();
-            Ok(())
+impl flatbuffers::Verifiable for List<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?
+            .visit_field::<flatbuffers::ForwardsUOffset<DType>>(
+                "element_type",
+                Self::VT_ELEMENT_TYPE,
+                false,
+            )?
+            .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
+            .finish();
+        Ok(())
+    }
+}
+pub struct ListArgs<'a> {
+    pub element_type: Option<flatbuffers::WIPOffset<DType<'a>>>,
+    pub nullability: Nullability,
+}
+impl<'a> Default for ListArgs<'a> {
+    #[inline]
+    fn default() -> Self {
+        ListArgs {
+            element_type: None,
+            nullability: Nullability::NonNullable,
         }
     }
-    pub struct ListArgs<'a> {
-        pub element_type: Option<flatbuffers::WIPOffset<DType<'a>>>,
-        pub nullability: Nullability,
-    }
-    impl<'a> Default for ListArgs<'a> {
-        #[inline]
-        fn default() -> Self {
-            ListArgs {
-                element_type: None,
-                nullability: Nullability::NonNullable,
-            }
-        }
-    }
+}
 
-    pub struct ListBuilder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+pub struct ListBuilder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> ListBuilder<'a, 'b> {
+    #[inline]
+    pub fn add_element_type(&mut self, element_type: flatbuffers::WIPOffset<DType<'b>>) {
+        self.fbb_
+            .push_slot_always::<flatbuffers::WIPOffset<DType>>(List::VT_ELEMENT_TYPE, element_type);
     }
-    impl<'a: 'b, 'b> ListBuilder<'a, 'b> {
-        #[inline]
-        pub fn add_element_type(&mut self, element_type: flatbuffers::WIPOffset<DType<'b>>) {
-            self.fbb_.push_slot_always::<flatbuffers::WIPOffset<DType>>(
-                List::VT_ELEMENT_TYPE,
-                element_type,
-            );
-        }
-        #[inline]
-        pub fn add_nullability(&mut self, nullability: Nullability) {
-            self.fbb_.push_slot::<Nullability>(
-                List::VT_NULLABILITY,
-                nullability,
-                Nullability::NonNullable,
-            );
-        }
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> ListBuilder<'a, 'b> {
-            let start = _fbb.start_table();
-            ListBuilder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<List<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
+    #[inline]
+    pub fn add_nullability(&mut self, nullability: Nullability) {
+        self.fbb_.push_slot::<Nullability>(
+            List::VT_NULLABILITY,
+            nullability,
+            Nullability::NonNullable,
+        );
+    }
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> ListBuilder<'a, 'b> {
+        let start = _fbb.start_table();
+        ListBuilder {
+            fbb_: _fbb,
+            start_: start,
         }
     }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<List<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
 
-    impl core::fmt::Debug for List<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("List");
-            ds.field("element_type", &self.element_type());
-            ds.field("nullability", &self.nullability());
-            ds.finish()
+impl core::fmt::Debug for List<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("List");
+        ds.field("element_type", &self.element_type());
+        ds.field("nullability", &self.nullability());
+        ds.finish()
+    }
+}
+pub enum CompositeOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct Composite<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for Composite<'a> {
+    type Inner = Composite<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
         }
     }
-    pub enum CompositeOffset {}
-    #[derive(Copy, Clone, PartialEq)]
+}
 
-    pub struct Composite<'a> {
-        pub _tab: flatbuffers::Table<'a>,
+impl<'a> Composite<'a> {
+    pub const VT_ID: flatbuffers::VOffsetT = 4;
+    pub const VT_NULLABILITY: flatbuffers::VOffsetT = 6;
+
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        Composite { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args CompositeArgs<'args>,
+    ) -> flatbuffers::WIPOffset<Composite<'bldr>> {
+        let mut builder = CompositeBuilder::new(_fbb);
+        if let Some(x) = args.id {
+            builder.add_id(x);
+        }
+        builder.add_nullability(args.nullability);
+        builder.finish()
     }
 
-    impl<'a> flatbuffers::Follow<'a> for Composite<'a> {
-        type Inner = Composite<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
+    #[inline]
+    pub fn id(&self) -> Option<&'a str> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<flatbuffers::ForwardsUOffset<&str>>(Composite::VT_ID, None)
         }
     }
-
-    impl<'a> Composite<'a> {
-        pub const VT_ID: flatbuffers::VOffsetT = 4;
-        pub const VT_NULLABILITY: flatbuffers::VOffsetT = 6;
-
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            Composite { _tab: table }
-        }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            args: &'args CompositeArgs<'args>,
-        ) -> flatbuffers::WIPOffset<Composite<'bldr>> {
-            let mut builder = CompositeBuilder::new(_fbb);
-            if let Some(x) = args.id {
-                builder.add_id(x);
-            }
-            builder.add_nullability(args.nullability);
-            builder.finish()
-        }
-
-        #[inline]
-        pub fn id(&self) -> Option<&'a str> {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<flatbuffers::ForwardsUOffset<&str>>(Composite::VT_ID, None)
-            }
-        }
-        #[inline]
-        pub fn nullability(&self) -> Nullability {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<Nullability>(Composite::VT_NULLABILITY, Some(Nullability::NonNullable))
-                    .unwrap()
-            }
+    #[inline]
+    pub fn nullability(&self) -> Nullability {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<Nullability>(Composite::VT_NULLABILITY, Some(Nullability::NonNullable))
+                .unwrap()
         }
     }
+}
 
-    impl flatbuffers::Verifiable for Composite<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?
-                .visit_field::<flatbuffers::ForwardsUOffset<&str>>("id", Self::VT_ID, false)?
-                .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
-                .finish();
-            Ok(())
+impl flatbuffers::Verifiable for Composite<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?
+            .visit_field::<flatbuffers::ForwardsUOffset<&str>>("id", Self::VT_ID, false)?
+            .visit_field::<Nullability>("nullability", Self::VT_NULLABILITY, false)?
+            .finish();
+        Ok(())
+    }
+}
+pub struct CompositeArgs<'a> {
+    pub id: Option<flatbuffers::WIPOffset<&'a str>>,
+    pub nullability: Nullability,
+}
+impl<'a> Default for CompositeArgs<'a> {
+    #[inline]
+    fn default() -> Self {
+        CompositeArgs {
+            id: None,
+            nullability: Nullability::NonNullable,
         }
     }
-    pub struct CompositeArgs<'a> {
-        pub id: Option<flatbuffers::WIPOffset<&'a str>>,
-        pub nullability: Nullability,
-    }
-    impl<'a> Default for CompositeArgs<'a> {
-        #[inline]
-        fn default() -> Self {
-            CompositeArgs {
-                id: None,
-                nullability: Nullability::NonNullable,
-            }
-        }
-    }
+}
 
-    pub struct CompositeBuilder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+pub struct CompositeBuilder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> CompositeBuilder<'a, 'b> {
+    #[inline]
+    pub fn add_id(&mut self, id: flatbuffers::WIPOffset<&'b str>) {
+        self.fbb_
+            .push_slot_always::<flatbuffers::WIPOffset<_>>(Composite::VT_ID, id);
     }
-    impl<'a: 'b, 'b> CompositeBuilder<'a, 'b> {
-        #[inline]
-        pub fn add_id(&mut self, id: flatbuffers::WIPOffset<&'b str>) {
-            self.fbb_
-                .push_slot_always::<flatbuffers::WIPOffset<_>>(Composite::VT_ID, id);
-        }
-        #[inline]
-        pub fn add_nullability(&mut self, nullability: Nullability) {
-            self.fbb_.push_slot::<Nullability>(
-                Composite::VT_NULLABILITY,
-                nullability,
-                Nullability::NonNullable,
-            );
-        }
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> CompositeBuilder<'a, 'b> {
-            let start = _fbb.start_table();
-            CompositeBuilder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<Composite<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
+    #[inline]
+    pub fn add_nullability(&mut self, nullability: Nullability) {
+        self.fbb_.push_slot::<Nullability>(
+            Composite::VT_NULLABILITY,
+            nullability,
+            Nullability::NonNullable,
+        );
+    }
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> CompositeBuilder<'a, 'b> {
+        let start = _fbb.start_table();
+        CompositeBuilder {
+            fbb_: _fbb,
+            start_: start,
         }
     }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<Composite<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
 
-    impl core::fmt::Debug for Composite<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("Composite");
-            ds.field("id", &self.id());
-            ds.field("nullability", &self.nullability());
-            ds.finish()
+impl core::fmt::Debug for Composite<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("Composite");
+        ds.field("id", &self.id());
+        ds.field("nullability", &self.nullability());
+        ds.finish()
+    }
+}
+pub enum DTypeOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct DType<'a> {
+    pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for DType<'a> {
+    type Inner = DType<'a>;
+    #[inline]
+    unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self {
+            _tab: flatbuffers::Table::new(buf, loc),
         }
     }
-    pub enum DTypeOffset {}
-    #[derive(Copy, Clone, PartialEq)]
+}
 
-    pub struct DType<'a> {
-        pub _tab: flatbuffers::Table<'a>,
+impl<'a> DType<'a> {
+    pub const VT_TYPE_TYPE: flatbuffers::VOffsetT = 4;
+    pub const VT_TYPE_: flatbuffers::VOffsetT = 6;
+
+    #[inline]
+    pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        DType { _tab: table }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args DTypeArgs,
+    ) -> flatbuffers::WIPOffset<DType<'bldr>> {
+        let mut builder = DTypeBuilder::new(_fbb);
+        if let Some(x) = args.type_ {
+            builder.add_type_(x);
+        }
+        builder.add_type_type(args.type_type);
+        builder.finish()
     }
 
-    impl<'a> flatbuffers::Follow<'a> for DType<'a> {
-        type Inner = DType<'a>;
-        #[inline]
-        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-            Self {
-                _tab: flatbuffers::Table::new(buf, loc),
-            }
+    #[inline]
+    pub fn type_type(&self) -> Type {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<Type>(DType::VT_TYPE_TYPE, Some(Type::NONE))
+                .unwrap()
         }
     }
-
-    impl<'a> DType<'a> {
-        pub const VT_TYPE_TYPE: flatbuffers::VOffsetT = 4;
-        pub const VT_TYPE_: flatbuffers::VOffsetT = 6;
-
-        #[inline]
-        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            DType { _tab: table }
+    #[inline]
+    pub fn type_(&self) -> Option<flatbuffers::Table<'a>> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe {
+            self._tab
+                .get::<flatbuffers::ForwardsUOffset<flatbuffers::Table<'a>>>(DType::VT_TYPE_, None)
         }
-        #[allow(unused_mut)]
-        pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
-            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
-            args: &'args DTypeArgs,
-        ) -> flatbuffers::WIPOffset<DType<'bldr>> {
-            let mut builder = DTypeBuilder::new(_fbb);
-            if let Some(x) = args.type_ {
-                builder.add_type_(x);
-            }
-            builder.add_type_type(args.type_type);
-            builder.finish()
-        }
-
-        #[inline]
-        pub fn type_type(&self) -> Type {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<Type>(DType::VT_TYPE_TYPE, Some(Type::NONE))
-                    .unwrap()
-            }
-        }
-        #[inline]
-        pub fn type_(&self) -> Option<flatbuffers::Table<'a>> {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<flatbuffers::ForwardsUOffset<flatbuffers::Table<'a>>>(
-                        DType::VT_TYPE_,
-                        None,
-                    )
-            }
-        }
-        #[inline]
-        #[allow(non_snake_case)]
-        pub fn type__as_null(&self) -> Option<Null<'a>> {
-            if self.type_type() == Type::Null {
-                self.type_().map(|t| {
-                    // Safety:
-                    // Created from a valid Table for this object
-                    // Which contains a valid union in this slot
-                    unsafe { Null::init_from_table(t) }
-                })
-            } else {
-                None
-            }
-        }
-
-        #[inline]
-        #[allow(non_snake_case)]
-        pub fn type__as_bool(&self) -> Option<Bool<'a>> {
-            if self.type_type() == Type::Bool {
-                self.type_().map(|t| {
-                    // Safety:
-                    // Created from a valid Table for this object
-                    // Which contains a valid union in this slot
-                    unsafe { Bool::init_from_table(t) }
-                })
-            } else {
-                None
-            }
-        }
-
-        #[inline]
-        #[allow(non_snake_case)]
-        pub fn type__as_int(&self) -> Option<Int<'a>> {
-            if self.type_type() == Type::Int {
-                self.type_().map(|t| {
-                    // Safety:
-                    // Created from a valid Table for this object
-                    // Which contains a valid union in this slot
-                    unsafe { Int::init_from_table(t) }
-                })
-            } else {
-                None
-            }
-        }
-
-        #[inline]
-        #[allow(non_snake_case)]
-        pub fn type__as_decimal(&self) -> Option<Decimal<'a>> {
-            if self.type_type() == Type::Decimal {
-                self.type_().map(|t| {
-                    // Safety:
-                    // Created from a valid Table for this object
-                    // Which contains a valid union in this slot
-                    unsafe { Decimal::init_from_table(t) }
-                })
-            } else {
-                None
-            }
-        }
-
-        #[inline]
-        #[allow(non_snake_case)]
-        pub fn type__as_float(&self) -> Option<Float<'a>> {
-            if self.type_type() == Type::Float {
-                self.type_().map(|t| {
-                    // Safety:
-                    // Created from a valid Table for this object
-                    // Which contains a valid union in this slot
-                    unsafe { Float::init_from_table(t) }
-                })
-            } else {
-                None
-            }
-        }
-
-        #[inline]
-        #[allow(non_snake_case)]
-        pub fn type__as_utf_8(&self) -> Option<Utf8<'a>> {
-            if self.type_type() == Type::Utf8 {
-                self.type_().map(|t| {
-                    // Safety:
-                    // Created from a valid Table for this object
-                    // Which contains a valid union in this slot
-                    unsafe { Utf8::init_from_table(t) }
-                })
-            } else {
-                None
-            }
-        }
-
-        #[inline]
-        #[allow(non_snake_case)]
-        pub fn type__as_binary(&self) -> Option<Binary<'a>> {
-            if self.type_type() == Type::Binary {
-                self.type_().map(|t| {
-                    // Safety:
-                    // Created from a valid Table for this object
-                    // Which contains a valid union in this slot
-                    unsafe { Binary::init_from_table(t) }
-                })
-            } else {
-                None
-            }
-        }
-
-        #[inline]
-        #[allow(non_snake_case)]
-        pub fn type__as_struct_(&self) -> Option<Struct_<'a>> {
-            if self.type_type() == Type::Struct_ {
-                self.type_().map(|t| {
-                    // Safety:
-                    // Created from a valid Table for this object
-                    // Which contains a valid union in this slot
-                    unsafe { Struct_::init_from_table(t) }
-                })
-            } else {
-                None
-            }
-        }
-
-        #[inline]
-        #[allow(non_snake_case)]
-        pub fn type__as_list(&self) -> Option<List<'a>> {
-            if self.type_type() == Type::List {
-                self.type_().map(|t| {
-                    // Safety:
-                    // Created from a valid Table for this object
-                    // Which contains a valid union in this slot
-                    unsafe { List::init_from_table(t) }
-                })
-            } else {
-                None
-            }
-        }
-
-        #[inline]
-        #[allow(non_snake_case)]
-        pub fn type__as_composite(&self) -> Option<Composite<'a>> {
-            if self.type_type() == Type::Composite {
-                self.type_().map(|t| {
-                    // Safety:
-                    // Created from a valid Table for this object
-                    // Which contains a valid union in this slot
-                    unsafe { Composite::init_from_table(t) }
-                })
-            } else {
-                None
-            }
+    }
+    #[inline]
+    #[allow(non_snake_case)]
+    pub fn type__as_null(&self) -> Option<Null<'a>> {
+        if self.type_type() == Type::Null {
+            self.type_().map(|t| {
+                // Safety:
+                // Created from a valid Table for this object
+                // Which contains a valid union in this slot
+                unsafe { Null::init_from_table(t) }
+            })
+        } else {
+            None
         }
     }
 
-    impl flatbuffers::Verifiable for DType<'_> {
-        #[inline]
-        fn run_verifier(
-            v: &mut flatbuffers::Verifier,
-            pos: usize,
-        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
-            use self::flatbuffers::Verifiable;
-            v.visit_table(pos)?
-                .visit_union::<Type, _>(
-                    "type_type",
-                    Self::VT_TYPE_TYPE,
-                    "type_",
-                    Self::VT_TYPE_,
-                    false,
-                    |key, v, pos| match key {
-                        Type::Null => v.verify_union_variant::<flatbuffers::ForwardsUOffset<Null>>(
-                            "Type::Null",
+    #[inline]
+    #[allow(non_snake_case)]
+    pub fn type__as_bool(&self) -> Option<Bool<'a>> {
+        if self.type_type() == Type::Bool {
+            self.type_().map(|t| {
+                // Safety:
+                // Created from a valid Table for this object
+                // Which contains a valid union in this slot
+                unsafe { Bool::init_from_table(t) }
+            })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
+    pub fn type__as_int(&self) -> Option<Int<'a>> {
+        if self.type_type() == Type::Int {
+            self.type_().map(|t| {
+                // Safety:
+                // Created from a valid Table for this object
+                // Which contains a valid union in this slot
+                unsafe { Int::init_from_table(t) }
+            })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
+    pub fn type__as_decimal(&self) -> Option<Decimal<'a>> {
+        if self.type_type() == Type::Decimal {
+            self.type_().map(|t| {
+                // Safety:
+                // Created from a valid Table for this object
+                // Which contains a valid union in this slot
+                unsafe { Decimal::init_from_table(t) }
+            })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
+    pub fn type__as_float(&self) -> Option<Float<'a>> {
+        if self.type_type() == Type::Float {
+            self.type_().map(|t| {
+                // Safety:
+                // Created from a valid Table for this object
+                // Which contains a valid union in this slot
+                unsafe { Float::init_from_table(t) }
+            })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
+    pub fn type__as_utf_8(&self) -> Option<Utf8<'a>> {
+        if self.type_type() == Type::Utf8 {
+            self.type_().map(|t| {
+                // Safety:
+                // Created from a valid Table for this object
+                // Which contains a valid union in this slot
+                unsafe { Utf8::init_from_table(t) }
+            })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
+    pub fn type__as_binary(&self) -> Option<Binary<'a>> {
+        if self.type_type() == Type::Binary {
+            self.type_().map(|t| {
+                // Safety:
+                // Created from a valid Table for this object
+                // Which contains a valid union in this slot
+                unsafe { Binary::init_from_table(t) }
+            })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
+    pub fn type__as_struct_(&self) -> Option<Struct_<'a>> {
+        if self.type_type() == Type::Struct_ {
+            self.type_().map(|t| {
+                // Safety:
+                // Created from a valid Table for this object
+                // Which contains a valid union in this slot
+                unsafe { Struct_::init_from_table(t) }
+            })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
+    pub fn type__as_list(&self) -> Option<List<'a>> {
+        if self.type_type() == Type::List {
+            self.type_().map(|t| {
+                // Safety:
+                // Created from a valid Table for this object
+                // Which contains a valid union in this slot
+                unsafe { List::init_from_table(t) }
+            })
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[allow(non_snake_case)]
+    pub fn type__as_composite(&self) -> Option<Composite<'a>> {
+        if self.type_type() == Type::Composite {
+            self.type_().map(|t| {
+                // Safety:
+                // Created from a valid Table for this object
+                // Which contains a valid union in this slot
+                unsafe { Composite::init_from_table(t) }
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl flatbuffers::Verifiable for DType<'_> {
+    #[inline]
+    fn run_verifier(
+        v: &mut flatbuffers::Verifier,
+        pos: usize,
+    ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+        use self::flatbuffers::Verifiable;
+        v.visit_table(pos)?
+            .visit_union::<Type, _>(
+                "type_type",
+                Self::VT_TYPE_TYPE,
+                "type_",
+                Self::VT_TYPE_,
+                false,
+                |key, v, pos| match key {
+                    Type::Null => v.verify_union_variant::<flatbuffers::ForwardsUOffset<Null>>(
+                        "Type::Null",
+                        pos,
+                    ),
+                    Type::Bool => v.verify_union_variant::<flatbuffers::ForwardsUOffset<Bool>>(
+                        "Type::Bool",
+                        pos,
+                    ),
+                    Type::Int => v.verify_union_variant::<flatbuffers::ForwardsUOffset<Int>>(
+                        "Type::Int",
+                        pos,
+                    ),
+                    Type::Decimal => v
+                        .verify_union_variant::<flatbuffers::ForwardsUOffset<Decimal>>(
+                            "Type::Decimal",
                             pos,
                         ),
-                        Type::Bool => v.verify_union_variant::<flatbuffers::ForwardsUOffset<Bool>>(
-                            "Type::Bool",
+                    Type::Float => v.verify_union_variant::<flatbuffers::ForwardsUOffset<Float>>(
+                        "Type::Float",
+                        pos,
+                    ),
+                    Type::Utf8 => v.verify_union_variant::<flatbuffers::ForwardsUOffset<Utf8>>(
+                        "Type::Utf8",
+                        pos,
+                    ),
+                    Type::Binary => v.verify_union_variant::<flatbuffers::ForwardsUOffset<Binary>>(
+                        "Type::Binary",
+                        pos,
+                    ),
+                    Type::Struct_ => v
+                        .verify_union_variant::<flatbuffers::ForwardsUOffset<Struct_>>(
+                            "Type::Struct_",
                             pos,
                         ),
-                        Type::Int => v.verify_union_variant::<flatbuffers::ForwardsUOffset<Int>>(
-                            "Type::Int",
+                    Type::List => v.verify_union_variant::<flatbuffers::ForwardsUOffset<List>>(
+                        "Type::List",
+                        pos,
+                    ),
+                    Type::Composite => v
+                        .verify_union_variant::<flatbuffers::ForwardsUOffset<Composite>>(
+                            "Type::Composite",
                             pos,
                         ),
-                        Type::Decimal => v
-                            .verify_union_variant::<flatbuffers::ForwardsUOffset<Decimal>>(
-                                "Type::Decimal",
-                                pos,
-                            ),
-                        Type::Float => v
-                            .verify_union_variant::<flatbuffers::ForwardsUOffset<Float>>(
-                                "Type::Float",
-                                pos,
-                            ),
-                        Type::Utf8 => v.verify_union_variant::<flatbuffers::ForwardsUOffset<Utf8>>(
-                            "Type::Utf8",
-                            pos,
-                        ),
-                        Type::Binary => v
-                            .verify_union_variant::<flatbuffers::ForwardsUOffset<Binary>>(
-                                "Type::Binary",
-                                pos,
-                            ),
-                        Type::Struct_ => v
-                            .verify_union_variant::<flatbuffers::ForwardsUOffset<Struct_>>(
-                                "Type::Struct_",
-                                pos,
-                            ),
-                        Type::List => v.verify_union_variant::<flatbuffers::ForwardsUOffset<List>>(
-                            "Type::List",
-                            pos,
-                        ),
-                        Type::Composite => v
-                            .verify_union_variant::<flatbuffers::ForwardsUOffset<Composite>>(
-                                "Type::Composite",
-                                pos,
-                            ),
-                        _ => Ok(()),
-                    },
-                )?
-                .finish();
-            Ok(())
+                    _ => Ok(()),
+                },
+            )?
+            .finish();
+        Ok(())
+    }
+}
+pub struct DTypeArgs {
+    pub type_type: Type,
+    pub type_: Option<flatbuffers::WIPOffset<flatbuffers::UnionWIPOffset>>,
+}
+impl<'a> Default for DTypeArgs {
+    #[inline]
+    fn default() -> Self {
+        DTypeArgs {
+            type_type: Type::NONE,
+            type_: None,
         }
     }
-    pub struct DTypeArgs {
-        pub type_type: Type,
-        pub type_: Option<flatbuffers::WIPOffset<flatbuffers::UnionWIPOffset>>,
-    }
-    impl<'a> Default for DTypeArgs {
-        #[inline]
-        fn default() -> Self {
-            DTypeArgs {
-                type_type: Type::NONE,
-                type_: None,
-            }
-        }
-    }
+}
 
-    pub struct DTypeBuilder<'a: 'b, 'b> {
-        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+pub struct DTypeBuilder<'a: 'b, 'b> {
+    fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> DTypeBuilder<'a, 'b> {
+    #[inline]
+    pub fn add_type_type(&mut self, type_type: Type) {
+        self.fbb_
+            .push_slot::<Type>(DType::VT_TYPE_TYPE, type_type, Type::NONE);
     }
-    impl<'a: 'b, 'b> DTypeBuilder<'a, 'b> {
-        #[inline]
-        pub fn add_type_type(&mut self, type_type: Type) {
-            self.fbb_
-                .push_slot::<Type>(DType::VT_TYPE_TYPE, type_type, Type::NONE);
-        }
-        #[inline]
-        pub fn add_type_(&mut self, type_: flatbuffers::WIPOffset<flatbuffers::UnionWIPOffset>) {
-            self.fbb_
-                .push_slot_always::<flatbuffers::WIPOffset<_>>(DType::VT_TYPE_, type_);
-        }
-        #[inline]
-        pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> DTypeBuilder<'a, 'b> {
-            let start = _fbb.start_table();
-            DTypeBuilder {
-                fbb_: _fbb,
-                start_: start,
-            }
-        }
-        #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<DType<'a>> {
-            let o = self.fbb_.end_table(self.start_);
-            flatbuffers::WIPOffset::new(o.value())
+    #[inline]
+    pub fn add_type_(&mut self, type_: flatbuffers::WIPOffset<flatbuffers::UnionWIPOffset>) {
+        self.fbb_
+            .push_slot_always::<flatbuffers::WIPOffset<_>>(DType::VT_TYPE_, type_);
+    }
+    #[inline]
+    pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> DTypeBuilder<'a, 'b> {
+        let start = _fbb.start_table();
+        DTypeBuilder {
+            fbb_: _fbb,
+            start_: start,
         }
     }
+    #[inline]
+    pub fn finish(self) -> flatbuffers::WIPOffset<DType<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        flatbuffers::WIPOffset::new(o.value())
+    }
+}
 
-    impl core::fmt::Debug for DType<'_> {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("DType");
-            ds.field("type_type", &self.type_type());
-            match self.type_type() {
-                Type::Null => {
-                    if let Some(x) = self.type__as_null() {
-                        ds.field("type_", &x)
-                    } else {
-                        ds.field(
-                            "type_",
-                            &"InvalidFlatbuffer: Union discriminant does not match value.",
-                        )
-                    }
-                }
-                Type::Bool => {
-                    if let Some(x) = self.type__as_bool() {
-                        ds.field("type_", &x)
-                    } else {
-                        ds.field(
-                            "type_",
-                            &"InvalidFlatbuffer: Union discriminant does not match value.",
-                        )
-                    }
-                }
-                Type::Int => {
-                    if let Some(x) = self.type__as_int() {
-                        ds.field("type_", &x)
-                    } else {
-                        ds.field(
-                            "type_",
-                            &"InvalidFlatbuffer: Union discriminant does not match value.",
-                        )
-                    }
-                }
-                Type::Decimal => {
-                    if let Some(x) = self.type__as_decimal() {
-                        ds.field("type_", &x)
-                    } else {
-                        ds.field(
-                            "type_",
-                            &"InvalidFlatbuffer: Union discriminant does not match value.",
-                        )
-                    }
-                }
-                Type::Float => {
-                    if let Some(x) = self.type__as_float() {
-                        ds.field("type_", &x)
-                    } else {
-                        ds.field(
-                            "type_",
-                            &"InvalidFlatbuffer: Union discriminant does not match value.",
-                        )
-                    }
-                }
-                Type::Utf8 => {
-                    if let Some(x) = self.type__as_utf_8() {
-                        ds.field("type_", &x)
-                    } else {
-                        ds.field(
-                            "type_",
-                            &"InvalidFlatbuffer: Union discriminant does not match value.",
-                        )
-                    }
-                }
-                Type::Binary => {
-                    if let Some(x) = self.type__as_binary() {
-                        ds.field("type_", &x)
-                    } else {
-                        ds.field(
-                            "type_",
-                            &"InvalidFlatbuffer: Union discriminant does not match value.",
-                        )
-                    }
-                }
-                Type::Struct_ => {
-                    if let Some(x) = self.type__as_struct_() {
-                        ds.field("type_", &x)
-                    } else {
-                        ds.field(
-                            "type_",
-                            &"InvalidFlatbuffer: Union discriminant does not match value.",
-                        )
-                    }
-                }
-                Type::List => {
-                    if let Some(x) = self.type__as_list() {
-                        ds.field("type_", &x)
-                    } else {
-                        ds.field(
-                            "type_",
-                            &"InvalidFlatbuffer: Union discriminant does not match value.",
-                        )
-                    }
-                }
-                Type::Composite => {
-                    if let Some(x) = self.type__as_composite() {
-                        ds.field("type_", &x)
-                    } else {
-                        ds.field(
-                            "type_",
-                            &"InvalidFlatbuffer: Union discriminant does not match value.",
-                        )
-                    }
-                }
-                _ => {
-                    let x: Option<()> = None;
+impl core::fmt::Debug for DType<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut ds = f.debug_struct("DType");
+        ds.field("type_type", &self.type_type());
+        match self.type_type() {
+            Type::Null => {
+                if let Some(x) = self.type__as_null() {
                     ds.field("type_", &x)
+                } else {
+                    ds.field(
+                        "type_",
+                        &"InvalidFlatbuffer: Union discriminant does not match value.",
+                    )
                 }
-            };
-            ds.finish()
-        }
+            }
+            Type::Bool => {
+                if let Some(x) = self.type__as_bool() {
+                    ds.field("type_", &x)
+                } else {
+                    ds.field(
+                        "type_",
+                        &"InvalidFlatbuffer: Union discriminant does not match value.",
+                    )
+                }
+            }
+            Type::Int => {
+                if let Some(x) = self.type__as_int() {
+                    ds.field("type_", &x)
+                } else {
+                    ds.field(
+                        "type_",
+                        &"InvalidFlatbuffer: Union discriminant does not match value.",
+                    )
+                }
+            }
+            Type::Decimal => {
+                if let Some(x) = self.type__as_decimal() {
+                    ds.field("type_", &x)
+                } else {
+                    ds.field(
+                        "type_",
+                        &"InvalidFlatbuffer: Union discriminant does not match value.",
+                    )
+                }
+            }
+            Type::Float => {
+                if let Some(x) = self.type__as_float() {
+                    ds.field("type_", &x)
+                } else {
+                    ds.field(
+                        "type_",
+                        &"InvalidFlatbuffer: Union discriminant does not match value.",
+                    )
+                }
+            }
+            Type::Utf8 => {
+                if let Some(x) = self.type__as_utf_8() {
+                    ds.field("type_", &x)
+                } else {
+                    ds.field(
+                        "type_",
+                        &"InvalidFlatbuffer: Union discriminant does not match value.",
+                    )
+                }
+            }
+            Type::Binary => {
+                if let Some(x) = self.type__as_binary() {
+                    ds.field("type_", &x)
+                } else {
+                    ds.field(
+                        "type_",
+                        &"InvalidFlatbuffer: Union discriminant does not match value.",
+                    )
+                }
+            }
+            Type::Struct_ => {
+                if let Some(x) = self.type__as_struct_() {
+                    ds.field("type_", &x)
+                } else {
+                    ds.field(
+                        "type_",
+                        &"InvalidFlatbuffer: Union discriminant does not match value.",
+                    )
+                }
+            }
+            Type::List => {
+                if let Some(x) = self.type__as_list() {
+                    ds.field("type_", &x)
+                } else {
+                    ds.field(
+                        "type_",
+                        &"InvalidFlatbuffer: Union discriminant does not match value.",
+                    )
+                }
+            }
+            Type::Composite => {
+                if let Some(x) = self.type__as_composite() {
+                    ds.field("type_", &x)
+                } else {
+                    ds.field(
+                        "type_",
+                        &"InvalidFlatbuffer: Union discriminant does not match value.",
+                    )
+                }
+            }
+            _ => {
+                let x: Option<()> = None;
+                ds.field("type_", &x)
+            }
+        };
+        ds.finish()
     }
-    #[inline]
-    /// Verifies that a buffer of bytes contains a `DType`
-    /// and returns it.
-    /// Note that verification is still experimental and may not
-    /// catch every error, or be maximally performant. For the
-    /// previous, unchecked, behavior use
-    /// `root_as_dtype_unchecked`.
-    pub fn root_as_dtype(buf: &[u8]) -> Result<DType, flatbuffers::InvalidFlatbuffer> {
-        flatbuffers::root::<DType>(buf)
-    }
-    #[inline]
-    /// Verifies that a buffer of bytes contains a size prefixed
-    /// `DType` and returns it.
-    /// Note that verification is still experimental and may not
-    /// catch every error, or be maximally performant. For the
-    /// previous, unchecked, behavior use
-    /// `size_prefixed_root_as_dtype_unchecked`.
-    pub fn size_prefixed_root_as_dtype(
-        buf: &[u8],
-    ) -> Result<DType, flatbuffers::InvalidFlatbuffer> {
-        flatbuffers::size_prefixed_root::<DType>(buf)
-    }
-    #[inline]
-    /// Verifies, with the given options, that a buffer of bytes
-    /// contains a `DType` and returns it.
-    /// Note that verification is still experimental and may not
-    /// catch every error, or be maximally performant. For the
-    /// previous, unchecked, behavior use
-    /// `root_as_dtype_unchecked`.
-    pub fn root_as_dtype_with_opts<'b, 'o>(
-        opts: &'o flatbuffers::VerifierOptions,
-        buf: &'b [u8],
-    ) -> Result<DType<'b>, flatbuffers::InvalidFlatbuffer> {
-        flatbuffers::root_with_opts::<DType<'b>>(opts, buf)
-    }
-    #[inline]
-    /// Verifies, with the given verifier options, that a buffer of
-    /// bytes contains a size prefixed `DType` and returns
-    /// it. Note that verification is still experimental and may not
-    /// catch every error, or be maximally performant. For the
-    /// previous, unchecked, behavior use
-    /// `root_as_dtype_unchecked`.
-    pub fn size_prefixed_root_as_dtype_with_opts<'b, 'o>(
-        opts: &'o flatbuffers::VerifierOptions,
-        buf: &'b [u8],
-    ) -> Result<DType<'b>, flatbuffers::InvalidFlatbuffer> {
-        flatbuffers::size_prefixed_root_with_opts::<DType<'b>>(opts, buf)
-    }
-    #[inline]
-    /// Assumes, without verification, that a buffer of bytes contains a DType and returns it.
-    /// # Safety
-    /// Callers must trust the given bytes do indeed contain a valid `DType`.
-    pub unsafe fn root_as_dtype_unchecked(buf: &[u8]) -> DType {
-        flatbuffers::root_unchecked::<DType>(buf)
-    }
-    #[inline]
-    /// Assumes, without verification, that a buffer of bytes contains a size prefixed DType and returns it.
-    /// # Safety
-    /// Callers must trust the given bytes do indeed contain a valid size prefixed `DType`.
-    pub unsafe fn size_prefixed_root_as_dtype_unchecked(buf: &[u8]) -> DType {
-        flatbuffers::size_prefixed_root_unchecked::<DType>(buf)
-    }
-    #[inline]
-    pub fn finish_dtype_buffer<'a, 'b>(
-        fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        root: flatbuffers::WIPOffset<DType<'a>>,
-    ) {
-        fbb.finish(root, None);
-    }
+}
+#[inline]
+/// Verifies that a buffer of bytes contains a `DType`
+/// and returns it.
+/// Note that verification is still experimental and may not
+/// catch every error, or be maximally performant. For the
+/// previous, unchecked, behavior use
+/// `root_as_dtype_unchecked`.
+pub fn root_as_dtype(buf: &[u8]) -> Result<DType, flatbuffers::InvalidFlatbuffer> {
+    flatbuffers::root::<DType>(buf)
+}
+#[inline]
+/// Verifies that a buffer of bytes contains a size prefixed
+/// `DType` and returns it.
+/// Note that verification is still experimental and may not
+/// catch every error, or be maximally performant. For the
+/// previous, unchecked, behavior use
+/// `size_prefixed_root_as_dtype_unchecked`.
+pub fn size_prefixed_root_as_dtype(buf: &[u8]) -> Result<DType, flatbuffers::InvalidFlatbuffer> {
+    flatbuffers::size_prefixed_root::<DType>(buf)
+}
+#[inline]
+/// Verifies, with the given options, that a buffer of bytes
+/// contains a `DType` and returns it.
+/// Note that verification is still experimental and may not
+/// catch every error, or be maximally performant. For the
+/// previous, unchecked, behavior use
+/// `root_as_dtype_unchecked`.
+pub fn root_as_dtype_with_opts<'b, 'o>(
+    opts: &'o flatbuffers::VerifierOptions,
+    buf: &'b [u8],
+) -> Result<DType<'b>, flatbuffers::InvalidFlatbuffer> {
+    flatbuffers::root_with_opts::<DType<'b>>(opts, buf)
+}
+#[inline]
+/// Verifies, with the given verifier options, that a buffer of
+/// bytes contains a size prefixed `DType` and returns
+/// it. Note that verification is still experimental and may not
+/// catch every error, or be maximally performant. For the
+/// previous, unchecked, behavior use
+/// `root_as_dtype_unchecked`.
+pub fn size_prefixed_root_as_dtype_with_opts<'b, 'o>(
+    opts: &'o flatbuffers::VerifierOptions,
+    buf: &'b [u8],
+) -> Result<DType<'b>, flatbuffers::InvalidFlatbuffer> {
+    flatbuffers::size_prefixed_root_with_opts::<DType<'b>>(opts, buf)
+}
+#[inline]
+/// Assumes, without verification, that a buffer of bytes contains a DType and returns it.
+/// # Safety
+/// Callers must trust the given bytes do indeed contain a valid `DType`.
+pub unsafe fn root_as_dtype_unchecked(buf: &[u8]) -> DType {
+    flatbuffers::root_unchecked::<DType>(buf)
+}
+#[inline]
+/// Assumes, without verification, that a buffer of bytes contains a size prefixed DType and returns it.
+/// # Safety
+/// Callers must trust the given bytes do indeed contain a valid size prefixed `DType`.
+pub unsafe fn size_prefixed_root_as_dtype_unchecked(buf: &[u8]) -> DType {
+    flatbuffers::size_prefixed_root_unchecked::<DType>(buf)
+}
+#[inline]
+pub fn finish_dtype_buffer<'a, 'b>(
+    fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    root: flatbuffers::WIPOffset<DType<'a>>,
+) {
+    fbb.finish(root, None);
+}
 
-    #[inline]
-    pub fn finish_size_prefixed_dtype_buffer<'a, 'b>(
-        fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>,
-        root: flatbuffers::WIPOffset<DType<'a>>,
-    ) {
-        fbb.finish_size_prefixed(root, None);
-    }
-} // pub mod vortex
+#[inline]
+pub fn finish_size_prefixed_dtype_buffer<'a, 'b>(
+    fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+    root: flatbuffers::WIPOffset<DType<'a>>,
+) {
+    fbb.finish_size_prefixed(root, None);
+}

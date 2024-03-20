@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 
-use crate::generated::schema::vortex::{
+use crate::generated::schema::{
     root_as_dtype, Bool, BoolArgs, Composite, CompositeArgs, Int, IntArgs, List, ListArgs, Null,
     NullArgs, Struct_, Struct_Args, Type,
 };
-use crate::generated::schema::vortex::{Binary, BinaryArgs, Signedness as FbSignedness};
-use crate::generated::schema::vortex::{DType as FbDType, DTypeArgs};
-use crate::generated::schema::vortex::{Decimal, DecimalArgs, FloatWidth as FbFloatWidth};
-use crate::generated::schema::vortex::{Float, FloatArgs, IntWidth as FbIntWidth};
-use crate::generated::schema::vortex::{Nullability as FbNullability, Utf8, Utf8Args};
+use crate::generated::schema::{Binary, BinaryArgs, Signedness as FbSignedness};
+use crate::generated::schema::{DType as FbDType, DTypeArgs};
+use crate::generated::schema::{Decimal, DecimalArgs, FloatWidth as FbFloatWidth};
+use crate::generated::schema::{Float, FloatArgs, IntWidth as FbIntWidth};
+use crate::generated::schema::{Nullability as FbNullability, Utf8, Utf8Args};
 use crate::{
     CompositeID, DType, FloatWidth, IntWidth, Nullability, SchemaError, SchemaResult, Signedness,
 };
