@@ -22,7 +22,7 @@ impl EncodingSerde for VarBinEncoding {
             None
         };
         // TODO(robert): Stop writing this
-        let offsets_dtype = ctx.read_dtype()?;
+        let offsets_dtype = ctx.dtype()?;
         let offsets = ctx.with_schema(&offsets_dtype).read()?;
         let bytes = ctx.bytes().read()?;
         Ok(VarBinArray::new(offsets, bytes, ctx.schema().clone(), validity).boxed())

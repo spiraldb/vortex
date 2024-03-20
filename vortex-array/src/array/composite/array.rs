@@ -34,7 +34,7 @@ pub struct CompositeArray {
 impl CompositeArray {
     pub fn new(id: CompositeID, metadata: Arc<Vec<u8>>, underlying: ArrayRef) -> Self {
         let dtype = DType::Composite(id, underlying.dtype().is_nullable().into());
-        let extension = find_extension(id).expect("Unrecognized composite extension");
+        let extension = find_extension(id.0).expect("Unrecognized composite extension");
         Self {
             extension,
             metadata,

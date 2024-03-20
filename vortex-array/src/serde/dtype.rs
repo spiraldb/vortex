@@ -2,6 +2,7 @@ use leb128::read::Error;
 use std::io::Read;
 use std::sync::Arc;
 
+use crate::array::composite::find_extension;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::dtype::DType::*;
@@ -91,11 +92,12 @@ impl<'a> DTypeReader<'a> {
                 Ok(Struct(names, fields))
             }
             DTypeTag::Composite => {
-                let _name = unsafe { String::from_utf8_unchecked(self.read_slice()?) };
-                let _dtype = self.read()?;
-                let _metadata = self.read_slice()?;
-                todo!()
-                // Ok(Composite(Arc::new(name), Box::new(dtype), metadata))
+                let nullability = self.read_nullability()?;
+                let id = unsafe { String::from_utf8_unchecked(self.read_slice()?) };
+                let extension = find_extension(id.as_str()).ok_or(VortexError::InvalidArgument(
+                    "Failed to find extension".into(),
+                ))?;
+                Ok(Composite(extension.id(), nullability))
             }
         }
     }

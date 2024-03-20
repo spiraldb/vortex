@@ -79,7 +79,7 @@ impl<'a> ReadCtx<'a> {
     }
 
     #[inline]
-    pub fn read_dtype(&mut self) -> VortexResult<DType> {
+    pub fn dtype(&mut self) -> VortexResult<DType> {
         DTypeReader::new(self.r).read()
     }
 

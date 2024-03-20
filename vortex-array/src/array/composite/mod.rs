@@ -22,9 +22,9 @@ impl Display for CompositeID {
 #[distributed_slice]
 pub static COMPOSITE_EXTENSIONS: [&'static dyn CompositeExtension] = [..];
 
-pub fn find_extension(id: CompositeID) -> Option<&'static dyn CompositeExtension> {
+pub fn find_extension(id: &str) -> Option<&'static dyn CompositeExtension> {
     COMPOSITE_EXTENSIONS
         .iter()
         .copied()
-        .find(|ext| ext.id() == id)
+        .find(|ext| ext.id().0 == id)
 }

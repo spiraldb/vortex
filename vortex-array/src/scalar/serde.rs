@@ -50,7 +50,7 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
                     }
                     Ok(ListScalar::new(values[0].dtype().clone(), Some(values)).into())
                 } else {
-                    Ok(ListScalar::new(self.reader.read_dtype()?, None).into())
+                    Ok(ListScalar::new(self.reader.dtype()?, None).into())
                 }
             }
             ScalarTag::Null => Ok(NullScalar::new().into()),
@@ -79,7 +79,7 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
                 )
             }
             ScalarTag::Composite => {
-                let dtype = self.reader.read_dtype()?;
+                let dtype = self.reader.dtype()?;
                 let scalar = self.read()?;
                 Ok(CompositeScalar::new(dtype, Box::new(scalar)).into())
             }

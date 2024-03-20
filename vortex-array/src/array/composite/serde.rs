@@ -20,7 +20,7 @@ impl EncodingSerde for CompositeEncoding {
             panic!("Expected composite schema")
         };
         let metadata = ctx.read_slice()?;
-        let underling_dtype = ctx.read_dtype()?;
+        let underling_dtype = ctx.dtype()?;
         let underlying = ctx.with_schema(&underling_dtype).read()?;
 
         Ok(CompositeArray::new(id, Arc::new(metadata), underlying).boxed())
