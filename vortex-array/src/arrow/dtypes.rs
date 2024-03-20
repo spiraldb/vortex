@@ -33,13 +33,8 @@ impl From<RecordBatch> for ArrayRef {
                 .map(|(array, field)| {
                     // The dtype of the child arrays infer their nullability from the array itself.
                     // In case the schema says something different, we cast into the schema's dtype.
-                    let vortex_array =
-                        ArrayRef::from_arrow_array(array.clone(), field.is_nullable());
-                    cast(
-                        vortex_array.as_ref(),
-                        &DType::from_arrow_type(field.as_ref()),
-                    )
-                    .unwrap()
+                    let vortex_array = ArrayRef::from_arrow(array.clone(), field.is_nullable());
+                    cast(vortex_array.as_ref(), &DType::from_arrow(field.as_ref())).unwrap()
                 })
                 .collect(),
         )
@@ -75,7 +70,7 @@ impl TryFrom<&DataType> for PType {
 }
 
 impl FromArrowType<SchemaRef> for DType {
-    fn from_arrow_type(value: SchemaRef) -> Self {
+    fn from_arrow(value: SchemaRef) -> Self {
         DType::Struct(
             value
                 .fields()
@@ -85,14 +80,14 @@ impl FromArrowType<SchemaRef> for DType {
             value
                 .fields()
                 .iter()
-                .map(|f| DType::from_arrow_type(f.as_ref()))
+                .map(|f| DType::from_arrow(f.as_ref()))
                 .collect_vec(),
         )
     }
 }
 
 impl FromArrowType<&Field> for DType {
-    fn from_arrow_type(field: &Field) -> Self {
+    fn from_arrow(field: &Field) -> Self {
         use vortex_schema::DType::*;
         use vortex_schema::Signedness::*;
 
@@ -123,12 +118,12 @@ impl FromArrowType<&Field> for DType {
             // DataType::Time32(u) => localtime(u.into(), IntWidth::_32, nullability),
             // DataType::Time64(u) => localtime(u.into(), IntWidth::_64, nullability),
             DataType::List(e) | DataType::LargeList(e) => {
-                List(Box::new(DType::from_arrow_type(e.as_ref())), nullability)
+                List(Box::new(DType::from_arrow(e.as_ref())), nullability)
             }
             DataType::Struct(f) => Struct(
                 f.iter().map(|f| Arc::new(f.name().clone())).collect(),
                 f.iter()
-                    .map(|f| DType::from_arrow_type(f.as_ref()))
+                    .map(|f| DType::from_arrow(f.as_ref()))
                     .collect_vec(),
             ),
             DataType::Decimal128(p, s) | DataType::Decimal256(p, s) => Decimal(*p, *s, nullability),

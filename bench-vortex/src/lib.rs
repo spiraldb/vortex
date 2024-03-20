@@ -1,17 +1,18 @@
+use std::collections::HashSet;
+use std::fs::{create_dir_all, File};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use arrow_array::RecordBatchReader;
 use itertools::Itertools;
 use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
-use std::collections::HashSet;
-use std::fs::{create_dir_all, File};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+
 use vortex::array::bool::BoolEncoding;
 use vortex::array::chunked::{ChunkedArray, ChunkedEncoding};
-use vortex::array::constant::ConstantEncoding;
-
 use vortex::array::composite::CompositeEncoding;
+use vortex::array::constant::ConstantEncoding;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveEncoding;
 use vortex::array::sparse::SparseEncoding;
@@ -117,7 +118,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         })
         .collect_vec();
 
-    let dtype = DType::from_arrow_type(schema.clone());
+    let dtype = DType::from_arrow(schema.clone());
     let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
 
     info!("Compressed array {}", display_tree(compressed.as_ref()));
@@ -143,13 +144,15 @@ pub fn compress_taxi_data() -> ArrayRef {
 
 #[cfg(test)]
 mod test {
+    use std::fs::File;
+    use std::ops::Deref;
+    use std::sync::Arc;
+
     use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-    use std::fs::File;
-    use std::ops::Deref;
-    use std::sync::Arc;
+
     use vortex::array::ArrayRef;
     use vortex::compute::as_arrow::as_arrow;
     use vortex::encode::FromArrowArray;
@@ -185,7 +188,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayRef::from_arrow_array(arrow_array.clone(), false);
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
 
             let mut buf = Vec::<u8>::new();
             let mut write_ctx = WriteCtx::new(&mut buf);
@@ -207,7 +210,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayRef::from_arrow_array(arrow_array.clone(), false);
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
             let vortex_as_arrow = as_arrow(vortex_array.as_ref()).unwrap();
             assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
         }
@@ -226,7 +229,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayRef::from_arrow_array(arrow_array.clone(), false);
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
 
             let compressed = ctx.clone().compress(vortex_array.as_ref(), None).unwrap();
             let compressed_as_arrow = as_arrow(compressed.as_ref()).unwrap();

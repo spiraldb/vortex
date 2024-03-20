@@ -25,7 +25,7 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
 
     if obj.is_instance(pa_array)? {
         let arrow_array = ArrayData::from_pyarrow(obj).map(make_array)?;
-        let enc_array = ArrayRef::from_arrow_array(arrow_array, false);
+        let enc_array = ArrayRef::from_arrow(arrow_array, false);
         PyArray::wrap(obj.py(), enc_array)
     } else if obj.is_instance(chunked_array)? {
         let chunks: Vec<&PyAny> = obj.getattr("chunks")?.extract()?;
@@ -34,17 +34,17 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
             .map(|a| {
                 ArrayData::from_pyarrow(a)
                     .map(make_array)
-                    .map(|a| ArrayRef::from_arrow_array(a, false))
+                    .map(|a| ArrayRef::from_arrow(a, false))
             })
             .collect::<PyResult<Vec<ArrayRef>>>()?;
         let dtype: DType = obj
             .getattr("type")
             .and_then(DataType::from_pyarrow)
-            .map(|dt| DType::from_arrow_type(&Field::new("_", dt, false)))?;
+            .map(|dt| DType::from_arrow(&Field::new("_", dt, false)))?;
         PyArray::wrap(obj.py(), ChunkedArray::new(encoded_chunks, dtype).boxed())
     } else if obj.is_instance(table)? {
         let array_stream = ArrowArrayStreamReader::from_pyarrow(obj)?;
-        let dtype = DType::from_arrow_type(array_stream.schema());
+        let dtype = DType::from_arrow(array_stream.schema());
         let chunks = array_stream
             .into_iter()
             .map(|b| b.map(ArrayRef::from).map_err(map_arrow_err))

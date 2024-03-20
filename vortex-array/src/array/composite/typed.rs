@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use vortex_schema::CompositeID;
+
 use crate::array::composite::array::CompositeArray;
 use crate::array::composite::CompositeMetadata;
 use crate::array::{Array, ArrayRef};
@@ -95,4 +97,3 @@ macro_rules! composite_impl {
 }
 
 pub(crate) use composite_impl;
-use vortex_schema::CompositeID;

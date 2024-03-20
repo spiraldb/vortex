@@ -35,7 +35,7 @@ impl PyDType {
     ) -> PyResult<Py<Self>> {
         PyDType::wrap(
             cls.py(),
-            DType::from_arrow_type(&Field::new("_", arrow_dtype, nullable)),
+            DType::from_arrow(&Field::new("_", arrow_dtype, nullable)),
         )
     }
 }
