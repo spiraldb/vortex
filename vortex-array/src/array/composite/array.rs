@@ -24,7 +24,6 @@ pub trait CompositeMetadata:
 
 #[derive(Debug, Clone)]
 pub struct CompositeArray {
-    id: CompositeID,
     extension: CompositeExtensionRef,
     metadata: Arc<Vec<u8>>,
     underlying: ArrayRef,
@@ -37,7 +36,6 @@ impl CompositeArray {
         let dtype = DType::Composite(id, underlying.dtype().is_nullable().into());
         let extension = find_extension(id).expect("Unrecognized composite extension");
         Self {
-            id,
             extension,
             metadata,
             underlying,
@@ -48,7 +46,7 @@ impl CompositeArray {
 
     #[inline]
     pub fn id(&self) -> CompositeID {
-        self.id
+        self.extension.id()
     }
 
     #[inline]

@@ -6,26 +6,14 @@ use arrow_array::{
     TimestampNanosecondArray, TimestampSecondArray,
 };
 
-use crate::array::composite::typed::{composite_impl, TypedCompositeArray};
 use crate::array::composite::CompositeID;
-/// Arrow Datetime Types
-/// time32/64 - time of day
-///   => LocalTime
-/// date32 - days since unix epoch
-/// date64 - millis since unix epoch
-///   => LocalDate
-/// timestamp(unit, tz)
-///   => Instant iff tz == UTC
-///   => ZonedDateTime(Instant, tz)
-/// timestamp(unit)
-///   => LocalDateTime (tz is "unknown", not "UTC")
-/// duration
-///   => Duration
+use crate::array::composite::{composite_impl, TypedCompositeArray};
+
 use crate::arrow::wrappers::as_nulls;
-use crate::composite_dtypes::TimeUnit;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
+use crate::datetime::TimeUnit;
 use crate::error::VortexResult;
 use crate::ptype::PType;
 use crate::serde::BytesSerde;

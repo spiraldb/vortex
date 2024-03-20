@@ -29,11 +29,6 @@ impl<M: CompositeMetadata> TypedCompositeArray<M> {
     }
 
     #[inline]
-    pub fn id(&self) -> CompositeID {
-        self.metadata().id()
-    }
-
-    #[inline]
     pub fn metadata(&self) -> &M {
         &self.metadata
     }
@@ -45,7 +40,7 @@ impl<M: CompositeMetadata> TypedCompositeArray<M> {
 
     pub fn as_composite(&self) -> CompositeArray {
         CompositeArray::new(
-            self.id(),
+            self.metadata().id(),
             Arc::new(self.metadata().serialize()),
             dyn_clone::clone_box(self.underlying()),
         )
@@ -54,10 +49,10 @@ impl<M: CompositeMetadata> TypedCompositeArray<M> {
 
 macro_rules! composite_impl {
     ($id:expr, $T:ty) => {
-        use crate::array::composite::array::{CompositeArray, CompositeMetadata};
-        use crate::array::composite::typed::CompositeExtension;
-        use crate::array::composite::COMPOSITE_EXTENSIONS;
-        use crate::array::ArrayCompute;
+        use crate::array::composite::{
+            CompositeArray, CompositeExtension, CompositeMetadata, COMPOSITE_EXTENSIONS,
+        };
+        use crate::compute::ArrayCompute;
         use crate::dtype::{DType, Nullability};
         use linkme::distributed_slice;
         use paste::paste;

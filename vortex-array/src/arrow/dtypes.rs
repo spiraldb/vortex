@@ -4,11 +4,10 @@ use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Field, SchemaRef, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
 
-use crate::array::composite::localdatetime::LocalDateTimeExtension;
 use crate::array::struct_::StructArray;
 use crate::array::{Array, ArrayRef};
-use crate::composite_dtypes::TimeUnit;
 use crate::compute::cast::cast;
+use crate::datetime::{LocalDateTimeExtension, TimeUnit};
 use crate::dtype::DType::*;
 use crate::dtype::{DType, FloatWidth, IntWidth, Nullability};
 use crate::encode::FromArrow;

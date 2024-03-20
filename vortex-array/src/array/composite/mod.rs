@@ -4,12 +4,10 @@ use std::fmt::{Display, Formatter};
 mod array;
 mod compress;
 mod compute;
-mod ext;
 mod serde;
 mod typed;
 
 pub use array::*;
-pub use ext::*;
 pub use typed::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]

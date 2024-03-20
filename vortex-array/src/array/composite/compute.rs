@@ -21,7 +21,7 @@ impl ArrayCompute for CompositeArray {
     }
 
     fn flatten(&self) -> Option<&dyn FlattenFn> {
-        None
+        Some(self)
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
