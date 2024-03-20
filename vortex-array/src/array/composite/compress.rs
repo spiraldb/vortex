@@ -1,10 +1,9 @@
+use crate::array::composite::{CompositeArray, CompositeEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::typed::{TypedArray, TypedEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use crate::error::VortexResult;
-
-impl EncodingCompression for TypedEncoding {
+impl EncodingCompression for CompositeEncoding {
     fn cost(&self) -> u8 {
         0
     }
@@ -23,15 +22,16 @@ impl EncodingCompression for TypedEncoding {
         like: Option<&dyn Array>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
-        let typed_array = array.as_typed();
-        let typed_like = like.map(|like_array| like_array.as_typed());
+        let composite_array = array.as_composite();
+        let composite_like = like.map(|like_array| like_array.as_composite());
 
-        Ok(TypedArray::new(
+        Ok(CompositeArray::new(
+            composite_array.id(),
+            composite_array.metadata().clone(),
             ctx.compress(
-                typed_array.untyped_array(),
-                typed_like.map(|typed_arr| typed_arr.untyped_array()),
+                composite_array.underlying(),
+                composite_like.map(|c| c.underlying()),
             )?,
-            array.dtype().clone(),
         )
         .boxed())
     }

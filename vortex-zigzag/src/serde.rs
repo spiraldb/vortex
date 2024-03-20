@@ -1,28 +1,21 @@
-use std::io;
-use std::io::ErrorKind;
-
 use vortex::array::{Array, ArrayRef};
 use vortex::dtype::{DType, Signedness};
+use vortex::error::{VortexError, VortexResult};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 use crate::{ZigZagArray, ZigZagEncoding};
 
 impl ArraySerde for ZigZagArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.write(self.encoded())
     }
 }
 
 impl EncodingSerde for ZigZagEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let encoded_dtype = match ctx.schema() {
             DType::Int(w, Signedness::Signed, n) => DType::Int(*w, Signedness::Unsigned, *n),
-            _ => {
-                return Err(io::Error::new(
-                    ErrorKind::InvalidData,
-                    "Invalid zigzag encoded dtype, not an signed integer",
-                ));
-            }
+            _ => return Err(VortexError::InvalidDType(ctx.schema().clone())),
         };
         let encoded = ctx.with_schema(&encoded_dtype).read()?;
         Ok(ZigZagArray::new(encoded).boxed())
@@ -31,17 +24,16 @@ impl EncodingSerde for ZigZagEncoding {
 
 #[cfg(test)]
 mod test {
-    use std::io;
-
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::{Array, ArrayRef};
+    use vortex::error::VortexResult;
     use vortex::serde::{ReadCtx, WriteCtx};
 
     use crate::compress::zigzag_encode;
     use crate::downcast::DowncastZigzag;
 
-    fn roundtrip_array(array: &dyn Array) -> io::Result<ArrayRef> {
+    fn roundtrip_array(array: &dyn Array) -> VortexResult<ArrayRef> {
         let mut buf = Vec::<u8>::new();
         let mut write_ctx = WriteCtx::new(&mut buf);
         write_ctx.write(array)?;

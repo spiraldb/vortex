@@ -1,10 +1,10 @@
 #[cfg(test)]
 pub mod test {
-    use std::io;
     use vortex::array::{Array, ArrayRef};
+    use vortex::error::VortexResult;
     use vortex::serde::{ReadCtx, WriteCtx};
 
-    pub fn roundtrip_array(array: &dyn Array) -> io::Result<ArrayRef> {
+    pub fn roundtrip_array(array: &dyn Array) -> VortexResult<ArrayRef> {
         let mut buf = Vec::<u8>::new();
         let mut write_ctx = WriteCtx::new(&mut buf);
         write_ctx.write(array)?;

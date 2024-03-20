@@ -75,14 +75,13 @@ impl EncodingCompression for DeltaEncoding {
             PrimitiveArray::from(delta_primitive(filled.as_primitive().typed_data::<$T>()))
         });
 
-        let encoded = ctx.named("deltas").compress(
-            delta_encoded.as_ref(),
-            like_delta.map(|d| d.encoded().as_ref()),
-        )?;
+        let encoded = ctx
+            .named("deltas")
+            .compress(delta_encoded.as_ref(), like_delta.map(|d| d.encoded()))?;
 
-        return Ok(DeltaArray::try_new(array.len(), encoded, validity)
+        Ok(DeltaArray::try_new(array.len(), encoded, validity)
             .unwrap()
-            .boxed());
+            .boxed())
     }
 }
 

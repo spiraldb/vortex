@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef};
+use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::scalar_at::scalar_at;
 use vortex::compute::ArrayCompute;
@@ -81,16 +81,12 @@ impl Array for DeltaArray {
 
     #[inline]
     fn dtype(&self) -> &DType {
-        &self.encoded.dtype()
+        self.encoded.dtype()
     }
 
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!()
     }
 
     fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {
@@ -107,8 +103,8 @@ impl Array for DeltaArray {
         self.encoded().nbytes() + self.validity().map(|v| v.nbytes()).unwrap_or(0)
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

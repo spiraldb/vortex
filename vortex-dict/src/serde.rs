@@ -1,12 +1,11 @@
-use std::io;
-
 use vortex::array::{Array, ArrayRef};
+use vortex::error::VortexResult;
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 use crate::{DictArray, DictEncoding};
 
 impl ArraySerde for DictArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.write(self.dict())?;
         // TODO(robert): Stop writing this
         ctx.dtype(self.codes().dtype())?;
@@ -15,7 +14,7 @@ impl ArraySerde for DictArray {
 }
 
 impl EncodingSerde for DictEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let dict = ctx.read()?;
         let codes_dtype = ctx.dtype()?;
         let codes = ctx.with_schema(&codes_dtype).read()?;
@@ -25,16 +24,15 @@ impl EncodingSerde for DictEncoding {
 
 #[cfg(test)]
 mod test {
-    use std::io;
-
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::{Array, ArrayRef};
+    use vortex::error::VortexResult;
     use vortex::serde::{ReadCtx, WriteCtx};
 
     use crate::downcast::DowncastDict;
     use crate::DictArray;
 
-    fn roundtrip_array(array: &dyn Array) -> io::Result<ArrayRef> {
+    fn roundtrip_array(array: &dyn Array) -> VortexResult<ArrayRef> {
         let mut buf = Vec::<u8>::new();
         let mut write_ctx = WriteCtx::new(&mut buf);
         write_ctx.write(array)?;

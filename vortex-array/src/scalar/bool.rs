@@ -1,105 +1,74 @@
-use std::any::Any;
 use std::fmt::{Display, Formatter};
 
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::{NullableScalar, Scalar, ScalarRef};
+use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BoolScalar {
-    value: bool,
+    value: Option<bool>,
 }
 
 impl BoolScalar {
-    pub fn new(value: bool) -> Self {
+    pub fn new(value: Option<bool>) -> Self {
         Self { value }
     }
 
-    pub fn value(&self) -> bool {
+    pub fn none() -> Self {
+        Self { value: None }
+    }
+
+    pub fn some(value: bool) -> Self {
+        Self { value: Some(value) }
+    }
+
+    pub fn value(&self) -> Option<bool> {
         self.value
     }
-}
-
-impl Scalar for BoolScalar {
-    #[inline]
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 
     #[inline]
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
-
-    #[inline]
-    fn as_nonnull(&self) -> Option<&dyn Scalar> {
-        Some(self)
-    }
-
-    #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
-        Some(self)
-    }
-
-    #[inline]
-    fn boxed(self) -> ScalarRef {
-        Box::new(self)
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
+    pub fn dtype(&self) -> &DType {
         &DType::Bool(Nullability::NonNullable)
     }
 
-    fn cast(&self, dtype: &DType) -> VortexResult<ScalarRef> {
+    pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
         match dtype {
-            DType::Bool(Nullability::NonNullable) => Ok(self.clone().boxed()),
-            DType::Bool(Nullability::Nullable) => {
-                Ok(NullableScalar::some(self.clone().boxed()).boxed())
-            }
+            DType::Bool(_) => Ok(self.clone().into()),
             _ => Err(VortexError::InvalidDType(dtype.clone())),
         }
     }
 
-    fn nbytes(&self) -> usize {
+    pub fn nbytes(&self) -> usize {
         1
     }
 }
 
-impl From<bool> for ScalarRef {
+impl From<bool> for Scalar {
     #[inline]
     fn from(value: bool) -> Self {
-        BoolScalar::new(value).boxed()
+        BoolScalar::new(Some(value)).into()
     }
 }
 
-impl TryFrom<ScalarRef> for bool {
+impl TryFrom<Scalar> for bool {
     type Error = VortexError;
 
-    #[inline]
-    fn try_from(value: ScalarRef) -> VortexResult<Self> {
-        value.as_ref().try_into()
-    }
-}
+    fn try_from(value: Scalar) -> VortexResult<Self> {
+        let Scalar::Bool(b) = value else {
+            return Err(VortexError::InvalidDType(value.dtype().clone()));
+        };
 
-impl TryFrom<&dyn Scalar> for bool {
-    type Error = VortexError;
-
-    fn try_from(value: &dyn Scalar) -> VortexResult<Self> {
-        if let Some(bool_scalar) = value
-            .as_nonnull()
-            .and_then(|v| v.as_any().downcast_ref::<BoolScalar>())
-        {
-            Ok(bool_scalar.value())
-        } else {
-            Err(VortexError::InvalidDType(value.dtype().clone()))
-        }
+        b.value()
+            .ok_or_else(|| VortexError::InvalidDType(b.dtype().clone()))
     }
 }
 
 impl Display for BoolScalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
+        match self.value() {
+            None => write!(f, "null"),
+            Some(b) => Display::fmt(&b, f),
+        }
     }
 }
 
@@ -109,7 +78,7 @@ mod test {
 
     #[test]
     fn into_from() {
-        let scalar: ScalarRef = false.into();
-        assert_eq!(scalar.as_ref().try_into(), Ok(false));
+        let scalar: Scalar = false.into();
+        assert_eq!(scalar.try_into(), Ok(false));
     }
 }

@@ -1,20 +1,17 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::Datum;
 use linkme::distributed_slice;
 
 use crate::array::{
-    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
-    ENCODINGS,
+    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
-use crate::arrow::compute::repeat;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::scalar::{Scalar, ScalarRef};
+use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
+use crate::stats::{Stat, Stats, StatsSet};
 
 mod compute;
 mod serde;
@@ -22,22 +19,32 @@ mod stats;
 
 #[derive(Debug, Clone)]
 pub struct ConstantArray {
-    scalar: ScalarRef,
+    scalar: Scalar,
     length: usize,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl ConstantArray {
-    pub fn new(scalar: ScalarRef, length: usize) -> Self {
+    pub fn new(scalar: Scalar, length: usize) -> Self {
+        let stats = StatsSet::from(
+            [
+                (Stat::Max, scalar.clone()),
+                (Stat::Min, scalar.clone()),
+                (Stat::IsConstant, true.into()),
+                (Stat::IsSorted, true.into()),
+                (Stat::RunCount, 1.into()),
+            ]
+            .into(),
+        );
         Self {
             scalar,
             length,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(stats)),
         }
     }
 
-    pub fn scalar(&self) -> &dyn Scalar {
-        self.scalar.as_ref()
+    pub fn scalar(&self) -> &Scalar {
+        &self.scalar
     }
 }
 
@@ -77,11 +84,6 @@ impl Array for ConstantArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let arrow_scalar: Box<dyn Datum> = self.scalar.as_ref().into();
-        Box::new(std::iter::once(repeat(arrow_scalar.as_ref(), self.length)))
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -98,8 +100,8 @@ impl Array for ConstantArray {
         self.scalar.nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

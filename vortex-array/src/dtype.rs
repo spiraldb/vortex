@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 use std::sync::Arc;
 
 use itertools::Itertools;
@@ -122,28 +123,11 @@ impl Display for FloatWidth {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub enum TimeUnit {
-    Ns,
-    Us,
-    Ms,
-    S,
-}
-
-impl Display for TimeUnit {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TimeUnit::Ns => write!(f, "ns"),
-            TimeUnit::Us => write!(f, "us"),
-            TimeUnit::Ms => write!(f, "ms"),
-            TimeUnit::S => write!(f, "s"),
-        }
-    }
-}
-
 pub type FieldNames = Vec<Arc<String>>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub type Metadata = Vec<u8>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub enum DType {
     Null,
     Bool(Nullability),
@@ -152,13 +136,9 @@ pub enum DType {
     Float(FloatWidth, Nullability),
     Utf8(Nullability),
     Binary(Nullability),
-    LocalTime(TimeUnit, Nullability),
-    LocalDate(Nullability),
-    Instant(TimeUnit, Nullability),
-    ZonedDateTime(TimeUnit, Nullability),
     Struct(FieldNames, Vec<DType>),
     List(Box<DType>, Nullability),
-    Map(Box<DType>, Box<DType>, Nullability),
+    Composite(Arc<String>, Box<DType>, Metadata),
 }
 
 impl DType {
@@ -180,13 +160,9 @@ impl DType {
             Float(_, n) => matches!(n, Nullable),
             Utf8(n) => matches!(n, Nullable),
             Binary(n) => matches!(n, Nullable),
-            LocalTime(_, n) => matches!(n, Nullable),
-            LocalDate(n) => matches!(n, Nullable),
-            Instant(_, n) => matches!(n, Nullable),
-            ZonedDateTime(_, n) => matches!(n, Nullable),
             Struct(_, fs) => fs.iter().all(|f| f.is_nullable()),
             List(_, n) => matches!(n, Nullable),
-            Map(_, _, n) => matches!(n, Nullable),
+            Composite(_, d, _) => d.is_nullable(),
         }
     }
 
@@ -207,16 +183,16 @@ impl DType {
             Float(w, _) => Float(*w, nullability),
             Utf8(_) => Utf8(nullability),
             Binary(_) => Binary(nullability),
-            LocalTime(u, _) => LocalTime(*u, nullability),
-            LocalDate(_) => LocalDate(nullability),
-            Instant(u, _) => Instant(*u, nullability),
-            ZonedDateTime(u, _) => ZonedDateTime(*u, nullability),
             Struct(n, fs) => Struct(
                 n.clone(),
                 fs.iter().map(|f| f.with_nullability(nullability)).collect(),
             ),
             List(c, _) => List(c.clone(), nullability),
-            Map(k, v, _) => Map(k.clone(), v.clone(), nullability),
+            Composite(n, d, m) => Composite(
+                n.clone(),
+                Box::new(d.with_nullability(nullability)),
+                m.clone(),
+            ),
         }
     }
 
@@ -240,10 +216,6 @@ impl Display for DType {
             Float(w, n) => write!(f, "float({}){}", w, n),
             Utf8(n) => write!(f, "utf8{}", n),
             Binary(n) => write!(f, "binary{}", n),
-            LocalTime(u, n) => write!(f, "localtime({}){}", u, n),
-            LocalDate(n) => write!(f, "localdate{}", n),
-            Instant(u, n) => write!(f, "instant({}){}", u, n),
-            ZonedDateTime(u, n) => write!(f, "zoned_date_time({}){}", u, n),
             Struct(n, dt) => write!(
                 f,
                 "{{{}}}",
@@ -253,7 +225,8 @@ impl Display for DType {
                     .join(", ")
             ),
             List(c, n) => write!(f, "list({}){}", c, n),
-            Map(k, v, n) => write!(f, "map({}, {}){}", k, v, n),
+            // TODO(robert): Print metadata
+            Composite(n, d, _) => write!(f, "composite({}, [{}])", n, d,),
         }
     }
 }
@@ -297,5 +270,17 @@ impl From<PType> for DType {
             PType::F32 => Float(FloatWidth::_32, NonNullable),
             PType::F64 => Float(FloatWidth::_64, NonNullable),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::mem;
+
+    use crate::dtype::DType;
+
+    #[test]
+    fn size_of() {
+        assert_eq!(mem::size_of::<DType>(), 56);
     }
 }

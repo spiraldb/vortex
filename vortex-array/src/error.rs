@@ -1,7 +1,7 @@
 use std::borrow::Cow;
-use std::env;
 use std::fmt::{self, Display, Formatter};
 use std::ops::Deref;
+use std::{env, io};
 
 use crate::array::EncodingId;
 use crate::dtype::DType;
@@ -70,11 +70,7 @@ pub enum VortexError {
     #[error("Expected type {0} but found type {1}")]
     MismatchedTypes(DType, DType),
     #[error("unexpected arrow data type: {0:?}")]
-    InvalidArrowDataType(arrow::datatypes::DataType),
-    #[error("polars error: {0:?}")]
-    PolarsError(PolarsError),
-    #[error("arrow error: {0:?}")]
-    ArrowError(ArrowError),
+    InvalidArrowDataType(arrow_schema::DataType),
     #[error("patch values may not be null for base dtype {0}")]
     NullPatchValuesNotAllowed(DType),
     #[error("unsupported DType {0} for data array")]
@@ -83,38 +79,38 @@ pub enum VortexError {
     UnsupportedOffsetsArrayDType(DType),
     #[error("array containing indices or run ends must be strictly monotonically increasing")]
     IndexArrayMustBeStrictSorted,
+    #[error("arrow error: {0:?}")]
+    ArrowError(ArrowError),
+    #[error("io error: {0:?}")]
+    IOError(IOError),
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;
 
-// Wrap up external errors so that we can implement a dumb PartialEq
-#[derive(Debug)]
-pub struct ArrowError(pub arrow::error::ArrowError);
-
-impl PartialEq for ArrowError {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+impl From<&str> for VortexError {
+    fn from(value: &str) -> Self {
+        VortexError::InvalidArgument(value.to_string().into())
     }
 }
 
-impl From<arrow::error::ArrowError> for VortexError {
-    fn from(err: arrow::error::ArrowError) -> Self {
-        VortexError::ArrowError(ArrowError(err))
-    }
+macro_rules! wrapped_error {
+    ($E:ty, $e:ident) => {
+        #[derive(Debug)]
+        pub struct $e(pub $E);
+
+        impl PartialEq for $e {
+            fn eq(&self, _other: &Self) -> bool {
+                false
+            }
+        }
+
+        impl From<$E> for VortexError {
+            fn from(err: $E) -> Self {
+                VortexError::$e($e(err))
+            }
+        }
+    };
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct PolarsError(polars_core::error::PolarsError);
-
-impl PartialEq for PolarsError {
-    fn eq(&self, _other: &Self) -> bool {
-        false
-    }
-}
-
-impl From<polars_core::error::PolarsError> for VortexError {
-    fn from(err: polars_core::error::PolarsError) -> Self {
-        VortexError::PolarsError(PolarsError(err))
-    }
-}
+wrapped_error!(arrow_schema::ArrowError, ArrowError);
+wrapped_error!(io::Error, IOError);

@@ -1,25 +1,19 @@
 use std::any::Any;
-use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::AsArray;
-use arrow::array::{
-    ArrayRef as ArrowArrayRef, BooleanBufferBuilder, PrimitiveArray as ArrowPrimitiveArray,
-};
-use arrow::buffer::{NullBuffer, ScalarBuffer};
-use arrow::datatypes::UInt64Type;
+use itertools::Itertools;
 use linkme::distributed_slice;
 
 use crate::array::ENCODINGS;
-use crate::array::{
-    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
-};
+use crate::array::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use crate::compress::EncodingCompression;
-use crate::compute::search_sorted::{search_sorted_usize, SearchSortedSide};
+use crate::compute::cast::cast;
+use crate::compute::flatten::flatten_primitive;
+use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::dtype::DType;
 use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::match_arrow_numeric_type;
+use crate::ptype::PType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 
@@ -53,7 +47,9 @@ impl SparseArray {
         indices_offset: usize,
     ) -> VortexResult<Self> {
         if !matches!(indices.dtype(), &DType::IDX) {
-            return Err(VortexError::InvalidDType(indices.dtype().clone()));
+            return Err(VortexError::InvalidArgument(
+                format!("Cannot use {} as indices", indices.dtype().clone()).into(),
+            ));
         }
 
         Ok(Self {
@@ -82,18 +78,12 @@ impl SparseArray {
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        let mut indices = Vec::with_capacity(self.len());
-        self.indices().iter_arrow().for_each(|c| {
-            indices.extend(
-                arrow::compute::cast(c.as_ref(), &arrow::datatypes::DataType::UInt64)
-                    .unwrap()
-                    .as_primitive::<UInt64Type>()
-                    .values()
-                    .into_iter()
-                    .map(|v| (*v as usize) - self.indices_offset),
-            )
-        });
-        indices
+        flatten_primitive(cast(self.indices(), &PType::U64.into()).unwrap().as_ref())
+            .unwrap()
+            .typed_data::<u64>()
+            .iter()
+            .map(|v| (*v as usize) - self.indices_offset)
+            .collect_vec()
     }
 }
 
@@ -133,36 +123,12 @@ impl Array for SparseArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        // Resolve our indices into a vector of usize applying the offset
-        let indices = self.resolved_indices();
-        let array: ArrowArrayRef = match_arrow_numeric_type!(self.values().dtype(), |$E| {
-            let mut validity = BooleanBufferBuilder::new(self.len());
-            validity.append_n(self.len(), false);
-            let mut values = vec![<$E as ArrowPrimitiveType>::Native::default(); self.len()];
-            let mut offset = 0;
-            for values_array in self.values().iter_arrow() {
-                for v in values_array.as_primitive::<$E>().values() {
-                    let idx = indices[offset];
-                    values[idx] = *v;
-                    validity.set_bit(idx, true);
-                    offset += 1;
-                }
-            }
-            Arc::new(ArrowPrimitiveArray::<$E>::new(
-                ScalarBuffer::from(values),
-                Some(NullBuffer::from(validity.finish())),
-            ))
-        });
-        Box::new(iter::once(array))
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         // Find the index of the first patch index that is greater than or equal to the offset of this array
-        let index_start_index = search_sorted_usize(self.indices(), start, SearchSortedSide::Left)?;
-        let index_end_index = search_sorted_usize(self.indices(), stop, SearchSortedSide::Left)?;
+        let index_start_index = search_sorted(self.indices(), start, SearchSortedSide::Left)?;
+        let index_end_index = search_sorted(self.indices(), stop, SearchSortedSide::Left)?;
 
         Ok(SparseArray {
             indices_offset: self.indices_offset + start,
@@ -184,8 +150,8 @@ impl Array for SparseArray {
         self.indices.nbytes() + self.values.nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 
@@ -231,12 +197,11 @@ impl Encoding for SparseEncoding {
 
 #[cfg(test)]
 mod test {
-    use arrow::array::AsArray;
-    use arrow::datatypes::Int32Type;
     use itertools::Itertools;
 
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
+    use crate::compute::flatten::flatten_primitive;
     use crate::compute::scalar_at::scalar_at;
     use crate::error::VortexError;
 
@@ -246,13 +211,9 @@ mod test {
     }
 
     fn assert_sparse_array(sparse: &dyn Array, values: &[Option<i32>]) {
-        let sparse_arrow = sparse
-            .as_ref()
-            .iter_arrow()
-            .next()
+        let sparse_arrow = flatten_primitive(sparse)
             .unwrap()
-            .as_primitive::<Int32Type>()
-            .into_iter()
+            .iter::<i32>()
             .collect_vec();
         assert_eq!(sparse_arrow, values);
     }

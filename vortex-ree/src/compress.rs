@@ -3,7 +3,8 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef, Encoding};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::compute::cast::cast_primitive;
+use vortex::compute::cast::cast;
+use vortex::compute::flatten::flatten_primitive;
 use vortex::error::VortexResult;
 use vortex::ptype::{match_each_native_ptype, NativePType};
 use vortex::stats::Stat;
@@ -110,7 +111,6 @@ fn ree_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
     (ends, values)
 }
 
-#[allow(dead_code)]
 pub fn ree_decode(
     ends: &PrimitiveArray,
     values: &PrimitiveArray,
@@ -119,7 +119,7 @@ pub fn ree_decode(
     // TODO(ngates): switch over ends without necessarily casting
     match_each_native_ptype!(values.ptype(), |$P| {
         Ok(PrimitiveArray::from_nullable(ree_decode_primitive(
-            cast_primitive(ends, &PType::U64)?.typed_data(),
+            flatten_primitive(cast(ends, &PType::U64.into())?.as_ref())?.typed_data(),
             values.typed_data::<$P>(),
         ), validity))
     })
@@ -135,7 +135,7 @@ pub fn ree_decode_primitive<T: NativePType>(run_ends: &[u64], values: &[T]) -> V
 
 #[cfg(test)]
 mod test {
-    use arrow::buffer::BooleanBuffer;
+    use arrow_buffer::buffer::BooleanBuffer;
 
     use vortex::array::bool::BoolArray;
     use vortex::array::downcast::DowncastArrayBuiltin;

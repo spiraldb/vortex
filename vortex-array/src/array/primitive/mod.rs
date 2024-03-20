@@ -6,20 +6,21 @@ use std::panic::RefUnwindSafe;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
+use crate::accessor::ArrayAccessor;
 use allocator_api2::alloc::Allocator;
-use arrow::array::{make_array, ArrayData, AsArray};
-use arrow::buffer::{Buffer, NullBuffer, ScalarBuffer};
+use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
 
+use crate::array::bool::BoolArray;
 use crate::array::{
-    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef, ENCODINGS,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
+    ENCODINGS,
 };
-use crate::arrow::CombineChunks;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
@@ -98,6 +99,17 @@ impl PrimitiveArray {
             .unwrap_or(true)
     }
 
+    pub fn from_value<T: NativePType>(value: T, n: usize) -> Self {
+        PrimitiveArray::from(iter::repeat(value).take(n).collect::<Vec<_>>())
+    }
+
+    pub fn null<T: NativePType>(n: usize) -> Self {
+        PrimitiveArray::from_nullable(
+            iter::repeat(T::zero()).take(n).collect::<Vec<_>>(),
+            Some(BoolArray::from(vec![false; n]).boxed()),
+        )
+    }
+
     #[inline]
     pub fn ptype(&self) -> &PType {
         &self.ptype
@@ -161,25 +173,6 @@ impl Array for PrimitiveArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        Box::new(iter::once(make_array(
-            ArrayData::builder(self.dtype().into())
-                .len(self.len())
-                .nulls(self.validity().map(|v| {
-                    NullBuffer::new(
-                        v.iter_arrow()
-                            .combine_chunks()
-                            .as_boolean()
-                            .values()
-                            .clone(),
-                    )
-                }))
-                .add_buffer(self.buffer.clone())
-                .build()
-                .unwrap(),
-        )))
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -210,8 +203,8 @@ impl Array for PrimitiveArray {
         self.buffer.len()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 
@@ -220,6 +213,24 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for PrimitiveArray {
         self
     }
 }
+
+impl<T: NativePType> ArrayAccessor<T> for PrimitiveArray {
+    fn value(&self, index: usize) -> Option<T> {
+        if self.is_valid(index) {
+            Some(self.typed_data::<T>()[index])
+        } else {
+            None
+        }
+    }
+}
+
+impl PrimitiveArray {
+    pub fn iter<T: NativePType>(&self) -> ArrayIter<PrimitiveArray, T> {
+        ArrayIter::new(self.clone())
+    }
+}
+
+pub type PrimitiveIter<'a, T> = ArrayIter<dyn ArrayAccessor<T>, T>;
 
 #[derive(Debug)]
 pub struct PrimitiveEncoding;

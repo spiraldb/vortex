@@ -1,14 +1,19 @@
-use crate::compute::as_contiguous::AsContiguousFn;
-use cast::{CastBoolFn, CastPrimitiveFn};
+use as_arrow::AsArrowArray;
+use as_contiguous::AsContiguousFn;
+use cast::CastFn;
 use fill::FillForwardFn;
+use flatten::*;
 use patch::PatchFn;
 use scalar_at::ScalarAtFn;
+use search_sorted::SearchSortedFn;
 use take::TakeFn;
 
 pub mod add;
+pub mod as_arrow;
 pub mod as_contiguous;
 pub mod cast;
 pub mod fill;
+pub mod flatten;
 pub mod patch;
 pub mod repeat;
 pub mod scalar_at;
@@ -16,15 +21,19 @@ pub mod search_sorted;
 pub mod take;
 
 pub trait ArrayCompute {
+    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
+        None
+    }
+
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         None
     }
 
-    fn cast_bool(&self) -> Option<&dyn CastBoolFn> {
+    fn cast(&self) -> Option<&dyn CastFn> {
         None
     }
 
-    fn cast_primitive(&self) -> Option<&dyn CastPrimitiveFn> {
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
         None
     }
 
@@ -37,6 +46,10 @@ pub trait ArrayCompute {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        None
+    }
+
+    fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
         None
     }
 

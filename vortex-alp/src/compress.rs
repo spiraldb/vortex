@@ -107,7 +107,6 @@ mod tests {
     fn test_compress() {
         let array = PrimitiveArray::from(vec![1.234f32; 1025]);
         let encoded = alp_encode(&array).unwrap();
-        println!("Encoded {:?}", encoded);
         assert!(encoded.patches().is_none());
         assert_eq!(
             encoded.encoded().as_primitive().typed_data::<i32>(),
