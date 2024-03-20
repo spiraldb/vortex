@@ -2,6 +2,7 @@ use leb128::read::Error;
 use std::io::Read;
 use std::sync::Arc;
 
+use crate::array::composite::find_extension;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::dtype::DType::*;
@@ -91,10 +92,12 @@ impl<'a> DTypeReader<'a> {
                 Ok(Struct(names, fields))
             }
             DTypeTag::Composite => {
-                let name = unsafe { String::from_utf8_unchecked(self.read_slice()?) };
-                let dtype = self.read()?;
-                let metadata = self.read_slice()?;
-                Ok(Composite(Arc::new(name), Box::new(dtype), metadata))
+                let nullability = self.read_nullability()?;
+                let id = unsafe { String::from_utf8_unchecked(self.read_slice()?) };
+                let extension = find_extension(id.as_str()).ok_or(VortexError::InvalidArgument(
+                    "Failed to find extension".into(),
+                ))?;
+                Ok(Composite(extension.id(), nullability))
             }
         }
     }
@@ -167,10 +170,9 @@ impl<'a, 'b> DTypeWriter<'a, 'b> {
                 self.write_nullability(*n)?;
                 self.write(e.as_ref())?
             }
-            Composite(n, d, m) => {
-                self.writer.write_slice(n.as_bytes())?;
-                self.writer.dtype(d)?;
-                self.writer.write_slice(m)?
+            Composite(id, n) => {
+                self.write_nullability(*n)?;
+                self.writer.write_slice(id.0.as_bytes())?;
             }
         }
 
@@ -225,7 +227,7 @@ impl From<&DType> for DTypeTag {
             Decimal(_, _, _) => DTypeTag::Decimal,
             List(_, _) => DTypeTag::List,
             Struct(_, _) => DTypeTag::Struct,
-            Composite(_, _, _) => DTypeTag::Composite,
+            Composite(_, _) => DTypeTag::Composite,
         }
     }
 }

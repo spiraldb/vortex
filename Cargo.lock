@@ -2568,7 +2568,7 @@ dependencies = [
  "log",
  "num-traits",
  "num_enum",
- "once_cell",
+ "paste",
  "rand",
  "rayon",
  "roaring",

@@ -86,13 +86,13 @@ pub fn download_taxi_data() -> PathBuf {
 pub fn compress_taxi_data() -> ArrayRef {
     let file = File::open(download_taxi_data()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
+    let _mask = ProjectionMask::roots(builder.parquet_schema(), [1]);
     let _no_datetime_mask = ProjectionMask::roots(
         builder.parquet_schema(),
         [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
     );
     let reader = builder
-        //.with_projection(mask)
+        .with_projection(_mask)
         //.with_projection(no_datetime_mask)
         .with_batch_size(65_536)
         // .with_batch_size(5_000_000)
@@ -151,6 +151,7 @@ mod test {
     use vortex::array::ArrayRef;
     use vortex::compute::as_arrow::as_arrow;
     use vortex::encode::FromArrow;
+    use vortex::serde::{ReadCtx, WriteCtx};
 
     use crate::{compress_ctx, compress_taxi_data, download_taxi_data};
 
@@ -165,11 +166,32 @@ mod test {
         .unwrap();
     }
 
-    #[ignore]
     #[test]
     fn compression_ratio() {
         setup_logger(LevelFilter::Debug);
         _ = compress_taxi_data();
+    }
+
+    #[ignore]
+    #[test]
+    fn round_trip_serde() {
+        let file = File::open(download_taxi_data()).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let reader = builder.with_limit(1).build().unwrap();
+
+        for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
+            let struct_arrow: ArrowStructArray = record_batch.into();
+            let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+
+            let mut buf = Vec::<u8>::new();
+            let mut write_ctx = WriteCtx::new(&mut buf);
+            write_ctx.write(vortex_array.as_ref()).unwrap();
+
+            let mut read = buf.as_slice();
+            let mut read_ctx = ReadCtx::new(vortex_array.dtype(), &mut read);
+            read_ctx.read().unwrap();
+        }
     }
 
     #[ignore]
@@ -188,6 +210,8 @@ mod test {
         }
     }
 
+    // Ignoring since Struct arrays don't currently support equality.
+    // https://github.com/apache/arrow-rs/issues/5199
     #[ignore]
     #[test]
     fn round_trip_arrow_compressed() {

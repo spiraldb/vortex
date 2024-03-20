@@ -6,8 +6,8 @@ use itertools::Itertools;
 
 use crate::array::struct_::StructArray;
 use crate::array::{Array, ArrayRef};
-use crate::composite_dtypes::{localdate, localtime, zoneddatetime, TimeUnit};
 use crate::compute::cast::cast;
+use crate::datetime::{LocalDateTimeExtension, TimeUnit};
 use crate::dtype::DType::*;
 use crate::dtype::{DType, FloatWidth, IntWidth, Nullability};
 use crate::encode::FromArrow;
@@ -110,11 +110,14 @@ impl From<&Field> for DType {
             DataType::Utf8 | DataType::LargeUtf8 => Utf8(nullability),
             DataType::Binary | DataType::LargeBinary => Binary(nullability),
             // TODO(robert): what to do about this timezone?
-            DataType::Timestamp(u, _) => zoneddatetime(u.into(), nullability),
-            DataType::Date32 => localdate(IntWidth::_32, nullability),
-            DataType::Date64 => localdate(IntWidth::_64, nullability),
-            DataType::Time32(u) => localtime(u.into(), IntWidth::_32, nullability),
-            DataType::Time64(u) => localtime(u.into(), IntWidth::_64, nullability),
+            DataType::Timestamp(_u, tz) => match tz {
+                None => LocalDateTimeExtension::dtype(nullability),
+                Some(_) => unimplemented!("Timezone not yet supported"),
+            },
+            // DataType::Date32 => localdate(IntWidth::_32, nullability),
+            // DataType::Date64 => localdate(IntWidth::_64, nullability),
+            // DataType::Time32(u) => localtime(u.into(), IntWidth::_32, nullability),
+            // DataType::Time64(u) => localtime(u.into(), IntWidth::_64, nullability),
             DataType::List(e) | DataType::LargeList(e) => {
                 List(Box::new(e.as_ref().into()), nullability)
             }

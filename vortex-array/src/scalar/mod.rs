@@ -123,7 +123,7 @@ impl Scalar {
             DType::Binary(_) => BinaryScalar::new(None).into(),
             DType::Struct(_, _) => StructScalar::new(dtype.clone(), vec![]).into(),
             DType::List(_, _) => ListScalar::new(dtype.clone(), None).into(),
-            DType::Composite(_, _, _) => unimplemented!("CompositeScalar"),
+            DType::Composite(_, _) => unimplemented!("CompositeScalar"),
         }
     }
 }
@@ -172,6 +172,6 @@ mod test {
 
     #[test]
     fn size_of() {
-        assert_eq!(mem::size_of::<Scalar>(), 88);
+        assert_eq!(mem::size_of::<Scalar>(), 80);
     }
 }
