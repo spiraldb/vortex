@@ -46,7 +46,7 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         &DictEncoding,
         &BitPackedEncoding,
         &FoREncoding,
-        &DeltaEncoding,
+        // &DeltaEncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
         // &RoaringIntEncoding,
@@ -168,7 +168,7 @@ mod test {
 
     #[test]
     fn compression_ratio() {
-        setup_logger(LevelFilter::Debug);
+        setup_logger(LevelFilter::Info);
         _ = compress_taxi_data();
     }
 
