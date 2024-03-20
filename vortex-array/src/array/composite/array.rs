@@ -9,6 +9,7 @@ use crate::array::composite::{
 };
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::compress::EncodingCompression;
+use crate::compute::ArrayCompute;
 use crate::dtype::DType;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -71,8 +72,8 @@ impl CompositeArray {
         )
     }
 
-    pub fn as_typed_array(&self) -> ArrayRef {
-        self.extension.as_typed_array(self)
+    pub fn as_typed_compute(&self) -> Box<dyn ArrayCompute> {
+        self.extension.as_typed_compute(self)
     }
 }
 
@@ -146,7 +147,8 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for CompositeArray {
 
 impl ArrayDisplay for CompositeArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        ArrayDisplay::fmt(self.as_typed_array().as_ref(), f)
+        f.property("metadata", format!("{:#?}", self.metadata().as_slice()))?;
+        f.child("underlying", self.underlying.as_ref())
     }
 }
 

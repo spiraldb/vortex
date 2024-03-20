@@ -1,12 +1,12 @@
 use crate::array::composite::array::CompositeArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef};
-use crate::compute::as_arrow::{as_arrow, AsArrowArray};
+use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
-use crate::error::VortexResult;
+use crate::error::{VortexError, VortexResult};
 use crate::scalar::Scalar;
 use arrow_array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
@@ -31,8 +31,19 @@ impl ArrayCompute for CompositeArray {
 
 impl AsArrowArray for CompositeArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
-        let typed = self.extension().as_typed_array(self);
-        as_arrow(typed.as_ref())
+        self.extension()
+            .as_typed_compute(self)
+            .as_arrow()
+            .map(|a| a.as_arrow())
+            .unwrap_or_else(|| {
+                Err(VortexError::InvalidArgument(
+                    format!(
+                        "as_arrow not implemented for composite extension {}",
+                        self.id()
+                    )
+                    .into(),
+                ))
+            })
     }
 }
 

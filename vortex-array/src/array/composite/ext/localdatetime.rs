@@ -26,7 +26,6 @@ use crate::composite_dtypes::TimeUnit;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::cast::cast;
 use crate::compute::flatten::{flatten_primitive, FlattenFn};
-use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
 use crate::ptype::PType;
 use crate::serde::BytesSerde;
