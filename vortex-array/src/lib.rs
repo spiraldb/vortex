@@ -3,7 +3,6 @@ pub mod arrow;
 pub mod scalar;
 
 pub mod accessor;
-pub mod composite_dtypes;
 pub mod compress;
 pub mod compute;
 pub mod datetime;
