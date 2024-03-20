@@ -4,7 +4,7 @@ use pyo3::prelude::*;
 
 use vortex::array::bool::BoolArray;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::composite::{CompositeArray, CompositeEncoding};
+use vortex::array::composite::CompositeArray;
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
@@ -12,7 +12,6 @@ use vortex::array::struct_::StructArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::varbinview::VarBinViewArray;
 use vortex::array::{Array, ArrayKind, ArrayRef};
-use vortex::compute::flatten::flatten_composite;
 use vortex_alp::{ALPArray, ALPEncoding};
 use vortex_dict::{DictArray, DictEncoding};
 use vortex_fastlanes::{BitPackedArray, BitPackedEncoding, FoRArray, FoREncoding};
@@ -83,6 +82,10 @@ impl PyArray {
                 PyChunkedArray::wrap(py, inner.into_any().downcast::<ChunkedArray>().unwrap())?
                     .extract(py)
             }
+            ArrayKind::Composite(_) => {
+                PyCompositeArray::wrap(py, inner.into_any().downcast::<CompositeArray>().unwrap())?
+                    .extract(py)
+            }
             ArrayKind::Constant(_) => {
                 PyConstantArray::wrap(py, inner.into_any().downcast::<ConstantArray>().unwrap())?
                     .extract(py)
@@ -115,11 +118,6 @@ impl PyArray {
                     PyALPArray::wrap(py, inner.into_any().downcast::<ALPArray>().unwrap())?
                         .extract(py)
                 }
-                CompositeEncoding::ID => PyCompositeArray::wrap(
-                    py,
-                    Box::new(flatten_composite(inner.as_ref()).unwrap()),
-                )?
-                .extract(py),
                 DictEncoding::ID => {
                     PyDictArray::wrap(py, inner.into_any().downcast::<DictArray>().unwrap())?
                         .extract(py)

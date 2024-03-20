@@ -5,6 +5,7 @@ use linkme::distributed_slice;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
+use crate::array::composite::{CompositeArray, CompositeEncoding};
 use crate::array::constant::{ConstantArray, ConstantEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
@@ -174,6 +175,7 @@ pub static ENCODINGS: [EncodingRef] = [..];
 pub enum ArrayKind<'a> {
     Bool(&'a BoolArray),
     Chunked(&'a ChunkedArray),
+    Composite(&'a CompositeArray),
     Constant(&'a ConstantArray),
     Primitive(&'a PrimitiveArray),
     Sparse(&'a SparseArray),
@@ -188,6 +190,7 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
         match *value.encoding().id() {
             BoolEncoding::ID => ArrayKind::Bool(value.as_bool()),
             ChunkedEncoding::ID => ArrayKind::Chunked(value.as_chunked()),
+            CompositeEncoding::ID => ArrayKind::Composite(value.as_composite()),
             ConstantEncoding::ID => ArrayKind::Constant(value.as_constant()),
             PrimitiveEncoding::ID => ArrayKind::Primitive(value.as_primitive()),
             SparseEncoding::ID => ArrayKind::Sparse(value.as_sparse()),

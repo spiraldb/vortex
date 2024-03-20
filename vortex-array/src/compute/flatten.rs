@@ -55,16 +55,6 @@ pub fn flatten_bool(array: &dyn Array) -> VortexResult<BoolArray> {
     }
 }
 
-pub fn flatten_composite(array: &dyn Array) -> VortexResult<CompositeArray> {
-    if let FlattenedArray::Composite(c) = flatten(array)? {
-        Ok(c)
-    } else {
-        Err(VortexError::InvalidArgument(
-            format!("Cannot flatten array {} into composite", array).into(),
-        ))
-    }
-}
-
 pub fn flatten_primitive(array: &dyn Array) -> VortexResult<PrimitiveArray> {
     if let FlattenedArray::Primitive(p) = flatten(array)? {
         Ok(p)

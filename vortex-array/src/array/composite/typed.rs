@@ -4,8 +4,7 @@ use std::sync::Arc;
 use crate::array::composite::array::CompositeArray;
 use crate::array::composite::{CompositeID, CompositeMetadata};
 use crate::array::{Array, ArrayRef};
-use crate::compute::flatten::{FlattenFn, FlattenedArray};
-use crate::error::VortexResult;
+use crate::compute::ArrayCompute;
 
 pub trait CompositeExtension: Debug + Send + Sync + 'static {
     fn id(&self) -> CompositeID;
@@ -50,12 +49,6 @@ impl<M: CompositeMetadata> TypedCompositeArray<M> {
             Arc::new(self.metadata().serialize()),
             dyn_clone::clone_box(self.underlying()),
         )
-    }
-}
-
-impl<M: CompositeMetadata> FlattenFn for TypedCompositeArray<M> {
-    fn flatten(&self) -> VortexResult<FlattenedArray> {
-        Ok(FlattenedArray::Composite(self.as_composite()))
     }
 }
 
@@ -106,5 +99,4 @@ macro_rules! composite_impl {
     };
 }
 
-use crate::compute::ArrayCompute;
 pub(crate) use composite_impl;

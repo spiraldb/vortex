@@ -14,11 +14,7 @@ impl EncodingCompression for CompositeEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
-        if array.maybe_composite().is_some() {
-            Some(self)
-        } else {
-            None
-        }
+        (array.encoding().id() == &Self::ID).then_some(self)
     }
 
     fn compress(
