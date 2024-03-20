@@ -1,10 +1,11 @@
-use arrayref::array_ref;
 use std::mem::size_of;
 
-use fastlanez_sys::{transpose, Delta};
+use arrayref::array_ref;
+
+use fastlanez_sys::{Delta, transpose};
+use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::error::VortexResult;
@@ -124,25 +125,33 @@ where
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
+    use std::sync::Arc;
 
-    use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
+    use vortex::array::primitive::PrimitiveEncoding;
 
     use super::*;
 
-    #[test]
-    fn test_compress() {
-        // FIXME(ngates): remove PrimitiveEncoding https://github.com/fulcrum-so/vortex/issues/35
+    fn compress_ctx() -> CompressCtx {
         let cfg = CompressConfig::new(
-            HashSet::from([PrimitiveEncoding.id(), DeltaEncoding.id()]),
+            HashSet::from([
+                PrimitiveEncoding.id(),
+                DeltaEncoding.id(),
+            ]),
             HashSet::default(),
         );
-        let ctx = CompressCtx::new(&cfg);
+        CompressCtx::new(Arc::new(cfg))
+    }
 
-        let compressed = ctx.compress(
-            &PrimitiveArray::from_vec(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
-            None,
-        );
+    #[test]
+    fn test_compress() {
+        let ctx = compress_ctx();
+        let compressed = ctx
+            .compress(
+                &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
+                None,
+            )
+            .unwrap();
         assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
         _ = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
     }

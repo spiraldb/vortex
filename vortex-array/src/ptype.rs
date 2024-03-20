@@ -203,24 +203,6 @@ impl Display for PType {
     }
 }
 
-impl Display for PType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PType::U8 => write!(f, "u8"),
-            PType::U16 => write!(f, "u16"),
-            PType::U32 => write!(f, "u32"),
-            PType::U64 => write!(f, "u64"),
-            PType::I8 => write!(f, "i8"),
-            PType::I16 => write!(f, "i16"),
-            PType::I32 => write!(f, "i32"),
-            PType::I64 => write!(f, "i64"),
-            PType::F16 => write!(f, "f16"),
-            PType::F32 => write!(f, "f32"),
-            PType::F64 => write!(f, "f64"),
-        }
-    }
-}
-
 impl TryFrom<&DType> for PType {
     type Error = VortexError;
 
