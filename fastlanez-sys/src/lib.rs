@@ -197,7 +197,7 @@ macro_rules! delta_impl {
                     unsafe {
                         [<fl_delta_encode_ $T>](
                             input,
-                            base,// as *mut [Self; 128 / size_of::<Self>()],
+                            base,
                             array_mut_ref![output.reserve_uninit(1024), 0, 1024] as *mut [std::mem::MaybeUninit<Self>; 1024] as *mut [Self; 1024],
                         );
                         output.set_len(output.len() + 1024)
