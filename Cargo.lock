@@ -2588,6 +2588,7 @@ dependencies = [
  "linkme",
  "log",
  "vortex-array",
+ "vortex-schema",
 ]
 
 [[package]]

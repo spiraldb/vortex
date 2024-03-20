@@ -2,12 +2,12 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use vortex_schema::CompositeID;
+use vortex_schema::DType;
 
+use crate::array::{Array, ArrayRef};
 use crate::array::composite::array::CompositeArray;
 use crate::array::composite::CompositeMetadata;
-use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
-use crate::dtype::DType;
 
 pub trait CompositeExtension: Debug + Send + Sync + 'static {
     fn id(&self) -> CompositeID;

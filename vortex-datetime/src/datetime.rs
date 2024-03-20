@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use vortex::array::{Array, ArrayRef, Encoding, EncodingId};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
-use vortex::dtype::DType;
+use vortex_schema::DType;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
