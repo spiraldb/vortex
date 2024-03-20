@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 
+use crate::array::composite::CompositeID;
 use DType::*;
 
 use crate::ptype::PType;
@@ -138,7 +139,7 @@ pub enum DType {
     Binary(Nullability),
     Struct(FieldNames, Vec<DType>),
     List(Box<DType>, Nullability),
-    Composite(Arc<String>, Box<DType>, Metadata),
+    Composite(CompositeID, Nullability),
 }
 
 impl DType {
@@ -162,7 +163,7 @@ impl DType {
             Binary(n) => matches!(n, Nullable),
             Struct(_, fs) => fs.iter().all(|f| f.is_nullable()),
             List(_, n) => matches!(n, Nullable),
-            Composite(_, d, _) => d.is_nullable(),
+            Composite(_, n) => matches!(n, Nullable),
         }
     }
 
@@ -188,11 +189,7 @@ impl DType {
                 fs.iter().map(|f| f.with_nullability(nullability)).collect(),
             ),
             List(c, _) => List(c.clone(), nullability),
-            Composite(n, d, m) => Composite(
-                n.clone(),
-                Box::new(d.with_nullability(nullability)),
-                m.clone(),
-            ),
+            Composite(id, _) => Composite(*id, nullability),
         }
     }
 
@@ -225,8 +222,7 @@ impl Display for DType {
                     .join(", ")
             ),
             List(c, n) => write!(f, "list({}){}", c, n),
-            // TODO(robert): Print metadata
-            Composite(n, d, _) => write!(f, "composite({}, [{}])", n, d,),
+            Composite(id, n) => write!(f, "<{}>{}", id, n),
         }
     }
 }
@@ -281,6 +277,6 @@ mod test {
 
     #[test]
     fn size_of() {
-        assert_eq!(mem::size_of::<DType>(), 56);
+        assert_eq!(mem::size_of::<DType>(), 48);
     }
 }
