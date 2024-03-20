@@ -24,7 +24,7 @@ use vortex::dtype::DType;
 use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
-use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
+use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 

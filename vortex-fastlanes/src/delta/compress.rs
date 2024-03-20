@@ -2,10 +2,10 @@ use std::mem::size_of;
 
 use arrayref::array_ref;
 
-use fastlanez_sys::{Delta, transpose};
-use vortex::array::{Array, ArrayRef};
+use fastlanez_sys::{transpose, Delta};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::error::VortexResult;
@@ -22,9 +22,7 @@ impl EncodingCompression for DeltaEncoding {
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
-        let Some(parray) = array.maybe_primitive() else {
-            return None;
-        };
+        let parray = array.maybe_primitive()?;
 
         // Only supports signed ints
         if !parray.ptype().is_signed_int() {
@@ -109,15 +107,14 @@ where
 
     // To avoid padding, the remainder is encoded with scalar logic.
     let mut base_scalar = base[base.len() - 1];
-    let last_chunk_size = array.len() - ((num_chunks - 1) * 1024);
-    for i in array.len() - last_chunk_size..array.len() {
-        let next = array[i];
-        output.push(next - base_scalar);
-        base_scalar = next;
+    let last_chunk_size = array.len() % 1024;
+    if last_chunk_size > 0 {
+        let chunk = &array[array.len() - last_chunk_size..];
+        for next in chunk {
+            output.push(*next - base_scalar);
+            base_scalar = next;
+        }
     }
-    // let mut last_chunk: [T; 1024] = [T::default(); 1024];
-    // last_chunk[..last_chunk_size].copy_from_slice(&array[array.len() - last_chunk_size..]);
-    // Delta::delta(&last_chunk, &mut base, &mut output);
 
     output
 }
@@ -127,17 +124,14 @@ mod test {
     use std::collections::HashSet;
     use std::sync::Arc;
 
-    use vortex::array::Encoding;
     use vortex::array::primitive::PrimitiveEncoding;
+    use vortex::array::Encoding;
 
     use super::*;
 
     fn compress_ctx() -> CompressCtx {
         let cfg = CompressConfig::new(
-            HashSet::from([
-                PrimitiveEncoding.id(),
-                DeltaEncoding.id(),
-            ]),
+            HashSet::from([PrimitiveEncoding.id(), DeltaEncoding.id()]),
             HashSet::default(),
         );
         CompressCtx::new(Arc::new(cfg))
