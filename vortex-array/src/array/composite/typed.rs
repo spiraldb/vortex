@@ -5,6 +5,7 @@ use crate::array::composite::array::CompositeArray;
 use crate::array::composite::{CompositeID, CompositeMetadata};
 use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
+use crate::dtype::DType;
 
 pub trait CompositeExtension: Debug + Send + Sync + 'static {
     fn id(&self) -> CompositeID;
@@ -18,13 +19,16 @@ pub type CompositeExtensionRef = &'static dyn CompositeExtension;
 pub struct TypedCompositeArray<M: CompositeMetadata> {
     metadata: M,
     underlying: ArrayRef,
+    dtype: DType,
 }
 
 impl<M: CompositeMetadata> TypedCompositeArray<M> {
     pub fn new(metadata: M, underlying: ArrayRef) -> Self {
+        let dtype = DType::Composite(metadata.id(), underlying.dtype().is_nullable().into());
         Self {
             metadata,
             underlying,
+            dtype,
         }
     }
 
@@ -36,6 +40,11 @@ impl<M: CompositeMetadata> TypedCompositeArray<M> {
     #[inline]
     pub fn underlying(&self) -> &dyn Array {
         self.underlying.as_ref()
+    }
+
+    #[inline]
+    pub fn dtype(&self) -> &DType {
+        &self.dtype
     }
 
     pub fn as_composite(&self) -> CompositeArray {

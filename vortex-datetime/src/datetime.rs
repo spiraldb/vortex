@@ -1,16 +1,13 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId};
+use vortex::array::{Array, ArrayRef, Encoding, EncodingId};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
-use vortex::dtype::Nullability::NonNullable;
-use vortex::dtype::{DType, Nullability};
+use vortex::dtype::DType;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::ptype::PType;
-use vortex::scalar::Scalar;
-use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
+use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsCompute, StatsSet};
 
 /// An array that decomposes a datetime into days, seconds, and nanoseconds.
@@ -19,19 +16,27 @@ pub struct DateTimeArray {
     days: ArrayRef,
     seconds: ArrayRef,
     subsecond: ArrayRef,
+    validity: Option<ArrayRef>,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl DateTimeArray {
-    pub fn new(days: ArrayRef, seconds: ArrayRef, subsecond: ArrayRef, dtype: DType) -> Self {
-        Self::try_new(days, seconds, subsecond, dtype).unwrap()
+    pub fn new(
+        days: ArrayRef,
+        seconds: ArrayRef,
+        subsecond: ArrayRef,
+        validity: Option<ArrayRef>,
+        dtype: DType,
+    ) -> Self {
+        Self::try_new(days, seconds, subsecond, validity, dtype).unwrap()
     }
 
     pub fn try_new(
         days: ArrayRef,
         seconds: ArrayRef,
         subsecond: ArrayRef,
+        validity: Option<ArrayRef>,
         dtype: DType,
     ) -> VortexResult<Self> {
         if !matches!(days.dtype(), DType::Int(_, _, _)) {
@@ -48,6 +53,7 @@ impl DateTimeArray {
             days,
             seconds,
             subsecond,
+            validity,
             dtype,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
@@ -91,19 +97,25 @@ impl Array for DateTimeArray {
     }
 
     fn dtype(&self) -> &DType {
-        &DType::LocalDate(NonNullable)
+        &self.dtype
     }
 
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!()
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        todo!()
+        Ok(Self::new(
+            self.days.slice(start, stop)?,
+            self.seconds.slice(start, stop)?,
+            self.subsecond.slice(start, stop)?,
+            self.validity
+                .as_ref()
+                .map(|v| v.slice(start, stop))
+                .transpose()?,
+            self.dtype.clone(),
+        )
+        .boxed())
     }
 
     fn encoding(&self) -> &'static dyn Encoding {
@@ -114,26 +126,14 @@ impl Array for DateTimeArray {
         self.days().nbytes() + self.seconds().nbytes() + self.subsecond().nbytes()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        None
     }
 }
 
 impl StatsCompute for DateTimeArray {}
 
 impl ArrayCompute for DateTimeArray {}
-
-impl ArraySerde for DateTimeArray {
-    fn write(&self, ctx: &mut WriteCtx) -> std::io::Result<()> {
-        todo!()
-    }
-}
-
-impl EncodingSerde for DateTimeEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> std::io::Result<ArrayRef> {
-        todo!()
-    }
-}
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for DateTimeArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
@@ -164,6 +164,6 @@ impl Encoding for DateTimeEncoding {
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+        None
     }
 }
