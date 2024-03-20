@@ -1,6 +1,7 @@
 use std::mem::size_of;
 
 use arrayref::array_ref;
+use num_traits::WrappingSub;
 
 use fastlanez_sys::{transpose, Delta};
 use vortex::array::downcast::DowncastArrayBuiltin;
@@ -84,7 +85,7 @@ impl EncodingCompression for DeltaEncoding {
     }
 }
 
-fn delta_primitive<T: NativePType + Delta>(array: &[T]) -> Vec<T>
+fn delta_primitive<T: NativePType + Delta + WrappingSub>(array: &[T]) -> Vec<T>
 where
     [(); 128 / size_of::<T>()]:,
 {
@@ -106,13 +107,13 @@ where
     });
 
     // To avoid padding, the remainder is encoded with scalar logic.
-    let mut base_scalar = base[base.len() - 1];
+    let mut base_scalar = &base[base.len() - 1];
     let last_chunk_size = array.len() % 1024;
     if last_chunk_size > 0 {
         let chunk = &array[array.len() - last_chunk_size..];
         for next in chunk {
-            output.push(*next - base_scalar);
-            base_scalar = *next;
+            output.push(next.wrapping_sub(base_scalar));
+            base_scalar = next;
         }
     }
 
@@ -142,7 +143,7 @@ mod test {
         let ctx = compress_ctx();
         let compressed = ctx
             .compress(
-                &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
+                &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63)))),
                 None,
             )
             .unwrap();
