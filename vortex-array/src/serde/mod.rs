@@ -85,10 +85,6 @@ impl<'a> ReadCtx<'a> {
         let dtype_bytes = self.read_slice()?;
         DType::deserialize(&dtype_bytes, find_extension_id).map_err(|e| match e {
             SchemaError::InvalidArgument(s) => VortexError::InvalidArgument(s),
-            SchemaError::IOError(io_err) => io_err.0.into(),
-            SchemaError::SerdeError(s_err) => {
-                VortexError::InvalidArgument(s_err.0.to_string().into())
-            }
         })
     }
 

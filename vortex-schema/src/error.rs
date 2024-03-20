@@ -1,8 +1,7 @@
-use flatbuffers::InvalidFlatbuffer;
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
-use std::{env, fmt, io};
+use std::{env, fmt};
 
 #[derive(Debug, PartialEq)]
 pub struct ErrString(Cow<'static, str>);
@@ -44,32 +43,6 @@ impl Display for ErrString {
 pub enum SchemaError {
     #[error("{0}")]
     InvalidArgument(ErrString),
-    #[error("io error: {0:?}")]
-    IOError(IOError),
-    #[error("Unable to read bytes as DType: {0:?}")]
-    SerdeError(SerdeError),
 }
 
 pub type SchemaResult<T> = Result<T, SchemaError>;
-
-macro_rules! wrapped_error {
-    ($E:ty, $e:ident) => {
-        #[derive(Debug)]
-        pub struct $e(pub $E);
-
-        impl PartialEq for $e {
-            fn eq(&self, _other: &Self) -> bool {
-                false
-            }
-        }
-
-        impl From<$E> for SchemaError {
-            fn from(err: $E) -> Self {
-                SchemaError::$e($e(err))
-            }
-        }
-    };
-}
-
-wrapped_error!(io::Error, IOError);
-wrapped_error!(InvalidFlatbuffer, SerdeError);

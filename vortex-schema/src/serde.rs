@@ -189,7 +189,9 @@ impl<'a> FbDeserialize<'a> for DType {
 
     fn deserialize(bytes: &[u8], find_id: fn(&str) -> Option<CompositeID>) -> SchemaResult<Self> {
         root_as_dtype(bytes)
-            .map_err(|e| e.into())
+            .map_err(|e| {
+                SchemaError::InvalidArgument(format!("Unable to read bytes as DType: {}", e).into())
+            })
             .and_then(|d| Self::convert_from_fb(d, find_id))
     }
 
@@ -246,13 +248,15 @@ impl<'a> FbDeserialize<'a> for DType {
             }
             Type::Struct_ => {
                 let fb_struct = fb_type.type__as_struct_().unwrap();
-                let fb_names = fb_struct.names().unwrap();
-                let names = fb_names
+                let names = fb_struct
+                    .names()
+                    .unwrap()
                     .iter()
                     .map(|n| Arc::new(n.to_string()))
                     .collect::<Vec<_>>();
-                let fb_fields = fb_struct.fields().unwrap();
-                let fields: Vec<DType> = fb_fields
+                let fields: Vec<DType> = fb_struct
+                    .fields()
+                    .unwrap()
                     .iter()
                     .map(|f| DType::convert_from_fb(f, find_id))
                     .try_collect()?;
