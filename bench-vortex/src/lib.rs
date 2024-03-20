@@ -212,7 +212,9 @@ mod test {
         }
     }
 
-    // #[ignore]
+    // Ignoring since Struct arrays don't currently support equality.
+    // https://github.com/apache/arrow-rs/issues/5199
+    #[ignore]
     #[test]
     fn round_trip_arrow_compressed() {
         let file = File::open(download_taxi_data()).unwrap();
