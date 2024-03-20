@@ -1,3 +1,4 @@
+use flatbuffers::InvalidFlatbuffer;
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
@@ -45,6 +46,8 @@ pub enum SchemaError {
     InvalidArgument(ErrString),
     #[error("io error: {0:?}")]
     IOError(IOError),
+    #[error("Unable to read bytes as DType: {0:?}")]
+    SerdeError(SerdeError),
 }
 
 pub type SchemaResult<T> = Result<T, SchemaError>;
@@ -69,3 +72,4 @@ macro_rules! wrapped_error {
 }
 
 wrapped_error!(io::Error, IOError);
+wrapped_error!(InvalidFlatbuffer, SerdeError);

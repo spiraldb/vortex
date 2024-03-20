@@ -1,8 +1,11 @@
+use std::fmt::{Display, Formatter};
+
 pub use dtype::*;
 pub use error::ErrString;
 pub use error::SchemaError;
 pub use error::SchemaResult;
-use std::fmt::{Display, Formatter};
+pub use serde::FbDeserialize;
+pub use serde::FbSerialize;
 
 mod dtype;
 mod error;

@@ -3,8 +3,11 @@ use std::io::{ErrorKind, Read, Write};
 
 use arrow_buffer::buffer::{Buffer, MutableBuffer};
 
-use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+use vortex_schema::{
+    DType, FbDeserialize, FbSerialize, IntWidth, Nullability, SchemaError, Signedness,
+};
 
+use crate::array::composite::find_extension_id;
 use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
@@ -79,7 +82,14 @@ impl<'a> ReadCtx<'a> {
 
     #[inline]
     pub fn dtype(&mut self) -> VortexResult<DType> {
-        todo!()
+        let dtype_bytes = self.read_slice()?;
+        DType::deserialize(&dtype_bytes, find_extension_id).map_err(|e| match e {
+            SchemaError::InvalidArgument(s) => VortexError::InvalidArgument(s),
+            SchemaError::IOError(io_err) => io_err.0.into(),
+            SchemaError::SerdeError(s_err) => {
+                VortexError::InvalidArgument(s_err.0.to_string().into())
+            }
+        })
     }
 
     pub fn ptype(&mut self) -> VortexResult<PType> {
@@ -173,8 +183,9 @@ impl<'a> WriteCtx<'a> {
         }
     }
 
-    pub fn dtype(&mut self, _dtype: &DType) -> VortexResult<()> {
-        todo!()
+    pub fn dtype(&mut self, dtype: &DType) -> VortexResult<()> {
+        let serialized = dtype.serialize();
+        self.write_slice(&serialized)
     }
 
     pub fn ptype(&mut self, ptype: PType) -> VortexResult<()> {

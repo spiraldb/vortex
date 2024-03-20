@@ -1,4 +1,7 @@
-use flatbuffers::{FlatBufferBuilder, InvalidFlatbuffer, WIPOffset};
+use std::sync::Arc;
+
+use flatbuffers::{FlatBufferBuilder, WIPOffset};
+use itertools::Itertools;
 
 use crate::generated::schema::{
     root_as_dtype, Bool, BoolArgs, Composite, CompositeArgs, Int, IntArgs, List, ListArgs, Null,
@@ -9,7 +12,9 @@ use crate::generated::schema::{DType as FbDType, DTypeArgs};
 use crate::generated::schema::{Decimal, DecimalArgs, FloatWidth as FbFloatWidth};
 use crate::generated::schema::{Float, FloatArgs, IntWidth as FbIntWidth};
 use crate::generated::schema::{Nullability as FbNullability, Utf8, Utf8Args};
-use crate::{DType, FloatWidth, IntWidth, Nullability, Signedness};
+use crate::{
+    CompositeID, DType, FloatWidth, IntWidth, Nullability, SchemaError, SchemaResult, Signedness,
+};
 
 pub trait FbSerialize<'a> {
     type OffsetType;
@@ -24,8 +29,15 @@ pub trait FbSerialize<'a> {
     fn write_to_builder(&self, fbb: &mut FlatBufferBuilder<'a>) -> WIPOffset<Self::OffsetType>;
 }
 
-pub trait FbDeserialize: Sized {
-    fn deserialize(bytes: &[u8]) -> Self;
+pub trait FbDeserialize<'a>: Sized {
+    type OffsetType;
+
+    fn deserialize(bytes: &[u8], find_id: fn(&str) -> Option<CompositeID>) -> SchemaResult<Self>;
+
+    fn convert_from_fb(
+        fb_type: Self::OffsetType,
+        find_id: fn(&str) -> Option<CompositeID>,
+    ) -> SchemaResult<Self>;
 }
 
 impl<'a> FbSerialize<'a> for DType {
@@ -172,12 +184,90 @@ impl<'a> FbSerialize<'a> for DType {
     }
 }
 
-pub fn bytes_as_dtype(bytes: &[u8]) -> Result<DType, InvalidFlatbuffer> {
-    root_as_dtype(bytes).map(fb_to_dtype)
-}
+impl<'a> FbDeserialize<'a> for DType {
+    type OffsetType = FbDType<'a>;
 
-pub fn fb_to_dtype(fb_dtype: FbDType) -> DType {
-    todo!()
+    fn deserialize(bytes: &[u8], find_id: fn(&str) -> Option<CompositeID>) -> SchemaResult<Self> {
+        root_as_dtype(bytes)
+            .map_err(|e| e.into())
+            .and_then(|d| Self::convert_from_fb(d, find_id))
+    }
+
+    fn convert_from_fb(
+        fb_type: Self::OffsetType,
+        find_id: fn(&str) -> Option<CompositeID>,
+    ) -> SchemaResult<Self> {
+        match fb_type.type_type() {
+            Type::Null => Ok(DType::Null),
+            Type::Bool => Ok(DType::Bool(
+                fb_type.type__as_bool().unwrap().nullability().try_into()?,
+            )),
+            Type::Int => {
+                let fb_int = fb_type.type__as_int().unwrap();
+                Ok(DType::Int(
+                    fb_int.width().try_into()?,
+                    fb_int.signedness().try_into()?,
+                    fb_int.nullability().try_into()?,
+                ))
+            }
+            Type::Float => {
+                let fb_float = fb_type.type__as_float().unwrap();
+                Ok(DType::Float(
+                    fb_float.width().try_into()?,
+                    fb_float.nullability().try_into()?,
+                ))
+            }
+            Type::Decimal => {
+                let fb_decimal = fb_type.type__as_decimal().unwrap();
+                Ok(DType::Decimal(
+                    fb_decimal.precision(),
+                    fb_decimal.scale(),
+                    fb_decimal.nullability().try_into()?,
+                ))
+            }
+            Type::Binary => Ok(DType::Binary(
+                fb_type
+                    .type__as_binary()
+                    .unwrap()
+                    .nullability()
+                    .try_into()?,
+            )),
+            Type::Utf8 => Ok(DType::Utf8(
+                fb_type.type__as_utf_8().unwrap().nullability().try_into()?,
+            )),
+            Type::List => {
+                let fb_list = fb_type.type__as_list().unwrap();
+                let element_dtype =
+                    DType::convert_from_fb(fb_list.element_type().unwrap(), find_id)?;
+                Ok(DType::List(
+                    Box::new(element_dtype),
+                    fb_list.nullability().try_into()?,
+                ))
+            }
+            Type::Struct_ => {
+                let fb_struct = fb_type.type__as_struct_().unwrap();
+                let fb_names = fb_struct.names().unwrap();
+                let names = fb_names
+                    .iter()
+                    .map(|n| Arc::new(n.to_string()))
+                    .collect::<Vec<_>>();
+                let fb_fields = fb_struct.fields().unwrap();
+                let fields: Vec<DType> = fb_fields
+                    .iter()
+                    .map(|f| DType::convert_from_fb(f, find_id))
+                    .try_collect()?;
+                Ok(DType::Struct(names, fields))
+            }
+            Type::Composite => {
+                let fb_composite = fb_type.type__as_composite().unwrap();
+                let id = find_id(fb_composite.id().unwrap()).ok_or_else(|| {
+                    SchemaError::InvalidArgument("Couldn't find composite id".into())
+                })?;
+                Ok(DType::Composite(id, fb_composite.nullability().try_into()?))
+            }
+            _ => Err(SchemaError::InvalidArgument("Unknown DType variant".into())),
+        }
+    }
 }
 
 impl From<&Nullability> for FbNullability {
@@ -189,12 +279,16 @@ impl From<&Nullability> for FbNullability {
     }
 }
 
-impl From<FbNullability> for Nullability {
-    fn from(value: FbNullability) -> Self {
+impl TryFrom<FbNullability> for Nullability {
+    type Error = SchemaError;
+
+    fn try_from(value: FbNullability) -> SchemaResult<Self> {
         match value {
-            FbNullability::NonNullable => Nullability::NonNullable,
-            FbNullability::Nullable => Nullability::Nullable,
-            _ => panic!("Unknown nullability value"),
+            FbNullability::NonNullable => Ok(Nullability::NonNullable),
+            FbNullability::Nullable => Ok(Nullability::Nullable),
+            _ => Err(SchemaError::InvalidArgument(
+                "Unknown nullability value".into(),
+            )),
         }
     }
 }
@@ -211,15 +305,19 @@ impl From<&IntWidth> for FbIntWidth {
     }
 }
 
-impl From<FbIntWidth> for IntWidth {
-    fn from(value: FbIntWidth) -> Self {
+impl TryFrom<FbIntWidth> for IntWidth {
+    type Error = SchemaError;
+
+    fn try_from(value: FbIntWidth) -> SchemaResult<Self> {
         match value {
-            FbIntWidth::Unknown => IntWidth::Unknown,
-            FbIntWidth::_8 => IntWidth::_8,
-            FbIntWidth::_16 => IntWidth::_16,
-            FbIntWidth::_32 => IntWidth::_32,
-            FbIntWidth::_64 => IntWidth::_64,
-            _ => panic!("Unknown IntWidth value"),
+            FbIntWidth::Unknown => Ok(IntWidth::Unknown),
+            FbIntWidth::_8 => Ok(IntWidth::_8),
+            FbIntWidth::_16 => Ok(IntWidth::_16),
+            FbIntWidth::_32 => Ok(IntWidth::_32),
+            FbIntWidth::_64 => Ok(IntWidth::_64),
+            _ => Err(SchemaError::InvalidArgument(
+                "Unknown IntWidth value".into(),
+            )),
         }
     }
 }
@@ -234,13 +332,17 @@ impl From<&Signedness> for FbSignedness {
     }
 }
 
-impl From<FbSignedness> for Signedness {
-    fn from(value: FbSignedness) -> Self {
+impl TryFrom<FbSignedness> for Signedness {
+    type Error = SchemaError;
+
+    fn try_from(value: FbSignedness) -> SchemaResult<Self> {
         match value {
-            FbSignedness::Unknown => Signedness::Unknown,
-            FbSignedness::Unsigned => Signedness::Unsigned,
-            FbSignedness::Signed => Signedness::Signed,
-            _ => panic!("Unknown Signedness value"),
+            FbSignedness::Unknown => Ok(Signedness::Unknown),
+            FbSignedness::Unsigned => Ok(Signedness::Unsigned),
+            FbSignedness::Signed => Ok(Signedness::Signed),
+            _ => Err(SchemaError::InvalidArgument(
+                "Unknown Signedness value".into(),
+            )),
         }
     }
 }
@@ -256,14 +358,18 @@ impl From<&FloatWidth> for FbFloatWidth {
     }
 }
 
-impl From<FbFloatWidth> for FloatWidth {
-    fn from(value: FbFloatWidth) -> Self {
+impl TryFrom<FbFloatWidth> for FloatWidth {
+    type Error = SchemaError;
+
+    fn try_from(value: FbFloatWidth) -> SchemaResult<Self> {
         match value {
-            FbFloatWidth::Unknown => FloatWidth::Unknown,
-            FbFloatWidth::_16 => FloatWidth::_16,
-            FbFloatWidth::_32 => FloatWidth::_32,
-            FbFloatWidth::_64 => FloatWidth::_64,
-            _ => panic!("Unknown IntWidth value"),
+            FbFloatWidth::Unknown => Ok(FloatWidth::Unknown),
+            FbFloatWidth::_16 => Ok(FloatWidth::_16),
+            FbFloatWidth::_32 => Ok(FloatWidth::_32),
+            FbFloatWidth::_64 => Ok(FloatWidth::_64),
+            _ => Err(SchemaError::InvalidArgument(
+                "Unknown IntWidth value".into(),
+            )),
         }
     }
 }
