@@ -1,15 +1,13 @@
 # Vortex Datetime Composite Extensions
 
-/// Arrow Datetime Types
-/// time32/64 - time of day
-/// => LocalTime
-/// date32 - days since unix epoch
-/// date64 - millis since unix epoch
-/// => LocalDate
-/// timestamp(unit, tz)
-/// => Instant iff tz == UTC
-/// => ZonedDateTime(Instant, tz)
-/// timestamp(unit)
-/// => LocalDateTime (tz is "unknown", not "UTC")
-/// duration
-/// => Duration
+This module provides implementations of datetime types using composite arrays.
+
+## Arrow Conversion
+
+| Arrow Type            | Vortex Type     |                                  |
+|-----------------------|-----------------|----------------------------------|
+| `time32/64`           | `LocalTime`     | Time since midnight              |
+| `date32/64`           | `LocalDate`     | Julian day                       |
+| `timestamp(tz=None)`  | `LocalDateTime` | Julian day + time since midnight |
+| `timestamp(tz=UTC)`   | `Instant`       | Time since Unix epoch            |
+| `timestamp(tz=Other)` | `ZonedDateTime` | TZ aware time since Unix epoch   |
