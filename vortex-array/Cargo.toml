@@ -19,7 +19,7 @@ path = "src/lib.rs"
 workspace = true
 
 [dependencies]
-allocator-api2 = "0.2.16"
+allocator-api2 = { workspace = true }
 arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
 arrow-schema = { workspace = true }
@@ -27,13 +27,13 @@ dyn-clone = "1.0.17"
 half = { workspace = true }
 humansize = { workspace = true }
 itertools = { workspace = true }
-leb128 = "0.2.5"
+leb128 = { workspace = true }
 linkme = { workspace = true }
 log = { workspace = true }
 num-traits = { workspace = true }
-num_enum = "0.7.2"
-paste = "1.0.14"
-rand = { version = "0.8.5" }
+num_enum = { workspace = true }
+paste = { workspace = true }
+rand = { workspace = true }
 rayon = "1.9.0"
 thiserror = { workspace = true }
 vortex-schema = { path = "../vortex-schema" }
