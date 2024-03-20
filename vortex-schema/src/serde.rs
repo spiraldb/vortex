@@ -117,7 +117,7 @@ impl<'a> FbSerialize<'a> for DType {
                     .map(|n| fbb.create_string(n.as_ref()))
                     .collect::<Vec<_>>();
                 fbb.start_vector::<WIPOffset<&str>>(ns.len());
-                for name in name_offsets {
+                for name in name_offsets.iter().rev() {
                     fbb.push(name);
                 }
                 let names_vector = fbb.end_vector(ns.len());
@@ -127,7 +127,7 @@ impl<'a> FbSerialize<'a> for DType {
                     .map(|f| f.write_to_builder(fbb))
                     .collect::<Vec<_>>();
                 fbb.start_vector::<WIPOffset<FbDType>>(fs.len());
-                for doff in dtype_offsets {
+                for doff in dtype_offsets.iter().rev() {
                     fbb.push(doff);
                 }
                 let fields_vector = fbb.end_vector(fs.len());
@@ -375,5 +375,43 @@ impl TryFrom<FbFloatWidth> for FloatWidth {
                 "Unknown IntWidth value".into(),
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{DType, FbDeserialize, FbSerialize, FloatWidth, IntWidth, Nullability, Signedness};
+    use std::sync::Arc;
+
+    fn roundtrip_dtype(dtype: DType) {
+        let bytes = dtype.serialize();
+        let deserialized = DType::deserialize(&bytes, |_| panic!("no composite ids")).unwrap();
+        assert_eq!(dtype, deserialized);
+    }
+
+    #[test]
+    fn roundtrip() {
+        roundtrip_dtype(DType::Null);
+        roundtrip_dtype(DType::Bool(Nullability::NonNullable));
+        roundtrip_dtype(DType::Int(
+            IntWidth::_64,
+            Signedness::Unsigned,
+            Nullability::NonNullable,
+        ));
+        roundtrip_dtype(DType::Decimal(18, 9, Nullability::NonNullable));
+        roundtrip_dtype(DType::Float(FloatWidth::_64, Nullability::NonNullable));
+        roundtrip_dtype(DType::Binary(Nullability::NonNullable));
+        roundtrip_dtype(DType::Utf8(Nullability::NonNullable));
+        roundtrip_dtype(DType::List(
+            Box::new(DType::Float(FloatWidth::_32, Nullability::Nullable)),
+            Nullability::NonNullable,
+        ));
+        roundtrip_dtype(DType::Struct(
+            vec![Arc::new("strings".into()), Arc::new("ints".into())],
+            vec![
+                DType::Utf8(Nullability::NonNullable),
+                DType::Int(IntWidth::_16, Signedness::Unsigned, Nullability::Nullable),
+            ],
+        ))
     }
 }
