@@ -19,14 +19,15 @@ use vortex::array::struct_::StructEncoding;
 use vortex::array::varbin::VarBinEncoding;
 use vortex::array::varbinview::VarBinViewEncoding;
 use vortex::array::{Array, ArrayRef, Encoding};
+use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
-use vortex::dtype::DType;
 use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
+use vortex_schema::DType;
 
 pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
     vec![
@@ -116,7 +117,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         })
         .collect_vec();
 
-    let dtype: DType = schema.clone().try_into().unwrap();
+    let dtype = DType::from_arrow_type(schema.clone());
     let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
 
     info!("Compressed array {}", display_tree(compressed.as_ref()));
@@ -151,7 +152,7 @@ mod test {
     use std::sync::Arc;
     use vortex::array::ArrayRef;
     use vortex::compute::as_arrow::as_arrow;
-    use vortex::encode::FromArrow;
+    use vortex::encode::FromArrowArray;
     use vortex::serde::{ReadCtx, WriteCtx};
 
     use crate::{compress_ctx, compress_taxi_data, download_taxi_data};
@@ -184,7 +185,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+            let vortex_array = ArrayRef::from_arrow_array(arrow_array.clone(), false);
 
             let mut buf = Vec::<u8>::new();
             let mut write_ctx = WriteCtx::new(&mut buf);
@@ -206,7 +207,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+            let vortex_array = ArrayRef::from_arrow_array(arrow_array.clone(), false);
             let vortex_as_arrow = as_arrow(vortex_array.as_ref()).unwrap();
             assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
         }
@@ -225,7 +226,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+            let vortex_array = ArrayRef::from_arrow_array(arrow_array.clone(), false);
 
             let compressed = ctx.clone().compress(vortex_array.as_ref(), None).unwrap();
             let compressed_as_arrow = as_arrow(compressed.as_ref()).unwrap();

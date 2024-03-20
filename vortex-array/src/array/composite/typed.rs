@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use crate::array::composite::array::CompositeArray;
-use crate::array::composite::{CompositeID, CompositeMetadata};
+use crate::array::composite::CompositeMetadata;
 use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 
@@ -53,9 +53,9 @@ macro_rules! composite_impl {
             CompositeArray, CompositeExtension, CompositeMetadata, COMPOSITE_EXTENSIONS,
         };
         use crate::compute::ArrayCompute;
-        use crate::dtype::{DType, Nullability};
         use linkme::distributed_slice;
         use paste::paste;
+        use vortex_schema::{DType, Nullability};
 
         paste! {
             #[derive(Debug)]
@@ -95,3 +95,4 @@ macro_rules! composite_impl {
 }
 
 pub(crate) use composite_impl;
+use vortex_schema::CompositeID;

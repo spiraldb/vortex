@@ -21,6 +21,8 @@ use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::Buffer;
 use arrow_schema::{DataType, TimeUnit};
 
+use vortex_schema::DType;
+
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
@@ -28,12 +30,11 @@ use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
 use crate::datetime::{LocalDateTime, LocalDateTimeArray};
-use crate::dtype::DType;
 use crate::ptype::PType;
 use crate::scalar::NullScalar;
 
-pub trait FromArrow<A> {
-    fn from_arrow(array: A, nullable: bool) -> Self;
+pub trait FromArrowArray<A> {
+    fn from_arrow_array(array: A, nullable: bool) -> Self;
 }
 
 impl From<&Buffer> for ArrayRef {
@@ -55,8 +56,8 @@ impl<O: OffsetSizeTrait> From<&OffsetBuffer<O>> for ArrayRef {
     }
 }
 
-impl<T: ArrowPrimitiveType> FromArrow<&ArrowPrimitiveArray<T>> for ArrayRef {
-    fn from_arrow(value: &ArrowPrimitiveArray<T>, nullable: bool) -> Self {
+impl<T: ArrowPrimitiveType> FromArrowArray<&ArrowPrimitiveArray<T>> for ArrayRef {
+    fn from_arrow_array(value: &ArrowPrimitiveArray<T>, nullable: bool) -> Self {
         let ptype: PType = (&T::DATA_TYPE).try_into().unwrap();
         let arr = PrimitiveArray::new(
             ptype,
@@ -89,8 +90,8 @@ impl<T: ArrowPrimitiveType> FromArrow<&ArrowPrimitiveArray<T>> for ArrayRef {
     }
 }
 
-impl<T: ByteArrayType> FromArrow<&GenericByteArray<T>> for ArrayRef {
-    fn from_arrow(value: &GenericByteArray<T>, nullable: bool) -> Self {
+impl<T: ByteArrayType> FromArrowArray<&GenericByteArray<T>> for ArrayRef {
+    fn from_arrow_array(value: &GenericByteArray<T>, nullable: bool) -> Self {
         let dtype = match T::DATA_TYPE {
             DataType::Binary | DataType::LargeBinary => DType::Binary(nullable.into()),
             DataType::Utf8 | DataType::LargeUtf8 => DType::Utf8(nullable.into()),
@@ -106,8 +107,8 @@ impl<T: ByteArrayType> FromArrow<&GenericByteArray<T>> for ArrayRef {
     }
 }
 
-impl FromArrow<&ArrowBooleanArray> for ArrayRef {
-    fn from_arrow(value: &ArrowBooleanArray, nullable: bool) -> Self {
+impl FromArrowArray<&ArrowBooleanArray> for ArrayRef {
+    fn from_arrow_array(value: &ArrowBooleanArray, nullable: bool) -> Self {
         BoolArray::new(
             value.values().to_owned(),
             nulls(value.nulls(), nullable, value.len()),
@@ -116,8 +117,8 @@ impl FromArrow<&ArrowBooleanArray> for ArrayRef {
     }
 }
 
-impl FromArrow<&ArrowStructArray> for ArrayRef {
-    fn from_arrow(value: &ArrowStructArray, nullable: bool) -> Self {
+impl FromArrowArray<&ArrowStructArray> for ArrayRef {
+    fn from_arrow_array(value: &ArrowStructArray, nullable: bool) -> Self {
         // TODO(ngates): how should we deal with Arrow "logical nulls"?
         assert!(!nullable);
         StructArray::new(
@@ -131,15 +132,15 @@ impl FromArrow<&ArrowStructArray> for ArrayRef {
                 .columns()
                 .iter()
                 .zip(value.fields())
-                .map(|(c, field)| ArrayRef::from_arrow(c.clone(), field.is_nullable()))
+                .map(|(c, field)| ArrayRef::from_arrow_array(c.clone(), field.is_nullable()))
                 .collect(),
         )
         .boxed()
     }
 }
 
-impl FromArrow<&ArrowNullArray> for ArrayRef {
-    fn from_arrow(value: &ArrowNullArray, nullable: bool) -> Self {
+impl FromArrowArray<&ArrowNullArray> for ArrayRef {
+    fn from_arrow_array(value: &ArrowNullArray, nullable: bool) -> Self {
         assert!(nullable);
         ConstantArray::new(NullScalar::new().into(), value.len()).boxed()
     }
@@ -158,80 +159,110 @@ fn nulls(nulls: Option<&NullBuffer>, nullable: bool, len: usize) -> Option<Array
     }
 }
 
-impl FromArrow<ArrowArrayRef> for ArrayRef {
-    fn from_arrow(array: ArrowArrayRef, nullable: bool) -> Self {
+impl FromArrowArray<ArrowArrayRef> for ArrayRef {
+    fn from_arrow_array(array: ArrowArrayRef, nullable: bool) -> Self {
         match array.data_type() {
-            DataType::Boolean => ArrayRef::from_arrow(array.as_boolean(), nullable),
-            DataType::UInt8 => ArrayRef::from_arrow(array.as_primitive::<UInt8Type>(), nullable),
-            DataType::UInt16 => ArrayRef::from_arrow(array.as_primitive::<UInt16Type>(), nullable),
-            DataType::UInt32 => ArrayRef::from_arrow(array.as_primitive::<UInt32Type>(), nullable),
-            DataType::UInt64 => ArrayRef::from_arrow(array.as_primitive::<UInt64Type>(), nullable),
-            DataType::Int8 => ArrayRef::from_arrow(array.as_primitive::<Int8Type>(), nullable),
-            DataType::Int16 => ArrayRef::from_arrow(array.as_primitive::<Int16Type>(), nullable),
-            DataType::Int32 => ArrayRef::from_arrow(array.as_primitive::<Int32Type>(), nullable),
-            DataType::Int64 => ArrayRef::from_arrow(array.as_primitive::<Int64Type>(), nullable),
+            DataType::Boolean => ArrayRef::from_arrow_array(array.as_boolean(), nullable),
+            DataType::UInt8 => {
+                ArrayRef::from_arrow_array(array.as_primitive::<UInt8Type>(), nullable)
+            }
+            DataType::UInt16 => {
+                ArrayRef::from_arrow_array(array.as_primitive::<UInt16Type>(), nullable)
+            }
+            DataType::UInt32 => {
+                ArrayRef::from_arrow_array(array.as_primitive::<UInt32Type>(), nullable)
+            }
+            DataType::UInt64 => {
+                ArrayRef::from_arrow_array(array.as_primitive::<UInt64Type>(), nullable)
+            }
+            DataType::Int8 => {
+                ArrayRef::from_arrow_array(array.as_primitive::<Int8Type>(), nullable)
+            }
+            DataType::Int16 => {
+                ArrayRef::from_arrow_array(array.as_primitive::<Int16Type>(), nullable)
+            }
+            DataType::Int32 => {
+                ArrayRef::from_arrow_array(array.as_primitive::<Int32Type>(), nullable)
+            }
+            DataType::Int64 => {
+                ArrayRef::from_arrow_array(array.as_primitive::<Int64Type>(), nullable)
+            }
             DataType::Float16 => {
-                ArrayRef::from_arrow(array.as_primitive::<Float16Type>(), nullable)
+                ArrayRef::from_arrow_array(array.as_primitive::<Float16Type>(), nullable)
             }
             DataType::Float32 => {
-                ArrayRef::from_arrow(array.as_primitive::<Float32Type>(), nullable)
+                ArrayRef::from_arrow_array(array.as_primitive::<Float32Type>(), nullable)
             }
             DataType::Float64 => {
-                ArrayRef::from_arrow(array.as_primitive::<Float64Type>(), nullable)
+                ArrayRef::from_arrow_array(array.as_primitive::<Float64Type>(), nullable)
             }
-            DataType::Utf8 => ArrayRef::from_arrow(array.as_string::<i32>(), nullable),
-            DataType::LargeUtf8 => ArrayRef::from_arrow(array.as_string::<i64>(), nullable),
-            DataType::Binary => ArrayRef::from_arrow(array.as_binary::<i32>(), nullable),
-            DataType::LargeBinary => ArrayRef::from_arrow(array.as_binary::<i64>(), nullable),
-            DataType::Struct(_) => ArrayRef::from_arrow(array.as_struct(), nullable),
-            DataType::Null => ArrayRef::from_arrow(as_null_array(array.as_ref()), nullable),
+            DataType::Utf8 => ArrayRef::from_arrow_array(array.as_string::<i32>(), nullable),
+            DataType::LargeUtf8 => ArrayRef::from_arrow_array(array.as_string::<i64>(), nullable),
+            DataType::Binary => ArrayRef::from_arrow_array(array.as_binary::<i32>(), nullable),
+            DataType::LargeBinary => ArrayRef::from_arrow_array(array.as_binary::<i64>(), nullable),
+            DataType::Struct(_) => ArrayRef::from_arrow_array(array.as_struct(), nullable),
+            DataType::Null => ArrayRef::from_arrow_array(as_null_array(array.as_ref()), nullable),
             DataType::Timestamp(u, _) => match u {
-                TimeUnit::Second => {
-                    ArrayRef::from_arrow(array.as_primitive::<TimestampSecondType>(), nullable)
-                }
-                TimeUnit::Millisecond => {
-                    ArrayRef::from_arrow(array.as_primitive::<TimestampMillisecondType>(), nullable)
-                }
-                TimeUnit::Microsecond => {
-                    ArrayRef::from_arrow(array.as_primitive::<TimestampMicrosecondType>(), nullable)
-                }
-                TimeUnit::Nanosecond => {
-                    ArrayRef::from_arrow(array.as_primitive::<TimestampNanosecondType>(), nullable)
-                }
+                TimeUnit::Second => ArrayRef::from_arrow_array(
+                    array.as_primitive::<TimestampSecondType>(),
+                    nullable,
+                ),
+                TimeUnit::Millisecond => ArrayRef::from_arrow_array(
+                    array.as_primitive::<TimestampMillisecondType>(),
+                    nullable,
+                ),
+                TimeUnit::Microsecond => ArrayRef::from_arrow_array(
+                    array.as_primitive::<TimestampMicrosecondType>(),
+                    nullable,
+                ),
+                TimeUnit::Nanosecond => ArrayRef::from_arrow_array(
+                    array.as_primitive::<TimestampNanosecondType>(),
+                    nullable,
+                ),
             },
-            DataType::Date32 => ArrayRef::from_arrow(array.as_primitive::<Date32Type>(), nullable),
-            DataType::Date64 => ArrayRef::from_arrow(array.as_primitive::<Date64Type>(), nullable),
+            DataType::Date32 => {
+                ArrayRef::from_arrow_array(array.as_primitive::<Date32Type>(), nullable)
+            }
+            DataType::Date64 => {
+                ArrayRef::from_arrow_array(array.as_primitive::<Date64Type>(), nullable)
+            }
             DataType::Time32(u) => match u {
                 TimeUnit::Second => {
-                    ArrayRef::from_arrow(array.as_primitive::<Time32SecondType>(), nullable)
+                    ArrayRef::from_arrow_array(array.as_primitive::<Time32SecondType>(), nullable)
                 }
-                TimeUnit::Millisecond => {
-                    ArrayRef::from_arrow(array.as_primitive::<Time32MillisecondType>(), nullable)
-                }
+                TimeUnit::Millisecond => ArrayRef::from_arrow_array(
+                    array.as_primitive::<Time32MillisecondType>(),
+                    nullable,
+                ),
                 _ => unreachable!(),
             },
             DataType::Time64(u) => match u {
-                TimeUnit::Microsecond => {
-                    ArrayRef::from_arrow(array.as_primitive::<Time64MicrosecondType>(), nullable)
-                }
-                TimeUnit::Nanosecond => {
-                    ArrayRef::from_arrow(array.as_primitive::<Time64NanosecondType>(), nullable)
-                }
+                TimeUnit::Microsecond => ArrayRef::from_arrow_array(
+                    array.as_primitive::<Time64MicrosecondType>(),
+                    nullable,
+                ),
+                TimeUnit::Nanosecond => ArrayRef::from_arrow_array(
+                    array.as_primitive::<Time64NanosecondType>(),
+                    nullable,
+                ),
                 _ => unreachable!(),
             },
             DataType::Duration(u) => match u {
                 TimeUnit::Second => {
-                    ArrayRef::from_arrow(array.as_primitive::<DurationSecondType>(), nullable)
+                    ArrayRef::from_arrow_array(array.as_primitive::<DurationSecondType>(), nullable)
                 }
-                TimeUnit::Millisecond => {
-                    ArrayRef::from_arrow(array.as_primitive::<DurationMillisecondType>(), nullable)
-                }
-                TimeUnit::Microsecond => {
-                    ArrayRef::from_arrow(array.as_primitive::<DurationMicrosecondType>(), nullable)
-                }
-                TimeUnit::Nanosecond => {
-                    ArrayRef::from_arrow(array.as_primitive::<DurationNanosecondType>(), nullable)
-                }
+                TimeUnit::Millisecond => ArrayRef::from_arrow_array(
+                    array.as_primitive::<DurationMillisecondType>(),
+                    nullable,
+                ),
+                TimeUnit::Microsecond => ArrayRef::from_arrow_array(
+                    array.as_primitive::<DurationMicrosecondType>(),
+                    nullable,
+                ),
+                TimeUnit::Nanosecond => ArrayRef::from_arrow_array(
+                    array.as_primitive::<DurationNanosecondType>(),
+                    nullable,
+                ),
             },
             _ => panic!(
                 "TODO(robert): Missing array encoding for dtype {}",
