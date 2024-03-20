@@ -169,7 +169,7 @@ mod test {
         .unwrap();
     }
 
-    //#[ignore]
+    #[ignore]
     #[test]
     fn compression_ratio() {
         setup_logger(LevelFilter::Info);
