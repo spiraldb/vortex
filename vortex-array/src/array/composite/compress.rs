@@ -1,8 +1,9 @@
+use crate::array::{Array, ArrayRef};
 use crate::array::composite::{CompositeArray, CompositeEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use crate::error::VortexResult;
+
 impl EncodingCompression for CompositeEncoding {
     fn cost(&self) -> u8 {
         0
