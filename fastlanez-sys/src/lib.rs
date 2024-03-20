@@ -6,7 +6,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-use std::mem::{size_of, transmute, MaybeUninit};
+use std::mem::{size_of, MaybeUninit};
 
 use arrayref::{array_mut_ref, array_ref};
 use seq_macro::seq;
@@ -14,10 +14,28 @@ use uninit::prelude::VecCapacity;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-pub fn transpose<'a, T: Sized>(input: &[T; 1024]) -> [T; 1024] {
+pub fn transpose<T: Sized>(input: &[T; 1024]) -> [T; 1024] {
+    let mut output: [MaybeUninit<T>; 1024] = MaybeUninit::uninit_array();
     unsafe {
-        let mut output: [MaybeUninit<T>; 1024] = MaybeUninit::uninit_array();
-        fl_transpose_u8(transmute(input), transmute(&mut output));
+        match size_of::<T>() {
+            1 => fl_transpose_u8(
+                input.as_ptr() as *const [u8; 1024],
+                &mut output as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u8; 1024],
+            ),
+            2 => fl_transpose_u16(
+                input.as_ptr() as *const [u16; 1024],
+                &mut output as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u16; 1024],
+            ),
+            4 => fl_transpose_u32(
+                input.as_ptr() as *const [u32; 1024],
+                &mut output as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u32; 1024],
+            ),
+            8 => fl_transpose_u64(
+                input.as_ptr() as *const [u64; 1024],
+                &mut output as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u64; 1024],
+            ),
+            _ => unreachable!(),
+        }
         MaybeUninit::array_assume_init(output)
     }
 }
@@ -179,8 +197,8 @@ macro_rules! delta_impl {
                     unsafe {
                         [<fl_delta_encode_ $T>](
                             input,
-                            transmute(base),
-                            transmute(array_mut_ref![output.reserve_uninit(1024), 0, 1024]),
+                            base,// as *mut [Self; 128 / size_of::<Self>()],
+                            array_mut_ref![output.reserve_uninit(1024), 0, 1024] as *mut [std::mem::MaybeUninit<Self>; 1024] as *mut [Self; 1024],
                         );
                         output.set_len(output.len() + 1024)
                     }

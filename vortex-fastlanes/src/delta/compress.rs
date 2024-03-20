@@ -112,7 +112,7 @@ where
         let chunk = &array[array.len() - last_chunk_size..];
         for next in chunk {
             output.push(*next - base_scalar);
-            base_scalar = next;
+            base_scalar = *next;
         }
     }
 
