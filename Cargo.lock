@@ -360,6 +360,7 @@ dependencies = [
  "vortex-fastlanes",
  "vortex-ree",
  "vortex-roaring",
+ "vortex-schema",
  "vortex-zigzag",
 ]
 
@@ -1844,6 +1845,7 @@ dependencies = [
  "vortex-fastlanes",
  "vortex-ree",
  "vortex-roaring",
+ "vortex-schema",
  "vortex-zigzag",
 ]
 
@@ -2549,6 +2551,7 @@ dependencies = [
  "log",
  "num-traits",
  "vortex-array",
+ "vortex-schema",
 ]
 
 [[package]]
@@ -2574,6 +2577,7 @@ dependencies = [
  "roaring",
  "thiserror",
  "vortex-alloc",
+ "vortex-schema",
 ]
 
 [[package]]
@@ -2590,6 +2594,7 @@ dependencies = [
  "rand",
  "simplelog",
  "vortex-array",
+ "vortex-schema",
 ]
 
 [[package]]
@@ -2600,10 +2605,9 @@ dependencies = [
  "fastlanez-sys",
  "itertools 0.12.1",
  "linkme",
- "log",
  "num-traits",
- "simplelog",
  "vortex-array",
+ "vortex-schema",
 ]
 
 [[package]]
@@ -2617,6 +2621,7 @@ dependencies = [
  "linkme",
  "num-traits",
  "vortex-array",
+ "vortex-schema",
 ]
 
 [[package]]
@@ -2628,6 +2633,18 @@ dependencies = [
  "log",
  "num-traits",
  "vortex-array",
+ "vortex-schema",
+]
+
+[[package]]
+name = "vortex-schema"
+version = "0.1.0"
+dependencies = [
+ "arrow-schema",
+ "itertools 0.12.1",
+ "leb128",
+ "num_enum",
+ "thiserror",
 ]
 
 [[package]]
@@ -2637,6 +2654,7 @@ dependencies = [
  "linkme",
  "vortex-alloc",
  "vortex-array",
+ "vortex-schema",
  "zigzag",
 ]
 
