@@ -23,6 +23,7 @@ flatbuffers = "23.5.26"
 
 [build-dependencies]
 flatc = "0.2.2"
+walkdir = "2.4.0"
 
 [lints]
 workspace = true

@@ -1,31 +1,51 @@
+use std::env;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use flatc::flatc;
+use walkdir::WalkDir;
 
 fn main() {
-    println!("cargo:rerun-if-changed=schema.fbs");
-    println!("path {}", flatc().to_str().unwrap());
+    let flatbuffers_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+        .canonicalize()
+        .expect("Failed to canonicalize CARGO_MANIFEST_DIR")
+        .join("flatbuffers");
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap())
+        .canonicalize()
+        .expect("Failed to canonicalize OUT_DIR");
+
+    WalkDir::new(&flatbuffers_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .for_each(|e| rerun_if_changed(e.path()));
+
     if !Command::new(flatc())
         .args(["--filename-suffix", ""])
         .arg("--rust")
-        .args(["-o", "./src/generated/"])
-        .arg("./schema.fbs")
-        .spawn()
-        .expect("flatc")
-        .wait()
+        .arg("-o")
+        .arg(out_dir.join("flatbuffers"))
+        .args(
+            WalkDir::new(flatbuffers_dir)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension() == Some(OsStr::new("fbs")))
+                .map(|d| d.path().to_path_buf()),
+        )
+        .status()
         .unwrap()
         .success()
     {
         panic!("Failed to run flatc");
     }
-    if !Command::new("cargo")
-        .args(["fmt", "-p", "vortex-schema"])
-        .spawn()
-        .expect("cargo fmt")
-        .wait()
-        .unwrap()
-        .success()
-    {
-        panic!("Failed to run cargo fmt")
-    }
+}
+
+fn rerun_if_changed(path: &Path) {
+    println!(
+        "cargo:rerun-if-changed={}",
+        path.canonicalize()
+            .unwrap_or_else(|_| panic!("failed to canonicalize {}", path.to_str().unwrap()))
+            .to_str()
+            .unwrap()
+    );
 }
