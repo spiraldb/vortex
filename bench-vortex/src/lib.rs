@@ -167,14 +167,14 @@ mod test {
         .unwrap();
     }
 
-    // #[ignore]
+    #[ignore]
     #[test]
     fn compression_ratio() {
         setup_logger(LevelFilter::Info);
         _ = compress_taxi_data();
     }
 
-    // [ignore]
+    #[ignore]
     #[test]
     fn round_trip_serde() {
         let file = File::open(download_taxi_data()).unwrap();
@@ -196,7 +196,7 @@ mod test {
         }
     }
 
-    //#[ignore]
+    #[ignore]
     #[test]
     fn round_trip_arrow() {
         let file = File::open(download_taxi_data()).unwrap();
