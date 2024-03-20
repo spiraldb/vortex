@@ -15,23 +15,22 @@ fn main() {
         .canonicalize()
         .expect("Failed to canonicalize OUT_DIR");
 
-    WalkDir::new(&flatbuffers_dir)
+    let fbs_files = WalkDir::new(flatbuffers_dir)
         .into_iter()
         .filter_map(|e| e.ok())
-        .for_each(|e| rerun_if_changed(e.path()));
+        .filter(|e| e.path().extension() == Some(OsStr::new("fbs")))
+        .map(|e| {
+            rerun_if_changed(e.path());
+            e.path().to_path_buf()
+        })
+        .collect::<Vec<_>>();
 
     if !Command::new(flatc())
         .args(["--filename-suffix", ""])
         .arg("--rust")
         .arg("-o")
         .arg(out_dir.join("flatbuffers"))
-        .args(
-            WalkDir::new(flatbuffers_dir)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().extension() == Some(OsStr::new("fbs")))
-                .map(|d| d.path().to_path_buf()),
-        )
+        .args(fbs_files)
         .status()
         .unwrap()
         .success()
