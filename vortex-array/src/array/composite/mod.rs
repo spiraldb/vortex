@@ -1,14 +1,15 @@
-use linkme::distributed_slice;
 use std::fmt::{Display, Formatter};
+
+use linkme::distributed_slice;
+
+pub use array::*;
+pub use typed::*;
 
 mod array;
 mod compress;
 mod compute;
 mod serde;
 mod typed;
-
-pub use array::*;
-pub use typed::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 pub struct CompositeID(pub &'static str);
@@ -25,6 +26,6 @@ pub static COMPOSITE_EXTENSIONS: [&'static dyn CompositeExtension] = [..];
 pub fn find_extension(id: &str) -> Option<&'static dyn CompositeExtension> {
     COMPOSITE_EXTENSIONS
         .iter()
-        .copied()
         .find(|ext| ext.id().0 == id)
+        .copied()
 }
