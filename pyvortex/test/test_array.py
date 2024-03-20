@@ -1,5 +1,4 @@
 import pyarrow as pa
-import pytest
 import vortex
 
 
@@ -12,14 +11,6 @@ def test_primitive_array_round_trip():
 
 def test_varbin_array_round_trip():
     a = pa.array(["a", "b", "c"])
-    arr = vortex.encode(a)
-    assert isinstance(arr, vortex.VarBinArray)
-    assert arr.to_pyarrow().combine_chunks() == a
-
-
-@pytest.mark.xfail(strict=True)
-def test_varbin_array_doesnt_round_trip():
-    a = pa.array(["a", "b", "c"], type=pa.large_utf8())
     arr = vortex.encode(a)
     assert isinstance(arr, vortex.VarBinArray)
     assert arr.to_pyarrow().combine_chunks() == a

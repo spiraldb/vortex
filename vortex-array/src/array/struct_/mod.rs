@@ -4,11 +4,6 @@ use std::sync::{Arc, RwLock};
 use itertools::Itertools;
 use linkme::distributed_slice;
 
-use arrow_array::array::StructArray as ArrowStructArray;
-use arrow_array::array::{Array as ArrowArray, ArrayRef as ArrowArrayRef};
-use arrow_schema::{Field, Fields};
-
-use crate::arrow::aligned_iter::AlignedArrowArrayIterator;
 use crate::compress::EncodingCompression;
 use crate::dtype::{DType, FieldNames};
 use crate::error::VortexResult;
@@ -16,10 +11,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 
-use super::{
-    check_slice_bounds, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
-    ENCODINGS,
-};
+use super::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
 
 mod compress;
 mod compute;
@@ -66,15 +58,6 @@ impl StructArray {
             panic!("dtype is not a struct")
         }
     }
-
-    fn arrow_fields(&self) -> Fields {
-        self.names()
-            .iter()
-            .zip(self.field_dtypes())
-            .map(|(name, dtype)| Field::new(name.as_str(), dtype.into(), dtype.is_nullable()))
-            .map(Arc::new)
-            .collect()
-    }
 }
 
 impl Array for StructArray {
@@ -112,25 +95,6 @@ impl Array for StructArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        let fields = self.arrow_fields();
-        Box::new(
-            AlignedArrowArrayIterator::new(
-                self.fields
-                    .iter()
-                    .map(|f| f.iter_arrow())
-                    .collect::<Vec<_>>(),
-            )
-            .map(move |items| {
-                Arc::new(ArrowStructArray::new(
-                    fields.clone(),
-                    items.into_iter().map(ArrowArrayRef::from).collect(),
-                    None,
-                )) as Arc<dyn ArrowArray>
-            }),
-        )
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -156,8 +120,8 @@ impl Array for StructArray {
         self.fields.iter().map(|arr| arr.nbytes()).sum()
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 
@@ -202,45 +166,5 @@ impl ArrayDisplay for StructArray {
             f.child(&format!("\"{}\"", name), field.as_ref())?;
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::sync::Arc;
-
-    use arrow_array::array::PrimitiveArray as ArrowPrimitiveArray;
-    use arrow_array::array::StructArray as ArrowStructArray;
-    use arrow_array::array::{Array as ArrowArray, GenericStringArray as ArrowStringArray};
-    use arrow_array::types::UInt64Type;
-
-    use crate::array::struct_::StructArray;
-    use crate::array::Array;
-
-    #[test]
-    pub fn iter() {
-        let arrow_aas = ArrowPrimitiveArray::<UInt64Type>::from(vec![1, 2, 3]);
-        let arrow_bbs = ArrowStringArray::<i32>::from(vec!["a", "b", "c"]);
-
-        let array = StructArray::new(
-            vec![Arc::new("a".to_string()), Arc::new("b".to_string())],
-            vec![(&arrow_aas).into(), (&arrow_bbs).into()],
-        );
-        let arrow_struct = ArrowStructArray::new(
-            array.arrow_fields(),
-            vec![Arc::new(arrow_aas), Arc::new(arrow_bbs)],
-            None,
-        );
-
-        assert_eq!(
-            array
-                .iter_arrow()
-                .next()
-                .unwrap()
-                .as_any()
-                .downcast_ref::<ArrowStructArray>()
-                .unwrap(),
-            &arrow_struct
-        );
     }
 }

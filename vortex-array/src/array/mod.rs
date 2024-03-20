@@ -1,17 +1,16 @@
 use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
 
-use arrow_array::array::ArrayRef as ArrowArrayRef;
 use linkme::distributed_slice;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
+use crate::array::composite::{CompositeArray, CompositeEncoding};
 use crate::array::constant::{ConstantArray, ConstantEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::struct_::{StructArray, StructEncoding};
-use crate::array::typed::{TypedArray, TypedEncoding};
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::compress::EncodingCompression;
@@ -24,16 +23,15 @@ use crate::stats::Stats;
 
 pub mod bool;
 pub mod chunked;
+pub mod composite;
 pub mod constant;
 pub mod downcast;
 pub mod primitive;
 pub mod sparse;
 pub mod struct_;
-pub mod typed;
 pub mod varbin;
 pub mod varbinview;
 
-pub type ArrowIterator = dyn Iterator<Item = ArrowArrayRef>;
 pub type ArrayRef = Box<dyn Array>;
 
 /// An Enc Array is the base object representing all arrays in enc.
@@ -61,8 +59,6 @@ pub trait Array:
     fn dtype(&self) -> &DType;
     /// Get statistics for the array
     fn stats(&self) -> Stats;
-    /// Produce arrow batches from the encoding
-    fn iter_arrow(&self) -> Box<ArrowIterator>;
     /// Limit array to start..stop range
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef>;
     /// Encoding kind of the array
@@ -70,7 +66,9 @@ pub trait Array:
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
 
-    fn serde(&self) -> &dyn ArraySerde;
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        None
+    }
 }
 
 dyn_clone::clone_trait_object!(Array);
@@ -177,11 +175,11 @@ pub static ENCODINGS: [EncodingRef] = [..];
 pub enum ArrayKind<'a> {
     Bool(&'a BoolArray),
     Chunked(&'a ChunkedArray),
+    Composite(&'a CompositeArray),
     Constant(&'a ConstantArray),
     Primitive(&'a PrimitiveArray),
     Sparse(&'a SparseArray),
     Struct(&'a StructArray),
-    Typed(&'a TypedArray),
     VarBin(&'a VarBinArray),
     VarBinView(&'a VarBinViewArray),
     Other(&'a dyn Array),
@@ -192,11 +190,11 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
         match *value.encoding().id() {
             BoolEncoding::ID => ArrayKind::Bool(value.as_bool()),
             ChunkedEncoding::ID => ArrayKind::Chunked(value.as_chunked()),
+            CompositeEncoding::ID => ArrayKind::Composite(value.as_composite()),
             ConstantEncoding::ID => ArrayKind::Constant(value.as_constant()),
             PrimitiveEncoding::ID => ArrayKind::Primitive(value.as_primitive()),
             SparseEncoding::ID => ArrayKind::Sparse(value.as_sparse()),
             StructEncoding::ID => ArrayKind::Struct(value.as_struct()),
-            TypedEncoding::ID => ArrayKind::Typed(value.as_typed()),
             VarBinEncoding::ID => ArrayKind::VarBin(value.as_varbin()),
             VarBinViewEncoding::ID => ArrayKind::VarBinView(value.as_varbinview()),
             _ => ArrayKind::Other(value),

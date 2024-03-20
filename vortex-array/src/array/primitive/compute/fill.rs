@@ -2,8 +2,8 @@ use num_traits::Zero;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
-use crate::compute::cast::cast_bool;
 use crate::compute::fill::FillForwardFn;
+use crate::compute::flatten::flatten_bool;
 use crate::error::VortexResult;
 use crate::match_each_native_ptype;
 use crate::stats::Stat;
@@ -21,7 +21,7 @@ impl FillForwardFn for PrimitiveArray {
             return Ok(PrimitiveArray::new(*self.ptype(), self.buffer().clone(), None).boxed());
         } else {
             match_each_native_ptype!(self.ptype(), |$P| {
-                let validity = cast_bool(self.validity().unwrap())?;
+                let validity = flatten_bool(self.validity().unwrap())?;
                 let typed_data = self.typed_data::<$P>();
                 let mut last_value = $P::zero();
                 let filled = typed_data

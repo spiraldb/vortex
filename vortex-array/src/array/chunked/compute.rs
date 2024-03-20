@@ -1,15 +1,21 @@
+use itertools::Itertools;
+
 use crate::array::chunked::ChunkedArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::ArrayRef;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
+use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
 use crate::scalar::Scalar;
-use itertools::Itertools;
 
 impl ArrayCompute for ChunkedArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
+        Some(self)
+    }
+
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 
@@ -27,6 +33,12 @@ impl AsContiguousFn for ChunkedArray {
             .cloned()
             .collect_vec();
         as_contiguous(chunks)
+    }
+}
+
+impl FlattenFn for ChunkedArray {
+    fn flatten(&self) -> VortexResult<FlattenedArray> {
+        Ok(FlattenedArray::Chunked(self.clone()))
     }
 }
 

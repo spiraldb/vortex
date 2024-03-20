@@ -1,12 +1,9 @@
 use std::any::Any;
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{
-    check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding, EncodingId, EncodingRef,
-};
+use vortex::array::{check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::scalar_at::scalar_at;
-use vortex::compute::ArrayCompute;
 use vortex::dtype::DType;
 use vortex::error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
@@ -14,6 +11,7 @@ use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 
 mod compress;
+mod compute;
 mod serde;
 
 #[derive(Debug, Clone)]
@@ -115,10 +113,6 @@ impl Array for BitPackedArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        todo!()
-    }
-
     fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {
         unimplemented!("BitPackedArray::slice")
     }
@@ -137,12 +131,10 @@ impl Array for BitPackedArray {
             + self.validity().map(|v| v.nbytes()).unwrap_or(0)
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
-
-impl ArrayCompute for BitPackedArray {}
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for BitPackedArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {

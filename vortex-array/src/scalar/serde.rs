@@ -4,13 +4,15 @@ use std::sync::Arc;
 use half::f16;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
-use crate::dtype::{DType, TimeUnit};
+use crate::dtype::DType;
+use crate::error::VortexResult;
 use crate::ptype::PType;
+use crate::scalar::composite::CompositeScalar;
 use crate::scalar::{
-    BinaryScalar, BoolScalar, ListScalar, LocalTimeScalar, NullScalar, PScalar, PrimitiveScalar,
-    Scalar, StructScalar, Utf8Scalar,
+    BinaryScalar, BoolScalar, ListScalar, NullScalar, PScalar, PrimitiveScalar, Scalar,
+    StructScalar, Utf8Scalar,
 };
-use crate::serde::{ReadCtx, TimeUnitTag, WriteCtx};
+use crate::serde::{ReadCtx, WriteCtx};
 
 pub struct ScalarReader<'a, 'b> {
     reader: &'b mut ReadCtx<'a>,
@@ -21,7 +23,7 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
         Self { reader }
     }
 
-    pub fn read(&mut self) -> io::Result<Scalar> {
+    pub fn read(&mut self) -> VortexResult<Scalar> {
         let tag = ScalarTag::try_from(self.reader.read_nbytes::<1>()?[0])
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         match tag {
@@ -51,14 +53,6 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
                     Ok(ListScalar::new(self.reader.dtype()?, None).into())
                 }
             }
-            ScalarTag::LocalTime => {
-                let time_unit = TimeUnitTag::try_from(self.reader.read_nbytes::<1>()?[0])
-                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-                    .map(TimeUnit::from)?;
-                let ps = self.read_primitive_scalar()?;
-
-                Ok(LocalTimeScalar::new(ps, time_unit).into())
-            }
             ScalarTag::Null => Ok(NullScalar::new().into()),
             ScalarTag::Struct => {
                 let field_num = self.reader.read_usize()?;
@@ -84,10 +78,15 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
                         .into(),
                 )
             }
+            ScalarTag::Composite => {
+                let dtype = self.reader.dtype()?;
+                let scalar = self.read()?;
+                Ok(CompositeScalar::new(dtype, Box::new(scalar)).into())
+            }
         }
     }
 
-    fn read_primitive_scalar(&mut self) -> io::Result<PrimitiveScalar> {
+    fn read_primitive_scalar(&mut self) -> VortexResult<PrimitiveScalar> {
         let ptype = self.reader.ptype()?;
         let is_present = self.reader.read_option_tag()?;
         if is_present {
@@ -142,7 +141,7 @@ impl<'a, 'b> ScalarWriter<'a, 'b> {
         Self { writer }
     }
 
-    pub fn write(&mut self, scalar: &Scalar) -> io::Result<()> {
+    pub fn write(&mut self, scalar: &Scalar) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([ScalarTag::from(scalar).into()])?;
         match scalar {
@@ -166,11 +165,6 @@ impl<'a, 'b> ScalarWriter<'a, 'b> {
                 }
                 Ok(())
             }
-            Scalar::LocalTime(lt) => {
-                self.writer
-                    .write_fixed_slice([TimeUnitTag::from(lt.time_unit()).into()])?;
-                self.write_primitive_scalar(lt.value())
-            }
             Scalar::Null(_) => Ok(()),
             Scalar::Primitive(p) => self.write_primitive_scalar(p),
             Scalar::Struct(s) => {
@@ -187,10 +181,14 @@ impl<'a, 'b> ScalarWriter<'a, 'b> {
             Scalar::Utf8(u) => self
                 .writer
                 .write_optional_slice(u.value().map(|s| s.as_bytes())),
+            Scalar::Composite(c) => {
+                self.writer.dtype(c.dtype())?;
+                self.write(c.scalar())
+            }
         }
     }
 
-    fn write_primitive_scalar(&mut self, scalar: &PrimitiveScalar) -> io::Result<()> {
+    fn write_primitive_scalar(&mut self, scalar: &PrimitiveScalar) -> VortexResult<()> {
         self.writer.ptype(scalar.ptype())?;
         self.writer.write_option_tag(scalar.value().is_some())?;
         if let Some(ps) = scalar.value() {
@@ -218,12 +216,12 @@ enum ScalarTag {
     Binary,
     Bool,
     List,
-    LocalTime,
     Null,
     // TODO(robert): rename to primitive once we stop using enum for serialization
     PrimitiveS,
     Struct,
     Utf8,
+    Composite,
 }
 
 impl From<&Scalar> for ScalarTag {
@@ -232,11 +230,11 @@ impl From<&Scalar> for ScalarTag {
             Scalar::Binary(_) => ScalarTag::Binary,
             Scalar::Bool(_) => ScalarTag::Bool,
             Scalar::List(_) => ScalarTag::List,
-            Scalar::LocalTime(_) => ScalarTag::LocalTime,
             Scalar::Null(_) => ScalarTag::Null,
             Scalar::Primitive(_) => ScalarTag::PrimitiveS,
             Scalar::Struct(_) => ScalarTag::Struct,
             Scalar::Utf8(_) => ScalarTag::Utf8,
+            Scalar::Composite(_) => ScalarTag::Composite,
         }
     }
 }

@@ -11,11 +11,11 @@ use vortex::array::bool::BoolEncoding;
 use vortex::array::chunked::{ChunkedArray, ChunkedEncoding};
 use vortex::array::constant::ConstantEncoding;
 
+use vortex::array::composite::CompositeEncoding;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveEncoding;
 use vortex::array::sparse::SparseEncoding;
 use vortex::array::struct_::StructEncoding;
-use vortex::array::typed::TypedEncoding;
 use vortex::array::varbin::VarBinEncoding;
 use vortex::array::varbinview::VarBinViewEncoding;
 use vortex::array::{Array, ArrayRef, Encoding};
@@ -34,11 +34,11 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         // Builtins
         &BoolEncoding,
         &ChunkedEncoding,
+        &CompositeEncoding,
         &ConstantEncoding,
         &PrimitiveEncoding,
         &SparseEncoding,
         &StructEncoding,
-        &TypedEncoding,
         &VarBinEncoding,
         &VarBinViewEncoding,
         // Encodings
@@ -54,6 +54,15 @@ pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
         // Doesn't offer anything more than FoR really
         // &ZigZagEncoding,
     ]
+}
+
+pub fn compress_ctx() -> CompressCtx {
+    let cfg = CompressConfig::new(
+        HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
+        HashSet::default(),
+    );
+    info!("Compression config {cfg:?}");
+    CompressCtx::new(Arc::new(cfg))
 }
 
 pub fn download_taxi_data() -> PathBuf {
@@ -78,13 +87,13 @@ pub fn download_taxi_data() -> PathBuf {
 pub fn compress_taxi_data() -> ArrayRef {
     let file = File::open(download_taxi_data()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
+    let _mask = ProjectionMask::roots(builder.parquet_schema(), [1]);
     let _no_datetime_mask = ProjectionMask::roots(
         builder.parquet_schema(),
         [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
     );
     let reader = builder
-        //.with_projection(mask)
+        .with_projection(_mask)
         //.with_projection(no_datetime_mask)
         .with_batch_size(65_536)
         // .with_batch_size(5_000_000)
@@ -92,14 +101,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         .build()
         .unwrap();
 
-    // let array = ArrayRef::try_from((&mut reader) as &mut dyn RecordBatchReader).unwrap();
-    let cfg = CompressConfig::new(
-        HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
-        HashSet::default(),
-    );
-    info!("Compression config {cfg:?}");
-    let ctx = CompressCtx::new(Arc::new(cfg));
-
+    let ctx = compress_ctx();
     let schema = reader.schema();
     let mut uncompressed_size = 0;
     let chunks = reader
@@ -140,10 +142,19 @@ pub fn compress_taxi_data() -> ArrayRef {
 
 #[cfg(test)]
 mod test {
+    use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+    use std::fs::File;
+    use std::ops::Deref;
+    use std::sync::Arc;
+    use vortex::array::ArrayRef;
+    use vortex::compute::as_arrow::as_arrow;
+    use vortex::encode::FromArrow;
+    use vortex::serde::{ReadCtx, WriteCtx};
 
-    use crate::compress_taxi_data;
+    use crate::{compress_ctx, compress_taxi_data, download_taxi_data};
 
     #[allow(dead_code)]
     fn setup_logger(level: LevelFilter) {
@@ -159,7 +170,66 @@ mod test {
     #[ignore]
     #[test]
     fn compression_ratio() {
-        setup_logger(LevelFilter::Warn);
+        setup_logger(LevelFilter::Info);
         _ = compress_taxi_data();
+    }
+
+    #[ignore]
+    #[test]
+    fn round_trip_serde() {
+        let file = File::open(download_taxi_data()).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let reader = builder.with_limit(1).build().unwrap();
+
+        for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
+            let struct_arrow: ArrowStructArray = record_batch.into();
+            let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+
+            let mut buf = Vec::<u8>::new();
+            let mut write_ctx = WriteCtx::new(&mut buf);
+            write_ctx.write(vortex_array.as_ref()).unwrap();
+
+            let mut read = buf.as_slice();
+            let mut read_ctx = ReadCtx::new(vortex_array.dtype(), &mut read);
+            read_ctx.read().unwrap();
+        }
+    }
+
+    #[ignore]
+    #[test]
+    fn round_trip_arrow() {
+        let file = File::open(download_taxi_data()).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let reader = builder.with_limit(1).build().unwrap();
+
+        for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
+            let struct_arrow: ArrowStructArray = record_batch.into();
+            let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+            let vortex_as_arrow = as_arrow(vortex_array.as_ref()).unwrap();
+            assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
+        }
+    }
+
+    // Ignoring since Struct arrays don't currently support equality.
+    // https://github.com/apache/arrow-rs/issues/5199
+    #[ignore]
+    #[test]
+    fn round_trip_arrow_compressed() {
+        let file = File::open(download_taxi_data()).unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+        let reader = builder.with_limit(1).build().unwrap();
+
+        let ctx = compress_ctx();
+        for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
+            let struct_arrow: ArrowStructArray = record_batch.into();
+            let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
+            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+
+            let compressed = ctx.clone().compress(vortex_array.as_ref(), None).unwrap();
+            let compressed_as_arrow = as_arrow(compressed.as_ref()).unwrap();
+            assert_eq!(compressed_as_arrow.deref(), arrow_array.deref());
+        }
     }
 }

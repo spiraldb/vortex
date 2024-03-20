@@ -107,22 +107,6 @@ macro_rules! match_each_integer_ptype {
 }
 pub use match_each_integer_ptype;
 
-#[macro_export]
-macro_rules! match_each_unsigned_integer_ptype {
-    ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
-        macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use $crate::ptype::PType;
-        match $self {
-            PType::U8 => __with__! { u8 },
-            PType::U16 => __with__! { u16 },
-            PType::U32 => __with__! { u32 },
-            PType::U64 => __with__! { u64 },
-            _ => panic!("Unsupported ptype {:?}", $self),
-        }
-    })
-}
-pub use match_each_unsigned_integer_ptype;
-
 impl PType {
     pub const fn is_unsigned_int(self) -> bool {
         matches!(self, PType::U8 | PType::U16 | PType::U32 | PType::U64)
@@ -206,7 +190,9 @@ impl TryFrom<&DType> for PType {
                 FloatWidth::_32 => Ok(PType::F32),
                 FloatWidth::_64 => Ok(PType::F64),
             },
-            _ => Err(VortexError::InvalidDType(value.clone())),
+            _ => Err(VortexError::InvalidArgument(
+                format!("Cannot convert DType {} into PType", value.clone()).into(),
+            )),
         }
     }
 }
