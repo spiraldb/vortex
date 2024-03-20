@@ -74,7 +74,7 @@ fn dtype_bool(py: Python<'_>, nullable: bool) -> PyResult<Py<PyDType>> {
 #[pyo3(signature = (width = None, signed = true, nullable = false))]
 fn dtype_int(
     py: Python<'_>,
-    width: Option<i16>,
+    width: Option<u16>,
     signed: bool,
     nullable: bool,
 ) -> PyResult<Py<PyDType>> {
