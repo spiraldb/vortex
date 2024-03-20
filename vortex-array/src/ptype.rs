@@ -1,13 +1,13 @@
-use std::fmt::{Debug, Display};
+use arrow_buffer::ArrowNativeType;
+use std::fmt::{Debug, Display, Formatter};
 use std::panic::RefUnwindSafe;
 
-use arrow::datatypes::ArrowNativeType;
 use half::f16;
 use num_traits::{Num, NumCast};
 
 use crate::dtype::{DType, FloatWidth, IntWidth, Signedness};
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::{PScalar, ScalarRef};
+use crate::scalar::{PScalar, Scalar};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub enum PType {
@@ -37,8 +37,8 @@ pub trait NativePType:
     + RefUnwindSafe
     + Num
     + NumCast
-    + Into<ScalarRef>
-    + TryFrom<ScalarRef, Error = VortexError>
+    + Into<Scalar>
+    + TryFrom<Scalar, Error = VortexError>
     + Into<PScalar>
 {
     const PTYPE: PType;
@@ -107,45 +107,47 @@ macro_rules! match_each_integer_ptype {
 }
 pub use match_each_integer_ptype;
 
-#[macro_export]
-macro_rules! match_each_unsigned_integer_ptype {
-    ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
-        macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use $crate::ptype::PType;
-        match $self {
-            PType::U8 => __with__! { u8 },
-            PType::U16 => __with__! { u16 },
-            PType::U32 => __with__! { u32 },
-            PType::U64 => __with__! { u64 },
-            _ => panic!("Unsupported ptype {:?}", $self),
-        }
-    })
-}
-pub use match_each_unsigned_integer_ptype;
-
 impl PType {
-    pub fn is_unsigned_int(self) -> bool {
+    pub const fn is_unsigned_int(self) -> bool {
         matches!(self, PType::U8 | PType::U16 | PType::U32 | PType::U64)
     }
 
-    pub fn is_signed_int(self) -> bool {
+    pub const fn is_signed_int(self) -> bool {
         matches!(self, PType::I8 | PType::I16 | PType::I32 | PType::I64)
     }
 
-    pub fn is_int(self) -> bool {
+    pub const fn is_int(self) -> bool {
         self.is_unsigned_int() || self.is_signed_int()
     }
 
-    pub fn is_float(self) -> bool {
+    pub const fn is_float(self) -> bool {
         matches!(self, PType::F16 | PType::F32 | PType::F64)
     }
 
-    pub fn byte_width(&self) -> usize {
+    pub const fn byte_width(&self) -> usize {
         match_each_native_ptype!(self, |$T| std::mem::size_of::<$T>())
     }
 
-    pub fn bit_width(&self) -> usize {
+    pub const fn bit_width(&self) -> usize {
         self.byte_width() * 8
+    }
+}
+
+impl Display for PType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PType::U8 => write!(f, "u8"),
+            PType::U16 => write!(f, "u16"),
+            PType::U32 => write!(f, "u32"),
+            PType::U64 => write!(f, "u64"),
+            PType::I8 => write!(f, "i8"),
+            PType::I16 => write!(f, "i16"),
+            PType::I32 => write!(f, "i32"),
+            PType::I64 => write!(f, "i64"),
+            PType::F16 => write!(f, "f16"),
+            PType::F32 => write!(f, "f32"),
+            PType::F64 => write!(f, "f64"),
+        }
     }
 }
 
@@ -188,7 +190,9 @@ impl TryFrom<&DType> for PType {
                 FloatWidth::_32 => Ok(PType::F32),
                 FloatWidth::_64 => Ok(PType::F64),
             },
-            _ => Err(VortexError::InvalidDType(value.clone())),
+            _ => Err(VortexError::InvalidArgument(
+                format!("Cannot convert DType {} into PType", value.clone()).into(),
+            )),
         }
     }
 }

@@ -1,11 +1,15 @@
 use itertools::Itertools;
+use num_traits::PrimInt;
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, CloneOptionalArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compute::flatten::flatten_primitive;
 use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
+use vortex::ptype::{NativePType, PType};
+use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
 
 use crate::{FoRArray, FoREncoding};
@@ -28,8 +32,10 @@ impl EncodingCompression for FoREncoding {
             return None;
         }
 
-        // Nothing for us to do if the min is already zero
-        if parray.stats().get_or_compute_cast::<i64>(&Stat::Min)? == 0 {
+        // Nothing for us to do if the min is already zero and tz == 0
+        let shift = trailing_zeros(parray);
+        let min = parray.stats().get_or_compute_cast::<i64>(&Stat::Min)?;
+        if min == 0 && shift == 0 {
             return None;
         }
 
@@ -43,17 +49,9 @@ impl EncodingCompression for FoREncoding {
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let parray = array.as_primitive();
-
+        let shift = trailing_zeros(parray);
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
-            let min = parray.stats().get_or_compute_as::<$T>(&Stat::Min).unwrap_or(<$T>::default());
-
-            // TODO(ngates): check for overflow
-            let values = parray.buffer().typed_data::<$T>().iter().map(|v| v - min)
-                // TODO(ngates): cast to unsigned
-                // .map(|v| v as parray.ptype().to_unsigned()::T)
-                .collect_vec();
-
-            PrimitiveArray::from(values)
+            compress_primitive::<$T>(parray, shift)
         });
 
         // TODO(ngates): remove FoR as a potential encoding from the ctx
@@ -61,17 +59,83 @@ impl EncodingCompression for FoREncoding {
         //  worth trying.
         let compressed_child = ctx.named("for").excluding(&FoREncoding::ID).compress(
             child.as_ref(),
-            like.map(|l| l.as_any().downcast_ref::<FoRArray>().unwrap().child()),
+            like.map(|l| l.as_any().downcast_ref::<FoRArray>().unwrap().encoded()),
         )?;
         let reference = parray.stats().get(&Stat::Min).unwrap();
-        Ok(FoRArray::try_new(compressed_child, reference)?.boxed())
+        Ok(FoRArray::try_new(compressed_child, reference, shift)?.boxed())
     }
+}
+
+fn compress_primitive<T: NativePType + PrimInt>(
+    parray: &PrimitiveArray,
+    shift: u8,
+) -> PrimitiveArray {
+    let min = parray
+        .stats()
+        .get_or_compute_as::<T>(&Stat::Min)
+        .unwrap_or_default();
+
+    let values = if shift > 0 {
+        let shifted_min = min >> shift as usize;
+        parray
+            .typed_data::<T>()
+            .iter()
+            .map(|&v| v >> shift as usize)
+            .map(|v| v - shifted_min)
+            .collect_vec()
+    } else {
+        parray
+            .typed_data::<T>()
+            .iter()
+            .map(|&v| v - min)
+            .collect_vec()
+    };
+
+    PrimitiveArray::from(values)
+}
+
+pub fn decompress(array: &FoRArray) -> VortexResult<PrimitiveArray> {
+    let shift = array.shift();
+    let ptype: PType = array.dtype().try_into()?;
+    let encoded = flatten_primitive(array.encoded())?;
+    Ok(match_each_integer_ptype!(ptype, |$T| {
+        let reference: $T = array.reference().try_into()?;
+        PrimitiveArray::from_nullable(
+            decompress_primitive(encoded.typed_data::<$T>(), reference, shift),
+            encoded.validity().clone_optional(),
+        )
+    }))
+}
+
+fn decompress_primitive<T: NativePType + PrimInt>(values: &[T], reference: T, shift: u8) -> Vec<T> {
+    if shift > 0 {
+        let shifted_reference = reference << shift as usize;
+        values
+            .iter()
+            .map(|&v| v << shift as usize)
+            .map(|v| v + shifted_reference)
+            .collect_vec()
+    } else {
+        values.iter().map(|&v| v + reference).collect_vec()
+    }
+}
+
+fn trailing_zeros(array: &dyn Array) -> u8 {
+    let tz_freq = array
+        .stats()
+        .get_or_compute_as::<ListScalarVec<usize>>(&Stat::TrailingZeroFreq)
+        .map(|v| v.0)
+        .unwrap_or(vec![0]);
+    tz_freq
+        .iter()
+        .enumerate()
+        .find_or_first(|(_, &v)| v > 0)
+        .map(|(i, _freq)| i)
+        .unwrap_or(0) as u8
 }
 
 #[cfg(test)]
 mod test {
-    use log::LevelFilter;
-    use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
     use std::collections::HashSet;
     use std::sync::Arc;
 
@@ -82,16 +146,7 @@ mod test {
 
     use super::*;
 
-    #[test]
-    fn test_compress() {
-        TermLogger::init(
-            LevelFilter::Debug,
-            Config::default(),
-            TerminalMode::Mixed,
-            ColorChoice::Auto,
-        )
-        .unwrap();
-
+    fn compress_ctx() -> CompressCtx {
         let cfg = CompressConfig::new(
             // We need some BitPacking else we will need choose FoR.
             HashSet::from([
@@ -101,7 +156,12 @@ mod test {
             ]),
             HashSet::default(),
         );
-        let ctx = CompressCtx::new(Arc::new(cfg));
+        CompressCtx::new(Arc::new(cfg))
+    }
+
+    #[test]
+    fn test_compress() {
+        let ctx = compress_ctx();
 
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
@@ -110,5 +170,18 @@ mod test {
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
         let fa = compressed.as_any().downcast_ref::<FoRArray>().unwrap();
         assert_eq!(fa.reference().try_into(), Ok(1_000_000u32));
+    }
+
+    #[test]
+    fn test_decompress() {
+        let ctx = compress_ctx();
+
+        // Create a range offset by a million
+        let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
+        let compressed = ctx.compress(&array, None).unwrap();
+        assert_eq!(compressed.encoding().id(), FoREncoding.id());
+
+        let decompressed = flatten_primitive(compressed.as_ref()).unwrap();
+        assert_eq!(decompressed.typed_data::<u32>(), array.typed_data::<u32>());
     }
 }

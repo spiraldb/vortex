@@ -1,11 +1,13 @@
-use std::io;
-use std::io::{ErrorKind, Read};
+use leb128::read::Error;
+use std::io::Read;
 use std::sync::Arc;
 
+use crate::array::composite::find_extension;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::dtype::DType::*;
-use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness, TimeUnit};
+use crate::dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness};
+use crate::error::{VortexError, VortexResult};
 use crate::serde::WriteCtx;
 
 pub struct DTypeReader<'a> {
@@ -17,15 +19,34 @@ impl<'a> DTypeReader<'a> {
         Self { reader }
     }
 
-    fn read_byte(&mut self) -> io::Result<u8> {
-        let mut buf: [u8; 1] = [0; 1];
-        self.reader.read_exact(&mut buf)?;
-        Ok(buf[0])
+    fn read_nbytes<const N: usize>(&mut self) -> VortexResult<[u8; N]> {
+        let mut bytes: [u8; N] = [0; N];
+        self.reader.read_exact(&mut bytes)?;
+        Ok(bytes)
     }
 
-    pub fn read(&mut self) -> io::Result<DType> {
-        let dtype = DTypeTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))?;
+    fn read_usize(&mut self) -> VortexResult<usize> {
+        leb128::read::unsigned(self.reader)
+            .map_err(|e| match e {
+                Error::IoError(io_err) => io_err.into(),
+                Error::Overflow => VortexError::InvalidArgument("overflow".into()),
+            })
+            .map(|u| u as usize)
+    }
+
+    fn read_slice(&mut self) -> VortexResult<Vec<u8>> {
+        let len = self.read_usize()?;
+        let mut slice = Vec::with_capacity(len);
+        self.reader
+            .take(len as u64)
+            .read_to_end(&mut slice)
+            .map_err(VortexError::from)?;
+        Ok(slice)
+    }
+
+    pub fn read(&mut self) -> VortexResult<DType> {
+        let dtype = DTypeTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse dtype tag".into()))?;
         match dtype {
             DTypeTag::Null => Ok(Null),
             DTypeTag::Bool => Ok(Bool(self.read_nullability()?)),
@@ -45,88 +66,64 @@ impl<'a> DTypeReader<'a> {
             DTypeTag::Binary => Ok(Binary(self.read_nullability()?)),
             DTypeTag::Decimal => {
                 let nullability = self.read_nullability()?;
-                let mut precision_scale: [u8; 2] = [0; 2];
-                self.reader.read_exact(&mut precision_scale)?;
+                let precision_scale: [u8; 2] = self.read_nbytes()?;
                 Ok(Decimal(
                     precision_scale[0],
                     precision_scale[1] as i8,
                     nullability,
                 ))
             }
-            DTypeTag::LocalTime => {
-                let nullability = self.read_nullability()?;
-                Ok(LocalTime(self.read_time_unit()?, nullability))
-            }
-            DTypeTag::LocalDate => Ok(LocalDate(self.read_nullability()?)),
-            DTypeTag::Instant => {
-                let nullability = self.read_nullability()?;
-                Ok(Instant(self.read_time_unit()?, nullability))
-            }
-            DTypeTag::ZonedDateTime => {
-                let nullability = self.read_nullability()?;
-                Ok(ZonedDateTime(self.read_time_unit()?, nullability))
-            }
             DTypeTag::List => {
                 let nullability = self.read_nullability()?;
                 Ok(List(Box::new(self.read()?), nullability))
             }
-            DTypeTag::Map => {
-                let nullability = self.read_nullability()?;
-                Ok(Map(
-                    Box::new(self.read()?),
-                    Box::new(self.read()?),
-                    nullability,
-                ))
-            }
             DTypeTag::Struct => {
-                let field_num = leb128::read::unsigned(self.reader)
-                    .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
-                let mut names = Vec::<Arc<String>>::with_capacity(field_num as usize);
+                let field_num = self.read_usize()?;
+                let mut names = Vec::with_capacity(field_num);
                 for _ in 0..field_num {
-                    let len = leb128::read::unsigned(self.reader)
-                        .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
-                    let mut name = String::with_capacity(len as usize);
-                    self.reader.take(len).read_to_string(&mut name)?;
+                    let name = unsafe { String::from_utf8_unchecked(self.read_slice()?) };
                     names.push(Arc::new(name));
                 }
 
-                let mut fields = Vec::<DType>::with_capacity(field_num as usize);
+                let mut fields = Vec::with_capacity(field_num);
                 for _ in 0..field_num {
                     fields.push(self.read()?);
                 }
                 Ok(Struct(names, fields))
             }
+            DTypeTag::Composite => {
+                let nullability = self.read_nullability()?;
+                let id = unsafe { String::from_utf8_unchecked(self.read_slice()?) };
+                let extension = find_extension(id.as_str()).ok_or(VortexError::InvalidArgument(
+                    "Failed to find extension".into(),
+                ))?;
+                Ok(Composite(extension.id(), nullability))
+            }
         }
     }
 
-    fn read_signedness(&mut self) -> io::Result<Signedness> {
-        SignednessTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+    fn read_signedness(&mut self) -> VortexResult<Signedness> {
+        SignednessTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse signedness tag".into()))
             .map(Signedness::from)
     }
 
-    fn read_nullability(&mut self) -> io::Result<Nullability> {
-        NullabilityTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+    fn read_nullability(&mut self) -> VortexResult<Nullability> {
+        NullabilityTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse nullability tag".into()))
             .map(Nullability::from)
     }
 
-    fn read_int_width(&mut self) -> io::Result<IntWidth> {
-        IntWidthTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+    fn read_int_width(&mut self) -> VortexResult<IntWidth> {
+        IntWidthTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse int width tag".into()))
             .map(IntWidth::from)
     }
 
-    fn read_float_width(&mut self) -> io::Result<FloatWidth> {
-        FloatWidthTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+    fn read_float_width(&mut self) -> VortexResult<FloatWidth> {
+        FloatWidthTag::try_from(self.read_nbytes::<1>()?[0])
+            .map_err(|_| VortexError::InvalidArgument("Failed to parse float width tag".into()))
             .map(FloatWidth::from)
-    }
-
-    fn read_time_unit(&mut self) -> io::Result<TimeUnit> {
-        TimeUnitTag::try_from(self.read_byte()?)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
-            .map(TimeUnit::from)
     }
 }
 
@@ -139,7 +136,7 @@ impl<'a, 'b> DTypeWriter<'a, 'b> {
         Self { writer }
     }
 
-    pub fn write(&mut self, dtype: &DType) -> io::Result<()> {
+    pub fn write(&mut self, dtype: &DType) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([DTypeTag::from(dtype).into()])?;
         match dtype {
@@ -160,19 +157,6 @@ impl<'a, 'b> DTypeWriter<'a, 'b> {
             }
             Utf8(n) => self.write_nullability(*n)?,
             Binary(n) => self.write_nullability(*n)?,
-            LocalTime(u, n) => {
-                self.write_nullability(*n)?;
-                self.write_time_unit(*u)?
-            }
-            LocalDate(n) => self.write_nullability(*n)?,
-            Instant(u, n) => {
-                self.write_nullability(*n)?;
-                self.write_time_unit(*u)?
-            }
-            ZonedDateTime(u, n) => {
-                self.write_nullability(*n)?;
-                self.write_time_unit(*u)?
-            }
             Struct(ns, fs) => {
                 self.writer.write_usize(ns.len())?;
                 for name in ns {
@@ -186,39 +170,33 @@ impl<'a, 'b> DTypeWriter<'a, 'b> {
                 self.write_nullability(*n)?;
                 self.write(e.as_ref())?
             }
-            Map(k, v, n) => {
+            Composite(id, n) => {
                 self.write_nullability(*n)?;
-                self.write(k.as_ref())?;
-                self.write(v.as_ref())?
+                self.writer.write_slice(id.0.as_bytes())?;
             }
         }
 
         Ok(())
     }
 
-    fn write_signedness(&mut self, signedness: Signedness) -> io::Result<()> {
+    fn write_signedness(&mut self, signedness: Signedness) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([SignednessTag::from(signedness).into()])
     }
 
-    fn write_nullability(&mut self, nullability: Nullability) -> io::Result<()> {
+    fn write_nullability(&mut self, nullability: Nullability) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([NullabilityTag::from(nullability).into()])
     }
 
-    fn write_int_width(&mut self, int_width: IntWidth) -> io::Result<()> {
+    fn write_int_width(&mut self, int_width: IntWidth) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([IntWidthTag::from(int_width).into()])
     }
 
-    fn write_float_width(&mut self, float_width: FloatWidth) -> io::Result<()> {
+    fn write_float_width(&mut self, float_width: FloatWidth) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([FloatWidthTag::from(float_width).into()])
-    }
-
-    fn write_time_unit(&mut self, time_unit: TimeUnit) -> io::Result<()> {
-        self.writer
-            .write_fixed_slice([TimeUnitTag::from(time_unit).into()])
     }
 }
 
@@ -232,13 +210,9 @@ enum DTypeTag {
     Utf8,
     Binary,
     Decimal,
-    LocalTime,
-    LocalDate,
-    Instant,
-    ZonedDateTime,
     List,
-    Map,
     Struct,
+    Composite,
 }
 
 impl From<&DType> for DTypeTag {
@@ -251,13 +225,9 @@ impl From<&DType> for DTypeTag {
             Utf8(_) => DTypeTag::Utf8,
             Binary(_) => DTypeTag::Binary,
             Decimal(_, _, _) => DTypeTag::Decimal,
-            LocalTime(_, _) => DTypeTag::LocalTime,
-            LocalDate(_) => DTypeTag::LocalDate,
-            Instant(_, _) => DTypeTag::Instant,
-            ZonedDateTime(_, _) => DTypeTag::ZonedDateTime,
             List(_, _) => DTypeTag::List,
-            Map(_, _, _) => DTypeTag::Map,
             Struct(_, _) => DTypeTag::Struct,
+            Composite(_, _) => DTypeTag::Composite,
         }
     }
 }
@@ -386,39 +356,6 @@ impl From<IntWidthTag> for IntWidth {
             IntWidthTag::_16 => _16,
             IntWidthTag::_32 => _32,
             IntWidthTag::_64 => _64,
-        }
-    }
-}
-
-#[derive(IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-pub enum TimeUnitTag {
-    Ns,
-    Us,
-    Ms,
-    S,
-}
-
-impl From<TimeUnit> for TimeUnitTag {
-    fn from(value: TimeUnit) -> Self {
-        use TimeUnit::*;
-        match value {
-            Ns => TimeUnitTag::Ns,
-            Us => TimeUnitTag::Us,
-            Ms => TimeUnitTag::Ms,
-            S => TimeUnitTag::S,
-        }
-    }
-}
-
-impl From<TimeUnitTag> for TimeUnit {
-    fn from(value: TimeUnitTag) -> Self {
-        use TimeUnit::*;
-        match value {
-            TimeUnitTag::Ns => Ns,
-            TimeUnitTag::Us => Us,
-            TimeUnitTag::Ms => Ms,
-            TimeUnitTag::S => S,
         }
     }
 }

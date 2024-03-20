@@ -4,12 +4,13 @@ use std::io::ErrorKind;
 use croaring::{Bitmap, Portable};
 
 use vortex::array::{Array, ArrayRef};
+use vortex::error::VortexResult;
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 use crate::{RoaringBoolArray, RoaringBoolEncoding};
 
 impl ArraySerde for RoaringBoolArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.write_usize(self.len())?;
         let mut data = Vec::new();
         self.bitmap().serialize_into::<Portable>(&mut data);
@@ -18,7 +19,7 @@ impl ArraySerde for RoaringBoolArray {
 }
 
 impl EncodingSerde for RoaringBoolEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let len = ctx.read_usize()?;
         let bitmap_data = ctx.read_slice()?;
         Ok(RoaringBoolArray::new(

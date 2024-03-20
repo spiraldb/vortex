@@ -21,7 +21,3 @@ linkme = "0.3.22"
 itertools = "0.12.1"
 num-traits = "0.2.18"
 fastlanez-sys = { path = "../fastlanez-sys" }
-log = "0.4.20"
-
-[dev-dependencies]
-simplelog = { version = "0.12.1", features = ["paris"] }

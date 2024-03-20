@@ -2557,7 +2557,9 @@ name = "vortex-array"
 version = "0.1.0"
 dependencies = [
  "allocator-api2",
- "arrow",
+ "arrow-array",
+ "arrow-buffer",
+ "arrow-schema",
  "dyn-clone",
  "half",
  "humansize",
@@ -2567,7 +2569,7 @@ dependencies = [
  "log",
  "num-traits",
  "num_enum",
- "once_cell",
+ "paste",
  "rand",
  "rayon",
  "roaring",
@@ -2608,9 +2610,7 @@ dependencies = [
  "fastlanez-sys",
  "itertools 0.12.1",
  "linkme",
- "log",
  "num-traits",
- "simplelog",
  "vortex-array",
 ]
 
@@ -2618,7 +2618,8 @@ dependencies = [
 name = "vortex-ree"
 version = "0.1.0"
 dependencies = [
- "arrow",
+ "arrow-array",
+ "arrow-buffer",
  "half",
  "itertools 0.12.1",
  "linkme",

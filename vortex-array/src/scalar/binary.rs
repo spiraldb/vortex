@@ -1,97 +1,68 @@
+use std::fmt::{Display, Formatter};
+
 use crate::dtype::{DType, Nullability};
 use crate::error::{VortexError, VortexResult};
-use crate::scalar::{Scalar, ScalarRef};
-use std::any::Any;
-use std::fmt::{Display, Formatter};
+use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct BinaryScalar {
-    value: Vec<u8>,
+    value: Option<Vec<u8>>,
 }
 
 impl BinaryScalar {
-    pub fn new(value: Vec<u8>) -> Self {
+    pub fn new(value: Option<Vec<u8>>) -> Self {
         Self { value }
     }
 
-    pub fn value(&self) -> &Vec<u8> {
-        &self.value
-    }
-}
-
-impl Scalar for BinaryScalar {
-    #[inline]
-    fn as_any(&self) -> &dyn Any {
-        self
+    pub fn none() -> Self {
+        Self { value: None }
     }
 
-    #[inline]
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
+    pub fn some(value: Vec<u8>) -> Self {
+        Self { value: Some(value) }
+    }
+
+    pub fn value(&self) -> Option<&[u8]> {
+        self.value.as_deref()
     }
 
     #[inline]
-    fn as_nonnull(&self) -> Option<&dyn Scalar> {
-        Some(self)
-    }
-
-    #[inline]
-    fn into_nonnull(self: Box<Self>) -> Option<ScalarRef> {
-        Some(self)
-    }
-
-    #[inline]
-    fn boxed(self) -> ScalarRef {
-        Box::new(self)
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
+    pub fn dtype(&self) -> &DType {
         &DType::Binary(Nullability::NonNullable)
     }
 
-    fn cast(&self, _dtype: &DType) -> VortexResult<ScalarRef> {
+    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
         todo!()
     }
 
-    fn nbytes(&self) -> usize {
-        self.value.len()
+    pub fn nbytes(&self) -> usize {
+        self.value().map(|s| s.len()).unwrap_or(1)
     }
 }
 
-impl From<Vec<u8>> for ScalarRef {
+impl From<Vec<u8>> for Scalar {
     fn from(value: Vec<u8>) -> Self {
-        BinaryScalar::new(value).boxed()
+        BinaryScalar::new(Some(value)).into()
     }
 }
 
-impl TryFrom<ScalarRef> for Vec<u8> {
+impl TryFrom<Scalar> for Vec<u8> {
     type Error = VortexError;
 
-    fn try_from(value: ScalarRef) -> Result<Self, Self::Error> {
-        let dtype = value.dtype().clone();
-        let scalar = value
-            .into_any()
-            .downcast::<BinaryScalar>()
-            .map_err(|_| VortexError::InvalidDType(dtype))?;
-        Ok(scalar.value)
-    }
-}
-
-impl TryFrom<&dyn Scalar> for Vec<u8> {
-    type Error = VortexError;
-
-    fn try_from(value: &dyn Scalar) -> Result<Self, Self::Error> {
-        if let Some(scalar) = value.as_any().downcast_ref::<BinaryScalar>() {
-            Ok(scalar.value.clone())
-        } else {
-            Err(VortexError::InvalidDType(value.dtype().clone()))
-        }
+    fn try_from(value: Scalar) -> VortexResult<Self> {
+        let Scalar::Binary(b) = value else {
+            return Err(VortexError::InvalidDType(value.dtype().clone()));
+        };
+        let dtype = b.dtype().clone();
+        b.value.ok_or_else(|| VortexError::InvalidDType(dtype))
     }
 }
 
 impl Display for BinaryScalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "bytes[{}]", self.value.len())
+        match self.value() {
+            None => write!(f, "bytes[none]"),
+            Some(b) => write!(f, "bytes[{}]", b.len()),
+        }
     }
 }

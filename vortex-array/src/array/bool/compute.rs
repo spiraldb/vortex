@@ -1,22 +1,23 @@
+use arrow_buffer::buffer::BooleanBuffer;
+use itertools::Itertools;
+
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef, CloneOptionalArray};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
-use crate::compute::cast::{cast_bool, CastBoolFn};
 use crate::compute::fill::FillForwardFn;
+use crate::compute::flatten::{flatten_bool, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
-use crate::scalar::{NullableScalar, Scalar, ScalarRef};
-use arrow::buffer::BooleanBuffer;
-use itertools::Itertools;
+use crate::scalar::{BoolScalar, Scalar};
 
 impl ArrayCompute for BoolArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
 
-    fn cast_bool(&self) -> Option<&dyn CastBoolFn> {
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 
@@ -61,18 +62,18 @@ impl AsContiguousFn for BoolArray {
     }
 }
 
-impl CastBoolFn for BoolArray {
-    fn cast_bool(&self) -> VortexResult<BoolArray> {
-        Ok(self.clone())
+impl FlattenFn for BoolArray {
+    fn flatten(&self) -> VortexResult<FlattenedArray> {
+        Ok(FlattenedArray::Bool(self.clone()))
     }
 }
 
 impl ScalarAtFn for BoolArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<ScalarRef> {
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
             Ok(self.buffer.value(index).into())
         } else {
-            Ok(NullableScalar::none(self.dtype().clone()).boxed())
+            Ok(BoolScalar::new(None).into())
         }
     }
 }
@@ -82,7 +83,7 @@ impl FillForwardFn for BoolArray {
         if self.validity().is_none() {
             Ok(dyn_clone::clone_box(self))
         } else {
-            let validity = cast_bool(self.validity().unwrap())?;
+            let validity = flatten_bool(self.validity().unwrap())?;
             let bools = self.buffer();
             let mut last_value = false;
             let filled = bools

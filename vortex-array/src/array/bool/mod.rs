@@ -1,12 +1,9 @@
 use std::any::Any;
-use std::iter;
 use std::sync::{Arc, RwLock};
 
-use arrow::array::{ArrayRef as ArrowArrayRef, AsArray, BooleanArray};
-use arrow::buffer::{BooleanBuffer, NullBuffer};
+use arrow_buffer::buffer::BooleanBuffer;
 use linkme::distributed_slice;
 
-use crate::arrow::CombineChunks;
 use crate::compute::scalar_at::scalar_at;
 use crate::dtype::{DType, Nullability};
 use crate::error::VortexResult;
@@ -15,11 +12,12 @@ use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 
 use super::{
-    check_slice_bounds, check_validity_buffer, Array, ArrayRef, ArrowIterator, Encoding,
-    EncodingId, EncodingRef, ENCODINGS,
+    check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
+    ENCODINGS,
 };
 
 mod compute;
+mod flatten;
 mod serde;
 mod stats;
 
@@ -51,6 +49,13 @@ impl BoolArray {
             .as_deref()
             .map(|v| scalar_at(v, index).unwrap().try_into().unwrap())
             .unwrap_or(true)
+    }
+
+    pub fn null(n: usize) -> Self {
+        BoolArray::new(
+            BooleanBuffer::from(vec![false; n]),
+            Some(BoolArray::from(vec![false; n]).boxed()),
+        )
     }
 
     #[inline]
@@ -104,21 +109,6 @@ impl Array for BoolArray {
         Stats::new(&self.stats, self)
     }
 
-    fn iter_arrow(&self) -> Box<ArrowIterator> {
-        Box::new(iter::once(Arc::new(BooleanArray::new(
-            self.buffer.clone(),
-            self.validity().map(|v| {
-                NullBuffer::new(
-                    v.iter_arrow()
-                        .combine_chunks()
-                        .as_boolean()
-                        .values()
-                        .clone(),
-                )
-            }),
-        )) as ArrowArrayRef))
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -144,8 +134,8 @@ impl Array for BoolArray {
         (self.len() + 7) / 8
     }
 
-    fn serde(&self) -> &dyn ArraySerde {
-        self
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 }
 

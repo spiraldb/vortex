@@ -1,13 +1,12 @@
-use std::io;
-
-use arrow::buffer::BooleanBuffer;
+use arrow_buffer::buffer::BooleanBuffer;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::{Array, ArrayRef};
+use crate::error::VortexResult;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for BoolArray {
-    fn write(&self, ctx: &mut WriteCtx) -> io::Result<()> {
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         if let Some(v) = self.validity() {
             ctx.write(v.as_ref())?;
         }
@@ -16,7 +15,7 @@ impl ArraySerde for BoolArray {
 }
 
 impl EncodingSerde for BoolEncoding {
-    fn read(&self, ctx: &mut ReadCtx) -> io::Result<ArrayRef> {
+    fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let validity = if ctx.schema().is_nullable() {
             Some(ctx.validity().read()?)
         } else {

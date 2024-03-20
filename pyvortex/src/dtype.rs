@@ -1,12 +1,9 @@
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, Field};
 use arrow::pyarrow::FromPyArrow;
 use pyo3::types::PyType;
 use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
-use vortex::arrow::convert::TryIntoDType;
 
 use vortex::dtype::DType;
-
-use crate::error::PyVortexError;
 
 #[pyclass(name = "DType", module = "vortex", subclass)]
 pub struct PyDType {
@@ -35,12 +32,7 @@ impl PyDType {
         #[pyo3(from_py_with = "import_arrow_dtype")] arrow_dtype: DataType,
         nullable: bool,
     ) -> PyResult<Py<Self>> {
-        PyDType::wrap(
-            cls.py(),
-            arrow_dtype
-                .try_into_dtype(nullable)
-                .map_err(PyVortexError::new)?,
-        )
+        PyDType::wrap(cls.py(), (&Field::new("_", arrow_dtype, nullable)).into())
     }
 }
 
