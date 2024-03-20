@@ -212,3 +212,7 @@ delta_impl!(i8);
 delta_impl!(i16);
 delta_impl!(i32);
 delta_impl!(i64);
+delta_impl!(u8);
+delta_impl!(u16);
+delta_impl!(u32);
+delta_impl!(u64);

@@ -10,7 +10,7 @@ use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::error::VortexResult;
-use vortex::match_each_signed_integer_ptype;
+use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
 use vortex::stats::Stat;
 
@@ -25,8 +25,8 @@ impl EncodingCompression for DeltaEncoding {
         // Only support primitive arrays
         let parray = array.maybe_primitive()?;
 
-        // Only supports signed ints
-        if !parray.ptype().is_signed_int() {
+        // Only supports ints
+        if !parray.ptype().is_int() {
             return None;
         }
 
@@ -40,16 +40,6 @@ impl EncodingCompression for DeltaEncoding {
         }
 
         Some(self)
-        //
-        // // For now, only consider delta on sorted arrays
-        // if parray
-        //     .stats()
-        //     .get_or_compute_as::<bool>(&Stat::IsSorted)
-        //     .unwrap_or(false)
-        // {
-        //     return Some(self);
-        // }
-        // None
     }
 
     fn compress(
@@ -71,7 +61,7 @@ impl EncodingCompression for DeltaEncoding {
 
         // Fill forward nulls
         let filled = fill_forward(array)?;
-        let delta_encoded = match_each_signed_integer_ptype!(parray.ptype(), |$T| {
+        let delta_encoded = match_each_integer_ptype!(parray.ptype(), |$T| {
             PrimitiveArray::from(delta_primitive(filled.as_primitive().typed_data::<$T>()))
         });
 
@@ -143,7 +133,7 @@ mod test {
         let ctx = compress_ctx();
         let compressed = ctx
             .compress(
-                &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63)))),
+                &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
                 None,
             )
             .unwrap();
