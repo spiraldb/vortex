@@ -356,6 +356,7 @@ dependencies = [
  "simplelog",
  "vortex-alp",
  "vortex-array",
+ "vortex-datetime",
  "vortex-dict",
  "vortex-fastlanes",
  "vortex-ree",
@@ -2577,6 +2578,16 @@ dependencies = [
  "roaring",
  "thiserror",
  "vortex-alloc",
+ "vortex-schema",
+]
+
+[[package]]
+name = "vortex-datetime"
+version = "0.1.0"
+dependencies = [
+ "linkme",
+ "log",
+ "vortex-array",
  "vortex-schema",
 ]
 
