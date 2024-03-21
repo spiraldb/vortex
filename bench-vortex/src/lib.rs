@@ -20,7 +20,6 @@ use vortex::array::struct_::StructEncoding;
 use vortex::array::varbin::VarBinEncoding;
 use vortex::array::varbinview::VarBinViewEncoding;
 use vortex::array::{Array, ArrayRef, Encoding};
-use vortex::arrow::dtypes::IntoArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::formatter::display_tree;
@@ -114,15 +113,15 @@ pub fn compress_taxi_data() -> ArrayRef {
         //.skip(39)
         //.take(1)
         .map(|batch_result| batch_result.unwrap())
-        .map(|b| b.into_array())
+        .map(ArrayRef::from)
         .map(|array| {
             uncompressed_size += array.nbytes();
-            ctx.clone().compress(array, None).unwrap()
+            ctx.clone().compress(array.as_ref(), None).unwrap()
         })
         .collect_vec();
 
     let dtype = DType::from_arrow(schema.clone());
-    let compressed = ChunkedArray::new(chunks.clone(), dtype).into_array();
+    let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
 
     warn!("Compressed array {}", display_tree(compressed.as_ref()));
 

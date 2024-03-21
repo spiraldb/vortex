@@ -117,35 +117,35 @@ impl ArrayCompute for ArrayRef {
     }
 
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
-        todo!()
+        self.as_ref().as_contiguous()
     }
 
     fn cast(&self) -> Option<&dyn CastFn> {
-        todo!()
+        self.as_ref().cast()
     }
 
     fn flatten(&self) -> Option<&dyn FlattenFn> {
-        todo!()
+        self.as_ref().flatten()
     }
 
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
-        todo!()
+        self.as_ref().fill_forward()
     }
 
     fn patch(&self) -> Option<&dyn PatchFn> {
-        todo!()
+        self.as_ref().patch()
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        todo!()
+        self.as_ref().scalar_at()
     }
 
     fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
-        todo!()
+        self.as_ref().search_sorted()
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
-        todo!()
+        self.as_ref().take()
     }
 }
 
