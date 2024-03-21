@@ -10,6 +10,7 @@ use crate::array::PyArray;
 use crate::vortex_arrow::map_arrow_err;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::{Array, ArrayRef};
+use vortex::arrow::dtypes::IntoArray;
 use vortex::arrow::FromArrowType;
 use vortex::encode::FromArrowArray;
 use vortex_schema::DType;
@@ -50,7 +51,7 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
         let dtype = DType::from_arrow(array_stream.schema());
         let chunks = array_stream
             .into_iter()
-            .map(|b| b.map(ArrayRef::from).map_err(map_arrow_err))
+            .map(|b| b.map(|bb| bb.into_array()).map_err(map_arrow_err))
             .collect::<PyResult<Vec<ArrayRef>>>()?;
         PyArray::wrap(obj.py(), ChunkedArray::new(chunks, dtype).into_array())
     } else {

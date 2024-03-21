@@ -27,6 +27,7 @@ impl EncodingSerde for FoREncoding {
 mod test {
 
     use vortex::array::{Array, ArrayRef};
+    use vortex::arrow::dtypes::IntoArray;
     use vortex::error::VortexResult;
     use vortex::scalar::Scalar;
     use vortex::serde::{ReadCtx, WriteCtx};
@@ -45,7 +46,7 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = FoRArray::try_new(
-            vec![-7i64, -13, 17, 23].into(),
+            vec![-7i64, -13, 17, 23].into_array(),
             <i64 as Into<Scalar>>::into(-7i64),
             2,
         )

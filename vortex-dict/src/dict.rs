@@ -33,13 +33,13 @@ impl DictArray {
     }
 
     #[inline]
-    pub fn dict(&self) -> &dyn Array {
-        self.dict.as_ref()
+    pub fn dict(&self) -> &ArrayRef {
+        &self.dict
     }
 
     #[inline]
-    pub fn codes(&self) -> &dyn Array {
-        self.codes.as_ref()
+    pub fn codes(&self) -> &ArrayRef {
+        &self.codes
     }
 }
 

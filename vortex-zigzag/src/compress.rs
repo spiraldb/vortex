@@ -45,12 +45,13 @@ impl EncodingCompression for ZigZagEncoding {
         let encoded = match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => zigzag_encode(p),
             _ => unreachable!("This array kind should have been filtered out"),
-        };
+        }
+        .unwrap();
 
-        Ok(ZigZagArray::new(
-            ctx.compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded()))?,
+        Ok(
+            ZigZagArray::new(ctx.compress(encoded.encoded(), zigzag_like.map(|z| z.encoded()))?)
+                .into_array(),
         )
-        .into_array())
     }
 }
 

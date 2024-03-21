@@ -6,9 +6,10 @@ pub trait CastFn {
     fn cast(&self, dtype: &DType) -> VortexResult<ArrayRef>;
 }
 
-pub fn cast(array: &ArrayRef, dtype: &DType) -> VortexResult<ArrayRef> {
+pub fn cast<T: AsRef<dyn Array>>(array: T, dtype: &DType) -> VortexResult<ArrayRef> {
+    let array = array.as_ref();
     if array.dtype() == dtype {
-        return Ok(array.clone());
+        return Ok(array.to_array());
     }
 
     // TODO(ngates): check for null_count if dtype is non-nullable

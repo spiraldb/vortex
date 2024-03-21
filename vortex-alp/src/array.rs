@@ -55,8 +55,8 @@ impl ALPArray {
         }
     }
 
-    pub fn encoded(&self) -> &dyn Array {
-        self.encoded.as_ref()
+    pub fn encoded(&self) -> &ArrayRef {
+        &self.encoded
     }
 
     pub fn exponents(&self) -> &Exponents {

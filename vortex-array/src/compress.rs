@@ -156,9 +156,14 @@ impl CompressCtx {
 
     // We don't take a reference to self to force the caller to think about whether to use
     // an auxilliary ctx.
-    pub fn compress(self, arr: &ArrayRef, like: Option<&ArrayRef>) -> VortexResult<ArrayRef> {
+    pub fn compress<T: AsRef<dyn Array>>(
+        self,
+        arr: T,
+        like: Option<&ArrayRef>,
+    ) -> VortexResult<ArrayRef> {
+        let arr = arr.as_ref();
         if arr.is_empty() {
-            return Ok(arr.clone());
+            return Ok(arr.to_array());
         }
 
         // Attempt to compress using the "like" array, otherwise fall back to sampled compression
@@ -181,7 +186,7 @@ impl CompressCtx {
         self.compress_array(arr)
     }
 
-    fn compress_array(&self, arr: &ArrayRef) -> VortexResult<ArrayRef> {
+    fn compress_array<T: AsRef<dyn Array>>(&self, arr: T) -> VortexResult<ArrayRef> {
         match ArrayKind::from(arr.as_ref()) {
             ArrayKind::Chunked(chunked) => {
                 // For chunked arrays, we compress each chunk individually
@@ -207,7 +212,8 @@ impl CompressCtx {
             }
             _ => {
                 // Otherwise, we run sampled compression over pluggable encodings
-                Ok(sampled_compression(arr, self)?.unwrap_or_else(|| arr.clone()))
+                let sampled = sampled_compression(&arr, self)?;
+                Ok(sampled.unwrap_or_else(|| arr.as_ref().to_array()))
             }
         }
     }
@@ -219,8 +225,12 @@ impl Default for CompressCtx {
     }
 }
 
-pub fn sampled_compression(array: &ArrayRef, ctx: &CompressCtx) -> VortexResult<Option<ArrayRef>> {
+pub fn sampled_compression<T: AsRef<dyn Array>>(
+    array: &T,
+    ctx: &CompressCtx,
+) -> VortexResult<Option<ArrayRef>> {
     // First, we try constant compression and shortcut any sampling.
+    let array = array.as_ref();
     if !array.is_empty()
         && array
             .stats()
@@ -307,7 +317,7 @@ pub fn sampled_compression(array: &ArrayRef, ctx: &CompressCtx) -> VortexResult<
 
 fn find_best_compression<'a>(
     candidates: Vec<&'a dyn EncodingCompression>,
-    sample: &ArrayRef,
+    sample: &dyn Array,
     ctx: &CompressCtx,
 ) -> VortexResult<Option<(&'a dyn EncodingCompression, ArrayRef)>> {
     let mut best = None;

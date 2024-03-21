@@ -1,4 +1,5 @@
 use itertools::Itertools;
+
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef, Encoding};
@@ -140,7 +141,8 @@ mod test {
     use vortex::array::bool::BoolArray;
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::{Array, CloneOptionalArray};
+    use vortex::array::Array;
+    use vortex::arrow::dtypes::IntoArray;
 
     use crate::compress::{ree_decode, ree_encode};
     use crate::REEArray;
@@ -175,8 +177,8 @@ mod test {
             BoolArray::from(validity)
         };
         let arr = REEArray::new(
-            vec![2u32, 5, 10].into(),
-            vec![1i32, 2, 3].into(),
+            vec![2u32, 5, 10].into_array(),
+            vec![1i32, 2, 3].into_array(),
             Some(validity.into_array()),
             10,
         );
@@ -184,7 +186,7 @@ mod test {
         let decoded = ree_decode(
             arr.ends().as_primitive(),
             arr.values().as_primitive(),
-            arr.validity().clone_optional(),
+            arr.validity().cloned(),
         )
         .unwrap();
 

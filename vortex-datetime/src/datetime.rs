@@ -60,18 +60,18 @@ impl DateTimeArray {
     }
 
     #[inline]
-    pub fn days(&self) -> &dyn Array {
-        self.days.as_ref()
+    pub fn days(&self) -> &ArrayRef {
+        &self.days
     }
 
     #[inline]
-    pub fn seconds(&self) -> &dyn Array {
-        self.seconds.as_ref()
+    pub fn seconds(&self) -> &ArrayRef {
+        &self.seconds
     }
 
     #[inline]
-    pub fn subsecond(&self) -> &dyn Array {
-        self.subsecond.as_ref()
+    pub fn subsecond(&self) -> &ArrayRef {
+        &self.subsecond
     }
 }
 

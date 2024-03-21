@@ -231,7 +231,7 @@ impl<'a> WriteCtx<'a> {
             .map_err(|e| e.into())
     }
 
-    pub fn write_optional_array(&mut self, array: Option<&dyn Array>) -> VortexResult<()> {
+    pub fn write_optional_array(&mut self, array: Option<&ArrayRef>) -> VortexResult<()> {
         self.write_option_tag(array.is_some())?;
         if let Some(array) = array {
             self.write(array)
