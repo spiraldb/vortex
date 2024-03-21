@@ -1,12 +1,12 @@
-use std::mem::{MaybeUninit, size_of};
+use std::mem::size_of;
 
 use arrayref::array_ref;
 use num_traits::{WrappingAdd, WrappingSub};
 
-use fastlanez_sys::{transpose, Delta};
+use fastlanez_sys::{Delta, transpose, untranspose};
+use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::compute::flatten::flatten_primitive;
@@ -91,11 +91,15 @@ where
     let mut base = [T::default(); 128 / size_of::<T>()];
 
     // Loop over all but the last chunk.
-    for i in 0..num_chunks {
-        let start_elem = i * 1024;
-        let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
-        Delta::transpose_and_encode(&chunk, &mut base, &mut output);
-    };
+    if num_chunks > 0 {
+        let mut transposed: [T; 1024] = [T::default(); 1024];
+        for i in 0..num_chunks {
+            let start_elem = i * 1024;
+            let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
+            transpose(chunk, &mut transposed);
+            Delta::encode_transposed(&transposed, &mut base, &mut output);
+        }
+    }
 
     // To avoid padding, the remainder is encoded with scalar logic.
     let remainder_size = array.len() % 1024;
@@ -136,11 +140,15 @@ where
     // Start with a base vector of zeros.
     let mut base = [T::default(); 128 / size_of::<T>()];
 
-    // Loop over all but the last chunk.
-    for i in 0..num_chunks {
-        let start_elem = i * 1024;
-        let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
-        Delta::decode_and_untranspose(chunk, &mut base, &mut output);
+    // Loop over all the chunks
+    if num_chunks > 0 {
+        let mut transposed: [T; 1024] = [T::default(); 1024];
+        for i in 0..num_chunks {
+            let start_elem = i * 1024;
+            let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
+            Delta::decode_transposed(chunk, &mut base, &mut transposed);
+            untranspose(&transposed, &mut output);
+        }
     }
 
     // To avoid padding, the remainder is encoded with scalar logic.
@@ -162,15 +170,20 @@ mod test {
     use std::collections::HashSet;
     use std::sync::Arc;
 
-    use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
+    use vortex::array::primitive::PrimitiveEncoding;
+
     use crate::BitPackedEncoding;
 
     use super::*;
 
     fn compress_ctx() -> CompressCtx {
         let cfg = CompressConfig::new(
-            HashSet::from([PrimitiveEncoding.id(), DeltaEncoding.id(), BitPackedEncoding.id()]),
+            HashSet::from([
+                PrimitiveEncoding.id(),
+                DeltaEncoding.id(),
+                BitPackedEncoding.id(),
+            ]),
             HashSet::default(),
         );
         CompressCtx::new(Arc::new(cfg))
@@ -180,17 +193,17 @@ mod test {
     fn test_compress() {
         let ctx = compress_ctx();
         let compressed = ctx
-            .compress(
-                &PrimitiveArray::from(Vec::from_iter(0..10_000)),
-                None,
-            )
+            .compress(&PrimitiveArray::from(Vec::from_iter(0..10_000)), None)
             .unwrap();
         assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
         let delta = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
         println!("Delta {:?}", delta);
 
         let decompressed = decompress(delta).unwrap();
-        assert_eq!(decompressed.typed_data::<i32>(), Vec::from_iter(0..10_000).as_slice());
+        assert_eq!(
+            decompressed.typed_data::<i32>(),
+            Vec::from_iter(0..10_000).as_slice()
+        );
     }
 
     #[test]
