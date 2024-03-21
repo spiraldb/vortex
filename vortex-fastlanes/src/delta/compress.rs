@@ -1,7 +1,7 @@
-use std::mem::size_of;
+use std::mem::{MaybeUninit, size_of};
 
 use arrayref::array_ref;
-use num_traits::WrappingSub;
+use num_traits::{WrappingAdd, WrappingSub};
 
 use fastlanez_sys::{transpose, Delta};
 use vortex::array::downcast::DowncastArrayBuiltin;
@@ -9,6 +9,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
+use vortex::compute::flatten::flatten_primitive;
 use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
@@ -30,6 +31,7 @@ impl EncodingCompression for DeltaEncoding {
             return None;
         }
 
+        // Force Frame of Reference before delta
         if parray
             .stats()
             .get_or_compute_cast::<i64>(&Stat::Min)
@@ -62,7 +64,7 @@ impl EncodingCompression for DeltaEncoding {
         // Fill forward nulls
         let filled = fill_forward(array)?;
         let delta_encoded = match_each_integer_ptype!(parray.ptype(), |$T| {
-            PrimitiveArray::from(delta_primitive(filled.as_primitive().typed_data::<$T>()))
+            PrimitiveArray::from(compress_primitive(filled.as_primitive().typed_data::<$T>()))
         });
 
         let encoded = ctx
@@ -75,12 +77,12 @@ impl EncodingCompression for DeltaEncoding {
     }
 }
 
-fn delta_primitive<T: NativePType + Delta + WrappingSub>(array: &[T]) -> Vec<T>
+fn compress_primitive<T: NativePType + Delta + WrappingSub>(array: &[T]) -> Vec<T>
 where
     [(); 128 / size_of::<T>()]:,
 {
     // How many fastlanes vectors we will process.
-    let num_chunks = (array.len() + 1023) / 1024;
+    let num_chunks = array.len() / 1024;
 
     // Allocate a result array.
     let mut output = Vec::with_capacity(array.len());
@@ -89,21 +91,66 @@ where
     let mut base = [T::default(); 128 / size_of::<T>()];
 
     // Loop over all but the last chunk.
-    (0..num_chunks - 1).for_each(|i| {
+    for i in 0..num_chunks {
         let start_elem = i * 1024;
         let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
-        let transposed = transpose(chunk);
-        Delta::delta(&transposed, &mut base, &mut output);
-    });
+        Delta::transpose_and_encode(&chunk, &mut base, &mut output);
+    };
 
     // To avoid padding, the remainder is encoded with scalar logic.
-    let mut base_scalar = &base[base.len() - 1];
-    let last_chunk_size = array.len() % 1024;
-    if last_chunk_size > 0 {
-        let chunk = &array[array.len() - last_chunk_size..];
+    let remainder_size = array.len() % 1024;
+    if remainder_size > 0 {
+        let mut base_scalar = base[base.len() - 1];
+        let chunk = &array[array.len() - remainder_size..];
         for next in chunk {
-            output.push(next.wrapping_sub(base_scalar));
-            base_scalar = next;
+            output.push(next.wrapping_sub(&base_scalar));
+            base_scalar = *next;
+        }
+    }
+
+    output
+}
+
+pub fn decompress(array: &DeltaArray) -> VortexResult<PrimitiveArray> {
+    let deltas = flatten_primitive(array.encoded())?;
+    let decoded = match_each_integer_ptype!(deltas.ptype(), |$T| {
+        use vortex::array::CloneOptionalArray;
+        PrimitiveArray::from_nullable(
+            decompress_primitive::<$T>(deltas.typed_data()),
+            array.validity().clone_optional()
+        )
+    });
+    Ok(decoded)
+}
+
+fn decompress_primitive<T: NativePType + Delta + WrappingAdd>(array: &[T]) -> Vec<T>
+where
+    [(); 128 / size_of::<T>()]:,
+{
+    // How many fastlanes vectors we will process.
+    let num_chunks = array.len() / 1024;
+
+    // Allocate a result array.
+    let mut output = Vec::with_capacity(array.len());
+
+    // Start with a base vector of zeros.
+    let mut base = [T::default(); 128 / size_of::<T>()];
+
+    // Loop over all but the last chunk.
+    for i in 0..num_chunks {
+        let start_elem = i * 1024;
+        let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
+        Delta::decode_and_untranspose(chunk, &mut base, &mut output);
+    }
+
+    // To avoid padding, the remainder is encoded with scalar logic.
+    let remainder_size = array.len() % 1024;
+    if remainder_size > 0 {
+        let mut base_scalar = base[base.len() - 1];
+        let chunk = &array[array.len() - remainder_size..];
+        for next in chunk {
+            output.push(next.wrapping_add(&base_scalar));
+            base_scalar = *next;
         }
     }
 
@@ -117,12 +164,13 @@ mod test {
 
     use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
+    use crate::BitPackedEncoding;
 
     use super::*;
 
     fn compress_ctx() -> CompressCtx {
         let cfg = CompressConfig::new(
-            HashSet::from([PrimitiveEncoding.id(), DeltaEncoding.id()]),
+            HashSet::from([PrimitiveEncoding.id(), DeltaEncoding.id(), BitPackedEncoding.id()]),
             HashSet::default(),
         );
         CompressCtx::new(Arc::new(cfg))
@@ -130,6 +178,23 @@ mod test {
 
     #[test]
     fn test_compress() {
+        let ctx = compress_ctx();
+        let compressed = ctx
+            .compress(
+                &PrimitiveArray::from(Vec::from_iter(0..10_000)),
+                None,
+            )
+            .unwrap();
+        assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
+        let delta = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
+        println!("Delta {:?}", delta);
+
+        let decompressed = decompress(delta).unwrap();
+        assert_eq!(decompressed.typed_data::<i32>(), Vec::from_iter(0..10_000).as_slice());
+    }
+
+    #[test]
+    fn test_compress_overflow() {
         let ctx = compress_ctx();
         let compressed = ctx
             .compress(

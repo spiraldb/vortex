@@ -40,6 +40,30 @@ pub fn transpose<T: Sized>(input: &[T; 1024]) -> [T; 1024] {
     }
 }
 
+pub fn untranspose<T: Sized>(input: &[T; 1024], output: &mut [MaybeUninit<T>; 1024]) {
+    unsafe {
+        match size_of::<T>() {
+            1 => fl_untranspose_u8(
+                input.as_ptr() as *const [u8; 1024],
+                output as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u8; 1024],
+            ),
+            2 => fl_untranspose_u16(
+                input.as_ptr() as *const [u16; 1024],
+                output as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u16; 1024],
+            ),
+            4 => fl_untranspose_u32(
+                input.as_ptr() as *const [u32; 1024],
+                output as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u32; 1024],
+            ),
+            8 => fl_untranspose_u64(
+                input.as_ptr() as *const [u64; 1024],
+                output as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u64; 1024],
+            ),
+            _ => unreachable!(),
+        }
+    }
+}
+
 pub struct Pred<const B: bool>;
 pub trait Satisfied {}
 impl Satisfied for Pred<true> {}
@@ -178,29 +202,75 @@ pub trait Delta
 where
     Self: Sized,
 {
-    fn delta(
+    /// input is assumed to be in regular (non-transposed) layout
+    /// equivalent to calling transpose() and then encode_transposed()
+    fn transpose_and_encode(input: &[Self; 1024], base: &mut [Self; 128 / size_of::<Self>()], output: &mut Vec<Self>) {
+        let transposed = transpose(input);
+        Self::encode_transposed(&transposed, base, array_mut_ref![output.reserve_uninit(1024), 0, 1024]);
+        unsafe {
+            output.set_len(output.len() + 1024)
+        }
+    }
+
+    /// input is assumed to already be in the transposed layout
+    fn encode_transposed(
         input: &[Self; 1024],
         base: &mut [Self; 128 / size_of::<Self>()],
-        output: &mut Vec<Self>,
+        output: &mut [std::mem::MaybeUninit<Self>; 1024],
     );
+
+    fn decode_transposed(
+        input: &[Self; 1024],
+        base: &mut [Self; 128 / size_of::<Self>()],
+        output: &mut [std::mem::MaybeUninit<Self>; 1024],
+    );
+
+    fn decode_and_untranspose(
+        input: &[Self; 1024],
+        base: &mut [Self; 128 / size_of::<Self>()],
+        output: &mut Vec<Self>) {
+        let mut buffer: [MaybeUninit<Self>; 1024] = MaybeUninit::uninit_array();
+        Self::decode_transposed(input, base, &mut buffer);
+
+        unsafe {
+            let buffer = MaybeUninit::array_assume_init(buffer);
+            untranspose(&buffer, array_mut_ref![output.reserve_uninit(1024), 0, 1024]);
+            output.set_len(output.len() + 1024);
+        }
+    }
+
 }
 
 macro_rules! delta_impl {
     ($T:ty) => {
         paste::item! {
             impl Delta for $T {
-                fn delta(
+                fn encode_transposed(
                     input: &[Self; 1024],
                     base: &mut [Self; 128 / size_of::<Self>()],
-                    output: &mut Vec<Self>,
+                    output: &mut [std::mem::MaybeUninit<Self>; 1024],
                 ) {
                     unsafe {
                         [<fl_delta_encode_ $T>](
                             input,
                             base,
-                            array_mut_ref![output.reserve_uninit(1024), 0, 1024] as *mut [std::mem::MaybeUninit<Self>; 1024] as *mut [Self; 1024],
+                            output as *mut [std::mem::MaybeUninit<Self>; 1024] as *mut [Self; 1024],
                         );
-                        output.set_len(output.len() + 1024)
+                    }
+                }
+
+                fn decode_transposed(
+                    input: &[Self; 1024],
+                    base: &mut [Self; 128 / size_of::<Self>()],
+                    output: &mut [std::mem::MaybeUninit<Self>; 1024],
+                ) {
+                    // array_mut_ref![output.reserve_uninit(1024), 0, 1024] as *mut [std::mem::MaybeUninit<Self>; 1024] as *mut [Self; 1024]
+                    unsafe {
+                        [<fl_delta_decode_ $T>](
+                            input,
+                            base,
+                            output as *mut [std::mem::MaybeUninit<Self>; 1024] as *mut [Self; 1024],
+                        );
                     }
                 }
             }
