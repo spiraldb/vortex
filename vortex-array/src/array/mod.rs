@@ -34,7 +34,7 @@ pub mod varbinview;
 
 pub type ArrayRef = Arc<dyn Array>;
 
-/// An Enc Array is the base object representing all arrays in enc.
+/// A Vortex Array is the base object representing all arrays in enc.
 ///
 /// Arrays have a dtype and an encoding. DTypes represent the logical type of the
 /// values stored in a vortex array. Encodings represent the physical layout of the
@@ -42,10 +42,11 @@ pub type ArrayRef = Arc<dyn Array>;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub trait Array: ArrayCompute + ArrayDisplay + Debug + Send + Sync + dyn_clone::DynClone {
+pub trait Array: ArrayCompute + ArrayDisplay + Debug + Send + Sync {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
-    fn as_array(&self) -> ArrayRef;
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
+    fn to_array(&self) -> ArrayRef;
     fn into_array(self) -> ArrayRef;
     fn compute(&self) -> &dyn ArrayCompute;
 
@@ -78,7 +79,12 @@ macro_rules! impl_array {
         }
 
         #[inline]
-        fn as_array(&self) -> ArrayRef {
+        fn into_any(self: Arc<Self>) -> std::sync::Arc<dyn std::any::Any + Send + Sync> {
+            self
+        }
+
+        #[inline]
+        fn to_array(&self) -> ArrayRef {
             self.clone().into_array()
         }
 
@@ -87,7 +93,7 @@ macro_rules! impl_array {
             std::sync::Arc::new(self)
         }
 
-        fn compute(&self) -> &dyn crate::compute::ArrayCompute {
+        fn compute(&self) -> &dyn $crate::compute::ArrayCompute {
             self.as_any().downcast_ref::<Self>().unwrap()
         }
     };
@@ -104,8 +110,6 @@ use crate::compute::search_sorted::SearchSortedFn;
 use crate::compute::take::TakeFn;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 pub use impl_array;
-
-dyn_clone::clone_trait_object!(Array);
 
 impl ArrayCompute for ArrayRef {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -146,6 +150,26 @@ impl ArrayCompute for ArrayRef {
 }
 
 impl Array for ArrayRef {
+    fn as_any(&self) -> &dyn Any {
+        self.as_ref().as_any()
+    }
+
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+        self
+    }
+
+    fn to_array(&self) -> ArrayRef {
+        self.as_ref().to_array()
+    }
+
+    fn into_array(self) -> ArrayRef {
+        self
+    }
+
+    fn compute(&self) -> &dyn ArrayCompute {
+        self.as_ref().compute()
+    }
+
     fn len(&self) -> usize {
         self.as_ref().len()
     }
@@ -174,24 +198,8 @@ impl Array for ArrayRef {
         self.as_ref().nbytes()
     }
 
-    fn compute(&self) -> &dyn ArrayCompute {
-        self.as_ref().compute()
-    }
-
     fn serde(&self) -> Option<&dyn ArraySerde> {
         self.as_ref().serde()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self.as_ref().as_any()
-    }
-
-    fn into_array(self) -> ArrayRef {
-        self
-    }
-
-    fn as_array(&self) -> ArrayRef {
-        self.as_ref().as_array()
     }
 }
 

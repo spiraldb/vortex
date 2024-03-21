@@ -3,7 +3,7 @@ use num_traits::PrimInt;
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef, CloneOptionalArray};
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::error::VortexResult;
@@ -102,7 +102,7 @@ pub fn decompress(array: &FoRArray) -> VortexResult<PrimitiveArray> {
         let reference: $T = array.reference().try_into()?;
         PrimitiveArray::from_nullable(
             decompress_primitive(encoded.typed_data::<$T>(), reference, shift),
-            encoded.validity().clone_optional(),
+            encoded.validity().cloned(),
         )
     }))
 }

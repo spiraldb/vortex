@@ -1,10 +1,12 @@
 use arrayref::array_ref;
 
+use crate::{BitPackedArray, BitPackedEncoding};
 use fastlanez_sys::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::array::{Array, ArrayRef, CloneOptionalArray};
+use vortex::array::{Array, ArrayRef};
+use vortex::arrow::dtypes::IntoArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
@@ -15,8 +17,6 @@ use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
-
-use crate::{BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -85,7 +85,7 @@ impl EncodingCompression for BitPackedEncoding {
 
         let patches = if num_exceptions > 0 {
             Some(ctx.auxiliary("patches").compress(
-                bitpack_patches(parray, bit_width, num_exceptions).as_ref(),
+                &bitpack_patches(parray, bit_width, num_exceptions),
                 like_bp.and_then(|bp| bp.patches()),
             )?)
         } else {
@@ -163,7 +163,7 @@ fn bitpack_patches(
             }
         }
         let len = indices.len();
-        SparseArray::new(indices.into_array(),values.into_array(), len).into_array()
+        SparseArray::new(indices.into_array(), values.into_array(), len).into_array()
     })
 }
 
@@ -176,19 +176,19 @@ pub fn bitunpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     let mut unpacked = match ptype {
         I8 | U8 => PrimitiveArray::from_nullable(
             bitunpack_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity().clone_optional(),
+            array.validity().cloned(),
         ),
         I16 | U16 => PrimitiveArray::from_nullable(
             bitunpack_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity().clone_optional(),
+            array.validity().cloned(),
         ),
         I32 | U32 => PrimitiveArray::from_nullable(
             bitunpack_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity().clone_optional(),
+            array.validity().cloned(),
         ),
         I64 | U64 => PrimitiveArray::from_nullable(
             bitunpack_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity().clone_optional(),
+            array.validity().cloned(),
         ),
         _ => panic!("Unsupported ptype {:?}", ptype),
     }

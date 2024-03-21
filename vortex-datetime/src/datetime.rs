@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use vortex::array::{Array, ArrayRef, Encoding, EncodingId};
@@ -6,6 +5,7 @@ use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
+use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsCompute, StatsSet};
 use vortex_schema::DType;
@@ -76,17 +76,7 @@ impl DateTimeArray {
 }
 
 impl Array for DateTimeArray {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn into_array(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
+    impl_array!();
 
     fn len(&self) -> usize {
         self.days.len()

@@ -91,9 +91,9 @@ impl AsArrowArray for VarBinArray {
             // Unless it's u64, everything else can be converted into an i32.
             // FIXME(ngates): do not copy offsets again
             &PType::U64 => {
-                flatten_primitive(cast(&offsets.as_array(), &PType::I64.into())?.as_ref())?
+                flatten_primitive(cast(&offsets.to_array(), &PType::I64.into())?.as_ref())?
             }
-            _ => flatten_primitive(cast(&offsets.as_array(), &PType::I32.into())?.as_ref())?,
+            _ => flatten_primitive(cast(&offsets.to_array(), &PType::I32.into())?.as_ref())?,
         };
         let nulls = as_nulls(offsets.validity())?;
 

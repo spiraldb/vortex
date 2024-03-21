@@ -1,17 +1,16 @@
-use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use vortex::array::{
-    check_slice_bounds, check_validity_buffer, Array, ArrayKind, ArrayRef, CloneOptionalArray,
-    Encoding, EncodingId, EncodingRef,
+    check_slice_bounds, check_validity_buffer, Array, ArrayKind, ArrayRef, Encoding, EncodingId,
+    EncodingRef,
 };
 use vortex::compress::EncodingCompression;
-use vortex::compute;
 use vortex::compute::search_sorted::SearchSortedSide;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
+use vortex::{compute, impl_array};
 use vortex_schema::DType;
 
 use crate::compress::ree_encode;
@@ -42,7 +41,7 @@ impl REEArray {
         validity: Option<ArrayRef>,
         length: usize,
     ) -> VortexResult<Self> {
-        check_validity_buffer(validity.as_deref(), length)?;
+        check_validity_buffer(validity.as_ref(), length)?;
 
         if !ends
             .stats()
@@ -78,7 +77,7 @@ impl REEArray {
                 Ok(REEArray::new(
                     ends.into_array(),
                     values.into_array(),
-                    p.validity().clone_optional(),
+                    p.validity().cloned(),
                     p.len(),
                 )
                 .into_array())
@@ -93,36 +92,23 @@ impl REEArray {
     }
 
     #[inline]
-    pub fn ends(&self) -> &dyn Array {
-        self.ends.as_ref()
+    pub fn ends(&self) -> &ArrayRef {
+        &self.ends
     }
 
     #[inline]
-    pub fn values(&self) -> &dyn Array {
-        self.values.as_ref()
+    pub fn values(&self) -> &ArrayRef {
+        &self.values
     }
 
     #[inline]
-    pub fn validity(&self) -> Option<&dyn Array> {
-        self.validity.as_deref()
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
     }
 }
 
 impl Array for REEArray {
-    #[inline]
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    #[inline]
-    fn into_array(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    #[inline]
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
+    impl_array!();
 
     #[inline]
     fn len(&self) -> usize {
@@ -218,6 +204,7 @@ impl ArrayDisplay for REEArray {
 #[cfg(test)]
 mod test {
     use vortex::array::Array;
+    use vortex::arrow::dtypes::IntoArray;
     use vortex::compute::flatten::flatten_primitive;
     use vortex::compute::scalar_at::scalar_at;
     use vortex_schema::{DType, IntWidth, Nullability, Signedness};
@@ -226,7 +213,12 @@ mod test {
 
     #[test]
     fn new() {
-        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1i32, 2, 3].into(), None, 10);
+        let arr = REEArray::new(
+            vec![2u32, 5, 10].into_array(),
+            vec![1i32, 2, 3].into_array(),
+            None,
+            10,
+        );
         assert_eq!(arr.len(), 10);
         assert_eq!(
             arr.dtype(),
@@ -244,9 +236,14 @@ mod test {
 
     #[test]
     fn slice() {
-        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1i32, 2, 3].into(), None, 10)
-            .slice(3, 8)
-            .unwrap();
+        let arr = REEArray::new(
+            vec![2u32, 5, 10].into_array(),
+            vec![1i32, 2, 3].into_array(),
+            None,
+            10,
+        )
+        .slice(3, 8)
+        .unwrap();
         assert_eq!(
             arr.dtype(),
             &DType::Int(IntWidth::_32, Signedness::Signed, Nullability::NonNullable)
@@ -261,7 +258,12 @@ mod test {
 
     #[test]
     fn flatten() {
-        let arr = REEArray::new(vec![2u32, 5, 10].into(), vec![1i32, 2, 3].into(), None, 10);
+        let arr = REEArray::new(
+            vec![2u32, 5, 10].into_array(),
+            vec![1i32, 2, 3].into_array(),
+            None,
+            10,
+        );
         assert_eq!(
             flatten_primitive(arr.as_ref()).unwrap().typed_data::<i32>(),
             vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]

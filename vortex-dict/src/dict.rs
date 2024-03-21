@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use vortex::array::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId};

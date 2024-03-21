@@ -7,7 +7,7 @@ pub trait FillForwardFn {
 
 pub fn fill_forward(array: &dyn Array) -> VortexResult<ArrayRef> {
     if !array.dtype().is_nullable() {
-        return Ok(array.as_array());
+        return Ok(array.to_array());
     }
 
     array
