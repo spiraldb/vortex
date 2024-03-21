@@ -79,7 +79,7 @@ impl EncodingCompression for BitPackedEncoding {
             .validity()
             .map(|v| {
                 ctx.auxiliary("validity")
-                    .compress(v.as_ref(), like_bp.and_then(|bp| bp.validity()))
+                    .compress(v, like_bp.and_then(|bp| bp.validity()))
             })
             .transpose()?;
 
@@ -197,7 +197,7 @@ pub fn bitunpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     // Cast to signed if necessary
     // TODO(ngates): do this more efficiently since we know it's a safe cast. unchecked_cast maybe?
     if ptype.is_signed_int() {
-        unpacked = cast(unpacked.as_ref(), &ptype.into())?
+        unpacked = cast(unpacked, &ptype.into())?
     }
 
     if let Some(patches) = array.patches() {

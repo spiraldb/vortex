@@ -60,10 +60,10 @@ impl EncodingCompression for DictEncoding {
                 (
                     ctx.auxiliary("codes")
                         .excluding(&DictEncoding::ID)
-                        .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
+                        .compress(codes, dict_like.map(|dict| dict.codes()))?,
                     ctx.named("values")
                         .excluding(&DictEncoding::ID)
-                        .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
+                        .compress(dict, dict_like.map(|dict| dict.dict()))?,
                 )
             }
             ArrayKind::VarBin(vb) => {
@@ -71,10 +71,10 @@ impl EncodingCompression for DictEncoding {
                 (
                     ctx.auxiliary("codes")
                         .excluding(&DictEncoding::ID)
-                        .compress(codes.as_ref(), dict_like.map(|dict| dict.codes()))?,
+                        .compress(codes, dict_like.map(|dict| dict.codes()))?,
                     ctx.named("values")
                         .excluding(&DictEncoding::ID)
-                        .compress(dict.as_ref(), dict_like.map(|dict| dict.dict()))?,
+                        .compress(dict, dict_like.map(|dict| dict.dict()))?,
                 )
             }
 
