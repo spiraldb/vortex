@@ -180,8 +180,8 @@ impl<'a> WriteCtx<'a> {
     }
 
     pub fn dtype(&mut self, dtype: &DType) -> VortexResult<()> {
-        let serialized = dtype.serialize();
-        self.write_slice(&serialized)
+        let (bytes, head) = dtype.serialize();
+        self.write_slice(&bytes[head..])
     }
 
     pub fn ptype(&mut self, ptype: PType) -> VortexResult<()> {

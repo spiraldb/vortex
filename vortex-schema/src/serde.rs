@@ -18,14 +18,16 @@ use crate::{
 pub trait FbSerialize<'a> {
     type OffsetType;
 
-    fn serialize(&self) -> Vec<u8> {
+    // Convert self to flatbuffer representation, returns written bytes and index of valid data
+    // If you want to serialize multiple objects you should prefer serialize_to_builder to reuse the allocated memory
+    fn serialize(&self) -> (Vec<u8>, usize) {
         let mut fbb = FlatBufferBuilder::new();
-        let wip_dtype = self.write_to_builder(&mut fbb);
-        fbb.finish(wip_dtype, None);
-        fbb.finished_data().to_vec()
+        let wip_dtype = self.serialize_to_builder(&mut fbb);
+        fbb.finish_minimal(wip_dtype);
+        fbb.collapse()
     }
 
-    fn write_to_builder(&self, fbb: &mut FlatBufferBuilder<'a>) -> WIPOffset<Self::OffsetType>;
+    fn serialize_to_builder(&self, fbb: &mut FlatBufferBuilder<'a>) -> WIPOffset<Self::OffsetType>;
 }
 
 pub trait FbDeserialize<'a>: Sized {
@@ -42,7 +44,7 @@ pub trait FbDeserialize<'a>: Sized {
 impl<'a> FbSerialize<'a> for DType {
     type OffsetType = FbDType<'a>;
 
-    fn write_to_builder(&self, fbb: &mut FlatBufferBuilder<'a>) -> WIPOffset<Self::OffsetType> {
+    fn serialize_to_builder(&self, fbb: &mut FlatBufferBuilder<'a>) -> WIPOffset<Self::OffsetType> {
         let (dtype_union, dtype_union_variant) = match self {
             DType::Null => (Null::create(fbb, &NullArgs {}).as_union_value(), Type::Null),
             DType::Bool(n) => (
@@ -123,7 +125,7 @@ impl<'a> FbSerialize<'a> for DType {
 
                 let dtype_offsets = fs
                     .iter()
-                    .map(|f| f.write_to_builder(fbb))
+                    .map(|f| f.serialize_to_builder(fbb))
                     .collect::<Vec<_>>();
                 fbb.start_vector::<WIPOffset<FbDType>>(fs.len());
                 for doff in dtype_offsets.iter().rev() {
@@ -144,7 +146,7 @@ impl<'a> FbSerialize<'a> for DType {
                 )
             }
             DType::List(e, n) => {
-                let fb_dtype = e.as_ref().write_to_builder(fbb);
+                let fb_dtype = e.as_ref().serialize_to_builder(fbb);
                 (
                     List::create(
                         fbb,
@@ -384,8 +386,9 @@ mod test {
     use crate::{DType, FbDeserialize, FbSerialize, FloatWidth, IntWidth, Nullability, Signedness};
 
     fn roundtrip_dtype(dtype: DType) {
-        let bytes = dtype.serialize();
-        let deserialized = DType::deserialize(&bytes, |_| panic!("no composite ids")).unwrap();
+        let (bytes, head) = dtype.serialize();
+        let deserialized =
+            DType::deserialize(&bytes[head..], |_| panic!("no composite ids")).unwrap();
         assert_eq!(dtype, deserialized);
     }
 
