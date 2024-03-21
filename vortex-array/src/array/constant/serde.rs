@@ -14,7 +14,7 @@ impl EncodingSerde for ConstantEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let len = ctx.read_usize()?;
         let scalar = ctx.scalar()?;
-        Ok(ConstantArray::new(scalar, len).boxed())
+        Ok(ConstantArray::new(scalar, len).into_array())
     }
 }
 

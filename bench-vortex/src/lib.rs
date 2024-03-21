@@ -121,7 +121,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         .collect_vec();
 
     let dtype = DType::from_arrow(schema.clone());
-    let compressed = ChunkedArray::new(chunks.clone(), dtype).boxed();
+    let compressed = ChunkedArray::new(chunks.clone(), dtype).into_array();
 
     warn!("Compressed array {}", display_tree(compressed.as_ref()));
 

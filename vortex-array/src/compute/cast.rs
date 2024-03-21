@@ -6,9 +6,9 @@ pub trait CastFn {
     fn cast(&self, dtype: &DType) -> VortexResult<ArrayRef>;
 }
 
-pub fn cast(array: &dyn Array, dtype: &DType) -> VortexResult<ArrayRef> {
+pub fn cast(array: &ArrayRef, dtype: &DType) -> VortexResult<ArrayRef> {
     if array.dtype() == dtype {
-        return Ok(dyn_clone::clone_box(array));
+        return Ok(array.clone());
     }
 
     // TODO(ngates): check for null_count if dtype is non-nullable

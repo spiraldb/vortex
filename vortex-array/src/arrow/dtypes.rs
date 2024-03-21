@@ -15,30 +15,33 @@ use crate::encode::FromArrowArray;
 use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 
-impl From<RecordBatch> for ArrayRef {
-    fn from(value: RecordBatch) -> Self {
+// FIXME(ngates): move this somewhere?
+pub trait IntoArray {
+    fn into_array(self) -> ArrayRef;
+}
+
+impl IntoArray for &RecordBatch {
+    fn into_array(self) -> ArrayRef {
         StructArray::new(
-            value
-                .schema()
+            self.schema()
                 .fields()
                 .iter()
                 .map(|f| f.name())
                 .map(|s| s.to_owned())
                 .map(Arc::new)
                 .collect(),
-            value
-                .columns()
+            self.columns()
                 .iter()
-                .zip(value.schema().fields())
+                .zip(self.schema().fields())
                 .map(|(array, field)| {
                     // The dtype of the child arrays infer their nullability from the array itself.
                     // In case the schema says something different, we cast into the schema's dtype.
                     let vortex_array = ArrayRef::from_arrow(array.clone(), field.is_nullable());
-                    cast(vortex_array.as_ref(), &DType::from_arrow(field.as_ref())).unwrap()
+                    cast(&vortex_array, &DType::from_arrow(field.as_ref())).unwrap()
                 })
                 .collect(),
         )
-        .boxed()
+        .into_array()
     }
 }
 

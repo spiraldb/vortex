@@ -27,7 +27,7 @@ impl EncodingSerde for PrimitiveEncoding {
         let ptype =
             PType::try_from(ctx.schema()).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
         let (_, buf) = ctx.read_buffer(|len| len * ptype.byte_width())?;
-        Ok(PrimitiveArray::new(ptype, buf, validity).boxed())
+        Ok(PrimitiveArray::new(ptype, buf, validity).into_array())
     }
 }
 

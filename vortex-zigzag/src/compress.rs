@@ -50,7 +50,7 @@ impl EncodingCompression for ZigZagEncoding {
         Ok(ZigZagArray::new(
             ctx.compress(encoded.unwrap().encoded(), zigzag_like.map(|z| z.encoded()))?,
         )
-        .boxed())
+        .into_array())
     }
 }
 
@@ -68,7 +68,7 @@ pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
         }
         _ => panic!("Unsupported ptype"),
     };
-    ZigZagArray::try_new(encoded.boxed())
+    ZigZagArray::try_new(encoded.into_array())
 }
 
 fn zigzag_encode_primitive<T: ZigZag + NativePType>(

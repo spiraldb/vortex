@@ -18,7 +18,7 @@ impl EncodingSerde for DictEncoding {
         let dict = ctx.read()?;
         let codes_dtype = ctx.dtype()?;
         let codes = ctx.with_schema(&codes_dtype).read()?;
-        Ok(DictArray::new(codes, dict).boxed())
+        Ok(DictArray::new(codes, dict).into_array())
     }
 }
 

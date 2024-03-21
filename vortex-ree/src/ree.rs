@@ -76,12 +76,12 @@ impl REEArray {
             ArrayKind::Primitive(p) => {
                 let (ends, values) = ree_encode(p);
                 Ok(REEArray::new(
-                    ends.boxed(),
-                    values.boxed(),
+                    ends.into_array(),
+                    values.into_array(),
                     p.validity().clone_optional(),
                     p.len(),
                 )
-                .boxed())
+                .into_array())
             }
             _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
         }
@@ -115,7 +115,7 @@ impl Array for REEArray {
     }
 
     #[inline]
-    fn boxed(self) -> ArrayRef {
+    fn into_array(self) -> ArrayRef {
         Box::new(self)
     }
 
@@ -160,7 +160,7 @@ impl Array for REEArray {
             length: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
-        .boxed())
+        .into_array())
     }
 
     #[inline]

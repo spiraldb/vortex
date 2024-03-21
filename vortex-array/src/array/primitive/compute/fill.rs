@@ -2,6 +2,7 @@ use num_traits::Zero;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
+use crate::arrow::dtypes::IntoArray;
 use crate::compute::fill::FillForwardFn;
 use crate::compute::flatten::flatten_bool;
 use crate::error::VortexResult;
@@ -11,14 +12,16 @@ use crate::stats::Stat;
 impl FillForwardFn for PrimitiveArray {
     fn fill_forward(&self) -> VortexResult<ArrayRef> {
         if self.validity().is_none() {
-            Ok(dyn_clone::clone_box(self))
+            Ok(self.clone().into_array())
         } else if self
             .stats()
             .get_or_compute_as::<usize>(&Stat::NullCount)
             .unwrap()
             == 0usize
         {
-            return Ok(PrimitiveArray::new(*self.ptype(), self.buffer().clone(), None).boxed());
+            return Ok(
+                PrimitiveArray::new(*self.ptype(), self.buffer().clone(), None).into_array(),
+            );
         } else {
             match_each_native_ptype!(self.ptype(), |$P| {
                 let validity = flatten_bool(self.validity().unwrap())?;
@@ -34,7 +37,7 @@ impl FillForwardFn for PrimitiveArray {
                         last_value
                     })
                     .collect::<Vec<_>>();
-                Ok(filled.into())
+                Ok(filled.into_array())
             })
         }
     }
@@ -70,7 +73,7 @@ mod test {
     fn nullable_non_null() {
         let arr = PrimitiveArray::from_nullable(
             vec![8u8, 10u8, 12u8, 14u8, 16u8],
-            Some(BoolArray::from(vec![true, true, true, true, true]).boxed()),
+            Some(BoolArray::from(vec![true, true, true, true, true]).into_array()),
         );
         let filled = compute::fill::fill_forward(arr.as_ref()).unwrap();
         let filled_primitive = filled.as_primitive();

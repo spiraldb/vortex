@@ -85,5 +85,5 @@ fn compress_localdatetime(
         underlying.validity().clone_optional(),
         LocalDateTimeExtension::dtype(underlying.validity().is_some().into()),
     )
-    .boxed())
+    .into_array())
 }

@@ -81,7 +81,7 @@ impl EncodingCompression for DictEncoding {
             _ => unreachable!("This array kind should have been filtered out"),
         };
 
-        Ok(DictArray::new(codes, dict).boxed())
+        Ok(DictArray::new(codes, dict).into_array())
     }
 }
 
@@ -191,8 +191,8 @@ where
     (
         PrimitiveArray::from(codes),
         VarBinArray::new(
-            PrimitiveArray::from(offsets).boxed(),
-            PrimitiveArray::from(bytes).boxed(),
+            PrimitiveArray::from(offsets).into_array(),
+            PrimitiveArray::from(bytes).into_array(),
             dtype,
             None,
         ),

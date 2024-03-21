@@ -80,7 +80,7 @@ impl Array for DateTimeArray {
         self
     }
 
-    fn boxed(self) -> ArrayRef {
+    fn into_array(self) -> ArrayRef {
         Box::new(self)
     }
 
@@ -115,7 +115,7 @@ impl Array for DateTimeArray {
                 .transpose()?,
             self.dtype.clone(),
         )
-        .boxed())
+        .into_array())
     }
 
     fn encoding(&self) -> &'static dyn Encoding {

@@ -18,7 +18,7 @@ impl EncodingSerde for ZigZagEncoding {
             _ => return Err(VortexError::InvalidDType(ctx.schema().clone())),
         };
         let encoded = ctx.with_schema(&encoded_dtype).read()?;
-        Ok(ZigZagArray::new(encoded).boxed())
+        Ok(ZigZagArray::new(encoded).into_array())
     }
 }
 

@@ -39,7 +39,7 @@ impl ZigZagArray {
 
     pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => Ok(zigzag_encode(p)?.boxed()),
+            ArrayKind::Primitive(p) => Ok(zigzag_encode(p)?.into_array()),
             _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
         }
     }
@@ -56,7 +56,7 @@ impl Array for ZigZagArray {
     }
 
     #[inline]
-    fn boxed(self) -> ArrayRef {
+    fn into_array(self) -> ArrayRef {
         Box::new(self)
     }
 
@@ -86,7 +86,7 @@ impl Array for ZigZagArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Self::try_new(self.encoded.slice(start, stop)?)?.boxed())
+        Ok(Self::try_new(self.encoded.slice(start, stop)?)?.into_array())
     }
 
     #[inline]

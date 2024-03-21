@@ -60,7 +60,7 @@ impl EncodingCompression for REEEncoding {
                 .transpose()?,
             array.len(),
         )
-        .boxed())
+        .into_array())
     }
 }
 
@@ -177,7 +177,7 @@ mod test {
         let arr = REEArray::new(
             vec![2u32, 5, 10].into(),
             vec![1i32, 2, 3].into(),
-            Some(validity.boxed()),
+            Some(validity.into_array()),
             10,
         );
 

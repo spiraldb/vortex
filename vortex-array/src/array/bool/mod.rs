@@ -1,9 +1,10 @@
-use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use arrow_buffer::buffer::BooleanBuffer;
 use linkme::distributed_slice;
 
+use crate::arrow::dtypes::IntoArray;
+use crate::impl_array;
 use vortex_schema::{DType, Nullability};
 
 use crate::compute::scalar_at::scalar_at;
@@ -36,7 +37,7 @@ impl BoolArray {
 
     pub fn try_new(buffer: BooleanBuffer, validity: Option<ArrayRef>) -> VortexResult<Self> {
         let validity = validity.filter(|v| !v.is_empty());
-        check_validity_buffer(validity.as_deref(), buffer.len())?;
+        check_validity_buffer(validity.as_ref(), buffer.len())?;
 
         Ok(Self {
             buffer,
@@ -55,7 +56,7 @@ impl BoolArray {
     pub fn null(n: usize) -> Self {
         BoolArray::new(
             BooleanBuffer::from(vec![false; n]),
-            Some(BoolArray::from(vec![false; n]).boxed()),
+            Some(BoolArray::from(vec![false; n]).into_array()),
         )
     }
 
@@ -65,26 +66,13 @@ impl BoolArray {
     }
 
     #[inline]
-    pub fn validity(&self) -> Option<&dyn Array> {
-        self.validity.as_deref()
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
     }
 }
 
 impl Array for BoolArray {
-    #[inline]
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    #[inline]
-    fn boxed(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    #[inline]
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
+    impl_array!();
 
     #[inline]
     fn len(&self) -> usize {
@@ -122,7 +110,7 @@ impl Array for BoolArray {
                 .map(|v| v.slice(start, stop))
                 .transpose()?,
         }
-        .boxed())
+        .into_array())
     }
 
     #[inline]
@@ -182,9 +170,9 @@ impl From<Vec<bool>> for BoolArray {
     }
 }
 
-impl From<Vec<bool>> for ArrayRef {
-    fn from(values: Vec<bool>) -> Self {
-        BoolArray::from(values).boxed()
+impl IntoArray for Vec<bool> {
+    fn into_array(self) -> ArrayRef {
+        Arc::new(BoolArray::from(self))
     }
 }
 
@@ -211,7 +199,7 @@ impl FromIterator<Option<bool>> for BoolArray {
         } else {
             BoolArray::new(
                 BooleanBuffer::from(values),
-                Some(BoolArray::from(validity).boxed()),
+                Some(BoolArray::from(validity).into_array()),
             )
         }
     }

@@ -41,7 +41,10 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
             .getattr("type")
             .and_then(DataType::from_pyarrow)
             .map(|dt| DType::from_arrow(&Field::new("_", dt, false)))?;
-        PyArray::wrap(obj.py(), ChunkedArray::new(encoded_chunks, dtype).boxed())
+        PyArray::wrap(
+            obj.py(),
+            ChunkedArray::new(encoded_chunks, dtype).into_array(),
+        )
     } else if obj.is_instance(table)? {
         let array_stream = ArrowArrayStreamReader::from_pyarrow(obj)?;
         let dtype = DType::from_arrow(array_stream.schema());
@@ -49,7 +52,7 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
             .into_iter()
             .map(|b| b.map(ArrayRef::from).map_err(map_arrow_err))
             .collect::<PyResult<Vec<ArrayRef>>>()?;
-        PyArray::wrap(obj.py(), ChunkedArray::new(chunks, dtype).boxed())
+        PyArray::wrap(obj.py(), ChunkedArray::new(chunks, dtype).into_array())
     } else {
         Err(PyValueError::new_err("Cannot convert object to enc array"))
     }

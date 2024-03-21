@@ -5,6 +5,7 @@ use vortex::array::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId};
 use vortex::compress::EncodingCompression;
 use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
+use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 use vortex_schema::{DType, Signedness};
@@ -44,17 +45,7 @@ impl DictArray {
 }
 
 impl Array for DictArray {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn boxed(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
+    impl_array!();
 
     fn len(&self) -> usize {
         self.codes.len()
@@ -75,7 +66,7 @@ impl Array for DictArray {
     // TODO(robert): Add function to trim the dictionary
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
-        Ok(Self::new(self.codes().slice(start, stop)?, self.dict.clone()).boxed())
+        Ok(Self::new(self.codes().slice(start, stop)?, self.dict.clone()).into_array())
     }
 
     fn encoding(&self) -> &'static dyn Encoding {

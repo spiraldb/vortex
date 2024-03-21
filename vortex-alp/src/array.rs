@@ -50,7 +50,7 @@ impl ALPArray {
 
     pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => Ok(alp_encode(p)?.boxed()),
+            ArrayKind::Primitive(p) => Ok(alp_encode(p)?.into_array()),
             _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
         }
     }
@@ -75,7 +75,7 @@ impl Array for ALPArray {
     }
 
     #[inline]
-    fn boxed(self) -> ArrayRef {
+    fn into_array(self) -> ArrayRef {
         Box::new(self)
     }
 
@@ -110,7 +110,7 @@ impl Array for ALPArray {
             self.exponents().clone(),
             self.patches().map(|p| p.slice(start, stop)).transpose()?,
         )?
-        .boxed())
+        .into_array())
     }
 
     #[inline]

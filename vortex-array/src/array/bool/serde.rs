@@ -23,7 +23,7 @@ impl EncodingSerde for BoolEncoding {
         };
 
         let (logical_len, buf) = ctx.read_buffer(|len| (len + 7) / 8)?;
-        Ok(BoolArray::new(BooleanBuffer::new(buf, 0, logical_len), validity).boxed())
+        Ok(BoolArray::new(BooleanBuffer::new(buf, 0, logical_len), validity).into_array())
     }
 }
 

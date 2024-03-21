@@ -55,7 +55,7 @@ impl Array for RoaringBoolArray {
     }
 
     #[inline]
-    fn boxed(self) -> ArrayRef {
+    fn into_array(self) -> ArrayRef {
         Box::new(self)
     }
 
@@ -94,7 +94,7 @@ impl Array for RoaringBoolArray {
             length: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
-        .boxed())
+        .into_array())
     }
 
     #[inline]

@@ -17,7 +17,9 @@ impl EncodingSerde for FoREncoding {
         let reference = ctx.scalar()?;
         let shift = ctx.read_usize()? as u8;
         let child = ctx.read()?;
-        Ok(FoRArray::try_new(child, reference, shift).unwrap().boxed())
+        Ok(FoRArray::try_new(child, reference, shift)
+            .unwrap()
+            .into_array())
     }
 }
 

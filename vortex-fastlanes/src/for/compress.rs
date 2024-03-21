@@ -62,7 +62,7 @@ impl EncodingCompression for FoREncoding {
             like.map(|l| l.as_any().downcast_ref::<FoRArray>().unwrap().encoded()),
         )?;
         let reference = parray.stats().get(&Stat::Min).unwrap();
-        Ok(FoRArray::try_new(compressed_child, reference, shift)?.boxed())
+        Ok(FoRArray::try_new(compressed_child, reference, shift)?.into_array())
     }
 }
 

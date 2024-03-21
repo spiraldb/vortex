@@ -1,5 +1,4 @@
 use core::cmp::min;
-use std::any::Any;
 use std::iter;
 use std::mem::size_of;
 use std::panic::RefUnwindSafe;
@@ -17,9 +16,11 @@ use crate::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
     ENCODINGS,
 };
+use crate::arrow::dtypes::IntoArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::impl_array;
 use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -45,7 +46,7 @@ impl PrimitiveArray {
 
     pub fn try_new(ptype: PType, buffer: Buffer, validity: Option<ArrayRef>) -> VortexResult<Self> {
         let validity = validity.filter(|v| !v.is_empty());
-        check_validity_buffer(validity.as_deref(), buffer.len() / ptype.byte_width())?;
+        check_validity_buffer(validity.as_ref(), buffer.len() / ptype.byte_width())?;
         let dtype = if validity.is_some() {
             DType::from(ptype).as_nullable()
         } else {
@@ -106,7 +107,7 @@ impl PrimitiveArray {
     pub fn null<T: NativePType>(n: usize) -> Self {
         PrimitiveArray::from_nullable(
             iter::repeat(T::zero()).take(n).collect::<Vec<_>>(),
-            Some(BoolArray::from(vec![false; n]).boxed()),
+            Some(BoolArray::from(vec![false; n]).into_array()),
         )
     }
 
@@ -121,8 +122,8 @@ impl PrimitiveArray {
     }
 
     #[inline]
-    pub fn validity(&self) -> Option<&dyn Array> {
-        self.validity.as_deref()
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
     }
 
     pub fn scalar_buffer<T: NativePType>(&self) -> ScalarBuffer<T> {
@@ -142,20 +143,7 @@ impl PrimitiveArray {
 }
 
 impl Array for PrimitiveArray {
-    #[inline]
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    #[inline]
-    fn boxed(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    #[inline]
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
+    impl_array!();
 
     #[inline]
     fn len(&self) -> usize {
@@ -194,7 +182,7 @@ impl Array for PrimitiveArray {
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
-        .boxed())
+        .into_array())
     }
 
     #[inline]
@@ -256,15 +244,15 @@ impl Encoding for PrimitiveEncoding {
     }
 }
 
-impl<T: NativePType> From<Vec<T>> for ArrayRef {
-    fn from(values: Vec<T>) -> Self {
-        PrimitiveArray::from(values).boxed()
-    }
-}
-
 impl<T: NativePType> From<Vec<T>> for PrimitiveArray {
     fn from(values: Vec<T>) -> Self {
         Self::from_nullable(values, None)
+    }
+}
+
+impl<T: NativePType> IntoArray for Vec<T> {
+    fn into_array(self) -> ArrayRef {
+        PrimitiveArray::from(self).into_array()
     }
 }
 
@@ -289,7 +277,7 @@ impl<T: NativePType> FromIterator<Option<T>> for PrimitiveArray {
         PrimitiveArray::from_nullable(
             values,
             if !validity.is_empty() {
-                Some(validity.into())
+                Some(validity.into_array())
             } else {
                 None
             },

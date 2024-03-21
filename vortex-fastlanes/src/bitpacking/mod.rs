@@ -84,7 +84,7 @@ impl Array for BitPackedArray {
     }
 
     #[inline]
-    fn boxed(self) -> ArrayRef {
+    fn into_array(self) -> ArrayRef {
         Box::new(self)
     }
 

@@ -70,7 +70,7 @@ impl EncodingCompression for BitPackedEncoding {
 
         if bit_width == parray.ptype().bit_width() {
             // Nothing we can do
-            return Ok(parray.clone().boxed());
+            return Ok(parray.clone().into_array());
         }
 
         let packed = bitpack(parray, bit_width);
@@ -101,7 +101,7 @@ impl EncodingCompression for BitPackedEncoding {
             parray.len(),
         )
         .unwrap()
-        .boxed())
+        .into_array())
     }
 }
 
@@ -116,7 +116,7 @@ fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
         I64 | U64 => bitpack_primitive(parray.buffer().typed_data::<u64>(), bit_width),
         _ => panic!("Unsupported ptype {:?}", parray.ptype()),
     };
-    PrimitiveArray::from(bytes).boxed()
+    PrimitiveArray::from(bytes).into_array()
 }
 
 fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize) -> Vec<u8> {
@@ -163,11 +163,7 @@ fn bitpack_patches(
             }
         }
         let len = indices.len();
-        SparseArray::new(
-            PrimitiveArray::from(indices).boxed(),
-            PrimitiveArray::from(values).boxed(),
-            len,
-        ).boxed()
+        SparseArray::new(indices.into_array(),values.into_array(), len).into_array()
     })
 }
 
@@ -196,7 +192,7 @@ pub fn bitunpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
         ),
         _ => panic!("Unsupported ptype {:?}", ptype),
     }
-    .boxed();
+    .into_array();
 
     // Cast to signed if necessary
     // TODO(ngates): do this more efficiently since we know it's a safe cast. unchecked_cast maybe?
