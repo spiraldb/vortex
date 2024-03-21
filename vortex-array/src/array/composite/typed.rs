@@ -4,9 +4,9 @@ use std::sync::Arc;
 use vortex_schema::CompositeID;
 use vortex_schema::DType;
 
-use crate::array::{Array, ArrayRef};
 use crate::array::composite::array::CompositeArray;
 use crate::array::composite::CompositeMetadata;
+use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 
 pub trait CompositeExtension: Debug + Send + Sync + 'static {
