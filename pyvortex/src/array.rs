@@ -39,7 +39,7 @@ macro_rules! pyarray {
            impl [<Py $T>] {
                pub fn wrap(py: Python<'_>, inner: Arc<$T>) -> PyResult<Py<Self>> {
                    let init = PyClassInitializer::from(PyArray { inner: inner.clone() })
-                        .add_subclass([<Py $T>] { inner: inner });
+                        .add_subclass([<Py $T>] { inner });
                    Py::new(py, init)
                }
 
