@@ -86,9 +86,6 @@ where
 
     // Allocate a result array.
     let mut output = Vec::with_capacity(array.len());
-
-    // Start with a base vector of zeros.
-    let mut base = [T::default(); 128 / size_of::<T>()];
     let mut base_scalar = T::default();
 
     // Loop over all but the last chunk.
@@ -98,6 +95,9 @@ where
             let start_elem = i * 1024;
             let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
             transpose(chunk, &mut transposed);
+
+            // Always use a base vector of zeros for now, until we split out the bases from deltas
+            let mut base = [T::default(); 128 / size_of::<T>()];
             Delta::encode_transposed(&transposed, &mut base, &mut output);
         }
         base_scalar = array[num_chunks * 1024 - 1];
@@ -137,9 +137,6 @@ where
 
     // Allocate a result array.
     let mut output = Vec::with_capacity(array.len());
-
-    // Start with a base vector of zeros.
-    let mut base = [T::default(); 128 / size_of::<T>()];
     let mut base_scalar = T::default();
 
     // Loop over all the chunks
@@ -148,6 +145,9 @@ where
         for i in 0..num_chunks {
             let start_elem = i * 1024;
             let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
+
+            // Always use a base vector of zeros for now, until we split out the bases from deltas
+            let mut base = [T::default(); 128 / size_of::<T>()];
             Delta::decode_transposed(chunk, &mut base, &mut transposed);
             untranspose(&transposed, &mut output);
         }
