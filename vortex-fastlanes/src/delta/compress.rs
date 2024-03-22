@@ -108,7 +108,8 @@ where
     if remainder_size > 0 {
         let chunk = &array[array.len() - remainder_size..];
         for next in chunk {
-            output.push(next.wrapping_sub(&base_scalar));
+            let diff = next.wrapping_sub(&base_scalar);
+            output.push(diff);
             base_scalar = *next;
         }
     }
@@ -152,14 +153,16 @@ where
         }
         base_scalar = output[output.len() - 1];
     }
+    assert_eq!(output.len() % 1024, 0);
 
     // To avoid padding, the remainder is encoded with scalar logic.
     let remainder_size = array.len() % 1024;
     if remainder_size > 0 {
-        let chunk = &array[array.len() - remainder_size..];
-        for next in chunk {
-            output.push(next.wrapping_add(&base_scalar));
-            base_scalar = *next;
+        let chunk = &array[num_chunks * 1024..];
+        for next_diff in chunk {
+            let next = next_diff.wrapping_add(&base_scalar);
+            output.push(next);
+            base_scalar = next;
         }
     }
 
@@ -189,13 +192,13 @@ mod test {
 
         assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
         let delta = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
-        println!("Delta {:?}", delta);
 
         let decompressed = decompress(delta).unwrap();
-        assert_eq!(
-            decompressed.typed_data::<i32>(),
-            Vec::from_iter(0..10_000).as_slice()
-        );
+        let decompressed_slice = decompressed.typed_data::<i32>();
+        assert_eq!(decompressed_slice.len(), 10_000);
+        for (actual, expected) in decompressed_slice.iter().zip(0..10_000) {
+            assert_eq!(actual, &expected);
+        }
     }
 
     #[test]
