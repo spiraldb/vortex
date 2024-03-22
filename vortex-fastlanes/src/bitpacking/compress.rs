@@ -281,10 +281,9 @@ fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
     use std::sync::Arc;
 
-    use vortex::array::Encoding;
+    use vortex::array::{Encoding, EncodingRef};
 
     use super::*;
 
@@ -298,7 +297,7 @@ mod test {
 
     #[test]
     fn test_compress() {
-        let cfg = CompressConfig::new(HashSet::from([BitPackedEncoding.id()]), HashSet::default());
+        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
         let ctx = CompressCtx::new(Arc::new(cfg));
 
         let compressed = ctx
@@ -317,7 +316,7 @@ mod test {
 
     #[test]
     fn test_decompress() {
-        let cfg = CompressConfig::new(HashSet::from([BitPackedEncoding.id()]), HashSet::default());
+        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
         let ctx = CompressCtx::new(Arc::new(cfg));
 
         let values = PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8)));

@@ -136,21 +136,18 @@ fn trailing_zeros(array: &dyn Array) -> u8 {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
     use std::sync::Arc;
 
-    use vortex::array::Encoding;
+    use vortex::array::{Encoding, EncodingRef};
 
     use crate::BitPackedEncoding;
 
     use super::*;
 
     fn compress_ctx() -> CompressCtx {
-        let cfg = CompressConfig::new(
+        let cfg = CompressConfig::new()
             // We need some BitPacking else we will need choose FoR.
-            HashSet::from([FoREncoding.id(), BitPackedEncoding.id()]),
-            HashSet::default(),
-        );
+            .with_enabled([&FoREncoding as EncodingRef, &BitPackedEncoding]);
         CompressCtx::new(Arc::new(cfg))
     }
 
