@@ -181,8 +181,8 @@ impl DeltaEncoding {
 }
 
 impl Encoding for DeltaEncoding {
-    fn id(&self) -> &EncodingId {
-        &Self::ID
+    fn id(&self) -> EncodingId {
+        Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

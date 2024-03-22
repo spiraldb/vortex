@@ -187,15 +187,14 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
     use std::sync::Arc;
 
-    use vortex::array::Encoding;
+    use vortex::array::{Encoding, EncodingRef};
 
     use super::*;
 
     fn compress_ctx() -> CompressCtx {
-        let cfg = CompressConfig::new(HashSet::from([DeltaEncoding.id()]), HashSet::default());
+        let cfg = CompressConfig::new().with_enabled([&DeltaEncoding as EncodingRef]);
         CompressCtx::new(Arc::new(cfg))
     }
 
