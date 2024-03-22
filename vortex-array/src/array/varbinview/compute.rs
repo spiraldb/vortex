@@ -72,7 +72,7 @@ impl AsArrowArray for VarBinViewArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         // Views should be buffer of u8
         let views = flatten_primitive(self.views())?;
-        assert_eq!(views.ptype(), &PType::U8);
+        assert_eq!(views.ptype(), PType::U8);
         let nulls = as_nulls(self.validity())?;
 
         let data = self
@@ -81,7 +81,7 @@ impl AsArrowArray for VarBinViewArray {
             .map(|d| flatten_primitive(d.as_ref()).unwrap())
             .collect::<Vec<_>>();
         if !data.is_empty() {
-            assert_eq!(data[0].ptype(), &PType::U8);
+            assert_eq!(data[0].ptype(), PType::U8);
             assert!(data.iter().map(|d| d.ptype()).all_equal());
         }
 

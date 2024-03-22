@@ -10,7 +10,7 @@ use arrow_buffer::{ArrowNativeType, NullBuffer, OffsetBuffer, ScalarBuffer};
 pub fn as_scalar_buffer<T: NativePType + ArrowNativeType>(
     array: PrimitiveArray,
 ) -> ScalarBuffer<T> {
-    assert_eq!(array.ptype(), &T::PTYPE);
+    assert_eq!(array.ptype(), T::PTYPE);
     ScalarBuffer::from(array.buffer().clone())
 }
 

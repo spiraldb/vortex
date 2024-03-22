@@ -52,7 +52,7 @@ fn compress_localdatetime(
     like: Option<&DateTimeArray>,
     ctx: CompressCtx,
 ) -> VortexResult<ArrayRef> {
-    let underlying = flatten_primitive(cast(array.underlying(), &PType::I64.into())?.as_ref())?;
+    let underlying = flatten_primitive(cast(array.underlying(), PType::I64.into())?.as_ref())?;
 
     let divisor = match array.metadata().time_unit() {
         TimeUnit::Ns => 1_000_000_000,

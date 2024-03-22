@@ -29,11 +29,15 @@ itertools = { workspace = true }
 reqwest = { workspace = true }
 parquet = { workspace = true }
 log = { workspace = true }
+simplelog = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-simplelog = { workspace = true }
 
 [[bench]]
 name = "compress_benchmark"
+harness = false
+
+[[bench]]
+name = "random_access"
 harness = false

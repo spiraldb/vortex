@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{Array, ArrayRef, Encoding, EncodingId};
+use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::error::{VortexError, VortexResult};
@@ -73,6 +73,11 @@ impl DateTimeArray {
     pub fn subsecond(&self) -> &ArrayRef {
         &self.subsecond
     }
+
+    #[inline]
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
+    }
 }
 
 impl Array for DateTimeArray {
@@ -108,7 +113,7 @@ impl Array for DateTimeArray {
         .into_array())
     }
 
-    fn encoding(&self) -> &'static dyn Encoding {
+    fn encoding(&self) -> EncodingRef {
         &DateTimeEncoding
     }
 
@@ -117,7 +122,7 @@ impl Array for DateTimeArray {
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
-        None
+        Some(self)
     }
 }
 
@@ -150,6 +155,6 @@ impl Encoding for DateTimeEncoding {
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
-        None
+        Some(self)
     }
 }
