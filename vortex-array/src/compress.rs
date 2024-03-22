@@ -5,15 +5,12 @@ use std::sync::Arc;
 
 use log::{debug, info, warn};
 
-use crate::array::bool::BoolEncoding;
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::composite::CompositeEncoding;
 use crate::array::constant::{ConstantArray, ConstantEncoding};
-use crate::array::primitive::PrimitiveEncoding;
 use crate::array::sparse::SparseEncoding;
 use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::varbin::VarBinEncoding;
-use crate::array::varbinview::VarBinViewEncoding;
 use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId, ENCODINGS};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
