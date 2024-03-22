@@ -44,7 +44,7 @@ mod test {
             DType::Int(IntWidth::_32, Signedness::Signed, Nullability::Nullable),
         );
 
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
 
         for (i, chunk) in arr.chunks().iter().enumerate() {
             assert_eq!(

@@ -36,8 +36,8 @@ impl EncodingSerde for REEEncoding {
 mod test {
 
     use vortex::array::downcast::DowncastArrayBuiltin;
+    use vortex::array::IntoArray;
     use vortex::array::{Array, ArrayRef};
-    use vortex::arrow::dtypes::IntoArray;
     use vortex::error::VortexResult;
     use vortex::serde::{ReadCtx, WriteCtx};
 
@@ -61,7 +61,7 @@ mod test {
             None,
             49,
         );
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
         let read_ree = read_arr.as_ree();
 
         assert_eq!(

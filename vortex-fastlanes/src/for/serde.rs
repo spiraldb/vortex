@@ -26,8 +26,8 @@ impl EncodingSerde for FoREncoding {
 #[cfg(test)]
 mod test {
 
+    use vortex::array::IntoArray;
     use vortex::array::{Array, ArrayRef};
-    use vortex::arrow::dtypes::IntoArray;
     use vortex::error::VortexResult;
     use vortex::scalar::Scalar;
     use vortex::serde::{ReadCtx, WriteCtx};
@@ -51,6 +51,6 @@ mod test {
             2,
         )
         .unwrap();
-        roundtrip_array(arr.as_ref()).unwrap();
+        roundtrip_array(&arr).unwrap();
     }
 }

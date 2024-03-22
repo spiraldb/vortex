@@ -125,12 +125,6 @@ impl StatsCompute for DateTimeArray {}
 
 impl ArrayCompute for DateTimeArray {}
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for DateTimeArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for DateTimeArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.child("days", self.days())?;

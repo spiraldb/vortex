@@ -35,7 +35,7 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
-    use crate::arrow::dtypes::IntoArray;
+    use crate::array::IntoArray;
     use crate::serde::test::roundtrip_array;
 
     #[test]
@@ -46,7 +46,7 @@ mod test {
             100,
         );
 
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
 
         assert_eq!(
             arr.indices().as_primitive().buffer().typed_data::<u8>(),

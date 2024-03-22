@@ -46,11 +46,11 @@ impl EncodingCompression for REEEncoding {
         let (ends, values) = ree_encode(primitive_array);
         let compressed_ends = ctx
             .auxiliary("ends")
-            .compress(ends, ree_like.map(|ree| ree.ends()))?;
+            .compress(&ends, ree_like.map(|ree| ree.ends()))?;
         let compressed_values = ctx
             .named("values")
             .excluding(&REEEncoding::ID)
-            .compress(values, ree_like.map(|ree| ree.values()))?;
+            .compress(&values, ree_like.map(|ree| ree.values()))?;
 
         Ok(REEArray::new(
             compressed_ends,
@@ -142,7 +142,7 @@ mod test {
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::Array;
-    use vortex::arrow::dtypes::IntoArray;
+    use vortex::array::IntoArray;
 
     use crate::compress::{ree_decode, ree_encode};
     use crate::REEArray;

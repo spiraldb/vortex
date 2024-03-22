@@ -58,7 +58,7 @@ impl EncodingCompression for FoREncoding {
         // NOTE(ngates): we don't invoke next_level here since we know bit-packing is always
         //  worth trying.
         let compressed_child = ctx.named("for").excluding(&FoREncoding::ID).compress(
-            child,
+            &child,
             like.map(|l| l.as_any().downcast_ref::<FoRArray>().unwrap().encoded()),
         )?;
         let reference = parray.stats().get(&Stat::Min).unwrap();

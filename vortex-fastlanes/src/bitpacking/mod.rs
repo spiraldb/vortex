@@ -123,12 +123,6 @@ impl Array for BitPackedArray {
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for BitPackedArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for BitPackedArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("packed", format!("u{}", self.bit_width()))?;

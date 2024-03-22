@@ -166,12 +166,6 @@ impl Array for REEArray {
 
 impl StatsCompute for REEArray {}
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for REEArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 #[derive(Debug)]
 pub struct REEEncoding;
 
@@ -203,7 +197,7 @@ impl ArrayDisplay for REEArray {
 #[cfg(test)]
 mod test {
     use vortex::array::Array;
-    use vortex::arrow::dtypes::IntoArray;
+    use vortex::array::IntoArray;
     use vortex::compute::flatten::flatten_primitive;
     use vortex::compute::scalar_at::scalar_at;
     use vortex_schema::{DType, IntWidth, Nullability, Signedness};
@@ -227,10 +221,10 @@ mod test {
         // 0, 1 => 1
         // 2, 3, 4 => 2
         // 5, 6, 7, 8, 9 => 3
-        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(1));
-        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(2));
-        assert_eq!(scalar_at(arr.as_ref(), 5).unwrap().try_into(), Ok(3));
-        assert_eq!(scalar_at(arr.as_ref(), 9).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(&arr, 0).unwrap().try_into(), Ok(1));
+        assert_eq!(scalar_at(&arr, 2).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(&arr, 5).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(&arr, 9).unwrap().try_into(), Ok(3));
     }
 
     #[test]
@@ -250,7 +244,7 @@ mod test {
         assert_eq!(arr.len(), 5);
 
         assert_eq!(
-            flatten_primitive(arr.as_ref()).unwrap().typed_data::<i32>(),
+            flatten_primitive(&arr).unwrap().typed_data::<i32>(),
             vec![2, 2, 3, 3, 3]
         );
     }
@@ -264,7 +258,7 @@ mod test {
             10,
         );
         assert_eq!(
-            flatten_primitive(arr.as_ref()).unwrap().typed_data::<i32>(),
+            flatten_primitive(&arr).unwrap().typed_data::<i32>(),
             vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]
         );
     }

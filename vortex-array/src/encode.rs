@@ -28,8 +28,8 @@ use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
+use crate::array::IntoArray;
 use crate::array::{Array, ArrayRef};
-use crate::arrow::dtypes::IntoArray;
 use crate::datetime::{LocalDateTime, LocalDateTimeArray};
 use crate::ptype::PType;
 use crate::scalar::NullScalar;
@@ -186,7 +186,7 @@ impl FromArrowArray<ArrowArrayRef> for ArrayRef {
             DataType::Binary => ArrayRef::from_arrow(array.as_binary::<i32>(), nullable),
             DataType::LargeBinary => ArrayRef::from_arrow(array.as_binary::<i64>(), nullable),
             DataType::Struct(_) => ArrayRef::from_arrow(array.as_struct(), nullable),
-            DataType::Null => ArrayRef::from_arrow(as_null_array(array.as_ref()), nullable),
+            DataType::Null => ArrayRef::from_arrow(as_null_array(&array), nullable),
             DataType::Timestamp(u, _) => match u {
                 TimeUnit::Second => {
                     ArrayRef::from_arrow(array.as_primitive::<TimestampSecondType>(), nullable)

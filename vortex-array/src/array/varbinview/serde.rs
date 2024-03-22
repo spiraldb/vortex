@@ -74,7 +74,7 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = binary_array();
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
 
         assert_eq!(
             arr.views().as_primitive().buffer().typed_data::<u8>(),

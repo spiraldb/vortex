@@ -37,7 +37,7 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::struct_::StructArray;
     use crate::array::Array;
-    use crate::arrow::dtypes::IntoArray;
+    use crate::array::IntoArray;
     use crate::serde::test::roundtrip_array;
 
     #[test]
@@ -53,7 +53,7 @@ mod test {
             ],
         );
 
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
 
         assert_eq!(
             arr.fields()[0].as_primitive().buffer().typed_data::<u8>(),

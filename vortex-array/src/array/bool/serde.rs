@@ -36,7 +36,7 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = BoolArray::from_iter(vec![Some(false), None, Some(true), Some(false)]);
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
 
         assert_eq!(arr.buffer().values(), read_arr.as_bool().buffer().values());
         assert_eq!(

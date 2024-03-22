@@ -1,9 +1,9 @@
+use arrow_array::RecordBatchReader;
 use std::collections::HashSet;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use arrow_array::RecordBatchReader;
 use itertools::Itertools;
 use log::{info, warn};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
@@ -19,8 +19,8 @@ use vortex::array::sparse::SparseEncoding;
 use vortex::array::struct_::StructEncoding;
 use vortex::array::varbin::VarBinEncoding;
 use vortex::array::varbinview::VarBinViewEncoding;
+use vortex::array::IntoArray;
 use vortex::array::{Array, ArrayRef, Encoding};
-use vortex::arrow::dtypes::IntoArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::formatter::display_tree;
@@ -117,7 +117,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         .map(|batch| batch.into_array())
         .map(|array| {
             uncompressed_size += array.nbytes();
-            ctx.clone().compress(array.as_ref(), None).unwrap()
+            ctx.clone().compress(&array, None).unwrap()
         })
         .collect_vec();
 

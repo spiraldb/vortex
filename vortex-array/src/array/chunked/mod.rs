@@ -163,12 +163,6 @@ impl FromIterator<ArrayRef> for ChunkedArray {
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for ChunkedArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for ChunkedArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         for (i, c) in self.chunks().iter().enumerate() {
@@ -204,7 +198,7 @@ mod test {
     use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
     use crate::array::chunked::ChunkedArray;
-    use crate::arrow::dtypes::IntoArray;
+    use crate::array::IntoArray;
     use crate::compute::flatten::{flatten, flatten_primitive, FlattenedArray};
     use crate::ptype::NativePType;
 
@@ -224,7 +218,7 @@ mod test {
     }
 
     fn assert_equal_slices<T: NativePType>(arr: ArrayRef, slice: &[T]) {
-        let FlattenedArray::Chunked(chunked) = flatten(arr.as_ref()).unwrap() else {
+        let FlattenedArray::Chunked(chunked) = flatten(&arr).unwrap() else {
             unreachable!()
         };
         let mut values = Vec::with_capacity(arr.len());

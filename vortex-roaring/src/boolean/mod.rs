@@ -100,12 +100,6 @@ impl Array for RoaringBoolArray {
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for RoaringBoolArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for RoaringBoolArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("bitmap", format!("{:?}", self.bitmap()))
@@ -162,10 +156,10 @@ mod test {
         let truthy: Scalar = true.into();
         let falsy: Scalar = false.into();
 
-        assert_eq!(scalar_at(array.as_ref(), 0)?, truthy);
-        assert_eq!(scalar_at(array.as_ref(), 1)?, falsy);
-        assert_eq!(scalar_at(array.as_ref(), 2)?, truthy);
-        assert_eq!(scalar_at(array.as_ref(), 3)?, truthy);
+        assert_eq!(scalar_at(&array, 0)?, truthy);
+        assert_eq!(scalar_at(&array, 1)?, falsy);
+        assert_eq!(scalar_at(&array, 2)?, truthy);
+        assert_eq!(scalar_at(&array, 3)?, truthy);
 
         Ok(())
     }

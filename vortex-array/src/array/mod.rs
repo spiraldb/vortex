@@ -16,8 +16,18 @@ use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::compress::EncodingCompression;
+use crate::compute::as_arrow::AsArrowArray;
+use crate::compute::as_contiguous::AsContiguousFn;
+use crate::compute::cast::CastFn;
+use crate::compute::fill::FillForwardFn;
+use crate::compute::flatten::FlattenFn;
+use crate::compute::patch::PatchFn;
+use crate::compute::scalar_at::ScalarAtFn;
+use crate::compute::search_sorted::SearchSortedFn;
+use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::error::{VortexError, VortexResult};
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::Stats;
 
@@ -70,6 +80,10 @@ pub trait Array: ArrayCompute + ArrayDisplay + Debug + Send + Sync {
     }
 }
 
+pub trait IntoArray {
+    fn into_array(self) -> ArrayRef;
+}
+
 #[macro_export]
 macro_rules! impl_array {
     () => {
@@ -99,16 +113,6 @@ macro_rules! impl_array {
     };
 }
 
-use crate::compute::as_arrow::AsArrowArray;
-use crate::compute::as_contiguous::AsContiguousFn;
-use crate::compute::cast::CastFn;
-use crate::compute::fill::FillForwardFn;
-use crate::compute::flatten::FlattenFn;
-use crate::compute::patch::PatchFn;
-use crate::compute::scalar_at::ScalarAtFn;
-use crate::compute::search_sorted::SearchSortedFn;
-use crate::compute::take::TakeFn;
-use crate::formatter::{ArrayDisplay, ArrayFormatter};
 pub use impl_array;
 
 impl ArrayCompute for ArrayRef {
@@ -241,12 +245,6 @@ pub fn check_validity_buffer(validity: Option<&ArrayRef>, expected_len: usize) -
     }
 
     Ok(())
-}
-
-impl<'a> AsRef<(dyn Array + 'a)> for dyn Array {
-    fn as_ref(&self) -> &(dyn Array + 'a) {
-        self
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]

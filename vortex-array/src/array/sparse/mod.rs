@@ -144,12 +144,6 @@ impl Array for SparseArray {
 
 impl StatsCompute for SparseArray {}
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for SparseArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for SparseArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("offset", self.indices_offset())?;
@@ -188,7 +182,7 @@ mod test {
 
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
-    use crate::arrow::dtypes::IntoArray;
+    use crate::array::IntoArray;
     use crate::compute::flatten::flatten_primitive;
     use crate::compute::scalar_at::scalar_at;
     use crate::error::VortexError;
@@ -213,7 +207,7 @@ mod test {
     #[test]
     pub fn iter() {
         assert_sparse_array(
-            sparse_array().as_ref(),
+            &sparse_array(),
             &[
                 None,
                 None,
@@ -253,11 +247,11 @@ mod test {
     #[test]
     pub fn test_scalar_at() {
         assert_eq!(
-            usize::try_from(scalar_at(sparse_array().as_ref(), 2).unwrap()).unwrap(),
+            usize::try_from(scalar_at(&sparse_array(), 2).unwrap()).unwrap(),
             100
         );
         assert_eq!(
-            scalar_at(sparse_array().as_ref(), 10).err().unwrap(),
+            scalar_at(&sparse_array(), 10).err().unwrap(),
             VortexError::OutOfBounds(10, 0, 10)
         );
     }

@@ -41,7 +41,7 @@ fn cast<T: NativePType>(array: &PrimitiveArray) -> VortexResult<Vec<T>> {
 #[cfg(test)]
 mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
-    use crate::arrow::dtypes::IntoArray;
+    use crate::array::IntoArray;
     use crate::compute;
     use crate::error::VortexError;
     use crate::ptype::PType;

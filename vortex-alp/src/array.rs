@@ -115,12 +115,6 @@ impl Array for ALPArray {
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for ALPArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for ALPArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("exponents", format!("{:?}", self.exponents()))?;

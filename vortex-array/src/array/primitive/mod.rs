@@ -12,11 +12,11 @@ use linkme::distributed_slice;
 use vortex_schema::DType;
 
 use crate::array::bool::BoolArray;
+use crate::array::IntoArray;
 use crate::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
     ENCODINGS,
 };
-use crate::arrow::dtypes::IntoArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -200,12 +200,6 @@ impl Array for PrimitiveArray {
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for PrimitiveArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl<T: NativePType> ArrayAccessor<T> for PrimitiveArray {
     fn value(&self, index: usize) -> Option<T> {
         if self.is_valid(index) {
@@ -313,9 +307,9 @@ mod test {
         );
 
         // Ensure we can fetch the scalar at the given index.
-        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(1));
-        assert_eq!(scalar_at(arr.as_ref(), 1).unwrap().try_into(), Ok(2));
-        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(&arr, 0).unwrap().try_into(), Ok(1));
+        assert_eq!(scalar_at(&arr, 1).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(&arr, 2).unwrap().try_into(), Ok(3));
     }
 
     #[test]
@@ -324,8 +318,8 @@ mod test {
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
-        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap().try_into(), Ok(2));
-        assert_eq!(scalar_at(arr.as_ref(), 1).unwrap().try_into(), Ok(3));
-        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap().try_into(), Ok(4));
+        assert_eq!(scalar_at(&arr, 0).unwrap().try_into(), Ok(2));
+        assert_eq!(scalar_at(&arr, 1).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(&arr, 2).unwrap().try_into(), Ok(4));
     }
 }

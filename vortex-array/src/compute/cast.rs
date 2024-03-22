@@ -6,8 +6,7 @@ pub trait CastFn {
     fn cast(&self, dtype: &DType) -> VortexResult<ArrayRef>;
 }
 
-pub fn cast<T: AsRef<dyn Array>>(array: T, dtype: &DType) -> VortexResult<ArrayRef> {
-    let array = array.as_ref();
+pub fn cast(array: &dyn Array, dtype: &DType) -> VortexResult<ArrayRef> {
     if array.dtype() == dtype {
         return Ok(array.to_array());
     }

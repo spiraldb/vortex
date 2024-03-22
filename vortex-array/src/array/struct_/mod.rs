@@ -112,12 +112,6 @@ impl Array for StructArray {
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for StructArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl StatsCompute for StructArray {}
 
 #[derive(Debug)]

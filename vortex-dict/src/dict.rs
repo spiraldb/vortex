@@ -81,12 +81,6 @@ impl Array for DictArray {
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for DictArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for DictArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.child("values", self.dict())?;

@@ -74,12 +74,10 @@ fn compress_localdatetime(
     Ok(DateTimeArray::new(
         ctx.named("days")
             .compress(&PrimitiveArray::from(days), like.map(|l| l.days()))?,
-        ctx.named("seconds").compress(
-            PrimitiveArray::from(seconds).as_ref(),
-            like.map(|l| l.seconds()),
-        )?,
+        ctx.named("seconds")
+            .compress(&PrimitiveArray::from(seconds), like.map(|l| l.seconds()))?,
         ctx.named("subsecond").compress(
-            PrimitiveArray::from(subsecond).as_ref(),
+            &PrimitiveArray::from(subsecond),
             like.map(|l| l.subsecond()),
         )?,
         underlying.validity().cloned(),

@@ -156,12 +156,7 @@ impl CompressCtx {
 
     // We don't take a reference to self to force the caller to think about whether to use
     // an auxilliary ctx.
-    pub fn compress<T: AsRef<dyn Array>>(
-        self,
-        arr: T,
-        like: Option<&ArrayRef>,
-    ) -> VortexResult<ArrayRef> {
-        let arr = arr.as_ref();
+    pub fn compress(self, arr: &dyn Array, like: Option<&ArrayRef>) -> VortexResult<ArrayRef> {
         if arr.is_empty() {
             return Ok(arr.to_array());
         }
@@ -186,8 +181,8 @@ impl CompressCtx {
         self.compress_array(arr)
     }
 
-    fn compress_array<T: AsRef<dyn Array>>(&self, arr: T) -> VortexResult<ArrayRef> {
-        match ArrayKind::from(arr.as_ref()) {
+    fn compress_array(&self, arr: &dyn Array) -> VortexResult<ArrayRef> {
+        match ArrayKind::from(arr) {
             ArrayKind::Chunked(chunked) => {
                 // For chunked arrays, we compress each chunk individually
                 let compressed_chunks: VortexResult<Vec<ArrayRef>> = chunked
@@ -212,8 +207,8 @@ impl CompressCtx {
             }
             _ => {
                 // Otherwise, we run sampled compression over pluggable encodings
-                let sampled = sampled_compression(&arr, self)?;
-                Ok(sampled.unwrap_or_else(|| arr.as_ref().to_array()))
+                let sampled = sampled_compression(arr, self)?;
+                Ok(sampled.unwrap_or_else(|| arr.to_array()))
             }
         }
     }
@@ -225,12 +220,8 @@ impl Default for CompressCtx {
     }
 }
 
-pub fn sampled_compression<T: AsRef<dyn Array>>(
-    array: &T,
-    ctx: &CompressCtx,
-) -> VortexResult<Option<ArrayRef>> {
+pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult<Option<ArrayRef>> {
     // First, we try constant compression and shortcut any sampling.
-    let array = array.as_ref();
     if !array.is_empty()
         && array
             .stats()

@@ -97,12 +97,6 @@ impl Array for FoRArray {
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for FoRArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for FoRArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("reference", self.reference())?;

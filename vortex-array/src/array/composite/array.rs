@@ -122,12 +122,6 @@ impl Array for CompositeArray {
 
 impl StatsCompute for CompositeArray {}
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for CompositeArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for CompositeArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("metadata", format!("{:#?}", self.metadata().as_slice()))?;

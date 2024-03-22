@@ -29,7 +29,7 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = ConstantArray::new(PrimitiveScalar::some(PScalar::I32(42)).into(), 100);
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
 
         assert_eq!(arr.scalar(), read_arr.as_constant().scalar());
         assert_eq!(arr.len(), read_arr.len());

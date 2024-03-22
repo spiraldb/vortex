@@ -44,7 +44,7 @@ mod test {
             DType::Utf8(Nullability::NonNullable),
         );
 
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
 
         assert_eq!(
             arr.offsets().as_primitive().buffer().typed_data::<u32>(),

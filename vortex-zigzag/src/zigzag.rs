@@ -91,12 +91,6 @@ impl Array for ZigZagArray {
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for ZigZagArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for ZigZagArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.child("zigzag", self.encoded())

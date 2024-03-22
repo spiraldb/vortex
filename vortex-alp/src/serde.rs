@@ -77,7 +77,7 @@ mod test {
             0.33f64,
         ]))
         .unwrap();
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
 
         let read_alp = read_arr.as_alp();
         assert_eq!(

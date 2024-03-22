@@ -40,7 +40,7 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]);
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
         assert_eq!(
             arr.buffer().typed_data::<i32>(),
             read_arr.as_primitive().buffer().typed_data::<i32>()

@@ -92,12 +92,6 @@ impl Array for ConstantArray {
     }
 }
 
-impl<'arr> AsRef<(dyn Array + 'arr)> for ConstantArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
 impl ArrayDisplay for ConstantArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("scalar", self.scalar())

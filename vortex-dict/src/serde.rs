@@ -25,8 +25,8 @@ impl EncodingSerde for DictEncoding {
 #[cfg(test)]
 mod test {
     use vortex::array::downcast::DowncastArrayBuiltin;
+    use vortex::array::IntoArray;
     use vortex::array::{Array, ArrayRef};
-    use vortex::arrow::dtypes::IntoArray;
     use vortex::error::VortexResult;
     use vortex::serde::{ReadCtx, WriteCtx};
 
@@ -48,7 +48,7 @@ mod test {
             vec![0u8, 0, 1, 2, 3].into_array(),
             vec![-7i64, -13, 17, 23].into_array(),
         );
-        let read_arr = roundtrip_array(arr.as_ref()).unwrap();
+        let read_arr = roundtrip_array(&arr).unwrap();
 
         assert_eq!(
             arr.codes().as_primitive().buffer().typed_data::<u8>(),
