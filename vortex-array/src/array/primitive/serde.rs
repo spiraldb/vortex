@@ -14,7 +14,7 @@ impl ArraySerde for PrimitiveArray {
 impl EncodingSerde for PrimitiveEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let ptype = ctx.ptype()?;
-        let validity = ctx.read_optional_array()?;
+        let validity = ctx.validity().read_optional_array()?;
         let (_, buf) = ctx.read_buffer(|len| len * ptype.byte_width())?;
         Ok(PrimitiveArray::new(ptype, buf, validity).into_array())
     }

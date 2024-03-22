@@ -14,7 +14,7 @@ impl ArraySerde for VarBinArray {
 
 impl EncodingSerde for VarBinEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
-        let validity = ctx.read_optional_array()?;
+        let validity = ctx.validity().read_optional_array()?;
         // TODO(robert): Stop writing this
         let offsets_dtype = ctx.dtype()?;
         let offsets = ctx.with_schema(&offsets_dtype).read()?;

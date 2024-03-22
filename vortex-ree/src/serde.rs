@@ -18,7 +18,7 @@ impl ArraySerde for REEArray {
 impl EncodingSerde for REEEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let len = ctx.read_usize()?;
-        let validity = ctx.read_optional_array()?;
+        let validity = ctx.validity().read_optional_array()?;
         let ends_dtype = ctx.dtype()?;
         let ends = ctx.with_schema(&ends_dtype).read()?;
         let values = ctx.read()?;

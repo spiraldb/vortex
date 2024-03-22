@@ -18,7 +18,7 @@ impl EncodingSerde for DateTimeEncoding {
             ctx.read()?,
             ctx.read()?,
             ctx.read()?,
-            ctx.read_optional_array()?,
+            ctx.validity().read_optional_array()?,
             ctx.schema().clone(),
         )
         .into_array())
