@@ -1,5 +1,4 @@
 use paste::paste;
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use vortex::array::bool::{BoolArray, BoolEncoding};
@@ -14,7 +13,9 @@ use vortex::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use vortex::array::{Array, ArrayKind, ArrayRef, EncodingRef};
 use vortex_alp::{ALPArray, ALPEncoding};
 use vortex_dict::{DictArray, DictEncoding};
-use vortex_fastlanes::{BitPackedArray, BitPackedEncoding, FoRArray, FoREncoding};
+use vortex_fastlanes::{
+    BitPackedArray, BitPackedEncoding, DeltaArray, DeltaEncoding, FoRArray, FoREncoding,
+};
 use vortex_ree::{REEArray, REEEncoding};
 use vortex_roaring::{RoaringBoolArray, RoaringBoolEncoding, RoaringIntArray, RoaringIntEncoding};
 use vortex_zigzag::{ZigZagArray, ZigZagEncoding};
@@ -66,6 +67,7 @@ pyarray!(VarBinViewEncoding, VarBinViewArray, "VarBinViewArray");
 pyarray!(ALPEncoding, ALPArray, "ALPArray");
 pyarray!(BitPackedEncoding, BitPackedArray, "BitPackedArray");
 pyarray!(FoREncoding, FoRArray, "FoRArray");
+pyarray!(DeltaEncoding, DeltaArray, "DeltaArray");
 pyarray!(DictEncoding, DictArray, "DictArray");
 pyarray!(REEEncoding, REEArray, "REEArray");
 pyarray!(RoaringBoolEncoding, RoaringBoolArray, "RoaringBoolArray");
@@ -120,6 +122,10 @@ impl PyArray {
                     PyALPArray::wrap(py, inner.into_any().downcast::<ALPArray>().unwrap())?
                         .extract(py)
                 }
+                DeltaEncoding::ID => {
+                    PyDeltaArray::wrap(py, inner.into_any().downcast::<DeltaArray>().unwrap())?
+                        .extract(py)
+                }
                 DictEncoding::ID => {
                     PyDictArray::wrap(py, inner.into_any().downcast::<DictArray>().unwrap())?
                         .extract(py)
@@ -151,10 +157,7 @@ impl PyArray {
                     PyZigZagArray::wrap(py, inner.into_any().downcast::<ZigZagArray>().unwrap())?
                         .extract(py)
                 }
-                _ => Err(PyValueError::new_err(format!(
-                    "Cannot convert {:?} to enc array",
-                    inner
-                ))),
+                _ => Py::new(py, Self { inner }),
             },
         }
     }

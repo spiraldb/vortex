@@ -1,8 +1,8 @@
-use arrow_array::RecordBatchReader;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use arrow_array::RecordBatchReader;
 use itertools::Itertools;
 use log::{info, warn, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
@@ -19,7 +19,7 @@ use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_datetime::DateTimeEncoding;
 use vortex_dict::DictEncoding;
-use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
+use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
@@ -58,8 +58,7 @@ pub fn enumerate_arrays() -> Vec<EncodingRef> {
         &BitPackedEncoding,
         &FoREncoding,
         &DateTimeEncoding,
-        // DeltaEncoding,
-        // FFoREncoding,
+        &DeltaEncoding,
         &REEEncoding,
         &RoaringBoolEncoding,
         // RoaringIntEncoding,
@@ -148,7 +147,6 @@ mod test {
     use crate::taxi_data::download_taxi_data;
     use crate::{compress_ctx, compress_taxi_data, setup_logger};
 
-    #[ignore]
     #[test]
     fn compression_ratio() {
         setup_logger(LevelFilter::Debug);

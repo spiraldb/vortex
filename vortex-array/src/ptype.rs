@@ -133,6 +133,26 @@ impl PType {
     pub const fn bit_width(&self) -> usize {
         self.byte_width() * 8
     }
+
+    pub fn to_signed(self) -> PType {
+        match self {
+            PType::U8 => PType::I8,
+            PType::U16 => PType::I16,
+            PType::U32 => PType::I32,
+            PType::U64 => PType::I64,
+            _ => self,
+        }
+    }
+
+    pub fn to_unsigned(self) -> PType {
+        match self {
+            PType::I8 => PType::U8,
+            PType::I16 => PType::U16,
+            PType::I32 => PType::U32,
+            PType::I64 => PType::U64,
+            _ => self,
+        }
+    }
 }
 
 impl Display for PType {
