@@ -1,11 +1,11 @@
 use std::sync::{Arc, RwLock};
 
+use vortex::{impl_array, match_each_integer_ptype};
 use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::scalar_at::scalar_at;
-use vortex::error::VortexResult;
+use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex_schema::DType;
@@ -17,7 +17,8 @@ mod serde;
 #[derive(Debug, Clone)]
 pub struct DeltaArray {
     len: usize,
-    encoded: ArrayRef,
+    bases: ArrayRef,
+    deltas: ArrayRef,
     validity: Option<ArrayRef>,
     stats: Arc<RwLock<StatsSet>>,
 }
@@ -25,20 +26,57 @@ pub struct DeltaArray {
 impl DeltaArray {
     pub fn try_new(
         len: usize,
-        encoded: ArrayRef,
+        bases: ArrayRef,
+        deltas: ArrayRef,
         validity: Option<ArrayRef>,
     ) -> VortexResult<Self> {
-        Ok(Self {
+        if bases.dtype() != deltas.dtype() {
+            return Err(VortexError::InvalidArgument(
+                format!(
+                    "DeltaArray: bases and deltas must have the same dtype, got {:?} and {:?}",
+                    bases.dtype(),
+                    deltas.dtype()
+                )
+                .into(),
+            ));
+        }
+        
+        let delta = Self {
             len,
-            encoded,
+            bases,
+            deltas,
             validity,
             stats: Arc::new(RwLock::new(StatsSet::new())),
-        })
+        };
+        if delta.bases.len() % delta.lanes() != 0 {
+            return Err(VortexError::InvalidArgument(
+                format!(
+                    "DeltaArray: bases.len() ({}) must be an exact multiple of lanes ({})",
+                    delta.bases.len(),
+                    delta.lanes()
+                )
+                .into(),
+            ));
+        }
+        Ok(delta)
     }
 
     #[inline]
-    pub fn encoded(&self) -> &ArrayRef {
-        &self.encoded
+    pub fn bases(&self) -> &ArrayRef {
+        &self.bases
+    }
+
+    #[inline]
+    pub fn deltas(&self) -> &ArrayRef {
+        &self.deltas
+    }
+
+    #[inline]
+    fn lanes(&self) -> usize {
+        let ptype = self.dtype().try_into().unwrap();
+        match_each_integer_ptype!(ptype, |$T| {
+            <$T as fastlanez_sys::Delta>::lanes()
+        })
     }
 
     #[inline]
@@ -63,12 +101,12 @@ impl Array for DeltaArray {
 
     #[inline]
     fn is_empty(&self) -> bool {
-        self.encoded.is_empty()
+        self.bases.is_empty()
     }
 
     #[inline]
     fn dtype(&self) -> &DType {
-        self.encoded.dtype()
+        self.bases.dtype()
     }
 
     #[inline]
@@ -87,7 +125,9 @@ impl Array for DeltaArray {
 
     #[inline]
     fn nbytes(&self) -> usize {
-        self.encoded().nbytes() + self.validity().map(|v| v.nbytes()).unwrap_or(0)
+        self.bases().nbytes()
+            + self.deltas().nbytes()
+            + self.validity().map(|v| v.nbytes()).unwrap_or(0)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
@@ -103,7 +143,8 @@ impl<'arr> AsRef<(dyn Array + 'arr)> for DeltaArray {
 
 impl ArrayDisplay for DeltaArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.child("deltas", self.encoded())?;
+        f.child("bases", self.bases())?;
+        f.child("deltas", self.deltas())?;
         f.maybe_child("validity", self.validity())
     }
 }
