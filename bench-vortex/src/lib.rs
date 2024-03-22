@@ -9,18 +9,10 @@ use log::{info, warn};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 
-use vortex::array::bool::BoolEncoding;
-use vortex::array::chunked::{ChunkedArray, ChunkedEncoding};
-use vortex::array::composite::CompositeEncoding;
-use vortex::array::constant::ConstantEncoding;
+use vortex::array::chunked::ChunkedArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::primitive::PrimitiveEncoding;
-use vortex::array::sparse::SparseEncoding;
-use vortex::array::struct_::StructEncoding;
-use vortex::array::varbin::VarBinEncoding;
-use vortex::array::varbinview::VarBinViewEncoding;
-use vortex::array::IntoArray;
-use vortex::array::{Array, ArrayRef, Encoding};
+use vortex::array::{Array, ArrayRef};
+use vortex::array::{EncodingId, IntoArray};
 use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::formatter::display_tree;
@@ -32,40 +24,25 @@ use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
 
-pub fn enumerate_arrays() -> Vec<&'static dyn Encoding> {
+pub fn enumerate_arrays() -> Vec<EncodingId> {
     vec![
-        // TODO(ngates): fix https://github.com/fulcrum-so/vortex/issues/35
-        // Builtins
-        &BoolEncoding,
-        &ChunkedEncoding,
-        &CompositeEncoding,
-        &ConstantEncoding,
-        &PrimitiveEncoding,
-        &SparseEncoding,
-        &StructEncoding,
-        &VarBinEncoding,
-        &VarBinViewEncoding,
-        // Encodings
-        &ALPEncoding,
-        &DictEncoding,
-        &BitPackedEncoding,
-        &FoREncoding,
-        &DateTimeEncoding,
-        // &DeltaEncoding,
-        // &FFoREncoding,
-        &REEEncoding,
-        &RoaringBoolEncoding,
-        // &RoaringIntEncoding,
+        ALPEncoding::ID,
+        DictEncoding::ID,
+        BitPackedEncoding::ID,
+        FoREncoding::ID,
+        DateTimeEncoding::ID,
+        // DeltaEncoding::ID,
+        // FFoREncoding::ID,
+        REEEncoding::ID,
+        RoaringBoolEncoding::ID,
+        // RoaringIntEncoding::ID,
         // Doesn't offer anything more than FoR really
-        // &ZigZagEncoding,
+        // ZigZagEncoding::ID,
     ]
 }
 
 pub fn compress_ctx() -> CompressCtx {
-    let cfg = CompressConfig::new(
-        HashSet::from_iter(enumerate_arrays().iter().map(|e| (*e).id())),
-        HashSet::default(),
-    );
+    let cfg = CompressConfig::new(HashSet::from_iter(enumerate_arrays()), HashSet::default());
     info!("Compression config {cfg:?}");
     CompressCtx::new(Arc::new(cfg))
 }

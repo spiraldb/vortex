@@ -229,8 +229,8 @@ impl PrimitiveEncoding {
 static ENCODINGS_PRIMITIVE: EncodingRef = &PrimitiveEncoding;
 
 impl Encoding for PrimitiveEncoding {
-    fn id(&self) -> &EncodingId {
-        &Self::ID
+    fn id(&self) -> EncodingId {
+        Self::ID
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {

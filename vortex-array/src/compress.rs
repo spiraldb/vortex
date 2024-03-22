@@ -1,12 +1,19 @@
 use std::collections::HashSet;
+use std::convert::Into;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
 use log::{debug, info, warn};
 
-use crate::array::chunked::ChunkedArray;
+use crate::array::bool::BoolEncoding;
+use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
+use crate::array::composite::CompositeEncoding;
 use crate::array::constant::{ConstantArray, ConstantEncoding};
-use crate::array::struct_::StructArray;
+use crate::array::primitive::PrimitiveEncoding;
+use crate::array::sparse::SparseEncoding;
+use crate::array::struct_::{StructArray, StructEncoding};
+use crate::array::varbin::VarBinEncoding;
+use crate::array::varbinview::VarBinViewEncoding;
 use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId, ENCODINGS};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
@@ -47,8 +54,8 @@ pub struct CompressConfig {
     max_depth: u8,
     // TODO(ngates): can each encoding define their own configs?
     pub ree_average_run_threshold: f32,
-    encodings: HashSet<&'static EncodingId>,
-    disabled_encodings: HashSet<&'static EncodingId>,
+    encodings: HashSet<EncodingId>,
+    disabled_encodings: HashSet<EncodingId>,
 }
 
 impl Default for CompressConfig {
@@ -68,12 +75,27 @@ impl Default for CompressConfig {
 }
 
 impl CompressConfig {
+    const DEFAULT_ENCODINGS: [EncodingId; 9] = [
+        BoolEncoding::ID,
+        ChunkedEncoding::ID,
+        CompositeEncoding::ID,
+        ConstantEncoding::ID,
+        PrimitiveEncoding::ID,
+        SparseEncoding::ID,
+        StructEncoding::ID,
+        VarBinEncoding::ID,
+        VarBinViewEncoding::ID,
+    ];
+
     pub fn new(
-        encodings: HashSet<&'static EncodingId>,
-        mut disabled_encodings: HashSet<&'static EncodingId>,
+        mut encodings: HashSet<EncodingId>,
+        mut disabled_encodings: HashSet<EncodingId>,
     ) -> Self {
+        Self::DEFAULT_ENCODINGS.iter().for_each(|e| {
+            encodings.insert(*e);
+        });
         // Always disable constant encoding, it's handled separately
-        disabled_encodings.insert(&ConstantEncoding::ID);
+        disabled_encodings.insert(ConstantEncoding::ID);
         Self {
             encodings,
             disabled_encodings,
@@ -91,9 +113,9 @@ impl CompressConfig {
         )
     }
 
-    pub fn is_enabled(&self, kind: &EncodingId) -> bool {
-        (self.encodings.is_empty() || self.encodings.contains(kind))
-            && !self.disabled_encodings.contains(kind)
+    pub fn is_enabled(&self, kind: EncodingId) -> bool {
+        (self.encodings.is_empty() || self.encodings.contains(&kind))
+            && !self.disabled_encodings.contains(&kind)
     }
 }
 
@@ -236,7 +258,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
     let mut candidates: Vec<&dyn EncodingCompression> = ENCODINGS
         .iter()
         .filter(|encoding| ctx.options().is_enabled(encoding.id()))
-        .filter(|encoding| !ctx.disabled_encodings.contains(encoding.id()))
+        .filter(|encoding| !ctx.disabled_encodings.contains(&encoding.id()))
         .filter_map(|encoding| encoding.compression())
         .filter(|compression| {
             if compression

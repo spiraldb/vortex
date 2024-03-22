@@ -96,8 +96,8 @@ impl DictEncoding {
 }
 
 impl Encoding for DictEncoding {
-    fn id(&self) -> &'static EncodingId {
-        &Self::ID
+    fn id(&self) -> EncodingId {
+        Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

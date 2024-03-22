@@ -116,8 +116,8 @@ impl RoaringIntEncoding {
 }
 
 impl Encoding for RoaringIntEncoding {
-    fn id(&self) -> &EncodingId {
-        &Self::ID
+    fn id(&self) -> EncodingId {
+        Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

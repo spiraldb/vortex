@@ -247,7 +247,7 @@ pub fn check_validity_buffer(validity: Option<&ArrayRef>, expected_len: usize) -
     Ok(())
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct EncodingId(&'static str);
 
 impl EncodingId {
@@ -268,7 +268,7 @@ impl Display for EncodingId {
 }
 
 pub trait Encoding: Debug + Send + Sync + 'static {
-    fn id(&self) -> &EncodingId;
+    fn id(&self) -> EncodingId;
 
     /// Whether this encoding provides a compressor.
     fn compression(&self) -> Option<&dyn EncodingCompression> {
@@ -308,7 +308,7 @@ pub enum ArrayKind<'a> {
 
 impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
     fn from(value: &'a dyn Array) -> Self {
-        match *value.encoding().id() {
+        match value.encoding().id() {
             BoolEncoding::ID => ArrayKind::Bool(value.as_bool()),
             ChunkedEncoding::ID => ArrayKind::Chunked(value.as_chunked()),
             CompositeEncoding::ID => ArrayKind::Composite(value.as_composite()),

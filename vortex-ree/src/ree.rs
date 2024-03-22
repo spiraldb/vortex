@@ -174,8 +174,8 @@ impl REEEncoding {
 }
 
 impl Encoding for REEEncoding {
-    fn id(&self) -> &EncodingId {
-        &Self::ID
+    fn id(&self) -> EncodingId {
+        Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {
