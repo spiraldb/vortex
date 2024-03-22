@@ -204,7 +204,7 @@ pub fn bitunpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
         unpacked = patch(unpacked.as_ref(), patches)?;
     }
 
-    Ok(flatten_primitive(&unpacked)?)
+    flatten_primitive(&unpacked)
 }
 
 fn bitunpack_primitive<T: NativePType + TryBitPack>(

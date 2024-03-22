@@ -138,8 +138,7 @@ impl Array for REEArray {
             ends: self.ends.slice(slice_begin, slice_end + 1)?,
             values: self.values.slice(slice_begin, slice_end + 1)?,
             validity: self
-                .validity
-                .as_ref()
+                .validity()
                 .map(|v| v.slice(slice_begin, slice_end + 1))
                 .transpose()?,
             offset: start,

@@ -46,11 +46,11 @@ impl EncodingCompression for REEEncoding {
         let (ends, values) = ree_encode(primitive_array);
         let compressed_ends = ctx
             .auxiliary("ends")
-            .compress(ends.as_ref(), ree_like.map(|ree| ree.ends()))?;
+            .compress(ends, ree_like.map(|ree| ree.ends()))?;
         let compressed_values = ctx
             .named("values")
             .excluding(&REEEncoding::ID)
-            .compress(values.as_ref(), ree_like.map(|ree| ree.values()))?;
+            .compress(values, ree_like.map(|ree| ree.values()))?;
 
         Ok(REEArray::new(
             compressed_ends,
