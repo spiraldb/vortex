@@ -49,11 +49,6 @@ impl<M: CompositeMetadata> TypedCompositeArray<M> {
         &self.dtype
     }
 
-    #[inline]
-    pub fn dtype(&self) -> &DType {
-        &self.dtype
-    }
-
     pub fn as_composite(&self) -> CompositeArray {
         CompositeArray::new(
             self.metadata().id(),

@@ -17,6 +17,6 @@ impl EncodingSerde for DeltaEncoding {
         let len = ctx.read_usize()?;
         let encoded = ctx.read()?;
         let validity = ctx.read_optional_array()?;
-        Ok(DeltaArray::try_new(len, encoded, validity).unwrap().boxed())
+        Ok(DeltaArray::try_new(len, encoded, validity).unwrap().into_array())
     }
 }

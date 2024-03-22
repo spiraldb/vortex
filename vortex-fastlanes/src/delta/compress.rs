@@ -69,11 +69,11 @@ impl EncodingCompression for DeltaEncoding {
 
         let encoded = ctx
             .named("deltas")
-            .compress(delta_encoded.as_ref(), like_delta.map(|d| d.encoded()))?;
+            .compress(&delta_encoded, like_delta.map(|d| d.encoded()))?;
 
         Ok(DeltaArray::try_new(array.len(), encoded, validity)
             .unwrap()
-            .boxed())
+            .into_array())
     }
 }
 
@@ -119,10 +119,9 @@ where
 pub fn decompress(array: &DeltaArray) -> VortexResult<PrimitiveArray> {
     let deltas = flatten_primitive(array.encoded())?;
     let decoded = match_each_integer_ptype!(deltas.ptype(), |$T| {
-        use vortex::array::CloneOptionalArray;
         PrimitiveArray::from_nullable(
             decompress_primitive::<$T>(deltas.typed_data()),
-            array.validity().clone_optional()
+            array.validity().cloned()
         )
     });
     Ok(decoded)

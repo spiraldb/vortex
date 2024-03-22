@@ -1,18 +1,18 @@
-use std::any::Any;
 use std::sync::{Arc, RwLock};
 
 use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::scalar_at::scalar_at;
-use vortex::compute::ArrayCompute;
 use vortex::error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
+use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex_schema::DType;
 
 mod compress;
 mod serde;
+mod compute;
 
 #[derive(Debug, Clone)]
 pub struct DeltaArray {
@@ -37,13 +37,13 @@ impl DeltaArray {
     }
 
     #[inline]
-    pub fn encoded(&self) -> &dyn Array {
-        self.encoded.as_ref()
+    pub fn encoded(&self) -> &ArrayRef {
+        &self.encoded
     }
 
     #[inline]
-    pub fn validity(&self) -> Option<&dyn Array> {
-        self.validity.as_deref()
+    pub fn validity(&self) -> Option<&ArrayRef> {
+        self.validity.as_ref()
     }
 
     pub fn is_valid(&self, index: usize) -> bool {
@@ -54,20 +54,7 @@ impl DeltaArray {
 }
 
 impl Array for DeltaArray {
-    #[inline]
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    #[inline]
-    fn boxed(self) -> ArrayRef {
-        Box::new(self)
-    }
-
-    #[inline]
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
+    impl_array!();
 
     #[inline]
     fn len(&self) -> usize {
@@ -107,8 +94,6 @@ impl Array for DeltaArray {
         Some(self)
     }
 }
-
-impl ArrayCompute for DeltaArray {}
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for DeltaArray {
     fn as_ref(&self) -> &(dyn Array + 'arr) {
