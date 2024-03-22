@@ -149,10 +149,17 @@ impl<'a> ReadCtx<'a> {
     }
 
     pub fn read(&mut self) -> VortexResult<ArrayRef> {
-        let encoding_id = self.read_usize()?;
+        let encoding_id = self.read_usize()? - 12345678;
         if let Some(serde) = ENCODINGS
             .iter()
-            .filter(|e| e.id().name() == self.encodings[encoding_id].name())
+            .filter(|e| {
+                e.id().name() == {
+                    if encoding_id > self.encodings.len() {
+                        panic!("Hmmm")
+                    }
+                    self.encodings[encoding_id].name()
+                }
+            })
             .flat_map(|e| e.serde())
             .next()
         {
@@ -241,6 +248,7 @@ impl<'a> WriteCtx<'a> {
             .available_encodings
             .iter()
             .position(|e| e.name() == array.encoding().id().name())
+            .map(|i| i + 12345678)
             .ok_or(io::Error::new(ErrorKind::InvalidInput, "unknown encoding"))?;
         self.write_usize(encoding_id)?;
         array.serde().map(|s| s.write(self)).unwrap_or_else(|| {

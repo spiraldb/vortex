@@ -65,13 +65,13 @@ impl EncodingCompression for ALPEncoding {
 
         let compressed_encoded = ctx
             .named("packed")
-            .excluding(&ALPEncoding::ID)
+            .excluding(&ALPEncoding)
             .compress(encoded.as_ref(), like_alp.map(|a| a.encoded()))?;
 
         let compressed_patches = patches
             .map(|p| {
                 ctx.auxiliary("patches")
-                    .excluding(&ALPEncoding::ID)
+                    .excluding(&ALPEncoding)
                     .compress(p.as_ref(), like_alp.and_then(|a| a.patches()))
             })
             .transpose()?;

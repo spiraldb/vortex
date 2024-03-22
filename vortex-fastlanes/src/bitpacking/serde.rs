@@ -1,5 +1,6 @@
 use vortex::array::{Array, ArrayRef};
 use vortex::error::VortexResult;
+use vortex::ptype::PType;
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 use crate::{BitPackedArray, BitPackedEncoding};
@@ -17,7 +18,7 @@ impl ArraySerde for BitPackedArray {
 
 impl EncodingSerde for BitPackedEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
-        let encoded = ctx.read()?;
+        let encoded = ctx.with_schema(&PType::U8.into()).read()?;
         let validity = ctx.read_optional_array()?;
         let patches = ctx.read_optional_array()?;
         let bit_width = ctx.read_usize()?;

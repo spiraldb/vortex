@@ -6,11 +6,11 @@ use log::{debug, info, warn};
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::composite::CompositeEncoding;
-use crate::array::constant::{ConstantArray, ConstantEncoding};
+use crate::array::constant::ConstantArray;
 use crate::array::sparse::SparseEncoding;
 use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::varbin::VarBinEncoding;
-use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId, ENCODINGS};
+use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingRef, ENCODINGS};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
 use crate::error::VortexResult;
@@ -50,8 +50,8 @@ pub struct CompressConfig {
     max_depth: u8,
     // TODO(ngates): can each encoding define their own configs?
     pub ree_average_run_threshold: f32,
-    encodings: HashSet<EncodingId>,
-    disabled_encodings: HashSet<EncodingId>,
+    encodings: HashSet<EncodingRef>,
+    disabled_encodings: HashSet<EncodingRef>,
 }
 
 impl Default for CompressConfig {
@@ -64,48 +64,40 @@ impl Default for CompressConfig {
             sample_count: 8,
             max_depth: 3,
             ree_average_run_threshold: 2.0,
-            encodings: HashSet::new(),
+            encodings: HashSet::from([
+                &ChunkedEncoding as EncodingRef,
+                &CompositeEncoding,
+                &SparseEncoding,
+                &StructEncoding,
+                &VarBinEncoding,
+            ]),
             disabled_encodings: HashSet::new(),
         }
     }
 }
 
 impl CompressConfig {
-    const DEFAULT_ENCODINGS: [EncodingId; 5] = [
-        ChunkedEncoding::ID,
-        CompositeEncoding::ID,
-        SparseEncoding::ID,
-        StructEncoding::ID,
-        VarBinEncoding::ID,
-    ];
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-    pub fn new(
-        mut encodings: HashSet<EncodingId>,
-        mut disabled_encodings: HashSet<EncodingId>,
-    ) -> Self {
-        Self::DEFAULT_ENCODINGS.iter().for_each(|e| {
-            encodings.insert(*e);
+    pub fn with_enabled<E: IntoIterator<Item = EncodingRef>>(self, encodings: E) -> Self {
+        let mut new_self = self.clone();
+        encodings.into_iter().for_each(|e| {
+            new_self.encodings.insert(e);
         });
-        // Always disable constant encoding, it's handled separately
-        disabled_encodings.insert(ConstantEncoding::ID);
-        Self {
-            encodings,
-            disabled_encodings,
-            ..CompressConfig::default()
-        }
+        new_self
     }
 
-    pub fn from_encodings(
-        encodings: &[&'static dyn Encoding],
-        disabled_encodings: &[&'static dyn Encoding],
-    ) -> Self {
-        Self::new(
-            encodings.iter().map(|e| e.id()).collect(),
-            disabled_encodings.iter().map(|e| e.id()).collect(),
-        )
+    pub fn with_disabled<E: IntoIterator<Item = EncodingRef>>(self, disabled_encodings: E) -> Self {
+        let mut new_self = self.clone();
+        disabled_encodings.into_iter().for_each(|e| {
+            new_self.disabled_encodings.insert(e);
+        });
+        new_self
     }
 
-    pub fn is_enabled(&self, kind: EncodingId) -> bool {
+    pub fn is_enabled(&self, kind: EncodingRef) -> bool {
         (self.encodings.is_empty() || self.encodings.contains(&kind))
             && !self.disabled_encodings.contains(&kind)
     }
@@ -117,7 +109,7 @@ pub struct CompressCtx {
     // TODO(ngates): put this back to a reference
     options: Arc<CompressConfig>,
     depth: u8,
-    disabled_encodings: HashSet<&'static EncodingId>,
+    disabled_encodings: HashSet<EncodingRef>,
 }
 
 impl Display for CompressCtx {
@@ -162,7 +154,7 @@ impl CompressCtx {
         self.options.clone()
     }
 
-    pub fn excluding(&self, encoding: &'static EncodingId) -> Self {
+    pub fn excluding(&self, encoding: EncodingRef) -> Self {
         let mut cloned = self.clone();
         cloned.disabled_encodings.insert(encoding);
         cloned
@@ -170,7 +162,7 @@ impl CompressCtx {
 
     // We don't take a reference to self to force the caller to think about whether to use
     // an auxilliary ctx.
-    pub fn compress(self, arr: &dyn Array, like: Option<&ArrayRef>) -> VortexResult<ArrayRef> {
+    pub fn compress(&self, arr: &dyn Array, like: Option<&ArrayRef>) -> VortexResult<ArrayRef> {
         if arr.is_empty() {
             return Ok(arr.to_array());
         }
@@ -249,8 +241,8 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
 
     let mut candidates: Vec<&dyn EncodingCompression> = ENCODINGS
         .iter()
-        .filter(|encoding| ctx.options().is_enabled(encoding.id()))
-        .filter(|encoding| !ctx.disabled_encodings.contains(&encoding.id()))
+        .filter(|&encoding| ctx.options().is_enabled(*encoding))
+        .filter(|&encoding| !ctx.disabled_encodings.contains(encoding))
         .filter_map(|encoding| encoding.compression())
         .filter(|compression| {
             if compression

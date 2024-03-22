@@ -29,11 +29,15 @@ itertools = "0.12.1"
 reqwest = { version = "0.11.24", features = ["blocking"] }
 parquet = "50.0.0"
 log = "0.4.20"
+simplelog = { version = "0.12.1", features = ["paris"] }
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports"] }
-simplelog = { version = "0.12.1", features = ["paris"] }
 
 [[bench]]
 name = "compress_benchmark"
+harness = false
+
+[[bench]]
+name = "random_access"
 harness = false

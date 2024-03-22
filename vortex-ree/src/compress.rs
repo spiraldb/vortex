@@ -49,7 +49,7 @@ impl EncodingCompression for REEEncoding {
             .compress(&ends, ree_like.map(|ree| ree.ends()))?;
         let compressed_values = ctx
             .named("values")
-            .excluding(&REEEncoding::ID)
+            .excluding(&REEEncoding)
             .compress(&values, ree_like.map(|ree| ree.values()))?;
 
         Ok(REEArray::new(
