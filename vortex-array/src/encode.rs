@@ -33,6 +33,7 @@ use crate::array::{Array, ArrayRef};
 use crate::datetime::{LocalDateTime, LocalDateTimeArray};
 use crate::ptype::PType;
 use crate::scalar::NullScalar;
+use crate::stats::Stat;
 
 pub trait FromArrowArray<A> {
     fn from_arrow(array: A, nullable: bool) -> Self;
@@ -53,7 +54,10 @@ impl IntoArray for NullBuffer {
 impl<O: OffsetSizeTrait> IntoArray for OffsetBuffer<O> {
     fn into_array(self) -> ArrayRef {
         let ptype = if O::IS_LARGE { PType::I64 } else { PType::I32 };
-        PrimitiveArray::new(ptype, self.into_inner().into_inner(), None).into_array()
+        let array = PrimitiveArray::new(ptype, self.into_inner().into_inner(), None).into_array();
+        array.stats().set(Stat::IsSorted, true.into());
+        array.stats().set(Stat::IsStrictSorted, true.into());
+        array
     }
 }
 
