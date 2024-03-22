@@ -13,7 +13,6 @@ use vortex::compute::flatten::flatten_primitive;
 use vortex::error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
-use vortex::stats::Stat;
 
 use crate::{DeltaArray, DeltaEncoding};
 
@@ -28,16 +27,6 @@ impl EncodingCompression for DeltaEncoding {
 
         // Only supports ints
         if !parray.ptype().is_int() {
-            return None;
-        }
-
-        // Force Frame of Reference before delta
-        if parray
-            .stats()
-            .get_or_compute_cast::<i64>(&Stat::Min)
-            .unwrap_or(0)
-            != 0
-        {
             return None;
         }
 
@@ -83,6 +72,7 @@ where
 {
     // How many fastlanes vectors we will process.
     let num_chunks = array.len() / 1024;
+    let lanes = T::lanes();
 
     // Allocate a result array.
     let mut output = Vec::with_capacity(array.len());

@@ -220,6 +220,11 @@ where
         base: &mut [Self; 128 / size_of::<Self>()],
         output: &mut [Self; 1024],
     );
+
+    fn lanes() -> usize {
+        // fastlanez processes 1024 bits (128 bytes) at a time
+        128 / std::mem::size_of::<Self>()
+    }
 }
 
 macro_rules! delta_impl {
