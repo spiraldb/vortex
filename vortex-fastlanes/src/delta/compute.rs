@@ -1,5 +1,5 @@
+use vortex::compute::flatten::{FlattenFn, FlattenedArray};
 use vortex::compute::ArrayCompute;
-use vortex::compute::flatten::{FlattenedArray, FlattenFn};
 use vortex::error::VortexResult;
 
 use crate::delta::compress::decompress;

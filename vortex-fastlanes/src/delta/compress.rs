@@ -3,10 +3,10 @@ use std::mem::size_of;
 use arrayref::array_ref;
 use num_traits::{WrappingAdd, WrappingSub};
 
-use fastlanez_sys::{Delta, transpose, untranspose};
-use vortex::array::{Array, ArrayRef};
+use fastlanez_sys::{transpose, untranspose, Delta};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::compute::flatten::flatten_primitive;
@@ -176,20 +176,16 @@ mod test {
     use super::*;
 
     fn compress_ctx() -> CompressCtx {
-        let cfg = CompressConfig::new(
-            HashSet::from([
-                DeltaEncoding.id(),
-            ]),
-            HashSet::default(),
-        );
+        let cfg = CompressConfig::new(HashSet::from([DeltaEncoding.id()]), HashSet::default());
         CompressCtx::new(Arc::new(cfg))
     }
 
     #[test]
     fn test_compress() {
         let ctx = compress_ctx();
-        let compressed = DeltaEncoding{}.compress(
-            &PrimitiveArray::from(Vec::from_iter(0..10_000)), None, ctx).unwrap();
+        let compressed = DeltaEncoding {}
+            .compress(&PrimitiveArray::from(Vec::from_iter(0..10_000)), None, ctx)
+            .unwrap();
 
         assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
         let delta = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();

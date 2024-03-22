@@ -11,8 +11,8 @@ use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex_schema::DType;
 
 mod compress;
-mod serde;
 mod compute;
+mod serde;
 
 #[derive(Debug, Clone)]
 pub struct DeltaArray {

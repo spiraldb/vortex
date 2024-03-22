@@ -43,19 +43,23 @@ pub fn untranspose<T: Sized>(input: &[T; 1024], output: &mut Vec<T>) {
         match size_of::<T>() {
             1 => fl_untranspose_u8(
                 input.as_ptr() as *const [u8; 1024],
-                array_mut_ref![output.reserve_uninit(1024), 0, 1024] as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u8; 1024],
+                array_mut_ref![output.reserve_uninit(1024), 0, 1024]
+                    as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u8; 1024],
             ),
             2 => fl_untranspose_u16(
                 input.as_ptr() as *const [u16; 1024],
-                array_mut_ref![output.reserve_uninit(1024), 0, 1024] as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u16; 1024],
+                array_mut_ref![output.reserve_uninit(1024), 0, 1024]
+                    as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u16; 1024],
             ),
             4 => fl_untranspose_u32(
                 input.as_ptr() as *const [u32; 1024],
-                array_mut_ref![output.reserve_uninit(1024), 0, 1024] as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u32; 1024],
+                array_mut_ref![output.reserve_uninit(1024), 0, 1024]
+                    as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u32; 1024],
             ),
             8 => fl_untranspose_u64(
                 input.as_ptr() as *const [u64; 1024],
-                array_mut_ref![output.reserve_uninit(1024), 0, 1024] as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u64; 1024],
+                array_mut_ref![output.reserve_uninit(1024), 0, 1024]
+                    as *mut [std::mem::MaybeUninit<T>; 1024] as *mut [u64; 1024],
             ),
             _ => unreachable!(),
         }
