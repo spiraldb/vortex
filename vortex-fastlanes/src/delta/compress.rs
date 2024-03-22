@@ -89,6 +89,7 @@ where
 
     // Start with a base vector of zeros.
     let mut base = [T::default(); 128 / size_of::<T>()];
+    let mut base_scalar = T::default();
 
     // Loop over all but the last chunk.
     if num_chunks > 0 {
@@ -99,12 +100,12 @@ where
             transpose(chunk, &mut transposed);
             Delta::encode_transposed(&transposed, &mut base, &mut output);
         }
+        base_scalar = array[num_chunks * 1024 - 1];
     }
 
     // To avoid padding, the remainder is encoded with scalar logic.
     let remainder_size = array.len() % 1024;
     if remainder_size > 0 {
-        let mut base_scalar = base[base.len() - 1];
         let chunk = &array[array.len() - remainder_size..];
         for next in chunk {
             output.push(next.wrapping_sub(&base_scalar));
@@ -139,6 +140,7 @@ where
 
     // Start with a base vector of zeros.
     let mut base = [T::default(); 128 / size_of::<T>()];
+    let mut base_scalar = T::default();
 
     // Loop over all the chunks
     if num_chunks > 0 {
@@ -149,12 +151,12 @@ where
             Delta::decode_transposed(chunk, &mut base, &mut transposed);
             untranspose(&transposed, &mut output);
         }
+        base_scalar = output[output.len() - 1];
     }
 
     // To avoid padding, the remainder is encoded with scalar logic.
     let remainder_size = array.len() % 1024;
     if remainder_size > 0 {
-        let mut base_scalar = base[base.len() - 1];
         let chunk = &array[array.len() - remainder_size..];
         for next in chunk {
             output.push(next.wrapping_add(&base_scalar));
@@ -171,18 +173,13 @@ mod test {
     use std::sync::Arc;
 
     use vortex::array::Encoding;
-    use vortex::array::primitive::PrimitiveEncoding;
-
-    use crate::BitPackedEncoding;
 
     use super::*;
 
     fn compress_ctx() -> CompressCtx {
         let cfg = CompressConfig::new(
             HashSet::from([
-                PrimitiveEncoding.id(),
                 DeltaEncoding.id(),
-                BitPackedEncoding.id(),
             ]),
             HashSet::default(),
         );
@@ -192,9 +189,9 @@ mod test {
     #[test]
     fn test_compress() {
         let ctx = compress_ctx();
-        let compressed = ctx
-            .compress(&PrimitiveArray::from(Vec::from_iter(0..10_000)), None)
-            .unwrap();
+        let compressed = DeltaEncoding{}.compress(
+            &PrimitiveArray::from(Vec::from_iter(0..10_000)), None, ctx).unwrap();
+
         assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
         let delta = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
         println!("Delta {:?}", delta);
