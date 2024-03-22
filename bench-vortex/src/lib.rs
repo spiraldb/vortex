@@ -27,13 +27,13 @@ use vortex_schema::DType;
 pub mod serde;
 pub mod taxi_data;
 
-pub fn idempotent(name: &str, f: impl FnOnce(&mut File) -> ()) -> PathBuf {
+pub fn idempotent(name: &str, f: impl FnOnce(&mut File)) -> PathBuf {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("data")
         .join(name);
     if !path.exists() {
         create_dir_all(path.parent().unwrap()).unwrap();
-        let mut file = File::create(path.to_path_buf()).unwrap();
+        let mut file = File::create(&path).unwrap();
         f(&mut file);
     }
     path.to_path_buf()

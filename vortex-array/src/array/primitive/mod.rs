@@ -112,8 +112,8 @@ impl PrimitiveArray {
     }
 
     #[inline]
-    pub fn ptype(&self) -> &PType {
-        &self.ptype
+    pub fn ptype(&self) -> PType {
+        self.ptype
     }
 
     #[inline]
@@ -131,7 +131,7 @@ impl PrimitiveArray {
     }
 
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
-        if self.ptype() != &T::PTYPE {
+        if self.ptype() != T::PTYPE {
             panic!(
                 "Invalid PType! Expected {}, got self.ptype {}",
                 T::PTYPE,

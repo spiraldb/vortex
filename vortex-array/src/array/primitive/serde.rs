@@ -5,7 +5,7 @@ use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for PrimitiveArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
-        ctx.ptype(self.ptype().clone())?;
+        ctx.ptype(self.ptype())?;
         ctx.write_optional_array(self.validity())?;
         ctx.write_buffer(self.len(), self.buffer())
     }

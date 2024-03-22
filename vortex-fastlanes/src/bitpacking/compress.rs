@@ -170,7 +170,7 @@ fn bitpack_patches(
 pub fn bitunpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
-    let encoded = flatten_primitive(cast(array.encoded(), &PType::U8.into())?.as_ref())?;
+    let encoded = flatten_primitive(cast(array.encoded(), PType::U8.into())?.as_ref())?;
     let ptype: PType = array.dtype().try_into()?;
 
     let mut unpacked = match ptype {
@@ -271,7 +271,7 @@ fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> usize
     best_width
 }
 
-fn bytes_per_exception(ptype: &PType) -> usize {
+fn bytes_per_exception(ptype: PType) -> usize {
     ptype.byte_width() + 4
 }
 
@@ -293,7 +293,7 @@ mod test {
         // 10 1-bit values, 20 2-bit, etc.
         let freq = vec![0, 10, 20, 15, 1, 0, 0, 0];
         // 3-bits => (46 * 3) + (8 * 1 * 5) => 178 bits => 23 bytes and zero exceptions
-        assert_eq!(best_bit_width(&freq, bytes_per_exception(&PType::U8)), 3);
+        assert_eq!(best_bit_width(&freq, bytes_per_exception(PType::U8)), 3);
     }
 
     #[test]
