@@ -1,6 +1,5 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::{impl_array, match_each_integer_ptype};
 use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::scalar_at::scalar_at;
@@ -8,6 +7,7 @@ use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
+use vortex::{impl_array, match_each_integer_ptype};
 use vortex_schema::DType;
 
 mod compress;
@@ -40,7 +40,17 @@ impl DeltaArray {
                 .into(),
             ));
         }
-        
+        if deltas.len() != len {
+            return Err(VortexError::InvalidArgument(
+                format!(
+                    "DeltaArray: provided deltas array of len {} does not match array len {}",
+                    deltas.len(),
+                    len
+                )
+                .into(),
+            ));
+        }
+
         let delta = Self {
             len,
             bases,
@@ -48,11 +58,19 @@ impl DeltaArray {
             validity,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         };
-        if delta.bases.len() % delta.lanes() != 0 {
+
+        let expected_bases_len = {
+            let num_chunks = len / 1024;
+            let remainder_base_size = if len % 1024 > 0 { 1 } else { 0 };
+            num_chunks * delta.lanes() + remainder_base_size
+        };
+        if delta.bases.len() != expected_bases_len {
             return Err(VortexError::InvalidArgument(
                 format!(
-                    "DeltaArray: bases.len() ({}) must be an exact multiple of lanes ({})",
+                    "DeltaArray: bases.len() ({}) != expected_bases_len ({}), based on len ({}) and lane count ({})",
                     delta.bases.len(),
+                    expected_bases_len,
+                    len,
                     delta.lanes()
                 )
                 .into(),

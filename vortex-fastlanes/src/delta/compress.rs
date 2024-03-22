@@ -52,103 +52,129 @@ impl EncodingCompression for DeltaEncoding {
 
         // Fill forward nulls
         let filled = fill_forward(array)?;
-        let delta_encoded = match_each_integer_ptype!(parray.ptype(), |$T| {
-            PrimitiveArray::from(compress_primitive(filled.as_primitive().typed_data::<$T>()))
+
+        // Compress the filled array
+        let (bases, deltas) = match_each_integer_ptype!(parray.ptype(), |$T| {
+            let (bases, deltas) = compress_primitive(filled.as_primitive().typed_data::<$T>());
+            (PrimitiveArray::from(bases), PrimitiveArray::from(deltas))
         });
 
-        let encoded = ctx
+        // Recursively compress the bases and deltas
+        let bases = ctx
+            .named("bases")
+            .compress(&bases, like_delta.map(|d| d.bases()))?;
+        let deltas = ctx
             .named("deltas")
-            .compress(&delta_encoded, like_delta.map(|d| d.encoded()))?;
+            .compress(&deltas, like_delta.map(|d| d.deltas()))?;
 
-        Ok(DeltaArray::try_new(array.len(), encoded, validity)
-            .unwrap()
-            .into_array())
+        Ok(DeltaArray::try_new(array.len(), bases, deltas, validity)?.into_array())
     }
 }
 
-fn compress_primitive<T: NativePType + Delta + WrappingSub>(array: &[T]) -> Vec<T>
+fn compress_primitive<T: NativePType + Delta + WrappingSub>(array: &[T]) -> (Vec<T>, Vec<T>)
 where
     [(); 128 / size_of::<T>()]:,
 {
     // How many fastlanes vectors we will process.
     let num_chunks = array.len() / 1024;
+
+    // How long each base vector will be.
     let lanes = T::lanes();
 
-    // Allocate a result array.
-    let mut output = Vec::with_capacity(array.len());
-    let mut base_scalar = T::default();
+    // Allocate result arrays.
+    let mut bases = Vec::with_capacity(num_chunks * lanes + 1);
+    let mut deltas = Vec::with_capacity(array.len());
 
-    // Loop over all but the last chunk.
+    // Loop over all of the 1024-element chunks.
     if num_chunks > 0 {
         let mut transposed: [T; 1024] = [T::default(); 1024];
+        let mut base = [T::default(); 128 / size_of::<T>()];
+        assert_eq!(base.len(), lanes);
+
         for i in 0..num_chunks {
             let start_elem = i * 1024;
             let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
             transpose(chunk, &mut transposed);
 
-            // Always use a base vector of zeros for now, until we split out the bases from deltas
-            let mut base = [T::default(); 128 / size_of::<T>()];
-            Delta::encode_transposed(&transposed, &mut base, &mut output);
+            // Initialize and store the base vector for each chunk
+            base.copy_from_slice(&transposed[0..lanes]);
+            bases.extend(base);
+
+            Delta::encode_transposed(&transposed, &mut base, &mut deltas);
         }
-        base_scalar = array[num_chunks * 1024 - 1];
     }
 
     // To avoid padding, the remainder is encoded with scalar logic.
     let remainder_size = array.len() % 1024;
     if remainder_size > 0 {
         let chunk = &array[array.len() - remainder_size..];
+        let mut base_scalar = chunk[0];
+        bases.push(base_scalar);
         for next in chunk {
             let diff = next.wrapping_sub(&base_scalar);
-            output.push(diff);
+            deltas.push(diff);
             base_scalar = *next;
         }
     }
 
-    output
+    assert_eq!(
+        bases.len(),
+        num_chunks * lanes + (if remainder_size > 0 { 1 } else { 0 })
+    );
+    assert_eq!(deltas.len(), array.len());
+
+    (bases, deltas)
 }
 
 pub fn decompress(array: &DeltaArray) -> VortexResult<PrimitiveArray> {
-    let deltas = flatten_primitive(array.encoded())?;
+    let bases = flatten_primitive(array.bases())?;
+    let deltas = flatten_primitive(array.deltas())?;
     let decoded = match_each_integer_ptype!(deltas.ptype(), |$T| {
         PrimitiveArray::from_nullable(
-            decompress_primitive::<$T>(deltas.typed_data()),
+            decompress_primitive::<$T>(bases.typed_data(), deltas.typed_data()),
             array.validity().cloned()
         )
     });
     Ok(decoded)
 }
 
-fn decompress_primitive<T: NativePType + Delta + WrappingAdd>(array: &[T]) -> Vec<T>
+fn decompress_primitive<T: NativePType + Delta + WrappingAdd>(bases: &[T], deltas: &[T]) -> Vec<T>
 where
     [(); 128 / size_of::<T>()]:,
 {
     // How many fastlanes vectors we will process.
-    let num_chunks = array.len() / 1024;
+    let num_chunks = deltas.len() / 1024;
+
+    // How long each base vector will be.
+    let lanes = T::lanes();
 
     // Allocate a result array.
-    let mut output = Vec::with_capacity(array.len());
-    let mut base_scalar = T::default();
+    let mut output = Vec::with_capacity(deltas.len());
 
     // Loop over all the chunks
     if num_chunks > 0 {
         let mut transposed: [T; 1024] = [T::default(); 1024];
+        let mut base = [T::default(); 128 / size_of::<T>()];
+        assert_eq!(base.len(), lanes);
+
         for i in 0..num_chunks {
             let start_elem = i * 1024;
-            let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
+            let chunk: &[T; 1024] = array_ref![deltas, start_elem, 1024];
 
             // Always use a base vector of zeros for now, until we split out the bases from deltas
-            let mut base = [T::default(); 128 / size_of::<T>()];
+            base.copy_from_slice(&bases[i * lanes..(i + 1) * lanes]);
             Delta::decode_transposed(chunk, &mut base, &mut transposed);
             untranspose(&transposed, &mut output);
         }
-        base_scalar = output[output.len() - 1];
     }
     assert_eq!(output.len() % 1024, 0);
 
     // To avoid padding, the remainder is encoded with scalar logic.
-    let remainder_size = array.len() % 1024;
+    let remainder_size = deltas.len() % 1024;
     if remainder_size > 0 {
-        let chunk = &array[num_chunks * 1024..];
+        let chunk = &deltas[num_chunks * 1024..];
+        assert_eq!(bases.len(), num_chunks * lanes + 1);
+        let mut base_scalar = bases[num_chunks * lanes];
         for next_diff in chunk {
             let next = next_diff.wrapping_add(&base_scalar);
             output.push(next);
@@ -196,7 +222,9 @@ mod test {
         let ctx = compress_ctx();
         let compressed = ctx
             .compress(
-                &PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))),
+                &PrimitiveArray::from(Vec::from_iter(
+                    (0..10_000).map(|i| (i % (u8::MAX as i32)) as u8),
+                )),
                 None,
             )
             .unwrap();
