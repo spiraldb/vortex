@@ -12,9 +12,9 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-ahash = "0.8.11"
+ahash = { workspace = true }
 half = { workspace = true }
-hashbrown = "0.14.3"
+hashbrown = { workspace = true }
 linkme = { workspace = true }
 log = { workspace = true }
 num-traits = { workspace = true }
@@ -25,10 +25,10 @@ vortex-schema = { path = "../vortex-schema" }
 workspace = true
 
 [dev-dependencies]
-criterion = { version = "0.5.1", features = ["html_reports"] }
-log = "0.4.20"
-rand = "0.8.5"
-simplelog = { version = "0.12.1", features = ["paris"] }
+criterion = { workspace = true }
+log = { workspace = true }
+rand = { workspace = true }
+simplelog = { workspace = true }
 
 [[bench]]
 name = "dict_compress"

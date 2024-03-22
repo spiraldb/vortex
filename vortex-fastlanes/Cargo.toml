@@ -15,7 +15,7 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
-arrayref = "0.3.7"
+arrayref = { workspace = true }
 vortex-schema = { path = "../vortex-schema" }
 vortex-array = { path = "../vortex-array" }
 linkme = { workspace = true }
@@ -25,4 +25,4 @@ fastlanez-sys = { path = "../fastlanez-sys" }
 log = { workspace = true }
 
 [dev-dependencies]
-simplelog = { version = "0.12.1", features = ["paris"] }
+simplelog = { workspace = true }

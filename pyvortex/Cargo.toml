@@ -31,8 +31,8 @@ vortex-zigzag = { path = "../vortex-zigzag" }
 itertools = { workspace = true }
 log = { workspace = true }
 paste = { workspace = true }
-pyo3 = { version = "0.20.2", features = ["extension-module", "abi3-py311"] }
-pyo3-log = "0.9.0"
+pyo3 = { workspace = true }
+pyo3-log = { workspace = true }
 
 # We may need this workaround?
 # https://pyo3.rs/v0.20.2/faq.html#i-cant-run-cargo-test-or-i-cant-build-in-a-cargo-workspace-im-having-linker-issues-like-symbol-not-found-or-undefined-reference-to-_pyexc_systemerror

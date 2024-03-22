@@ -23,7 +23,7 @@ num-traits = { workspace = true }
 log = { workspace = true }
 
 [dev-dependencies]
-divan = "0.1.14"
+divan = { workspace = true }
 
 [[bench]]
 name = "alp_compress"
