@@ -75,16 +75,12 @@ impl Default for CompressConfig {
 }
 
 impl CompressConfig {
-    const DEFAULT_ENCODINGS: [EncodingId; 9] = [
-        BoolEncoding::ID,
+    const DEFAULT_ENCODINGS: [EncodingId; 5] = [
         ChunkedEncoding::ID,
         CompositeEncoding::ID,
-        ConstantEncoding::ID,
-        PrimitiveEncoding::ID,
         SparseEncoding::ID,
         StructEncoding::ID,
         VarBinEncoding::ID,
-        VarBinViewEncoding::ID,
     ];
 
     pub fn new(
