@@ -161,7 +161,7 @@ where
             let start_elem = i * 1024;
             let chunk: &[T; 1024] = array_ref![deltas, start_elem, 1024];
 
-            // Always use a base vector of zeros for now, until we split out the bases from deltas
+            // Initialize the base vector for this chunk
             base.copy_from_slice(&bases[i * lanes..(i + 1) * lanes]);
             Delta::decode_transposed(chunk, &mut base, &mut transposed);
             untranspose(&transposed, &mut output);
@@ -169,7 +169,7 @@ where
     }
     assert_eq!(output.len() % 1024, 0);
 
-    // To avoid padding, the remainder is encoded with scalar logic.
+    // The remainder was encoded with scalar logic, so we need to scalar decode it.
     let remainder_size = deltas.len() % 1024;
     if remainder_size > 0 {
         let chunk = &deltas[num_chunks * 1024..];
