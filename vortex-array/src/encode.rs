@@ -55,7 +55,7 @@ impl IntoArray for NullBuffer {
 
 impl<T: ArrowNativeType + NativePType> IntoArray for ScalarBuffer<T> {
     fn into_array(self) -> ArrayRef {
-        PrimitiveArray::new(T::PTYPE, self.into_inner(), None).boxed()
+        PrimitiveArray::new(T::PTYPE, self.into_inner(), None).into_array()
     }
 }
 
@@ -129,16 +129,16 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayRef {
         };
 
         VarBinViewArray::new(
-            value.views().into(),
+            value.views().inner().clone().into_array(),
             value
                 .data_buffers()
                 .iter()
-                .map(|b| b.into())
+                .map(|b| b.clone().into_array())
                 .collect::<Vec<_>>(),
             dtype,
             nulls(value.nulls(), nullable, value.len()),
         )
-        .boxed()
+        .into_array()
     }
 }
 

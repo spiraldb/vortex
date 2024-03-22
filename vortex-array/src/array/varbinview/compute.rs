@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use arrow_array::{ArrayRef as ArrowArrayRef, BinaryViewArray, StringViewArray};
+use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
 
 use vortex_schema::DType;
 
 use crate::array::varbinview::VarBinViewArray;
 use crate::array::Array;
-use crate::arrow::wrappers::{as_nulls, as_scalar_buffer};
+use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
@@ -69,9 +70,9 @@ impl FlattenFn for VarBinViewArray {
 
 impl AsArrowArray for VarBinViewArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
-        // Ensure the offsets are either i32 or i64
+        // Views should be buffer of u8
         let views = flatten_primitive(self.views())?;
-        assert_eq!(views.ptype(), &PType::U128);
+        assert_eq!(views.ptype(), &PType::U8);
         let nulls = as_nulls(self.validity())?;
 
         let data = self
@@ -92,12 +93,12 @@ impl AsArrowArray for VarBinViewArray {
         // Switch on Arrow DType.
         Ok(match self.dtype() {
             DType::Binary(_) => Arc::new(BinaryViewArray::new(
-                as_scalar_buffer::<u128>(views),
+                ScalarBuffer::<u128>::from(views.buffer().clone()),
                 data,
                 nulls,
             )),
             DType::Utf8(_) => Arc::new(StringViewArray::new(
-                as_scalar_buffer::<u128>(views),
+                ScalarBuffer::<u128>::from(views.buffer().clone()),
                 data,
                 nulls,
             )),

@@ -97,12 +97,10 @@ pub enum PScalar {
     U16(u16),
     U32(u32),
     U64(u64),
-    U128(u128),
     I8(i8),
     I16(i16),
     I32(i32),
     I64(i64),
-    I128(i128),
     F16(f16),
     F32(f32),
     F64(f64),
@@ -115,12 +113,10 @@ impl PScalar {
             PScalar::U16(_) => PType::U16,
             PScalar::U32(_) => PType::U32,
             PScalar::U64(_) => PType::U64,
-            PScalar::U128(_) => PType::U128,
             PScalar::I8(_) => PType::I8,
             PScalar::I16(_) => PType::I16,
             PScalar::I32(_) => PType::I32,
             PScalar::I64(_) => PType::I64,
-            PScalar::I128(_) => PType::I128,
             PScalar::F16(_) => PType::F16,
             PScalar::F32(_) => PType::F32,
             PScalar::F64(_) => PType::F64,
@@ -135,12 +131,10 @@ impl PScalar {
                     PType::U16 => Ok((*$v as u16).into()),
                     PType::U32 => Ok((*$v as u32).into()),
                     PType::U64 => Ok((*$v as u64).into()),
-                    PType::U128 => Ok((*$v as u128).into()),
                     PType::I8 => Ok((*$v as i8).into()),
                     PType::I16 => Ok((*$v as i16).into()),
                     PType::I32 => Ok((*$v as i32).into()),
                     PType::I64 => Ok((*$v as i64).into()),
-                    PType::I128 => Ok((*$v as i128).into()),
                     PType::F16 => Ok(f16::from_f32(*$v as f32).into()),
                     PType::F32 => Ok((*$v as f32).into()),
                     PType::F64 => Ok((*$v as f64).into()),
@@ -164,12 +158,10 @@ impl PScalar {
             PScalar::U16(v) => from_int!(ptype, v),
             PScalar::U32(v) => from_int!(ptype, v),
             PScalar::U64(v) => from_int!(ptype, v),
-            PScalar::U128(v) => from_int!(ptype, v),
             PScalar::I8(v) => from_int!(ptype, v),
             PScalar::I16(v) => from_int!(ptype, v),
             PScalar::I32(v) => from_int!(ptype, v),
             PScalar::I64(v) => from_int!(ptype, v),
-            PScalar::I128(v) => from_int!(ptype, v),
             PScalar::F16(v) => match ptype {
                 PType::F16 => Ok((*v).into()),
                 PType::F32 => Ok(v.to_f32().into()),
@@ -241,12 +233,10 @@ pscalar!(u8, U8);
 pscalar!(u16, U16);
 pscalar!(u32, U32);
 pscalar!(u64, U64);
-pscalar!(u128, U128);
 pscalar!(i8, I8);
 pscalar!(i16, I16);
 pscalar!(i32, I32);
 pscalar!(i64, I64);
-pscalar!(i128, I128);
 pscalar!(f16, F16);
 pscalar!(f32, F32);
 pscalar!(f64, F64);
@@ -315,12 +305,10 @@ impl TryFrom<&Scalar> for usize {
                     PScalar::U16(v) => __with_pscalar__! { v },
                     PScalar::U32(v) => __with_pscalar__! { v },
                     PScalar::U64(v) => __with_pscalar__! { v },
-                    PScalar::U128(v) => __with_pscalar__! { v },
                     PScalar::I8(v) => __with_pscalar__! { v },
                     PScalar::I16(v) => __with_pscalar__! { v },
                     PScalar::I32(v) => __with_pscalar__! { v },
                     PScalar::I64(v) => __with_pscalar__! { v },
-                    PScalar::I128(v) => __with_pscalar__! { v },
                     _ => Err(VortexError::InvalidDType($self.ptype().into())),
                 }
             })
@@ -348,12 +336,10 @@ impl Display for PScalar {
             PScalar::U16(p) => Display::fmt(p, f),
             PScalar::U32(p) => Display::fmt(p, f),
             PScalar::U64(p) => Display::fmt(p, f),
-            PScalar::U128(p) => Display::fmt(p, f),
             PScalar::I8(p) => Display::fmt(p, f),
             PScalar::I16(p) => Display::fmt(p, f),
             PScalar::I32(p) => Display::fmt(p, f),
             PScalar::I64(p) => Display::fmt(p, f),
-            PScalar::I128(p) => Display::fmt(p, f),
             PScalar::F16(p) => Display::fmt(p, f),
             PScalar::F32(p) => Display::fmt(p, f),
             PScalar::F64(p) => Display::fmt(p, f),
