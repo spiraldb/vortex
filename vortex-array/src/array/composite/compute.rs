@@ -52,14 +52,14 @@ impl AsContiguousFn for CompositeArray {
         let composites = arrays
             .iter()
             .map(|array| array.as_composite().underlying())
-            .map(dyn_clone::clone_box)
+            .cloned()
             .collect_vec();
         Ok(CompositeArray::new(
             self.id(),
             self.metadata().clone(),
             as_contiguous(composites)?,
         )
-        .boxed())
+        .into_array())
     }
 }
 
