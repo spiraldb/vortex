@@ -201,34 +201,30 @@ mod test {
 
     #[test]
     fn test_compress() {
+        do_roundtrip_test(Vec::from_iter(0..10_000));
+    }
+
+    #[test]
+    fn test_compress_overflow() {
+        do_roundtrip_test(Vec::from_iter(
+            (0..10_000).map(|i| (i % (u8::MAX as i32)) as u8),
+        ));
+    }
+
+    fn do_roundtrip_test<T: NativePType>(input: Vec<T>) {
         let ctx = compress_ctx();
         let compressed = DeltaEncoding {}
-            .compress(&PrimitiveArray::from(Vec::from_iter(0..10_000)), None, ctx)
+            .compress(&PrimitiveArray::from(input.clone()), None, ctx)
             .unwrap();
 
         assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
         let delta = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
 
         let decompressed = decompress(delta).unwrap();
-        let decompressed_slice = decompressed.typed_data::<i32>();
-        assert_eq!(decompressed_slice.len(), 10_000);
-        for (actual, expected) in decompressed_slice.iter().zip(0..10_000) {
+        let decompressed_slice = decompressed.typed_data::<T>();
+        assert_eq!(decompressed_slice.len(), input.len());
+        for (actual, expected) in decompressed_slice.iter().zip(input) {
             assert_eq!(actual, &expected);
         }
-    }
-
-    #[test]
-    fn test_compress_overflow() {
-        let ctx = compress_ctx();
-        let compressed = ctx
-            .compress(
-                &PrimitiveArray::from(Vec::from_iter(
-                    (0..10_000).map(|i| (i % (u8::MAX as i32)) as u8),
-                )),
-                None,
-            )
-            .unwrap();
-        assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
-        _ = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
     }
 }
