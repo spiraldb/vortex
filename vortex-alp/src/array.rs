@@ -51,7 +51,7 @@ impl ALPArray {
     pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(alp_encode(p)?.into_array()),
-            _ => Err(VortexError::InvalidEncoding(array.encoding().id())),
+            _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
         }
     }
 
