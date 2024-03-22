@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use std::sync::Arc;
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -122,17 +121,10 @@ pub fn decompress(array: &ALPArray) -> VortexResult<PrimitiveArray> {
             encoded.validity().cloned(),
         )
     })?;
+
     if let Some(patches) = array.patches() {
         // TODO(#121): right now, applying patches forces an extraneous copy of the array data
-        let patched = patch(&decoded, patches)?;
-        let patched_encoding_id = patched.encoding().id().clone();
-        patched
-            .into_any()
-            .downcast::<PrimitiveArray>()
-            .map_err(|_| VortexError::InvalidEncoding(patched_encoding_id))
-            .map(|p| {
-                Arc::into_inner(p).expect("Patches were just constructed, expected one strong ref")
-            })
+        flatten_primitive(&patch(&decoded, patches)?)
     } else {
         Ok(decoded)
     }

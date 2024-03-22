@@ -197,14 +197,14 @@ pub fn bitunpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     // Cast to signed if necessary
     // TODO(ngates): do this more efficiently since we know it's a safe cast. unchecked_cast maybe?
     if ptype.is_signed_int() {
-        unpacked = cast(unpacked.as_ref(), &ptype.into())?
+        unpacked = cast(&unpacked, &ptype.into())?
     }
 
     if let Some(patches) = array.patches() {
         unpacked = patch(unpacked.as_ref(), patches)?;
     }
 
-    Ok(unpacked.as_primitive().clone())
+    Ok(flatten_primitive(&unpacked)?)
 }
 
 fn bitunpack_primitive<T: NativePType + TryBitPack>(
