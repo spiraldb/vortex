@@ -26,13 +26,13 @@ vortex-roaring = { path = "../vortex-roaring" }
 vortex-schema = { path = "../vortex-schema" }
 vortex-zigzag = { path = "../vortex-zigzag" }
 itertools = { workspace = true }
-reqwest = { version = "0.12.1", features = ["blocking"] }
+reqwest = { workspace = true }
 parquet = { workspace = true }
 log = { workspace = true }
-simplelog = { version = "0.12.1", features = ["paris"] }
+simplelog = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.5.1", features = ["html_reports"] }
+criterion = { workspace = true }
 
 [[bench]]
 name = "compress_benchmark"
