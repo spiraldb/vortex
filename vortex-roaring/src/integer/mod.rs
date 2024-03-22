@@ -55,7 +55,7 @@ impl RoaringIntArray {
     pub fn encode(array: &dyn Array) -> VortexResult<Self> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(roaring_encode(p)),
-            _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
+            _ => Err(VortexError::InvalidEncoding(array.encoding().id())),
         }
     }
 }

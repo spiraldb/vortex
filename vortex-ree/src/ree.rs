@@ -82,7 +82,7 @@ impl REEArray {
                 )
                 .into_array())
             }
-            _ => Err(VortexError::InvalidEncoding(array.encoding().id().clone())),
+            _ => Err(VortexError::InvalidEncoding(array.encoding().id())),
         }
     }
 
