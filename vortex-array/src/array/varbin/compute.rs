@@ -95,7 +95,7 @@ impl AsArrowArray for VarBinArray {
             }
             _ => flatten_primitive(cast(&offsets.to_array(), PType::I32.into())?.as_ref())?,
         };
-        let nulls = as_nulls(offsets.validity())?;
+        let nulls = as_nulls(self.validity())?;
 
         let data = flatten_primitive(self.bytes())?;
         assert_eq!(data.ptype(), PType::U8);
