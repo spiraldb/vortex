@@ -17,7 +17,7 @@ impl EncodingCompression for DateTimeEncoding {
         array: &dyn Array,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
-        if array.encoding().id() != &CompositeEncoding::ID {
+        if array.encoding().id() != CompositeEncoding::ID {
             return None;
         }
 

@@ -27,8 +27,8 @@ impl EncodingCompression for DictEncoding {
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // TODO(robert): Add support for VarBinView
-        if array.encoding().id() != &PrimitiveEncoding::ID
-            && array.encoding().id() != &VarBinEncoding::ID
+        if array.encoding().id() != PrimitiveEncoding::ID
+            && array.encoding().id() != VarBinEncoding::ID
         {
             return None;
         };

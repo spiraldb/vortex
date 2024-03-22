@@ -111,7 +111,7 @@ impl PyArray {
                 inner.into_any().downcast::<VarBinViewArray>().unwrap(),
             )?
             .extract(py),
-            ArrayKind::Other(other) => match *other.encoding().id() {
+            ArrayKind::Other(other) => match other.encoding().id() {
                 // PyEnc chooses to expose certain encodings as first-class objects.
                 // For the remainder, we should have a generic EncArray implementation that supports basic functions.
                 ALPEncoding::ID => {

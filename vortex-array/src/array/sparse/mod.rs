@@ -163,8 +163,8 @@ impl SparseEncoding {
 static ENCODINGS_SPARSE: EncodingRef = &SparseEncoding;
 
 impl Encoding for SparseEncoding {
-    fn id(&self) -> &EncodingId {
-        &Self::ID
+    fn id(&self) -> EncodingId {
+        Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

@@ -136,11 +136,13 @@ impl ArrayDisplay for DateTimeArray {
 #[derive(Debug)]
 pub struct DateTimeEncoding;
 
-pub const DATETIME_ENCODING: EncodingId = EncodingId::new("vortex.datetime");
+impl DateTimeEncoding {
+    pub const ID: EncodingId = EncodingId::new("vortex.datetime");
+}
 
 impl Encoding for DateTimeEncoding {
-    fn id(&self) -> &EncodingId {
-        &DATETIME_ENCODING
+    fn id(&self) -> EncodingId {
+        Self::ID
     }
 
     fn compression(&self) -> Option<&dyn EncodingCompression> {

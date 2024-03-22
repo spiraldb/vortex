@@ -139,7 +139,6 @@ mod test {
     use std::collections::HashSet;
     use std::sync::Arc;
 
-    use vortex::array::primitive::PrimitiveEncoding;
     use vortex::array::Encoding;
 
     use crate::BitPackedEncoding;
@@ -149,11 +148,7 @@ mod test {
     fn compress_ctx() -> CompressCtx {
         let cfg = CompressConfig::new(
             // We need some BitPacking else we will need choose FoR.
-            HashSet::from([
-                PrimitiveEncoding.id(),
-                FoREncoding.id(),
-                BitPackedEncoding.id(),
-            ]),
+            HashSet::from([FoREncoding.id(), BitPackedEncoding.id()]),
             HashSet::default(),
         );
         CompressCtx::new(Arc::new(cfg))
