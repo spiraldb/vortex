@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use arrow_array::{ArrayRef as ArrowArrayRef, RecordBatchReader, StructArray as ArrowStructArray};
+use bench_vortex::taxi_data::download_taxi_data;
+use bench_vortex::{compress_ctx, idempotent};
 use itertools::Itertools;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
@@ -15,9 +17,6 @@ use vortex::encode::FromArrowArray;
 use vortex::ptype::PType;
 use vortex::serde::{ReadCtx, WriteCtx};
 use vortex_schema::DType;
-
-use crate::taxi_data::download_taxi_data;
-use crate::{compress_ctx, idempotent};
 
 pub fn write_taxi_data() -> PathBuf {
     idempotent("taxi.spiral", |write| {
@@ -58,30 +57,8 @@ pub fn take_taxi_data(path: &Path, indices: &[u64]) -> ArrayRef {
     take(&chunked, &PrimitiveArray::from(indices.to_vec())).unwrap()
 }
 
-#[cfg(test)]
-mod test {
-
-    use log::LevelFilter;
-    use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-
-    use crate::serde::{take_taxi_data, write_taxi_data};
-
-    #[allow(dead_code)]
-    fn setup_logger(level: LevelFilter) {
-        TermLogger::init(
-            level,
-            Config::default(),
-            TerminalMode::Mixed,
-            ColorChoice::Auto,
-        )
-        .unwrap();
-    }
-
-    #[ignore]
-    #[test]
-    fn round_trip_serde() {
-        let taxi_spiral = write_taxi_data();
-        let rows = take_taxi_data(&taxi_spiral, &[10, 11, 12, 13, 100_000, 3_000_000]);
-        println!("TAKE TAXI DATA: {:?}", rows);
-    }
+pub fn main() {
+    let taxi_spiral = write_taxi_data();
+    let rows = take_taxi_data(&taxi_spiral, &[10, 11, 12, 13, 100_000, 3_000_000]);
+    println!("TAKE TAXI DATA: {:?}", rows);
 }

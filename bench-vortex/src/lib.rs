@@ -24,7 +24,6 @@ use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
 
-pub mod serde;
 pub mod taxi_data;
 
 pub fn idempotent(name: &str, f: impl FnOnce(&mut File)) -> PathBuf {

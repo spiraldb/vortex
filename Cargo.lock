@@ -2662,6 +2662,7 @@ dependencies = [
  "arrow-buffer",
  "arrow-schema",
  "half",
+ "hashbrown",
  "humansize",
  "itertools 0.12.1",
  "leb128",

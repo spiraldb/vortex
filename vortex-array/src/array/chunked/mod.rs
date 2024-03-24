@@ -20,7 +20,7 @@ mod stats;
 #[derive(Debug, Clone)]
 pub struct ChunkedArray {
     chunks: Vec<ArrayRef>,
-    chunk_ends: Vec<usize>,
+    chunk_ends: Vec<u64>,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
@@ -43,11 +43,11 @@ impl ChunkedArray {
 
         let chunk_ends = chunks
             .iter()
-            .scan(0usize, |acc, c| {
-                *acc += c.len();
+            .scan(0u64, |acc, c| {
+                *acc += c.len() as u64;
                 Some(*acc)
             })
-            .collect::<Vec<usize>>();
+            .collect_vec();
 
         let dtype = if chunks.iter().any(|c| c.dtype().is_nullable()) && !dtype.is_nullable() {
             dtype.as_nullable()
@@ -68,11 +68,16 @@ impl ChunkedArray {
         &self.chunks
     }
 
+    #[inline]
+    pub fn chunk_ends(&self) -> &[u64] {
+        &self.chunk_ends
+    }
+
     fn find_physical_location(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
         let index_chunk = self
             .chunk_ends
-            .binary_search(&index)
+            .binary_search(&(index as u64))
             // If the result of binary_search is Ok it means we have exact match, since these are chunk ends EXCLUSIVE we have to add one to move to the next one
             .map(|o| o + 1)
             .unwrap_or_else(|o| o);
@@ -81,7 +86,7 @@ impl ChunkedArray {
                 0
             } else {
                 self.chunk_ends[index_chunk - 1]
-            };
+            } as usize;
         (index_chunk, index_in_chunk)
     }
 }
@@ -90,7 +95,7 @@ impl Array for ChunkedArray {
     impl_array!();
 
     fn len(&self) -> usize {
-        *self.chunk_ends.last().unwrap_or(&0usize)
+        self.chunk_ends.last().map(|&i| i as usize).unwrap_or(0)
     }
 
     #[inline]

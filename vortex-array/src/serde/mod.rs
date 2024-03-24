@@ -39,6 +39,11 @@ pub struct ReadCtx<'a> {
     r: &'a mut dyn Read,
 }
 
+pub trait Serde: Sized {
+    fn read(ctx: &mut ReadCtx) -> VortexResult<Self>;
+    fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;
+}
+
 impl<'a> ReadCtx<'a> {
     pub fn new(schema: &'a DType, r: &'a mut dyn Read) -> Self {
         let encodings = ENCODINGS.iter().map(|e| e.id()).collect::<Vec<_>>();

@@ -6,9 +6,12 @@ use crate::array::ArrayRef;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
+use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::error::VortexResult;
 use crate::scalar::Scalar;
+
+mod take;
 
 impl ArrayCompute for ChunkedArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
@@ -20,6 +23,10 @@ impl ArrayCompute for ChunkedArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
 }
