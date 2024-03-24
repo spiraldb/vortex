@@ -294,14 +294,14 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
 
     // Take a sample of the array, then ask codecs for their best compression estimate.
     let sample = compute::as_contiguous::as_contiguous(
-        stratified_slices(
+        &stratified_slices(
             array.len(),
             ctx.options.sample_size,
             ctx.options.sample_count,
         )
         .into_iter()
         .map(|(start, stop)| array.slice(start, stop).unwrap())
-        .collect(),
+        .collect::<Vec<_>>(),
     )?;
 
     find_best_compression(candidates, &sample, ctx)?

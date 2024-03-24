@@ -32,14 +32,14 @@ impl ArrayCompute for ChunkedArray {
 }
 
 impl AsContiguousFn for ChunkedArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         // Combine all the chunks into one, then call as_contiguous again.
         let chunks = arrays
             .iter()
             .flat_map(|a| a.as_chunked().chunks().iter())
             .cloned()
             .collect_vec();
-        as_contiguous(chunks)
+        as_contiguous(&chunks)
     }
 }
 
@@ -51,7 +51,7 @@ impl FlattenFn for ChunkedArray {
 
 impl ScalarAtFn for ChunkedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let (chunk_index, chunk_offset) = self.find_physical_location(index);
+        let (chunk_index, chunk_offset) = self.find_chunk_idx(index);
         scalar_at(self.chunks[chunk_index].as_ref(), chunk_offset)
     }
 }

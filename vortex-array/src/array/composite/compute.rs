@@ -48,7 +48,7 @@ impl AsArrowArray for CompositeArray {
 }
 
 impl AsContiguousFn for CompositeArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         let composites = arrays
             .iter()
             .map(|array| array.as_composite().underlying())
@@ -57,7 +57,7 @@ impl AsContiguousFn for CompositeArray {
         Ok(CompositeArray::new(
             self.id(),
             self.metadata().clone(),
-            as_contiguous(composites)?,
+            as_contiguous(&composites)?,
         )
         .into_array())
     }

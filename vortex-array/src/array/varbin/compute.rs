@@ -41,16 +41,15 @@ impl ArrayCompute for VarBinArray {
 }
 
 impl AsContiguousFn for VarBinArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
-        let bytes = as_contiguous(
-            arrays
-                .iter()
-                .map(|a| a.as_varbin().sliced_bytes())
-                .try_collect()?,
-        )?;
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
+        let bytes_chunks: Vec<ArrayRef> = arrays
+            .iter()
+            .map(|a| a.as_varbin().sliced_bytes())
+            .try_collect()?;
+        let bytes = as_contiguous(&bytes_chunks)?;
 
         let validity = as_contiguous(
-            arrays
+            &arrays
                 .iter()
                 .map(|a| {
                     a.as_varbin()

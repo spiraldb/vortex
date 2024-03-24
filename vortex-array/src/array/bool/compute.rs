@@ -32,13 +32,13 @@ impl ArrayCompute for BoolArray {
 }
 
 impl AsContiguousFn for BoolArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         // TODO(ngates): implement a HasValidity trait to avoid this duplicate code.
         let validity = if arrays.iter().all(|a| a.as_bool().validity().is_none()) {
             None
         } else {
             Some(as_contiguous(
-                arrays
+                &arrays
                     .iter()
                     .map(|a| {
                         a.as_bool()

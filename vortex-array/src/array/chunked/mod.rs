@@ -73,7 +73,7 @@ impl ChunkedArray {
         &self.chunk_ends
     }
 
-    fn find_physical_location(&self, index: usize) -> (usize, usize) {
+    pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
         let index_chunk = self
             .chunk_ends
@@ -116,8 +116,8 @@ impl Array for ChunkedArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
-        let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(start);
-        let (length_chunk, length_in_last_chunk) = self.find_physical_location(stop);
+        let (offset_chunk, offset_in_first_chunk) = self.find_chunk_idx(start);
+        let (length_chunk, length_in_last_chunk) = self.find_chunk_idx(stop);
 
         if length_chunk == offset_chunk {
             if let Some(chunk) = self.chunks.get(offset_chunk) {

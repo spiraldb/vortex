@@ -67,7 +67,7 @@ impl AsArrowArray for StructArray {
 }
 
 impl AsContiguousFn for StructArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         let mut fields = vec![Vec::new(); self.fields().len()];
         for array in arrays {
             for f in 0..self.fields().len() {
@@ -79,7 +79,7 @@ impl AsContiguousFn for StructArray {
             self.names().clone(),
             fields
                 .iter()
-                .map(|field_arrays| as_contiguous(field_arrays.clone()))
+                .map(|field_arrays| as_contiguous(field_arrays))
                 .try_collect()?,
         )
         .into_array())

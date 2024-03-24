@@ -10,7 +10,7 @@ use itertools::Itertools;
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 
 impl AsContiguousFn for PrimitiveArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         if !arrays
             .iter()
             .map(|chunk| chunk.as_primitive().ptype())
@@ -26,7 +26,7 @@ impl AsContiguousFn for PrimitiveArray {
             None
         } else {
             Some(as_contiguous(
-                arrays
+                &arrays
                     .iter()
                     .map(|a| {
                         a.as_primitive()
