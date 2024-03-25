@@ -2,6 +2,7 @@ use itertools::Itertools;
 use num_traits::PrimInt;
 
 use crate::{FoRArray, FoREncoding};
+use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
@@ -52,7 +53,7 @@ impl EncodingCompression for FoREncoding {
         let shift = trailing_zeros(parray);
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
             if shift == <$T>::PTYPE.bit_width() as u8 {
-                ConstantArray::new($T::default().into(), parray.len()).into_array()
+                ConstantArray::new($T::default(), parray.len()).into_array()
             } else {
                 compress_primitive::<$T>(parray, shift).into_array()
             }
