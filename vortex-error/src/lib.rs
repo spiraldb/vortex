@@ -8,8 +8,6 @@ use vortex_schema::{DType, ErrString};
 pub enum VortexError {
     #[error("index {0} out of bounds from {1} to {2}")]
     OutOfBounds(usize, usize, usize),
-    #[error("arguments have different lengths")]
-    LengthMismatch,
     #[error("{0}")]
     ComputeError(ErrString),
     #[error("{0}")]
@@ -21,14 +19,10 @@ pub enum VortexError {
     MissingKernel(&'static str, &'static str, Vec<&'static str>),
     #[error("invalid data type: {0}")]
     InvalidDType(DType),
-    #[error("can't convert type {0} into {1}")]
-    IncompatibleTypes(DType, DType),
     #[error("Expected type {0} but found type {1}")]
     MismatchedTypes(DType, DType),
     #[error("unexpected arrow data type: {0:?}")]
     InvalidArrowDataType(arrow_schema::DataType),
-    #[error("patch values may not be null for base dtype {0}")]
-    NullPatchValuesNotAllowed(DType),
     #[error("unsupported DType {0} for data array")]
     UnsupportedDataArrayDType(DType),
     #[error("unsupported DType {0} for offsets array")]
