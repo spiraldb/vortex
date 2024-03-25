@@ -238,7 +238,7 @@ impl Array for VarBinViewArray {
 
 impl ArrayValidity for VarBinViewArray {
     fn validity(&self) -> Option<Validity> {
-        todo!()
+        self.validity.clone()
     }
 }
 
