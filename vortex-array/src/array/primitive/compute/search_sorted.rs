@@ -1,7 +1,8 @@
+use vortex_error::VortexResult;
+
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::search_sorted::SearchSorted;
 use crate::compute::search_sorted::{SearchSortedFn, SearchSortedSide};
-use crate::error::VortexResult;
 use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
 

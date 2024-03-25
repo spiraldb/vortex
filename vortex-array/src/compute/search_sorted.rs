@@ -1,5 +1,6 @@
+use vortex_error::{VortexError, VortexResult};
+
 use crate::array::Array;
-use crate::error::{VortexError, VortexResult};
 use crate::scalar::Scalar;
 use std::cmp::Ordering;
 
@@ -24,7 +25,7 @@ pub fn search_sorted<T: Into<Scalar>>(
         .unwrap_or_else(|| {
             Err(VortexError::NotImplemented(
                 "search_sorted",
-                array.encoding().id(),
+                array.encoding().id().name(),
             ))
         })
 }

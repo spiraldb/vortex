@@ -1,5 +1,7 @@
 use itertools::Itertools;
 
+use vortex_error::VortexResult;
+
 use crate::array::chunked::ChunkedArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::ArrayRef;
@@ -8,7 +10,6 @@ use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::error::VortexResult;
 use crate::scalar::Scalar;
 
 mod take;
