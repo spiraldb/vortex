@@ -4,6 +4,7 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use crate::validity::ArrayValidity;
 
 impl EncodingCompression for VarBinEncoding {
     fn cost(&self) -> u8 {
@@ -31,12 +32,7 @@ impl EncodingCompression for VarBinEncoding {
                 .compress(vb.offsets(), vblike.map(|l| l.offsets()))?,
             vb.bytes().clone(),
             vb.dtype().clone(),
-            vb.validity()
-                .map(|v| {
-                    ctx.auxiliary("validity")
-                        .compress(v, vblike.and_then(|l| l.validity()))
-                })
-                .transpose()?,
+            ctx.compress_validity(vb.validity())?,
         )
         .into_array())
     }

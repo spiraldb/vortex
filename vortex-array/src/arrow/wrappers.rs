@@ -3,11 +3,8 @@ use arrow_buffer::{ArrowNativeType, NullBuffer, OffsetBuffer, ScalarBuffer};
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayRef};
-use crate::compute::flatten::flatten_bool;
-use crate::compute::scalar_at::scalar_at;
 use crate::ptype::NativePType;
-use crate::stats::Stat;
+use crate::validity::Validity;
 
 pub fn as_scalar_buffer<T: NativePType + ArrowNativeType>(
     array: PrimitiveArray,
@@ -22,26 +19,22 @@ pub fn as_offset_buffer<T: NativePType + ArrowNativeType>(
     OffsetBuffer::new(as_scalar_buffer(array))
 }
 
-pub fn as_nulls(validity: Option<&ArrayRef>) -> VortexResult<Option<NullBuffer>> {
+pub fn as_nulls(validity: Option<Validity>) -> VortexResult<Option<NullBuffer>> {
     if validity.is_none() {
         return Ok(None);
     }
 
     // Short-circuit if the validity is constant
     let validity = validity.unwrap();
-    if validity
-        .stats()
-        .get_as::<bool>(&Stat::IsConstant)
-        .unwrap_or_default()
-    {
-        return if scalar_at(validity, 0)?.try_into().unwrap() {
-            Ok(None)
-        } else {
-            Ok(Some(NullBuffer::new_null(validity.len())))
-        };
+    if validity.all_valid() {
+        return Ok(None);
+    }
+
+    if validity.all_invalid() {
+        return Ok(Some(NullBuffer::new_null(validity.len())));
     }
 
     Ok(Some(NullBuffer::new(
-        flatten_bool(validity)?.buffer().clone(),
+        validity.to_bool_array().buffer().clone(),
     )))
 }

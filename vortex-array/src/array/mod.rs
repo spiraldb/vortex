@@ -38,7 +38,6 @@ pub mod chunked;
 pub mod composite;
 pub mod constant;
 pub mod downcast;
-pub mod lazy;
 pub mod primitive;
 pub mod sparse;
 pub mod struct_;
@@ -203,7 +202,7 @@ impl Array for ArrayRef {
 }
 
 impl ArrayValidity for ArrayRef {
-    fn validity(&self) -> Validity {
+    fn validity(&self) -> Option<Validity> {
         self.as_ref().validity()
     }
 }

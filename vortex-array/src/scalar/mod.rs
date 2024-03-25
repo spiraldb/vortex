@@ -84,6 +84,20 @@ impl Scalar {
         match_each_scalar! { self, |$s| $s.nbytes() }
     }
 
+    pub fn is_null(&self) -> bool {
+        match self {
+            Scalar::Binary(b) => b.value().is_none(),
+            Scalar::Bool(b) => b.value().is_none(),
+            Scalar::List(l) => l.values().is_none(),
+            Scalar::Null(_) => true,
+            Scalar::Primitive(p) => p.value().is_none(),
+            // FIXME(ngates): can't have a null struct?
+            Scalar::Struct(_) => false,
+            Scalar::Utf8(u) => u.value().is_none(),
+            Scalar::Composite(c) => c.scalar().is_null(),
+        }
+    }
+
     pub fn null(dtype: &DType) -> Self {
         match dtype {
             DType::Null => NullScalar::new().into(),

@@ -8,7 +8,6 @@ use itertools::Itertools;
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
@@ -22,6 +21,7 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
+use crate::validity::{ArrayValidity, Validity};
 
 impl ArrayCompute for VarBinArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -50,17 +50,13 @@ impl AsContiguousFn for VarBinArray {
                 .try_collect()?,
         )?;
 
-        let validity = as_contiguous(
-            arrays
-                .iter()
-                .map(|a| {
-                    a.as_varbin()
-                        .validity()
-                        .cloned()
-                        .unwrap_or_else(|| BoolArray::from(vec![true; a.len()]).into_array())
-                })
-                .collect_vec(),
-        )?;
+        let validity = if self.dtype().is_nullable() {
+            Some(Validity::from_iter(arrays.iter().map(|a| {
+                a.validity().unwrap_or_else(|| Validity::valid(a.len()))
+            })))
+        } else {
+            None
+        };
 
         let mut offsets = Vec::new();
         offsets.push(0);
@@ -79,7 +75,7 @@ impl AsContiguousFn for VarBinArray {
 
         let offsets_array = PrimitiveArray::from(offsets).into_array();
 
-        Ok(VarBinArray::new(offsets_array, bytes, self.dtype.clone(), Some(validity)).into_array())
+        Ok(VarBinArray::new(offsets_array, bytes, self.dtype.clone(), validity).into_array())
     }
 }
 
@@ -139,15 +135,11 @@ impl FlattenFn for VarBinArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
         let bytes = flatten(self.bytes())?.into_array();
         let offsets = flatten(self.offsets())?.into_array();
-        let validity = self
-            .validity()
-            .map(|v| flatten(v).map(FlattenedArray::into_array))
-            .transpose()?;
         Ok(FlattenedArray::VarBin(VarBinArray::new(
             offsets,
             bytes,
             self.dtype.clone(),
-            validity,
+            self.validity(),
         )))
     }
 }

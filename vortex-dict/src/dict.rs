@@ -6,6 +6,7 @@ use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
+use vortex::validity::{ArrayValidity, Validity};
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::{DType, Signedness};
 
@@ -85,6 +86,12 @@ impl ArrayDisplay for DictArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.child("values", self.dict())?;
         f.child("codes", self.codes())
+    }
+}
+
+impl ArrayValidity for DictArray {
+    fn validity(&self) -> Option<Validity> {
+        todo!()
     }
 }
 

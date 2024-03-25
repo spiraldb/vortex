@@ -3,7 +3,6 @@ use itertools::Itertools;
 
 use vortex_error::{VortexError, VortexResult};
 
-use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
@@ -74,11 +73,11 @@ impl FlattenFn for SparseArray {
                     offset += 1;
                 }
 
-                let validity = BoolArray::new(validity.finish(), None);
+                let validity = validity.finish();
 
                 Ok(FlattenedArray::Primitive(PrimitiveArray::from_nullable(
                     values,
-                    Some(validity.into_array()),
+                    Some(validity.into()),
                 )))
             })
         } else {

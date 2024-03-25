@@ -11,6 +11,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
+use crate::validity::{ArrayValidity, Validity};
 
 use super::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
 
@@ -110,6 +111,12 @@ impl Array for StructArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+}
+
+impl ArrayValidity for StructArray {
+    fn validity(&self) -> Option<Validity> {
+        todo!()
     }
 }
 

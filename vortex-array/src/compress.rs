@@ -17,6 +17,7 @@ use crate::compute;
 use crate::compute::scalar_at::scalar_at;
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
+use crate::validity::Validity;
 
 pub trait EncodingCompression: Encoding {
     fn cost(&self) -> u8 {
@@ -190,6 +191,17 @@ impl CompressCtx {
         let compressed = self.compress_array(arr)?;
         assert_eq!(compressed.dtype(), arr.dtype());
         Ok(compressed)
+    }
+
+    pub fn compress_validity(&self, validity: Option<Validity>) -> VortexResult<Option<Validity>> {
+        if let Some(validity) = validity {
+            match validity {
+                Validity::Valid(_) | Validity::Invalid(_) => Ok(Some(validity)),
+                Validity::Array(a) => Ok(Some(Validity::array(self.compress(&a, None)?))),
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     fn compress_array(&self, arr: &dyn Array) -> VortexResult<ArrayRef> {

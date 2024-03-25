@@ -6,6 +6,7 @@ use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
+use vortex::validity::{ArrayValidity, Validity};
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::{DType, Signedness};
 
@@ -94,6 +95,12 @@ impl Array for ZigZagArray {
 impl ArrayDisplay for ZigZagArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.child("zigzag", self.encoded())
+    }
+}
+
+impl ArrayValidity for ZigZagArray {
+    fn validity(&self) -> Option<Validity> {
+        self.encoded().validity()
     }
 }
 

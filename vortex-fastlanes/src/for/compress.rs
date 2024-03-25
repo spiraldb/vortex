@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use num_traits::PrimInt;
 
+use crate::{FoRArray, FoREncoding};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
@@ -10,9 +11,8 @@ use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
+use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
-
-use crate::{FoRArray, FoREncoding};
 
 impl EncodingCompression for FoREncoding {
     fn cost(&self) -> u8 {
@@ -102,7 +102,7 @@ pub fn decompress(array: &FoRArray) -> VortexResult<PrimitiveArray> {
         let reference: $T = array.reference().try_into()?;
         PrimitiveArray::from_nullable(
             decompress_primitive(encoded.typed_data::<$T>(), reference, shift),
-            encoded.validity().cloned(),
+            encoded.validity(),
         )
     }))
 }

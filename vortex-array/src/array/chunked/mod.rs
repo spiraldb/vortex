@@ -155,11 +155,16 @@ impl Array for ChunkedArray {
 }
 
 impl ArrayValidity for ChunkedArray {
-    fn validity(&self) -> Validity {
-        match self.dtype().is_nullable() {
-            true => Validity::invalid(),
-            false => Validity::valid(),
+    fn validity(&self) -> Option<Validity> {
+        if !self.dtype.is_nullable() {
+            return None;
         }
+
+        Some(Validity::from_iter(self.chunks.iter().map(|chunk| {
+            chunk
+                .validity()
+                .unwrap_or_else(|| Validity::valid(chunk.len()))
+        })))
     }
 }
 
