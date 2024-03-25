@@ -6,6 +6,7 @@ use bench_vortex::taxi_data::download_taxi_data;
 use bench_vortex::{compress_ctx, idempotent};
 use itertools::Itertools;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use parquet::arrow::ProjectionMask;
 
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
@@ -21,10 +22,12 @@ pub fn write_taxi_data() -> PathBuf {
     idempotent("taxi.spiral", |write| {
         let taxi_pq = File::open(download_taxi_data()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq).unwrap();
+        let _mask = ProjectionMask::roots(builder.parquet_schema(), (0..14).collect_vec());
 
         // FIXME(ngates): the compressor should handle batch size.
         let reader = builder
             .with_limit(100)
+            // .with_projection(_mask)
             .with_batch_size(65_536)
             .build()
             .unwrap();
