@@ -6,6 +6,7 @@ use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
 use crate::stats::Stat;
 use arrow_buffer::BooleanBuffer;
+use itertools::Itertools;
 use vortex_schema::{DType, Nullability};
 
 #[derive(Debug, Clone)]
@@ -169,15 +170,11 @@ impl FromIterator<Validity> for Validity {
         }
 
         // Otherwise, map each to a bool array and concatenate them.
-        Self::Array(
-            as_contiguous(
-                validities
-                    .iter()
-                    .map(|v| v.to_bool_array().into_array())
-                    .collect(),
-            )
-            .unwrap(),
-        )
+        let arrays = validities
+            .iter()
+            .map(|v| v.to_bool_array().into_array())
+            .collect_vec();
+        Self::Array(as_contiguous(&arrays).unwrap())
     }
 }
 

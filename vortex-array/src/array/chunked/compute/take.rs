@@ -3,8 +3,8 @@ use crate::array::{Array, ArrayRef, IntoArray};
 use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::{take, TakeFn};
-use crate::error::VortexResult;
 use crate::ptype::PType;
+use vortex_error::VortexResult;
 
 impl TakeFn for ChunkedArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {

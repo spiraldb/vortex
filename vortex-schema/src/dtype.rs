@@ -149,6 +149,10 @@ impl DType {
         Nullability::NonNullable,
     );
 
+    pub fn nullability(&self) -> Nullability {
+        self.is_nullable().into()
+    }
+
     pub fn is_nullable(&self) -> bool {
         use Nullability::*;
 

@@ -2,14 +2,20 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::{take, TakeFn};
-use crate::error::VortexResult;
 use crate::ptype::NativePType;
+use crate::validity::{ArrayValidity, Validity};
 use crate::{match_each_integer_ptype, match_each_native_ptype};
 use num_traits::PrimInt;
+use vortex_error::VortexResult;
 
 impl TakeFn for PrimitiveArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        let validity = self.validity().map(|v| take(v, indices)).transpose()?;
+        let validity = self
+            .validity()
+            // FIXME(ngates): implement take for validity
+            .map(|v| take(&v.to_array(), indices))
+            .transpose()?
+            .map(Validity::array);
         let indices = flatten_primitive(indices)?;
         match_each_native_ptype!(self.ptype(), |$T| {
             match_each_integer_ptype!(indices.ptype(), |$I| {

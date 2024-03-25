@@ -5,7 +5,6 @@ use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
 use num_traits::AsPrimitive;
 
-use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::varbin::{VarBinArray, VarBinEncoding};
 use vortex::array::{Array, ArrayKind, ArrayRef};
@@ -15,6 +14,7 @@ use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::AsBytes;
 use vortex::stats::Stat;
+use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
@@ -141,15 +141,9 @@ fn dict_encode_typed_primitive<T: NativePType>(
         }
     }
 
-    let values_len = values.len();
     (
         PrimitiveArray::from(codes),
-        PrimitiveArray::from_nullable(
-            values,
-            array
-                .validity()
-                .map(|_| ConstantArray::new(true.into(), values_len).into_array()),
-        ),
+        PrimitiveArray::from_nullable(values, array.validity()),
     )
 }
 

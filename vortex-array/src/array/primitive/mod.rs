@@ -8,18 +8,11 @@ use std::sync::{Arc, RwLock};
 use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
-<<<<<<< HEAD
-use vortex_schema::{DType, Nullability};
-
-use crate::array::bool::BoolArray;
-use crate::array::constant::ConstantArray;
-=======
 
 use vortex_error::VortexResult;
-use vortex_schema::DType;
+use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
->>>>>>> develop
 use crate::array::IntoArray;
 use crate::array::{
     check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
@@ -113,10 +106,7 @@ impl PrimitiveArray {
         }
         let len = self.len();
         let validity = if nullability == Nullability::Nullable {
-            Some(
-                self.validity
-                    .unwrap_or_else(|| ConstantArray::new(true.into(), len).into_array()),
-            )
+            Some(self.validity().unwrap_or_else(|| Validity::Valid(len)))
         } else {
             None
         };

@@ -1,7 +1,7 @@
+use bench_vortex::taxi_data::{take_taxi_data, write_taxi_data};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
 
-use bench_vortex::serde::{take_taxi_data, write_taxi_data};
 use vortex::array::ENCODINGS;
 
 fn random_access(c: &mut Criterion) {
