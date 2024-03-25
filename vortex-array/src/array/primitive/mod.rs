@@ -201,8 +201,6 @@ impl PrimitiveArray {
     }
 }
 
-pub type PrimitiveIter<'a, T> = ArrayIter<dyn ArrayAccessor<T>, T>;
-
 #[derive(Debug)]
 pub struct PrimitiveEncoding;
 
