@@ -5,12 +5,14 @@ use std::panic::RefUnwindSafe;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
 
-use crate::accessor::ArrayAccessor;
 use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
+
+use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::accessor::ArrayAccessor;
 use crate::array::bool::BoolArray;
 use crate::array::IntoArray;
 use crate::array::{
@@ -18,7 +20,6 @@ use crate::array::{
     ENCODINGS,
 };
 use crate::compute::scalar_at::scalar_at;
-use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::iterator::ArrayIter;

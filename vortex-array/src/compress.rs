@@ -4,6 +4,8 @@ use std::sync::Arc;
 
 use log::{debug, info, warn};
 
+use vortex_error::VortexResult;
+
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::composite::CompositeEncoding;
 use crate::array::constant::ConstantArray;
@@ -13,7 +15,6 @@ use crate::array::varbin::VarBinEncoding;
 use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingRef, ENCODINGS};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
-use crate::error::VortexResult;
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
 

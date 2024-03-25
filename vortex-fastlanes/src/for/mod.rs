@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
-use vortex::error::VortexResult;
+use vortex_error::VortexResult;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::impl_array;
 use vortex::scalar::Scalar;

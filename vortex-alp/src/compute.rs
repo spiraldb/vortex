@@ -2,7 +2,7 @@ use vortex::array::Array;
 use vortex::compute::flatten::{FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
-use vortex::error::VortexResult;
+use vortex_error::VortexResult;
 use vortex::scalar::Scalar;
 
 use crate::compress::decompress;

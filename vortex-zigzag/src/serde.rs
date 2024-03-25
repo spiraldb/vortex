@@ -1,5 +1,5 @@
 use vortex::array::{Array, ArrayRef};
-use vortex::error::{VortexError, VortexResult};
+use vortex_error::{VortexError, VortexResult};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use vortex_schema::{DType, Signedness};
 
@@ -27,7 +27,7 @@ mod test {
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::{Array, ArrayRef};
-    use vortex::error::VortexResult;
+    use vortex_error::VortexResult;
     use vortex::serde::{ReadCtx, WriteCtx};
 
     use crate::compress::zigzag_encode;

@@ -11,7 +11,7 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::patch::patch;
-use vortex::error::VortexResult;
+use vortex_error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::ptype::{NativePType, PType};

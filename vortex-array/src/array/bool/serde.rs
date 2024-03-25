@@ -1,8 +1,9 @@
 use arrow_buffer::buffer::BooleanBuffer;
 
+use vortex_error::VortexResult;
+
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::error::VortexResult;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for BoolArray {

@@ -1,11 +1,12 @@
 use itertools::Itertools;
 
+use vortex_error::{VortexError, VortexResult};
+
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compute::patch::PatchFn;
-use crate::error::{VortexError, VortexResult};
 use crate::{compute, match_each_native_ptype};
 
 impl PatchFn for PrimitiveArray {
@@ -15,8 +16,8 @@ impl PatchFn for PrimitiveArray {
             // TODO(ngates): support a default implementation based on iter_arrow?
             _ => Err(VortexError::MissingKernel(
                 "patch",
-                self.encoding().id(),
-                vec![patch.encoding().id()],
+                self.encoding().id().0,
+                vec![patch.encoding().id().0],
             )),
         }
     }

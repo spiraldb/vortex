@@ -4,6 +4,8 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use linkme::distributed_slice;
+
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::{BoolArray, BoolEncoding};
@@ -27,7 +29,6 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::search_sorted::SearchSortedFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::Stats;
@@ -249,7 +250,7 @@ impl EncodingId {
     }
 
     #[inline]
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &'static str {
         self.0
     }
 }

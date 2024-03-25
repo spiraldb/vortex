@@ -6,7 +6,7 @@ use vortex::array::{Array, ArrayRef, Encoding};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
-use vortex::error::VortexResult;
+use vortex_error::VortexResult;
 use vortex::ptype::{match_each_native_ptype, NativePType};
 use vortex::stats::Stat;
 

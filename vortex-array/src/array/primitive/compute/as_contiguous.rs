@@ -1,13 +1,15 @@
+use itertools::Itertools;
+
+use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
+use vortex_error::{VortexError, VortexResult};
+
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
-use crate::error::{VortexError, VortexResult};
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
-use itertools::Itertools;
-use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 
 impl AsContiguousFn for PrimitiveArray {
     fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {

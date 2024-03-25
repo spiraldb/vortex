@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use vortex::array::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
-use vortex::error::{VortexError, VortexResult};
+use vortex_error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};

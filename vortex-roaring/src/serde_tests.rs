@@ -1,7 +1,7 @@
 #[cfg(test)]
 pub mod test {
     use vortex::array::{Array, ArrayRef};
-    use vortex::error::VortexResult;
+    use vortex_error::VortexResult;
     use vortex::serde::{ReadCtx, WriteCtx};
 
     pub fn roundtrip_array(array: &dyn Array) -> VortexResult<ArrayRef> {

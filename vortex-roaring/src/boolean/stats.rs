@@ -1,5 +1,5 @@
 use vortex::array::Array;
-use vortex::error::VortexResult;
+use vortex_error::VortexResult;
 use vortex::stats::{Stat, StatsCompute, StatsSet};
 
 use crate::boolean::RoaringBoolArray;
@@ -38,7 +38,7 @@ impl StatsCompute for RoaringBoolArray {
 mod test {
     use vortex::array::bool::BoolArray;
     use vortex::array::Array;
-    use vortex::error::VortexResult;
+    use vortex_error::VortexResult;
     use vortex::stats::Stat::*;
 
     use crate::RoaringBoolArray;

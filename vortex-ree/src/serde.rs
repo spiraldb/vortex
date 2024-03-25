@@ -1,5 +1,5 @@
 use vortex::array::{Array, ArrayRef};
-use vortex::error::VortexResult;
+use vortex_error::VortexResult;
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 use crate::{REEArray, REEEncoding};
@@ -32,7 +32,7 @@ mod test {
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::IntoArray;
     use vortex::array::{Array, ArrayRef};
-    use vortex::error::VortexResult;
+    use vortex_error::VortexResult;
     use vortex::serde::{ReadCtx, WriteCtx};
 
     use crate::downcast::DowncastREE;

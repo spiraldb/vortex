@@ -1,6 +1,8 @@
 use arrow_buffer::BooleanBufferBuilder;
 use itertools::Itertools;
 
+use vortex_error::{VortexError, VortexResult};
+
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
@@ -11,7 +13,6 @@ use crate::compute::flatten::{flatten, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::ArrayCompute;
-use crate::error::{VortexError, VortexResult};
 use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
 

@@ -7,8 +7,8 @@ use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::patch::patch;
-use vortex::error::{VortexError, VortexResult};
 use vortex::ptype::{NativePType, PType};
+use vortex_error::VortexResult;
 
 use crate::alp::ALPFloat;
 use crate::array::{ALPArray, ALPEncoding};
@@ -19,13 +19,13 @@ use crate::Exponents;
 macro_rules! match_each_alp_float_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use vortex::error::VortexError;
         use vortex::ptype::PType;
+        use vortex_error::VortexError;
         let ptype = $self;
         match ptype {
             PType::F32 => Ok(__with__! { f32 }),
             PType::F64 => Ok(__with__! { f64 }),
-            _ => Err(VortexError::InvalidPType(ptype))
+            _ => Err(VortexError::InvalidArgument("ALP can only encode f32 and f64".into())),
         }
     })
 }
@@ -108,7 +108,7 @@ pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
     let (exponents, encoded, patches) = match parray.ptype() {
         PType::F32 => encode_to_array(parray.typed_data::<f32>(), None),
         PType::F64 => encode_to_array(parray.typed_data::<f64>(), None),
-        _ => return Err(VortexError::InvalidPType(parray.ptype())),
+        _ => return Err("ALP can only encode f32 and f64".into()),
     };
     Ok(ALPArray::new(encoded, exponents, patches))
 }

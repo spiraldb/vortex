@@ -5,7 +5,7 @@ use vortex::compute::cast::cast;
 use vortex::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
-use vortex::error::{VortexError, VortexResult};
+use vortex_error::{VortexError, VortexResult};
 use vortex::ptype::PType;
 use vortex::scalar::Scalar;
 

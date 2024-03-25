@@ -1,4 +1,4 @@
-use vortex::error::VortexResult;
+use vortex_error::VortexResult;
 use vortex::stats::{Stat, StatsCompute, StatsSet};
 
 use crate::dict::DictArray;

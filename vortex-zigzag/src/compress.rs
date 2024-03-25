@@ -5,7 +5,7 @@ use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::error::VortexResult;
+use vortex_error::VortexResult;
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};

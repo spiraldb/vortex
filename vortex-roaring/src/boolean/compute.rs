@@ -1,6 +1,6 @@
 use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::ArrayCompute;
-use vortex::error::VortexResult;
+use vortex_error::VortexResult;
 use vortex::scalar::Scalar;
 
 use crate::RoaringBoolArray;
