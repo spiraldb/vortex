@@ -81,6 +81,7 @@ pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
         compressed_ends.stats().set(Stat::Max, array.len().into());
         compressed_ends.stats().set(Stat::RunCount, compressed_ends.len().into());
 
+        assert_eq!(array.dtype(), compressed_values.dtype());
         (compressed_ends, compressed_values)
     })
 }
