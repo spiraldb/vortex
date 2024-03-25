@@ -35,11 +35,10 @@ impl ArrayCompute for BoolArray {
 
 impl AsContiguousFn for BoolArray {
     fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
-        // TODO(ngates): implement a HasValidity trait to avoid this duplicate code.
         let validity: Option<Validity> = if self.dtype().is_nullable() {
-            Some(Validity::from_iter(arrays.iter().map(|a| a.as_bool()).map(
-                |a| a.validity().unwrap_or_else(|| Validity::valid(a.len())),
-            )))
+            Some(Validity::from_iter(arrays.iter().map(|a| {
+                a.validity().unwrap_or_else(|| Validity::valid(a.len()))
+            })))
         } else {
             None
         };

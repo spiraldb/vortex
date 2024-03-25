@@ -17,11 +17,7 @@ impl IntoArray for &RecordBatch {
             self.columns()
                 .iter()
                 .zip(self.schema().fields())
-                .map(|(array, field)| {
-                    let array = ArrayRef::from_arrow(array.clone(), field.is_nullable());
-                    println!("FIELD {} {:?}", field.name(), array.dtype());
-                    array
-                })
+                .map(|(array, field)| ArrayRef::from_arrow(array.clone(), field.is_nullable()))
                 .collect(),
         )
         .into_array()
