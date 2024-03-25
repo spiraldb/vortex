@@ -51,7 +51,11 @@ impl EncodingCompression for FoREncoding {
         let parray = array.as_primitive();
         let shift = trailing_zeros(parray);
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
-            compress_primitive::<$T>(parray, shift)
+            if shift == <$T>::PTYPE.bit_width() as u8 {
+                ConstantArray::new($T::default().into(), parray.len()).into_array()
+            } else {
+                compress_primitive::<$T>(parray, shift).into_array()
+            }
         });
 
         // TODO(ngates): remove FoR as a potential encoding from the ctx
@@ -70,6 +74,7 @@ fn compress_primitive<T: NativePType + PrimInt>(
     parray: &PrimitiveArray,
     shift: u8,
 ) -> PrimitiveArray {
+    assert!(shift < T::PTYPE.bit_width() as u8);
     let min = parray
         .stats()
         .get_or_compute_as::<T>(&Stat::Min)
@@ -130,7 +135,7 @@ fn trailing_zeros(array: &dyn Array) -> u8 {
         .iter()
         .enumerate()
         .find_or_first(|(_, &v)| v > 0)
-        .map(|(i, _freq)| i)
+        .map(|(i, _)| i)
         .unwrap_or(0) as u8
 }
 
