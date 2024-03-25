@@ -25,6 +25,9 @@ impl Display for CompositeID {
 #[allow(clippy::needless_lifetimes)]
 #[allow(clippy::extra_unused_lifetimes)]
 #[allow(non_camel_case_types)]
-mod generated {
-    include!(concat!(env!("OUT_DIR"), "/flatbuffers/schema.rs"));
+pub mod flatbuffers {
+    mod generated {
+        include!(concat!(env!("OUT_DIR"), "/flatbuffers/schema.rs"));
+    }
+    pub use generated::vortex::*;
 }

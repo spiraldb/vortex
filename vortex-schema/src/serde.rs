@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 
-use crate::generated::{
+use crate::flatbuffers::schema::{
     root_as_dtype, Bool, BoolArgs, Composite, CompositeArgs, Int, IntArgs, List, ListArgs, Null,
     NullArgs, Struct_, Struct_Args, Type,
 };
-use crate::generated::{Binary, BinaryArgs, Signedness as FbSignedness};
-use crate::generated::{DType as FbDType, DTypeArgs};
-use crate::generated::{Decimal, DecimalArgs, FloatWidth as FbFloatWidth};
-use crate::generated::{Float, FloatArgs, IntWidth as FbIntWidth};
-use crate::generated::{Nullability as FbNullability, Utf8, Utf8Args};
+use crate::flatbuffers::schema::{Binary, BinaryArgs, Signedness as FbSignedness};
+use crate::flatbuffers::schema::{DType as FbDType, DTypeArgs};
+use crate::flatbuffers::schema::{Decimal, DecimalArgs, FloatWidth as FbFloatWidth};
+use crate::flatbuffers::schema::{Float, FloatArgs, IntWidth as FbIntWidth};
+use crate::flatbuffers::schema::{Nullability as FbNullability, Utf8, Utf8Args};
 use crate::{
     CompositeID, DType, FloatWidth, IntWidth, Nullability, SchemaError, SchemaResult, Signedness,
 };

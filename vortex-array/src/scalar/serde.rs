@@ -1,3 +1,4 @@
+use flatbuffers::{root, FlatBufferBuilder};
 use std::io;
 use std::sync::Arc;
 
@@ -5,7 +6,11 @@ use half::f16;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use vortex_schema::DType;
 
-use crate::error::VortexResult;
+use crate::error::{VortexError, VortexResult};
+use crate::flatbuffers::scalar;
+use crate::flatbuffers::scalar::{
+    Binary, BinaryArgs, Bool, BoolArgs, PrimitiveArgs, ScalarArgs, Type,
+};
 use crate::ptype::PType;
 use crate::scalar::composite::CompositeScalar;
 use crate::scalar::{
@@ -24,6 +29,40 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
     }
 
     pub fn read(&mut self) -> VortexResult<Scalar> {
+        let bytes = self.reader.read_slice()?;
+        let scalar = root::<scalar::Scalar>(&bytes)
+            .map_err(|_e| VortexError::InvalidArgument("Invalid FlatBuffer".into()))
+            .unwrap();
+
+        match scalar.type_type() {
+            Type::Binary => todo!(),
+            Type::Bool => todo!(),
+            Type::List => todo!(),
+            Type::Null => todo!(),
+            Type::Primitive => {
+                let primitive = scalar.type__as_primitive().unwrap();
+                match primitive.ptype() {
+                    scalar::PType::U8 => primitive
+                        .bytes()
+                        .map(|b| {
+                            u8::from_le_bytes(
+                                b.bytes().try_into().expect("slice with incorrect length"),
+                            )
+                        })
+                        .map(|v| PScalar::U8(v))
+                        .map(|ps| PrimitiveScalar::new(PType::U8, Some(ps)))
+                        .unwrap_or_else(|| PrimitiveScalar::new(PType::U8, None)),
+                    _ => panic!("Unsupported ptype"),
+                }
+            }
+            Type::Struct_ => todo!(),
+            Type::UTF8 => todo!(),
+            Type::Composite => todo!(),
+            _ => {
+                panic!("Unsupported scalar type")
+            }
+        };
+
         let tag = ScalarTag::try_from(self.reader.read_nbytes::<1>()?[0])
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         match tag {
@@ -142,71 +181,108 @@ impl<'a, 'b> ScalarWriter<'a, 'b> {
     }
 
     pub fn write(&mut self, scalar: &Scalar) -> VortexResult<()> {
+        let mut fbb = FlatBufferBuilder::new();
+
         self.writer
             .write_fixed_slice([ScalarTag::from(scalar).into()])?;
-        match scalar {
-            Scalar::Binary(b) => self.writer.write_optional_slice(b.value()),
-            Scalar::Bool(b) => {
-                self.writer.write_option_tag(b.value().is_some())?;
-                if let Some(v) = b.value() {
-                    self.writer.write_fixed_slice([v as u8])?;
+        let union = match scalar {
+            Scalar::Binary(b) => {
+                let bytes = b.value().map(|bytes| fbb.create_vector(bytes));
+                ScalarArgs {
+                    type_type: Type::Binary,
+                    type_: bytes.map(|b| {
+                        Binary::create(&mut fbb, &BinaryArgs { value: Some(b) }).as_union_value()
+                    }),
                 }
-                Ok(())
             }
-            Scalar::List(ls) => {
-                self.writer.write_option_tag(ls.values().is_some())?;
-                if let Some(vs) = ls.values() {
-                    self.writer.write_usize(vs.len())?;
-                    for elem in vs {
-                        self.write(elem)?;
-                    }
-                } else {
-                    self.writer.dtype(ls.dtype())?;
-                }
-                Ok(())
-            }
-            Scalar::Null(_) => Ok(()),
-            Scalar::Primitive(p) => self.write_primitive_scalar(p),
-            Scalar::Struct(s) => {
-                let names = s.names();
-                self.writer.write_usize(names.len())?;
-                for n in names {
-                    self.writer.write_slice(n.as_bytes())?;
-                }
-                for field in s.values() {
-                    self.write(field)?;
-                }
-                Ok(())
-            }
-            Scalar::Utf8(u) => self
-                .writer
-                .write_optional_slice(u.value().map(|s| s.as_bytes())),
-            Scalar::Composite(c) => {
-                self.writer.dtype(c.dtype())?;
-                self.write(c.scalar())
-            }
-        }
-    }
+            Scalar::Bool(b) => ScalarArgs {
+                type_type: Type::Bool,
+                type_: b
+                    .value()
+                    .map(|value| Bool::create(&mut fbb, &BoolArgs { value }).as_union_value()),
+            },
+            Scalar::List(_) => panic!(),
+            Scalar::Null(_) => ScalarArgs {
+                type_type: Type::Null,
+                type_: None,
+            },
+            Scalar::Primitive(p) => {
+                // TODO(ngates): clean this up.
+                // We could probably just keep PScalar as PType + Option<[u8]> internally too?
+                let primitive = p
+                    .value()
+                    .map(|pscalar| match pscalar {
+                        PScalar::U8(v) => {
+                            let pbytes = fbb.create_vector(&v.to_le_bytes());
+                            PrimitiveArgs {
+                                ptype: scalar::PType::U8,
+                                bytes: Some(pbytes),
+                            }
+                        }
+                        _ => panic!(),
+                    })
+                    .unwrap_or_else(|| match p.ptype() {
+                        PType::U8 => PrimitiveArgs {
+                            ptype: scalar::PType::U8,
+                            bytes: None,
+                        },
+                        PType::U16 => PrimitiveArgs {
+                            ptype: scalar::PType::U16,
+                            bytes: None,
+                        },
+                        PType::U32 => PrimitiveArgs {
+                            ptype: scalar::PType::U32,
+                            bytes: None,
+                        },
+                        PType::U64 => PrimitiveArgs {
+                            ptype: scalar::PType::U64,
+                            bytes: None,
+                        },
+                        PType::I8 => PrimitiveArgs {
+                            ptype: scalar::PType::I8,
+                            bytes: None,
+                        },
+                        PType::I16 => PrimitiveArgs {
+                            ptype: scalar::PType::I16,
+                            bytes: None,
+                        },
+                        PType::I32 => PrimitiveArgs {
+                            ptype: scalar::PType::I32,
+                            bytes: None,
+                        },
+                        PType::I64 => PrimitiveArgs {
+                            ptype: scalar::PType::I64,
+                            bytes: None,
+                        },
+                        PType::F16 => PrimitiveArgs {
+                            ptype: scalar::PType::F16,
+                            bytes: None,
+                        },
+                        PType::F32 => PrimitiveArgs {
+                            ptype: scalar::PType::F32,
+                            bytes: None,
+                        },
+                        PType::F64 => PrimitiveArgs {
+                            ptype: scalar::PType::F64,
+                            bytes: None,
+                        },
+                    });
 
-    fn write_primitive_scalar(&mut self, scalar: &PrimitiveScalar) -> VortexResult<()> {
-        self.writer.ptype(scalar.ptype())?;
-        self.writer.write_option_tag(scalar.value().is_some())?;
-        if let Some(ps) = scalar.value() {
-            match ps {
-                PScalar::F16(f) => self.writer.write_fixed_slice(f.to_le_bytes())?,
-                PScalar::F32(f) => self.writer.write_fixed_slice(f.to_le_bytes())?,
-                PScalar::F64(f) => self.writer.write_fixed_slice(f.to_le_bytes())?,
-                PScalar::I16(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
-                PScalar::I32(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
-                PScalar::I64(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
-                PScalar::I8(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
-                PScalar::U16(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
-                PScalar::U32(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
-                PScalar::U64(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
-                PScalar::U8(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
+                let primitive = scalar::Primitive::create(&mut fbb, &primitive);
+                ScalarArgs {
+                    type_type: Type::Primitive,
+                    type_: Some(primitive.as_union_value()),
+                }
             }
-        }
-        Ok(())
+            Scalar::Struct(_) => panic!(),
+            Scalar::Utf8(_) => panic!(),
+            Scalar::Composite(_) => panic!(),
+        };
+
+        let scalar = scalar::Scalar::create(&mut fbb, &union);
+        fbb.finish_minimal(scalar);
+        let (vec, offset) = fbb.collapse();
+        self.writer.write_slice(&vec[offset..])
     }
 }
 

@@ -2661,6 +2661,8 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-schema",
+ "flatbuffers",
+ "flatc",
  "half",
  "humansize",
  "itertools 0.12.1",
@@ -2674,6 +2676,7 @@ dependencies = [
  "thiserror",
  "vortex-alloc",
  "vortex-schema",
+ "walkdir",
 ]
 
 [[package]]

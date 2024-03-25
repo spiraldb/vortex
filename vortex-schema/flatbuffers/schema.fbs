@@ -1,12 +1,14 @@
+namespace vortex.schema;
+
 enum Nullability: byte {
     NonNullable,
     Nullable,
 }
 
 enum Signedness: byte {
+    Unknown,
     Signed,
     Unsigned,
-    Unknown,
 }
 
 enum IntWidth: byte {
