@@ -4,6 +4,7 @@ pub use datetime::*;
 use vortex::array::{EncodingRef, ENCODINGS};
 
 mod compress;
+mod compute;
 mod datetime;
 mod serde;
 
