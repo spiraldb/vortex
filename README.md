@@ -11,7 +11,7 @@ next-generation columnar file format for multidimensional arrays called Spiral.
 > [!CAUTION]
 > This library is still under rapid development and is very much a work in progress!
 >
-> Some key basic features are not yet implemented, and we cannot yet guarantee correctness in all cases.
+> Some key features are not yet implemented, the API will almost certainly change in breaking ways, and we cannot yet guarantee correctness in all cases.
 
 The major components of Vortex are (will be!):
 
