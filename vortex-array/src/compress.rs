@@ -175,7 +175,9 @@ impl CompressCtx {
                 .compression()
                 .map(|c| c.compress(arr, Some(l), self.for_encoding(c)))
             {
-                return compressed;
+                let compressed = compressed?;
+                assert_eq!(compressed.dtype(), arr.dtype());
+                return Ok(compressed);
             } else {
                 warn!(
                     "{} cannot find compressor to compress {} like {}",
@@ -185,7 +187,9 @@ impl CompressCtx {
         }
 
         // Otherwise, attempt to compress the array
-        self.compress_array(arr)
+        let compressed = self.compress_array(arr)?;
+        assert_eq!(compressed.dtype(), arr.dtype());
+        Ok(compressed)
     }
 
     fn compress_array(&self, arr: &dyn Array) -> VortexResult<ArrayRef> {

@@ -13,6 +13,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+use crate::validity::{ArrayValidity, Validity};
 
 mod compute;
 mod serde;
@@ -150,6 +151,15 @@ impl Array for ChunkedArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+}
+
+impl ArrayValidity for ChunkedArray {
+    fn validity(&self) -> Validity {
+        match self.dtype().is_nullable() {
+            true => Validity::invalid(),
+            false => Validity::valid(),
+        }
     }
 }
 

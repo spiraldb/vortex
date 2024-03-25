@@ -12,11 +12,9 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
+use crate::validity::{ArrayValidity, Validity};
 
-use super::{
-    check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
-    ENCODINGS,
-};
+use super::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
 
 mod compute;
 mod flatten;
@@ -27,18 +25,16 @@ mod stats;
 pub struct BoolArray {
     buffer: BooleanBuffer,
     stats: Arc<RwLock<StatsSet>>,
-    validity: Option<ArrayRef>,
+    validity: Validity,
 }
 
 impl BoolArray {
-    pub fn new(buffer: BooleanBuffer, validity: Option<ArrayRef>) -> Self {
+    pub fn new(buffer: BooleanBuffer, validity: Validity) -> Self {
         Self::try_new(buffer, validity).unwrap()
     }
 
-    pub fn try_new(buffer: BooleanBuffer, validity: Option<ArrayRef>) -> VortexResult<Self> {
-        let validity = validity.filter(|v| !v.is_empty());
-        check_validity_buffer(validity.as_ref(), buffer.len())?;
-
+    pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
+        validity.check_length(buffer.len())?;
         Ok(Self {
             buffer,
             stats: Arc::new(RwLock::new(StatsSet::new())),
@@ -125,6 +121,12 @@ impl Array for BoolArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+}
+
+impl ArrayValidity for BoolArray {
+    fn validity(&self) -> Validity {
+        self.validity
     }
 }
 

@@ -16,8 +16,7 @@ use crate::accessor::ArrayAccessor;
 use crate::array::bool::BoolArray;
 use crate::array::IntoArray;
 use crate::array::{
-    check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
-    ENCODINGS,
+    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
 use crate::compute::scalar_at::scalar_at;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -26,6 +25,7 @@ use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+use crate::validity::{ArrayValidity, Validity};
 
 mod compute;
 mod serde;
@@ -36,24 +36,18 @@ pub struct PrimitiveArray {
     buffer: Buffer,
     ptype: PType,
     dtype: DType,
-    validity: Option<ArrayRef>,
+    validity: Validity,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl PrimitiveArray {
-    pub fn new(ptype: PType, buffer: Buffer, validity: Option<ArrayRef>) -> Self {
+    pub fn new(ptype: PType, buffer: Buffer, validity: Validity) -> Self {
         Self::try_new(ptype, buffer, validity).unwrap()
     }
 
-    pub fn try_new(ptype: PType, buffer: Buffer, validity: Option<ArrayRef>) -> VortexResult<Self> {
-        let validity = validity.filter(|v| !v.is_empty());
-        check_validity_buffer(validity.as_ref(), buffer.len() / ptype.byte_width())?;
-        let dtype = if validity.is_some() {
-            DType::from(ptype).as_nullable()
-        } else {
-            DType::from(ptype)
-        };
-
+    pub fn try_new(ptype: PType, buffer: Buffer, validity: Validity) -> VortexResult<Self> {
+        validity.check_length(buffer.len())?;
+        let dtype = DType::from(ptype).with_nullability((&validity).into());
         Ok(Self {
             buffer,
             ptype,
@@ -198,6 +192,12 @@ impl Array for PrimitiveArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+}
+
+impl ArrayValidity for PrimitiveArray {
+    fn validity(&self) -> Validity {
+        self.validity
     }
 }
 

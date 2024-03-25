@@ -55,7 +55,7 @@ pub type ArrayRef = Arc<dyn Array>;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub trait Array: ArrayCompute + ArrayDisplay + Debug + Send + Sync {
+pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sync {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
     fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
@@ -111,6 +111,7 @@ macro_rules! impl_array {
     };
 }
 
+use crate::validity::{ArrayValidity, Validity};
 pub use impl_array;
 
 impl ArrayCompute for ArrayRef {
@@ -198,6 +199,12 @@ impl Array for ArrayRef {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         self.as_ref().serde()
+    }
+}
+
+impl ArrayValidity for ArrayRef {
+    fn validity(&self) -> Validity {
+        self.as_ref().validity()
     }
 }
 
