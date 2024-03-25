@@ -9,10 +9,7 @@ use crate::ALPEncoding;
 
 impl ArraySerde for ALPArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
-        ctx.write_option_tag(self.patches().is_some())?;
-        if let Some(p) = self.patches() {
-            ctx.write(p)?;
-        }
+        ctx.write_optional_array(self.patches())?;
         ctx.write_fixed_slice([self.exponents().e, self.exponents().f])?;
         ctx.write(self.encoded())
     }
@@ -20,12 +17,7 @@ impl ArraySerde for ALPArray {
 
 impl EncodingSerde for ALPEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
-        let patches_tag = ctx.read_nbytes::<1>()?[0];
-        let patches = if patches_tag == 0x01 {
-            Some(ctx.read()?)
-        } else {
-            None
-        };
+        let patches = ctx.read_optional_array()?;
         let exponents = ctx.read_nbytes::<2>()?;
         let encoded_dtype = match ctx.schema() {
             DType::Float(width, nullability) => match width {

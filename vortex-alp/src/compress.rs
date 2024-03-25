@@ -60,7 +60,7 @@ impl EncodingCompression for ALPEncoding {
 
         let (exponents, encoded, patches) = match_each_alp_float_ptype!(
             parray.ptype(), |$T| {
-            encode_to_array(parray.typed_data::<$T>(), like_alp.map(|l| l.exponents()))
+            encode_to_array::<$T>(parray, like_alp.map(|l| l.exponents()))
         })?;
 
         let compressed_encoded = ctx
@@ -81,18 +81,20 @@ impl EncodingCompression for ALPEncoding {
 }
 
 fn encode_to_array<T>(
-    values: &[T],
+    values: &PrimitiveArray,
     exponents: Option<&Exponents>,
 ) -> (Exponents, ArrayRef, Option<ArrayRef>)
 where
     T: ALPFloat + NativePType,
     T::ALPInt: NativePType,
 {
-    let (exponents, values, exc_pos, exc) = T::encode(values, exponents);
-    let len = values.len();
+    let (exponents, encoded, exc_pos, exc) = T::encode(values.typed_data::<T>(), exponents);
+    let len = encoded.len();
     (
         exponents,
-        PrimitiveArray::from(values).into_array(),
+        PrimitiveArray::from(encoded)
+            .into_nullable(values.validity().is_some().into())
+            .into_array(),
         (!exc.is_empty()).then(|| {
             SparseArray::new(
                 PrimitiveArray::from(exc_pos).into_array(),
@@ -106,8 +108,8 @@ where
 
 pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
     let (exponents, encoded, patches) = match parray.ptype() {
-        PType::F32 => encode_to_array(parray.typed_data::<f32>(), None),
-        PType::F64 => encode_to_array(parray.typed_data::<f64>(), None),
+        PType::F32 => encode_to_array::<f32>(parray, None),
+        PType::F64 => encode_to_array::<f64>(parray, None),
         _ => return Err(VortexError::InvalidPType(parray.ptype())),
     };
     Ok(ALPArray::new(encoded, exponents, patches))

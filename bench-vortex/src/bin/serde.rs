@@ -1,8 +1,7 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use arrow_array::{ArrayRef as ArrowArrayRef, RecordBatchReader, StructArray as ArrowStructArray};
+use arrow_array::RecordBatchReader;
 use bench_vortex::taxi_data::download_taxi_data;
 use bench_vortex::{compress_ctx, idempotent};
 use itertools::Itertools;
@@ -10,10 +9,10 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::ArrayRef;
+use vortex::array::{ArrayRef, IntoArray};
 use vortex::arrow::FromArrowType;
 use vortex::compute::take::take;
-use vortex::encode::FromArrowArray;
+use vortex::formatter::display_tree;
 use vortex::ptype::PType;
 use vortex::serde::{ReadCtx, WriteCtx};
 use vortex_schema::DType;
@@ -24,18 +23,24 @@ pub fn write_taxi_data() -> PathBuf {
         let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq).unwrap();
 
         // FIXME(ngates): the compressor should handle batch size.
-        let reader = builder.with_batch_size(65_536).build().unwrap();
+        let reader = builder
+            .with_limit(100)
+            .with_batch_size(65_536)
+            .build()
+            .unwrap();
 
         let dtype = DType::from_arrow(reader.schema());
+        println!("SCHEMA {:?}\nDTYPE: {:?}", reader.schema(), dtype);
         let ctx = compress_ctx();
 
         let chunks = reader
             .map(|batch_result| batch_result.unwrap())
             .map(|record_batch| {
-                let struct_arrow: ArrowStructArray = record_batch.into();
-                let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-                let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
-                ctx.compress(&vortex_array, None).unwrap()
+                println!("RBSCHEMA: {:?}", record_batch.schema());
+                let vortex_array = record_batch.into_array();
+                let compressed = ctx.compress(&vortex_array, None).unwrap();
+                println!("COMPRESSED {}", display_tree(&compressed));
+                compressed
             })
             .collect_vec();
         let chunked = ChunkedArray::new(chunks, dtype.clone());

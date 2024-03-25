@@ -9,9 +9,10 @@ use crate::accessor::ArrayAccessor;
 use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
-use vortex_schema::DType;
+use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::BoolArray;
+use crate::array::constant::ConstantArray;
 use crate::array::IntoArray;
 use crate::array::{
     check_slice_bounds, check_validity_buffer, Array, ArrayRef, Encoding, EncodingId, EncodingRef,
@@ -109,6 +110,29 @@ impl PrimitiveArray {
             iter::repeat(T::zero()).take(n).collect::<Vec<_>>(),
             Some(BoolArray::from(vec![false; n]).into_array()),
         )
+    }
+
+    pub fn into_nullable(self, nullability: Nullability) -> Self {
+        let dtype = self.dtype().with_nullability(nullability);
+        if self.validity().is_some() && nullability == Nullability::NonNullable {
+            panic!("Cannot convert nullable array to non-nullable array")
+        }
+        let len = self.len();
+        let validity = if nullability == Nullability::Nullable {
+            Some(
+                self.validity
+                    .unwrap_or_else(|| ConstantArray::new(true.into(), len).into_array()),
+            )
+        } else {
+            None
+        };
+        Self {
+            buffer: self.buffer,
+            ptype: self.ptype,
+            dtype,
+            validity,
+            stats: self.stats,
+        }
     }
 
     #[inline]

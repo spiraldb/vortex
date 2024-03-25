@@ -1,5 +1,5 @@
 use vortex::array::{Array, ArrayRef};
-use vortex::error::{VortexError, VortexResult};
+use vortex::error::VortexResult;
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use vortex_schema::{DType, Signedness};
 
@@ -13,12 +13,15 @@ impl ArraySerde for ZigZagArray {
 
 impl EncodingSerde for ZigZagEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
-        let encoded_dtype = match ctx.schema() {
-            DType::Int(w, Signedness::Signed, n) => DType::Int(*w, Signedness::Unsigned, *n),
-            _ => return Err(VortexError::InvalidDType(ctx.schema().clone())),
-        };
-        let encoded = ctx.with_schema(&encoded_dtype).read()?;
+        let encoded = ctx.with_schema(&encoded_dtype(ctx.schema())).read()?;
         Ok(ZigZagArray::new(encoded).into_array())
+    }
+}
+
+fn encoded_dtype(schema: &DType) -> DType {
+    match schema {
+        DType::Int(w, Signedness::Signed, n) => DType::Int(*w, Signedness::Unsigned, *n),
+        _ => panic!("Invalid schema"),
     }
 }
 

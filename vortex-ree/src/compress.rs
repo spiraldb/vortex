@@ -76,7 +76,7 @@ pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
             &Stat::Min, &Stat::Max, &Stat::IsSorted, &Stat::IsStrictSorted,
         ]);
 
-        let compressed_ends = PrimitiveArray::from(ends);
+        let compressed_ends = PrimitiveArray::from_nullable(ends);
         compressed_ends.stats().set(Stat::IsSorted, true.into());
         compressed_ends.stats().set(Stat::IsStrictSorted, true.into());
         compressed_ends.stats().set(Stat::IsConstant, false.into());
@@ -87,7 +87,9 @@ pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     })
 }
 
-fn ree_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
+fn ree_encode_primitive<T: NativePType, I: IntoIterator<Item = Option<T>>>(
+    elements: I,
+) -> (Vec<u64>, Vec<Option<T>>) {
     let mut ends = Vec::new();
     let mut values = Vec::new();
 

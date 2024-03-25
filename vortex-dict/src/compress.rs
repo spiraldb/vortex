@@ -5,6 +5,7 @@ use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
 use num_traits::AsPrimitive;
 
+use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::varbin::{VarBinArray, VarBinEncoding};
 use vortex::array::{Array, ArrayKind, ArrayRef};
@@ -116,20 +117,40 @@ fn dict_encode_typed_primitive<T: NativePType>(
     let mut lookup_dict: HashMap<Value<T>, u64> = HashMap::new();
     let mut codes: Vec<u64> = Vec::new();
     let mut values: Vec<T> = Vec::new();
-    for &v in array.buffer().typed_data::<T>() {
-        let code = match lookup_dict.entry(Value(v)) {
-            Entry::Occupied(o) => *o.get(),
-            Entry::Vacant(vac) => {
-                let next_code = values.len() as u64;
-                vac.insert(next_code.as_());
-                values.push(v);
-                next_code
-            }
-        };
-        codes.push(code)
+
+    // We use the first value to represent nulls.
+    if array.validity().is_some() {
+        values.push(T::default());
     }
 
-    (PrimitiveArray::from(codes), PrimitiveArray::from(values))
+    for v in array.iter::<T>() {
+        match v {
+            None => codes.push(0),
+            Some(v) => {
+                let code = match lookup_dict.entry(Value(v)) {
+                    Entry::Occupied(o) => *o.get(),
+                    Entry::Vacant(vac) => {
+                        let next_code = values.len() as u64;
+                        vac.insert(next_code.as_());
+                        values.push(v);
+                        next_code
+                    }
+                };
+                codes.push(code)
+            }
+        }
+    }
+
+    let values_len = values.len();
+    (
+        PrimitiveArray::from(codes),
+        PrimitiveArray::from_nullable(
+            values,
+            array
+                .validity()
+                .map(|_| ConstantArray::new(true.into(), values_len).into_array()),
+        ),
+    )
 }
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying

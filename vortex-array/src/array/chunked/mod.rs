@@ -31,16 +31,14 @@ impl ChunkedArray {
     }
 
     pub fn try_new(chunks: Vec<ArrayRef>, dtype: DType) -> VortexResult<Self> {
-        chunks
-            .iter()
-            .map(|c| c.dtype().as_nullable())
-            .all_equal_value()
-            .map(|_| ())
-            .or_else(|mismatched| match mismatched {
-                None => Ok(()),
-                Some((fst, snd)) => Err(VortexError::MismatchedTypes(fst, snd)),
-            })?;
-
+        for chunk in &chunks {
+            if chunk.dtype() != &dtype {
+                return Err(VortexError::MismatchedTypes(
+                    dtype.clone(),
+                    chunk.dtype().clone(),
+                ));
+            }
+        }
         let chunk_ends = chunks
             .iter()
             .scan(0u64, |acc, c| {
@@ -48,13 +46,6 @@ impl ChunkedArray {
                 Some(*acc)
             })
             .collect_vec();
-
-        let dtype = if chunks.iter().any(|c| c.dtype().is_nullable()) && !dtype.is_nullable() {
-            dtype.as_nullable()
-        } else {
-            dtype
-        };
-
         Ok(Self {
             chunks,
             chunk_ends,
