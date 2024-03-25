@@ -1,11 +1,13 @@
+use arrow_buffer::{ArrowNativeType, NullBuffer, OffsetBuffer, ScalarBuffer};
+
+use vortex_error::VortexResult;
+
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
-use crate::error::VortexResult;
 use crate::ptype::NativePType;
 use crate::stats::Stat;
-use arrow_buffer::{ArrowNativeType, NullBuffer, OffsetBuffer, ScalarBuffer};
 
 pub fn as_scalar_buffer<T: NativePType + ArrowNativeType>(
     array: PrimitiveArray,

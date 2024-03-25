@@ -1924,6 +1924,7 @@ dependencies = [
  "vortex-alp",
  "vortex-array",
  "vortex-dict",
+ "vortex-error",
  "vortex-fastlanes",
  "vortex-ree",
  "vortex-roaring",
@@ -2650,6 +2651,7 @@ dependencies = [
  "log",
  "num-traits",
  "vortex-array",
+ "vortex-error",
  "vortex-schema",
 ]
 
@@ -2673,6 +2675,7 @@ dependencies = [
  "rand",
  "thiserror",
  "vortex-alloc",
+ "vortex-error",
  "vortex-schema",
 ]
 
@@ -2683,6 +2686,7 @@ dependencies = [
  "linkme",
  "log",
  "vortex-array",
+ "vortex-error",
  "vortex-schema",
 ]
 
@@ -2700,6 +2704,16 @@ dependencies = [
  "rand",
  "simplelog",
  "vortex-array",
+ "vortex-error",
+ "vortex-schema",
+]
+
+[[package]]
+name = "vortex-error"
+version = "0.1.0"
+dependencies = [
+ "arrow-schema",
+ "thiserror",
  "vortex-schema",
 ]
 
@@ -2715,6 +2729,7 @@ dependencies = [
  "num-traits",
  "simplelog",
  "vortex-array",
+ "vortex-error",
  "vortex-schema",
 ]
 
@@ -2729,6 +2744,7 @@ dependencies = [
  "linkme",
  "num-traits",
  "vortex-array",
+ "vortex-error",
  "vortex-schema",
 ]
 
@@ -2741,6 +2757,7 @@ dependencies = [
  "log",
  "num-traits",
  "vortex-array",
+ "vortex-error",
  "vortex-schema",
 ]
 
@@ -2763,6 +2780,7 @@ dependencies = [
  "linkme",
  "vortex-alloc",
  "vortex-array",
+ "vortex-error",
  "vortex-schema",
  "zigzag",
 ]

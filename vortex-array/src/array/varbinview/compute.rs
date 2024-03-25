@@ -4,6 +4,7 @@ use arrow_array::{ArrayRef as ArrowArrayRef, BinaryViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
 
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::varbinview::VarBinViewArray;
@@ -13,7 +14,6 @@ use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
-use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 use crate::scalar::Scalar;
 

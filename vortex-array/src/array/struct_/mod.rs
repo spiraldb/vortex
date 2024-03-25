@@ -2,10 +2,11 @@ use std::sync::{Arc, RwLock};
 
 use itertools::Itertools;
 use linkme::distributed_slice;
+
+use vortex_error::VortexResult;
 use vortex_schema::{DType, FieldNames};
 
 use crate::compress::EncodingCompression;
-use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};

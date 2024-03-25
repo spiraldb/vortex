@@ -3,13 +3,13 @@ use std::sync::{Arc, RwLock};
 use arrow_buffer::buffer::BooleanBuffer;
 use linkme::distributed_slice;
 
-use crate::array::IntoArray;
-use crate::impl_array;
+use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
+use crate::array::IntoArray;
 use crate::compute::scalar_at::scalar_at;
-use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 

@@ -2,6 +2,8 @@ use std::sync::{Arc, RwLock};
 
 use itertools::Itertools;
 use linkme::distributed_slice;
+
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::ENCODINGS;
@@ -10,7 +12,6 @@ use crate::compress::EncodingCompression;
 use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
-use crate::error::{VortexError, VortexResult};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::ptype::PType;
@@ -180,12 +181,13 @@ impl Encoding for SparseEncoding {
 mod test {
     use itertools::Itertools;
 
+    use vortex_error::VortexError;
+
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
     use crate::array::IntoArray;
     use crate::compute::flatten::flatten_primitive;
     use crate::compute::scalar_at::scalar_at;
-    use crate::error::VortexError;
 
     fn sparse_array() -> SparseArray {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]

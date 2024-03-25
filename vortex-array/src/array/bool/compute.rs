@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use arrow_buffer::buffer::BooleanBuffer;
 use itertools::Itertools;
-use std::sync::Arc;
+
+use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
@@ -10,7 +13,6 @@ use crate::compute::fill::FillForwardFn;
 use crate::compute::flatten::{flatten_bool, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
-use crate::error::VortexResult;
 use crate::scalar::{BoolScalar, Scalar};
 
 impl ArrayCompute for BoolArray {

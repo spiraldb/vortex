@@ -9,9 +9,9 @@ pub use primitive::*;
 pub use serde::*;
 pub use struct_::*;
 pub use utf8::*;
+use vortex_error::VortexResult;
 use vortex_schema::{DType, FloatWidth, IntWidth, Signedness};
 
-use crate::error::VortexResult;
 use crate::ptype::{NativePType, PType};
 
 mod binary;

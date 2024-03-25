@@ -7,11 +7,11 @@ use vortex::array::{
     check_slice_bounds, Array, ArrayKind, ArrayRef, Encoding, EncodingId, EncodingRef,
 };
 use vortex::compress::EncodingCompression;
-use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
+use vortex_error::VortexResult;
 use vortex_schema::DType;
 use vortex_schema::Nullability::NonNullable;
 
@@ -43,7 +43,7 @@ impl RoaringBoolArray {
     pub fn encode(array: &dyn Array) -> VortexResult<Self> {
         match ArrayKind::from(array) {
             ArrayKind::Bool(p) => Ok(roaring_encode(p)),
-            _ => Err(VortexError::InvalidEncoding(array.encoding().id())),
+            _ => Err("RoaringBool can only encode bool arrays".into()),
         }
     }
 }
@@ -132,8 +132,8 @@ mod test {
     use vortex::array::bool::BoolArray;
     use vortex::array::Array;
     use vortex::compute::scalar_at::scalar_at;
-    use vortex::error::VortexResult;
     use vortex::scalar::Scalar;
+    use vortex_error::VortexResult;
 
     use crate::RoaringBoolArray;
 

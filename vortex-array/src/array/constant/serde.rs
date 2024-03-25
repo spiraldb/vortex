@@ -1,6 +1,7 @@
+use vortex_error::VortexResult;
+
 use crate::array::constant::{ConstantArray, ConstantEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::error::VortexResult;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for ConstantArray {

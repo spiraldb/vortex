@@ -1,12 +1,14 @@
+use std::fmt::{Debug, Formatter};
+use std::sync::{Arc, OnceLock, RwLock};
+
+use vortex_error::VortexResult;
+use vortex_schema::DType;
+
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use crate::compute::ArrayCompute;
-use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::stats::{Stats, StatsCompute, StatsSet};
-use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, OnceLock, RwLock};
-use vortex_schema::DType;
 
 pub type LazyFn = Arc<dyn Fn() -> ArrayRef + Send + Sync>;
 

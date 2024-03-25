@@ -3,13 +3,13 @@ use std::io::{ErrorKind, Read, Write};
 
 use arrow_buffer::buffer::{Buffer, MutableBuffer};
 
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::{
     DType, FbDeserialize, FbSerialize, IntWidth, Nullability, SchemaError, Signedness,
 };
 
 use crate::array::composite::find_extension_id;
 use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
-use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 use crate::serde::ptype::PTypeTag;
@@ -253,8 +253,9 @@ impl<'a> WriteCtx<'a> {
 
 #[cfg(test)]
 pub mod test {
+    use vortex_error::VortexResult;
+
     use crate::array::{Array, ArrayRef};
-    use crate::error::VortexResult;
     use crate::serde::{ReadCtx, WriteCtx};
 
     pub fn roundtrip_array(array: &dyn Array) -> VortexResult<ArrayRef> {

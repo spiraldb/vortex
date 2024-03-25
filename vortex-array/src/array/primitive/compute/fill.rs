@@ -1,11 +1,12 @@
 use num_traits::Zero;
 
+use vortex_error::VortexResult;
+
 use crate::array::primitive::PrimitiveArray;
 use crate::array::IntoArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::fill::FillForwardFn;
 use crate::compute::flatten::flatten_bool;
-use crate::error::VortexResult;
 use crate::match_each_native_ptype;
 use crate::stats::Stat;
 

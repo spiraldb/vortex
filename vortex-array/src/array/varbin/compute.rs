@@ -4,6 +4,8 @@ use arrow_array::{
     ArrayRef as ArrowArrayRef, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray,
 };
 use itertools::Itertools;
+
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::bool::BoolArray;
@@ -18,7 +20,6 @@ use crate::compute::cast::cast;
 use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
-use crate::error::{VortexError, VortexResult};
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 

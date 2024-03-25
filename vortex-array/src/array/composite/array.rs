@@ -2,13 +2,14 @@ use std::fmt::{Debug, Display};
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
+
+use vortex_error::VortexResult;
 use vortex_schema::{CompositeID, DType};
 
 use crate::array::composite::{find_extension, CompositeExtensionRef, TypedCompositeArray};
 use crate::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
-use crate::error::VortexResult;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::serde::{ArraySerde, BytesSerde, EncodingSerde};

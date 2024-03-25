@@ -6,11 +6,11 @@ use vortex::array::{
 };
 use vortex::compress::EncodingCompression;
 use vortex::compute::search_sorted::SearchSortedSide;
-use vortex::error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex::{compute, impl_array};
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::compress::ree_encode;
@@ -82,7 +82,7 @@ impl REEArray {
                 )
                 .into_array())
             }
-            _ => Err(VortexError::InvalidEncoding(array.encoding().id())),
+            _ => Err("REE can only encode primitive arrays".into()),
         }
     }
 

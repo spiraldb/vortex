@@ -1,6 +1,7 @@
+use vortex_error::VortexResult;
+
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::error::VortexResult;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for VarBinViewArray {
@@ -36,12 +37,13 @@ impl EncodingSerde for VarBinViewEncoding {
 
 #[cfg(test)]
 mod test {
+    use vortex_schema::{DType, Nullability};
+
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray};
     use crate::array::Array;
     use crate::serde::test::roundtrip_array;
-    use vortex_schema::{DType, Nullability};
 
     fn binary_array() -> VarBinViewArray {
         let values = PrimitiveArray::from("hello world this is a long string".as_bytes().to_vec());
