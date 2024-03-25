@@ -3,11 +3,11 @@ use std::sync::{Arc, RwLock};
 use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::scalar_at::scalar_at;
-use vortex_error::{VortexError, VortexResult};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex::{impl_array, match_each_integer_ptype};
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
 mod compress;

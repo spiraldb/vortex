@@ -1,5 +1,5 @@
-use vortex_error::VortexResult;
 use vortex::stats::{Stat, StatsCompute, StatsSet};
+use vortex_error::VortexResult;
 
 use crate::dict::DictArray;
 

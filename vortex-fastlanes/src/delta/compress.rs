@@ -10,9 +10,9 @@ use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::compute::flatten::flatten_primitive;
-use vortex_error::VortexResult;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
+use vortex_error::VortexResult;
 
 use crate::{DeltaArray, DeltaEncoding};
 
