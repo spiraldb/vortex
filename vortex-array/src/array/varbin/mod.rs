@@ -70,7 +70,6 @@ impl VarBinArray {
             return Err(VortexError::InvalidDType(dtype));
         }
 
-        let validity = validity.filter(|v| !v.is_empty());
         check_validity_buffer(validity.as_ref(), offsets.len() - 1)?;
 
         let dtype = if validity.is_some() && !dtype.is_nullable() {

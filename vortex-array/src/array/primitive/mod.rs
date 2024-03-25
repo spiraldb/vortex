@@ -45,7 +45,6 @@ impl PrimitiveArray {
     }
 
     pub fn try_new(ptype: PType, buffer: Buffer, validity: Option<ArrayRef>) -> VortexResult<Self> {
-        let validity = validity.filter(|v| !v.is_empty());
         check_validity_buffer(validity.as_ref(), buffer.len() / ptype.byte_width())?;
         let dtype = if validity.is_some() {
             DType::from(ptype).as_nullable()

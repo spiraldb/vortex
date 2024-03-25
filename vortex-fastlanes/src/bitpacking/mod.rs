@@ -34,7 +34,6 @@ impl BitPackedArray {
         dtype: DType,
         len: usize,
     ) -> VortexResult<Self> {
-        let validity = validity.filter(|v| !v.is_empty());
         check_validity_buffer(validity.as_ref(), len)?;
 
         // TODO(ngates): check encoded has type u8
