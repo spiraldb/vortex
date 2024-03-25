@@ -4,9 +4,11 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::take::take;
 use crate::stats::Stat;
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
+use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
 #[derive(Debug, Clone)]
@@ -101,6 +103,14 @@ impl Validity {
             Self::Valid(_) => Self::valid(stop - start),
             Self::Invalid(_) => Self::invalid(stop - start),
             Self::Array(a) => Self::Array(a.slice(start, stop).unwrap()),
+        }
+    }
+
+    pub fn take(&self, indices: &dyn Array) -> VortexResult<Validity> {
+        match self {
+            Self::Valid(_) => Ok(Self::valid(indices.len())),
+            Self::Invalid(_) => Ok(Self::invalid(indices.len())),
+            Self::Array(a) => Ok(Self::Array(take(a, indices)?)),
         }
     }
 
