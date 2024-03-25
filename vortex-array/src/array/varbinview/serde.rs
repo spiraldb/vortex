@@ -5,9 +5,7 @@ use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for VarBinViewArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
-        if let Some(v) = self.validity() {
-            ctx.write(v.as_ref())?;
-        }
+        ctx.write_optional_array(self.validity())?;
         ctx.write(self.views())?;
         ctx.write_usize(self.data().len())?;
         for d in self.data() {
@@ -19,11 +17,7 @@ impl ArraySerde for VarBinViewArray {
 
 impl EncodingSerde for VarBinViewEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
-        let validity = if ctx.schema().is_nullable() {
-            Some(ctx.validity().read()?)
-        } else {
-            None
-        };
+        let validity = ctx.read_optional_array()?;
         let views = ctx.bytes().read()?;
         let num_data = ctx.read_usize()?;
         let mut data_bufs = Vec::<ArrayRef>::with_capacity(num_data);
@@ -36,12 +30,13 @@ impl EncodingSerde for VarBinViewEncoding {
 
 #[cfg(test)]
 mod test {
+    use vortex_schema::{DType, Nullability};
+
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray};
     use crate::array::Array;
     use crate::serde::test::roundtrip_array;
-    use vortex_schema::{DType, Nullability};
 
     fn binary_array() -> VarBinViewArray {
         let values = PrimitiveArray::from("hello world this is a long string".as_bytes().to_vec());
