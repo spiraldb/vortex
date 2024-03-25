@@ -47,7 +47,7 @@ impl BoolArray {
     pub fn null(n: usize) -> Self {
         BoolArray::new(
             BooleanBuffer::from(vec![false; n]),
-            Some(Validity::invalid(n)),
+            Some(Validity::Invalid(n)),
         )
     }
 

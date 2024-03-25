@@ -102,8 +102,8 @@ impl ArrayValidity for ConstantArray {
     fn validity(&self) -> Option<Validity> {
         match self.scalar.dtype().is_nullable() {
             true => match self.scalar().is_null() {
-                true => Some(Validity::invalid(self.len())),
-                false => Some(Validity::valid(self.len())),
+                true => Some(Validity::Invalid(self.len())),
+                false => Some(Validity::Valid(self.len())),
             },
             false => None,
         }

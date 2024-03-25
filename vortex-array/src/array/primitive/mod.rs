@@ -95,7 +95,7 @@ impl PrimitiveArray {
     pub fn null<T: NativePType>(n: usize) -> Self {
         PrimitiveArray::from_nullable(
             iter::repeat(T::zero()).take(n).collect::<Vec<_>>(),
-            Some(Validity::invalid(n)),
+            Some(Validity::Invalid(n)),
         )
     }
 

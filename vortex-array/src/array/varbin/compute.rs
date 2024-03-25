@@ -51,7 +51,7 @@ impl AsContiguousFn for VarBinArray {
 
         let validity = if self.dtype().is_nullable() {
             Some(Validity::from_iter(arrays.iter().map(|a| {
-                a.validity().unwrap_or_else(|| Validity::valid(a.len()))
+                a.validity().unwrap_or_else(|| Validity::Valid(a.len()))
             })))
         } else {
             None

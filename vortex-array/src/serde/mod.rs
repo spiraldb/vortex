@@ -152,8 +152,8 @@ impl<'a> ReadCtx<'a> {
     pub fn read_validity(&mut self) -> VortexResult<Option<Validity>> {
         if self.read_option_tag()? {
             match self.read_nbytes::<1>()? {
-                [0u8] => Ok(Some(Validity::valid(self.read_usize()?))),
-                [1u8] => Ok(Some(Validity::invalid(self.read_usize()?))),
+                [0u8] => Ok(Some(Validity::Valid(self.read_usize()?))),
+                [1u8] => Ok(Some(Validity::Invalid(self.read_usize()?))),
                 [2u8] => Ok(Some(Validity::array(
                     self.with_schema(&Validity::DTYPE).read()?,
                 ))),

@@ -18,7 +18,6 @@ use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_datetime::DateTimeEncoding;
-use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
@@ -53,7 +52,7 @@ pub fn enumerate_arrays() -> Vec<EncodingRef> {
     println!("FOUND {:?}", ENCODINGS.iter().map(|e| e.id()).collect_vec());
     vec![
         &ALPEncoding,
-        &DictEncoding,
+        // &DictEncoding,
         &BitPackedEncoding,
         &FoREncoding,
         &DateTimeEncoding,

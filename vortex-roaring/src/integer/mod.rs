@@ -112,7 +112,7 @@ impl ArrayDisplay for RoaringIntArray {
 impl ArrayValidity for RoaringIntArray {
     fn validity(&self) -> Option<Validity> {
         match self.dtype().is_nullable() {
-            true => Some(Validity::valid(self.len())),
+            true => Some(Validity::Valid(self.len())),
             false => None,
         }
     }

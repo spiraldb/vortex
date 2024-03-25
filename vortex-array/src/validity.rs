@@ -28,14 +28,6 @@ impl Validity {
         Self::Array(array)
     }
 
-    pub fn invalid(len: usize) -> Self {
-        Self::Invalid(len)
-    }
-
-    pub fn valid(len: usize) -> Self {
-        Self::Valid(len)
-    }
-
     pub fn len(&self) -> usize {
         match self {
             Self::Valid(len) | Self::Invalid(len) => *len,
@@ -100,16 +92,16 @@ impl Validity {
     // TODO(ngates): maybe we want to impl Array for Validity?
     pub fn slice(&self, start: usize, stop: usize) -> Self {
         match self {
-            Self::Valid(_) => Self::valid(stop - start),
-            Self::Invalid(_) => Self::invalid(stop - start),
+            Self::Valid(_) => Self::Valid(stop - start),
+            Self::Invalid(_) => Self::Invalid(stop - start),
             Self::Array(a) => Self::Array(a.slice(start, stop).unwrap()),
         }
     }
 
     pub fn take(&self, indices: &dyn Array) -> VortexResult<Validity> {
         match self {
-            Self::Valid(_) => Ok(Self::valid(indices.len())),
-            Self::Invalid(_) => Ok(Self::invalid(indices.len())),
+            Self::Valid(_) => Ok(Self::Valid(indices.len())),
+            Self::Invalid(_) => Ok(Self::Invalid(indices.len())),
             Self::Array(a) => Ok(Self::Array(take(a, indices)?)),
         }
     }

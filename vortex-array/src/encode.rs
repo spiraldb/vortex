@@ -188,12 +188,12 @@ fn nulls(nulls: Option<&NullBuffer>, nullable: bool, len: usize) -> Option<Valid
             nulls
                 .map(|nulls| {
                     if nulls.null_count() == nulls.len() {
-                        Validity::invalid(len)
+                        Validity::Invalid(len)
                     } else {
                         Validity::from(nulls.inner().clone())
                     }
                 })
-                .unwrap_or_else(|| Validity::valid(len)),
+                .unwrap_or_else(|| Validity::Valid(len)),
         )
     } else {
         assert!(nulls.is_none());

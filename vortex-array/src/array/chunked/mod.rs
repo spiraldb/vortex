@@ -159,7 +159,7 @@ impl ArrayValidity for ChunkedArray {
         Some(Validity::from_iter(self.chunks.iter().map(|chunk| {
             chunk
                 .validity()
-                .unwrap_or_else(|| Validity::valid(chunk.len()))
+                .unwrap_or_else(|| Validity::Valid(chunk.len()))
         })))
     }
 }
