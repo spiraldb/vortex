@@ -17,7 +17,7 @@ impl ArraySerde for VarBinViewArray {
 
 impl EncodingSerde for VarBinViewEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
-        let validity = ctx.read_optional_array()?;
+        let validity = ctx.validity().read_optional_array()?;
         let views = ctx.bytes().read()?;
         let num_data = ctx.read_usize()?;
         let mut data_bufs = Vec::<ArrayRef>::with_capacity(num_data);
