@@ -17,6 +17,7 @@ use crate::impl_array;
 use crate::ptype::PType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
+use crate::validity::{ArrayValidity, Validity};
 
 mod compress;
 mod compute;
@@ -150,6 +151,12 @@ impl ArrayDisplay for SparseArray {
         f.property("offset", self.indices_offset())?;
         f.child("indices", self.indices())?;
         f.child("values", self.values())
+    }
+}
+
+impl ArrayValidity for SparseArray {
+    fn validity(&self) -> Option<Validity> {
+        todo!()
     }
 }
 

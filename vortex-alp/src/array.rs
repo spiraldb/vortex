@@ -7,6 +7,7 @@ use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
+use vortex::validity::{ArrayValidity, Validity};
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::{DType, IntWidth, Signedness};
 
@@ -120,6 +121,12 @@ impl ArrayDisplay for ALPArray {
         f.property("exponents", format!("{:?}", self.exponents()))?;
         f.child("encoded", self.encoded())?;
         f.maybe_child("patches", self.patches())
+    }
+}
+
+impl ArrayValidity for ALPArray {
+    fn validity(&self) -> Option<Validity> {
+        self.encoded().validity()
     }
 }
 

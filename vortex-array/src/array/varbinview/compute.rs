@@ -16,6 +16,7 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::Scalar;
+use crate::validity::ArrayValidity;
 
 impl ArrayCompute for VarBinViewArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -55,15 +56,11 @@ impl FlattenFn for VarBinViewArray {
             .iter()
             .map(|d| flatten(d.as_ref()).unwrap().into_array())
             .collect::<Vec<_>>();
-        let validity = self
-            .validity()
-            .map(|v| flatten(v).map(FlattenedArray::into_array))
-            .transpose()?;
         Ok(FlattenedArray::VarBinView(VarBinViewArray::new(
             views,
             data,
             self.dtype.clone(),
-            validity,
+            self.validity(),
         )))
     }
 }

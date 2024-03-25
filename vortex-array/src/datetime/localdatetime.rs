@@ -17,6 +17,7 @@ use crate::compute::flatten::flatten_primitive;
 use crate::datetime::TimeUnit;
 use crate::ptype::PType;
 use crate::serde::BytesSerde;
+use crate::validity::ArrayValidity;
 
 #[derive(Debug, Clone)]
 pub struct LocalDateTime {

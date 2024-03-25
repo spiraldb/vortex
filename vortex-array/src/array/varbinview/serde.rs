@@ -3,12 +3,11 @@ use vortex_error::VortexResult;
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
+use crate::validity::ArrayValidity;
 
 impl ArraySerde for VarBinViewArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
-        if let Some(v) = self.validity() {
-            ctx.write(v.as_ref())?;
-        }
+        ctx.write_validity(self.validity())?;
         ctx.write(self.views())?;
         ctx.write_usize(self.data().len())?;
         for d in self.data() {
@@ -20,11 +19,7 @@ impl ArraySerde for VarBinViewArray {
 
 impl EncodingSerde for VarBinViewEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
-        let validity = if ctx.schema().is_nullable() {
-            Some(ctx.validity().read()?)
-        } else {
-            None
-        };
+        let validity = ctx.read_validity()?;
         let views = ctx.bytes().read()?;
         let num_data = ctx.read_usize()?;
         let mut data_bufs = Vec::<ArrayRef>::with_capacity(num_data);

@@ -13,6 +13,7 @@ use crate::impl_array;
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
+use crate::validity::{ArrayValidity, Validity};
 
 mod compute;
 mod serde;
@@ -26,7 +27,11 @@ pub struct ConstantArray {
 }
 
 impl ConstantArray {
-    pub fn new(scalar: Scalar, length: usize) -> Self {
+    pub fn new<S>(scalar: S, length: usize) -> Self
+    where
+        Scalar: From<S>,
+    {
+        let scalar: Scalar = scalar.into();
         let stats = StatsSet::from(
             [
                 (Stat::Max, scalar.clone()),
@@ -90,6 +95,18 @@ impl Array for ConstantArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+}
+
+impl ArrayValidity for ConstantArray {
+    fn validity(&self) -> Option<Validity> {
+        match self.scalar.dtype().is_nullable() {
+            true => match self.scalar().is_null() {
+                true => Some(Validity::invalid(self.len())),
+                false => Some(Validity::valid(self.len())),
+            },
+            false => None,
+        }
     }
 }
 

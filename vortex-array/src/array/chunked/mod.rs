@@ -13,6 +13,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+use crate::validity::{ArrayValidity, Validity};
 
 mod compute;
 mod serde;
@@ -150,6 +151,20 @@ impl Array for ChunkedArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+}
+
+impl ArrayValidity for ChunkedArray {
+    fn validity(&self) -> Option<Validity> {
+        if !self.dtype.is_nullable() {
+            return None;
+        }
+
+        Some(Validity::from_iter(self.chunks.iter().map(|chunk| {
+            chunk
+                .validity()
+                .unwrap_or_else(|| Validity::valid(chunk.len()))
+        })))
     }
 }
 

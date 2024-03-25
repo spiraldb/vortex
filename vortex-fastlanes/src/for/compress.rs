@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use num_traits::PrimInt;
 
+use crate::{FoRArray, FoREncoding};
 use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -11,9 +12,8 @@ use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
+use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
-
-use crate::{FoRArray, FoREncoding};
 
 impl EncodingCompression for FoREncoding {
     fn cost(&self) -> u8 {
@@ -53,7 +53,7 @@ impl EncodingCompression for FoREncoding {
         let shift = trailing_zeros(parray);
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
             if shift == <$T>::PTYPE.bit_width() as u8 {
-                ConstantArray::new($T::default().into(), parray.len()).into_array()
+                ConstantArray::new($T::default(), parray.len()).into_array()
             } else {
                 compress_primitive::<$T>(parray, shift).into_array()
             }
@@ -108,7 +108,7 @@ pub fn decompress(array: &FoRArray) -> VortexResult<PrimitiveArray> {
         let reference: $T = array.reference().try_into()?;
         PrimitiveArray::from_nullable(
             decompress_primitive(encoded.typed_data::<$T>(), reference, shift),
-            encoded.validity().cloned(),
+            encoded.validity(),
         )
     }))
 }

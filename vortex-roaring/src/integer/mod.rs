@@ -12,6 +12,7 @@ use vortex::impl_array;
 use vortex::ptype::PType;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
+use vortex::validity::{ArrayValidity, Validity};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
@@ -105,6 +106,15 @@ impl Array for RoaringIntArray {
 impl ArrayDisplay for RoaringIntArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("bitmap", format!("{:?}", self.bitmap()))
+    }
+}
+
+impl ArrayValidity for RoaringIntArray {
+    fn validity(&self) -> Option<Validity> {
+        match self.dtype().is_nullable() {
+            true => Some(Validity::valid(self.len())),
+            false => None,
+        }
     }
 }
 
