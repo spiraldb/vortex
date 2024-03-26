@@ -301,7 +301,6 @@ impl TryFrom<FbNullability> for Nullability {
 impl From<&IntWidth> for FbIntWidth {
     fn from(value: &IntWidth) -> Self {
         match value {
-            IntWidth::Unknown => FbIntWidth::Unknown,
             IntWidth::_8 => FbIntWidth::_8,
             IntWidth::_16 => FbIntWidth::_16,
             IntWidth::_32 => FbIntWidth::_32,
@@ -315,7 +314,6 @@ impl TryFrom<FbIntWidth> for IntWidth {
 
     fn try_from(value: FbIntWidth) -> SchemaResult<Self> {
         match value {
-            FbIntWidth::Unknown => Ok(IntWidth::Unknown),
             FbIntWidth::_8 => Ok(IntWidth::_8),
             FbIntWidth::_16 => Ok(IntWidth::_16),
             FbIntWidth::_32 => Ok(IntWidth::_32),
@@ -330,7 +328,6 @@ impl TryFrom<FbIntWidth> for IntWidth {
 impl From<&Signedness> for FbSignedness {
     fn from(value: &Signedness) -> Self {
         match value {
-            Signedness::Unknown => FbSignedness::Unknown,
             Signedness::Unsigned => FbSignedness::Unsigned,
             Signedness::Signed => FbSignedness::Signed,
         }
@@ -342,7 +339,6 @@ impl TryFrom<FbSignedness> for Signedness {
 
     fn try_from(value: FbSignedness) -> SchemaResult<Self> {
         match value {
-            FbSignedness::Unknown => Ok(Signedness::Unknown),
             FbSignedness::Unsigned => Ok(Signedness::Unsigned),
             FbSignedness::Signed => Ok(Signedness::Signed),
             _ => Err(SchemaError::InvalidArgument(
@@ -355,7 +351,6 @@ impl TryFrom<FbSignedness> for Signedness {
 impl From<&FloatWidth> for FbFloatWidth {
     fn from(value: &FloatWidth) -> Self {
         match value {
-            FloatWidth::Unknown => FbFloatWidth::Unknown,
             FloatWidth::_16 => FbFloatWidth::_16,
             FloatWidth::_32 => FbFloatWidth::_32,
             FloatWidth::_64 => FbFloatWidth::_64,
@@ -368,7 +363,6 @@ impl TryFrom<FbFloatWidth> for FloatWidth {
 
     fn try_from(value: FbFloatWidth) -> SchemaResult<Self> {
         match value {
-            FbFloatWidth::Unknown => Ok(FloatWidth::Unknown),
             FbFloatWidth::_16 => Ok(FloatWidth::_16),
             FbFloatWidth::_32 => Ok(FloatWidth::_32),
             FbFloatWidth::_64 => Ok(FloatWidth::_64),
