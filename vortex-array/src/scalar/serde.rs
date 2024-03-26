@@ -1,13 +1,12 @@
 use std::io;
 use std::sync::Arc;
 
-use half::f16;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+use crate::match_each_native_ptype;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
+use vortex_schema::{DType, Nullability};
 
-use crate::ptype::PType;
 use crate::scalar::composite::CompositeScalar;
 use crate::scalar::{
     BinaryScalar, BoolScalar, ListScalar, NullScalar, PScalar, PrimitiveScalar, Scalar,
@@ -39,7 +38,7 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
                 let bool = self.reader.read_nbytes::<1>()?[0] != 0;
                 Ok(BoolScalar::new(is_present.then_some(bool), nullability)?.into())
             }
-            ScalarTag::PrimitiveS => self.read_primitive_scalar().map(|p| p.into()),
+            ScalarTag::PrimitiveS => self.read_primitive_scalar(nullability).map(|p| p.into()),
             ScalarTag::List => {
                 let is_present = self.reader.read_option_tag()?;
                 if is_present {
@@ -87,49 +86,17 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
         }
     }
 
-    fn read_primitive_scalar(&mut self) -> VortexResult<PrimitiveScalar> {
+    fn read_primitive_scalar(&mut self, nullability: Nullability) -> VortexResult<PrimitiveScalar> {
         let ptype = self.reader.ptype()?;
         let is_present = self.reader.read_option_tag()?;
-        if is_present {
-            let pscalar = match ptype {
-                PType::U8 => PrimitiveScalar::some(PScalar::U8(u8::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
-                PType::U16 => PrimitiveScalar::some(PScalar::U16(u16::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
-                PType::U32 => PrimitiveScalar::some(PScalar::U32(u32::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
-                PType::U64 => PrimitiveScalar::some(PScalar::U64(u64::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
-                PType::I8 => PrimitiveScalar::some(PScalar::I8(i8::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
-                PType::I16 => PrimitiveScalar::some(PScalar::I16(i16::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
-                PType::I32 => PrimitiveScalar::some(PScalar::I32(i32::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
-                PType::I64 => PrimitiveScalar::some(PScalar::I64(i64::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
-                PType::F16 => PrimitiveScalar::some(PScalar::F16(f16::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
-                PType::F32 => PrimitiveScalar::some(PScalar::F32(f32::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
-                PType::F64 => PrimitiveScalar::some(PScalar::F64(f64::from_le_bytes(
-                    self.reader.read_nbytes()?,
-                ))),
+        match_each_native_ptype!(ptype, |$P| {
+            let value = if is_present {
+                Some($P::from_le_bytes(self.reader.read_nbytes()?))
+            } else {
+                None
             };
-            Ok(pscalar)
-        } else {
-            Ok(PrimitiveScalar::none(ptype))
-        }
+            Ok(PrimitiveScalar::new::<$P>(value, nullability)?)
+        })
     }
 }
 

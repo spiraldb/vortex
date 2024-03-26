@@ -3,53 +3,55 @@ use std::mem::size_of;
 
 use half::f16;
 
+use crate::match_each_native_ptype;
 use vortex_error::{VortexError, VortexResult};
-use vortex_schema::DType;
+use vortex_schema::{DType, Nullability};
 
 use crate::ptype::{NativePType, PType};
-use crate::scalar::composite::CompositeScalar;
 use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct PrimitiveScalar {
     ptype: PType,
+    nullability: Nullability,
     value: Option<PScalar>,
-    exponent: u8,
 }
 
 impl PrimitiveScalar {
-    pub fn new(ptype: PType, value: Option<PScalar>) -> Self {
+    pub fn new<T: NativePType>(value: Option<T>, nullability: Nullability) -> VortexResult<Self> {
+        if value.is_none() && nullability == Nullability::NonNullable {
+            return Err("Value cannot be None for NonNullable Scalar".into());
+        }
+        Ok(Self {
+            ptype: T::PTYPE,
+            nullability,
+            value: value.map(|v| Into::<PScalar>::into(v)),
+        })
+    }
+
+    pub fn nullable<T: NativePType>(value: Option<T>) -> Self {
+        Self::new(value, Nullability::Nullable).unwrap()
+    }
+
+    pub fn some<T: NativePType>(value: T) -> Self {
         Self {
-            ptype,
-            value,
-            exponent: 0,
+            ptype: T::PTYPE,
+            nullability: Nullability::default(),
+            value: Some(Into::<PScalar>::into(value)),
         }
     }
 
-    pub fn some(value: PScalar) -> Self {
+    pub fn none<T: NativePType>() -> Self {
         Self {
-            ptype: value.ptype(),
-            value: Some(value),
-            exponent: 0,
-        }
-    }
-
-    pub fn none(ptype: PType) -> Self {
-        Self {
-            ptype,
+            ptype: T::PTYPE,
+            nullability: Nullability::Nullable,
             value: None,
-            exponent: 0,
         }
     }
 
     #[inline]
     pub fn value(&self) -> Option<PScalar> {
         self.value
-    }
-
-    #[inline]
-    pub fn factor(&self) -> u8 {
-        self.exponent
     }
 
     #[inline]
@@ -63,19 +65,17 @@ impl PrimitiveScalar {
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
-        let ptype: VortexResult<PType> = dtype.try_into();
-        ptype
-            .and_then(|p| match self.value() {
-                None => Ok(PrimitiveScalar::none(p).into()),
-                Some(ps) => ps.cast_ptype(p),
-            })
-            .or_else(|_| self.cast_dtype(dtype))
-    }
-
-    // General conversion function that handles casting primitive scalar to non-primitive.
-    // TODO(robert): Implement storage conversions
-    fn cast_dtype(&self, dtype: &DType) -> VortexResult<Scalar> {
-        Ok(CompositeScalar::new(dtype.clone(), Box::new(self.clone().into())).into())
+        let ptype: PType = dtype.try_into()?;
+        match_each_native_ptype!(ptype, |$T| {
+            Ok(PrimitiveScalar::new(
+                self.value()
+                .map(|ps| ps.cast_ptype(ptype))
+                .transpose()?
+                .map(|s| $T::try_from(s))
+                .transpose()?,
+                self.nullability,
+            )?.into())
+        })
     }
 
     pub fn nbytes(&self) -> usize {
@@ -190,7 +190,7 @@ macro_rules! pscalar {
 
         impl From<$T> for Scalar {
             fn from(value: $T) -> Self {
-                PrimitiveScalar::some(PScalar::from(value)).into()
+                PrimitiveScalar::some(value).into()
             }
         }
 
@@ -245,8 +245,8 @@ pscalar!(f64, F64);
 impl<T: NativePType> From<Option<T>> for Scalar {
     fn from(value: Option<T>) -> Self {
         match value {
-            Some(value) => value.into(),
-            None => PrimitiveScalar::new(T::PTYPE, None).into(),
+            Some(value) => PrimitiveScalar::some::<T>(value).into(),
+            None => PrimitiveScalar::none::<T>().into(),
         }
     }
 }
@@ -254,7 +254,7 @@ impl<T: NativePType> From<Option<T>> for Scalar {
 impl From<usize> for Scalar {
     #[inline]
     fn from(value: usize) -> Self {
-        PrimitiveScalar::new(PType::U64, Some(PScalar::U64(value as u64))).into()
+        PrimitiveScalar::some::<u64>(value as u64).into()
     }
 }
 

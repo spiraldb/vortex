@@ -8,17 +8,11 @@ use DType::*;
 
 use crate::CompositeID;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Nullability {
+    #[default]
     NonNullable,
     Nullable,
-}
-
-impl Default for Nullability {
-    fn default() -> Self {
-        // TODO(ngates): is this a sensible default?
-        Nullability::NonNullable
-    }
 }
 
 impl From<bool> for Nullability {

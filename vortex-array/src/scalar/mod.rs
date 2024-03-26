@@ -1,3 +1,4 @@
+use half::f16;
 use std::fmt::{Debug, Display, Formatter};
 
 pub use binary::*;
@@ -12,7 +13,7 @@ pub use utf8::*;
 use vortex_error::VortexResult;
 use vortex_schema::{DType, FloatWidth, IntWidth, Nullability, Signedness};
 
-use crate::ptype::{NativePType, PType};
+use crate::ptype::NativePType;
 
 mod binary;
 mod bool;
@@ -104,39 +105,38 @@ impl Scalar {
     }
 
     pub fn null(dtype: &DType) -> Self {
+        assert!(dtype.is_nullable());
         match dtype {
             DType::Null => NullScalar::new().into(),
             DType::Bool(_) => BoolScalar::none().into(),
             DType::Int(w, s, _) => match (w, s) {
                 (IntWidth::Unknown, Signedness::Unknown | Signedness::Signed) => {
-                    PrimitiveScalar::none(PType::I64).into()
+                    PrimitiveScalar::none::<i64>().into()
                 }
                 (IntWidth::_8, Signedness::Unknown | Signedness::Signed) => {
-                    PrimitiveScalar::none(PType::I8).into()
+                    PrimitiveScalar::none::<i8>().into()
                 }
                 (IntWidth::_16, Signedness::Unknown | Signedness::Signed) => {
-                    PrimitiveScalar::none(PType::I16).into()
+                    PrimitiveScalar::none::<i16>().into()
                 }
                 (IntWidth::_32, Signedness::Unknown | Signedness::Signed) => {
-                    PrimitiveScalar::none(PType::I32).into()
+                    PrimitiveScalar::none::<i32>().into()
                 }
                 (IntWidth::_64, Signedness::Unknown | Signedness::Signed) => {
-                    PrimitiveScalar::none(PType::I64).into()
+                    PrimitiveScalar::none::<i64>().into()
                 }
-                (IntWidth::Unknown, Signedness::Unsigned) => {
-                    PrimitiveScalar::none(PType::U64).into()
-                }
-                (IntWidth::_8, Signedness::Unsigned) => PrimitiveScalar::none(PType::U8).into(),
-                (IntWidth::_16, Signedness::Unsigned) => PrimitiveScalar::none(PType::U16).into(),
-                (IntWidth::_32, Signedness::Unsigned) => PrimitiveScalar::none(PType::U32).into(),
-                (IntWidth::_64, Signedness::Unsigned) => PrimitiveScalar::none(PType::U64).into(),
+                (IntWidth::Unknown, Signedness::Unsigned) => PrimitiveScalar::none::<u64>().into(),
+                (IntWidth::_8, Signedness::Unsigned) => PrimitiveScalar::none::<u8>().into(),
+                (IntWidth::_16, Signedness::Unsigned) => PrimitiveScalar::none::<u16>().into(),
+                (IntWidth::_32, Signedness::Unsigned) => PrimitiveScalar::none::<u32>().into(),
+                (IntWidth::_64, Signedness::Unsigned) => PrimitiveScalar::none::<u64>().into(),
             },
             DType::Decimal(_, _, _) => unimplemented!("DecimalScalar"),
             DType::Float(w, _) => match w {
-                FloatWidth::Unknown => PrimitiveScalar::none(PType::F64).into(),
-                FloatWidth::_16 => PrimitiveScalar::none(PType::F16).into(),
-                FloatWidth::_32 => PrimitiveScalar::none(PType::F32).into(),
-                FloatWidth::_64 => PrimitiveScalar::none(PType::F64).into(),
+                FloatWidth::Unknown => PrimitiveScalar::none::<f64>().into(),
+                FloatWidth::_16 => PrimitiveScalar::none::<f16>().into(),
+                FloatWidth::_32 => PrimitiveScalar::none::<f32>().into(),
+                FloatWidth::_64 => PrimitiveScalar::none::<f64>().into(),
             },
             DType::Utf8(_) => Utf8Scalar::none().into(),
             DType::Binary(_) => BinaryScalar::none().into(),

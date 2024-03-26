@@ -43,7 +43,8 @@ impl TryFrom<Scalar> for bool {
         let Scalar::Bool(b) = value else {
             return Err(VortexError::InvalidDType(value.dtype().clone()));
         };
-        b.into_value()
+        b.value()
+            .cloned()
             .ok_or_else(|| VortexError::InvalidDType(b.dtype().clone()))
     }
 }

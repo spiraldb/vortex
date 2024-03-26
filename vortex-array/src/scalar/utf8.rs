@@ -45,8 +45,9 @@ impl TryFrom<Scalar> for String {
         let Scalar::Utf8(u) = value else {
             return Err(VortexError::InvalidDType(value.dtype().clone()));
         };
+        let dt = u.dtype().clone();
         match u.into_value() {
-            None => Err(VortexError::InvalidDType(u.dtype().clone())),
+            None => Err(VortexError::InvalidDType(dt)),
             Some(s) => Ok(s),
         }
     }
