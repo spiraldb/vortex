@@ -11,29 +11,32 @@ next-generation columnar file format for multidimensional arrays called Spiral.
 > [!CAUTION]
 > This library is still under rapid development and is very much a work in progress!
 >
-> Some key features are not yet implemented, the API will almost certainly change in breaking ways, and we cannot yet guarantee correctness in all cases.
+> Some key features are not yet implemented, the API will almost certainly change in breaking ways, and we cannot
+> yet guarantee correctness in all cases.
 
 The major components of Vortex are (will be!):
 
 * **Logical Types** - a schema definition that makes no assertions about physical layout.
-* **Encodings** - a pluggable set of physical layouts. Vortex ships with several state-of-the-art lightweight 
-compression codecs that have the potential to support GPU decompression.
+* **Encodings** - a pluggable set of physical layouts. Vortex ships with several state-of-the-art lightweight
+  compression codecs that have the potential to support GPU decompression.
 * **Compression** - recursive compression based on stratified samples of the input.
 * **Compute** - basic compute kernels that can operate over compressed data. Note that Vortex does not intend to become
   a full-fledged compute engine, but rather to provide the ability to implement basic compute operations as may be
   required for efficient scanning & pushdown operations.
 * **Statistics** - each array carries around lazily computed summary statistics, optionally populated at read-time.
   These are available to compute kernels as well as to the compressor.
-* **Serde** - zero-copy serialization. Designed to work well both on-disk and over-the-wire.
+* **Serde** - zero-copy serialization. Useful as a building block in creating IPC or file formats that contain
+  compressed arrays.
 
 ## Overview: Logical vs Physical
 
 One of the core principles in Vortex is separation of the logical from the physical.
 
-A Vortex array is defined by a logical data type (i.e., the type of scalar elements) as well as a physical encoding 
+A Vortex array is defined by a logical data type (i.e., the type of scalar elements) as well as a physical encoding
 (the type of the array itself). Vortex ships with several built-in encodings, as well as several extension encodings.
 
-The built-in encodings are primarily designed to model the Apache Arrow in-memory format, enabling us to construct Vortex
+The built-in encodings are primarily designed to model the Apache Arrow in-memory format, enabling us to construct
+Vortex
 arrays with zero-copy from Arrow arrays. There are also several built-in encodings (e.g., `sparse` and `chunked`) that
 are useful building blocks for other encodings.
 The included extension encodings are mostly designed to model compressed in-memory arrays, such as run-length or
@@ -47,21 +50,21 @@ The Vortex type-system is still in flux. The current set of logical types is:
 
 * Null
 * Bool
-* Integer
-* Float
-* Decimal
+* Integer(8, 16, 32, 64)
+* Float(16, b16, 32, 64)
 * Binary
 * UTF8
-* List
 * Struct
+* Decimal: TODO
 * Date/Time/DateTime/Duration: TODO (in-progress, currently partially supported)
+* List: TODO
 * FixedList: TODO
 * Union: TODO
 
 ### Canonical/Flat Encodings
 
-Vortex includes a base set of "flat" encodings that are designed to be zero-copy with Apache Arrow. These are the canonical
-representations of each of the logical data types. The canonical encodings currently supported are:
+Vortex includes a base set of "flat" encodings that are designed to be zero-copy with Apache Arrow. These are the
+canonical representations of each of the logical data types. The canonical encodings currently supported are:
 
 * Null
 * Bool
@@ -76,7 +79,7 @@ representations of each of the logical data types. The canonical encodings curre
 Vortex includes a set of compressed encodings that can hold compression in-memory arrays allowing us to defer
 compression. These are:
 
-* BitPacking
+* BitPacked
 * Constant
 * Chunked
 * Dictionary
@@ -89,12 +92,13 @@ compression. These are:
 
 ### Compression
 
-Vortex's compression scheme is based on the [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
+Vortex's compression scheme is based on
+the [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
 
-Roughly, for each chunk of data, a sample of at least ~1% of the data is taken. Compression is then attempted (recursively)
-with a set of lightweight encodings. The best-performing combination of encodings is then chosen to encode the entire chunk.
-This sounds like it would be very expensive, but given basic statistics about a chunk, it is possible to cheaply prune
-many encodings and ensure the search space does not explode in size.
+Roughly, for each chunk of data, a sample of at least ~1% of the data is taken. Compression is then attempted (
+recursively) with a set of lightweight encodings. The best-performing combination of encodings is then chosen to encode
+the entire chunk. This sounds like it would be very expensive, but given basic statistics about a chunk, it is
+possible to cheaply prune many encodings and ensure the search space does not explode in size.
 
 ### Compute
 
@@ -126,7 +130,12 @@ The current statistics are:
 
 ### Serialization / Deserialization (Serde)
 
-TODO
+Vortex serde is currently in the design phase. The goals of this implementation are:
+
+* Support scanning (column projection + row filter) with zero-copy and zero heap allocation.
+* Support random access in constant time.
+* Forward statistical information (such as sortedness) to consumers.
+* To provide a building block for file format authors to store compressed array data.
 
 ## Vs Apache Arrow
 
@@ -143,7 +152,7 @@ In Arrow, `RunLengthArray` and `DictionaryArray` are separate incompatible types
 
 ## Contributing
 
-While we hope to turn Vortex into a community project, its current rapid rate of change makes taking contributions 
+While we hope to turn Vortex into a community project, its current rapid rate of change makes taking contributions
 without prior discussion infeasible. If you are interested in contributing, please open an issue to discuss your ideas.
 
 ## License
