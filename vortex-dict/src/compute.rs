@@ -3,7 +3,7 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::take::take;
 use vortex::compute::ArrayCompute;
 use vortex::scalar::Scalar;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::VortexResult;
 
 use crate::DictArray;
 
@@ -28,14 +28,7 @@ impl FlattenFn for DictArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
         let codes = flatten_primitive(self.codes())?;
         let values = flatten(self.values())?;
-
-        match values {
-            FlattenedArray::Primitive(v) => flatten(&take(&v, &codes)?),
-            FlattenedArray::VarBin(vb) => flatten(&take(&vb, &codes)?),
-            _ => Err(VortexError::InvalidArgument(
-                "Only VarBin and Primitive values array are supported".into(),
-            )),
-        }
+        flatten(&take(values.as_ref(), &codes)?)
     }
 }
 

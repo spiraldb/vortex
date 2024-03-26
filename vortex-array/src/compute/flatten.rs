@@ -38,6 +38,20 @@ impl FlattenedArray {
     }
 }
 
+impl<'arr> AsRef<dyn Array + 'arr> for FlattenedArray {
+    fn as_ref(&self) -> &(dyn Array + 'arr) {
+        match self {
+            FlattenedArray::Bool(a) => a,
+            FlattenedArray::Chunked(a) => a,
+            FlattenedArray::Composite(a) => a,
+            FlattenedArray::Primitive(a) => a,
+            FlattenedArray::Struct(a) => a,
+            FlattenedArray::VarBin(a) => a,
+            FlattenedArray::VarBinView(a) => a,
+        }
+    }
+}
+
 /// Flatten an array into one of the flat encodings.
 /// This does not guarantee that the array is recursively flattened.
 pub fn flatten(array: &dyn Array) -> VortexResult<FlattenedArray> {
