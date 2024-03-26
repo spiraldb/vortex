@@ -231,20 +231,22 @@ where
     (
         PrimitiveArray::from(codes),
         VarBinArray::new(
-            PrimitiveArray::from_nullable(offsets, values_validity).into_array(),
+            PrimitiveArray::from(offsets).into_array(),
             PrimitiveArray::from(bytes).into_array(),
             dtype,
-            None,
+            values_validity,
         ),
     )
 }
 
 #[cfg(test)]
 mod test {
-    use vortex::array::downcast::DowncastArrayBuiltin;
+    use std::str;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
+    use vortex::ptype::PType;
+    use vortex::scalar::PrimitiveScalar;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
 
@@ -271,9 +273,13 @@ mod test {
         let (codes, values) = dict_encode_typed_primitive::<i32>(&arr);
         assert_eq!(
             codes.buffer().typed_data::<u64>(),
-            &[0, 0, 1, 2, 2, 1, 2, 1]
+            &[1, 1, 0, 2, 2, 0, 2, 0]
         );
-        assert_eq!(scalar_at(&values, 0), Ok(1.into()));
+        assert_eq!(
+            scalar_at(&values, 0),
+            Ok(PrimitiveScalar::none(PType::I32).into())
+        );
+        assert_eq!(scalar_at(&values, 1), Ok(1.into()));
         assert_eq!(scalar_at(&values, 2), Ok(3.into()));
     }
 
@@ -283,16 +289,13 @@ mod test {
         let (codes, values) = dict_encode_varbin(&arr);
         assert_eq!(codes.buffer().typed_data::<u64>(), &[0, 1, 0, 2, 1]);
         assert_eq!(
-            String::from_utf8(values.bytes_at(0).unwrap()).unwrap(),
-            "hello"
-        );
-        assert_eq!(
-            String::from_utf8(values.bytes_at(1).unwrap()).unwrap(),
-            "world"
-        );
-        assert_eq!(
-            String::from_utf8(values.bytes_at(2).unwrap()).unwrap(),
-            "again"
+            values
+                .iter_primitive()
+                .unwrap()
+                .flatten()
+                .map(|b| unsafe { str::from_utf8_unchecked(b) })
+                .collect::<Vec<_>>(),
+            vec!["hello", "world", "again"]
         );
     }
 
@@ -313,20 +316,15 @@ mod test {
         let (codes, values) = dict_encode_varbin(&arr);
         assert_eq!(
             codes.buffer().typed_data::<u64>(),
-            &[0, 1, 2, 0, 1, 3, 2, 1]
+            &[1, 0, 2, 1, 0, 3, 2, 0]
         );
         assert_eq!(
-            String::from_utf8(values.bytes_at(0).unwrap()).unwrap(),
-            "hello"
-        );
-        assert_eq!(String::from_utf8(values.bytes_at(1).unwrap()).unwrap(), "");
-        assert_eq!(
-            String::from_utf8(values.bytes_at(2).unwrap()).unwrap(),
-            "world"
-        );
-        assert_eq!(
-            String::from_utf8(values.bytes_at(3).unwrap()).unwrap(),
-            "again"
+            values
+                .iter_primitive()
+                .unwrap()
+                .map(|b| b.map(|bv| unsafe { str::from_utf8_unchecked(bv) }))
+                .collect::<Vec<_>>(),
+            vec![None, Some("hello"), Some("world"), Some("again")]
         );
     }
 
@@ -335,12 +333,13 @@ mod test {
         let arr = VarBinArray::from(vec!["a", "a", "b", "b", "a", "b", "a", "b"]);
         let (codes, values) = dict_encode_varbin(&arr);
         assert_eq!(
-            values.bytes().as_primitive().typed_data::<u8>(),
-            "ab".as_bytes()
-        );
-        assert_eq!(
-            values.offsets().as_primitive().typed_data::<u64>(),
-            &[0, 1, 2]
+            values
+                .iter_primitive()
+                .unwrap()
+                .flatten()
+                .map(|b| unsafe { str::from_utf8_unchecked(b) })
+                .collect::<Vec<_>>(),
+            vec!["a", "b"]
         );
         assert_eq!(codes.typed_data::<u64>(), &[0u64, 0, 1, 1, 0, 1, 0, 1]);
     }

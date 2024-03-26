@@ -149,7 +149,7 @@ mod test {
 
     #[test]
     fn compression_ratio() {
-        setup_logger(LevelFilter::Debug);
+        setup_logger(LevelFilter::Error);
         _ = compress_taxi_data();
     }
 
