@@ -16,7 +16,6 @@ use crate::validity::{ArrayValidity, Validity};
 use super::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
 
 mod compute;
-mod flatten;
 mod serde;
 mod stats;
 
@@ -49,6 +48,10 @@ impl BoolArray {
             BooleanBuffer::from(vec![false; n]),
             Some(Validity::Invalid(n)),
         )
+    }
+
+    pub fn from_nullable(values: Vec<bool>, validity: Option<Validity>) -> Self {
+        BoolArray::new(BooleanBuffer::from(values), validity)
     }
 
     #[inline]
