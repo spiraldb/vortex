@@ -14,6 +14,13 @@ pub enum Nullability {
     Nullable,
 }
 
+impl Default for Nullability {
+    fn default() -> Self {
+        // TODO(ngates): is this a sensible default?
+        Nullability::NonNullable
+    }
+}
+
 impl From<bool> for Nullability {
     fn from(value: bool) -> Self {
         if value {

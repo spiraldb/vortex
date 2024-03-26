@@ -10,7 +10,7 @@ pub use serde::*;
 pub use struct_::*;
 pub use utf8::*;
 use vortex_error::VortexResult;
-use vortex_schema::{DType, FloatWidth, IntWidth, Signedness};
+use vortex_schema::{DType, FloatWidth, IntWidth, Nullability, Signedness};
 
 use crate::ptype::{NativePType, PType};
 
@@ -23,6 +23,7 @@ mod primitive;
 mod serde;
 mod struct_;
 mod utf8;
+mod value;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Scalar {
@@ -84,6 +85,10 @@ impl Scalar {
         match_each_scalar! { self, |$s| $s.nbytes() }
     }
 
+    pub fn nullability(&self) -> Nullability {
+        self.dtype().nullability()
+    }
+
     pub fn is_null(&self) -> bool {
         match self {
             Scalar::Binary(b) => b.value().is_none(),
@@ -101,7 +106,7 @@ impl Scalar {
     pub fn null(dtype: &DType) -> Self {
         match dtype {
             DType::Null => NullScalar::new().into(),
-            DType::Bool(_) => BoolScalar::new(None).into(),
+            DType::Bool(_) => BoolScalar::none().into(),
             DType::Int(w, s, _) => match (w, s) {
                 (IntWidth::Unknown, Signedness::Unknown | Signedness::Signed) => {
                     PrimitiveScalar::none(PType::I64).into()
@@ -133,8 +138,8 @@ impl Scalar {
                 FloatWidth::_32 => PrimitiveScalar::none(PType::F32).into(),
                 FloatWidth::_64 => PrimitiveScalar::none(PType::F64).into(),
             },
-            DType::Utf8(_) => Utf8Scalar::new(None).into(),
-            DType::Binary(_) => BinaryScalar::new(None).into(),
+            DType::Utf8(_) => Utf8Scalar::none().into(),
+            DType::Binary(_) => BinaryScalar::none().into(),
             DType::Struct(_, _) => StructScalar::new(dtype.clone(), vec![]).into(),
             DType::List(_, _) => ListScalar::new(dtype.clone(), None).into(),
             DType::Composite(_, _) => unimplemented!("CompositeScalar"),

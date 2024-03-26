@@ -53,7 +53,7 @@ impl FlattenFn for ConstantArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
         Ok(match self.scalar() {
             Scalar::Bool(b) => {
-                if let Some(bv) = b.value() {
+                if let Some(&bv) = b.value() {
                     FlattenedArray::Bool(BoolArray::from(vec![bv; self.len()]))
                 } else {
                     FlattenedArray::Bool(BoolArray::null(self.len()))

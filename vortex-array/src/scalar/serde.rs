@@ -27,18 +27,17 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
     pub fn read(&mut self) -> VortexResult<Scalar> {
         let tag = ScalarTag::try_from(self.reader.read_nbytes::<1>()?[0])
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let nullability = self.reader.nullability()?;
+
         match tag {
             ScalarTag::Binary => {
                 let slice = self.reader.read_optional_slice()?;
-                Ok(BinaryScalar::new(slice).into())
+                Ok(BinaryScalar::new(slice, nullability)?.into())
             }
             ScalarTag::Bool => {
                 let is_present = self.reader.read_option_tag()?;
-                if is_present {
-                    Ok(BoolScalar::some(self.reader.read_nbytes::<1>()?[0] != 0).into())
-                } else {
-                    Ok(BoolScalar::none().into())
-                }
+                let bool = self.reader.read_nbytes::<1>()?[0] != 0;
+                Ok(BoolScalar::new(is_present.then_some(bool), nullability)?.into())
             }
             ScalarTag::PrimitiveS => self.read_primitive_scalar().map(|p| p.into()),
             ScalarTag::List => {
@@ -74,10 +73,11 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
             }
             ScalarTag::Utf8 => {
                 let value = self.reader.read_optional_slice()?;
-                Ok(
-                    Utf8Scalar::new(value.map(|v| unsafe { String::from_utf8_unchecked(v) }))
-                        .into(),
-                )
+                Ok(Utf8Scalar::new(
+                    value.map(|v| unsafe { String::from_utf8_unchecked(v) }),
+                    nullability,
+                )?
+                .into())
             }
             ScalarTag::Composite => {
                 let dtype = self.reader.dtype()?;
@@ -145,11 +145,15 @@ impl<'a, 'b> ScalarWriter<'a, 'b> {
     pub fn write(&mut self, scalar: &Scalar) -> VortexResult<()> {
         self.writer
             .write_fixed_slice([ScalarTag::from(scalar).into()])?;
+        self.writer.nullability(scalar.nullability())?;
+
         match scalar {
-            Scalar::Binary(b) => self.writer.write_optional_slice(b.value()),
+            Scalar::Binary(b) => self
+                .writer
+                .write_optional_slice(b.value().map(|b| b.as_slice())),
             Scalar::Bool(b) => {
                 self.writer.write_option_tag(b.value().is_some())?;
-                if let Some(v) = b.value() {
+                if let Some(&v) = b.value() {
                     self.writer.write_fixed_slice([v as u8])?;
                 }
                 Ok(())

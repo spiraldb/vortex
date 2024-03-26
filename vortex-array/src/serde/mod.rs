@@ -95,6 +95,16 @@ impl<'a> ReadCtx<'a> {
         Ok(typetag.into())
     }
 
+    pub fn nullability(&mut self) -> VortexResult<Nullability> {
+        match self.read_nbytes::<1>()? {
+            [0] => Ok(Nullability::NonNullable),
+            [1] => Ok(Nullability::Nullable),
+            _ => Err(VortexError::InvalidArgument(
+                "Invalid nullability tag".into(),
+            )),
+        }
+    }
+
     #[inline]
     pub fn scalar(&mut self) -> VortexResult<Scalar> {
         ScalarReader::new(self).read()
@@ -202,6 +212,13 @@ impl<'a> WriteCtx<'a> {
 
     pub fn ptype(&mut self, ptype: PType) -> VortexResult<()> {
         self.write_fixed_slice([PTypeTag::from(ptype).into()])
+    }
+
+    pub fn nullability(&mut self, nullability: Nullability) -> VortexResult<()> {
+        match nullability {
+            Nullability::NonNullable => self.write_fixed_slice([0u8]),
+            Nullability::Nullable => self.write_fixed_slice([1u8]),
+        }
     }
 
     pub fn scalar(&mut self, scalar: &Scalar) -> VortexResult<()> {

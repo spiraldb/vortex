@@ -160,10 +160,11 @@ impl ScalarAtFn for VarBinArray {
                     bytes.into()
                 }
             })
+            // FIXME(ngates): there's something weird about this.
         } else if matches!(self.dtype, DType::Utf8(_)) {
-            Ok(Utf8Scalar::new(None).into())
+            Ok(Utf8Scalar::none().into())
         } else {
-            Ok(BinaryScalar::new(None).into())
+            Ok(BinaryScalar::none().into())
         }
     }
 }
