@@ -13,6 +13,7 @@ use crate::scalar::Scalar;
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct PrimitiveScalar {
     ptype: PType,
+    dtype: DType,
     nullability: Nullability,
     value: Option<PScalar>,
 }
@@ -24,6 +25,7 @@ impl PrimitiveScalar {
         }
         Ok(Self {
             ptype: T::PTYPE,
+            dtype: DType::from(T::PTYPE).with_nullability(nullability),
             nullability,
             value: value.map(|v| Into::<PScalar>::into(v)),
         })
@@ -34,19 +36,11 @@ impl PrimitiveScalar {
     }
 
     pub fn some<T: NativePType>(value: T) -> Self {
-        Self {
-            ptype: T::PTYPE,
-            nullability: Nullability::default(),
-            value: Some(Into::<PScalar>::into(value)),
-        }
+        Self::new::<T>(Some(value), Nullability::default()).unwrap()
     }
 
     pub fn none<T: NativePType>() -> Self {
-        Self {
-            ptype: T::PTYPE,
-            nullability: Nullability::Nullable,
-            value: None,
-        }
+        Self::new::<T>(None, Nullability::Nullable).unwrap()
     }
 
     #[inline]
@@ -61,7 +55,7 @@ impl PrimitiveScalar {
 
     #[inline]
     pub fn dtype(&self) -> &DType {
-        self.ptype.into()
+        &self.dtype
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {

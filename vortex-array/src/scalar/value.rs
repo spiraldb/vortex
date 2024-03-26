@@ -16,31 +16,19 @@ impl<T> ScalarValue<T> {
     }
 
     pub fn non_nullable(value: T) -> Self {
-        Self {
-            value: Some(value),
-            nullability: Nullability::NonNullable,
-        }
+        Self::new(Some(value), Nullability::NonNullable).unwrap()
     }
 
     pub fn nullable(value: T) -> Self {
-        Self {
-            value: Some(value),
-            nullability: Nullability::Nullable,
-        }
+        Self::new(Some(value), Nullability::Nullable).unwrap()
     }
 
     pub fn some(value: T) -> Self {
-        Self {
-            value: Some(value),
-            nullability: Nullability::default(),
-        }
+        Self::new(Some(value), Nullability::default()).unwrap()
     }
 
     pub fn none() -> Self {
-        Self {
-            value: None,
-            nullability: Nullability::Nullable,
-        }
+        Self::new(None, Nullability::Nullable).unwrap()
     }
 
     pub fn value(&self) -> Option<&T> {
