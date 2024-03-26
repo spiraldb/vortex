@@ -49,14 +49,13 @@ pub fn write_taxi_data() -> PathBuf {
             .unwrap();
 
         let dtype = DType::from_arrow(reader.schema());
-        let _ctx = compress_ctx();
+        let ctx = compress_ctx();
 
         let chunks = reader
             .map(|batch_result| batch_result.unwrap())
             .map(|record_batch| {
                 let vortex_array = record_batch.into_array();
-                // ctx.compress(&vortex_array, None).unwrap()
-                vortex_array
+                ctx.compress(&vortex_array, None).unwrap()
             })
             .collect_vec();
         let chunked = ChunkedArray::new(chunks, dtype.clone());
