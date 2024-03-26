@@ -9,7 +9,7 @@ use crate::validity::ArrayValidity;
 impl ScalarAtFn for PrimitiveArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         match_each_native_ptype!(self.ptype, |$T| {
-            Ok(PrimitiveScalar::new(
+            Ok(PrimitiveScalar::try_new(
                 self.is_valid(index).then(|| self.typed_data::<$T>()[index]),
                 self.nullability(),
             )?.into())

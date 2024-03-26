@@ -19,7 +19,10 @@ pub struct PrimitiveScalar {
 }
 
 impl PrimitiveScalar {
-    pub fn new<T: NativePType>(value: Option<T>, nullability: Nullability) -> VortexResult<Self> {
+    pub fn try_new<T: NativePType>(
+        value: Option<T>,
+        nullability: Nullability,
+    ) -> VortexResult<Self> {
         if value.is_none() && nullability == Nullability::NonNullable {
             return Err("Value cannot be None for NonNullable Scalar".into());
         }
@@ -32,15 +35,15 @@ impl PrimitiveScalar {
     }
 
     pub fn nullable<T: NativePType>(value: Option<T>) -> Self {
-        Self::new(value, Nullability::Nullable).unwrap()
+        Self::try_new(value, Nullability::Nullable).unwrap()
     }
 
     pub fn some<T: NativePType>(value: T) -> Self {
-        Self::new::<T>(Some(value), Nullability::default()).unwrap()
+        Self::try_new::<T>(Some(value), Nullability::default()).unwrap()
     }
 
     pub fn none<T: NativePType>() -> Self {
-        Self::new::<T>(None, Nullability::Nullable).unwrap()
+        Self::try_new::<T>(None, Nullability::Nullable).unwrap()
     }
 
     #[inline]
@@ -61,7 +64,7 @@ impl PrimitiveScalar {
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
         let ptype: PType = dtype.try_into()?;
         match_each_native_ptype!(ptype, |$T| {
-            Ok(PrimitiveScalar::new(
+            Ok(PrimitiveScalar::try_new(
                 self.value()
                 .map(|ps| ps.cast_ptype(ptype))
                 .transpose()?

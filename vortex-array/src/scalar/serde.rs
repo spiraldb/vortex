@@ -31,12 +31,12 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
         match tag {
             ScalarTag::Binary => {
                 let slice = self.reader.read_optional_slice()?;
-                Ok(BinaryScalar::new(slice, nullability)?.into())
+                Ok(BinaryScalar::try_new(slice, nullability)?.into())
             }
             ScalarTag::Bool => {
                 let is_present = self.reader.read_option_tag()?;
                 let bool = self.reader.read_nbytes::<1>()?[0] != 0;
-                Ok(BoolScalar::new(is_present.then_some(bool), nullability)?.into())
+                Ok(BoolScalar::try_new(is_present.then_some(bool), nullability)?.into())
             }
             ScalarTag::PrimitiveS => self.read_primitive_scalar(nullability).map(|p| p.into()),
             ScalarTag::List => {
@@ -72,7 +72,7 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
             }
             ScalarTag::Utf8 => {
                 let value = self.reader.read_optional_slice()?;
-                Ok(Utf8Scalar::new(
+                Ok(Utf8Scalar::try_new(
                     value.map(|v| unsafe { String::from_utf8_unchecked(v) }),
                     nullability,
                 )?
@@ -95,7 +95,7 @@ impl<'a, 'b> ScalarReader<'a, 'b> {
             } else {
                 None
             };
-            Ok(PrimitiveScalar::new::<$P>(value, nullability)?)
+            Ok(PrimitiveScalar::try_new::<$P>(value, nullability)?)
         })
     }
 }

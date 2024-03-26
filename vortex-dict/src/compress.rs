@@ -277,7 +277,9 @@ mod test {
         );
         assert_eq!(
             scalar_at(&values, 0),
-            Ok(PrimitiveScalar::new::<i32>(None, Nullable).unwrap().into())
+            Ok(PrimitiveScalar::try_new::<i32>(None, Nullable)
+                .unwrap()
+                .into())
         );
         assert_eq!(
             scalar_at(&values, 1),
