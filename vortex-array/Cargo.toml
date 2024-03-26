@@ -24,7 +24,6 @@ arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
 arrow-schema = { workspace = true }
 half = { workspace = true }
-hashbrown = { workspace = true }
 humansize = { workspace = true }
 itertools = { workspace = true }
 leb128 = { workspace = true }
