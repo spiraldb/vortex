@@ -47,7 +47,7 @@ impl BoolArray {
     pub fn null(n: usize) -> Self {
         BoolArray::new(
             BooleanBuffer::from(vec![false; n]),
-            Some(Validity::invalid(n)),
+            Some(Validity::Invalid(n)),
         )
     }
 
@@ -170,13 +170,8 @@ impl FromIterator<Option<bool>> for BoolArray {
         let mut validity: Vec<bool> = Vec::with_capacity(lower);
         let values: Vec<bool> = iter
             .map(|i| {
-                if let Some(v) = i {
-                    validity.push(true);
-                    v
-                } else {
-                    validity.push(false);
-                    false
-                }
+                validity.push(i.is_some());
+                i.unwrap_or_default()
             })
             .collect::<Vec<_>>();
 

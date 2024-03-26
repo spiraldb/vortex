@@ -2,7 +2,6 @@ use std::sync::{Arc, RwLock};
 
 use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
-use vortex::compute::ArrayCompute;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
@@ -120,8 +119,6 @@ impl Array for DateTimeArray {
 }
 
 impl StatsCompute for DateTimeArray {}
-
-impl ArrayCompute for DateTimeArray {}
 
 impl ArrayDisplay for DateTimeArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {

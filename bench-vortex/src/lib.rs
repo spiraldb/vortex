@@ -18,13 +18,11 @@ use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_datetime::DateTimeEncoding;
-use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
 
-pub mod serde;
 pub mod taxi_data;
 
 pub fn idempotent(name: &str, f: impl FnOnce(&mut File)) -> PathBuf {
@@ -39,8 +37,7 @@ pub fn idempotent(name: &str, f: impl FnOnce(&mut File)) -> PathBuf {
     path.to_path_buf()
 }
 
-#[allow(dead_code)]
-fn setup_logger(level: LevelFilter) {
+pub fn setup_logger(level: LevelFilter) {
     TermLogger::init(
         level,
         Config::default(),
@@ -54,7 +51,7 @@ pub fn enumerate_arrays() -> Vec<EncodingRef> {
     println!("FOUND {:?}", ENCODINGS.iter().map(|e| e.id()).collect_vec());
     vec![
         &ALPEncoding,
-        &DictEncoding,
+        //&DictEncoding,
         &BitPackedEncoding,
         &FoREncoding,
         &DateTimeEncoding,

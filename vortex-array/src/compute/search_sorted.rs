@@ -2,6 +2,7 @@ use vortex_error::{VortexError, VortexResult};
 
 use crate::array::Array;
 use crate::scalar::Scalar;
+use std::cmp::Ordering;
 
 pub enum SearchSortedSide {
     Left,
@@ -27,4 +28,33 @@ pub fn search_sorted<T: Into<Scalar>>(
                 array.encoding().id().name(),
             ))
         })
+}
+
+pub trait SearchSorted<T> {
+    fn search_sorted(&self, value: &T, side: SearchSortedSide) -> usize;
+}
+
+impl<T: PartialOrd> SearchSorted<T> for &[T] {
+    fn search_sorted(&self, value: &T, side: SearchSortedSide) -> usize {
+        match side {
+            SearchSortedSide::Left => self
+                .binary_search_by(|x| {
+                    if x < value {
+                        Ordering::Less
+                    } else {
+                        Ordering::Greater
+                    }
+                })
+                .unwrap_or_else(|x| x),
+            SearchSortedSide::Right => self
+                .binary_search_by(|x| {
+                    if x <= value {
+                        Ordering::Less
+                    } else {
+                        Ordering::Greater
+                    }
+                })
+                .unwrap_or_else(|x| x),
+        }
+    }
 }

@@ -67,7 +67,7 @@ pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     match_each_native_ptype!(array.ptype(), |$P| {
         let (ends, values) = ree_encode_primitive(array.typed_data::<$P>());
 
-        let compressed_values = PrimitiveArray::from(values);
+        let mut compressed_values = PrimitiveArray::from(values).into_nullable(array.dtype().nullability());
         compressed_values.stats().set(Stat::IsConstant, false.into());
         compressed_values.stats().set(Stat::RunCount, compressed_values.len().into());
         compressed_values.stats().set_many(&array.stats(), vec![

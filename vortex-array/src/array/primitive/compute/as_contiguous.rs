@@ -12,7 +12,7 @@ use crate::ptype::NativePType;
 use crate::validity::{ArrayValidity, Validity};
 
 impl AsContiguousFn for PrimitiveArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         if !arrays
             .iter()
             .map(|chunk| chunk.as_primitive().ptype())
@@ -26,7 +26,7 @@ impl AsContiguousFn for PrimitiveArray {
 
         let validity = if self.dtype().is_nullable() {
             Some(Validity::from_iter(arrays.iter().map(|v| {
-                v.validity().unwrap_or_else(|| Validity::valid(v.len()))
+                v.validity().unwrap_or_else(|| Validity::Valid(v.len()))
             })))
         } else {
             None

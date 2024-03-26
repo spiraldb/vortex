@@ -10,7 +10,7 @@ use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
 
 use vortex_error::VortexResult;
-use vortex_schema::DType;
+use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
 use crate::array::IntoArray;
@@ -95,8 +95,28 @@ impl PrimitiveArray {
     pub fn null<T: NativePType>(n: usize) -> Self {
         PrimitiveArray::from_nullable(
             iter::repeat(T::zero()).take(n).collect::<Vec<_>>(),
-            Some(Validity::invalid(n)),
+            Some(Validity::Invalid(n)),
         )
+    }
+
+    pub fn into_nullable(self, nullability: Nullability) -> Self {
+        let dtype = self.dtype().with_nullability(nullability);
+        if self.validity().is_some() && nullability == Nullability::NonNullable {
+            panic!("Cannot convert nullable array to non-nullable array")
+        }
+        let len = self.len();
+        let validity = if nullability == Nullability::Nullable {
+            Some(self.validity().unwrap_or_else(|| Validity::Valid(len)))
+        } else {
+            None
+        };
+        Self {
+            buffer: self.buffer,
+            ptype: self.ptype,
+            dtype,
+            validity,
+            stats: self.stats,
+        }
     }
 
     #[inline]
@@ -241,13 +261,8 @@ impl<T: NativePType> FromIterator<Option<T>> for PrimitiveArray {
         let mut validity: Vec<bool> = Vec::with_capacity(lower);
         let values: Vec<T> = iter
             .map(|i| {
-                if let Some(v) = i {
-                    validity.push(true);
-                    v
-                } else {
-                    validity.push(false);
-                    T::default()
-                }
+                validity.push(i.is_some());
+                i.unwrap_or_default()
             })
             .collect::<Vec<_>>();
 
@@ -275,10 +290,11 @@ impl ArrayDisplay for PrimitiveArray {
 
 #[cfg(test)]
 mod test {
+    use crate::array::primitive::PrimitiveArray;
+    use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
-    use vortex_schema::{IntWidth, Nullability, Signedness};
-
-    use super::*;
+    use crate::ptype::PType;
+    use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
     #[test]
     fn from_arrow() {

@@ -10,6 +10,7 @@ use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
+use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::scalar::Scalar;
 
@@ -27,6 +28,10 @@ impl ArrayCompute for CompositeArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
 }
@@ -50,7 +55,7 @@ impl AsArrowArray for CompositeArray {
 }
 
 impl AsContiguousFn for CompositeArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         let composites = arrays
             .iter()
             .map(|array| array.as_composite().underlying())
@@ -59,7 +64,7 @@ impl AsContiguousFn for CompositeArray {
         Ok(CompositeArray::new(
             self.id(),
             self.metadata().clone(),
-            as_contiguous(composites)?,
+            as_contiguous(&composites)?,
         )
         .into_array())
     }
@@ -77,5 +82,16 @@ impl ScalarAtFn for CompositeArray {
         //  e.g. how do we know what a datetime is in?
         let underlying = scalar_at(self.underlying(), index)?;
         underlying.cast(self.dtype())
+    }
+}
+
+impl TakeFn for CompositeArray {
+    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
+        Ok(CompositeArray::new(
+            self.id(),
+            self.metadata().clone(),
+            take(self.underlying(), indices)?,
+        )
+        .into_array())
     }
 }

@@ -5,10 +5,10 @@ use vortex_error::{VortexError, VortexResult};
 use crate::array::ArrayRef;
 
 pub trait AsContiguousFn {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef>;
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef>;
 }
 
-pub fn as_contiguous(arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+pub fn as_contiguous(arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
     if arrays.is_empty() {
         return Err(VortexError::ComputeError("No arrays to concatenate".into()));
     }
@@ -21,7 +21,7 @@ pub fn as_contiguous(arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
     let first = arrays.first().unwrap();
     first
         .as_contiguous()
-        .map(|f| f.as_contiguous(arrays.clone()))
+        .map(|f| f.as_contiguous(arrays))
         .unwrap_or_else(|| {
             Err(VortexError::NotImplemented(
                 "as_contiguous",

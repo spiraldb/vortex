@@ -7,6 +7,7 @@ use crate::compute::flatten::FlattenFn;
 use crate::compute::patch::PatchFn;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::search_sorted::SearchSortedFn;
+use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 
 mod as_arrow;
@@ -17,6 +18,7 @@ mod flatten;
 mod patch;
 mod scalar_at;
 mod search_sorted;
+mod take;
 
 impl ArrayCompute for PrimitiveArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -48,6 +50,10 @@ impl ArrayCompute for PrimitiveArray {
     }
 
     fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
+        Some(self)
+    }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
 }

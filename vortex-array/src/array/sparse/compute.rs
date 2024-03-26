@@ -30,17 +30,17 @@ impl ArrayCompute for SparseArray {
 }
 
 impl AsContiguousFn for SparseArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         Ok(SparseArray::new(
             as_contiguous(
-                arrays
+                &arrays
                     .iter()
                     .map(|a| a.as_sparse().indices())
                     .cloned()
                     .collect_vec(),
             )?,
             as_contiguous(
-                arrays
+                &arrays
                     .iter()
                     .map(|a| a.as_sparse().values())
                     .cloned()

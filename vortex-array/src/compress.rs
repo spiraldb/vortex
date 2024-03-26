@@ -15,6 +15,7 @@ use crate::array::varbin::VarBinEncoding;
 use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingRef, ENCODINGS};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
+use crate::formatter::display_tree;
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
 use crate::validity::Validity;
@@ -189,7 +190,14 @@ impl CompressCtx {
 
         // Otherwise, attempt to compress the array
         let compressed = self.compress_array(arr)?;
-        assert_eq!(compressed.dtype(), arr.dtype());
+        if compressed.dtype() != arr.dtype() {
+            panic!(
+                "Compression changed dtype: {:?} -> {:?} for {}",
+                arr.dtype(),
+                compressed.dtype(),
+                display_tree(&compressed),
+            );
+        }
         Ok(compressed)
     }
 
@@ -311,14 +319,14 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
 
     // Take a sample of the array, then ask codecs for their best compression estimate.
     let sample = compute::as_contiguous::as_contiguous(
-        stratified_slices(
+        &stratified_slices(
             array.len(),
             ctx.options.sample_size,
             ctx.options.sample_count,
         )
         .into_iter()
         .map(|(start, stop)| array.slice(start, stop).unwrap())
-        .collect(),
+        .collect::<Vec<_>>(),
     )?;
 
     find_best_compression(candidates, &sample, ctx)?

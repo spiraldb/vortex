@@ -23,6 +23,7 @@ use crate::stats::{Stats, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
 
 mod accessor;
+mod builder;
 mod compress;
 mod compute;
 mod serde;

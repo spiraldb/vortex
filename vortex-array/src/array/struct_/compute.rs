@@ -15,6 +15,7 @@ use crate::compute::as_arrow::{as_arrow, AsArrowArray};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{flatten, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
+use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::scalar::{Scalar, StructScalar};
 
@@ -32,6 +33,10 @@ impl ArrayCompute for StructArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
 }
@@ -68,7 +73,7 @@ impl AsArrowArray for StructArray {
 }
 
 impl AsContiguousFn for StructArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         let mut fields = vec![Vec::new(); self.fields().len()];
         for array in arrays {
             for f in 0..self.fields().len() {
@@ -80,7 +85,7 @@ impl AsContiguousFn for StructArray {
             self.names().clone(),
             fields
                 .iter()
-                .map(|field_arrays| as_contiguous(field_arrays.clone()))
+                .map(|field_arrays| as_contiguous(field_arrays))
                 .try_collect()?,
         )
         .into_array())
@@ -109,5 +114,18 @@ impl ScalarAtFn for StructArray {
                 .try_collect()?,
         )
         .into())
+    }
+}
+
+impl TakeFn for StructArray {
+    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
+        Ok(StructArray::new(
+            self.names().clone(),
+            self.fields()
+                .iter()
+                .map(|field| take(field, indices))
+                .try_collect()?,
+        )
+        .into_array())
     }
 }

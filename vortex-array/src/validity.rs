@@ -4,8 +4,11 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::take::take;
 use crate::stats::Stat;
-use arrow_buffer::BooleanBuffer;
+use arrow_buffer::{BooleanBuffer, NullBuffer};
+use itertools::Itertools;
+use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
 #[derive(Debug, Clone)]
@@ -23,14 +26,6 @@ impl Validity {
             panic!("Validity array must be of type bool");
         }
         Self::Array(array)
-    }
-
-    pub fn invalid(len: usize) -> Self {
-        Self::Invalid(len)
-    }
-
-    pub fn valid(len: usize) -> Self {
-        Self::Valid(len)
     }
 
     pub fn len(&self) -> usize {
@@ -94,12 +89,28 @@ impl Validity {
         }
     }
 
+    pub fn is_valid(&self, idx: usize) -> bool {
+        match self {
+            Validity::Valid(_) => true,
+            Validity::Invalid(_) => false,
+            Validity::Array(a) => scalar_at(&a, idx).unwrap().try_into().unwrap(),
+        }
+    }
+
     // TODO(ngates): maybe we want to impl Array for Validity?
     pub fn slice(&self, start: usize, stop: usize) -> Self {
         match self {
-            Self::Valid(_) => Self::valid(stop - start),
-            Self::Invalid(_) => Self::invalid(stop - start),
+            Self::Valid(_) => Self::Valid(stop - start),
+            Self::Invalid(_) => Self::Invalid(stop - start),
             Self::Array(a) => Self::Array(a.slice(start, stop).unwrap()),
+        }
+    }
+
+    pub fn take(&self, indices: &dyn Array) -> VortexResult<Validity> {
+        match self {
+            Self::Valid(_) => Ok(Self::Valid(indices.len())),
+            Self::Invalid(_) => Ok(Self::Invalid(indices.len())),
+            Self::Array(a) => Ok(Self::Array(take(a, indices)?)),
         }
     }
 
@@ -107,6 +118,18 @@ impl Validity {
         match self {
             Self::Valid(_) | Self::Invalid(_) => 4,
             Self::Array(a) => a.nbytes(),
+        }
+    }
+}
+
+impl From<NullBuffer> for Validity {
+    fn from(value: NullBuffer) -> Self {
+        if value.null_count() == 0 {
+            Self::Valid(value.len())
+        } else if value.null_count() == value.len() {
+            Self::Invalid(value.len())
+        } else {
+            Self::Array(BoolArray::new(value.into_inner(), None).into_array())
         }
     }
 }
@@ -169,15 +192,11 @@ impl FromIterator<Validity> for Validity {
         }
 
         // Otherwise, map each to a bool array and concatenate them.
-        Self::Array(
-            as_contiguous(
-                validities
-                    .iter()
-                    .map(|v| v.to_bool_array().into_array())
-                    .collect(),
-            )
-            .unwrap(),
-        )
+        let arrays = validities
+            .iter()
+            .map(|v| v.to_bool_array().into_array())
+            .collect_vec();
+        Self::Array(as_contiguous(&arrays).unwrap())
     }
 }
 
@@ -193,14 +212,6 @@ pub trait ArrayValidity {
     }
 
     fn is_valid(&self, index: usize) -> bool {
-        if let Some(v) = self.validity() {
-            match v {
-                Validity::Valid(_) => true,
-                Validity::Invalid(_) => false,
-                Validity::Array(a) => scalar_at(&a, index).unwrap().try_into().unwrap(),
-            }
-        } else {
-            true
-        }
+        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
     }
 }

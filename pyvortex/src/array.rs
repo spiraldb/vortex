@@ -24,6 +24,7 @@ use crate::dtype::PyDType;
 use crate::error::PyVortexError;
 use crate::vortex_arrow;
 use std::sync::Arc;
+use vortex::compute::take::take;
 
 #[pyclass(name = "Array", module = "vortex", sequence, subclass)]
 pub struct PyArray {
@@ -195,6 +196,12 @@ impl PyArray {
     #[getter]
     fn dtype(self_: PyRef<Self>) -> PyResult<Py<PyDType>> {
         PyDType::wrap(self_.py(), self_.inner.dtype().clone())
+    }
+
+    fn take(&self, indices: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
+        take(&self.inner, indices.unwrap())
+            .map_err(PyVortexError::map_err)
+            .and_then(|arr| PyArray::wrap(indices.py(), arr))
     }
 }
 

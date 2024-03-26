@@ -149,6 +149,10 @@ impl DType {
         Nullability::NonNullable,
     );
 
+    pub fn nullability(&self) -> Nullability {
+        self.is_nullable().into()
+    }
+
     pub fn is_nullable(&self) -> bool {
         use Nullability::*;
 
@@ -205,8 +209,8 @@ impl Display for DType {
             Bool(n) => write!(f, "bool{}", n),
             Int(w, s, n) => match s {
                 Unknown => write!(f, "int({}){}", w, n),
-                Unsigned => write!(f, "unsigned_int({})", w),
-                Signed => write!(f, "signed_int({})", w),
+                Unsigned => write!(f, "unsigned_int({}){}", w, n),
+                Signed => write!(f, "signed_int({}){}", w, n),
             },
             Decimal(p, s, n) => write!(f, "decimal({}, {}){}", p, s, n),
             Float(w, n) => write!(f, "float({}){}", w, n),

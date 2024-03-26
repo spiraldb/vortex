@@ -1,3 +1,5 @@
+mod take;
+
 use std::sync::Arc;
 
 use arrow_array::{
@@ -18,6 +20,7 @@ use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::cast::cast;
 use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
+use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
@@ -39,20 +42,23 @@ impl ArrayCompute for VarBinArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
 }
 
 impl AsContiguousFn for VarBinArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
-        let bytes = as_contiguous(
-            arrays
-                .iter()
-                .map(|a| a.as_varbin().sliced_bytes())
-                .try_collect()?,
-        )?;
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
+        let bytes_chunks: Vec<ArrayRef> = arrays
+            .iter()
+            .map(|a| a.as_varbin().sliced_bytes())
+            .try_collect()?;
+        let bytes = as_contiguous(&bytes_chunks)?;
 
         let validity = if self.dtype().is_nullable() {
             Some(Validity::from_iter(arrays.iter().map(|a| {
-                a.validity().unwrap_or_else(|| Validity::valid(a.len()))
+                a.validity().unwrap_or_else(|| Validity::Valid(a.len()))
             })))
         } else {
             None

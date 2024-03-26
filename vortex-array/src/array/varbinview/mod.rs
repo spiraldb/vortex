@@ -120,6 +120,7 @@ impl VarBinViewArray {
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
             return Err(VortexError::InvalidDType(dtype));
         }
+
         let dtype = if validity.is_some() && !dtype.is_nullable() {
             dtype.as_nullable()
         } else {

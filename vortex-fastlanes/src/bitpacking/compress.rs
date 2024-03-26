@@ -157,8 +157,7 @@ fn bitpack_patches(
                 values.push(*v);
             }
         }
-        let len = indices.len();
-        SparseArray::new(indices.into_array(), values.into_array(), len).into_array()
+        SparseArray::new(indices.into_array(), values.into_array(), parray.len()).into_array()
     })
 }
 

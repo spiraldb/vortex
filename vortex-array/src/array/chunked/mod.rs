@@ -22,7 +22,7 @@ mod stats;
 #[derive(Debug, Clone)]
 pub struct ChunkedArray {
     chunks: Vec<ArrayRef>,
-    chunk_ends: Vec<usize>,
+    chunk_ends: Vec<u64>,
     dtype: DType,
     stats: Arc<RwLock<StatsSet>>,
 }
@@ -33,30 +33,21 @@ impl ChunkedArray {
     }
 
     pub fn try_new(chunks: Vec<ArrayRef>, dtype: DType) -> VortexResult<Self> {
-        chunks
-            .iter()
-            .map(|c| c.dtype().as_nullable())
-            .all_equal_value()
-            .map(|_| ())
-            .or_else(|mismatched| match mismatched {
-                None => Ok(()),
-                Some((fst, snd)) => Err(VortexError::MismatchedTypes(fst, snd)),
-            })?;
-
+        for chunk in &chunks {
+            if chunk.dtype() != &dtype {
+                return Err(VortexError::MismatchedTypes(
+                    dtype.clone(),
+                    chunk.dtype().clone(),
+                ));
+            }
+        }
         let chunk_ends = chunks
             .iter()
-            .scan(0usize, |acc, c| {
-                *acc += c.len();
+            .scan(0u64, |acc, c| {
+                *acc += c.len() as u64;
                 Some(*acc)
             })
-            .collect::<Vec<usize>>();
-
-        let dtype = if chunks.iter().any(|c| c.dtype().is_nullable()) && !dtype.is_nullable() {
-            dtype.as_nullable()
-        } else {
-            dtype
-        };
-
+            .collect_vec();
         Ok(Self {
             chunks,
             chunk_ends,
@@ -70,11 +61,16 @@ impl ChunkedArray {
         &self.chunks
     }
 
-    fn find_physical_location(&self, index: usize) -> (usize, usize) {
+    #[inline]
+    pub fn chunk_ends(&self) -> &[u64] {
+        &self.chunk_ends
+    }
+
+    pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
         let index_chunk = self
             .chunk_ends
-            .binary_search(&index)
+            .binary_search(&(index as u64))
             // If the result of binary_search is Ok it means we have exact match, since these are chunk ends EXCLUSIVE we have to add one to move to the next one
             .map(|o| o + 1)
             .unwrap_or_else(|o| o);
@@ -83,7 +79,7 @@ impl ChunkedArray {
                 0
             } else {
                 self.chunk_ends[index_chunk - 1]
-            };
+            } as usize;
         (index_chunk, index_in_chunk)
     }
 }
@@ -92,7 +88,7 @@ impl Array for ChunkedArray {
     impl_array!();
 
     fn len(&self) -> usize {
-        *self.chunk_ends.last().unwrap_or(&0usize)
+        self.chunk_ends.last().map(|&i| i as usize).unwrap_or(0)
     }
 
     #[inline]
@@ -113,8 +109,8 @@ impl Array for ChunkedArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
-        let (offset_chunk, offset_in_first_chunk) = self.find_physical_location(start);
-        let (length_chunk, length_in_last_chunk) = self.find_physical_location(stop);
+        let (offset_chunk, offset_in_first_chunk) = self.find_chunk_idx(start);
+        let (length_chunk, length_in_last_chunk) = self.find_chunk_idx(stop);
 
         if length_chunk == offset_chunk {
             if let Some(chunk) = self.chunks.get(offset_chunk) {
@@ -163,7 +159,7 @@ impl ArrayValidity for ChunkedArray {
         Some(Validity::from_iter(self.chunks.iter().map(|chunk| {
             chunk
                 .validity()
-                .unwrap_or_else(|| Validity::valid(chunk.len()))
+                .unwrap_or_else(|| Validity::Valid(chunk.len()))
         })))
     }
 }

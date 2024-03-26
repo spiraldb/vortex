@@ -1,7 +1,7 @@
+use arrow_buffer::ArrowNativeType;
 use std::fmt::{Debug, Display, Formatter};
 use std::panic::RefUnwindSafe;
 
-use arrow_buffer::ArrowNativeType;
 use half::f16;
 use num_traits::{Num, NumCast};
 
@@ -30,6 +30,8 @@ pub trait NativePType:
     Send
     + Sync
     + Sized
+    + Clone
+    + Copy
     + Debug
     + Display
     + PartialEq

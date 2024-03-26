@@ -34,7 +34,7 @@ impl ArrayCompute for ConstantArray {
 }
 
 impl AsContiguousFn for ConstantArray {
-    fn as_contiguous(&self, arrays: Vec<ArrayRef>) -> VortexResult<ArrayRef> {
+    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         let chunks = arrays.iter().map(|a| a.as_constant().clone()).collect_vec();
         if chunks.iter().map(|c| c.scalar()).all_equal() {
             Ok(ConstantArray::new(
