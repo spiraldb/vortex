@@ -39,6 +39,7 @@ arrayref = "0.3.7"
 arrow = { version = "51.0.0", features = ["pyarrow"] }
 arrow-array = "51.0.0"
 arrow-buffer = "51.0.0"
+arrow-select = "51.0.0"
 arrow-schema = "51.0.0"
 bindgen = "0.69.4"
 criterion = { version = "0.5.1", features = ["html_reports"] }

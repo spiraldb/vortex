@@ -366,6 +366,7 @@ name = "bench-vortex"
 version = "0.1.0"
 dependencies = [
  "arrow-array",
+ "arrow-select",
  "criterion",
  "itertools 0.12.1",
  "log",
