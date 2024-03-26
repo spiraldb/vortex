@@ -1,3 +1,4 @@
+use log::info;
 use vortex_error::{VortexError, VortexResult};
 
 use crate::array::{Array, ArrayRef};
@@ -13,6 +14,7 @@ pub fn take(array: &dyn Array, indices: &dyn Array) -> VortexResult<ArrayRef> {
     }
 
     // Otherwise, flatten and try again.
+    info!("TakeFn not implemented for {}, flattening", array);
     flatten(array)?
         .into_array()
         .take()

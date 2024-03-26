@@ -1,3 +1,5 @@
+mod take;
+
 use std::sync::Arc;
 
 use arrow_array::{
@@ -18,6 +20,7 @@ use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::cast::cast;
 use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
+use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
@@ -37,6 +40,10 @@ impl ArrayCompute for VarBinArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
 }

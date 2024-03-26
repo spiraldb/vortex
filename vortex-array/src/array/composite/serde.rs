@@ -19,7 +19,7 @@ impl ArraySerde for CompositeArray {
 impl EncodingSerde for CompositeEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let DType::Composite(id, _) = *ctx.schema() else {
-            panic!("Expected composite schema")
+            panic!("Expected composite schema, found {}", ctx.schema())
         };
         let metadata = ctx.read_slice()?;
         let underling_dtype = ctx.dtype()?;

@@ -6,7 +6,7 @@ use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
 use crate::stats::Stat;
-use arrow_buffer::BooleanBuffer;
+use arrow_buffer::{BooleanBuffer, NullBuffer};
 use itertools::Itertools;
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
@@ -89,6 +89,14 @@ impl Validity {
         }
     }
 
+    pub fn is_valid(&self, idx: usize) -> bool {
+        match self {
+            Validity::Valid(_) => true,
+            Validity::Invalid(_) => false,
+            Validity::Array(a) => scalar_at(&a, idx).unwrap().try_into().unwrap(),
+        }
+    }
+
     // TODO(ngates): maybe we want to impl Array for Validity?
     pub fn slice(&self, start: usize, stop: usize) -> Self {
         match self {
@@ -110,6 +118,18 @@ impl Validity {
         match self {
             Self::Valid(_) | Self::Invalid(_) => 4,
             Self::Array(a) => a.nbytes(),
+        }
+    }
+}
+
+impl From<NullBuffer> for Validity {
+    fn from(value: NullBuffer) -> Self {
+        if value.null_count() == 0 {
+            Self::Valid(value.len())
+        } else if value.null_count() == value.len() {
+            Self::Invalid(value.len())
+        } else {
+            Self::Array(BoolArray::new(value.into_inner(), None).into_array())
         }
     }
 }
@@ -192,14 +212,6 @@ pub trait ArrayValidity {
     }
 
     fn is_valid(&self, index: usize) -> bool {
-        if let Some(v) = self.validity() {
-            match v {
-                Validity::Valid(_) => true,
-                Validity::Invalid(_) => false,
-                Validity::Array(a) => scalar_at(&a, index).unwrap().try_into().unwrap(),
-            }
-        } else {
-            true
-        }
+        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
     }
 }

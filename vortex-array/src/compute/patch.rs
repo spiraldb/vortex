@@ -10,7 +10,11 @@ pub trait PatchFn {
 pub fn patch(array: &dyn Array, patch: &dyn Array) -> VortexResult<ArrayRef> {
     if array.len() != patch.len() {
         return Err(VortexError::InvalidArgument(
-            "patch array must have the same length as the original array".into(),
+            format!(
+                "patch array {} must have the same length as the original array {}",
+                patch, array
+            )
+            .into(),
         ));
     }
 
