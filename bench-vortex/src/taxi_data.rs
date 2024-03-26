@@ -35,7 +35,7 @@ pub fn write_taxi_data() -> PathBuf {
 
         // FIXME(ngates): the compressor should handle batch size.
         let reader = builder
-            .with_limit(100)
+            // .with_limit(100)
             // .with_projection(_mask)
             .with_batch_size(65_536)
             .build()

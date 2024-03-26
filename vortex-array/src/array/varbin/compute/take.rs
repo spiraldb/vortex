@@ -50,7 +50,7 @@ fn take<I: NativePType + PrimInt, O: NativePType + PrimInt>(
     for &idx in indices {
         let idx = idx.to_usize().unwrap();
         let start = offsets[idx].to_usize().unwrap();
-        let stop = offsets[idx].to_usize().unwrap();
+        let stop = offsets[idx + 1].to_usize().unwrap();
         builder.push(Some(&data[start..stop]));
     }
     builder.finish(dtype)

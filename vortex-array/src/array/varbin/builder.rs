@@ -42,8 +42,46 @@ impl<O: NativePType + PrimInt> VarBinBuilder<O> {
     pub fn finish(self, dtype: DType) -> VarBinArray {
         let offsets = PrimitiveArray::from(self.offsets);
         let data = PrimitiveArray::from(self.data);
+
         // TODO(ngates): create our own ValidityBuilder that doesn't need mut or clone on finish.
-        let validity = self.validity.finish_cloned().map(Validity::from);
+        let nulls = self.validity.finish_cloned();
+
+        let validity = if dtype.is_nullable() {
+            Some(
+                nulls
+                    .map(Validity::from)
+                    .unwrap_or_else(|| Validity::Valid(offsets.len() - 1)),
+            )
+        } else {
+            assert!(nulls.is_none(), "dtype and validity mismatch");
+            None
+        };
+
         VarBinArray::new(offsets.into_array(), data.into_array(), dtype, validity)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::array::varbin::builder::VarBinBuilder;
+    use crate::array::Array;
+    use crate::compute::scalar_at::scalar_at;
+    use crate::scalar::Scalar;
+    use crate::validity::ArrayValidity;
+    use vortex_schema::DType;
+    use vortex_schema::Nullability::Nullable;
+
+    #[test]
+    fn test_builder() {
+        let mut builder = VarBinBuilder::<i32>::with_capacity(0);
+        builder.push(Some(b"hello"));
+        builder.push(None);
+        builder.push(Some(b"world"));
+        let array = builder.finish(DType::Utf8(Nullable));
+
+        assert_eq!(array.len(), 3);
+        assert_eq!(array.nullability(), Nullable);
+        assert_eq!(scalar_at(&array, 0).unwrap(), Scalar::from("hello"));
+        assert!(scalar_at(&array, 1).unwrap().is_null());
     }
 }
