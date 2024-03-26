@@ -1,7 +1,3 @@
-use std::sync::Arc;
-
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::varbin::VarBinArray;
 use vortex::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::take::take;
@@ -34,18 +30,8 @@ impl FlattenFn for DictArray {
         let values = flatten(self.values())?;
 
         match values {
-            FlattenedArray::Primitive(v) => take(&v, &codes).map(|r| {
-                FlattenedArray::Primitive(
-                    Arc::try_unwrap(r.into_any().downcast::<PrimitiveArray>().unwrap())
-                        .expect("Expected take on PrimitiveArray array to produce new array"),
-                )
-            }),
-            FlattenedArray::VarBin(vb) => take(&vb, &codes).map(|r| {
-                FlattenedArray::VarBin(
-                    Arc::try_unwrap(r.into_any().downcast::<VarBinArray>().unwrap())
-                        .expect("Expected take on VarBin array to produce new array"),
-                )
-            }),
+            FlattenedArray::Primitive(v) => flatten(&take(&v, &codes)?),
+            FlattenedArray::VarBin(vb) => flatten(&take(&vb, &codes)?),
             _ => Err(VortexError::InvalidArgument(
                 "Only VarBin and Primitive values array are supported".into(),
             )),
