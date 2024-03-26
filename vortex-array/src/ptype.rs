@@ -182,19 +182,16 @@ impl TryFrom<&DType> for PType {
         use vortex_schema::Signedness::*;
         match value {
             Int(w, s, _) => match (w, s) {
-                (IntWidth::Unknown, Unknown | Signed) => Ok(PType::I64),
-                (IntWidth::_8, Unknown | Signed) => Ok(PType::I8),
-                (IntWidth::_16, Unknown | Signed) => Ok(PType::I16),
-                (IntWidth::_32, Unknown | Signed) => Ok(PType::I32),
-                (IntWidth::_64, Unknown | Signed) => Ok(PType::I64),
-                (IntWidth::Unknown, Unsigned) => Ok(PType::U64),
+                (IntWidth::_8, Signed) => Ok(PType::I8),
+                (IntWidth::_16, Signed) => Ok(PType::I16),
+                (IntWidth::_32, Signed) => Ok(PType::I32),
+                (IntWidth::_64, Signed) => Ok(PType::I64),
                 (IntWidth::_8, Unsigned) => Ok(PType::U8),
                 (IntWidth::_16, Unsigned) => Ok(PType::U16),
                 (IntWidth::_32, Unsigned) => Ok(PType::U32),
                 (IntWidth::_64, Unsigned) => Ok(PType::U64),
             },
             Float(f, _) => match f {
-                FloatWidth::Unknown => Ok(PType::F64),
                 FloatWidth::_16 => Ok(PType::F16),
                 FloatWidth::_32 => Ok(PType::F32),
                 FloatWidth::_64 => Ok(PType::F64),

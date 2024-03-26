@@ -110,22 +110,10 @@ impl Scalar {
             DType::Null => NullScalar::new().into(),
             DType::Bool(_) => BoolScalar::none().into(),
             DType::Int(w, s, _) => match (w, s) {
-                (IntWidth::Unknown, Signedness::Unknown | Signedness::Signed) => {
-                    PrimitiveScalar::none::<i64>().into()
-                }
-                (IntWidth::_8, Signedness::Unknown | Signedness::Signed) => {
-                    PrimitiveScalar::none::<i8>().into()
-                }
-                (IntWidth::_16, Signedness::Unknown | Signedness::Signed) => {
-                    PrimitiveScalar::none::<i16>().into()
-                }
-                (IntWidth::_32, Signedness::Unknown | Signedness::Signed) => {
-                    PrimitiveScalar::none::<i32>().into()
-                }
-                (IntWidth::_64, Signedness::Unknown | Signedness::Signed) => {
-                    PrimitiveScalar::none::<i64>().into()
-                }
-                (IntWidth::Unknown, Signedness::Unsigned) => PrimitiveScalar::none::<u64>().into(),
+                (IntWidth::_8, Signedness::Signed) => PrimitiveScalar::none::<i8>().into(),
+                (IntWidth::_16, Signedness::Signed) => PrimitiveScalar::none::<i16>().into(),
+                (IntWidth::_32, Signedness::Signed) => PrimitiveScalar::none::<i32>().into(),
+                (IntWidth::_64, Signedness::Signed) => PrimitiveScalar::none::<i64>().into(),
                 (IntWidth::_8, Signedness::Unsigned) => PrimitiveScalar::none::<u8>().into(),
                 (IntWidth::_16, Signedness::Unsigned) => PrimitiveScalar::none::<u16>().into(),
                 (IntWidth::_32, Signedness::Unsigned) => PrimitiveScalar::none::<u32>().into(),
@@ -133,7 +121,6 @@ impl Scalar {
             },
             DType::Decimal(_, _, _) => unimplemented!("DecimalScalar"),
             DType::Float(w, _) => match w {
-                FloatWidth::Unknown => PrimitiveScalar::none::<f64>().into(),
                 FloatWidth::_16 => PrimitiveScalar::none::<f16>().into(),
                 FloatWidth::_32 => PrimitiveScalar::none::<f32>().into(),
                 FloatWidth::_64 => PrimitiveScalar::none::<f64>().into(),
