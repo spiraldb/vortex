@@ -15,7 +15,7 @@ impl StatsCompute for ConstantArray {
             return Ok(StatsSet::from(
                 [(
                     Stat::TrueCount,
-                    (self.len() as u64 * b.value().map(|v| v as u64).unwrap_or(0)).into(),
+                    (self.len() as u64 * b.value().cloned().map(|v| v as u64).unwrap_or(0)).into(),
                 )]
                 .into(),
             ));
