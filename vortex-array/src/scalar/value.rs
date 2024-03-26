@@ -8,7 +8,7 @@ pub struct ScalarValue<T> {
 }
 
 impl<T> ScalarValue<T> {
-    pub fn new(value: Option<T>, nullability: Nullability) -> VortexResult<Self> {
+    pub fn try_new(value: Option<T>, nullability: Nullability) -> VortexResult<Self> {
         if value.is_none() && nullability == Nullability::NonNullable {
             return Err("Value cannot be None for NonNullable Scalar".into());
         }
@@ -16,19 +16,19 @@ impl<T> ScalarValue<T> {
     }
 
     pub fn non_nullable(value: T) -> Self {
-        Self::new(Some(value), Nullability::NonNullable).unwrap()
+        Self::try_new(Some(value), Nullability::NonNullable).unwrap()
     }
 
     pub fn nullable(value: T) -> Self {
-        Self::new(Some(value), Nullability::Nullable).unwrap()
+        Self::try_new(Some(value), Nullability::Nullable).unwrap()
     }
 
     pub fn some(value: T) -> Self {
-        Self::new(Some(value), Nullability::default()).unwrap()
+        Self::try_new(Some(value), Nullability::default()).unwrap()
     }
 
     pub fn none() -> Self {
-        Self::new(None, Nullability::Nullable).unwrap()
+        Self::try_new(None, Nullability::Nullable).unwrap()
     }
 
     pub fn value(&self) -> Option<&T> {
