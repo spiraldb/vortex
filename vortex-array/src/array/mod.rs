@@ -32,6 +32,7 @@ use crate::compute::ArrayCompute;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::Stats;
+use crate::validity::{ArrayValidity, Validity};
 
 pub mod bool;
 pub mod chunked;
@@ -110,7 +111,6 @@ macro_rules! impl_array {
     };
 }
 
-use crate::validity::{ArrayValidity, Validity};
 pub use impl_array;
 
 impl ArrayCompute for ArrayRef {
@@ -148,6 +148,24 @@ impl ArrayCompute for ArrayRef {
 
     fn take(&self) -> Option<&dyn TakeFn> {
         self.as_ref().take()
+    }
+}
+
+impl ArrayValidity for ArrayRef {
+    fn nullability(&self) -> Nullability {
+        self.as_ref().nullability()
+    }
+
+    fn validity(&self) -> Option<Validity> {
+        self.as_ref().validity()
+    }
+
+    fn logical_validity(&self) -> Option<Validity> {
+        self.as_ref().logical_validity()
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.as_ref().is_valid(index)
     }
 }
 
@@ -201,15 +219,121 @@ impl Array for ArrayRef {
     }
 }
 
-impl ArrayValidity for ArrayRef {
-    fn validity(&self) -> Option<Validity> {
-        self.as_ref().validity()
-    }
-}
-
 impl ArrayDisplay for ArrayRef {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
         ArrayDisplay::fmt(self.as_ref(), fmt)
+    }
+}
+
+impl<'a, T: ArrayCompute> ArrayCompute for &'a T {
+    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
+        T::as_arrow(self)
+    }
+
+    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
+        T::as_contiguous(self)
+    }
+
+    fn cast(&self) -> Option<&dyn CastFn> {
+        T::cast(self)
+    }
+
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
+        T::flatten(self)
+    }
+
+    fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
+        T::fill_forward(self)
+    }
+
+    fn patch(&self) -> Option<&dyn PatchFn> {
+        T::patch(self)
+    }
+
+    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        T::scalar_at(self)
+    }
+
+    fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
+        T::search_sorted(self)
+    }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
+        T::take(self)
+    }
+}
+
+impl<'a, T: ArrayValidity> ArrayValidity for &'a T {
+    fn nullability(&self) -> Nullability {
+        T::nullability(self)
+    }
+
+    fn validity(&self) -> Option<Validity> {
+        T::validity(self)
+    }
+
+    fn logical_validity(&self) -> Option<Validity> {
+        T::logical_validity(self)
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        T::is_valid(self, index)
+    }
+}
+
+impl<'a, T: Array + Clone> Array for &'a T {
+    fn as_any(&self) -> &dyn Any {
+        T::as_any(self)
+    }
+
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+        T::into_any(Arc::new((*self).clone()))
+    }
+
+    fn to_array(&self) -> ArrayRef {
+        T::to_array(self)
+    }
+
+    fn into_array(self) -> ArrayRef {
+        self.to_array()
+    }
+
+    fn len(&self) -> usize {
+        T::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        T::is_empty(self)
+    }
+
+    fn dtype(&self) -> &DType {
+        T::dtype(self)
+    }
+
+    fn stats(&self) -> Stats {
+        T::stats(self)
+    }
+
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        T::slice(self, start, stop)
+    }
+
+    fn encoding(&self) -> EncodingRef {
+        T::encoding(self)
+    }
+
+    fn nbytes(&self) -> usize {
+        T::nbytes(self)
+    }
+
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        T::serde(self)
+    }
+}
+
+impl<'a, T: ArrayDisplay> ArrayDisplay for &'a T {
+    fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
+        ArrayDisplay::fmt(*self, fmt)
     }
 }
 

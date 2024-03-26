@@ -13,7 +13,7 @@ use vortex_schema::{DType, Signedness};
 #[derive(Debug, Clone)]
 pub struct DictArray {
     codes: ArrayRef,
-    dict: ArrayRef,
+    values: ArrayRef,
     stats: Arc<RwLock<StatsSet>>,
 }
 
@@ -28,14 +28,14 @@ impl DictArray {
         }
         Ok(Self {
             codes,
-            dict,
+            values: dict,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
 
     #[inline]
-    pub fn dict(&self) -> &ArrayRef {
-        &self.dict
+    pub fn values(&self) -> &ArrayRef {
+        &self.values
     }
 
     #[inline]
@@ -56,7 +56,7 @@ impl Array for DictArray {
     }
 
     fn dtype(&self) -> &DType {
-        self.dict.dtype()
+        self.values.dtype()
     }
 
     fn stats(&self) -> Stats {
@@ -66,7 +66,7 @@ impl Array for DictArray {
     // TODO(robert): Add function to trim the dictionary
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
-        Ok(Self::new(self.codes().slice(start, stop)?, self.dict.clone()).into_array())
+        Ok(Self::new(self.codes().slice(start, stop)?, self.values.clone()).into_array())
     }
 
     fn encoding(&self) -> EncodingRef {
@@ -74,7 +74,7 @@ impl Array for DictArray {
     }
 
     fn nbytes(&self) -> usize {
-        self.codes().nbytes() + self.dict().nbytes()
+        self.codes().nbytes() + self.values().nbytes()
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
@@ -84,7 +84,7 @@ impl Array for DictArray {
 
 impl ArrayDisplay for DictArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.child("values", self.dict())?;
+        f.child("values", self.values())?;
         f.child("codes", self.codes())
     }
 }

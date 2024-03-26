@@ -5,6 +5,8 @@ use rand::{thread_rng, Rng};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::array::Array;
+use vortex::match_each_native_ptype;
+use vortex_dict::dict_encode_typed_primitive;
 
 fn gen_primitive_dict(len: usize, uniqueness: f64) -> PrimitiveArray {
     let mut rng = thread_rng();
@@ -34,7 +36,9 @@ fn gen_varbin_dict(len: usize, uniqueness: f64) -> VarBinArray {
 }
 
 fn dict_encode_primitive(arr: &PrimitiveArray) -> usize {
-    let (codes, values) = vortex_dict::dict_encode_primitive(arr);
+    let (codes, values) = match_each_native_ptype!(arr.ptype(), |$P| {
+        dict_encode_typed_primitive::<$P>(arr)
+    });
     (codes.nbytes() + values.nbytes()) / arr.nbytes()
 }
 

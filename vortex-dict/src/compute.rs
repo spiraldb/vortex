@@ -14,6 +14,6 @@ impl ArrayCompute for DictArray {
 impl ScalarAtFn for DictArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let dict_index: usize = scalar_at(self.codes(), index)?.try_into()?;
-        scalar_at(self.dict(), dict_index)
+        scalar_at(self.values(), dict_index)
     }
 }
