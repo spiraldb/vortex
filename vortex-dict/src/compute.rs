@@ -1,4 +1,4 @@
-use vortex::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
+use vortex::compute::flatten::{flatten, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::take::take;
 use vortex::compute::ArrayCompute;
@@ -26,9 +26,7 @@ impl ScalarAtFn for DictArray {
 
 impl FlattenFn for DictArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
-        let codes = flatten_primitive(self.codes())?;
-        let values = flatten(self.values())?;
-        flatten(&take(values.as_ref(), &codes)?)
+        flatten(&take(self.values(), self.codes())?)
     }
 }
 
