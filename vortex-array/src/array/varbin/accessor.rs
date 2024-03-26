@@ -24,12 +24,7 @@ impl<'a> ArrayAccessor<&'a [u8]> for &'a VarBinArray {
         if self.is_valid(index) {
             let start = offset_at(self.offsets(), index);
             let end = offset_at(self.offsets(), index + 1);
-            unsafe {
-                Some(std::slice::from_raw_parts(
-                    self.bytes().as_primitive().buffer().as_ptr().add(start),
-                    end - start,
-                ))
-            }
+            Some(&self.bytes().as_primitive().buffer()[start..end])
         } else {
             None
         }
