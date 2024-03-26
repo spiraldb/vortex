@@ -160,7 +160,7 @@ pub fn ree_decode_primitive<
 mod test {
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::IntoArray;
+    use vortex::array::{Array, IntoArray};
     use vortex::validity::{ArrayValidity, Validity};
 
     use crate::compress::{ree_decode, ree_encode};
@@ -179,7 +179,7 @@ mod test {
     fn decode() {
         let ends = PrimitiveArray::from(vec![2, 5, 10]);
         let values = PrimitiveArray::from(vec![1i32, 2, 3]);
-        let decoded = ree_decode(&ends, &values, None, 0, 0).unwrap();
+        let decoded = ree_decode(&ends, &values, None, 0, 10).unwrap();
 
         assert_eq!(
             decoded.typed_data::<i32>(),
@@ -207,7 +207,7 @@ mod test {
             arr.values().as_primitive(),
             arr.validity(),
             0,
-            0,
+            arr.len(),
         )
         .unwrap();
 
