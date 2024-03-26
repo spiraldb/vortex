@@ -1,11 +1,7 @@
-use std::cmp::min;
-use vortex::array::primitive::PrimitiveArray;
 use vortex::array::Array;
-use vortex::compute::cast::cast;
-use vortex::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
+use vortex::compute::flatten::{flatten, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
-use vortex::ptype::PType;
 use vortex::scalar::Scalar;
 use vortex::validity::ArrayValidity;
 use vortex_error::{VortexError, VortexResult};
@@ -25,19 +21,17 @@ impl ArrayCompute for REEArray {
 
 impl FlattenFn for REEArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
-        let ends: PrimitiveArray =
-            flatten_primitive(cast(self.ends(), PType::U64.into())?.as_ref())?
-                .typed_data::<u64>()
-                .iter()
-                .map(|v| v - self.offset() as u64)
-                .map(|v| min(v, self.len() as u64))
-                .take_while(|v| *v <= (self.len() as u64))
-                .collect::<Vec<u64>>()
-                .into();
+        let ends = flatten(self.ends())?;
+        let FlattenedArray::Primitive(pends) = ends else {
+            return Err(VortexError::InvalidArgument(
+                "REE Ends array didn't flatten to primitive".into(),
+            ));
+        };
 
         let values = flatten(self.values())?;
         if let FlattenedArray::Primitive(pvalues) = values {
-            ree_decode(&ends, &pvalues, self.validity()).map(FlattenedArray::Primitive)
+            ree_decode(&pends, &pvalues, self.validity(), self.offset(), self.len())
+                .map(FlattenedArray::Primitive)
         } else {
             Err(VortexError::InvalidArgument(
                 "Cannot yet flatten non-primitive REE array".into(),

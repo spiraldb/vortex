@@ -1,11 +1,13 @@
+use std::cmp::min;
+
 use itertools::Itertools;
+use num_traits::{AsPrimitive, FromPrimitive};
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef, Encoding};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::compute::cast::cast;
-use vortex::compute::flatten::flatten_primitive;
+use vortex::match_each_integer_ptype;
 use vortex::ptype::{match_each_native_ptype, NativePType};
 use vortex::stats::Stat;
 use vortex::validity::{ArrayValidity, Validity};
@@ -115,20 +117,41 @@ pub fn ree_decode(
     ends: &PrimitiveArray,
     values: &PrimitiveArray,
     validity: Option<Validity>,
+    offset: usize,
+    length: usize,
 ) -> VortexResult<PrimitiveArray> {
-    // TODO(ngates): switch over ends without necessarily casting
     match_each_native_ptype!(values.ptype(), |$P| {
-        Ok(PrimitiveArray::from_nullable(ree_decode_primitive(
-            flatten_primitive(cast(ends, PType::U64.into())?.as_ref())?.typed_data(),
-            values.typed_data::<$P>(),
-        ), validity))
+        match_each_integer_ptype!(ends.ptype(), |$E| {
+            Ok(PrimitiveArray::from_nullable(ree_decode_primitive(
+                ends.typed_data::<$E>(),
+                values.typed_data::<$P>(),
+                offset,
+                length,
+            ), validity))
+        })
     })
 }
 
-pub fn ree_decode_primitive<T: NativePType>(run_ends: &[u64], values: &[T]) -> Vec<T> {
-    let mut decoded = Vec::with_capacity(run_ends.last().map(|x| *x as usize).unwrap_or(0_usize));
-    for (&end, &value) in run_ends.iter().zip_eq(values) {
-        decoded.extend(std::iter::repeat(value).take(end as usize - decoded.len()));
+pub fn ree_decode_primitive<
+    E: NativePType + AsPrimitive<usize> + FromPrimitive + Ord,
+    T: NativePType,
+>(
+    run_ends: &[E],
+    values: &[T],
+    offset: usize,
+    length: usize,
+) -> Vec<T> {
+    let offset_e = <E as FromPrimitive>::from_usize(offset).unwrap();
+    let length_e = <E as FromPrimitive>::from_usize(length).unwrap();
+    let trimmed_ends = run_ends
+        .iter()
+        .map(|v| *v - offset_e)
+        .map(|v| min(v, length_e))
+        .take_while(|v| *v <= length_e);
+
+    let mut decoded = Vec::with_capacity(length);
+    for (end, &value) in trimmed_ends.zip_eq(values) {
+        decoded.extend(std::iter::repeat(value).take(end.as_() - decoded.len()));
     }
     decoded
 }
@@ -156,7 +179,7 @@ mod test {
     fn decode() {
         let ends = PrimitiveArray::from(vec![2, 5, 10]);
         let values = PrimitiveArray::from(vec![1i32, 2, 3]);
-        let decoded = ree_decode(&ends, &values, None).unwrap();
+        let decoded = ree_decode(&ends, &values, None, 0, 0).unwrap();
 
         assert_eq!(
             decoded.typed_data::<i32>(),
@@ -183,6 +206,8 @@ mod test {
             arr.ends().as_primitive(),
             arr.values().as_primitive(),
             arr.validity(),
+            0,
+            0,
         )
         .unwrap();
 
