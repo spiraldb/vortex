@@ -45,6 +45,9 @@ impl PrimitiveArray {
 
     pub fn try_new(ptype: PType, buffer: Buffer, validity: Option<Validity>) -> VortexResult<Self> {
         if let Some(v) = &validity {
+            if v.len() != buffer.len() / ptype.byte_width() {
+                return Err("Validity length does not match buffer length".into());
+            }
             assert_eq!(v.len(), buffer.len() / ptype.byte_width());
         }
         let dtype = DType::from(ptype).with_nullability(validity.is_some().into());
