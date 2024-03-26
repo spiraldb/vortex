@@ -6,11 +6,9 @@ enum Nullability: byte {
 enum Signedness: byte {
     Signed,
     Unsigned,
-    Unknown,
 }
 
 enum IntWidth: byte {
-    Unknown,
     _8,
     _16,
     _32,
@@ -18,7 +16,6 @@ enum IntWidth: byte {
 }
 
 enum FloatWidth: byte {
-    Unknown,
     _16,
     _32,
     _64,
@@ -31,8 +28,8 @@ table Bool {
 }
 
 table Int {
-    width: IntWidth = Unknown;
-    signedness: Signedness = Unknown;
+    width: IntWidth;
+    signedness: Signedness;
     nullability: Nullability;
 }
 
@@ -46,7 +43,7 @@ table Decimal {
 }
 
 table Float {
-    width: FloatWidth = Unknown;
+    width: FloatWidth;
     nullability: Nullability;
 }
 
