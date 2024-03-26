@@ -1,7 +1,7 @@
 use std::cmp::min;
 
 use itertools::Itertools;
-use num_traits::{AsPrimitive, FromPrimitive};
+use num_traits::AsPrimitive;
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
@@ -132,22 +132,18 @@ pub fn ree_decode(
     })
 }
 
-pub fn ree_decode_primitive<
-    E: NativePType + AsPrimitive<usize> + FromPrimitive + Ord,
-    T: NativePType,
->(
+pub fn ree_decode_primitive<E: NativePType + AsPrimitive<usize> + Ord, T: NativePType>(
     run_ends: &[E],
     values: &[T],
     offset: usize,
     length: usize,
 ) -> Vec<T> {
-    let offset_e = <E as FromPrimitive>::from_usize(offset).unwrap();
-    let length_e = <E as FromPrimitive>::from_usize(length).unwrap();
+    let offset_e = E::from_usize(offset).unwrap();
+    let length_e = E::from_usize(length).unwrap();
     let trimmed_ends = run_ends
         .iter()
         .map(|v| *v - offset_e)
-        .map(|v| min(v, length_e))
-        .take_while(|v| *v <= length_e);
+        .map(|v| min(v, length_e));
 
     let mut decoded = Vec::with_capacity(length);
     for (end, &value) in trimmed_ends.zip_eq(values) {
