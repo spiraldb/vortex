@@ -49,6 +49,16 @@ pub fn flatten(array: &dyn Array) -> VortexResult<FlattenedArray> {
     })
 }
 
+pub fn flatten_varbin(array: &dyn Array) -> VortexResult<VarBinArray> {
+    if let FlattenedArray::VarBin(vb) = flatten(array)? {
+        Ok(vb)
+    } else {
+        Err(VortexError::InvalidArgument(
+            format!("Cannot flatten array {} into varbin", array).into(),
+        ))
+    }
+}
+
 pub fn flatten_bool(array: &dyn Array) -> VortexResult<BoolArray> {
     if let FlattenedArray::Bool(b) = flatten(array)? {
         Ok(b)
