@@ -36,11 +36,9 @@ A Vortex array is defined by a logical data type (i.e., the type of scalar eleme
 (the type of the array itself). Vortex ships with several built-in encodings, as well as several extension encodings.
 
 The built-in encodings are primarily designed to model the Apache Arrow in-memory format, enabling us to construct
-Vortex
-arrays with zero-copy from Arrow arrays. There are also several built-in encodings (e.g., `sparse` and `chunked`) that
-are useful building blocks for other encodings.
-The included extension encodings are mostly designed to model compressed in-memory arrays, such as run-length or
-dictionary encoding.
+Vortex arrays with zero-copy from Arrow arrays. There are also several built-in encodings (e.g., `sparse` and
+`chunked`) that are useful building blocks for other encodings. The included extension encodings are mostly designed
+to model compressed in-memory arrays, such as run-length or dictionary encoding.
 
 ## Components
 
