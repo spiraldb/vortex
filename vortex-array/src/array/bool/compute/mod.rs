@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use arrow_array::{ArrayRef as ArrowArrayRef, BooleanArray as ArrowBoolArray};
 use arrow_buffer::buffer::BooleanBuffer;
 
 use vortex_error::VortexResult;
@@ -7,15 +8,24 @@ use vortex_error::VortexResult;
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, ArrayRef};
+use crate::arrow::wrappers::as_nulls;
+use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::fill::FillForwardFn;
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
+use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::scalar::{BoolScalar, Scalar};
 use crate::validity::{ArrayValidity, Validity};
 
+mod take;
+
 impl ArrayCompute for BoolArray {
+    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
+        Some(self)
+    }
+
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
@@ -30,6 +40,19 @@ impl ArrayCompute for BoolArray {
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
+    }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+}
+
+impl AsArrowArray for BoolArray {
+    fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
+        Ok(Arc::new(ArrowBoolArray::new(
+            self.buffer().clone(),
+            as_nulls(self.validity())?,
+        )))
     }
 }
 
