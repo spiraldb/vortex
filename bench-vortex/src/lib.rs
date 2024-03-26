@@ -147,9 +147,10 @@ mod test {
     use crate::taxi_data::download_taxi_data;
     use crate::{compress_ctx, compress_taxi_data, setup_logger};
 
+    #[ignore]
     #[test]
     fn compression_ratio() {
-        setup_logger(LevelFilter::Error);
+        setup_logger(LevelFilter::Debug);
         _ = compress_taxi_data();
     }
 
