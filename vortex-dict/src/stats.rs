@@ -10,10 +10,10 @@ impl StatsCompute for DictArray {
         if let Some(rc) = self.codes().stats().get_or_compute(&Stat::RunCount) {
             stats.set(Stat::RunCount, rc);
         }
-        if let Some(min) = self.dict().stats().get_or_compute(&Stat::Min) {
+        if let Some(min) = self.values().stats().get_or_compute(&Stat::Min) {
             stats.set(Stat::Min, min);
         }
-        if let Some(max) = self.dict().stats().get_or_compute(&Stat::Max) {
+        if let Some(max) = self.values().stats().get_or_compute(&Stat::Max) {
             stats.set(Stat::Max, max);
         }
         if let Some(is_constant) = self.codes().stats().get_or_compute(&Stat::IsConstant) {
@@ -25,7 +25,7 @@ impl StatsCompute for DictArray {
 
         // if dictionary is sorted
         if self
-            .dict()
+            .values()
             .stats()
             .get_or_compute_as::<bool>(&Stat::IsSorted)
             .unwrap_or(false)

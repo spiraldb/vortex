@@ -6,7 +6,7 @@ use crate::{DictArray, DictEncoding};
 
 impl ArraySerde for DictArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
-        ctx.write(self.dict())?;
+        ctx.write(self.values())?;
         // TODO(robert): Stop writing this
         ctx.dtype(self.codes().dtype())?;
         ctx.write(self.codes())
@@ -61,10 +61,10 @@ mod test {
         );
 
         assert_eq!(
-            arr.dict().as_primitive().buffer().typed_data::<i64>(),
+            arr.values().as_primitive().buffer().typed_data::<i64>(),
             read_arr
                 .as_dict()
-                .dict()
+                .values()
                 .as_primitive()
                 .buffer()
                 .typed_data::<i64>()

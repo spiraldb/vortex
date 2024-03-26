@@ -8,7 +8,6 @@ use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbin::values_iter::{VarBinIter, VarBinPrimitiveIter};
 use crate::array::{
     check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
 };
@@ -17,16 +16,17 @@ use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
+use crate::iterator::ArrayIter;
 use crate::ptype::NativePType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
 
+mod accessor;
 mod compress;
 mod compute;
 mod serde;
 mod stats;
-mod values_iter;
 
 #[derive(Debug, Clone)]
 pub struct VarBinArray {
@@ -176,18 +176,17 @@ impl VarBinArray {
         }
     }
 
-    pub fn iter_primitive(&self) -> VortexResult<VarBinPrimitiveIter> {
+    pub fn iter_primitive(&self) -> VortexResult<VarBinIter<&[u8]>> {
         self.bytes()
             .maybe_primitive()
-            .zip(self.offsets().maybe_primitive())
             .ok_or_else(|| {
                 VortexError::ComputeError("Bytes array was not a primitive array".into())
             })
-            .map(|(b, o)| VarBinPrimitiveIter::new(b.typed_data::<u8>(), o))
+            .map(|_| ArrayIter::new(self))
     }
 
-    pub fn iter(&self) -> VarBinIter {
-        VarBinIter::new(self.bytes(), self.offsets())
+    pub fn iter(&self) -> VarBinIter<Vec<u8>> {
+        ArrayIter::new(self)
     }
 
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
@@ -199,6 +198,8 @@ impl VarBinArray {
             .to_vec())
     }
 }
+
+pub type VarBinIter<'a, T> = ArrayIter<&'a VarBinArray, T>;
 
 impl Array for VarBinArray {
     impl_array!();
