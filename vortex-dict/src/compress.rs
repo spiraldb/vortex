@@ -245,8 +245,8 @@ mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
-    use vortex::ptype::PType;
     use vortex::scalar::PrimitiveScalar;
+    use vortex_schema::Nullability::Nullable;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
 
@@ -277,10 +277,18 @@ mod test {
         );
         assert_eq!(
             scalar_at(&values, 0),
-            Ok(PrimitiveScalar::none(PType::I32).into())
+            Ok(PrimitiveScalar::try_new::<i32>(None, Nullable)
+                .unwrap()
+                .into())
         );
-        assert_eq!(scalar_at(&values, 1), Ok(1.into()));
-        assert_eq!(scalar_at(&values, 2), Ok(3.into()));
+        assert_eq!(
+            scalar_at(&values, 1),
+            Ok(PrimitiveScalar::nullable(Some(1)).into())
+        );
+        assert_eq!(
+            scalar_at(&values, 2),
+            Ok(PrimitiveScalar::nullable(Some(3)).into())
+        );
     }
 
     #[test]

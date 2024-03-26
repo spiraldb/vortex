@@ -87,11 +87,12 @@ impl FlattenFn for BoolArray {
 
 impl ScalarAtFn for BoolArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if self.is_valid(index) {
-            Ok(self.buffer.value(index).into())
-        } else {
-            Ok(BoolScalar::new(None).into())
-        }
+        Ok(BoolScalar::try_new(
+            self.is_valid(index).then(|| self.buffer.value(index)),
+            self.nullability(),
+        )
+        .unwrap()
+        .into())
     }
 }
 

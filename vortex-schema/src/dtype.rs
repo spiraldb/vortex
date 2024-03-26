@@ -8,8 +8,9 @@ use DType::*;
 
 use crate::CompositeID;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Nullability {
+    #[default]
     NonNullable,
     Nullable,
 }

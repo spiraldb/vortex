@@ -1,6 +1,7 @@
 use itertools::Itertools;
 
 use vortex_error::VortexResult;
+use vortex_schema::Nullability;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
@@ -14,6 +15,7 @@ use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
+use crate::validity::{ArrayValidity, Validity};
 
 impl ArrayCompute for ConstantArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
@@ -51,27 +53,26 @@ impl AsContiguousFn for ConstantArray {
 
 impl FlattenFn for ConstantArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
+        let validity = match self.nullability() {
+            Nullability::NonNullable => None,
+            Nullability::Nullable => Some(match self.scalar().is_null() {
+                true => Validity::Invalid(self.len()),
+                false => Validity::Valid(self.len()),
+            }),
+        };
+
         Ok(match self.scalar() {
-            Scalar::Bool(b) => {
-                if let Some(bv) = b.value() {
-                    FlattenedArray::Bool(BoolArray::from(vec![bv; self.len()]))
-                } else {
-                    FlattenedArray::Bool(BoolArray::null(self.len()))
-                }
-            }
+            Scalar::Bool(b) => FlattenedArray::Bool(BoolArray::from_nullable(
+                vec![b.value().copied().unwrap_or_default(); self.len()],
+                validity,
+            )),
             Scalar::Primitive(p) => {
-                if let Some(ps) = p.value() {
-                    match_each_native_ptype!(ps.ptype(), |$P| {
-                        FlattenedArray::Primitive(PrimitiveArray::from_value::<$P>(
-                            $P::try_from(self.scalar())?,
-                            self.len(),
-                        ))
-                    })
-                } else {
-                    match_each_native_ptype!(p.ptype(), |$P| {
-                        FlattenedArray::Primitive(PrimitiveArray::null::<$P>(self.len()))
-                    })
-                }
+                match_each_native_ptype!(p.ptype(), |$P| {
+                    FlattenedArray::Primitive(PrimitiveArray::from_nullable::<$P>(
+                        vec![$P::try_from(self.scalar())?; self.len()],
+                        validity,
+                    ))
+                })
             }
             _ => panic!("Unsupported scalar type {}", self.dtype()),
         })

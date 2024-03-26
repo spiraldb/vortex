@@ -3,33 +3,18 @@ use std::fmt::{Display, Formatter};
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::{DType, Nullability};
 
+use crate::scalar::value::ScalarValue;
 use crate::scalar::Scalar;
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub struct BoolScalar {
-    value: Option<bool>,
-}
+pub type BoolScalar = ScalarValue<bool>;
 
 impl BoolScalar {
-    pub fn new(value: Option<bool>) -> Self {
-        Self { value }
-    }
-
-    pub fn none() -> Self {
-        Self { value: None }
-    }
-
-    pub fn some(value: bool) -> Self {
-        Self { value: Some(value) }
-    }
-
-    pub fn value(&self) -> Option<bool> {
-        self.value
-    }
-
     #[inline]
     pub fn dtype(&self) -> &DType {
-        &DType::Bool(Nullability::NonNullable)
+        match self.nullability() {
+            Nullability::NonNullable => &DType::Bool(Nullability::NonNullable),
+            Nullability::Nullable => &DType::Bool(Nullability::Nullable),
+        }
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
@@ -47,7 +32,7 @@ impl BoolScalar {
 impl From<bool> for Scalar {
     #[inline]
     fn from(value: bool) -> Self {
-        BoolScalar::new(Some(value)).into()
+        BoolScalar::some(value).into()
     }
 }
 
@@ -58,8 +43,8 @@ impl TryFrom<Scalar> for bool {
         let Scalar::Bool(b) = value else {
             return Err(VortexError::InvalidDType(value.dtype().clone()));
         };
-
         b.value()
+            .cloned()
             .ok_or_else(|| VortexError::InvalidDType(b.dtype().clone()))
     }
 }

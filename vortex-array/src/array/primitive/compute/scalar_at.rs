@@ -8,10 +8,11 @@ use crate::validity::ArrayValidity;
 
 impl ScalarAtFn for PrimitiveArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if self.is_valid(index) {
-            Ok(match_each_native_ptype!(self.ptype, |$T| self.typed_data::<$T>()[index].into()))
-        } else {
-            Ok(PrimitiveScalar::none(self.ptype).into())
-        }
+        match_each_native_ptype!(self.ptype, |$T| {
+            Ok(PrimitiveScalar::try_new(
+                self.is_valid(index).then(|| self.typed_data::<$T>()[index]),
+                self.nullability(),
+            )?.into())
+        })
     }
 }
