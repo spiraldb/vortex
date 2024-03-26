@@ -261,13 +261,8 @@ impl<T: NativePType> FromIterator<Option<T>> for PrimitiveArray {
         let mut validity: Vec<bool> = Vec::with_capacity(lower);
         let values: Vec<T> = iter
             .map(|i| {
-                if let Some(v) = i {
-                    validity.push(true);
-                    v
-                } else {
-                    validity.push(false);
-                    T::default()
-                }
+                validity.push(i.is_some());
+                i.unwrap_or_default()
             })
             .collect::<Vec<_>>();
 
@@ -295,10 +290,11 @@ impl ArrayDisplay for PrimitiveArray {
 
 #[cfg(test)]
 mod test {
+    use crate::array::primitive::PrimitiveArray;
+    use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
-    use vortex_schema::{IntWidth, Nullability, Signedness};
-
-    use super::*;
+    use crate::ptype::PType;
+    use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
     #[test]
     fn from_arrow() {
