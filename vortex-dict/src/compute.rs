@@ -38,6 +38,9 @@ impl ScalarAtFn for DictArray {
 impl TakeFn for DictArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
         let codes = take(self.codes(), indices)?;
+        // TODO(ngates): we could wrap this back up as a DictArray with the same dictionary.
+        //  But we may later want to run some compaction function to ensure all values in the
+        //  dictionary are actually used.
         take(self.values(), &codes)
     }
 }

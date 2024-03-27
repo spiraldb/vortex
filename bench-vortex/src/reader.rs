@@ -1,3 +1,4 @@
+use crate::compress_ctx;
 use arrow_array::types::Int64Type;
 use arrow_array::{
     ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray, RecordBatch,
@@ -9,27 +10,56 @@ use itertools::Itertools;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
+use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::ArrayRef;
+use vortex::array::{ArrayRef, IntoArray};
+use vortex::arrow::FromArrowType;
 use vortex::compute::flatten::flatten;
 use vortex::compute::take::take;
 use vortex::ptype::PType;
-use vortex::serde::ReadCtx;
+use vortex::serde::{ReadCtx, WriteCtx};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<ArrayRef> {
-    let chunked = {
-        let mut file = File::open(path)?;
-        let dummy_dtype: DType = PType::U8.into();
-        let mut read_ctx = ReadCtx::new(&dummy_dtype, &mut file);
-        let dtype = read_ctx.dtype()?;
-        read_ctx.with_schema(&dtype).read()?
-    };
-    let taken = take(&chunked, &PrimitiveArray::from(indices.to_vec()))?;
+pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
+    let mut file = File::open(path)?;
+    let dummy_dtype: DType = PType::U8.into();
+    let mut read_ctx = ReadCtx::new(&dummy_dtype, &mut file);
+    let dtype = read_ctx.dtype()?;
+    read_ctx.with_schema(&dtype).read()
+}
 
+pub fn compress_vortex<W: Write>(parquet_path: &Path, write: &mut W) -> VortexResult<()> {
+    let taxi_pq = File::open(parquet_path)?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq)?;
+
+    // FIXME(ngates): #157 the compressor should handle batch size.
+    let reader = builder.with_batch_size(65_536).build()?;
+
+    let dtype = DType::from_arrow(reader.schema());
+    let ctx = compress_ctx();
+
+    let chunks = reader
+        .map(|batch_result| batch_result.unwrap())
+        .map(|record_batch| {
+            let vortex_array = record_batch.into_array();
+            ctx.compress(&vortex_array, None).unwrap()
+        })
+        .collect_vec();
+    let chunked = ChunkedArray::new(chunks, dtype.clone());
+
+    let mut write_ctx = WriteCtx::new(write);
+    write_ctx.dtype(&dtype).unwrap();
+    write_ctx.write(&chunked).unwrap();
+    Ok(())
+}
+
+pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<ArrayRef> {
+    let array = open_vortex(path)?;
+    let taken = take(&array, &PrimitiveArray::from(indices.to_vec()))?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
     flatten(&taken).map(|x| x.into_array())
 }
@@ -59,12 +89,9 @@ pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {
         let row_group_idx = row_group_offsets
             .binary_search(&(*idx as i64))
             .unwrap_or_else(|e| e - 1);
-        if !row_groups.contains_key(&row_group_idx) {
-            row_groups.insert(row_group_idx, Vec::new());
-        }
         row_groups
-            .get_mut(&row_group_idx)
-            .unwrap()
+            .entry(row_group_idx)
+            .or_insert_with(Vec::new)
             .push((*idx as i64) - row_group_offsets[row_group_idx]);
     }
     let row_group_indices = row_groups
