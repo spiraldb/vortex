@@ -28,10 +28,14 @@ vortex-roaring = { path = "../vortex-roaring" }
 vortex-schema = { path = "../vortex-schema" }
 vortex-zigzag = { path = "../vortex-zigzag" }
 itertools = { workspace = true }
+lance = { version = "0.10.5", features = [] }
+lance-arrow-array = { package = "arrow-array", version = "50.0" }
+lance-parquet = { package = "parquet", version = "50.0", features = [] }
 log = { workspace = true }
-parquet = { workspace = true }
+parquet = { workspace = true, features = [] }
 reqwest = { workspace = true }
 simplelog = { workspace = true }
+tokio = "1.0.1"
 
 [dev-dependencies]
 criterion = { workspace = true }
