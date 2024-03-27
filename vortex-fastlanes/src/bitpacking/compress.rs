@@ -120,13 +120,13 @@ fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize)
     }
 
     // How many fastlanes vectors we will process.
-    let num_chunks = (array.len() + 1023) / 1024;
+    let num_chunks = array.len() / 1024;
 
     // Allocate a result byte array.
     let mut output = Vec::with_capacity(num_chunks * bit_width * 128);
 
     // Loop over all but the last chunk.
-    (0..num_chunks - 1).for_each(|i| {
+    (0..num_chunks).for_each(|i| {
         let start_elem = i * 1024;
         let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
         TryBitPack::try_bitpack_into(chunk, bit_width, &mut output).unwrap();
@@ -211,14 +211,14 @@ fn bitunpack_primitive<T: NativePType + TryBitPack>(
     }
 
     // How many fastlanes vectors we will process.
-    let num_chunks = (length + 1023) / 1024;
+    let num_chunks = length / 1024;
 
     // Allocate a result vector.
     let mut output = Vec::with_capacity(length);
 
     // Loop over all but the last chunk.
     let bytes_per_chunk = 128 * bit_width;
-    (0..num_chunks - 1).for_each(|i| {
+    (0..num_chunks).for_each(|i| {
         let chunk: &[u8] = &packed[i * bytes_per_chunk..][0..bytes_per_chunk];
         TryBitPack::try_bitunpack_into(chunk, bit_width, &mut output).unwrap();
     });
@@ -228,7 +228,7 @@ fn bitunpack_primitive<T: NativePType + TryBitPack>(
     if last_chunk_size > 0 {
         let mut last_output = Vec::with_capacity(1024);
         TryBitPack::try_bitunpack_into(
-            &packed[(num_chunks - 1) * bytes_per_chunk..],
+            &packed[num_chunks * bytes_per_chunk..],
             bit_width,
             &mut last_output,
         )
@@ -309,11 +309,18 @@ mod test {
     }
 
     #[test]
-    fn test_decompress() {
+    fn test_compression_roundtrip() {
+        compression_roundtrip(125);
+        compression_roundtrip(1024);
+        compression_roundtrip(10_000);
+        compression_roundtrip(10_240);
+    }
+
+    fn compression_roundtrip(n: usize) {
         let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
         let ctx = CompressCtx::new(Arc::new(cfg));
 
-        let values = PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8)));
+        let values = PrimitiveArray::from(Vec::from_iter((0..n).map(|i| (i % 63) as u8)));
         let compressed = ctx.compress(&values, None).unwrap();
         assert_eq!(compressed.encoding().id(), BitPackedEncoding.id());
 
