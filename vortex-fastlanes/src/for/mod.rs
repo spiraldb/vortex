@@ -25,6 +25,11 @@ pub struct FoRArray {
 
 impl FoRArray {
     pub fn try_new(child: ArrayRef, reference: Scalar, shift: u8) -> VortexResult<Self> {
+        if reference.is_null() {
+            return Err(VortexError::InvalidArgument(
+                "Reference value cannot be null".into(),
+            ));
+        }
         if child.dtype() != reference.dtype() {
             return Err(VortexError::MismatchedTypes(
                 child.dtype().clone(),
