@@ -33,6 +33,9 @@ pub enum VortexError {
     ArrowError(ArrowError),
     #[error(transparent)]
     IOError(IOError),
+    #[cfg(feature = "parquet")]
+    #[error(transparent)]
+    ParquetError(ParquetError),
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;
@@ -72,3 +75,6 @@ macro_rules! wrapped_error {
 
 wrapped_error!(arrow_schema::ArrowError, ArrowError);
 wrapped_error!(io::Error, IOError);
+
+#[cfg(feature = "parquet")]
+wrapped_error!(parquet::errors::ParquetError, ParquetError);

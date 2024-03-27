@@ -1,6 +1,7 @@
+use vortex::array::{Array, ArrayRef};
 use vortex::compute::flatten::{flatten, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
-use vortex::compute::take::take;
+use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::scalar::Scalar;
 use vortex_error::VortexResult;
@@ -15,6 +16,16 @@ impl ArrayCompute for DictArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+}
+
+impl FlattenFn for DictArray {
+    fn flatten(&self) -> VortexResult<FlattenedArray> {
+        flatten(&take(self.values(), self.codes())?)
+    }
 }
 
 impl ScalarAtFn for DictArray {
@@ -24,9 +35,13 @@ impl ScalarAtFn for DictArray {
     }
 }
 
-impl FlattenFn for DictArray {
-    fn flatten(&self) -> VortexResult<FlattenedArray> {
-        flatten(&take(self.values(), self.codes())?)
+impl TakeFn for DictArray {
+    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
+        let codes = take(self.codes(), indices)?;
+        // TODO(ngates): we could wrap this back up as a DictArray with the same dictionary.
+        //  But we may later want to run some compaction function to ensure all values in the
+        //  dictionary are actually used.
+        take(self.values(), &codes)
     }
 }
 

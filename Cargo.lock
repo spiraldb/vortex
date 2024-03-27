@@ -366,6 +366,7 @@ name = "bench-vortex"
 version = "0.1.0"
 dependencies = [
  "arrow-array",
+ "arrow-select",
  "criterion",
  "itertools 0.12.1",
  "log",
@@ -376,6 +377,7 @@ dependencies = [
  "vortex-array",
  "vortex-datetime",
  "vortex-dict",
+ "vortex-error",
  "vortex-fastlanes",
  "vortex-ree",
  "vortex-roaring",
@@ -2713,6 +2715,7 @@ name = "vortex-error"
 version = "0.1.0"
 dependencies = [
  "arrow-schema",
+ "parquet",
  "thiserror",
  "vortex-schema",
 ]
@@ -2752,6 +2755,7 @@ dependencies = [
 name = "vortex-roaring"
 version = "0.1.0"
 dependencies = [
+ "arrow-buffer",
  "croaring",
  "linkme",
  "log",

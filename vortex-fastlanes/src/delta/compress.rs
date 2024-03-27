@@ -13,6 +13,7 @@ use vortex::compute::flatten::flatten_primitive;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
 use vortex::validity::ArrayValidity;
+use vortex::validity::Validity;
 use vortex_error::VortexResult;
 
 use crate::{DeltaArray, DeltaEncoding};
@@ -51,7 +52,13 @@ impl EncodingCompression for DeltaEncoding {
         // Compress the filled array
         let (bases, deltas) = match_each_integer_ptype!(parray.ptype(), |$T| {
             let (bases, deltas) = compress_primitive(filled.as_primitive().typed_data::<$T>());
-            (PrimitiveArray::from(bases), PrimitiveArray::from(deltas))
+            let base_validity = validity.is_some().then(|| Validity::Valid(bases.len()));
+            let delta_validity = validity.is_some().then(|| Validity::Valid(deltas.len()));
+            (
+                // To preserve nullability, we include Validity
+                PrimitiveArray::from_nullable(bases, base_validity),
+                PrimitiveArray::from_nullable(deltas, delta_validity),
+            )
         });
 
         // Recursively compress the bases and deltas

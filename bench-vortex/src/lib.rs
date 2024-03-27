@@ -9,6 +9,7 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 
+use crate::taxi_data::taxi_data_parquet;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::IntoArray;
@@ -18,23 +19,35 @@ use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_datetime::DateTimeEncoding;
-use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
+use vortex_dict::DictEncoding;
+use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
 
+pub mod reader;
 pub mod taxi_data;
 
-pub fn idempotent(name: &str, f: impl FnOnce(&mut File)) -> PathBuf {
+pub fn idempotent<T, E>(
+    name: &str,
+    f: impl FnOnce(&mut File) -> Result<T, E>,
+) -> Result<PathBuf, E> {
+    let path = data_path(name);
+    if !path.exists() {
+        let mut file = File::create(&path).unwrap();
+        f(&mut file)?;
+    }
+    Ok(path.to_path_buf())
+}
+
+pub fn data_path(name: &str) -> PathBuf {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("data")
         .join(name);
-    if !path.exists() {
+    if !path.parent().unwrap().exists() {
         create_dir_all(path.parent().unwrap()).unwrap();
-        let mut file = File::create(&path).unwrap();
-        f(&mut file);
     }
-    path.to_path_buf()
+    path
 }
 
 pub fn setup_logger(level: LevelFilter) {
@@ -51,11 +64,11 @@ pub fn enumerate_arrays() -> Vec<EncodingRef> {
     println!("FOUND {:?}", ENCODINGS.iter().map(|e| e.id()).collect_vec());
     vec![
         &ALPEncoding,
-        //&DictEncoding,
+        &DictEncoding,
         &BitPackedEncoding,
         &FoREncoding,
         &DateTimeEncoding,
-        &DeltaEncoding,
+        // &DeltaEncoding,  Blows up the search space too much.
         &REEEncoding,
         &RoaringBoolEncoding,
         // RoaringIntEncoding,
@@ -71,7 +84,7 @@ pub fn compress_ctx() -> CompressCtx {
 }
 
 pub fn compress_taxi_data() -> ArrayRef {
-    let file = File::open(taxi_data::download_taxi_data()).unwrap();
+    let file = File::open(taxi_data_parquet()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
     let _mask = ProjectionMask::roots(builder.parquet_schema(), [1]);
     let _no_datetime_mask = ProjectionMask::roots(
@@ -141,7 +154,7 @@ mod test {
     use vortex::encode::FromArrowArray;
     use vortex::serde::{ReadCtx, WriteCtx};
 
-    use crate::taxi_data::download_taxi_data;
+    use crate::taxi_data::taxi_data_parquet;
     use crate::{compress_ctx, compress_taxi_data, setup_logger};
 
     #[ignore]
@@ -154,7 +167,7 @@ mod test {
     #[ignore]
     #[test]
     fn round_trip_serde() {
-        let file = File::open(download_taxi_data()).unwrap();
+        let file = File::open(taxi_data_parquet()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
         let reader = builder.with_limit(1).build().unwrap();
 
@@ -176,7 +189,7 @@ mod test {
     #[ignore]
     #[test]
     fn round_trip_arrow() {
-        let file = File::open(download_taxi_data()).unwrap();
+        let file = File::open(taxi_data_parquet()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
         let reader = builder.with_limit(1).build().unwrap();
 
@@ -194,7 +207,7 @@ mod test {
     #[ignore]
     #[test]
     fn round_trip_arrow_compressed() {
-        let file = File::open(download_taxi_data()).unwrap();
+        let file = File::open(taxi_data_parquet()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
         let reader = builder.with_limit(1).build().unwrap();
 

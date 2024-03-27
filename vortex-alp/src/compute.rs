@@ -1,6 +1,7 @@
-use vortex::array::Array;
+use vortex::array::{Array, ArrayRef};
 use vortex::compute::flatten::{FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
+use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::scalar::Scalar;
 use vortex_error::VortexResult;
@@ -14,6 +15,10 @@ impl ArrayCompute for ALPArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
 }
@@ -38,5 +43,17 @@ impl ScalarAtFn for ALPArray {
                 self.exponents(),
             ))
         })
+    }
+}
+
+impl TakeFn for ALPArray {
+    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
+        // TODO(ngates): wrap up indices in an array that caches decompression?
+        Ok(ALPArray::new(
+            take(self.encoded(), indices)?,
+            self.exponents().clone(),
+            self.patches().map(|p| take(p, indices)).transpose()?,
+        )
+        .into_array())
     }
 }
