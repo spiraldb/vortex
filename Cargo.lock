@@ -2753,6 +2753,7 @@ dependencies = [
 name = "vortex-roaring"
 version = "0.1.0"
 dependencies = [
+ "arrow-buffer",
  "croaring",
  "linkme",
  "log",
