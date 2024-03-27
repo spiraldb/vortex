@@ -1,12 +1,13 @@
+use std::any;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use half::f16;
 
-use crate::match_each_native_ptype;
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::{DType, Nullability};
 
+use crate::match_each_native_ptype;
 use crate::ptype::{NativePType, PType};
 use crate::scalar::Scalar;
 
@@ -49,6 +50,15 @@ impl PrimitiveScalar {
     #[inline]
     pub fn value(&self) -> Option<PScalar> {
         self.value
+    }
+
+    pub fn typed_value<T: NativePType>(&self) -> Option<T> {
+        assert_eq!(
+            T::PTYPE,
+            self.ptype,
+            "typed_value called with incorrect ptype"
+        );
+        self.value.map(|v| v.try_into().unwrap())
     }
 
     #[inline]
@@ -216,11 +226,26 @@ macro_rules! pscalar {
                     Scalar::Primitive(PrimitiveScalar {
                         value: Some(pscalar),
                         ..
-                    }) => match pscalar {
-                        PScalar::$ptype(v) => Ok(v),
-                        _ => Err(VortexError::InvalidDType(pscalar.ptype().into())),
-                    },
+                    }) => pscalar.try_into(),
                     _ => Err(VortexError::InvalidDType(value.dtype().clone())),
+                }
+            }
+        }
+
+        impl TryFrom<PScalar> for $T {
+            type Error = VortexError;
+
+            fn try_from(value: PScalar) -> Result<Self, Self::Error> {
+                match value {
+                    PScalar::$ptype(v) => Ok(v),
+                    _ => Err(VortexError::InvalidArgument(
+                        format!(
+                            "Expected {} type but got {}",
+                            any::type_name::<Self>(),
+                            value
+                        )
+                        .into(),
+                    )),
                 }
             }
         }

@@ -44,6 +44,7 @@ pub trait NativePType:
     + Into<Scalar>
     + TryFrom<Scalar, Error = VortexError>
     + Into<PScalar>
+    + TryFrom<PScalar, Error = VortexError>
 {
     const PTYPE: PType;
 }
