@@ -1,16 +1,22 @@
-use arrow_array::RecordBatchReader;
 use itertools::Itertools;
+use lance;
+use lance::dataset::WriteParams;
+use lance::Dataset;
+use lance_parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder as LanceParquetRecordBatchReaderBuilder;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+use arrow_array::RecordBatchReader;
 use std::fs::File;
 use std::path::PathBuf;
+use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::IntoArray;
 use vortex::arrow::FromArrowType;
 use vortex::serde::WriteCtx;
 use vortex_schema::DType;
 
-use crate::idempotent;
 use crate::reader::compress_vortex;
+use crate::{data_path, idempotent};
 
 fn download_taxi_data() -> PathBuf {
     idempotent("yellow-tripdata-2023-11.parquet", |file| {
@@ -25,6 +31,27 @@ fn download_taxi_data() -> PathBuf {
 
 pub fn taxi_data_parquet() -> PathBuf {
     download_taxi_data()
+}
+
+pub fn taxi_data_lance() -> PathBuf {
+    let write_params = WriteParams::default();
+
+    let read = File::open(taxi_data_parquet()).unwrap();
+    let reader = LanceParquetRecordBatchReaderBuilder::try_new(read)
+        .unwrap()
+        .build()
+        .unwrap();
+
+    let lance_path = data_path("taxi.lance");
+    Runtime::new()
+        .unwrap()
+        .block_on(Dataset::write(
+            reader,
+            lance_path.as_os_str().to_str().unwrap(),
+            Some(write_params),
+        ))
+        .unwrap();
+    lance_path
 }
 
 pub fn taxi_data_vortex() -> PathBuf {

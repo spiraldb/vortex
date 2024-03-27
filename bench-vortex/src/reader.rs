@@ -7,12 +7,15 @@ use arrow_array::{
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
 use itertools::Itertools;
+use lance::Dataset;
+use lance_arrow_array::RecordBatch as LanceRecordBatch;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{ArrayRef, IntoArray};
@@ -121,4 +124,15 @@ pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {
         .collect_vec();
 
     Ok(concat_batches(&schema, &batches)?)
+}
+
+pub fn take_lance(path: &Path, indices: &[u64]) -> LanceRecordBatch {
+    Runtime::new()
+        .unwrap()
+        .block_on(async_take_lance(path, indices))
+}
+
+async fn async_take_lance(path: &Path, indices: &[u64]) -> LanceRecordBatch {
+    let dataset = Dataset::open(path.to_str().unwrap()).await.unwrap();
+    dataset.take(indices, dataset.schema()).await.unwrap()
 }
