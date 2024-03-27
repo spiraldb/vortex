@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use lance;
 use lance::dataset::WriteParams;
 use lance::Dataset;
 use lance_parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder as LanceParquetRecordBatchReaderBuilder;
