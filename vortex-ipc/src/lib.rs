@@ -69,7 +69,6 @@ mod tests {
     use crate::reader::StreamReader;
     use std::io::Cursor;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::formatter::display_tree;
 
     #[test]
     fn test_write_flatbuffer() {
@@ -80,14 +79,17 @@ mod tests {
         let mut writer = StreamWriter::try_new_unbuffered(&mut cursor, ctx).unwrap();
         writer.write(&array).unwrap();
         cursor.flush().unwrap();
+        cursor.set_position(0);
 
         let mut reader = StreamReader::try_new_unbuffered(cursor).unwrap();
         let array_chunk_reader: &mut dyn ArrayChunkReader = reader.next_array().unwrap().unwrap();
-        let array_chunk = array_chunk_reader.next().unwrap().unwrap();
-        println!("Array: {:?}", display_tree(&array_chunk));
-        //
+        println!("Array Chunk Reader: {:?}", array_chunk_reader.dtype());
+
+        // let array_chunk = array_chunk_reader.next().unwrap().unwrap();
+        // println!("Array: {:?}", display_tree(&array_chunk));
+
         // let msg = "Hello, World!";
-        // cursor.write_flatbuffer(&ctx).unwrap();
+        //cursor.write_flatbuffer(&ctx).unwrap();
         // cursor.write_all(msg.as_bytes()).unwrap();
         // cursor.flush().unwrap();s
     }

@@ -34,7 +34,7 @@ impl<R: Read> StreamReader<R> {
         let mut msg_vec = Vec::new();
         let fb_msg = read
             .read_flatbuffer::<Message>(&mut msg_vec)?
-            .ok_or_else(|| VortexError::InvalidSerde("Invalid Vortex IPC format".into()))?;
+            .ok_or_else(|| VortexError::InvalidSerde("Unexpected EOF reading IPC format".into()))?;
         let fb_ctx = fb_msg.header_as_context().ok_or_else(|| {
             VortexError::InvalidSerde("Expected IPC Context as first message in stream".into())
         })?;
@@ -62,13 +62,21 @@ impl<R: Read> StreamReader<R> {
     // TODO(ngates): avoid returning a heap-allocated array.
     // TODO(ngates): return an ArrayStream that can iterate over batches.
     pub fn next_array(&mut self) -> VortexResult<Option<&mut dyn ArrayChunkReader>> {
-        let msg = match self.read.read_flatbuffer::<Message>(&mut self.scratch)? {
+        self.scratch.clear();
+        let msg = match self
+            .read
+            .read_flatbuffer::<Message>(&mut self.scratch)
+            .unwrap()
+        {
             None => return Ok(None),
             Some(msg) => msg,
         };
-        let _schema = msg.header_as_schema().ok_or_else(|| {
-            VortexError::InvalidSerde("Expected IPC Schema as message header".into())
-        })?;
+        let _schema = msg
+            .header_as_schema()
+            .ok_or_else(|| {
+                VortexError::InvalidSerde("Expected IPC Schema as message header".into())
+            })
+            .unwrap();
         todo!()
     }
 }

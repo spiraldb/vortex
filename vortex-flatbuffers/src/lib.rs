@@ -3,6 +3,7 @@ use std::io;
 use std::io::{Read, Write};
 
 // FIXME(ngates): This is a temporary solution to avoid a cyclic dependency between vortex-error and vortex-flatbuffers.
+#[derive(Debug)]
 pub enum Error {
     IOError(io::Error),
     FlatBufferError(flatbuffers::InvalidFlatbuffer),
@@ -39,7 +40,6 @@ impl<R: Read> FlatBufferReader for R {
                 _ => Err(e.into()),
             };
         }
-
         let msg_size = u32::from_le_bytes(msg_size) as u64;
         self.take(msg_size).read_to_end(buffer)?;
         Ok(Some(root::<F>(buffer)?))
@@ -73,6 +73,9 @@ impl<W: Write> FlatBufferWriter for W {
         let root = msg.write_flatbuffer(&mut fbb);
         fbb.create_string("IPC");
         fbb.finish_minimal(root);
+        let data = fbb.finished_data();
+        let data_size: [u8; 4] = (data.len() as u32).to_le_bytes();
+        self.write(&data_size)?;
         self.write(fbb.finished_data())
     }
 }
