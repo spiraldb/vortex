@@ -28,14 +28,10 @@ use vortex_schema::DType;
 pub mod reader;
 pub mod taxi_data;
 
-pub fn idempotent<T, E>(
-    name: &str,
-    f: impl FnOnce(&mut File) -> Result<T, E>,
-) -> Result<PathBuf, E> {
+pub fn idempotent<T, E>(name: &str, f: impl FnOnce(&Path) -> Result<T, E>) -> Result<PathBuf, E> {
     let path = data_path(name);
     if !path.exists() {
-        let mut file = File::create(&path).unwrap();
-        f(&mut file)?;
+        f(&path)?;
     }
     Ok(path.to_path_buf())
 }
