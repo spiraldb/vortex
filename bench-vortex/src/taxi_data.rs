@@ -1,7 +1,6 @@
 use arrow_array::RecordBatchReader;
 use itertools::Itertools;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use parquet::arrow::ProjectionMask;
 use std::fs::File;
 use std::path::PathBuf;
 use vortex::array::chunked::ChunkedArray;
@@ -31,7 +30,6 @@ pub fn taxi_data_vortex() -> PathBuf {
     idempotent("taxi-uncompressed.vortex", |write| {
         let taxi_pq = File::open(download_taxi_data()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq).unwrap();
-        let _mask = ProjectionMask::roots(builder.parquet_schema(), (0..14).collect_vec());
 
         // FIXME(ngates): #157 the compressor should handle batch size.
         let reader = builder.with_batch_size(65_536).build().unwrap();
@@ -55,7 +53,6 @@ pub fn taxi_data_vortex_compressed() -> PathBuf {
     idempotent("taxi.vortex", |write| {
         let taxi_pq = File::open(download_taxi_data())?;
         let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq)?;
-        let _mask = ProjectionMask::roots(builder.parquet_schema(), (0..14).collect_vec());
 
         // FIXME(ngates): #157 the compressor should handle batch size.
         let reader = builder.with_batch_size(65_536).build()?;

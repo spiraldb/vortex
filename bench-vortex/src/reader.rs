@@ -13,6 +13,7 @@ use std::path::Path;
 use std::sync::Arc;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::ArrayRef;
+use vortex::compute::flatten::flatten;
 use vortex::compute::take::take;
 use vortex::ptype::PType;
 use vortex::serde::ReadCtx;
@@ -27,10 +28,13 @@ pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<ArrayRef> {
         let dtype = read_ctx.dtype()?;
         read_ctx.with_schema(&dtype).read()?
     };
-    take(&chunked, &PrimitiveArray::from(indices.to_vec()))
+    let taken = take(&chunked, &PrimitiveArray::from(indices.to_vec()))?;
+
+    // For equivalence.... we flatten to make sure we're not cheating too much.
+    flatten(&taken).map(|x| x.into_array())
 }
 
-pub fn take_arrow(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {
+pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {
     let file = File::open(path)?;
 
     // TODO(ngates): enable read_page_index
