@@ -8,7 +8,7 @@ use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
-use vortex_error::VortexResult;
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
 mod compress;
@@ -25,7 +25,12 @@ pub struct FoRArray {
 
 impl FoRArray {
     pub fn try_new(child: ArrayRef, reference: Scalar, shift: u8) -> VortexResult<Self> {
-        // TODO(ngates): check the dtype of reference == child.dtype()
+        if child.dtype() != reference.dtype() {
+            return Err(VortexError::MismatchedTypes(
+                child.dtype().clone(),
+                reference.dtype().clone(),
+            ));
+        }
         Ok(Self {
             encoded: child,
             reference,

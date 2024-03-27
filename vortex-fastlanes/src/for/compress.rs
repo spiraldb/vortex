@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use num_traits::PrimInt;
 
+use crate::downcast::DowncastFastlanes;
 use crate::{FoRArray, FoREncoding};
 use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
@@ -59,10 +60,10 @@ impl EncodingCompression for FoREncoding {
             }
         });
 
-        let compressed_child = ctx.named("for").excluding(&FoREncoding).compress(
-            &child,
-            like.map(|l| l.as_any().downcast_ref::<FoRArray>().unwrap().encoded()),
-        )?;
+        let compressed_child = ctx
+            .named("for")
+            .excluding(&FoREncoding)
+            .compress(&child, like.map(|l| l.as_for().encoded()))?;
         let reference = parray.stats().get(&Stat::Min).unwrap();
         Ok(FoRArray::try_new(compressed_child, reference, shift)?.into_array())
     }
@@ -163,8 +164,7 @@ mod test {
 
         let compressed = ctx.compress(&array, None).unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
-        let fa = compressed.as_any().downcast_ref::<FoRArray>().unwrap();
-        assert_eq!(fa.reference().try_into(), Ok(1_000_000u32));
+        assert_eq!(compressed.as_for().reference().try_into(), Ok(1_000_000u32));
     }
 
     #[test]

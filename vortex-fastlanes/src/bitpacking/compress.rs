@@ -1,6 +1,5 @@
 use arrayref::array_ref;
 
-use crate::{BitPackedArray, BitPackedEncoding};
 use fastlanez_sys::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -18,6 +17,9 @@ use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
 use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
+
+use crate::downcast::DowncastFastlanes;
+use crate::{BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -65,7 +67,7 @@ impl EncodingCompression for BitPackedEncoding {
             .unwrap()
             .0;
 
-        let like_bp = like.map(|l| l.as_any().downcast_ref::<BitPackedArray>().unwrap());
+        let like_bp = like.map(|l| l.as_bitpacked());
         let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception(parray.ptype()));
         let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
@@ -301,11 +303,7 @@ mod test {
             )
             .unwrap();
         assert_eq!(compressed.encoding().id(), BitPackedEncoding.id());
-        let bp = compressed
-            .as_any()
-            .downcast_ref::<BitPackedArray>()
-            .unwrap();
-        assert_eq!(bp.bit_width(), 6);
+        assert_eq!(compressed.as_bitpacked().bit_width(), 6);
     }
 
     #[test]
