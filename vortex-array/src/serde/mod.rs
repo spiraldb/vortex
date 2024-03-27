@@ -5,7 +5,7 @@ use arrow_buffer::buffer::{Buffer, MutableBuffer};
 
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::{
-    DType, FbDeserialize, FbSerialize, IntWidth, Nullability, SchemaError, Signedness,
+    DType, Deserialize, IntWidth, Nullability, SchemaError, Serialize, Signedness,
 };
 
 use crate::array::composite::find_extension_id;
@@ -15,6 +15,7 @@ use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 use crate::serde::ptype::PTypeTag;
 use crate::validity::Validity;
 
+mod data;
 mod ptype;
 
 pub trait ArraySerde {

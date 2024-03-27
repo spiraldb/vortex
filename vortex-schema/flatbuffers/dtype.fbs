@@ -1,3 +1,5 @@
+namespace vortex.dtype;
+
 enum Nullability: byte {
     NonNullable,
     Nullable,

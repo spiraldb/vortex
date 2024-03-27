@@ -1,0 +1,47 @@
+include "vortex-schema/flatbuffers/dtype.fbs";
+
+namespace vortex.ipc;
+
+enum Version: uint8 {
+  V0 = 0,
+}
+
+table Context {
+    encodings: [Encoding];
+}
+
+table Encoding {
+    id: string;
+}
+
+table Schema {
+   dtype: vortex.dtype.DType;
+}
+
+enum Compression: uint8 {
+    None = 0,
+}
+
+struct Buffer {
+    offset: uint64;
+    len: uint64;
+    compression: Compression;
+}
+
+table Column {
+    buffers: [Buffer];
+}
+
+union MessageHeader {
+  Context,
+  Schema,
+  Column,
+}
+
+table Message {
+  version: Version;
+  header: MessageHeader;
+  body_len: long;
+}
+
+root_type Message;

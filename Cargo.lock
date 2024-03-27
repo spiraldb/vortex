@@ -5265,6 +5265,7 @@ name = "vortex-error"
 version = "0.1.0"
 dependencies = [
  "arrow-schema 51.0.0",
+ "flatbuffers",
  "parquet 51.0.0",
  "thiserror",
  "vortex-schema",
@@ -5284,6 +5285,19 @@ dependencies = [
  "vortex-array",
  "vortex-error",
  "vortex-schema",
+]
+
+[[package]]
+name = "vortex-ipc"
+version = "0.1.0"
+dependencies = [
+ "flatbuffers",
+ "flatc",
+ "itertools 0.12.1",
+ "vortex-array",
+ "vortex-error",
+ "vortex-schema",
+ "walkdir",
 ]
 
 [[package]]

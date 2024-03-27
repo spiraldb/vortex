@@ -430,6 +430,10 @@ impl Hash for EncodingRef {
 #[distributed_slice]
 pub static ENCODINGS: [EncodingRef] = [..];
 
+pub fn find_encoding(id: &str) -> Option<EncodingRef> {
+    ENCODINGS.iter().find(|&x| x.id().name() == id).cloned()
+}
+
 #[derive(Debug, Clone)]
 pub enum ArrayKind<'a> {
     Bool(&'a BoolArray),

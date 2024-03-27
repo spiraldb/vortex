@@ -12,6 +12,8 @@ pub enum VortexError {
     ComputeError(ErrString),
     #[error("{0}")]
     InvalidArgument(ErrString),
+    #[error("{0}")]
+    InvalidSerde(ErrString),
     // Used when a function is not implemented for a given array type.
     #[error("function {0} not implemented for {1}")]
     NotImplemented(&'static str, &'static str),
@@ -33,6 +35,11 @@ pub enum VortexError {
     ArrowError(ArrowError),
     #[error(transparent)]
     IOError(IOError),
+
+    #[cfg(feature = "flatbuffers")]
+    #[error(transparent)]
+    FlatBufferError(FlatBufferError),
+
     #[cfg(feature = "parquet")]
     #[error(transparent)]
     ParquetError(ParquetError),
@@ -75,6 +82,9 @@ macro_rules! wrapped_error {
 
 wrapped_error!(arrow_schema::ArrowError, ArrowError);
 wrapped_error!(io::Error, IOError);
+
+#[cfg(feature = "flatbuffers")]
+wrapped_error!(flatbuffers::InvalidFlatbuffer, FlatBufferError);
 
 #[cfg(feature = "parquet")]
 wrapped_error!(parquet::errors::ParquetError, ParquetError);

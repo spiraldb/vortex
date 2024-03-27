@@ -4,8 +4,8 @@ pub use dtype::*;
 pub use error::ErrString;
 pub use error::SchemaError;
 pub use error::SchemaResult;
-pub use serde::FbDeserialize;
-pub use serde::FbSerialize;
+pub use serde::Deserialize;
+pub use serde::Serialize;
 
 mod dtype;
 mod error;
@@ -20,11 +20,13 @@ impl Display for CompositeID {
     }
 }
 
-#[allow(unused_imports)]
-#[allow(dead_code)]
-#[allow(clippy::needless_lifetimes)]
-#[allow(clippy::extra_unused_lifetimes)]
-#[allow(non_camel_case_types)]
-mod generated {
-    include!(concat!(env!("OUT_DIR"), "/flatbuffers/schema.rs"));
+pub mod flatbuffers {
+    #[allow(unused_imports)]
+    #[allow(dead_code)]
+    #[allow(clippy::all)]
+    #[allow(non_camel_case_types)]
+    mod generated {
+        include!(concat!(env!("OUT_DIR"), "/flatbuffers/dtype.rs"));
+    }
+    pub use generated::vortex::dtype::*;
 }
