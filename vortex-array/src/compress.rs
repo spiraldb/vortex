@@ -178,7 +178,14 @@ impl CompressCtx {
                 .map(|c| c.compress(arr, Some(l), self.for_encoding(c)))
             {
                 let compressed = compressed?;
-                assert_eq!(compressed.dtype(), arr.dtype());
+                if compressed.dtype() != arr.dtype() {
+                    panic!(
+                        "Compression changed dtype: {:?} -> {:?} for {}",
+                        arr.dtype(),
+                        compressed.dtype(),
+                        display_tree(&compressed),
+                    );
+                }
                 return Ok(compressed);
             } else {
                 warn!(

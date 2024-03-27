@@ -1,7 +1,10 @@
 use vortex_error::{VortexError, VortexResult};
 
 use crate::array::Array;
+use crate::compute::flatten::flatten;
+use crate::compute::ArrayCompute;
 use crate::scalar::Scalar;
+use log::info;
 use std::cmp::Ordering;
 
 pub enum SearchSortedSide {
@@ -19,7 +22,14 @@ pub fn search_sorted<T: Into<Scalar>>(
     side: SearchSortedSide,
 ) -> VortexResult<usize> {
     let scalar = target.into().cast(array.dtype())?;
-    array
+    if let Some(search_sorted) = array.search_sorted() {
+        return search_sorted.search_sorted(&scalar, side);
+    }
+
+    // Otherwise, flatten and try again.
+    info!("SearchSorted not implemented for {}, flattening", array);
+    flatten(array)?
+        .into_array()
         .search_sorted()
         .map(|f| f.search_sorted(&scalar, side))
         .unwrap_or_else(|| {
