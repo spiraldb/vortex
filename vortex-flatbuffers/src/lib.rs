@@ -1,16 +1,34 @@
 use flatbuffers::{root, FlatBufferBuilder, Follow, Verifiable, WIPOffset};
 use std::io;
 use std::io::{Read, Write};
-use vortex_error::VortexResult;
+
+// FIXME(ngates): This is a temporary solution to avoid a cyclic dependency between vortex-error and vortex-flatbuffers.
+pub enum Error {
+    IOError(io::Error),
+    FlatBufferError(flatbuffers::InvalidFlatbuffer),
+}
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
+        Error::IOError(value)
+    }
+}
+
+impl From<flatbuffers::InvalidFlatbuffer> for Error {
+    fn from(value: flatbuffers::InvalidFlatbuffer) -> Self {
+        Error::FlatBufferError(value)
+    }
+}
 
 pub trait FlatBufferReader {
-    fn read_flatbuffer<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> VortexResult<Option<F>>
+    fn read_flatbuffer<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> Result<Option<F>>
     where
         F: 'a + Follow<'a, Inner = F> + Verifiable;
 }
 
 impl<R: Read> FlatBufferReader for R {
-    fn read_flatbuffer<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> VortexResult<Option<F>>
+    fn read_flatbuffer<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> Result<Option<F>>
     where
         F: 'a + Follow<'a, Inner = F> + Verifiable,
     {
@@ -37,12 +55,20 @@ pub trait WriteFlatBuffer {
     ) -> WIPOffset<Self::Target<'fb>>;
 }
 
+pub trait FlatBufferRoot {}
+
 pub trait FlatBufferWriter {
-    fn write_flatbuffer<F: WriteFlatBuffer>(&mut self, msg: &F) -> io::Result<usize>;
+    fn write_flatbuffer<F: WriteFlatBuffer + FlatBufferRoot>(
+        &mut self,
+        msg: &F,
+    ) -> io::Result<usize>;
 }
 
 impl<W: Write> FlatBufferWriter for W {
-    fn write_flatbuffer<F: WriteFlatBuffer>(&mut self, msg: &F) -> io::Result<usize> {
+    fn write_flatbuffer<F: WriteFlatBuffer + FlatBufferRoot>(
+        &mut self,
+        msg: &F,
+    ) -> io::Result<usize> {
         let mut fbb = FlatBufferBuilder::new();
         let root = msg.write_flatbuffer(&mut fbb);
         fbb.create_string("IPC");

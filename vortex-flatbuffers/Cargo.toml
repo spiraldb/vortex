@@ -12,7 +12,6 @@ rust-version.workspace = true
 
 [dependencies]
 flatbuffers = { workspace = true }
-vortex-error = { path = "../vortex-error", features = ["flatbuffers"] }
 
 [lints]
 workspace = true

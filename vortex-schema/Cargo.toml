@@ -20,6 +20,7 @@ arrow-schema = { workspace = true }
 flatbuffers = { workspace = true }
 itertools = { workspace = true }
 thiserror = { workspace = true }
+vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 
 [build-dependencies]
 flatc = { workspace = true }

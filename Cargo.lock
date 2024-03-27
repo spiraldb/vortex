@@ -5268,6 +5268,7 @@ dependencies = [
  "flatbuffers",
  "parquet 51.0.0",
  "thiserror",
+ "vortex-flatbuffers",
  "vortex-schema",
 ]
 
@@ -5292,7 +5293,6 @@ name = "vortex-flatbuffers"
 version = "0.1.0"
 dependencies = [
  "flatbuffers",
- "vortex-error",
 ]
 
 [[package]]
@@ -5347,6 +5347,7 @@ dependencies = [
  "flatc",
  "itertools 0.12.1",
  "thiserror",
+ "vortex-flatbuffers",
  "walkdir",
 ]
 

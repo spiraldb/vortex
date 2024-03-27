@@ -3,17 +3,15 @@ use std::io::{ErrorKind, Read, Write};
 
 use arrow_buffer::buffer::{Buffer, MutableBuffer};
 
-use vortex_error::{VortexError, VortexResult};
-use vortex_schema::{
-    DType, Deserialize, IntWidth, Nullability, SchemaError, Serialize, Signedness,
-};
-
 use crate::array::composite::find_extension_id;
 use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 use crate::serde::ptype::PTypeTag;
 use crate::validity::Validity;
+use vortex_error::{VortexError, VortexResult};
+use vortex_schema::Serialize;
+use vortex_schema::{DType, Deserialize, IntWidth, Nullability, SchemaError, Signedness};
 
 mod data;
 mod ptype;

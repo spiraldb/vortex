@@ -6,6 +6,7 @@ use vortex_error::VortexResult;
 use vortex_flatbuffers::FlatBufferWriter;
 
 use crate::context::IPCContext;
+use crate::Message;
 
 #[allow(dead_code)]
 pub struct StreamWriter<W: Write> {
@@ -22,41 +23,20 @@ impl<W: Write> StreamWriter<BufWriter<W>> {
 impl<W: Write> StreamWriter<W> {
     pub fn try_new_unbuffered(mut write: W, ctx: IPCContext) -> VortexResult<Self> {
         // Write the IPC context to the stream
-        write.write_flatbuffer(&ctx)?;
-
+        write.write_flatbuffer(&Message::Context(&ctx))?;
         Ok(Self { write, ctx })
     }
 
-    pub fn write(&mut self, _array: &dyn Array) -> VortexResult<Self> {
-        todo!()
-    }
-}
+    pub fn write(&mut self, array: &dyn Array) -> VortexResult<()> {
+        // First, write a schema message indicating the start of an array.
+        self.write
+            .write_flatbuffer(&Message::Schema(array.dtype()))?;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::reader::StreamReader;
-    use std::io::Cursor;
-    use vortex::array::primitive::PrimitiveArray;
-    use vortex::formatter::display_tree;
+        // Then we write the array in chunks.
+        // TODO(ngates): should we do any chunking ourselves?
 
-    #[test]
-    fn test_write_flatbuffer() {
-        let array = PrimitiveArray::from(vec![1, 2, 3, 4, 5]);
+        // TODO(ngates): If it's a chunked array, use those chunks. Else write the whole thing.
 
-        let mut cursor = Cursor::new(Vec::new());
-        let ctx = IPCContext::default();
-        let mut writer = StreamWriter::try_new_unbuffered(&mut cursor, ctx).unwrap();
-        writer.write(&array).unwrap();
-        cursor.flush().unwrap();
-
-        let mut reader = StreamReader::try_new_unbuffered(cursor).unwrap();
-        let read_array = reader.next_array().unwrap().unwrap();
-        println!("Array: {:?}", display_tree(&read_array));
-        //
-        // let msg = "Hello, World!";
-        // cursor.write_flatbuffer(&ctx).unwrap();
-        // cursor.write_all(msg.as_bytes()).unwrap();
-        // cursor.flush().unwrap();s
+        todo!("write the array to the stream")
     }
 }

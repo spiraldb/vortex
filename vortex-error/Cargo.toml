@@ -20,6 +20,7 @@ arrow-schema = { workspace = true }
 flatbuffers = { workspace = true, optional = true }
 parquet = { workspace = true, optional = true }
 thiserror = { workspace = true }
+vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 vortex-schema = { path = "../vortex-schema" }
 
 [lints]

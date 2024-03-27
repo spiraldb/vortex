@@ -53,6 +53,15 @@ impl From<&str> for VortexError {
     }
 }
 
+impl From<vortex_flatbuffers::Error> for VortexError {
+    fn from(value: vortex_flatbuffers::Error) -> Self {
+        match value {
+            vortex_flatbuffers::Error::IOError(e) => e.into(),
+            vortex_flatbuffers::Error::FlatBufferError(e) => e.into(),
+        }
+    }
+}
+
 macro_rules! wrapped_error {
     ($E:ty, $e:ident) => {
         #[derive(Debug)]
