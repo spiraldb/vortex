@@ -24,18 +24,22 @@ use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
 
+pub mod reader;
 pub mod taxi_data;
 
-pub fn idempotent(name: &str, f: impl FnOnce(&mut File)) -> PathBuf {
+pub fn idempotent<T, E>(
+    name: &str,
+    f: impl FnOnce(&mut File) -> Result<T, E>,
+) -> Result<PathBuf, E> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("data")
         .join(name);
     if !path.exists() {
         create_dir_all(path.parent().unwrap()).unwrap();
         let mut file = File::create(&path).unwrap();
-        f(&mut file);
+        f(&mut file)?;
     }
-    path.to_path_buf()
+    Ok(path.to_path_buf())
 }
 
 pub fn setup_logger(level: LevelFilter) {
