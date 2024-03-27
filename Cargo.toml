@@ -9,7 +9,7 @@ members = [
     "vortex-datetime",
     "vortex-dict",
     "vortex-error",
-    "vortex-fastlanes", "vortex-ipc",
+    "vortex-fastlanes", "vortex-flatbuffers", "vortex-ipc",
     "vortex-ree",
     "vortex-roaring",
     "vortex-schema",

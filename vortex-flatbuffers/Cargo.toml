@@ -1,0 +1,18 @@
+[package]
+name = "vortex-flatbuffers"
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+include.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+flatbuffers = { workspace = true }
+vortex-error = { path = "../vortex-error", features = ["flatbuffers"] }
+
+[lints]
+workspace = true

@@ -1,10 +1,9 @@
-use std::io;
 use std::io::{BufWriter, Write};
 
-use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use vortex::array::Array;
 
 use vortex_error::VortexResult;
+use vortex_flatbuffers::FlatBufferWriter;
 
 use crate::context::IPCContext;
 
@@ -33,33 +32,10 @@ impl<W: Write> StreamWriter<W> {
     }
 }
 
-pub(crate) trait WriteFlatBuffer {
-    type Target<'a>;
-
-    fn write_flatbuffer<'fb>(
-        &self,
-        fbb: &mut FlatBufferBuilder<'fb>,
-    ) -> WIPOffset<Self::Target<'fb>>;
-}
-
-trait FlatBufferWriter {
-    fn write_flatbuffer<F: WriteFlatBuffer>(&mut self, msg: &F) -> io::Result<usize>;
-}
-
-impl<W: Write> FlatBufferWriter for W {
-    fn write_flatbuffer<F: WriteFlatBuffer>(&mut self, msg: &F) -> io::Result<usize> {
-        let mut fbb = FlatBufferBuilder::new();
-        let root = msg.write_flatbuffer(&mut fbb);
-        fbb.create_string("IPC");
-        fbb.finish_minimal(root);
-        self.write(fbb.finished_data())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::reader::StreamReader;
+    use crate::reader::StreamReader;
     use std::io::Cursor;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::formatter::display_tree;

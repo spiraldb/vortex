@@ -5288,6 +5288,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-flatbuffers"
+version = "0.1.0"
+dependencies = [
+ "flatbuffers",
+ "vortex-error",
+]
+
+[[package]]
 name = "vortex-ipc"
 version = "0.1.0"
 dependencies = [
@@ -5296,6 +5304,7 @@ dependencies = [
  "itertools 0.12.1",
  "vortex-array",
  "vortex-error",
+ "vortex-flatbuffers",
  "vortex-schema",
  "walkdir",
 ]

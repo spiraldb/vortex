@@ -1,10 +1,10 @@
 use crate::flatbuffers::ipc as fb;
 use crate::missing;
-use crate::stream::writer::WriteFlatBuffer;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex::array::{find_encoding, EncodingRef, ENCODINGS};
 use vortex_error::VortexError;
+use vortex_flatbuffers::WriteFlatBuffer;
 
 pub struct IPCContext {
     #[allow(dead_code)]

@@ -1,10 +1,9 @@
 use crate::context::IPCContext;
 use crate::flatbuffers::ipc::Message;
-use flatbuffers::{root, Follow, Verifiable};
-use std::io;
 use std::io::{BufReader, Read};
 use vortex::array::ArrayRef;
 use vortex_error::{VortexError, VortexResult};
+use vortex_flatbuffers::FlatBufferReader;
 
 #[allow(dead_code)]
 pub struct StreamReader<R: Read> {
@@ -53,30 +52,5 @@ impl<R: Read> StreamReader<R> {
             VortexError::InvalidSerde("Expected IPC Schema as message header".into())
         })?;
         todo!()
-    }
-}
-
-trait FlatBufferReader {
-    fn read_flatbuffer<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> VortexResult<Option<F>>
-    where
-        F: 'a + Follow<'a, Inner = F> + Verifiable;
-}
-
-impl<R: Read> FlatBufferReader for R {
-    fn read_flatbuffer<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> VortexResult<Option<F>>
-    where
-        F: 'a + Follow<'a, Inner = F> + Verifiable,
-    {
-        let mut msg_size: [u8; 4] = [0; 4];
-        if let Err(e) = self.read_exact(&mut msg_size) {
-            return match e.kind() {
-                io::ErrorKind::UnexpectedEof => Ok(None),
-                _ => Err(e.into()),
-            };
-        }
-
-        let msg_size = u32::from_le_bytes(msg_size) as u64;
-        self.take(msg_size).read_to_end(buffer)?;
-        Ok(Some(root::<F>(buffer)?))
     }
 }

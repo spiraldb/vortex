@@ -18,7 +18,8 @@ pub(crate) mod flatbuffers_deps {
 }
 
 pub mod context;
-pub mod stream;
+pub mod reader;
+pub mod writer;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
     move || VortexError::InvalidSerde(format!("missing field: {}", field).into())
