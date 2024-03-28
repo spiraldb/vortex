@@ -8,12 +8,11 @@ use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{
-    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
-};
+use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::iterator::ArrayIter;

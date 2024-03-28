@@ -1,4 +1,4 @@
-use crate::array::EncodingId;
+use crate::encoding::EncodingId;
 use arrow_buffer::Buffer;
 
 pub struct ArrayData {

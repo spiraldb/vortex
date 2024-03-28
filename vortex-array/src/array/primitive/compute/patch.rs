@@ -17,8 +17,8 @@ impl PatchFn for PrimitiveArray {
             // TODO(ngates): support a default implementation based on iter_arrow?
             _ => Err(VortexError::MissingKernel(
                 "patch",
-                self.encoding().id().0,
-                vec![patch.encoding().id().0],
+                self.encoding().id().name(),
+                vec![patch.encoding().id().name()],
             )),
         }
     }

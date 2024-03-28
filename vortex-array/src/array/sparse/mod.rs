@@ -3,11 +3,11 @@ use std::sync::{Arc, RwLock};
 use itertools::Itertools;
 use linkme::distributed_slice;
 
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::ENCODINGS;
-use crate::array::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef};
+use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;

@@ -6,9 +6,8 @@ use linkme::distributed_slice;
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::{
-    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
-};
+use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};

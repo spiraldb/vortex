@@ -7,13 +7,14 @@ use vortex_error::VortexResult;
 use vortex_schema::{DType, FieldNames};
 
 use crate::compress::EncodingCompression;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
 
-use super::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
+use super::{check_slice_bounds, Array, ArrayRef};
 
 mod compress;
 mod compute;

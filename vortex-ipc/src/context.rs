@@ -2,7 +2,7 @@ use crate::flatbuffers::ipc as fb;
 use crate::missing;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex::array::{find_encoding, EncodingId, EncodingRef, ENCODINGS};
+use vortex::encoding::{find_encoding, EncodingId, EncodingRef, ENCODINGS};
 use vortex_error::VortexError;
 use vortex_flatbuffers::WriteFlatBuffer;
 

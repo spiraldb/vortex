@@ -5,7 +5,8 @@ use std::io::{ErrorKind, Read, Write};
 use arrow_buffer::buffer::{Buffer, MutableBuffer};
 
 use crate::array::composite::find_extension_id;
-use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
+use crate::array::{Array, ArrayRef};
+use crate::encoding::{find_encoding, EncodingId, ENCODINGS};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 use crate::serde::data::ColumnData;
@@ -181,11 +182,8 @@ impl<'a> ReadCtx<'a> {
 
     pub fn read(&mut self) -> VortexResult<ArrayRef> {
         let encoding_id = self.read_usize()?;
-        if let Some(serde) = ENCODINGS
-            .iter()
-            .filter(|e| e.id().name() == self.encodings[encoding_id].name())
-            .flat_map(|e| e.serde())
-            .next()
+        if let Some(serde) =
+            find_encoding(self.encodings[encoding_id].name()).and_then(|e| e.serde())
         {
             serde.read(self)
         } else {

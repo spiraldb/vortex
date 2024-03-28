@@ -9,14 +9,13 @@ use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
 
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
 use crate::array::IntoArray;
-use crate::array::{
-    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
-};
+use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::iterator::ArrayIter;

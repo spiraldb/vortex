@@ -7,6 +7,7 @@ pub mod compress;
 pub mod compute;
 pub mod datetime;
 pub mod encode;
+pub mod encoding;
 pub mod formatter;
 pub mod iterator;
 pub mod ptype;

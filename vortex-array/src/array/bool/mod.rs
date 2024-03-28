@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 use arrow_buffer::buffer::BooleanBuffer;
 use linkme::distributed_slice;
 
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
@@ -13,7 +14,7 @@ use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
 
-use super::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
+use super::{check_slice_bounds, Array, ArrayRef};
 
 mod compute;
 mod serde;
