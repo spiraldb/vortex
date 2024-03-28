@@ -5408,6 +5408,7 @@ dependencies = [
 name = "vortex-ipc"
 version = "0.1.0"
 dependencies = [
+ "arrow-buffer 51.0.0",
  "flatbuffers",
  "flatc",
  "itertools 0.12.1",

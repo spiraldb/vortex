@@ -51,7 +51,10 @@ impl WriteFlatBuffer for Message<'_> {
     ) -> WIPOffset<Self::Target<'fb>> {
         let header = match self {
             Self::Context(ctx) => ctx.write_flatbuffer(fbb).as_union_value(),
-            Self::Schema(dtype) => dtype.write_flatbuffer(fbb).as_union_value(),
+            Self::Schema(dtype) => {
+                let dtype = Some(dtype.write_flatbuffer(fbb));
+                fb::Schema::create(fbb, &fb::SchemaArgs { dtype }).as_union_value()
+            }
         };
 
         let mut msg = fb::MessageBuilder::new(fbb);
@@ -61,6 +64,7 @@ impl WriteFlatBuffer for Message<'_> {
             Self::Schema(_) => fb::MessageHeader::Schema,
         });
         msg.add_header(header);
+        msg.add_body_len(0);
         msg.finish()
     }
 }
@@ -68,6 +72,7 @@ impl WriteFlatBuffer for Message<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chunked::ArrayChunkReader;
     use crate::reader::StreamReader;
     use std::io::Cursor;
     use vortex::array::primitive::PrimitiveArray;
@@ -84,12 +89,9 @@ mod tests {
         cursor.set_position(0);
 
         let mut ipc_reader = StreamReader::try_new_unbuffered(cursor).unwrap();
-        println!("CTX {:?}", ipc_reader.ctx);
         while let Some(chunk_reader) = ipc_reader.next() {
-            match chunk_reader {
-                Ok(_c) => println!("OK"),
-                Err(e) => println!("Error: {:?}", e),
-            }
+            let chunk_reader = chunk_reader.unwrap();
+            println!("DType: {:?}", chunk_reader.dtype());
             // let chunk = chunk_reader.next().unwrap();
             // println!("Array Chunk Reader: {:?}", chunk.dtype());
         }

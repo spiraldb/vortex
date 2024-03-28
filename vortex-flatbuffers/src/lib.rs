@@ -2,6 +2,10 @@ use flatbuffers::{root, FlatBufferBuilder, Follow, Verifiable, WIPOffset};
 use std::io;
 use std::io::{Read, Write};
 
+/// The alignment for FlatBuffers messages, in bytes.
+const ALIGNMENT: usize = 64;
+const PADDING: [u8; ALIGNMENT] = [0; ALIGNMENT];
+
 // FIXME(ngates): This is a temporary solution to avoid a cyclic dependency between vortex-error and vortex-flatbuffers.
 #[derive(Debug)]
 pub enum Error {
@@ -41,9 +45,7 @@ impl<R: Read> FlatBufferReader for R {
                 _ => Err(e.into()),
             };
         }
-
         let msg_size = u32::from_le_bytes(msg_size) as u64;
-        println!("Reading FB {}", msg_size);
         self.take(msg_size).read_to_end(buffer)?;
         Ok(Some(root::<F>(buffer)?))
     }
@@ -61,6 +63,8 @@ pub trait WriteFlatBuffer {
 pub trait FlatBufferRoot {}
 
 pub trait FlatBufferWriter {
+    // Write the given FlatBuffer message, appending padding until the total bytes written
+    // are a multiple of `alignment`.
     fn write_flatbuffer<F: WriteFlatBuffer + FlatBufferRoot>(
         &mut self,
         msg: &F,
@@ -75,10 +79,14 @@ impl<W: Write> FlatBufferWriter for W {
         let mut fbb = FlatBufferBuilder::new();
         let root = msg.write_flatbuffer(&mut fbb);
         fbb.finish_minimal(root);
-        let data = fbb.finished_data();
-        let data_size: [u8; 4] = (data.len() as u32).to_le_bytes();
-        println!("Writing FB {}", data.len());
-        self.write(&data_size)?;
-        self.write(data)
+        let fb_data = fbb.finished_data();
+        let fb_size = fb_data.len();
+
+        let aligned_size = (fb_size + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
+        let padding_bytes = aligned_size - fb_size;
+
+        self.write(&(aligned_size as u32).to_le_bytes())?;
+        self.write(fb_data)?;
+        self.write(&PADDING[0..padding_bytes])
     }
 }

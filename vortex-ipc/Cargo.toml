@@ -12,6 +12,7 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+arrow-buffer = { workspace = true }
 flatbuffers = { workspace = true }
 itertools = { workspace = true }
 lending-iterator = "0.1.7"
