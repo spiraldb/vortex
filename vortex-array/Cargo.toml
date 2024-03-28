@@ -40,3 +40,7 @@ vortex-schema = { path = "../vortex-schema" }
 
 [dev-dependencies]
 criterion = { workspace = true }
+
+[[bench]]
+name = "search_sorted"
+harness = false

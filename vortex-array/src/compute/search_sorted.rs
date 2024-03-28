@@ -115,13 +115,6 @@ impl<S: IndexOrd<T> + Len + ?Sized, T> SearchSorted<T> for S {
     }
 }
 
-impl<T: Array> IndexOrd<Scalar> for T {
-    fn index_cmp(&self, idx: usize, elem: &Scalar) -> Option<Ordering> {
-        let scalar_a = scalar_at(self, idx).ok()?;
-        scalar_a.partial_cmp(elem)
-    }
-}
-
 impl IndexOrd<Scalar> for &dyn Array {
     fn index_cmp(&self, idx: usize, elem: &Scalar) -> Option<Ordering> {
         let scalar_a = scalar_at(*self, idx).ok()?;
@@ -131,13 +124,8 @@ impl IndexOrd<Scalar> for &dyn Array {
 
 impl<T: PartialOrd> IndexOrd<T> for [T] {
     fn index_cmp(&self, idx: usize, elem: &T) -> Option<Ordering> {
-        self[idx].partial_cmp(elem)
-    }
-}
-
-impl<T: Array> Len for T {
-    fn len(&self) -> usize {
-        T::len(self)
+        // SAFETY: Used in search_sorted_by same as the standard library. The search_sorted ensures idx is in bounds
+        unsafe { self.get_unchecked(idx) }.partial_cmp(elem)
     }
 }
 
