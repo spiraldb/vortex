@@ -65,9 +65,10 @@ mod test {
 
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-    use vortex::array::{Array, EncodingRef};
+    use vortex::array::Array;
     use vortex::compress::{CompressConfig, CompressCtx};
     use vortex::compute::take::take;
+    use vortex::encoding::EncodingRef;
 
     use crate::BitPackedEncoding;
 
