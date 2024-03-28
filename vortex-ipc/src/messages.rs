@@ -96,9 +96,12 @@ impl<'a> WriteFlatBuffer for IPCChunkColumn<'a> {
         }
         let fb_buffers = fbb.create_vector(&fb_buffers);
 
+        let metadata = fbb.create_vector(self.0.metadata().as_slice());
+
         fb::ChunkColumn::create(
             fbb,
             &fb::ChunkColumnArgs {
+                metadata: Some(metadata),
                 buffers: Some(fb_buffers),
             },
         )

@@ -1,5 +1,18 @@
 use arrow_buffer::Buffer;
 
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct SomeData {
+    metadata: Buffer,
+    buffers: Vec<Buffer>,
+}
+
+impl SomeData {
+    pub fn new(metadata: Buffer, buffers: Vec<Buffer>) -> Self {
+        Self { metadata, buffers }
+    }
+}
+
 pub struct ArrayData {
     columns: Vec<ColumnData>,
 }
@@ -14,13 +27,19 @@ impl ArrayData {
     }
 }
 
+#[derive(Debug)]
 pub struct ColumnData {
+    metadata: Buffer,
     buffers: Vec<Buffer>,
 }
 
 impl ColumnData {
-    pub fn new(buffers: Vec<Buffer>) -> Self {
-        Self { buffers }
+    pub fn new(metadata: Buffer, buffers: Vec<Buffer>) -> Self {
+        Self { metadata, buffers }
+    }
+
+    pub fn metadata(&self) -> &Buffer {
+        &self.metadata
     }
 
     pub fn buffers(&self) -> &[Buffer] {
@@ -40,5 +59,19 @@ impl ColumnData {
         }
         offsets.push(offset);
         offsets
+    }
+}
+
+#[allow(dead_code)]
+pub struct ColumnDataBuilder {
+    buffers: Vec<Buffer>,
+}
+
+#[allow(dead_code)]
+impl ColumnDataBuilder {
+    pub fn new() -> Self {
+        Self {
+            buffers: Vec::new(),
+        }
     }
 }

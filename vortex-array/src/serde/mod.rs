@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 
@@ -7,6 +8,7 @@ use crate::array::composite::find_extension_id;
 use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
+use crate::serde::data::ColumnData;
 use crate::serde::ptype::PTypeTag;
 use crate::validity::Validity;
 use vortex_error::{VortexError, VortexResult};
@@ -16,8 +18,12 @@ use vortex_schema::{DType, Deserialize, IntWidth, Nullability, SchemaError, Sign
 pub mod data;
 mod ptype;
 
-pub trait ArraySerde {
+pub trait ArraySerde: Debug {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;
+
+    fn to_column_data(&self) -> VortexResult<ColumnData> {
+        todo!("Not implemented {:?}", self)
+    }
 }
 
 pub trait EncodingSerde {

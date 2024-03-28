@@ -1,11 +1,10 @@
-use arrow_buffer::Buffer;
 use std::io::{BufWriter, Write};
 
 use vortex::array::Array;
-use vortex::serde::data::{ArrayData, ColumnData};
+use vortex::serde::data::ArrayData;
 
 use crate::ALIGNMENT;
-use vortex_error::VortexResult;
+use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::FlatBufferWriter;
 
 use crate::context::IPCContext;
@@ -40,18 +39,29 @@ impl<W: Write> StreamWriter<W> {
         // TODO(ngates): If it's a chunked array, use those chunks. Else write the whole thing.
 
         // For now, we write a single chunk.
-        self.write_chunk(array)?;
-
-        // todo!("write the array to the stream")
-        Ok(())
+        self.write_chunk(array)
     }
 
-    fn write_chunk(&mut self, _array: &dyn Array) -> VortexResult<()> {
+    fn write_chunk(&mut self, array: &dyn Array) -> VortexResult<()> {
         // A chunk contains the forward byte offsets to each of the columns in the chunk.
+
+        let col_data = array
+            .serde()
+            .ok_or_else(|| {
+                VortexError::InvalidSerde(
+                    format!("Array {} does not implement serde", array).into(),
+                )
+            })?
+            .to_column_data()
+            .map_err(|e| {
+                VortexError::InvalidSerde(
+                    format!("Error converting array to ArrayData: {}", e).into(),
+                )
+            })?;
+        print!("Array Data: {:?}", col_data);
+
         // TODO(ngates): somehow get the flattened columns as ArrayData.
-        let data = ArrayData::new(vec![ColumnData::new(vec![Buffer::from_vec(vec![
-            1, 2, 3, 4, 5,
-        ])])]);
+        let data = ArrayData::new(vec![col_data]);
 
         let mut offset = 0;
         let mut chunk_column_msgs = Vec::with_capacity(data.columns().len());
