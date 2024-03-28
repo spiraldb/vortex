@@ -23,7 +23,7 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
 
     debug!(
         "Discovered encodings: {:?}",
-        vortex::array::ENCODINGS
+        vortex::encoding::ENCODINGS
             .iter()
             .map(|e| e.id().to_string())
             .collect::<Vec<String>>()

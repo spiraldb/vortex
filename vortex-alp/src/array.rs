@@ -1,8 +1,9 @@
 use std::sync::{Arc, RwLock};
 
 use crate::alp::Exponents;
-use vortex::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId, EncodingRef};
+use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
+use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};

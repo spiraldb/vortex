@@ -1,10 +1,9 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{
-    check_slice_bounds, Array, ArrayKind, ArrayRef, Encoding, EncodingId, EncodingRef,
-};
+use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::search_sorted::SearchSortedSide;
+use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};

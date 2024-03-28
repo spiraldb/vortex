@@ -2,7 +2,7 @@ use linkme::distributed_slice;
 
 pub use boolean::*;
 pub use integer::*;
-use vortex::array::{EncodingRef, ENCODINGS};
+use vortex::encoding::{EncodingRef, ENCODINGS};
 
 mod boolean;
 mod downcast;
