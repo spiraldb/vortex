@@ -40,7 +40,7 @@ Vortex arrays with zero-copy from Arrow arrays. There are also several built-in 
 `chunked`) that are useful building blocks for other encodings. The included extension encodings are mostly designed
 to model compressed in-memory arrays, such as run-length or dictionary encoding.
 
-## Components
+## ⚒Components
 
 ### Logical Types
 
@@ -137,7 +137,7 @@ Vortex serde is currently in the design phase. The goals of this implementation 
 * Forward statistical information (such as sortedness) to consumers.
 * To provide a building block for file format authors to store compressed array data.
 
-## Integration with Apache Arrow
+## 💘 Integration with Apache Arrow
 
 Apache Arrow is the de facto standard for interoperating on columnar array data. Naturally, Vortex is designed to
 be maximally compatible with Apache Arrow. All Arrow arrays can be converted into Vortex arrays with zero-copy,
@@ -158,3 +158,32 @@ without prior discussion infeasible. If you are interested in contributing, plea
 ## License
 
 Licensed under the Apache License, Version 2.0 (the "License").
+
+## Acknowledgments 🏆
+
+This project is inspired by and--in some cases--directly based upon the existing, excellent work of many researchers
+and OSS developers. 
+
+In particular, the following academic papers greatly influenced the development:
+* Maximilian Kuschewski, David Sauerwein, Adnan Alhomssi, and Viktor Leis. 2023. [BtrBlocks: Efficient Columnar Compression 
+for Data Lakes](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf). Proc. ACM Manag. Data 1, 2, 
+Article 118 (June 2023), 14 pages. https://doi.org/10.1145/3589263
+* Azim Afroozeh and Peter Boncz. [The FastLanes Compression Layout: Decoding >100 Billion Integers per Second with Scalar
+Code](https://www.vldb.org/pvldb/vol16/p2132-afroozeh.pdf). PVLDB, 16(9): 2132 - 2144, 2023.
+* Peter Boncz, Thomas Neumann, and Viktor Leis. [FSST: Fast Random Access String 
+Compression](https://www.vldb.org/pvldb/vol13/p2649-boncz.pdf).
+PVLDB, 13(11): 2649-2661, 2020.
+* Azim Afroozeh, Leonardo X. Kuffo, and Peter Boncz. 2023. [ALP: Adaptive Lossless floating-Point 
+Compression](https://ir.cwi.nl/pub/33334/33334.pdf). Proc. ACM
+Manag. Data 1, 4 (SIGMOD), Article 230 (December 2023), 26 pages. https://doi.org/10.1145/3626717
+
+Additionally, we benefited greatly from:
+* the collected OSS work of [Daniel Lemire](https://github.com/lemire), such as [FastPFor](https://github.com/lemire/FastPFor),
+and [StreamVByte](https://github.com/lemire/streamvbyte).
+* the [parquet2](https://github.com/jorgecarleitao/parquet2) project by [Jorge Leitao](https://github.com/jorgecarleitao).
+* the public discussions around choices of compression codecs, as well as the C++ implementations thereof,
+from [duckdb](https://github.com/duckdb/duckdb).
+* the existence, ideas, & implementation of the [Apache Arrow](https://arrow.apache.org) project.
+* the [Velox](https://github.com/facebookincubator/velox) project and discussions with its maintainers.
+
+Thanks to all of the aforementioned for sharing their work and knowledge with the world! 🚀
