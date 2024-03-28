@@ -30,6 +30,8 @@ pub(crate) mod flatbuffers_deps {
 }
 
 mod array;
+pub use array::*;
+
 mod chunked;
 pub mod context;
 mod messages;
@@ -45,8 +47,8 @@ mod tests {
     use std::io::Cursor;
 
     use vortex::array::primitive::PrimitiveArray;
+    use vortex::formatter::display_tree;
 
-    use crate::chunked::ArrayViewChunkReader;
     use crate::reader::StreamReader;
 
     use super::*;
@@ -69,7 +71,10 @@ mod tests {
             let mut chunk_reader = chunk_reader.unwrap();
             println!("DType: {:?}", chunk_reader.dtype());
             while let Some(chunk) = chunk_reader.next() {
-                println!("Chunk: {:?}", chunk);
+                let chunk = chunk.unwrap();
+
+                // Do we assume an ArrayView has Array implemented?
+                println!("Chunk: {:?}", display_tree(&chunk));
             }
             // let chunk = chunk_reader.next().unwrap();
             // println!("Array Chunk Reader: {:?}", chunk.dtype());

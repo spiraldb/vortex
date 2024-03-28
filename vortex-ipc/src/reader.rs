@@ -1,10 +1,11 @@
-use crate::chunked::ArrayViewChunkReader;
+use crate::array::ArrayView;
 use crate::context::IPCContext;
-use crate::flatbuffers::ipc::{Message, VortexArray};
+use crate::flatbuffers::ipc::Message;
+use arrow_buffer::Buffer;
+use flatbuffers::root;
 use lending_iterator::prelude::*;
 use std::io;
 use std::io::{BufReader, Read};
-use vortex::array::Array;
 use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::FlatBufferReader;
 use vortex_schema::DType;
@@ -95,8 +96,8 @@ impl<R: Read> LendingIterator for StreamReader<R> {
                 read: &mut self.read,
                 ctx: &self.ctx,
                 dtype: DType::Int(_32, Signed, Nullable),
-                buffer: Vec::new(),
-                chunk: None,
+                fb_buffer: Vec::new(),
+                buffers: Vec::new(),
             }))
         })()
         .transpose()
@@ -108,13 +109,19 @@ pub struct StreamArrayChunkReader<'a, R: Read> {
     read: &'a mut R,
     ctx: &'a IPCContext,
     dtype: DType,
-    buffer: Vec<u8>,
-    chunk: Option<VortexArray<'a>>,
+    fb_buffer: Vec<u8>,
+    buffers: Vec<Buffer>,
+}
+
+impl<'a, R: Read> StreamArrayChunkReader<'a, R> {
+    pub fn dtype(&self) -> &DType {
+        &self.dtype
+    }
 }
 
 #[gat]
 impl<'a, R: Read> LendingIterator for StreamArrayChunkReader<'a, R> {
-    type Item<'next> = VortexResult<&'next dyn Array> where Self: 'next;
+    type Item<'next> = VortexResult<ArrayView<'next>> where Self: 'next;
 
     fn next(self: &'_ mut Self) -> Option<Item<'_, Self>> {
         let mut fb_vec: Vec<u8> = Vec::new();
@@ -129,7 +136,6 @@ impl<'a, R: Read> LendingIterator for StreamArrayChunkReader<'a, R> {
         let msg = msg.unwrap();
 
         let msg = msg.unwrap();
-        println!("MESSAGE: {:?}", msg);
         let chunk = msg
             .header_as_chunk()
             .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Chunk message".into()))
@@ -143,41 +149,73 @@ impl<'a, R: Read> LendingIterator for StreamArrayChunkReader<'a, R> {
             .unwrap();
         assert_eq!(col_offsets.len(), 1);
 
-        // Now read each column
-        let col_msg = self
-            .read
-            .read_flatbuffer::<Message>(&mut self.buffer)
-            .unwrap()
-            .ok_or_else(|| VortexError::InvalidSerde("Unexpected EOF reading IPC format".into()))
+        // TODO(ngates): read each column
+        read_into(self.read, &mut self.fb_buffer).unwrap();
+        let col_msg = root::<Message>(&self.fb_buffer)
             .unwrap()
             .header_as_chunk_column()
             .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Chunk Column message".into()))
             .unwrap();
 
-        let _col_array = col_msg
+        let col_array = col_msg
             .array()
             .ok_or_else(|| VortexError::InvalidSerde("Chunk column missing Array".into()))
             .unwrap();
 
-        // self.chunk = Some(col_msg);
-
-        // Ensure we read all the buffers
+        // Read all the column's buffers
+        self.buffers.clear();
         let mut offset = 0;
-        for buffer_offset in col_msg.buffer_offsets().unwrap_or_default() {
+        for (buffer_offset, buffer_def) in col_msg
+            .buffer_offsets()
+            .unwrap_or_default()
+            .iter()
+            .zip(col_array.buffers().unwrap_or_default().iter())
+        {
             let to_kill = buffer_offset - offset;
             io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
-            offset += to_kill;
+
+            let mut buffer = vec![0u8; buffer_def.length() as usize];
+            self.read.read_exact(&mut buffer).unwrap();
+            self.buffers.push(Buffer::from_vec(buffer));
+
+            offset = buffer_offset + buffer_def.length();
         }
 
-        match self.chunk {
-            None => None,
-            Some(ref a) => Some(Ok(a)),
-        }
+        // Consume any remaining padding after the final buffer.
+        col_msg
+            .buffer_offsets()
+            .unwrap()
+            .iter()
+            .last()
+            .map(|last_offset| {
+                let to_kill = last_offset - offset;
+                io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
+            });
+
+        Some(Ok(ArrayView {
+            ctx: self.ctx,
+            array: col_array,
+            fb_buffer: &self.fb_buffer,
+            buffers: &self.buffers,
+        }))
     }
 }
 
-impl<R: Read> ArrayViewChunkReader for StreamArrayChunkReader<'_, R> {
-    fn dtype(&self) -> &DType {
-        &self.dtype
-    }
+pub fn read_into<R: Read>(read: &mut R, buffer: &mut Vec<u8>) -> VortexResult<()> {
+    buffer.clear();
+
+    let mut buffer_len: [u8; 4] = [0; 4];
+    // FIXME(ngates): return optional for EOF?
+    read.read_exact(&mut buffer_len)?;
+
+    let buffer_len = u32::from_le_bytes(buffer_len) as usize;
+    read.take(buffer_len as u64).read_to_end(buffer)?;
+
+    Ok(())
 }
+
+// impl<R: Read> ArrayViewChunkReader for StreamArrayChunkReader<'_, R> {
+//     fn dtype(&self) -> &DType {
+//         &self.dtype
+//     }
+// }

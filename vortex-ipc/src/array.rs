@@ -1,4 +1,6 @@
-use crate::flatbuffers::ipc as fb;
+use crate::context::IPCContext;
+use crate::flatbuffers::ipc::VortexArray;
+use arrow_buffer::Buffer;
 use std::any::Any;
 use std::sync::Arc;
 use vortex::array::{Array, ArrayRef};
@@ -10,7 +12,15 @@ use vortex::validity::{ArrayValidity, Validity};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-impl<'a> Array for fb::VortexArray<'a> {
+#[derive(Debug)]
+pub struct ArrayView<'a> {
+    pub(crate) ctx: &'a IPCContext,
+    pub(crate) array: VortexArray<'a>,
+    pub(crate) fb_buffer: &'a [u8],
+    pub(crate) buffers: &'a [Buffer],
+}
+
+impl<'a> Array for ArrayView<'a> {
     fn as_any(&self) -> &dyn Any {
         todo!()
     }
@@ -56,15 +66,15 @@ impl<'a> Array for fb::VortexArray<'a> {
     }
 }
 
-impl<'a> ArrayCompute for fb::VortexArray<'a> {}
+impl<'a> ArrayCompute for ArrayView<'a> {}
 
-impl<'a> ArrayValidity for fb::VortexArray<'a> {
+impl<'a> ArrayValidity for ArrayView<'a> {
     fn validity(&self) -> Option<Validity> {
         todo!()
     }
 }
 
-impl<'a> ArrayDisplay for fb::VortexArray<'a> {
+impl<'a> ArrayDisplay for ArrayView<'a> {
     fn fmt(&self, _fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
         todo!()
     }
