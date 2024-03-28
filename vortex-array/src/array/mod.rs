@@ -26,7 +26,7 @@ use crate::compute::fill::FillForwardFn;
 use crate::compute::flatten::FlattenFn;
 use crate::compute::patch::PatchFn;
 use crate::compute::scalar_at::ScalarAtFn;
-use crate::compute::search_sorted::SearchSortedFn;
+use crate::compute::search_sorted::{SearchSortedFn, SearchSortedManyFn};
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -146,6 +146,10 @@ impl ArrayCompute for ArrayRef {
         self.as_ref().search_sorted()
     }
 
+    fn search_sorted_many(&self) -> Option<&dyn SearchSortedManyFn> {
+        self.as_ref().search_sorted_many()
+    }
+
     fn take(&self) -> Option<&dyn TakeFn> {
         self.as_ref().take()
     }
@@ -256,6 +260,10 @@ impl<'a, T: ArrayCompute> ArrayCompute for &'a T {
 
     fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
         T::search_sorted(self)
+    }
+
+    fn search_sorted_many(&self) -> Option<&dyn SearchSortedManyFn> {
+        T::search_sorted_many(self)
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {

@@ -43,6 +43,8 @@ pub fn search_sorted_many(
     values: &dyn Array,
     side: SearchSortedSide,
 ) -> VortexResult<Vec<usize>> {
+    let _ssm = array.search_sorted_many();
+    println!("Array {}", array);
     array
         .search_sorted_many()
         .map(|f| f.search_sorted_many(values, side))

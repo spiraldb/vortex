@@ -74,7 +74,7 @@ mod test {
         );
         assert_eq!(
             search_sorted_many(&values, &targets, SearchSortedSide::Right),
-            Ok(vec![0, 0, 3])
+            Ok(vec![0, 1, 3])
         );
     }
 }
