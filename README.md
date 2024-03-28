@@ -74,8 +74,8 @@ canonical representations of each of the logical data types. The canonical encod
 
 ### Compressed Encodings
 
-Vortex includes a set of highly data-parallel, vectorized encodings. We can hold these compressed arrays in-memory, allowing us to defer
-decompression. Currently, these are:
+Vortex includes a set of highly data-parallel, vectorized encodings. These encodings each correspond to a compressed 
+in-memory array implementation, allowing us to defer decompression. Currently, these are:
 
 * Adaptive Lossless Floating Point (ALP)
 * BitPacked (FastLanes)
