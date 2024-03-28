@@ -6,7 +6,7 @@ use crate::compute::fill::FillForwardFn;
 use crate::compute::flatten::FlattenFn;
 use crate::compute::patch::PatchFn;
 use crate::compute::scalar_at::ScalarAtFn;
-use crate::compute::search_sorted::SearchSortedFn;
+use crate::compute::search_sorted::{SearchSortedFn, SearchSortedManyFn};
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 
@@ -50,6 +50,10 @@ impl ArrayCompute for PrimitiveArray {
     }
 
     fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
+        Some(self)
+    }
+
+    fn search_sorted_many(&self) -> Option<&dyn SearchSortedManyFn> {
         Some(self)
     }
 

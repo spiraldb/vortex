@@ -5,7 +5,7 @@ use fill::FillForwardFn;
 use flatten::*;
 use patch::PatchFn;
 use scalar_at::ScalarAtFn;
-use search_sorted::SearchSortedFn;
+use search_sorted::{SearchSortedFn, SearchSortedManyFn};
 use take::TakeFn;
 
 pub mod add;
@@ -50,6 +50,10 @@ pub trait ArrayCompute {
     }
 
     fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
+        None
+    }
+
+    fn search_sorted_many(&self) -> Option<&dyn SearchSortedManyFn> {
         None
     }
 
