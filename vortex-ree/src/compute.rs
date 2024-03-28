@@ -56,28 +56,17 @@ impl ScalarAtFn for REEArray {
 impl TakeFn for REEArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
         let primitive_indices = flatten_primitive(indices)?;
-        let mut values_to_take: Vec<u64> = Vec::new();
-        let physical_indices: Vec<u64> = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
+        let physical_indices = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
             primitive_indices
                 .typed_data::<$P>()
                 .iter()
                 .map(|idx| {
-                    self.find_physical_index(*idx as usize).map(|loc| {
-                        values_to_take
-                            .iter()
-                            .position(|to_take| *to_take == loc as u64)
-                            .map(|p| p as u64)
-                            .unwrap_or_else(|| {
-                                let position = values_to_take.len();
-                                values_to_take.push(loc as u64);
-                                position as u64
-                            })
-                    })
+                    self.find_physical_index(*idx as usize)
+                        .map(|loc| loc as u64)
                 })
                 .collect::<VortexResult<Vec<_>>>()?
         });
-        let taken_values = take(self.values(), &PrimitiveArray::from(values_to_take))?;
-        take(&taken_values, &PrimitiveArray::from(physical_indices))
+        take(self.values(), &PrimitiveArray::from(physical_indices))
     }
 }
 
@@ -95,7 +84,7 @@ mod test {
             1, 1, 1, 4, 4, 4, 2, 2, 5, 5, 5, 5,
         ]))
         .unwrap();
-        let taken = take(&ree, &PrimitiveArray::from(vec![8, 1, 3])).unwrap();
-        assert_eq!(taken.as_primitive().typed_data::<i32>(), &[5, 1, 4]);
+        let taken = take(&ree, &PrimitiveArray::from(vec![9, 8, 1, 3])).unwrap();
+        assert_eq!(taken.as_primitive().typed_data::<i32>(), &[5, 5, 1, 4]);
     }
 }
