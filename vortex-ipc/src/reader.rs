@@ -1,6 +1,7 @@
 use crate::chunked::ArrayChunkReader;
 use crate::context::IPCContext;
 use crate::flatbuffers::ipc::Message;
+use lending_iterator::prelude::*;
 use std::io::{BufReader, Read};
 use vortex::array::ArrayRef;
 use vortex_error::{VortexError, VortexResult};
@@ -14,7 +15,7 @@ use vortex_schema::Signedness::Signed;
 pub struct StreamReader<R: Read> {
     read: R,
 
-    ctx: IPCContext,
+    pub(crate) ctx: IPCContext,
     // Optionally take a projection?
 
     // Use replace to swap the scratch buffer.
@@ -46,45 +47,59 @@ impl<R: Read> StreamReader<R> {
             scratch: Vec::with_capacity(1024),
         })
     }
+    //
+    // pub fn with_next_array<T>(
+    //     mut self,
+    //     f: impl FnOnce(&mut dyn ArrayChunkReader) -> VortexResult<T>,
+    // ) -> VortexResult<Option<T>> {
+    //     let mut array_chunk_reader = StreamArrayChunkReader {
+    //         reader: self,
+    //         dtype: DType::Int(_32, Signed, Nullable),
+    //     };
+    //     Ok(Some(f(&mut array_chunk_reader)?))
+    // }
 
-    pub fn with_next_array<T>(
-        &mut self,
-        f: impl FnOnce(&mut dyn ArrayChunkReader) -> VortexResult<T>,
-    ) -> VortexResult<Option<T>> {
-        let mut array_chunk_reader = StreamArrayChunkReader {
-            read: &mut self.read,
-            ctx: &self.ctx,
-            dtype: DType::Int(_32, Signed, Nullable),
-        };
-        Ok(Some(f(&mut array_chunk_reader)?))
-    }
+    // pub fn into_iter<'a>(self) -> StreamReaderStreamingIterator<'a, R> {
+    //     StreamReaderStreamingIterator {
+    //         reader: self,
+    //         chunk_reader: None,
+    //     }
+    // }
+}
 
-    // TODO(ngates): avoid returning a heap-allocated array.
-    // TODO(ngates): return an ArrayStream that can iterate over batches.
-    pub fn next_array(&mut self) -> VortexResult<Option<&mut dyn ArrayChunkReader>> {
-        self.scratch.clear();
-        let msg = match self
+#[gat]
+impl<R: Read> LendingIterator for StreamReader<R> {
+    type Item<'next> = VortexResult<StreamArrayChunkReader<'next, R>> where Self: 'next;
+
+    fn next(self: &'_ mut Self) -> Option<Item<'_, Self>> {
+        let mut fb_vec = Vec::new();
+        let msg = self
             .read
-            .read_flatbuffer::<Message>(&mut self.scratch)
-            .unwrap()
-        {
-            None => return Ok(None),
-            Some(msg) => msg,
-        };
-        let _schema = msg
-            .header_as_schema()
-            .ok_or_else(|| {
-                VortexError::InvalidSerde("Expected IPC Schema as message header".into())
-            })
-            .unwrap();
-        todo!()
+            .read_flatbuffer::<Message>(&mut fb_vec)
+            .transpose();
+
+        if msg.is_none() {
+            // End of the stream
+            return None;
+        }
+        let msg = msg.unwrap();
+
+        // Invoke a closure that returns VortexResult<Option<Item>> so we can nicely transpose.
+        (move || {
+            let _schema = msg?
+                .header_as_schema()
+                .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Schema message".into()))?;
+            Ok(Some(StreamArrayChunkReader {
+                read: &mut self.read,
+                dtype: DType::Int(_32, Signed, Nullable),
+            }))
+        })()
+        .transpose()
     }
 }
 
-struct StreamArrayChunkReader<'a, R: Read> {
+pub struct StreamArrayChunkReader<'a, R: Read> {
     read: &'a mut R,
-    #[allow(dead_code)]
-    ctx: &'a IPCContext,
     dtype: DType,
 }
 
@@ -100,6 +115,7 @@ impl<'a, R: Read> Iterator for StreamArrayChunkReader<'a, R> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut buffer = Vec::new();
         let _msg = self.read.read_flatbuffer::<Message>(&mut buffer);
-        todo!()
+        print!("MSG {:?}", _msg);
+        None
     }
 }

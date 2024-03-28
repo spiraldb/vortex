@@ -44,19 +44,6 @@ impl WriteFlatBuffer for DType {
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
-        let dtype_type = match self {
-            DType::Null => fb::Type::Null,
-            DType::Bool(_) => fb::Type::Bool,
-            DType::Int(_, _, _) => fb::Type::Int,
-            DType::Decimal(_, _, _) => fb::Type::Decimal,
-            DType::Float(_, _) => fb::Type::Float,
-            DType::Utf8(_) => fb::Type::Utf8,
-            DType::Binary(_) => fb::Type::Binary,
-            DType::Struct(_, _) => fb::Type::Struct_,
-            DType::List(_, _) => fb::Type::List,
-            DType::Composite(_, _) => fb::Type::Composite,
-        };
-
         let dtype_union = match self {
             DType::Null => fb::Null::create(fbb, &fb::NullArgs {}).as_union_value(),
             DType::Bool(n) => fb::Bool::create(
@@ -82,6 +69,19 @@ impl WriteFlatBuffer for DType {
             DType::Struct(_, _) => todo!(),
             DType::List(_, _) => todo!(),
             DType::Composite(_, _) => todo!(),
+        };
+
+        let dtype_type = match self {
+            DType::Null => fb::Type::Null,
+            DType::Bool(_) => fb::Type::Bool,
+            DType::Int(_, _, _) => fb::Type::Int,
+            DType::Decimal(_, _, _) => fb::Type::Decimal,
+            DType::Float(_, _) => fb::Type::Float,
+            DType::Utf8(_) => fb::Type::Utf8,
+            DType::Binary(_) => fb::Type::Binary,
+            DType::Struct(_, _) => fb::Type::Struct_,
+            DType::List(_, _) => fb::Type::List,
+            DType::Composite(_, _) => fb::Type::Composite,
         };
 
         fb::DType::create(

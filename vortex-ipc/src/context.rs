@@ -6,8 +6,8 @@ use vortex::array::{find_encoding, EncodingRef, ENCODINGS};
 use vortex_error::VortexError;
 use vortex_flatbuffers::WriteFlatBuffer;
 
+#[derive(Debug)]
 pub struct IPCContext {
-    #[allow(dead_code)]
     encodings: Vec<EncodingRef>,
 }
 

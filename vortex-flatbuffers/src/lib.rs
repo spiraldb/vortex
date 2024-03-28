@@ -23,6 +23,7 @@ impl From<flatbuffers::InvalidFlatbuffer> for Error {
 }
 
 pub trait FlatBufferReader {
+    /// Returns Ok(None) if the reader has reached EOF.
     fn read_flatbuffer<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> Result<Option<F>>
     where
         F: 'a + Follow<'a, Inner = F> + Verifiable;
@@ -40,7 +41,9 @@ impl<R: Read> FlatBufferReader for R {
                 _ => Err(e.into()),
             };
         }
+
         let msg_size = u32::from_le_bytes(msg_size) as u64;
+        println!("Reading FB {}", msg_size);
         self.take(msg_size).read_to_end(buffer)?;
         Ok(Some(root::<F>(buffer)?))
     }
@@ -71,11 +74,11 @@ impl<W: Write> FlatBufferWriter for W {
     ) -> io::Result<usize> {
         let mut fbb = FlatBufferBuilder::new();
         let root = msg.write_flatbuffer(&mut fbb);
-        fbb.create_string("IPC");
         fbb.finish_minimal(root);
         let data = fbb.finished_data();
         let data_size: [u8; 4] = (data.len() as u32).to_le_bytes();
+        println!("Writing FB {}", data.len());
         self.write(&data_size)?;
-        self.write(fbb.finished_data())
+        self.write(data)
     }
 }

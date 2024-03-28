@@ -14,6 +14,9 @@ rust-version = { workspace = true }
 [dependencies]
 flatbuffers = { workspace = true }
 itertools = { workspace = true }
+lending-iterator = "0.1.7"
+nougat = "0.2.4"
+streaming-iterator = "0.1.9"
 vortex-array = { path = "../vortex-array" }
 vortex-error = { path = "../vortex-error", features = ["flatbuffers"] }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
@@ -24,4 +27,4 @@ flatc = { workspace = true }
 walkdir = { workspace = true }
 
 [lints]
-workspace = true
+# workspace = false

@@ -1,7 +1,10 @@
+extern crate core;
+
 use crate::context::IPCContext;
 use crate::flatbuffers::ipc as fb;
 use crate::writer::StreamWriter;
 use ::flatbuffers::{FlatBufferBuilder, WIPOffset};
+use lending_iterator::LendingIterator;
 use std::io::Write;
 use vortex_error::VortexError;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
@@ -65,7 +68,6 @@ impl WriteFlatBuffer for Message<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chunked::ArrayChunkReader;
     use crate::reader::StreamReader;
     use std::io::Cursor;
     use vortex::array::primitive::PrimitiveArray;
@@ -81,16 +83,15 @@ mod tests {
         cursor.flush().unwrap();
         cursor.set_position(0);
 
-        let mut reader = StreamReader::try_new_unbuffered(cursor).unwrap();
-        let array_chunk_reader: &mut dyn ArrayChunkReader = reader.next_array().unwrap().unwrap();
-        println!("Array Chunk Reader: {:?}", array_chunk_reader.dtype());
-
-        // let array_chunk = array_chunk_reader.next().unwrap().unwrap();
-        // println!("Array: {:?}", display_tree(&array_chunk));
-
-        // let msg = "Hello, World!";
-        //cursor.write_flatbuffer(&ctx).unwrap();
-        // cursor.write_all(msg.as_bytes()).unwrap();
-        // cursor.flush().unwrap();s
+        let mut ipc_reader = StreamReader::try_new_unbuffered(cursor).unwrap();
+        println!("CTX {:?}", ipc_reader.ctx);
+        while let Some(chunk_reader) = ipc_reader.next() {
+            match chunk_reader {
+                Ok(_c) => println!("OK"),
+                Err(e) => println!("Error: {:?}", e),
+            }
+            // let chunk = chunk_reader.next().unwrap();
+            // println!("Array Chunk Reader: {:?}", chunk.dtype());
+        }
     }
 }
