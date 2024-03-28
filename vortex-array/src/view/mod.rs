@@ -63,7 +63,7 @@ impl<'a> ArrayView<'a> {
         self.array.metadata().map(|m| m.bytes())
     }
 
-    pub fn child(&self, idx: usize) -> Option<ArrayView<'a>> {
+    pub fn child(&self, idx: usize, dtype: DType) -> Option<ArrayView<'a>> {
         let child = self.array_child(idx)?;
 
         // Figure out how many buffers to skip...
@@ -77,8 +77,6 @@ impl<'a> ArrayView<'a> {
             .sum();
         let buffer_count = child.buffers().unwrap_or_default().len();
 
-        // Child DType?
-        let dtype = self.vtable.child_dtype(self, idx)?;
         Some(ArrayView {
             encoding: self.encoding,
             vtable: self.vtable,
@@ -139,38 +137,41 @@ impl<'view, E: Encoding> TypedArrayView<'view, E> {
 }
 
 pub trait ArrayViewVTable<'view>: Send + Sync {
+    fn to_array(&self, view: &ArrayView<'view>) -> ArrayRef;
     fn len(&self, view: &ArrayView<'view>) -> usize;
-    fn child_dtype(&self, view: &ArrayView<'view>, idx: usize) -> Option<DType>;
+    fn is_empty(&self, view: &ArrayView<'view>) -> bool {
+        self.len(view) == 0
+    }
 }
 
 impl<'view, E: Encoding> ArrayViewVTable<'view> for E
 where
     TypedArrayView<'view, E>: Array,
 {
-    fn len(&self, data: &ArrayView<'view>) -> usize {
-        data.as_typed::<E>().len()
+    fn to_array(&self, view: &ArrayView<'view>) -> ArrayRef {
+        view.as_typed::<E>().to_array()
     }
 
-    fn child_dtype(&self, data: &ArrayView<'view>, idx: usize) -> Option<DType> {
-        data.as_typed::<E>().child_dtype(idx)
+    fn len(&self, view: &ArrayView<'view>) -> usize {
+        view.as_typed::<E>().len()
     }
 }
 
 impl<'a> Array for ArrayView<'a> {
     fn as_any(&self) -> &dyn Any {
-        todo!()
+        panic!("Not implemented for ArrayView")
     }
 
     fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
-        todo!()
+        panic!("Not implemented for ArrayView")
     }
 
     fn to_array(&self) -> ArrayRef {
-        todo!()
+        self.vtable.to_array(self)
     }
 
     fn into_array(self) -> ArrayRef {
-        todo!()
+        unreachable!()
     }
 
     fn len(&self) -> usize {
@@ -178,7 +179,7 @@ impl<'a> Array for ArrayView<'a> {
     }
 
     fn is_empty(&self) -> bool {
-        todo!()
+        self.vtable.is_empty(self)
     }
 
     fn dtype(&self) -> &DType {
@@ -186,6 +187,7 @@ impl<'a> Array for ArrayView<'a> {
     }
 
     fn stats(&self) -> Stats {
+        // TODO(ngates): implement a dynamic trait for stats?
         todo!()
     }
 
