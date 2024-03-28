@@ -42,7 +42,7 @@ impl PrimitiveView<'_> {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        self.view().buffers().get(0).expect("Missing buffer")
+        self.view().buffers().first().expect("Missing buffer")
     }
 }
 

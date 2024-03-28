@@ -101,7 +101,7 @@ impl<'a> ArrayView<'a> {
     }
 
     /// The number of buffers used by the current Array and all its children.
-    fn cumulative_nbuffers<'b>(array: fb::Array<'b>) -> usize {
+    fn cumulative_nbuffers(array: fb::Array) -> usize {
         let mut nbuffers = array.buffers().unwrap_or_default().len();
         for child in array.children().unwrap_or_default() {
             nbuffers += Self::cumulative_nbuffers(child);
@@ -123,7 +123,6 @@ impl<'a> ArrayView<'a> {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct TypedArrayView<'view, E: Encoding> {
     view: ArrayView<'view>,
@@ -214,13 +213,13 @@ impl<'a> ArrayValidity for ArrayView<'a> {
 
 impl<'a> ArrayDisplay for ArrayView<'a> {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
-        fmt.property("encoding", &self.encoding)?;
+        fmt.property("encoding", self.encoding)?;
         fmt.property("dtype", &self.dtype)?;
         fmt.property("metadata", format!("{:?}", self.array.metadata()))?;
-        for (_i, _child) in self.array.children().unwrap_or_default().iter().enumerate() {
-            // TODO(ngates): children?
-            // fmt.child(&format!("{}", i), &child)?;
-        }
+        // for (_i, _child) in self.array.children().unwrap_or_default().iter().enumerate() {
+        //     // TODO(ngates): children?
+        //     // fmt.child(&format!("{}", i), &child)?;
+        // }
         Ok(())
     }
 }
