@@ -1,4 +1,3 @@
-use crate::array::ArrayView;
 use crate::context::IPCContext;
 use crate::flatbuffers::ipc::Message;
 use arrow_buffer::Buffer;
@@ -6,6 +5,7 @@ use flatbuffers::root;
 use lending_iterator::prelude::*;
 use std::io;
 use std::io::{BufReader, Read};
+use vortex::view::ArrayView;
 use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::FlatBufferReader;
 use vortex_schema::DType;
@@ -192,12 +192,15 @@ impl<'a, R: Read> LendingIterator for StreamArrayChunkReader<'a, R> {
                 io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
             });
 
-        Some(Ok(ArrayView {
-            ctx: self.ctx,
-            array: col_array,
-            fb_buffer: &self.fb_buffer,
-            buffers: &self.buffers,
-        }))
+        let encoding = self.ctx.find_encoding(col_array.encoding()).unwrap();
+
+        Some(ArrayView::try_new(
+            encoding,
+            // FIXME(ngates): avoid this clone?
+            self.dtype.clone(),
+            col_array,
+            &self.buffers,
+        ))
     }
 }
 
@@ -213,9 +216,3 @@ pub fn read_into<R: Read>(read: &mut R, buffer: &mut Vec<u8>) -> VortexResult<()
 
     Ok(())
 }
-
-// impl<R: Read> ArrayViewChunkReader for StreamArrayChunkReader<'_, R> {
-//     fn dtype(&self) -> &DType {
-//         &self.dtype
-//     }
-// }

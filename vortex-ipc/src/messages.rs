@@ -1,9 +1,9 @@
 use crate::context::IPCContext;
 use crate::flatbuffers::ipc as fb;
-use crate::flatbuffers::ipc::Compression;
 use crate::ALIGNMENT;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
+use vortex::flatbuffers::array as fba;
 use vortex::serde::data::ColumnData;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 use vortex_schema::DType;
@@ -44,7 +44,6 @@ impl WriteFlatBuffer for IPCMessage<'_> {
             Self::ChunkColumn(_) => fb::MessageHeader::ChunkColumn,
         });
         msg.add_header(header);
-        msg.add_body_len(0);
         msg.finish()
     }
 }
@@ -115,7 +114,7 @@ impl<'a> WriteFlatBuffer for IPCChunkColumn<'a> {
 }
 
 impl<'a> WriteFlatBuffer for IPCArray<'a> {
-    type Target<'t> = fb::VortexArray<'t>;
+    type Target<'t> = fba::Array<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -143,13 +142,14 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
         let buffers = column_data
             .buffers()
             .iter()
-            .map(|buffer| fb::Buffer::new(buffer.len() as u64, Compression::None))
+            .map(|buffer| fba::Buffer::new(buffer.len() as u64, fba::Compression::None))
             .collect_vec();
         let buffers = Some(fbb.create_vector(&buffers));
 
-        fb::VortexArray::create(
+        fba::Array::create(
             fbb,
-            &fb::VortexArrayArgs {
+            &fba::ArrayArgs {
+                version: Default::default(),
                 encoding,
                 metadata,
                 children,

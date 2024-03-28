@@ -32,7 +32,7 @@ fn main() {
         .arg("-I")
         .arg(flatbuffers_dir.join("../../"))
         .arg("--include-prefix")
-        .arg("flatbuffers_deps")
+        .arg("flatbuffers::deps")
         .arg("-o")
         .arg(out_dir.join("flatbuffers"))
         .args(fbs_files)

@@ -23,6 +23,7 @@ allocator-api2 = { workspace = true }
 arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
 arrow-schema = { workspace = true }
+flatbuffers = { workspace = true }
 half = { workspace = true }
 humansize = { workspace = true }
 itertools = { workspace = true }
@@ -37,3 +38,7 @@ thiserror = { workspace = true }
 vortex-alloc = { path = "../vortex-alloc" }
 vortex-error = { path = "../vortex-error" }
 vortex-schema = { path = "../vortex-schema" }
+
+[build-dependencies]
+flatc = { workspace = true }
+walkdir = { workspace = true }

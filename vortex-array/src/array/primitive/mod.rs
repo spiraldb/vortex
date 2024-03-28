@@ -23,10 +23,12 @@ use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
+use crate::view::ArrayViewVTable;
 
 mod compute;
 mod serde;
 mod stats;
+mod view;
 
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {
@@ -243,6 +245,10 @@ impl Encoding for PrimitiveEncoding {
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
+        Some(self)
+    }
+
+    fn view_vtable(&self) -> Option<&dyn ArrayViewVTable> {
         Some(self)
     }
 }

@@ -15,3 +15,17 @@ mod sampling;
 pub mod serde;
 pub mod stats;
 pub mod validity;
+
+pub mod view;
+
+pub mod flatbuffers {
+    pub use generated::vortex::*;
+
+    #[allow(unused_imports)]
+    #[allow(dead_code)]
+    #[allow(non_camel_case_types)]
+    #[allow(clippy::all)]
+    mod generated {
+        include!(concat!(env!("OUT_DIR"), "/flatbuffers/array.rs"));
+    }
+}

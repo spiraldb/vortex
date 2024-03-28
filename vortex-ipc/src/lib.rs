@@ -1,7 +1,5 @@
 extern crate core;
 
-use std::io::Write;
-
 use lending_iterator::LendingIterator;
 
 use vortex_error::VortexError;
@@ -21,16 +19,16 @@ pub mod flatbuffers {
     mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/message.rs"));
     }
-}
 
-pub(crate) mod flatbuffers_deps {
-    pub mod dtype {
-        pub use vortex_schema::flatbuffers as dtype;
+    mod deps {
+        pub mod array {
+            pub use vortex::flatbuffers::array;
+        }
+        pub mod dtype {
+            pub use vortex_schema::flatbuffers as dtype;
+        }
     }
 }
-
-mod array;
-pub use array::*;
 
 mod chunked;
 pub mod context;
@@ -44,7 +42,7 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::io::{Cursor, Write};
 
     use vortex::array::primitive::PrimitiveArray;
     use vortex::formatter::display_tree;

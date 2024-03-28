@@ -1,3 +1,4 @@
+include "vortex-array/flatbuffers/array.fbs";
 include "vortex-schema/flatbuffers/dtype.fbs";
 
 namespace vortex.ipc;
@@ -27,20 +28,8 @@ enum Compression: uint8 {
     None = 0,
 }
 
-struct Buffer {
-    length: uint64;
-    compression: Compression;
-}
-
-table VortexArray {
-    encoding: uint16;
-    metadata: [ubyte];
-    children: [VortexArray];
-    buffers: [Buffer];
-}
-
 table ChunkColumn {
-    array: VortexArray;
+    array: vortex.array.Array;
     buffer_offsets: [uint64];
 }
 
@@ -52,9 +41,8 @@ union MessageHeader {
 }
 
 table Message {
-  version: Version;
+  version: Version = V0;
   header: MessageHeader;
-  body_len: long;
 }
 
 root_type Message;

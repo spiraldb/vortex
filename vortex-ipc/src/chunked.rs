@@ -9,6 +9,7 @@ pub trait ArrayChunkReader: Iterator<Item = VortexResult<ArrayRef>> {
     fn dtype(&self) -> &DType;
 }
 
+#[allow(dead_code)]
 pub trait ArrayViewChunkReader: LendingIteratorDyn<Item = HKT!(VortexResult<&dyn Array>)> {
     fn dtype(&self) -> &DType;
 }
