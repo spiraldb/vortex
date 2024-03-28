@@ -10,7 +10,7 @@ use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
-use vortex_error::VortexResult;
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
 mod compress;
@@ -27,7 +27,12 @@ pub struct FoRArray {
 
 impl FoRArray {
     pub fn try_new(child: ArrayRef, reference: Scalar, shift: u8) -> VortexResult<Self> {
-        // TODO(ngates): check the dtype of reference == child.dtype()
+        if reference.is_null() {
+            return Err(VortexError::InvalidArgument(
+                "Reference value cannot be null".into(),
+            ));
+        }
+        let reference = reference.cast(child.dtype())?;
         Ok(Self {
             encoded: child,
             reference,

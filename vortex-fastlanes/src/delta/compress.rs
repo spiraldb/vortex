@@ -16,6 +16,7 @@ use vortex::validity::ArrayValidity;
 use vortex::validity::Validity;
 use vortex_error::VortexResult;
 
+use crate::downcast::DowncastFastlanes;
 use crate::{DeltaArray, DeltaEncoding};
 
 impl EncodingCompression for DeltaEncoding {
@@ -42,7 +43,7 @@ impl EncodingCompression for DeltaEncoding {
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let parray = array.as_primitive();
-        let like_delta = like.map(|l| l.as_any().downcast_ref::<DeltaArray>().unwrap());
+        let like_delta = like.map(|l| l.as_delta());
 
         let validity = ctx.compress_validity(parray.validity())?;
 
@@ -219,7 +220,7 @@ mod test {
             .unwrap();
 
         assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
-        let delta = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
+        let delta = compressed.as_delta();
 
         let decompressed = decompress(delta).unwrap();
         let decompressed_slice = decompressed.typed_data::<T>();

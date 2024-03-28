@@ -10,6 +10,7 @@ use vortex::encoding::{EncodingRef, ENCODINGS};
 
 mod bitpacking;
 mod delta;
+mod downcast;
 mod r#for;
 
 #[distributed_slice(ENCODINGS)]

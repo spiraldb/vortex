@@ -52,7 +52,7 @@ pub fn taxi_data_lance() -> PathBuf {
     .unwrap()
 }
 
-pub fn taxi_data_vortex() -> PathBuf {
+pub fn taxi_data_vortex_uncompressed() -> PathBuf {
     idempotent("taxi-uncompressed.vortex", |path| {
         let taxi_pq = File::open(download_taxi_data()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq).unwrap();
@@ -76,7 +76,7 @@ pub fn taxi_data_vortex() -> PathBuf {
     .unwrap()
 }
 
-pub fn taxi_data_vortex_compressed() -> PathBuf {
+pub fn taxi_data_vortex() -> PathBuf {
     idempotent("taxi.vortex", |path| {
         let mut write = File::create(path).unwrap();
         compress_vortex(&taxi_data_parquet(), &mut write)
