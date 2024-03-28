@@ -36,7 +36,6 @@ pub enum VortexError {
     #[error(transparent)]
     IOError(IOError),
 
-    #[cfg(feature = "flatbuffers")]
     #[error(transparent)]
     FlatBufferError(FlatBufferError),
 
@@ -92,7 +91,6 @@ macro_rules! wrapped_error {
 wrapped_error!(arrow_schema::ArrowError, ArrowError);
 wrapped_error!(io::Error, IOError);
 
-#[cfg(feature = "flatbuffers")]
 wrapped_error!(flatbuffers::InvalidFlatbuffer, FlatBufferError);
 
 #[cfg(feature = "parquet")]
