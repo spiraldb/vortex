@@ -74,15 +74,17 @@ canonical representations of each of the logical data types. The canonical encod
 
 ### Compressed Encodings
 
-Vortex includes a set of compressed encodings that can hold compression in-memory arrays allowing us to defer
-compression. These are:
+Vortex includes a set of highly data-parallel, vectorized encodings. We can hold these compressed arrays in-memory, allowing us to defer
+decompression. Currently, these are:
 
-* BitPacked
+* Adaptive Lossless Floating Point (ALP)
+* BitPacked (FastLanes)
 * Constant
 * Chunked
+* Delta (FastLanes)
 * Dictionary
 * Frame-of-Reference
-* Run-end
+* Run-end Encoding
 * RoaringUInt
 * RoaringBool
 * Sparse
@@ -90,8 +92,8 @@ compression. These are:
 
 ### Compression
 
-Vortex's compression scheme is based on
-the [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
+Vortex's top-level compression strategy is based on the 
+[BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
 
 Roughly, for each chunk of data, a sample of at least ~1% of the data is taken. Compression is then attempted (
 recursively) with a set of lightweight encodings. The best-performing combination of encodings is then chosen to encode
@@ -135,13 +137,13 @@ Vortex serde is currently in the design phase. The goals of this implementation 
 * Forward statistical information (such as sortedness) to consumers.
 * To provide a building block for file format authors to store compressed array data.
 
-## Vs Apache Arrow
+## Integration with Apache Arrow
 
-It is important to note that Vortex and Arrow have different design goals. As such, it is somewhat
-unfair to make any comparison at all. But given both can be used as array libraries, it is worth noting the differences.
+Apache Arrow is the de facto standard for interoperating on columnar array data. Naturally, Vortex is designed to
+be maximally compatible with Apache Arrow. All Arrow arrays can be converted into Vortex arrays with zero-copy,
+and a Vortex array constructed from an Arrow array can be converted back to Arrow, again with zero-copy.
 
-Vortex is designed to be maximally compatible with Apache Arrow. All Arrow arrays can be converted into Vortex arrays
-with zero-copy, and a Vortex array constructed from an Arrow array can be converted back to Arrow, again with zero-copy.
+It is important to note that Vortex and Arrow have different--albeit complementary--goals.
 
 Vortex explicitly separates logical types from physical encodings, distinguishing it from Arrow. This allows
 Vortex to model more complex arrays while still exposing a logical interface. For example, Vortex can model a UTF8
