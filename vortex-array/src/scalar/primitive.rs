@@ -266,10 +266,7 @@ pscalar!(f64, F64);
 
 impl<T: NativePType> From<Option<T>> for Scalar {
     fn from(value: Option<T>) -> Self {
-        match value {
-            Some(value) => PrimitiveScalar::some::<T>(value).into(),
-            None => PrimitiveScalar::none::<T>().into(),
-        }
+        PrimitiveScalar::nullable(value).into()
     }
 }
 

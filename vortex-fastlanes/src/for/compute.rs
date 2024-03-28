@@ -48,9 +48,10 @@ impl ScalarAtFn for FoRArray {
             (Scalar::Primitive(p), Scalar::Primitive(r)) => match p.value() {
                 None => Ok(encoded_scalar),
                 Some(pv) => match_each_integer_ptype!(pv.ptype(), |$P| {
-                    Ok(PrimitiveScalar::some::<$P>(
-                        (p.typed_value::<$P>().unwrap() << self.shift()) + r.typed_value::<$P>().unwrap(),
-                    ).into())
+                    Ok(PrimitiveScalar::try_new::<$P>(
+                        Some((p.typed_value::<$P>().unwrap() << self.shift()) + r.typed_value::<$P>().unwrap()),
+                        p.dtype().nullability()
+                    ).unwrap().into())
                 }),
             },
             _ => unreachable!("Reference and encoded values had different dtypes"),

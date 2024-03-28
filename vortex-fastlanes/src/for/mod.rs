@@ -30,12 +30,7 @@ impl FoRArray {
                 "Reference value cannot be null".into(),
             ));
         }
-        if child.dtype() != reference.dtype() {
-            return Err(VortexError::MismatchedTypes(
-                child.dtype().clone(),
-                reference.dtype().clone(),
-            ));
-        }
+        let reference = reference.cast(child.dtype())?;
         Ok(Self {
             encoded: child,
             reference,
