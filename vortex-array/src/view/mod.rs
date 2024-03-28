@@ -63,8 +63,57 @@ impl<'a> ArrayView<'a> {
         self.array.metadata().map(|m| m.bytes())
     }
 
+    pub fn child(&self, idx: usize) -> Option<ArrayView<'a>> {
+        let child = self.array_child(idx)?;
+
+        // Figure out how many buffers to skip...
+        // We store them depth-first.
+        let buffer_offset = self
+            .array
+            .children()?
+            .iter()
+            .take(idx)
+            .map(|child| Self::cumulative_nbuffers(child))
+            .sum();
+        let buffer_count = child.buffers().unwrap_or_default().len();
+
+        // Child DType?
+        let dtype = self.vtable.child_dtype(self, idx)?;
+        Some(ArrayView {
+            encoding: self.encoding,
+            vtable: self.vtable,
+            dtype,
+            array: child,
+            buffers: &self.buffers[buffer_offset..][0..buffer_count],
+        })
+    }
+
+    fn array_child(&self, idx: usize) -> Option<fb::Array<'a>> {
+        let children = self.array.children()?;
+        if idx < children.len() {
+            Some(children.get(idx))
+        } else {
+            None
+        }
+    }
+
+    /// The number of buffers used by the current Array.
+    pub fn nbuffers(&self) -> usize {
+        self.array.buffers().unwrap_or_default().len()
+    }
+
+    /// The number of buffers used by the current Array and all its children.
+    fn cumulative_nbuffers<'b>(array: fb::Array<'b>) -> usize {
+        let mut nbuffers = array.buffers().unwrap_or_default().len();
+        for child in array.children().unwrap_or_default() {
+            nbuffers += Self::cumulative_nbuffers(child);
+        }
+        nbuffers
+    }
+
     pub fn buffers(&self) -> &'a [Buffer] {
-        self.buffers
+        // This is only true for the immediate current node?
+        &self.buffers[0..self.nbuffers()]
     }
 
     pub fn as_typed<E: Encoding>(&self) -> TypedArrayView<'a, E> {
@@ -91,6 +140,7 @@ impl<'view, E: Encoding> TypedArrayView<'view, E> {
 
 pub trait ArrayViewVTable<'view>: Send + Sync {
     fn len(&self, view: &ArrayView<'view>) -> usize;
+    fn child_dtype(&self, view: &ArrayView<'view>, idx: usize) -> Option<DType>;
 }
 
 impl<'view, E: Encoding> ArrayViewVTable<'view> for E
@@ -99,6 +149,10 @@ where
 {
     fn len(&self, data: &ArrayView<'view>) -> usize {
         data.as_typed::<E>().len()
+    }
+
+    fn child_dtype(&self, data: &ArrayView<'view>, idx: usize) -> Option<DType> {
+        data.as_typed::<E>().child_dtype(idx)
     }
 }
 

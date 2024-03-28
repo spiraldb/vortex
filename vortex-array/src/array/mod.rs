@@ -74,6 +74,10 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
 
+    fn child_dtype(&self, _idx: usize) -> Option<DType> {
+        todo!("Child dtype not yet implemented for {}", self.encoding())
+    }
+
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         todo!("Walk not yet implemented for {}", self.encoding())
     }
