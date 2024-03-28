@@ -1,4 +1,4 @@
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::Nullability;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -10,7 +10,7 @@ pub struct ScalarValue<T> {
 impl<T> ScalarValue<T> {
     pub fn try_new(value: Option<T>, nullability: Nullability) -> VortexResult<Self> {
         if value.is_none() && nullability == Nullability::NonNullable {
-            return Err("Value cannot be None for NonNullable Scalar".into());
+            vortex_bail!("Value cannot be None for NonNullable Scalar");
         }
         Ok(Self { value, nullability })
     }

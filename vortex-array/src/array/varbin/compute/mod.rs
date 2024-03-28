@@ -1,5 +1,3 @@
-mod take;
-
 use std::sync::Arc;
 
 use arrow_array::{
@@ -7,7 +5,7 @@ use arrow_array::{
 };
 use itertools::Itertools;
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::downcast::DowncastArrayBuiltin;
@@ -25,6 +23,8 @@ use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 use crate::validity::{ArrayValidity, Validity};
+
+mod take;
 
 impl ArrayCompute for VarBinArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -132,7 +132,7 @@ impl AsArrowArray for VarBinArray {
                 )),
                 _ => panic!("Invalid offsets type"),
             },
-            _ => return Err(VortexError::InvalidDType(self.dtype().clone())),
+            _ => vortex_bail!(mt = "Utf8 or Binary", self.dtype()),
         })
     }
 }

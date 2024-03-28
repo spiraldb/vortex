@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 use vortex_schema::Nullability::{NonNullable, Nullable};
 
@@ -38,12 +38,11 @@ impl TryFrom<Scalar> for Vec<u8> {
 
     fn try_from(value: Scalar) -> VortexResult<Self> {
         let Scalar::Binary(b) = value else {
-            return Err(VortexError::InvalidDType(value.dtype().clone()));
+            vortex_bail!(mt = "Binary", value.dtype());
         };
-        let dtype = b.dtype().clone();
         b.value()
             .cloned()
-            .ok_or_else(|| VortexError::InvalidDType(dtype))
+            .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
     }
 }
 

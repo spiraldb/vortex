@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 pub use localdatetime::*;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::serde::BytesSerde;
 
@@ -37,7 +37,7 @@ impl BytesSerde for TimeUnit {
             0x01 => Ok(TimeUnit::Us),
             0x02 => Ok(TimeUnit::Ms),
             0x03 => Ok(TimeUnit::S),
-            _ => Err("Unknown timeunit variant".into()),
+            _ => Err(vortex_err!("Unknown timeunit variant")),
         }
     }
 }

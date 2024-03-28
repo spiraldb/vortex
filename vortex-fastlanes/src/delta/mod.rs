@@ -7,7 +7,7 @@ use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, match_each_integer_ptype};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 mod compress;
@@ -31,24 +31,18 @@ impl DeltaArray {
         validity: Option<Validity>,
     ) -> VortexResult<Self> {
         if bases.dtype() != deltas.dtype() {
-            return Err(VortexError::InvalidArgument(
-                format!(
-                    "DeltaArray: bases and deltas must have the same dtype, got {:?} and {:?}",
-                    bases.dtype(),
-                    deltas.dtype()
-                )
-                .into(),
-            ));
+            vortex_bail!(
+                "DeltaArray: bases and deltas must have the same dtype, got {:?} and {:?}",
+                bases.dtype(),
+                deltas.dtype()
+            );
         }
         if deltas.len() != len {
-            return Err(VortexError::InvalidArgument(
-                format!(
-                    "DeltaArray: provided deltas array of len {} does not match array len {}",
-                    deltas.len(),
-                    len
-                )
-                .into(),
-            ));
+            vortex_bail!(
+                "DeltaArray: provided deltas array of len {} does not match array len {}",
+                deltas.len(),
+                len
+            );
         }
 
         let delta = Self {
@@ -65,16 +59,13 @@ impl DeltaArray {
             num_chunks * delta.lanes() + remainder_base_size
         };
         if delta.bases.len() != expected_bases_len {
-            return Err(VortexError::InvalidArgument(
-                format!(
-                    "DeltaArray: bases.len() ({}) != expected_bases_len ({}), based on len ({}) and lane count ({})",
-                    delta.bases.len(),
-                    expected_bases_len,
-                    len,
-                    delta.lanes()
-                )
-                .into(),
-            ));
+            vortex_bail!(
+                "DeltaArray: bases.len() ({}) != expected_bases_len ({}), based on len ({}) and lane count ({})",
+                delta.bases.len(),
+                expected_bases_len,
+                len,
+                delta.lanes()
+            );
         }
         Ok(delta)
     }

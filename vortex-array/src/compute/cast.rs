@@ -1,4 +1,4 @@
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::{Array, ArrayRef};
@@ -13,10 +13,8 @@ pub fn cast(array: &dyn Array, dtype: &DType) -> VortexResult<ArrayRef> {
     }
 
     // TODO(ngates): check for null_count if dtype is non-nullable
-    array.cast().map(|f| f.cast(dtype)).unwrap_or_else(|| {
-        Err(VortexError::NotImplemented(
-            "cast",
-            array.encoding().id().name(),
-        ))
-    })
+    array
+        .cast()
+        .map(|f| f.cast(dtype))
+        .unwrap_or_else(|| Err(vortex_err!(ni = "cast", array.encoding().id().name())))
 }

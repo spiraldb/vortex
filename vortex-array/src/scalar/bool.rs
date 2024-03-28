@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::scalar::value::ScalarValue;
@@ -20,7 +20,7 @@ impl BoolScalar {
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
         match dtype {
             DType::Bool(_) => Ok(self.clone().into()),
-            _ => Err(VortexError::InvalidDType(dtype.clone())),
+            _ => Err(vortex_err!(mt = "Bool", dtype)),
         }
     }
 
@@ -36,16 +36,28 @@ impl From<bool> for Scalar {
     }
 }
 
+impl TryFrom<&Scalar> for bool {
+    type Error = VortexError;
+
+    fn try_from(value: &Scalar) -> VortexResult<Self> {
+        let Scalar::Bool(b) = value else {
+            vortex_bail!(mt = "Bool", value.dtype());
+        };
+        b.value()
+            .cloned()
+            .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
+    }
+}
+
 impl TryFrom<Scalar> for bool {
     type Error = VortexError;
 
     fn try_from(value: Scalar) -> VortexResult<Self> {
         let Scalar::Bool(b) = value else {
-            return Err(VortexError::InvalidDType(value.dtype().clone()));
+            vortex_bail!(mt = "Bool", value.dtype());
         };
-        b.value()
-            .cloned()
-            .ok_or_else(|| VortexError::InvalidDType(b.dtype().clone()))
+        b.into_value()
+            .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
     }
 }
 
@@ -65,6 +77,6 @@ mod test {
     #[test]
     fn into_from() {
         let scalar: Scalar = false.into();
-        assert_eq!(scalar.try_into(), Ok(false));
+        assert!(!bool::try_from(scalar).unwrap());
     }
 }

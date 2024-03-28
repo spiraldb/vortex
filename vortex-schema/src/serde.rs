@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
+use vortex_error::{vortex_err, VortexError, VortexResult};
 
 use crate::generated::{
     root_as_dtype, Bool, BoolArgs, Composite, CompositeArgs, Int, IntArgs, List, ListArgs, Null,
@@ -11,9 +12,7 @@ use crate::generated::{DType as FbDType, DTypeArgs};
 use crate::generated::{Decimal, DecimalArgs, FloatWidth as FbFloatWidth};
 use crate::generated::{Float, FloatArgs, IntWidth as FbIntWidth};
 use crate::generated::{Nullability as FbNullability, Utf8, Utf8Args};
-use crate::{
-    CompositeID, DType, FloatWidth, IntWidth, Nullability, SchemaError, SchemaResult, Signedness,
-};
+use crate::{CompositeID, DType, FloatWidth, IntWidth, Nullability, Signedness};
 
 pub trait FbSerialize<'a> {
     type OffsetType;
@@ -33,12 +32,12 @@ pub trait FbSerialize<'a> {
 pub trait FbDeserialize<'a>: Sized {
     type OffsetType;
 
-    fn deserialize(bytes: &[u8], find_id: fn(&str) -> Option<CompositeID>) -> SchemaResult<Self>;
+    fn deserialize(bytes: &[u8], find_id: fn(&str) -> Option<CompositeID>) -> VortexResult<Self>;
 
     fn convert_from_fb(
         fb_type: Self::OffsetType,
         find_id: fn(&str) -> Option<CompositeID>,
-    ) -> SchemaResult<Self>;
+    ) -> VortexResult<Self>;
 }
 
 impl<'a> FbSerialize<'a> for DType {
@@ -188,18 +187,16 @@ impl<'a> FbSerialize<'a> for DType {
 impl<'a> FbDeserialize<'a> for DType {
     type OffsetType = FbDType<'a>;
 
-    fn deserialize(bytes: &[u8], find_id: fn(&str) -> Option<CompositeID>) -> SchemaResult<Self> {
+    fn deserialize(bytes: &[u8], find_id: fn(&str) -> Option<CompositeID>) -> VortexResult<Self> {
         root_as_dtype(bytes)
-            .map_err(|e| {
-                SchemaError::InvalidArgument(format!("Unable to read bytes as DType: {}", e).into())
-            })
+            .map_err(|e| vortex_err!("Unable to read bytes as DType: {}", e))
             .and_then(|d| Self::convert_from_fb(d, find_id))
     }
 
     fn convert_from_fb(
         fb_type: Self::OffsetType,
         find_id: fn(&str) -> Option<CompositeID>,
-    ) -> SchemaResult<Self> {
+    ) -> VortexResult<Self> {
         match fb_type.type_type() {
             Type::Null => Ok(DType::Null),
             Type::Bool => Ok(DType::Bool(
@@ -260,17 +257,16 @@ impl<'a> FbDeserialize<'a> for DType {
                     .unwrap()
                     .iter()
                     .map(|f| DType::convert_from_fb(f, find_id))
-                    .collect::<SchemaResult<Vec<_>>>()?;
+                    .collect::<VortexResult<Vec<_>>>()?;
                 Ok(DType::Struct(names, fields))
             }
             Type::Composite => {
                 let fb_composite = fb_type.type__as_composite().unwrap();
-                let id = find_id(fb_composite.id().unwrap()).ok_or_else(|| {
-                    SchemaError::InvalidArgument("Couldn't find composite id".into())
-                })?;
+                let id = find_id(fb_composite.id().unwrap())
+                    .ok_or_else(|| vortex_err!("Couldn't find composite id"))?;
                 Ok(DType::Composite(id, fb_composite.nullability().try_into()?))
             }
-            _ => Err(SchemaError::InvalidArgument("Unknown DType variant".into())),
+            _ => Err(vortex_err!("Unknown DType variant")),
         }
     }
 }
@@ -285,15 +281,13 @@ impl From<&Nullability> for FbNullability {
 }
 
 impl TryFrom<FbNullability> for Nullability {
-    type Error = SchemaError;
+    type Error = VortexError;
 
-    fn try_from(value: FbNullability) -> SchemaResult<Self> {
+    fn try_from(value: FbNullability) -> VortexResult<Self> {
         match value {
             FbNullability::NonNullable => Ok(Nullability::NonNullable),
             FbNullability::Nullable => Ok(Nullability::Nullable),
-            _ => Err(SchemaError::InvalidArgument(
-                "Unknown nullability value".into(),
-            )),
+            _ => Err(vortex_err!("Unknown nullability value")),
         }
     }
 }
@@ -310,17 +304,15 @@ impl From<&IntWidth> for FbIntWidth {
 }
 
 impl TryFrom<FbIntWidth> for IntWidth {
-    type Error = SchemaError;
+    type Error = VortexError;
 
-    fn try_from(value: FbIntWidth) -> SchemaResult<Self> {
+    fn try_from(value: FbIntWidth) -> VortexResult<Self> {
         match value {
             FbIntWidth::_8 => Ok(IntWidth::_8),
             FbIntWidth::_16 => Ok(IntWidth::_16),
             FbIntWidth::_32 => Ok(IntWidth::_32),
             FbIntWidth::_64 => Ok(IntWidth::_64),
-            _ => Err(SchemaError::InvalidArgument(
-                "Unknown IntWidth value".into(),
-            )),
+            _ => Err(vortex_err!("Unknown IntWidth value")),
         }
     }
 }
@@ -335,15 +327,13 @@ impl From<&Signedness> for FbSignedness {
 }
 
 impl TryFrom<FbSignedness> for Signedness {
-    type Error = SchemaError;
+    type Error = VortexError;
 
-    fn try_from(value: FbSignedness) -> SchemaResult<Self> {
+    fn try_from(value: FbSignedness) -> VortexResult<Self> {
         match value {
             FbSignedness::Unsigned => Ok(Signedness::Unsigned),
             FbSignedness::Signed => Ok(Signedness::Signed),
-            _ => Err(SchemaError::InvalidArgument(
-                "Unknown Signedness value".into(),
-            )),
+            _ => Err(vortex_err!("Unknown Signedness value")),
         }
     }
 }
@@ -359,16 +349,14 @@ impl From<&FloatWidth> for FbFloatWidth {
 }
 
 impl TryFrom<FbFloatWidth> for FloatWidth {
-    type Error = SchemaError;
+    type Error = VortexError;
 
-    fn try_from(value: FbFloatWidth) -> SchemaResult<Self> {
+    fn try_from(value: FbFloatWidth) -> VortexResult<Self> {
         match value {
             FbFloatWidth::_16 => Ok(FloatWidth::_16),
             FbFloatWidth::_32 => Ok(FloatWidth::_32),
             FbFloatWidth::_64 => Ok(FloatWidth::_64),
-            _ => Err(SchemaError::InvalidArgument(
-                "Unknown IntWidth value".into(),
-            )),
+            _ => Err(vortex_err!("Unknown IntWidth value")),
         }
     }
 }
@@ -404,7 +392,10 @@ mod test {
             Nullability::NonNullable,
         ));
         roundtrip_dtype(DType::Struct(
-            vec![Arc::new("strings".into()), Arc::new("ints".into())],
+            vec![
+                Arc::new("strings".to_string()),
+                Arc::new("ints".to_string()),
+            ],
             vec![
                 DType::Utf8(Nullability::NonNullable),
                 DType::Int(IntWidth::_16, Signedness::Unsigned, Nullability::Nullable),

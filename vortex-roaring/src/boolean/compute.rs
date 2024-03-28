@@ -5,7 +5,7 @@ use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::ArrayCompute;
 use vortex::scalar::{AsBytes, Scalar};
 use vortex::validity::ArrayValidity;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::RoaringBoolArray;
 
@@ -26,7 +26,7 @@ impl FlattenFn for RoaringBoolArray {
         let bitset = self
             .bitmap
             .to_bitset()
-            .ok_or("Failed to convert RoaringBitmap to Bitset")?;
+            .ok_or(vortex_err!("Failed to convert RoaringBitmap to Bitset"))?;
 
         let bytes = &bitset.as_slice().as_bytes()[0..bitset.size_in_bytes()];
         let buffer = Buffer::from_slice_ref(bytes);

@@ -1,7 +1,7 @@
 use arrow_buffer::BooleanBufferBuilder;
 use itertools::Itertools;
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
@@ -81,8 +81,8 @@ impl FlattenFn for SparseArray {
                 )))
             })
         } else {
-            Err(VortexError::InvalidArgument(
-                "Cannot flatten SparseArray with non-primitive values".into(),
+            Err(vortex_err!(
+                "Cannot flatten SparseArray with non-primitive values"
             ))
         }
     }
@@ -99,7 +99,7 @@ impl ScalarAtFn for SparseArray {
             // and we should return the value at the corresponding index in the patch values array
             scalar_at(self.indices(), idx)
                 .or_else(|_| Ok(Scalar::null(self.values().dtype())))
-                .and_then(usize::try_from)
+                .and_then(|s| usize::try_from(&s))
                 .and_then(|patch_index| {
                     if patch_index == true_patch_index {
                         scalar_at(self.values(), idx)

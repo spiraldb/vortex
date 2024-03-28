@@ -1,4 +1,4 @@
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::struct_::{StructArray, StructEncoding};
@@ -24,7 +24,7 @@ impl EncodingSerde for StructEncoding {
             fields.push(ctx.subfield(i).read()?);
         }
         let DType::Struct(names, _) = ctx.schema() else {
-            return Err(VortexError::InvalidDType(ctx.schema().clone()));
+            vortex_bail!(mt = "any struct", ctx.schema());
         };
         Ok(StructArray::new(names.clone(), fields).into_array())
     }

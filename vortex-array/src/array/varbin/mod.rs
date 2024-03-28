@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use linkme::distributed_slice;
 use num_traits::{FromPrimitive, Unsigned};
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
@@ -55,20 +55,16 @@ impl VarBinArray {
         validity: Option<Validity>,
     ) -> VortexResult<Self> {
         if !matches!(offsets.dtype(), DType::Int(_, _, Nullability::NonNullable)) {
-            return Err(VortexError::UnsupportedOffsetsArrayDType(
-                offsets.dtype().clone(),
-            ));
+            vortex_bail!(mt = "non nullable int", offsets.dtype());
         }
         if !matches!(
             bytes.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
-            return Err(VortexError::UnsupportedDataArrayDType(
-                bytes.dtype().clone(),
-            ));
+            vortex_bail!(mt = "U8", bytes.dtype());
         }
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
-            return Err(VortexError::InvalidDType(dtype));
+            vortex_bail!(mt = "Binary or Utf8", dtype);
         }
 
         if let Some(v) = &validity {
@@ -180,9 +176,7 @@ impl VarBinArray {
     pub fn iter_primitive(&self) -> VortexResult<VarBinIter<&[u8]>> {
         self.bytes()
             .maybe_primitive()
-            .ok_or_else(|| {
-                VortexError::ComputeError("Bytes array was not a primitive array".into())
-            })
+            .ok_or_else(|| vortex_err!(ComputeError: "Bytes array was not a primitive array"))
             .map(|_| ArrayIter::new(self))
     }
 
@@ -367,10 +361,10 @@ mod test {
     pub fn test_scalar_at() {
         let binary_arr = binary_array();
         assert_eq!(binary_arr.len(), 2);
-        assert_eq!(scalar_at(&binary_arr, 0), Ok("hello world".into()));
+        assert_eq!(scalar_at(&binary_arr, 0).unwrap(), "hello world".into());
         assert_eq!(
-            scalar_at(&binary_arr, 1),
-            Ok("hello world this is a long string".into())
+            scalar_at(&binary_arr, 1).unwrap(),
+            "hello world this is a long string".into()
         )
     }
 
@@ -378,8 +372,8 @@ mod test {
     pub fn slice() {
         let binary_arr = binary_array().slice(1, 2).unwrap();
         assert_eq!(
-            scalar_at(&binary_arr, 0),
-            Ok("hello world this is a long string".into())
+            scalar_at(&binary_arr, 0).unwrap(),
+            "hello world this is a long string".into()
         );
     }
 }

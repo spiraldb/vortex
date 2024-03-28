@@ -7,7 +7,7 @@ use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Signedness};
 
 #[derive(Debug, Clone)]
@@ -24,7 +24,7 @@ impl DictArray {
 
     pub fn try_new(codes: ArrayRef, dict: ArrayRef) -> VortexResult<Self> {
         if !matches!(codes.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
-            return Err(VortexError::InvalidDType(codes.dtype().clone()));
+            vortex_bail!(mt = "unsigned int", codes.dtype());
         }
         Ok(Self {
             codes,

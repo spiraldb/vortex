@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::scalar::Scalar;
@@ -48,7 +48,7 @@ impl ListScalar {
                 };
                 Ok(ListScalar::new(new_type, new_fields).into())
             }
-            _ => Err(VortexError::InvalidDType(dtype.clone())),
+            _ => Err(vortex_err!(mt = "any list", dtype)),
         }
     }
 
@@ -66,7 +66,7 @@ impl<T: Into<Scalar>> From<ListScalarVec<T>> for Scalar {
     fn from(value: ListScalarVec<T>) -> Self {
         let values: Vec<Scalar> = value.0.into_iter().map(|v| v.into()).collect();
         if values.is_empty() {
-            panic!("Can't implicitly convert empty list into ListScalar");
+            panic!("can't implicitly convert empty list into ListScalar");
         }
         ListScalar::new(values[0].dtype().clone(), Some(values)).into()
     }
@@ -82,10 +82,10 @@ impl<T: TryFrom<Scalar, Error = VortexError>> TryFrom<Scalar> for ListScalarVec<
                     vs.into_iter().map(|v| v.try_into()).try_collect()?,
                 ))
             } else {
-                Err(VortexError::InvalidDType(ls.dtype().clone()))
+                Err(vortex_err!("can't extract present value from null scalar",))
             }
         } else {
-            Err(VortexError::InvalidDType(value.dtype().clone()))
+            Err(vortex_err!(mt = "any list", value.dtype()))
         }
     }
 }
@@ -100,10 +100,10 @@ impl<'a, T: TryFrom<&'a Scalar, Error = VortexError>> TryFrom<&'a Scalar> for Li
                     vs.iter().map(|v| v.try_into()).try_collect()?,
                 ))
             } else {
-                Err(VortexError::InvalidDType(ls.dtype().clone()))
+                Err(vortex_err!("can't extract present value from null scalar",))
             }
         } else {
-            Err(VortexError::InvalidDType(value.dtype().clone()))
+            Err(vortex_err!(mt = "any list", value.dtype()))
         }
     }
 }

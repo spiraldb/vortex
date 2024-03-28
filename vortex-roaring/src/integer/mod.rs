@@ -13,7 +13,7 @@ use vortex::ptype::PType;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
 mod compress;
@@ -35,7 +35,7 @@ impl RoaringIntArray {
 
     pub fn try_new(bitmap: Bitmap, ptype: PType) -> VortexResult<Self> {
         if !ptype.is_unsigned_int() {
-            return Err("RoaringInt expected unsigned int".into());
+            vortex_bail!("RoaringInt expected unsigned int");
         }
 
         Ok(Self {
@@ -56,7 +56,7 @@ impl RoaringIntArray {
     pub fn encode(array: &dyn Array) -> VortexResult<Self> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(roaring_encode(p)),
-            _ => Err("RoaringInt can only encode primitive arrays".into()),
+            _ => Err(vortex_err!("RoaringInt can only encode primitive arrays")),
         }
     }
 }
@@ -152,8 +152,8 @@ mod test {
         let ints = PrimitiveArray::from(vec![2u32, 12, 22, 32]);
         let array = RoaringIntArray::encode(&ints)?;
 
-        assert_eq!(scalar_at(&array, 0), Ok(2u32.into()));
-        assert_eq!(scalar_at(&array, 1), Ok(12u32.into()));
+        assert_eq!(scalar_at(&array, 0).unwrap(), 2u32.into());
+        assert_eq!(scalar_at(&array, 1).unwrap(), 12u32.into());
 
         Ok(())
     }
