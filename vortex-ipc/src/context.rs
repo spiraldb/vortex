@@ -16,7 +16,7 @@ impl IPCContext {
         self.encodings.get(encoding_idx as usize).cloned()
     }
 
-    pub fn encoding_position(&self, encoding_id: EncodingId) -> Option<u16> {
+    pub fn encoding_idx(&self, encoding_id: EncodingId) -> Option<u16> {
         self.encodings
             .iter()
             .position(|e| e.id() == encoding_id)

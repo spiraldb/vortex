@@ -1,5 +1,7 @@
+use crate::array::{Array, ArrayWalker};
 use crate::encoding::EncodingId;
 use arrow_buffer::Buffer;
+use vortex_error::{VortexError, VortexResult};
 
 pub struct ArrayData {
     columns: Vec<ColumnData>,
@@ -19,22 +21,34 @@ impl ArrayData {
 pub struct ColumnData {
     encoding: EncodingId,
     metadata: Option<Buffer>,
-    children: Vec<ChildColumnData>,
+    children: Vec<ColumnData>,
     buffers: Vec<Buffer>,
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct ChildColumnData {
-    data: ColumnData,
-    num_buffers: u16,
-}
-
 impl ColumnData {
+    pub fn try_from_array(array: &dyn Array) -> VortexResult<Self> {
+        let mut data = ColumnData {
+            encoding: array.encoding().id(),
+            metadata: array
+                .serde()
+                .ok_or_else(|| {
+                    VortexError::InvalidSerde(
+                        format!("Array {} does not support serde", array.encoding()).into(),
+                    )
+                })?
+                .metadata()?
+                .map(Buffer::from_vec),
+            children: Vec::new(),
+            buffers: Vec::new(),
+        };
+        array.walk(&mut data)?;
+        Ok(data)
+    }
+
     pub fn new(
         encoding: EncodingId,
         metadata: Option<Buffer>,
-        children: Vec<ChildColumnData>,
+        children: Vec<ColumnData>,
         buffers: Vec<Buffer>,
     ) -> Self {
         Self {
@@ -53,7 +67,7 @@ impl ColumnData {
         self.metadata.as_ref()
     }
 
-    pub fn children(&self) -> &[ChildColumnData] {
+    pub fn children(&self) -> &[ColumnData] {
         &self.children
     }
 
@@ -77,16 +91,14 @@ impl ColumnData {
     }
 }
 
-#[allow(dead_code)]
-pub struct ColumnDataBuilder {
-    buffers: Vec<Buffer>,
-}
+impl ArrayWalker for ColumnData {
+    fn child(&mut self, array: &dyn Array) -> VortexResult<()> {
+        self.children.push(ColumnData::try_from_array(array)?);
+        Ok(())
+    }
 
-#[allow(dead_code)]
-impl ColumnDataBuilder {
-    pub fn new() -> Self {
-        Self {
-            buffers: Vec::new(),
-        }
+    fn buffer(&mut self, buffer: &Buffer) -> VortexResult<()> {
+        self.buffers.push(buffer.clone());
+        Ok(())
     }
 }

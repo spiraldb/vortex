@@ -1,10 +1,10 @@
 use crate::chunked::ArrayViewChunkReader;
 use crate::context::IPCContext;
-use crate::flatbuffers::ipc::Message;
+use crate::flatbuffers::ipc::{Message, VortexArray};
 use lending_iterator::prelude::*;
+use std::io;
 use std::io::{BufReader, Read};
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::Array;
 use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::FlatBufferReader;
 use vortex_schema::DType;
@@ -95,6 +95,7 @@ impl<R: Read> LendingIterator for StreamReader<R> {
                 read: &mut self.read,
                 ctx: &self.ctx,
                 dtype: DType::Int(_32, Signed, Nullable),
+                buffer: Vec::new(),
                 chunk: None,
             }))
         })()
@@ -102,11 +103,13 @@ impl<R: Read> LendingIterator for StreamReader<R> {
     }
 }
 
+#[allow(dead_code)]
 pub struct StreamArrayChunkReader<'a, R: Read> {
     read: &'a mut R,
     ctx: &'a IPCContext,
     dtype: DType,
-    chunk: Option<ArrayRef>,
+    buffer: Vec<u8>,
+    chunk: Option<VortexArray<'a>>,
 }
 
 #[gat]
@@ -125,49 +128,51 @@ impl<'a, R: Read> LendingIterator for StreamArrayChunkReader<'a, R> {
         }
         let msg = msg.unwrap();
 
-        (move || {
-            let msg = msg?;
-            println!("MESSAGE: {:?}", msg);
-            let chunk = msg
-                .header_as_chunk()
-                .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Chunk message".into()))?;
+        let msg = msg.unwrap();
+        println!("MESSAGE: {:?}", msg);
+        let chunk = msg
+            .header_as_chunk()
+            .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Chunk message".into()))
+            .unwrap();
 
-            let col_offsets = chunk.column_offsets().ok_or_else(|| {
+        let col_offsets = chunk
+            .column_offsets()
+            .ok_or_else(|| {
                 VortexError::InvalidSerde("Expected column offsets in IPC Chunk message".into())
-            })?;
+            })
+            .unwrap();
+        assert_eq!(col_offsets.len(), 1);
 
-            let mut offset = 0;
-            let mut col_vec = Vec::new();
-            for col_offset in col_offsets {
-                // TODO(ngates): drop bytes until we reach col_offset.
-                col_vec.clear();
-                let col_msg = self
-                    .read
-                    .read_flatbuffer::<Message>(&mut col_vec)?
-                    .ok_or_else(|| {
-                        VortexError::InvalidSerde("Unexpected EOF reading IPC format".into())
-                    })?
-                    .header_as_chunk_column()
-                    .ok_or_else(|| {
-                        VortexError::InvalidSerde("Expected IPC Chunk Column message".into())
-                    })?;
+        // Now read each column
+        let col_msg = self
+            .read
+            .read_flatbuffer::<Message>(&mut self.buffer)
+            .unwrap()
+            .ok_or_else(|| VortexError::InvalidSerde("Unexpected EOF reading IPC format".into()))
+            .unwrap()
+            .header_as_chunk_column()
+            .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Chunk Column message".into()))
+            .unwrap();
 
-                let encoding = self.ctx.find_encoding(col_msg.encoding()).ok_or_else(|| {
-                    VortexError::InvalidSerde("Unknown encoding in IPC Chunk Column message".into())
-                })?;
+        let _col_array = col_msg
+            .array()
+            .ok_or_else(|| VortexError::InvalidSerde("Chunk column missing Array".into()))
+            .unwrap();
 
-                println!("Chunk column: {:?} {}", col_msg, encoding);
-            }
+        // self.chunk = Some(col_msg);
 
-            // TODO(ngates): select the columns to read from the chunk
-            println!("Chunk: {:?}", chunk);
+        // Ensure we read all the buffers
+        let mut offset = 0;
+        for buffer_offset in col_msg.buffer_offsets().unwrap_or_default() {
+            let to_kill = buffer_offset - offset;
+            io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
+            offset += to_kill;
+        }
 
-            // TODO(ngates): construct a reference over the array data.
-            self.chunk = Some(PrimitiveArray::from(vec![1, 2, 3, 4, 5]).into_array());
-
-            Ok(self.chunk.as_deref())
-        })()
-        .transpose()
+        match self.chunk {
+            None => None,
+            Some(ref a) => Some(Ok(a)),
+        }
     }
 }
 

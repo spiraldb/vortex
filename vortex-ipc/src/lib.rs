@@ -29,6 +29,7 @@ pub(crate) mod flatbuffers_deps {
     }
 }
 
+mod array;
 mod chunked;
 pub mod context;
 mod messages;

@@ -75,7 +75,7 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
     fn nbytes(&self) -> usize;
 
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        todo!()
+        todo!("Walk not yet implemented for {}", self.encoding())
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

@@ -1,13 +1,15 @@
+use flatbuffers::root_unchecked;
 use std::io::{BufWriter, Write};
 
 use vortex::array::Array;
-use vortex::serde::data::ArrayData;
+use vortex::serde::data::{ArrayData, ColumnData};
 
 use crate::ALIGNMENT;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::VortexResult;
 use vortex_flatbuffers::FlatBufferWriter;
 
 use crate::context::IPCContext;
+use crate::flatbuffers::ipc as fb;
 use crate::messages::{IPCChunk, IPCChunkColumn, IPCMessage, IPCSchema};
 
 #[allow(dead_code)]
@@ -44,58 +46,35 @@ impl<W: Write> StreamWriter<W> {
 
     fn write_chunk(&mut self, array: &dyn Array) -> VortexResult<()> {
         // A chunk contains the forward byte offsets to each of the columns in the chunk.
-
-        let col_data = array
-            .serde()
-            .ok_or_else(|| {
-                VortexError::InvalidSerde(
-                    format!("Array {} does not implement serde", array).into(),
-                )
-            })?
-            .to_column_data()
-            .map_err(|e| {
-                VortexError::InvalidSerde(
-                    format!("Error converting array to ArrayData: {}", e).into(),
-                )
-            })?;
-        println!("Array Data: {:?}", col_data);
+        let col_data = ColumnData::try_from_array(array)?;
 
         // TODO(ngates): somehow get the flattened columns as ArrayData.
         let data = ArrayData::new(vec![col_data]);
 
+        // In order to generate chunk metadata, we need to know the forward offsets for each
+        // column. To compute this, we need to know how big the metadata messages are for each
+        // column, as well as how long their buffers are.
         let mut offset = 0;
         let mut chunk_column_msgs = Vec::with_capacity(data.columns().len());
         let mut chunk_column_offsets = Vec::with_capacity(data.columns().len());
         for column_data in data.columns() {
             chunk_column_offsets.push(offset);
 
-            let encoding_idx = self
-                .ctx
-                .encoding_position(column_data.encoding())
-                .ok_or_else(|| {
-                    VortexError::InvalidSerde(
-                        format!(
-                            "Encoding {} not found in IPC context",
-                            column_data.encoding()
-                        )
-                        .into(),
-                    )
-                })? as u16;
-
             // Serialize the ChunkColumn message and add its offset.
             let mut vec = Vec::new();
             vec.write_flatbuffer(
-                &IPCMessage::ChunkColumn(IPCChunkColumn {
-                    data: &column_data,
-                    encoding_idx,
-                }),
+                &IPCMessage::ChunkColumn(IPCChunkColumn(&self.ctx, &column_data)),
                 ALIGNMENT,
             )?;
-            chunk_column_msgs.push(vec);
 
-            // We then leave space for the actual buffers of the column.
-            let buffer_offsets = column_data.buffer_offsets(ALIGNMENT);
-            offset += buffer_offsets.last().unwrap();
+            // Parse our message to extract the total size used by all buffers of the column.
+            let chunk_col = unsafe { root_unchecked::<fb::Message>(&vec[4..]) }
+                .header_as_chunk_column()
+                .unwrap();
+            let total_buffer_size = chunk_col.buffer_offsets().unwrap().iter().last().unwrap();
+            offset += total_buffer_size;
+
+            chunk_column_msgs.push(vec);
         }
 
         // Now we can construct a Chunk message with the offsets to each column.
@@ -108,6 +87,7 @@ impl<W: Write> StreamWriter<W> {
         for (msg, column_data) in chunk_column_msgs.iter().zip(data.columns()) {
             self.write.write_all(&msg)?;
 
+            // FIXME(ngates): not implemented yet.
             let buffer_offsets = column_data.buffer_offsets(ALIGNMENT);
             let mut current_offset = 0;
             for (buffer_end, buffer) in buffer_offsets.iter().skip(1).zip(column_data.buffers()) {

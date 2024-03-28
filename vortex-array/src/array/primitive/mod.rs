@@ -14,8 +14,8 @@ use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
-use crate::array::IntoArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{ArrayWalker, IntoArray};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::impl_array;
 use crate::iterator::ArrayIter;
@@ -194,6 +194,10 @@ impl Array for PrimitiveArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.buffer.len()
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.buffer(&self.buffer)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

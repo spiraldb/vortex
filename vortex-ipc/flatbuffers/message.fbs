@@ -28,15 +28,20 @@ enum Compression: uint8 {
 }
 
 struct Buffer {
-    offset: uint64;
-    len: uint64;
+    length: uint64;
     compression: Compression;
 }
 
-table ChunkColumn {
+table VortexArray {
     encoding: uint16;
     metadata: [ubyte];
+    children: [VortexArray];
     buffers: [Buffer];
+}
+
+table ChunkColumn {
+    array: VortexArray;
+    buffer_offsets: [uint64];
 }
 
 union MessageHeader {

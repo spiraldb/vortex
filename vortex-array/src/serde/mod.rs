@@ -9,7 +9,6 @@ use crate::array::{Array, ArrayRef};
 use crate::encoding::{find_encoding, EncodingId, ENCODINGS};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
-use crate::serde::data::ColumnData;
 use crate::serde::ptype::PTypeTag;
 use crate::validity::Validity;
 use vortex_error::{VortexError, VortexResult};
@@ -22,8 +21,8 @@ mod ptype;
 pub trait ArraySerde: Debug {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;
 
-    fn to_column_data(&self) -> VortexResult<ColumnData> {
-        todo!("Not implemented {:?}", self)
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(None)
     }
 }
 

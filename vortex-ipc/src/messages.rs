@@ -3,6 +3,7 @@ use crate::flatbuffers::ipc as fb;
 use crate::flatbuffers::ipc::Compression;
 use crate::ALIGNMENT;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
+use itertools::Itertools;
 use vortex::serde::data::ColumnData;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 use vortex_schema::DType;
@@ -15,11 +16,9 @@ pub(crate) enum IPCMessage<'a> {
 }
 
 pub(crate) struct IPCSchema<'a>(pub &'a DType);
-pub(crate) struct IPCChunk<'a>(pub &'a [usize]);
-pub(crate) struct IPCChunkColumn<'a> {
-    pub data: &'a ColumnData,
-    pub encoding_idx: u16,
-}
+pub(crate) struct IPCChunk<'a>(pub &'a [u64]);
+pub(crate) struct IPCChunkColumn<'a>(pub &'a IPCContext, pub &'a ColumnData);
+pub(crate) struct IPCArray<'a>(pub &'a IPCContext, pub &'a ColumnData);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
 impl WriteFlatBuffer for IPCMessage<'_> {
@@ -30,10 +29,10 @@ impl WriteFlatBuffer for IPCMessage<'_> {
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
         let header = match self {
-            Self::Context(ctx) => ctx.write_flatbuffer(fbb).as_union_value(),
-            Self::Schema(schema) => schema.write_flatbuffer(fbb).as_union_value(),
-            Self::Chunk(chunk) => chunk.write_flatbuffer(fbb).as_union_value(),
-            Self::ChunkColumn(column) => column.write_flatbuffer(fbb).as_union_value(),
+            Self::Context(f) => f.write_flatbuffer(fbb).as_union_value(),
+            Self::Schema(f) => f.write_flatbuffer(fbb).as_union_value(),
+            Self::Chunk(f) => f.write_flatbuffer(fbb).as_union_value(),
+            Self::ChunkColumn(f) => f.write_flatbuffer(fbb).as_union_value(),
         };
 
         let mut msg = fb::MessageBuilder::new(fbb);
@@ -86,30 +85,75 @@ impl<'a> WriteFlatBuffer for IPCChunkColumn<'a> {
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
-        // Each chunk column just contains the encoding metadata.
-        let buffer_offsets = self.data.buffer_offsets(ALIGNMENT);
+        let array = Some(IPCArray(self.0, self.1).write_flatbuffer(fbb));
 
-        let mut fb_buffers = Vec::new();
-        for (buffer, buffer_offset) in self.data.buffers().iter().zip(buffer_offsets.iter()) {
-            fb_buffers.push(fb::Buffer::new(
-                *buffer_offset as u64,
-                buffer.len() as u64,
-                Compression::None,
-            ))
+        // Walk the ColumnData depth-first to compute the buffer offsets.
+        let mut offset: u64 = 0;
+        let mut buffer_offsets = vec![];
+        let mut col_datas = vec![self.1];
+        while let Some(col_data) = col_datas.pop() {
+            for buffer in col_data.buffers() {
+                buffer_offsets.push(offset);
+                let buffer_size = buffer.len();
+                let aligned_size = (buffer_size + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
+                offset += aligned_size as u64;
+            }
+            col_data.children().iter().for_each(|c| col_datas.push(c));
         }
-        let fb_buffers = fbb.create_vector(&fb_buffers);
+        buffer_offsets.push(offset);
 
-        let metadata = self
-            .data
-            .metadata()
-            .map(|metadata| fbb.create_vector(metadata.as_slice()));
+        let buffer_offsets = Some(fbb.create_vector(buffer_offsets.as_slice()));
 
         fb::ChunkColumn::create(
             fbb,
             &fb::ChunkColumnArgs {
-                encoding: self.encoding_idx,
+                array,
+                buffer_offsets,
+            },
+        )
+    }
+}
+
+impl<'a> WriteFlatBuffer for IPCArray<'a> {
+    type Target<'t> = fb::VortexArray<'t>;
+
+    fn write_flatbuffer<'fb>(
+        &self,
+        fbb: &mut FlatBufferBuilder<'fb>,
+    ) -> WIPOffset<Self::Target<'fb>> {
+        let column_data = self.1;
+
+        let encoding = self
+            .0
+            .encoding_idx(column_data.encoding())
+            // TODO(ngates): return result from this writer?
+            .unwrap_or_else(|| panic!("Encoding not found: {:?}", column_data.encoding()));
+
+        let metadata = column_data
+            .metadata()
+            .map(|m| fbb.create_vector(m.as_slice()));
+
+        let children = column_data
+            .children()
+            .iter()
+            .map(|child| IPCArray(self.0, child).write_flatbuffer(fbb))
+            .collect_vec();
+        let children = Some(fbb.create_vector(&children));
+
+        let buffers = column_data
+            .buffers()
+            .iter()
+            .map(|buffer| fb::Buffer::new(buffer.len() as u64, Compression::None))
+            .collect_vec();
+        let buffers = Some(fbb.create_vector(&buffers));
+
+        fb::VortexArray::create(
+            fbb,
+            &fb::VortexArrayArgs {
+                encoding,
                 metadata,
-                buffers: Some(fb_buffers),
+                children,
+                buffers,
             },
         )
     }

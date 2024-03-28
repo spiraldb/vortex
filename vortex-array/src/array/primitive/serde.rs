@@ -1,9 +1,7 @@
-use arrow_buffer::Buffer;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::serde::data::ColumnData;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use crate::validity::ArrayValidity;
 
@@ -14,18 +12,13 @@ impl ArraySerde for PrimitiveArray {
         ctx.write_buffer(self.len(), self.buffer())
     }
 
-    fn to_column_data(&self) -> VortexResult<ColumnData> {
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
         let mut vec = Vec::new();
         let mut ctx = WriteCtx::new(&mut vec);
         ctx.ptype(self.ptype())?;
         ctx.nullability(self.nullability())?;
         ctx.write_validity(self.validity())?;
-        Ok(ColumnData::new(
-            self.encoding().id(),
-            Some(Buffer::from_vec(vec)),
-            vec![],
-            vec![self.buffer().clone()],
-        ))
+        Ok(Some(vec))
     }
 }
 
