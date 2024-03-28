@@ -40,7 +40,7 @@ Vortex arrays with zero-copy from Arrow arrays. There are also several built-in 
 `chunked`) that are useful building blocks for other encodings. The included extension encodings are mostly designed
 to model compressed in-memory arrays, such as run-length or dictionary encoding.
 
-## ⚒Components
+## Components
 
 ### Logical Types
 
@@ -137,7 +137,7 @@ Vortex serde is currently in the design phase. The goals of this implementation 
 * Forward statistical information (such as sortedness) to consumers.
 * To provide a building block for file format authors to store compressed array data.
 
-## 💘 Integration with Apache Arrow
+## Integration with Apache Arrow
 
 Apache Arrow is the de facto standard for interoperating on columnar array data. Naturally, Vortex is designed to
 be maximally compatible with Apache Arrow. All Arrow arrays can be converted into Vortex arrays with zero-copy,
