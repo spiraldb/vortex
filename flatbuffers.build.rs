@@ -15,7 +15,6 @@ fn main() {
         .canonicalize()
         .expect("Failed to canonicalize OUT_DIR");
 
-    rerun_if_changed(&flatbuffers_dir.parent().unwrap().join("build.rs"));
     let fbs_files = WalkDir::new(&flatbuffers_dir)
         .into_iter()
         .filter_map(|e| e.ok())

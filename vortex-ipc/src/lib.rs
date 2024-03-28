@@ -1,16 +1,19 @@
 extern crate core;
 
-use crate::context::IPCContext;
-use crate::flatbuffers::ipc as fb;
-use crate::writer::StreamWriter;
-use ::flatbuffers::{FlatBufferBuilder, WIPOffset};
-use lending_iterator::LendingIterator;
 use std::io::Write;
+
+use lending_iterator::LendingIterator;
+
 use vortex_error::VortexError;
-use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
-use vortex_schema::DType;
+
+use crate::context::IPCContext;
+use crate::writer::StreamWriter;
+
+pub const ALIGNMENT: usize = 64;
 
 pub mod flatbuffers {
+    pub use generated::vortex::*;
+
     #[allow(unused_imports)]
     #[allow(dead_code)]
     #[allow(non_camel_case_types)]
@@ -18,7 +21,6 @@ pub mod flatbuffers {
     mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/message.rs"));
     }
-    pub use generated::vortex::*;
 }
 
 pub(crate) mod flatbuffers_deps {
@@ -29,6 +31,7 @@ pub(crate) mod flatbuffers_deps {
 
 mod chunked;
 pub mod context;
+mod messages;
 pub mod reader;
 pub mod writer;
 
@@ -36,46 +39,16 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
     move || VortexError::InvalidSerde(format!("missing field: {}", field).into())
 }
 
-pub(crate) enum Message<'a> {
-    Context(&'a IPCContext),
-    Schema(&'a DType),
-}
-
-impl FlatBufferRoot for Message<'_> {}
-impl WriteFlatBuffer for Message<'_> {
-    type Target<'a> = fb::Message<'a>;
-
-    fn write_flatbuffer<'fb>(
-        &self,
-        fbb: &mut FlatBufferBuilder<'fb>,
-    ) -> WIPOffset<Self::Target<'fb>> {
-        let header = match self {
-            Self::Context(ctx) => ctx.write_flatbuffer(fbb).as_union_value(),
-            Self::Schema(dtype) => {
-                let dtype = Some(dtype.write_flatbuffer(fbb));
-                fb::Schema::create(fbb, &fb::SchemaArgs { dtype }).as_union_value()
-            }
-        };
-
-        let mut msg = fb::MessageBuilder::new(fbb);
-        msg.add_version(Default::default());
-        msg.add_header_type(match self {
-            Self::Context(_) => fb::MessageHeader::Context,
-            Self::Schema(_) => fb::MessageHeader::Schema,
-        });
-        msg.add_header(header);
-        msg.add_body_len(0);
-        msg.finish()
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::chunked::ArrayChunkReader;
-    use crate::reader::StreamReader;
     use std::io::Cursor;
+
     use vortex::array::primitive::PrimitiveArray;
+
+    use crate::chunked::ArrayViewChunkReader;
+    use crate::reader::StreamReader;
+
+    use super::*;
 
     #[test]
     fn test_write_flatbuffer() {
@@ -90,8 +63,11 @@ mod tests {
 
         let mut ipc_reader = StreamReader::try_new_unbuffered(cursor).unwrap();
         while let Some(chunk_reader) = ipc_reader.next() {
-            let chunk_reader = chunk_reader.unwrap();
+            let mut chunk_reader = chunk_reader.unwrap();
             println!("DType: {:?}", chunk_reader.dtype());
+            while let Some(chunk) = chunk_reader.next() {
+                println!("Chunk: {:?}", chunk);
+            }
             // let chunk = chunk_reader.next().unwrap();
             // println!("Array Chunk Reader: {:?}", chunk.dtype());
         }

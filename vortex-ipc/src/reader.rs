@@ -1,9 +1,10 @@
-use crate::chunked::ArrayChunkReader;
+use crate::chunked::ArrayViewChunkReader;
 use crate::context::IPCContext;
 use crate::flatbuffers::ipc::Message;
 use lending_iterator::prelude::*;
 use std::io::{BufReader, Read};
-use vortex::array::ArrayRef;
+use vortex::array::primitive::PrimitiveArray;
+use vortex::array::{Array, ArrayRef};
 use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::FlatBufferReader;
 use vortex_schema::DType;
@@ -67,6 +68,8 @@ impl<R: Read> StreamReader<R> {
     // }
 }
 
+/// We implement a lending iterator here so that each StreamArrayChunkReader can be lent as
+/// mutable to the caller. This is necessary because we need a mutable handle to the reader.
 #[gat]
 impl<R: Read> LendingIterator for StreamReader<R> {
     type Item<'next> = VortexResult<StreamArrayChunkReader<'next, R>> where Self: 'next;
@@ -77,7 +80,6 @@ impl<R: Read> LendingIterator for StreamReader<R> {
             .read
             .read_flatbuffer::<Message>(&mut fb_vec)
             .transpose();
-
         if msg.is_none() {
             // End of the stream
             return None;
@@ -92,6 +94,7 @@ impl<R: Read> LendingIterator for StreamReader<R> {
             Ok(Some(StreamArrayChunkReader {
                 read: &mut self.read,
                 dtype: DType::Int(_32, Signed, Nullable),
+                chunk: None,
             }))
         })()
         .transpose()
@@ -101,21 +104,44 @@ impl<R: Read> LendingIterator for StreamReader<R> {
 pub struct StreamArrayChunkReader<'a, R: Read> {
     read: &'a mut R,
     dtype: DType,
+    chunk: Option<ArrayRef>,
 }
 
-impl<'a, R: Read> ArrayChunkReader for StreamArrayChunkReader<'a, R> {
-    fn dtype(&self) -> &DType {
-        &self.dtype
+#[gat]
+impl<'a, R: Read> LendingIterator for StreamArrayChunkReader<'a, R> {
+    type Item<'next> = VortexResult<&'next dyn Array> where Self: 'next;
+
+    fn next(self: &'_ mut Self) -> Option<Item<'_, Self>> {
+        let mut fb_vec: Vec<u8> = Vec::new();
+        let msg = self
+            .read
+            .read_flatbuffer::<Message>(&mut fb_vec)
+            .transpose();
+        if msg.is_none() {
+            // End of the stream
+            return None;
+        }
+        let msg = msg.unwrap();
+
+        (move || {
+            let chunk = msg?
+                .header_as_chunk()
+                .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Chunk message".into()))?;
+
+            // TODO(ngates): select the columns to read from the chunk
+            println!("Chunk: {:?}", chunk);
+
+            // TODO(ngates): construct a reference over the array data.
+            self.chunk = Some(PrimitiveArray::from(vec![1, 2, 3, 4, 5]).into_array());
+
+            Ok(self.chunk.as_deref())
+        })()
+        .transpose()
     }
 }
 
-impl<'a, R: Read> Iterator for StreamArrayChunkReader<'a, R> {
-    type Item = VortexResult<ArrayRef>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut buffer = Vec::new();
-        let _msg = self.read.read_flatbuffer::<Message>(&mut buffer);
-        print!("MSG {:?}", _msg);
-        None
+impl<R: Read> ArrayViewChunkReader for StreamArrayChunkReader<'_, R> {
+    fn dtype(&self) -> &DType {
+        &self.dtype
     }
 }

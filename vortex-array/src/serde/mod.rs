@@ -13,7 +13,7 @@ use vortex_error::{VortexError, VortexResult};
 use vortex_schema::Serialize;
 use vortex_schema::{DType, Deserialize, IntWidth, Nullability, SchemaError, Signedness};
 
-mod data;
+pub mod data;
 mod ptype;
 
 pub trait ArraySerde {
