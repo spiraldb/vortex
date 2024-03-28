@@ -1,17 +1,5 @@
+use crate::array::EncodingId;
 use arrow_buffer::Buffer;
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct SomeData {
-    metadata: Buffer,
-    buffers: Vec<Buffer>,
-}
-
-impl SomeData {
-    pub fn new(metadata: Buffer, buffers: Vec<Buffer>) -> Self {
-        Self { metadata, buffers }
-    }
-}
 
 pub struct ArrayData {
     columns: Vec<ColumnData>,
@@ -29,17 +17,44 @@ impl ArrayData {
 
 #[derive(Debug)]
 pub struct ColumnData {
-    metadata: Buffer,
+    encoding: EncodingId,
+    metadata: Option<Buffer>,
+    children: Vec<ChildColumnData>,
     buffers: Vec<Buffer>,
 }
 
+#[derive(Debug)]
+#[allow(dead_code)]
+pub struct ChildColumnData {
+    data: ColumnData,
+    num_buffers: u16,
+}
+
 impl ColumnData {
-    pub fn new(metadata: Buffer, buffers: Vec<Buffer>) -> Self {
-        Self { metadata, buffers }
+    pub fn new(
+        encoding: EncodingId,
+        metadata: Option<Buffer>,
+        children: Vec<ChildColumnData>,
+        buffers: Vec<Buffer>,
+    ) -> Self {
+        Self {
+            encoding,
+            metadata,
+            children,
+            buffers,
+        }
     }
 
-    pub fn metadata(&self) -> &Buffer {
-        &self.metadata
+    pub fn encoding(&self) -> EncodingId {
+        self.encoding
+    }
+
+    pub fn metadata(&self) -> Option<&Buffer> {
+        self.metadata.as_ref()
+    }
+
+    pub fn children(&self) -> &[ChildColumnData] {
+        &self.children
     }
 
     pub fn buffers(&self) -> &[Buffer] {

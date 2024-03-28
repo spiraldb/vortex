@@ -93,6 +93,7 @@ impl<R: Read> LendingIterator for StreamReader<R> {
                 .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Schema message".into()))?;
             Ok(Some(StreamArrayChunkReader {
                 read: &mut self.read,
+                ctx: &self.ctx,
                 dtype: DType::Int(_32, Signed, Nullable),
                 chunk: None,
             }))
@@ -103,6 +104,7 @@ impl<R: Read> LendingIterator for StreamReader<R> {
 
 pub struct StreamArrayChunkReader<'a, R: Read> {
     read: &'a mut R,
+    ctx: &'a IPCContext,
     dtype: DType,
     chunk: Option<ArrayRef>,
 }
@@ -124,9 +126,38 @@ impl<'a, R: Read> LendingIterator for StreamArrayChunkReader<'a, R> {
         let msg = msg.unwrap();
 
         (move || {
-            let chunk = msg?
+            let msg = msg?;
+            println!("MESSAGE: {:?}", msg);
+            let chunk = msg
                 .header_as_chunk()
                 .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Chunk message".into()))?;
+
+            let col_offsets = chunk.column_offsets().ok_or_else(|| {
+                VortexError::InvalidSerde("Expected column offsets in IPC Chunk message".into())
+            })?;
+
+            let mut offset = 0;
+            let mut col_vec = Vec::new();
+            for col_offset in col_offsets {
+                // TODO(ngates): drop bytes until we reach col_offset.
+                col_vec.clear();
+                let col_msg = self
+                    .read
+                    .read_flatbuffer::<Message>(&mut col_vec)?
+                    .ok_or_else(|| {
+                        VortexError::InvalidSerde("Unexpected EOF reading IPC format".into())
+                    })?
+                    .header_as_chunk_column()
+                    .ok_or_else(|| {
+                        VortexError::InvalidSerde("Expected IPC Chunk Column message".into())
+                    })?;
+
+                let encoding = self.ctx.find_encoding(col_msg.encoding()).ok_or_else(|| {
+                    VortexError::InvalidSerde("Unknown encoding in IPC Chunk Column message".into())
+                })?;
+
+                println!("Chunk column: {:?} {}", col_msg, encoding);
+            }
 
             // TODO(ngates): select the columns to read from the chunk
             println!("Chunk: {:?}", chunk);

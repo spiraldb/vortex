@@ -62,7 +62,9 @@ mod tests {
         cursor.set_position(0);
 
         let mut ipc_reader = StreamReader::try_new_unbuffered(cursor).unwrap();
+        // Read some number of arrays off the stream.
         while let Some(chunk_reader) = ipc_reader.next() {
+            // Each array is split into chunks.
             let mut chunk_reader = chunk_reader.unwrap();
             println!("DType: {:?}", chunk_reader.dtype());
             while let Some(chunk) = chunk_reader.next() {

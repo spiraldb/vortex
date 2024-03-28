@@ -2,13 +2,26 @@ use crate::flatbuffers::ipc as fb;
 use crate::missing;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex::array::{find_encoding, EncodingRef, ENCODINGS};
+use vortex::array::{find_encoding, EncodingId, EncodingRef, ENCODINGS};
 use vortex_error::VortexError;
 use vortex_flatbuffers::WriteFlatBuffer;
 
 #[derive(Debug)]
 pub struct IPCContext {
     encodings: Vec<EncodingRef>,
+}
+
+impl IPCContext {
+    pub fn find_encoding(&self, encoding_idx: u16) -> Option<EncodingRef> {
+        self.encodings.get(encoding_idx as usize).cloned()
+    }
+
+    pub fn encoding_position(&self, encoding_id: EncodingId) -> Option<u16> {
+        self.encodings
+            .iter()
+            .position(|e| e.id() == encoding_id)
+            .map(|i| i as u16)
+    }
 }
 
 impl Default for IPCContext {

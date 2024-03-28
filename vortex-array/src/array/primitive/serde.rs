@@ -21,7 +21,9 @@ impl ArraySerde for PrimitiveArray {
         ctx.nullability(self.nullability())?;
         ctx.write_validity(self.validity())?;
         Ok(ColumnData::new(
-            Buffer::from_vec(vec),
+            self.encoding().id(),
+            Some(Buffer::from_vec(vec)),
+            vec![],
             vec![self.buffer().clone()],
         ))
     }

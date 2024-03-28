@@ -16,7 +16,10 @@ pub(crate) enum IPCMessage<'a> {
 
 pub(crate) struct IPCSchema<'a>(pub &'a DType);
 pub(crate) struct IPCChunk<'a>(pub &'a [usize]);
-pub(crate) struct IPCChunkColumn<'a>(pub &'a ColumnData);
+pub(crate) struct IPCChunkColumn<'a> {
+    pub data: &'a ColumnData,
+    pub encoding_idx: u16,
+}
 
 impl FlatBufferRoot for IPCMessage<'_> {}
 impl WriteFlatBuffer for IPCMessage<'_> {
@@ -84,10 +87,10 @@ impl<'a> WriteFlatBuffer for IPCChunkColumn<'a> {
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
         // Each chunk column just contains the encoding metadata.
-        let buffer_offsets = self.0.buffer_offsets(ALIGNMENT);
+        let buffer_offsets = self.data.buffer_offsets(ALIGNMENT);
 
         let mut fb_buffers = Vec::new();
-        for (buffer, buffer_offset) in self.0.buffers().iter().zip(buffer_offsets.iter()) {
+        for (buffer, buffer_offset) in self.data.buffers().iter().zip(buffer_offsets.iter()) {
             fb_buffers.push(fb::Buffer::new(
                 *buffer_offset as u64,
                 buffer.len() as u64,
@@ -96,12 +99,16 @@ impl<'a> WriteFlatBuffer for IPCChunkColumn<'a> {
         }
         let fb_buffers = fbb.create_vector(&fb_buffers);
 
-        let metadata = fbb.create_vector(self.0.metadata().as_slice());
+        let metadata = self
+            .data
+            .metadata()
+            .map(|metadata| fbb.create_vector(metadata.as_slice()));
 
         fb::ChunkColumn::create(
             fbb,
             &fb::ChunkColumnArgs {
-                metadata: Some(metadata),
+                encoding: self.encoding_idx,
+                metadata,
                 buffers: Some(fb_buffers),
             },
         )

@@ -58,7 +58,7 @@ impl<W: Write> StreamWriter<W> {
                     format!("Error converting array to ArrayData: {}", e).into(),
                 )
             })?;
-        print!("Array Data: {:?}", col_data);
+        println!("Array Data: {:?}", col_data);
 
         // TODO(ngates): somehow get the flattened columns as ArrayData.
         let data = ArrayData::new(vec![col_data]);
@@ -69,10 +69,26 @@ impl<W: Write> StreamWriter<W> {
         for column_data in data.columns() {
             chunk_column_offsets.push(offset);
 
+            let encoding_idx = self
+                .ctx
+                .encoding_position(column_data.encoding())
+                .ok_or_else(|| {
+                    VortexError::InvalidSerde(
+                        format!(
+                            "Encoding {} not found in IPC context",
+                            column_data.encoding()
+                        )
+                        .into(),
+                    )
+                })? as u16;
+
             // Serialize the ChunkColumn message and add its offset.
             let mut vec = Vec::new();
             vec.write_flatbuffer(
-                &IPCMessage::ChunkColumn(IPCChunkColumn(&column_data)),
+                &IPCMessage::ChunkColumn(IPCChunkColumn {
+                    data: &column_data,
+                    encoding_idx,
+                }),
                 ALIGNMENT,
             )?;
             chunk_column_msgs.push(vec);
