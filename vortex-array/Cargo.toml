@@ -37,3 +37,10 @@ thiserror = { workspace = true }
 vortex-alloc = { path = "../vortex-alloc" }
 vortex-error = { path = "../vortex-error" }
 vortex-schema = { path = "../vortex-schema" }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "search_sorted"
+harness = false

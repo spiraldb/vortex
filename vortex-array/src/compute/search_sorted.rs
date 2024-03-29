@@ -1,12 +1,13 @@
+use std::cmp::Ordering;
+use std::cmp::Ordering::{Equal, Greater, Less};
+
 use vortex_error::{VortexError, VortexResult};
 
 use crate::array::Array;
-use crate::compute::flatten::flatten;
-use crate::compute::ArrayCompute;
+use crate::compute::scalar_at::scalar_at;
 use crate::scalar::Scalar;
-use log::info;
-use std::cmp::Ordering;
 
+#[derive(Debug, Copy, Clone)]
 pub enum SearchSortedSide {
     Left,
     Right,
@@ -26,45 +27,116 @@ pub fn search_sorted<T: Into<Scalar>>(
         return search_sorted.search_sorted(&scalar, side);
     }
 
-    // Otherwise, flatten and try again.
-    info!("SearchSorted not implemented for {}, flattening", array);
-    flatten(array)?
-        .into_array()
-        .search_sorted()
-        .map(|f| f.search_sorted(&scalar, side))
-        .unwrap_or_else(|| {
-            Err(VortexError::NotImplemented(
-                "search_sorted",
-                array.encoding().id().name(),
-            ))
-        })
+    if array.scalar_at().is_some() {
+        return Ok(SearchSorted::search_sorted(&array, &scalar, side));
+    }
+
+    Err(VortexError::NotImplemented(
+        "search_sorted",
+        array.encoding().id().name(),
+    ))
+}
+
+pub trait IndexOrd<V> {
+    fn index_cmp(&self, idx: usize, elem: &V) -> Option<Ordering>;
+
+    fn index_lt(&self, idx: usize, elem: &V) -> bool {
+        matches!(self.index_cmp(idx, elem), Some(Less))
+    }
+
+    fn index_le(&self, idx: usize, elem: &V) -> bool {
+        matches!(self.index_cmp(idx, elem), Some(Less | Equal))
+    }
+
+    fn index_gt(&self, idx: usize, elem: &V) -> bool {
+        matches!(self.index_cmp(idx, elem), Some(Greater))
+    }
+
+    fn index_ge(&self, idx: usize, elem: &V) -> bool {
+        matches!(self.index_cmp(idx, elem), Some(Greater | Equal))
+    }
+}
+
+#[allow(clippy::len_without_is_empty)]
+pub trait Len {
+    fn len(&self) -> usize;
 }
 
 pub trait SearchSorted<T> {
-    fn search_sorted(&self, value: &T, side: SearchSortedSide) -> usize;
+    fn search_sorted(&self, value: &T, side: SearchSortedSide) -> usize
+    where
+        Self: IndexOrd<T>,
+    {
+        match side {
+            SearchSortedSide::Left => self.search_sorted_by(|idx| {
+                if self.index_lt(idx, value) {
+                    Less
+                } else {
+                    Greater
+                }
+            }),
+            SearchSortedSide::Right => self.search_sorted_by(|idx| {
+                if self.index_le(idx, value) {
+                    Less
+                } else {
+                    Greater
+                }
+            }),
+        }
+    }
+
+    fn search_sorted_by<F: FnMut(usize) -> Ordering>(&self, f: F) -> usize;
 }
 
-impl<T: PartialOrd> SearchSorted<T> for &[T] {
-    fn search_sorted(&self, value: &T, side: SearchSortedSide) -> usize {
-        match side {
-            SearchSortedSide::Left => self
-                .binary_search_by(|x| {
-                    if x < value {
-                        Ordering::Less
-                    } else {
-                        Ordering::Greater
-                    }
-                })
-                .unwrap_or_else(|x| x),
-            SearchSortedSide::Right => self
-                .binary_search_by(|x| {
-                    if x <= value {
-                        Ordering::Less
-                    } else {
-                        Ordering::Greater
-                    }
-                })
-                .unwrap_or_else(|x| x),
+impl<S: IndexOrd<T> + Len + ?Sized, T> SearchSorted<T> for S {
+    // Code adapted from Rust standard library slice::binary_search_by
+    fn search_sorted_by<F: FnMut(usize) -> Ordering>(&self, mut f: F) -> usize {
+        // INVARIANTS:
+        // - 0 <= left <= left + size = right <= self.len()
+        // - f returns Less for everything in self[..left]
+        // - f returns Greater for everything in self[right..]
+        let mut size = self.len();
+        let mut left = 0;
+        let mut right = size;
+        while left < right {
+            let mid = left + size / 2;
+            let cmp = f(mid);
+
+            left = if cmp == Less { mid + 1 } else { left };
+            right = if cmp == Greater { mid } else { right };
+            if cmp == Equal {
+                return mid;
+            }
+
+            size = right - left;
         }
+
+        left
+    }
+}
+
+impl IndexOrd<Scalar> for &dyn Array {
+    fn index_cmp(&self, idx: usize, elem: &Scalar) -> Option<Ordering> {
+        let scalar_a = scalar_at(*self, idx).ok()?;
+        scalar_a.partial_cmp(elem)
+    }
+}
+
+impl<T: PartialOrd> IndexOrd<T> for [T] {
+    fn index_cmp(&self, idx: usize, elem: &T) -> Option<Ordering> {
+        // SAFETY: Used in search_sorted_by same as the standard library. The search_sorted ensures idx is in bounds
+        unsafe { self.get_unchecked(idx) }.partial_cmp(elem)
+    }
+}
+
+impl Len for &dyn Array {
+    fn len(&self) -> usize {
+        Array::len(*self)
+    }
+}
+
+impl<T> Len for [T] {
+    fn len(&self) -> usize {
+        self.len()
     }
 }
