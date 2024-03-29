@@ -7,7 +7,7 @@ use crate::ptype::PType;
 use crate::serde::ReadCtx;
 use crate::stats::Stats;
 use crate::validity::{ArrayValidity, Validity};
-use crate::view::TypedArrayView;
+use crate::view::{ArrayMetadata, ArrayView, ArrayViewVTable, TypedArrayView};
 use arrow_buffer::Buffer;
 use std::any::Any;
 use std::io::Cursor;
@@ -18,27 +18,43 @@ use vortex_schema::Nullability::Nullable;
 use vortex_schema::Signedness::Signed;
 use vortex_schema::{DType, Nullability};
 
-type PrimitiveView<'a> = TypedArrayView<'a, PrimitiveEncoding>;
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct PrimitiveMetadata {
+    ptype: PType,
+    nullability: Nullability,
+}
+
+impl<'a> ArrayMetadata<'a> for PrimitiveMetadata {
+    fn from_bytes(bytes: Option<&'a [u8]>) -> VortexResult<Self> {
+        let mut cursor = Cursor::new(bytes.expect("Missing metadata"));
+        let mut ctx = ReadCtx::new(&DType::Int(_32, Signed, Nullable), &mut cursor);
+        let ptype = ctx.ptype()?;
+        let nullability = ctx.nullability()?;
+        Ok(PrimitiveMetadata { ptype, nullability })
+    }
+}
+
+impl<'view> ArrayViewVTable<'view> for PrimitiveEncoding {
+    fn to_array(&self, view: &ArrayView<'view>) -> VortexResult<ArrayRef> {
+        let p = PrimitiveView::try_new(view)?;
+        Ok(p.to_array())
+    }
+
+    fn len(&self, view: &ArrayView<'view>) -> VortexResult<usize> {
+        Ok(PrimitiveView::try_new(view)?.len())
+    }
+}
+
+type PrimitiveView<'a> = TypedArrayView<'a, PrimitiveMetadata>;
 
 impl PrimitiveView<'_> {
     pub fn ptype(&self) -> PType {
-        let meta = self.view().metadata().expect("Missing metadata");
-        let mut cursor = Cursor::new(meta);
-        let mut ctx = ReadCtx::new(self.dtype(), &mut cursor);
-        let ptype = ctx.ptype().unwrap();
-        let _nullability = ctx.nullability().unwrap();
-        let _validity = ctx.read_validity().unwrap();
-        ptype
+        self.metadata().ptype
     }
 
     pub fn nullability(&self) -> Nullability {
-        let meta = self.view().metadata().expect("Missing metadata");
-        let mut cursor = Cursor::new(meta);
-        let mut ctx = ReadCtx::new(self.dtype(), &mut cursor);
-        let _ptype = ctx.ptype().unwrap();
-        let nullability = ctx.nullability().unwrap();
-        let _validity = ctx.read_validity().unwrap();
-        nullability
+        self.metadata().nullability
     }
 
     pub fn buffer(&self) -> &Buffer {

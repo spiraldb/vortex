@@ -1,6 +1,7 @@
+use crate::array::ArrayRef;
 use crate::compress::EncodingCompression;
 use crate::serde::EncodingSerde;
-use crate::view::ArrayViewVTable;
+use crate::view::{ArrayView, ArrayViewVTable};
 use linkme::distributed_slice;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -35,6 +36,10 @@ pub trait Encoding: Debug + Send + Sync + 'static {
 
     /// Array serialization
     fn serde(&self) -> Option<&dyn EncodingSerde> {
+        None
+    }
+
+    fn view_as_array(&self, _view: ArrayView) -> Option<ArrayRef> {
         None
     }
 

@@ -1,4 +1,3 @@
-use arrow_buffer::Buffer;
 use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
@@ -74,23 +73,18 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
 
-    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        todo!("Walk not yet implemented for {}", self.encoding())
-    }
-
     fn serde(&self) -> Option<&dyn ArraySerde> {
         None
+    }
+
+    #[allow(unused_variables)]
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        todo!()
     }
 }
 
 pub trait IntoArray {
     fn into_array(self) -> ArrayRef;
-}
-
-pub trait ArrayWalker {
-    fn child(&mut self, array: &dyn Array) -> VortexResult<()>;
-
-    fn buffer(&mut self, buffer: &Buffer) -> VortexResult<()>;
 }
 
 #[macro_export]
@@ -119,6 +113,7 @@ macro_rules! impl_array {
 }
 
 use crate::encoding::EncodingRef;
+use crate::ArrayWalker;
 pub use impl_array;
 
 impl ArrayCompute for ArrayRef {
@@ -224,6 +219,11 @@ impl Array for ArrayRef {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         self.as_ref().serde()
+    }
+
+    #[allow(unused_variables)]
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        todo!()
     }
 }
 

@@ -18,6 +18,9 @@ pub mod validity;
 
 pub mod view;
 
+mod walk;
+pub use walk::*;
+
 pub mod flatbuffers {
     pub use generated::vortex::*;
 

@@ -1,5 +1,6 @@
-use crate::array::{Array, ArrayWalker};
+use crate::array::Array;
 use crate::encoding::EncodingId;
+use crate::walk::ArrayWalker;
 use arrow_buffer::Buffer;
 use vortex_error::{VortexError, VortexResult};
 
@@ -92,12 +93,12 @@ impl ColumnData {
 }
 
 impl ArrayWalker for ColumnData {
-    fn child(&mut self, array: &dyn Array) -> VortexResult<()> {
+    fn visit_child(&mut self, array: &dyn Array) -> VortexResult<()> {
         self.children.push(ColumnData::try_from_array(array)?);
         Ok(())
     }
 
-    fn buffer(&mut self, buffer: &Buffer) -> VortexResult<()> {
+    fn visit_buffer(&mut self, buffer: &Buffer) -> VortexResult<()> {
         self.buffers.push(buffer.clone());
         Ok(())
     }

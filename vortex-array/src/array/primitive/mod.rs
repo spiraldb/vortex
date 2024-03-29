@@ -14,16 +14,16 @@ use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
+use crate::array::IntoArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
-use crate::array::{ArrayWalker, IntoArray};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
 use crate::view::ArrayViewVTable;
+use crate::{impl_array, ArrayWalker};
 
 mod compute;
 mod serde;
@@ -198,12 +198,16 @@ impl Array for PrimitiveArray {
         self.buffer.len()
     }
 
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        walker.buffer(&self.buffer)
-    }
-
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        if let Some(_v) = self.validity() {
+            // TODO(ngates): is validity an array?
+            // walker.visit_child(&v)?;
+        }
+        walker.visit_buffer(self.buffer())
     }
 }
 
