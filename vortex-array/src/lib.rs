@@ -16,9 +16,9 @@ pub mod serde;
 pub mod stats;
 pub mod validity;
 
-pub mod view;
-
+pub mod array2;
 mod walk;
+
 pub use walk::*;
 
 pub mod flatbuffers {

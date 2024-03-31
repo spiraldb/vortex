@@ -1,4 +1,5 @@
 use crate::array::{Array, ArrayRef};
+use crate::array2::{ArrayMetadata, ArrayView, ArrayViewVTable};
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::flatbuffers::array as fb;
@@ -7,34 +8,10 @@ use crate::stats::Stats;
 use crate::validity::{ArrayValidity, Validity};
 use arrow_buffer::Buffer;
 use std::any::Any;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::sync::Arc;
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
-
-pub trait ArrayMetadata<'a>: Send + Sync + Sized {
-    fn from_bytes(bytes: Option<&'a [u8]>) -> VortexResult<Self>;
-}
-
-#[derive(Clone)]
-pub struct ArrayView<'a> {
-    encoding: EncodingRef,
-    vtable: &'a dyn ArrayViewVTable<'a>,
-    dtype: DType,
-    array: fb::Array<'a>,
-    buffers: &'a [Buffer],
-}
-
-impl<'a> Debug for ArrayView<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ArrayView")
-            .field("encoding", &self.encoding)
-            .field("dtype", &self.dtype)
-            .field("array", &self.array)
-            .field("buffers", &self.buffers)
-            .finish()
-    }
-}
 
 impl<'a> ArrayView<'a> {
     pub fn try_new(
@@ -43,7 +20,7 @@ impl<'a> ArrayView<'a> {
         array: fb::Array<'a>,
         buffers: &'a [Buffer],
     ) -> VortexResult<Self> {
-        let vtable = encoding.view_vtable().ok_or_else(|| {
+        let _vtable = encoding.view_vtable().ok_or_else(|| {
             // TODO(ngates): we could fall-back to heap-allocating?
             VortexError::InvalidSerde(
                 format!("Encoding {} does not support reading from view", encoding).into(),
@@ -52,7 +29,6 @@ impl<'a> ArrayView<'a> {
         Ok(Self {
             encoding,
             dtype,
-            vtable,
             array,
             buffers,
         })
@@ -60,6 +36,10 @@ impl<'a> ArrayView<'a> {
 
     pub fn encoding(&self) -> EncodingRef {
         self.encoding
+    }
+
+    pub fn vtable(&self) -> &ArrayViewVTable {
+        self.encoding.view_vtable().unwrap()
     }
 
     pub fn metadata(&self) -> Option<&'a [u8]> {
@@ -82,7 +62,6 @@ impl<'a> ArrayView<'a> {
 
         Some(ArrayView {
             encoding: self.encoding,
-            vtable: self.vtable,
             dtype,
             array: child,
             buffers: &self.buffers[buffer_offset..][0..buffer_count],
@@ -117,11 +96,14 @@ impl<'a> ArrayView<'a> {
         &self.buffers[0..self.nbuffers()]
     }
 
-    pub fn try_as_typed<M: ArrayMetadata<'a>>(&'a self) -> VortexResult<TypedArrayView<'a, M>> {
+    pub fn try_as_typed<M>(&'a self) -> VortexResult<TypedArrayView<'a, M>>
+    where
+        M: ArrayMetadata,
+    {
         // TODO(ngates): ideally we would verify the encoding here...
         Ok(TypedArrayView {
             view: self.clone(),
-            metadata: M::from_bytes(self.metadata())?,
+            metadata: M::try_from_bytes(self.metadata(), &self.dtype)?,
         })
     }
 }
@@ -133,11 +115,14 @@ pub struct TypedArrayView<'view, M> {
     metadata: M,
 }
 
-impl<'view, M: ArrayMetadata<'view>> TypedArrayView<'view, M> {
+impl<'view, M> TypedArrayView<'view, M>
+where
+    M: ArrayMetadata,
+{
     pub fn try_new(view: &ArrayView<'view>) -> VortexResult<Self> {
         Ok(Self {
             view: view.clone(),
-            metadata: M::from_bytes(view.metadata())?,
+            metadata: M::try_from_bytes(view.metadata(), &view.dtype)?,
         })
     }
 
@@ -147,16 +132,6 @@ impl<'view, M: ArrayMetadata<'view>> TypedArrayView<'view, M> {
 
     pub fn view(&self) -> &ArrayView<'view> {
         &self.view
-    }
-}
-
-pub trait ArrayViewVTable<'view>: Send + Sync {
-    fn to_array(&self, view: &ArrayView<'view>) -> VortexResult<ArrayRef>;
-
-    fn len(&self, view: &ArrayView<'view>) -> VortexResult<usize>;
-
-    fn is_empty(&self, view: &ArrayView<'view>) -> VortexResult<bool> {
-        Ok(self.len(view)? == 0)
     }
 }
 
@@ -170,7 +145,9 @@ impl<'a> Array for ArrayView<'a> {
     }
 
     fn to_array(&self) -> ArrayRef {
-        self.vtable.to_array(self).unwrap()
+        todo!()
+        // self.encoding.view_vtable().unwrap()
+        // self.vtable.to_array(self).unwrap()
     }
 
     fn into_array(self) -> ArrayRef {
@@ -178,11 +155,12 @@ impl<'a> Array for ArrayView<'a> {
     }
 
     fn len(&self) -> usize {
-        self.vtable.len(self).unwrap()
+        self.vtable().len(self)
     }
 
     fn is_empty(&self) -> bool {
-        self.vtable.is_empty(self).unwrap()
+        todo!()
+        // self.vtable.is_empty(self).unwrap()
     }
 
     fn dtype(&self) -> &DType {

@@ -1,16 +1,14 @@
 use crate::array::primitive::PrimitiveEncoding;
 use crate::array::{Array, ArrayRef};
+use crate::array2::{ArrayData, ArrayMetadata, ArrayView, TypedArrayData, TypedArrayView, VTable};
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::PType;
-use crate::serde::ReadCtx;
 use crate::stats::Stats;
 use crate::validity::{ArrayValidity, Validity};
-use crate::view::{ArrayMetadata, ArrayView, ArrayViewVTable, TypedArrayView};
 use arrow_buffer::Buffer;
 use std::any::Any;
-use std::io::Cursor;
 use std::sync::Arc;
 use vortex_error::VortexResult;
 use vortex_schema::IntWidth::_32;
@@ -21,32 +19,52 @@ use vortex_schema::{DType, Nullability};
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct PrimitiveMetadata {
+    dtype: DType,
     ptype: PType,
-    nullability: Nullability,
 }
-
-impl<'a> ArrayMetadata<'a> for PrimitiveMetadata {
-    fn from_bytes(bytes: Option<&'a [u8]>) -> VortexResult<Self> {
-        let mut cursor = Cursor::new(bytes.expect("Missing metadata"));
-        let mut ctx = ReadCtx::new(&DType::Int(_32, Signed, Nullable), &mut cursor);
-        let ptype = ctx.ptype()?;
-        let nullability = ctx.nullability()?;
-        Ok(PrimitiveMetadata { ptype, nullability })
-    }
-}
-
-impl<'view> ArrayViewVTable<'view> for PrimitiveEncoding {
-    fn to_array(&self, view: &ArrayView<'view>) -> VortexResult<ArrayRef> {
-        let p = PrimitiveView::try_new(view)?;
-        Ok(p.to_array())
-    }
-
-    fn len(&self, view: &ArrayView<'view>) -> VortexResult<usize> {
-        Ok(PrimitiveView::try_new(view)?.len())
-    }
-}
-
 type PrimitiveView<'a> = TypedArrayView<'a, PrimitiveMetadata>;
+
+/// The "owned" version of a PrimitiveArray.
+/// Not all arrays have to be implemented using TypedArrayData, but it can short-cut a lot of
+/// implementation details. This should not preclude implementing the Array and Encoding traits
+/// directly.
+#[allow(dead_code)]
+type PrimitiveData = TypedArrayData<PrimitiveMetadata>;
+
+impl ArrayMetadata for PrimitiveMetadata {
+    fn try_from_bytes<'a>(_bytes: Option<&'a [u8]>, dtype: &DType) -> VortexResult<Self> {
+        let ptype = PType::try_from(dtype)?;
+        Ok(PrimitiveMetadata {
+            dtype: dtype.clone(),
+            ptype,
+        })
+    }
+}
+
+impl VTable<ArrayData> for PrimitiveEncoding {
+    fn len(&self, _array: &ArrayData) -> usize {
+        todo!()
+    }
+
+    fn validate(&self, _array: &ArrayData) -> VortexResult<()> {
+        todo!()
+    }
+}
+
+impl<'view> VTable<ArrayView<'view>> for PrimitiveEncoding {
+    // fn to_array(&self, view: &ArrayView<'view>) -> VortexResult<ArrayRef> {
+    //     let p = PrimitiveView::try_new(view)?;
+    //     Ok(p.to_array())
+    // }
+
+    fn len(&self, view: &ArrayView<'view>) -> usize {
+        PrimitiveView::try_new(view).unwrap().len()
+    }
+
+    fn validate(&self, array: &ArrayView<'view>) -> VortexResult<()> {
+        PrimitiveMetadata::try_from_bytes(array.metadata(), array.dtype()).map(|_| ())
+    }
+}
 
 impl PrimitiveView<'_> {
     pub fn ptype(&self) -> PType {
@@ -54,7 +72,7 @@ impl PrimitiveView<'_> {
     }
 
     pub fn nullability(&self) -> Nullability {
-        self.metadata().nullability
+        self.metadata().dtype.nullability()
     }
 
     pub fn buffer(&self) -> &Buffer {

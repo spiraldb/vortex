@@ -1,11 +1,12 @@
 use crate::context::IPCContext;
 use crate::flatbuffers::ipc::Message;
+use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
 use arrow_buffer::Buffer;
 use flatbuffers::root;
-use lending_iterator::prelude::*;
+use nougat::gat;
 use std::io;
 use std::io::{BufReader, Read};
-use vortex::view::ArrayView;
+use vortex::array2::ArrayView;
 use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::FlatBufferReader;
 use vortex_schema::DType;
@@ -72,35 +73,31 @@ impl<R: Read> StreamReader<R> {
 /// We implement a lending iterator here so that each StreamArrayChunkReader can be lent as
 /// mutable to the caller. This is necessary because we need a mutable handle to the reader.
 #[gat]
-impl<R: Read> LendingIterator for StreamReader<R> {
-    type Item<'next> = VortexResult<StreamArrayChunkReader<'next, R>> where Self: 'next;
+impl<R: Read> FallibleLendingIterator for StreamReader<R> {
+    type Error = VortexError;
+    type Item<'next> =  StreamArrayChunkReader<'next, R> where Self: 'next;
 
-    fn next(self: &'_ mut Self) -> Option<Item<'_, Self>> {
+    fn next<'next>(
+        &'next mut self,
+    ) -> Result<Option<StreamArrayChunkReader<'next, R>>, Self::Error> {
         let mut fb_vec = Vec::new();
-        let msg = self
-            .read
-            .read_flatbuffer::<Message>(&mut fb_vec)
-            .transpose();
+        let msg = self.read.read_flatbuffer::<Message>(&mut fb_vec)?;
         if msg.is_none() {
             // End of the stream
-            return None;
+            return Ok(None);
         }
         let msg = msg.unwrap();
 
-        // Invoke a closure that returns VortexResult<Option<Item>> so we can nicely transpose.
-        (move || {
-            let _schema = msg?
-                .header_as_schema()
-                .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Schema message".into()))?;
-            Ok(Some(StreamArrayChunkReader {
-                read: &mut self.read,
-                ctx: &self.ctx,
-                dtype: DType::Int(_32, Signed, Nullable),
-                fb_buffer: Vec::new(),
-                buffers: Vec::new(),
-            }))
-        })()
-        .transpose()
+        let _schema = msg
+            .header_as_schema()
+            .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Schema message".into()))?;
+        Ok(Some(StreamArrayChunkReader {
+            read: &mut self.read,
+            ctx: &self.ctx,
+            dtype: DType::Int(_32, Signed, Nullable),
+            fb_buffer: Vec::new(),
+            buffers: Vec::new(),
+        }))
     }
 }
 
@@ -120,22 +117,19 @@ impl<'a, R: Read> StreamArrayChunkReader<'a, R> {
 }
 
 #[gat]
-impl<'a, R: Read> LendingIterator for StreamArrayChunkReader<'a, R> {
-    type Item<'next> = VortexResult<ArrayView<'next>> where Self: 'next;
+impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
+    type Error = VortexError;
+    type Item<'next> = ArrayView<'next> where Self: 'next;
 
-    fn next(self: &'_ mut Self) -> Option<Item<'_, Self>> {
+    fn next<'next>(&'next mut self) -> Result<Option<ArrayView<'next>>, Self::Error> {
         let mut fb_vec: Vec<u8> = Vec::new();
-        let msg = self
-            .read
-            .read_flatbuffer::<Message>(&mut fb_vec)
-            .transpose();
+        let msg = self.read.read_flatbuffer::<Message>(&mut fb_vec)?;
         if msg.is_none() {
             // End of the stream
-            return None;
+            return Ok(None);
         }
         let msg = msg.unwrap();
 
-        let msg = msg.unwrap();
         let chunk = msg
             .header_as_chunk()
             .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Chunk message".into()))
@@ -194,13 +188,22 @@ impl<'a, R: Read> LendingIterator for StreamArrayChunkReader<'a, R> {
 
         let encoding = self.ctx.find_encoding(col_array.encoding()).unwrap();
 
-        Some(ArrayView::try_new(
+        let view = ArrayView::try_new(
             encoding,
             // FIXME(ngates): avoid this clone?
             self.dtype.clone(),
             col_array,
             &self.buffers,
-        ))
+        )?;
+
+        // Validate the array once here so we can ignore metadata parsing errors from now on.
+        // TODO(ngates): should we convert to heap-allocated array if this is missing?
+        let vtable = encoding.view_vtable().ok_or_else(|| {
+            VortexError::InvalidSerde("Encoding does not have a view vtable".into())
+        })?;
+        vtable.validate(&view)?;
+
+        Ok(Some(view))
     }
 }
 

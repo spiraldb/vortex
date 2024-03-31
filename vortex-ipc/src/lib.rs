@@ -1,11 +1,9 @@
 extern crate core;
 
-use lending_iterator::LendingIterator;
-
-use vortex_error::VortexError;
-
 use crate::context::IPCContext;
+use crate::iter::FallibleLendingIterator;
 use crate::writer::StreamWriter;
+use vortex_error::VortexError;
 
 pub const ALIGNMENT: usize = 64;
 
@@ -32,6 +30,7 @@ pub mod flatbuffers {
 
 mod chunked;
 pub mod context;
+mod iter;
 mod messages;
 pub mod reader;
 pub mod writer;
@@ -65,11 +64,11 @@ mod tests {
         let mut ipc_reader = StreamReader::try_new_unbuffered(cursor).unwrap();
 
         // Read some number of arrays off the stream.
-        while let Some(array_reader) = ipc_reader.next() {
-            let mut array_reader = array_reader.unwrap();
+        while let Ok(Some(array_reader)) = ipc_reader.next() {
+            let mut array_reader = array_reader;
             println!("DType: {:?}", array_reader.dtype());
-            while let Some(chunk) = array_reader.next() {
-                println!("Chunk: {:?}", display_tree(&chunk.unwrap()));
+            while let Ok(Some(chunk)) = array_reader.next() {
+                println!("Chunk: {:?}", display_tree(&chunk));
             }
         }
     }

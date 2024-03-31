@@ -64,8 +64,12 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
     fn is_empty(&self) -> bool;
     /// Get the dtype of the array
     fn dtype(&self) -> &DType;
+
     /// Get statistics for the array
+    /// TODO(ngates): this is interesting. What type do we return from this?
+    /// Maybe we actually need to model stats more like compute?
     fn stats(&self) -> Stats;
+
     /// Limit array to start..stop range
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef>;
     /// Encoding kind of the array

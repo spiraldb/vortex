@@ -16,13 +16,13 @@ use vortex_schema::{DType, Nullability};
 use crate::accessor::ArrayAccessor;
 use crate::array::IntoArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array2::{ArrayDataVTable, ArrayViewVTable};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
-use crate::view::ArrayViewVTable;
 use crate::{impl_array, ArrayWalker};
 
 mod compute;
@@ -252,7 +252,11 @@ impl Encoding for PrimitiveEncoding {
         Some(self)
     }
 
-    fn view_vtable(&self) -> Option<&dyn ArrayViewVTable> {
+    fn data_vtable(&self) -> Option<&ArrayDataVTable> {
+        Some(self)
+    }
+
+    fn view_vtable(&self) -> Option<&ArrayViewVTable> {
         Some(self)
     }
 }

@@ -1,7 +1,6 @@
-use crate::array::ArrayRef;
+use crate::array2::{ArrayDataVTable, ArrayViewVTable};
 use crate::compress::EncodingCompression;
 use crate::serde::EncodingSerde;
-use crate::view::{ArrayView, ArrayViewVTable};
 use linkme::distributed_slice;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -39,11 +38,10 @@ pub trait Encoding: Debug + Send + Sync + 'static {
         None
     }
 
-    fn view_as_array(&self, _view: ArrayView) -> Option<ArrayRef> {
+    fn data_vtable(&self) -> Option<&ArrayDataVTable> {
         None
     }
-
-    fn view_vtable(&self) -> Option<&dyn ArrayViewVTable> {
+    fn view_vtable(&self) -> Option<&ArrayViewVTable> {
         None
     }
 }
