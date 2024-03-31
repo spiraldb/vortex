@@ -204,9 +204,9 @@ impl Array for PrimitiveArray {
     }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        if let Some(_v) = self.validity() {
-            // TODO(ngates): is validity an array?
-            // walker.visit_child(&v)?;
+        if let Some(v) = self.validity() {
+            // FIXME(ngates): should validity implement Array?
+            walker.visit_child(&v.to_array())?;
         }
         walker.visit_buffer(self.buffer())
     }

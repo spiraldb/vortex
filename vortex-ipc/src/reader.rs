@@ -50,24 +50,6 @@ impl<R: Read> StreamReader<R> {
             scratch: Vec::with_capacity(1024),
         })
     }
-    //
-    // pub fn with_next_array<T>(
-    //     mut self,
-    //     f: impl FnOnce(&mut dyn ArrayChunkReader) -> VortexResult<T>,
-    // ) -> VortexResult<Option<T>> {
-    //     let mut array_chunk_reader = StreamArrayChunkReader {
-    //         reader: self,
-    //         dtype: DType::Int(_32, Signed, Nullable),
-    //     };
-    //     Ok(Some(f(&mut array_chunk_reader)?))
-    // }
-
-    // pub fn into_iter<'a>(self) -> StreamReaderStreamingIterator<'a, R> {
-    //     StreamReaderStreamingIterator {
-    //         reader: self,
-    //         chunk_reader: None,
-    //     }
-    // }
 }
 
 /// We implement a lending iterator here so that each StreamArrayChunkReader can be lent as

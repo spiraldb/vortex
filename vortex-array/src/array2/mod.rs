@@ -47,7 +47,7 @@ impl<'a> Debug for ArrayView<'a> {
     }
 }
 
-pub trait ArrayMetadata: Send + Sync + Sized {
+pub trait ArrayMetadata: Debug + Send + Sync + Sized {
     fn to_bytes(&self) -> Option<Vec<u8>>;
 
     fn try_from_bytes<'a>(bytes: Option<&'a [u8]>, dtype: &DType) -> VortexResult<Self>;

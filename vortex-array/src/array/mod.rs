@@ -83,7 +83,7 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
 
     #[allow(unused_variables)]
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        todo!()
+        todo!("Walk not implemented for {}", self.encoding().id())
     }
 }
 
@@ -227,7 +227,7 @@ impl Array for ArrayRef {
 
     #[allow(unused_variables)]
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        todo!()
+        self.as_ref().walk(walker)
     }
 }
 

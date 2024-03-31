@@ -1,5 +1,6 @@
 use crate::array::{Array, ArrayRef};
 use crate::array2::{ArrayMetadata, ArrayView, ArrayViewVTable};
+use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::flatbuffers::array as fb;
@@ -185,7 +186,11 @@ impl<'a> Array for ArrayView<'a> {
     }
 }
 
-impl<'a> ArrayCompute for ArrayView<'a> {}
+impl<'a> ArrayCompute for ArrayView<'a> {
+    fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self.vtable())
+    }
+}
 
 impl<'a> ArrayValidity for ArrayView<'a> {
     fn validity(&self) -> Option<Validity> {
@@ -203,5 +208,65 @@ impl<'a> ArrayDisplay for ArrayView<'a> {
         //     // fmt.child(&format!("{}", i), &child)?;
         // }
         Ok(())
+    }
+}
+
+impl<'view, M: ArrayMetadata> ArrayCompute for TypedArrayView<'view, M> {}
+
+impl<'view, M: ArrayMetadata> ArrayValidity for TypedArrayView<'view, M> {
+    fn validity(&self) -> Option<Validity> {
+        todo!()
+    }
+}
+
+impl<'view, M: ArrayMetadata> ArrayDisplay for TypedArrayView<'view, M> {
+    fn fmt(&self, _fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+impl<'view, M: ArrayMetadata> Array for TypedArrayView<'view, M> {
+    fn as_any(&self) -> &dyn Any {
+        todo!()
+    }
+
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+        todo!()
+    }
+
+    fn to_array(&self) -> ArrayRef {
+        todo!()
+    }
+
+    fn into_array(self) -> ArrayRef {
+        todo!()
+    }
+
+    fn len(&self) -> usize {
+        todo!()
+    }
+
+    fn is_empty(&self) -> bool {
+        todo!()
+    }
+
+    fn dtype(&self) -> &DType {
+        todo!()
+    }
+
+    fn stats(&self) -> Stats {
+        todo!()
+    }
+
+    fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {
+        todo!()
+    }
+
+    fn encoding(&self) -> EncodingRef {
+        todo!()
+    }
+
+    fn nbytes(&self) -> usize {
+        todo!()
     }
 }

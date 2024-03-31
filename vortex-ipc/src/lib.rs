@@ -42,8 +42,10 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
+    use vortex::array::ArrayKind::Primitive;
 
-    use vortex::array::primitive::PrimitiveData;
+    use vortex::array::primitive::{PrimitiveArray, PrimitiveData};
+    use vortex::compute::take::take;
     use vortex::formatter::display_tree;
 
     use crate::reader::StreamReader;
@@ -52,8 +54,8 @@ mod tests {
 
     #[test]
     fn test_write_flatbuffer() {
-        let array = PrimitiveData::from(vec![1, 2, 3, 4, 5]);
-        // let array = PrimitiveArray::from(vec![1, 2, 3, 4, 5]);
+        let _array = PrimitiveData::from(vec![1, 2, 3, 4, 5]);
+        let array = PrimitiveArray::from_iter(vec![Some(1), None, None, Some(4), Some(5)]);
 
         let mut cursor = Cursor::new(Vec::new());
         let ctx = IPCContext::default();
@@ -65,11 +67,14 @@ mod tests {
         let mut ipc_reader = StreamReader::try_new_unbuffered(cursor).unwrap();
 
         // Read some number of arrays off the stream.
-        while let Ok(Some(array_reader)) = ipc_reader.next() {
+        while let Some(array_reader) = ipc_reader.next().unwrap() {
             let mut array_reader = array_reader;
             println!("DType: {:?}", array_reader.dtype());
-            while let Ok(Some(chunk)) = array_reader.next() {
-                println!("Chunk: {:?}", display_tree(&chunk));
+            // Read some number of chunks from the stream.
+            while let Some(chunk) = array_reader.next().unwrap() {
+                println!("VIEW: {:?}", &chunk);
+                let taken = take(&chunk, &PrimitiveArray::from(vec![0, 1, 0, 1])).unwrap();
+                println!("Taken: {:?}", &taken);
             }
         }
     }
