@@ -1,5 +1,5 @@
 use crate::array::{Array, ArrayRef};
-use crate::array2::{ArrayData, ArrayView};
+use crate::array2::ArrayView;
 use vortex_error::VortexResult;
 
 // A VTable for the ArrayData and ArrayView implementations
@@ -14,8 +14,6 @@ pub trait VTable<A>: ComputeVTable<A> + Send + Sync {
 }
 
 pub type ArrayViewVTable<'view> = dyn VTable<ArrayView<'view>>;
-pub type ArrayDataVTable = dyn VTable<ArrayData>;
-
 pub trait ComputeVTable<A> {
     fn take(&self) -> Option<&dyn TakeFn<A>>;
 }

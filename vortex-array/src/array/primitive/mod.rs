@@ -16,7 +16,7 @@ use vortex_schema::{DType, Nullability};
 use crate::accessor::ArrayAccessor;
 use crate::array::IntoArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
-use crate::array2::{ArrayDataVTable, ArrayViewVTable};
+use crate::array2::ArrayViewVTable;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
@@ -251,10 +251,6 @@ impl Encoding for PrimitiveEncoding {
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
-    }
-
-    fn data_vtable(&self) -> Option<&ArrayDataVTable> {
-        None
     }
 
     fn view_vtable(&self) -> Option<&ArrayViewVTable> {

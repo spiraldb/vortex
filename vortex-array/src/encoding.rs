@@ -1,4 +1,4 @@
-use crate::array2::{ArrayDataVTable, ArrayViewVTable};
+use crate::array2::ArrayViewVTable;
 use crate::compress::EncodingCompression;
 use crate::serde::EncodingSerde;
 use linkme::distributed_slice;
@@ -38,9 +38,6 @@ pub trait Encoding: Debug + Send + Sync + 'static {
         None
     }
 
-    fn data_vtable(&self) -> Option<&ArrayDataVTable> {
-        None
-    }
     fn view_vtable(&self) -> Option<&ArrayViewVTable> {
         None
     }
