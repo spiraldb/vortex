@@ -1,5 +1,6 @@
 use crate::array::{Array, ArrayRef};
-use crate::array2::{ArrayMetadata, ArrayView, ArrayViewVTable};
+use crate::array2::context::ViewContext;
+use crate::array2::{ArrayMetadata, ArrayViewVTable, TypedArrayView};
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
@@ -9,18 +10,41 @@ use crate::stats::Stats;
 use crate::validity::{ArrayValidity, Validity};
 use arrow_buffer::Buffer;
 use std::any::Any;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
+#[derive(Clone)]
+pub struct ArrayView<'a> {
+    ctx: &'a ViewContext,
+    encoding: EncodingRef,
+    dtype: DType,
+    array: fb::Array<'a>,
+    buffers: &'a [Buffer],
+}
+
+impl<'a> Debug for ArrayView<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ArrayView")
+            .field("encoding", &self.encoding)
+            .field("dtype", &self.dtype)
+            // .field("array", &self.array)
+            .field("buffers", &self.buffers)
+            .finish()
+    }
+}
+
 impl<'a> ArrayView<'a> {
     pub fn try_new(
-        encoding: EncodingRef,
+        ctx: &'a ViewContext,
         dtype: DType,
         array: fb::Array<'a>,
         buffers: &'a [Buffer],
     ) -> VortexResult<Self> {
+        let encoding = ctx
+            .find_encoding(array.encoding())
+            .ok_or_else(|| VortexError::InvalidSerde("Encoding ID out of bounds".into()))?;
         let _vtable = encoding.view_vtable().ok_or_else(|| {
             // TODO(ngates): we could fall-back to heap-allocating?
             VortexError::InvalidSerde(
@@ -28,6 +52,7 @@ impl<'a> ArrayView<'a> {
             )
         })?;
         Ok(Self {
+            ctx,
             encoding,
             dtype,
             array,
@@ -41,6 +66,10 @@ impl<'a> ArrayView<'a> {
 
     pub fn vtable(&self) -> &ArrayViewVTable {
         self.encoding.view_vtable().unwrap()
+    }
+
+    pub fn dtype(&self) -> &DType {
+        &self.dtype
     }
 
     pub fn metadata(&self) -> Option<&'a [u8]> {
@@ -61,12 +90,15 @@ impl<'a> ArrayView<'a> {
             .sum();
         let buffer_count = child.buffers().unwrap_or_default().len();
 
-        Some(ArrayView {
-            encoding: self.encoding,
-            dtype,
-            array: child,
-            buffers: &self.buffers[buffer_offset..][0..buffer_count],
-        })
+        Some(
+            Self::try_new(
+                self.ctx,
+                dtype,
+                child,
+                &self.buffers[buffer_offset..][0..buffer_count],
+            )
+            .unwrap(),
+        )
     }
 
     fn array_child(&self, idx: usize) -> Option<fb::Array<'a>> {
@@ -96,44 +128,6 @@ impl<'a> ArrayView<'a> {
         // This is only true for the immediate current node?
         &self.buffers[0..self.nbuffers()]
     }
-
-    pub fn try_as_typed<M>(&'a self) -> VortexResult<TypedArrayView<'a, M>>
-    where
-        M: ArrayMetadata,
-    {
-        // TODO(ngates): ideally we would verify the encoding here...
-        Ok(TypedArrayView {
-            view: self.clone(),
-            metadata: M::try_from_bytes(self.metadata(), &self.dtype)?,
-        })
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct TypedArrayView<'view, M> {
-    view: ArrayView<'view>,
-    metadata: M,
-}
-
-impl<'view, M> TypedArrayView<'view, M>
-where
-    M: ArrayMetadata,
-{
-    pub fn try_new(view: &ArrayView<'view>) -> VortexResult<Self> {
-        Ok(Self {
-            view: view.clone(),
-            metadata: M::try_from_bytes(view.metadata(), &view.dtype)?,
-        })
-    }
-
-    pub fn metadata(&self) -> &M {
-        &self.metadata
-    }
-
-    pub fn view(&self) -> &ArrayView<'view> {
-        &self.view
-    }
 }
 
 impl<'a> Array for ArrayView<'a> {
@@ -146,13 +140,12 @@ impl<'a> Array for ArrayView<'a> {
     }
 
     fn to_array(&self) -> ArrayRef {
-        todo!()
-        // self.encoding.view_vtable().unwrap()
-        // self.vtable.to_array(self).unwrap()
+        self.vtable().to_array(self)
     }
 
     fn into_array(self) -> ArrayRef {
-        unreachable!()
+        // Not much point adding VTable.into_array for ArrayView since everything is by-reference.
+        self.vtable().to_array(&self)
     }
 
     fn len(&self) -> usize {
@@ -186,12 +179,6 @@ impl<'a> Array for ArrayView<'a> {
     }
 }
 
-impl<'a> ArrayCompute for ArrayView<'a> {
-    fn take(&self) -> Option<&dyn TakeFn> {
-        Some(self.vtable())
-    }
-}
-
 impl<'a> ArrayValidity for ArrayView<'a> {
     fn validity(&self) -> Option<Validity> {
         todo!()
@@ -208,6 +195,23 @@ impl<'a> ArrayDisplay for ArrayView<'a> {
         //     // fmt.child(&format!("{}", i), &child)?;
         // }
         Ok(())
+    }
+}
+
+impl<'a> ArrayCompute for ArrayView<'a> {
+    fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+}
+
+impl<'a> TakeFn for ArrayView<'a> {
+    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
+        self.encoding()
+            .view_vtable()
+            .map(|vt| vt.compute())
+            .and_then(|compute| compute.take())
+            .map(|t| t.take(self, indices))
+            .ok_or_else(|| VortexError::NotImplemented("take", self.encoding().id().name()))?
     }
 }
 

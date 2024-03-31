@@ -1,24 +1,25 @@
-use crate::context::IPCContext;
 use crate::flatbuffers::ipc as fb;
 use crate::ALIGNMENT;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
+use vortex::array2::ViewContext;
 use vortex::flatbuffers::array as fba;
 use vortex::serde::data::ColumnData;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 use vortex_schema::DType;
 
 pub(crate) enum IPCMessage<'a> {
-    Context(&'a IPCContext),
+    Context(IPCContext<'a>),
     Schema(IPCSchema<'a>),
     Chunk(IPCChunk<'a>),
     ChunkColumn(IPCChunkColumn<'a>),
 }
 
+pub(crate) struct IPCContext<'a>(pub &'a ViewContext);
 pub(crate) struct IPCSchema<'a>(pub &'a DType);
 pub(crate) struct IPCChunk<'a>(pub &'a [u64]);
-pub(crate) struct IPCChunkColumn<'a>(pub &'a IPCContext, pub &'a ColumnData);
-pub(crate) struct IPCArray<'a>(pub &'a IPCContext, pub &'a ColumnData);
+pub(crate) struct IPCChunkColumn<'a>(pub &'a ViewContext, pub &'a ColumnData);
+pub(crate) struct IPCArray<'a>(pub &'a ViewContext, pub &'a ColumnData);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
 impl WriteFlatBuffer for IPCMessage<'_> {
@@ -45,6 +46,39 @@ impl WriteFlatBuffer for IPCMessage<'_> {
         });
         msg.add_header(header);
         msg.finish()
+    }
+}
+
+impl<'a> WriteFlatBuffer for IPCContext<'a> {
+    type Target<'t> = fb::Context<'t>;
+
+    fn write_flatbuffer<'fb>(
+        &self,
+        fbb: &mut FlatBufferBuilder<'fb>,
+    ) -> WIPOffset<Self::Target<'fb>> {
+        let fb_encodings = self
+            .0
+            .encodings()
+            .iter()
+            .map(|e| e.id().name())
+            .map(|name| {
+                let encoding_id = fbb.create_string(name);
+                fb::Encoding::create(
+                    fbb,
+                    &fb::EncodingArgs {
+                        id: Some(encoding_id),
+                    },
+                )
+            })
+            .collect_vec();
+        let fb_encodings = fbb.create_vector(fb_encodings.as_slice());
+
+        fb::Context::create(
+            fbb,
+            &fb::ContextArgs {
+                encodings: Some(fb_encodings),
+            },
+        )
     }
 }
 

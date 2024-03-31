@@ -254,7 +254,7 @@ impl Encoding for PrimitiveEncoding {
     }
 
     fn data_vtable(&self) -> Option<&ArrayDataVTable> {
-        Some(self)
+        None
     }
 
     fn view_vtable(&self) -> Option<&ArrayViewVTable> {

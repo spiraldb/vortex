@@ -1,6 +1,5 @@
 extern crate core;
 
-use crate::context::IPCContext;
 use crate::iter::FallibleLendingIterator;
 use crate::writer::StreamWriter;
 use vortex_error::VortexError;
@@ -42,11 +41,10 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
-    use vortex::array::ArrayKind::Primitive;
+    use vortex::array2::ViewContext;
 
-    use vortex::array::primitive::{PrimitiveArray, PrimitiveData};
+    use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::take::take;
-    use vortex::formatter::display_tree;
 
     use crate::reader::StreamReader;
 
@@ -54,11 +52,10 @@ mod tests {
 
     #[test]
     fn test_write_flatbuffer() {
-        let _array = PrimitiveData::from(vec![1, 2, 3, 4, 5]);
         let array = PrimitiveArray::from_iter(vec![Some(1), None, None, Some(4), Some(5)]);
 
         let mut cursor = Cursor::new(Vec::new());
-        let ctx = IPCContext::default();
+        let ctx = ViewContext::default();
         let mut writer = StreamWriter::try_new_unbuffered(&mut cursor, ctx).unwrap();
         writer.write(&array).unwrap();
         cursor.flush().unwrap();

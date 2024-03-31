@@ -1,5 +1,6 @@
 use flatbuffers::root_unchecked;
 use std::io::{BufWriter, Write};
+use vortex::array2::ViewContext;
 
 use vortex::array::Array;
 use vortex::serde::data::{ArrayData, ColumnData};
@@ -8,26 +9,25 @@ use crate::ALIGNMENT;
 use vortex_error::VortexResult;
 use vortex_flatbuffers::FlatBufferWriter;
 
-use crate::context::IPCContext;
 use crate::flatbuffers::ipc as fb;
-use crate::messages::{IPCChunk, IPCChunkColumn, IPCMessage, IPCSchema};
+use crate::messages::{IPCChunk, IPCChunkColumn, IPCContext, IPCMessage, IPCSchema};
 
 #[allow(dead_code)]
 pub struct StreamWriter<W: Write> {
     write: W,
-    ctx: IPCContext,
+    ctx: ViewContext,
 }
 
 impl<W: Write> StreamWriter<BufWriter<W>> {
-    pub fn try_new(write: W, ctx: IPCContext) -> VortexResult<Self> {
+    pub fn try_new(write: W, ctx: ViewContext) -> VortexResult<Self> {
         Self::try_new_unbuffered(BufWriter::new(write), ctx)
     }
 }
 
 impl<W: Write> StreamWriter<W> {
-    pub fn try_new_unbuffered(mut write: W, ctx: IPCContext) -> VortexResult<Self> {
+    pub fn try_new_unbuffered(mut write: W, ctx: ViewContext) -> VortexResult<Self> {
         // Write the IPC context to the stream
-        write.write_flatbuffer(&IPCMessage::Context(&ctx), ALIGNMENT)?;
+        write.write_flatbuffer(&IPCMessage::Context(IPCContext(&ctx)), ALIGNMENT)?;
         Ok(Self { write, ctx })
     }
 

@@ -1,14 +1,16 @@
-use arrow_buffer::{Buffer, ScalarBuffer};
-
-use vortex_error::VortexResult;
-use vortex_schema::{DType, Nullability};
+use arrow_buffer::Buffer;
+use num_traits::PrimInt;
 
 use crate::array::primitive::PrimitiveEncoding;
+use crate::array::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
-use crate::array2::{ArrayData, ArrayMetadata, ArrayView, TypedArrayData, TypedArrayView, VTable};
-use crate::compute::take::TakeFn;
-use crate::compute::ArrayCompute;
+use crate::array2::{ArrayMetadata, ArrayView, ComputeVTable, TakeFn, VTable};
+use crate::compute::flatten::flatten_primitive;
 use crate::ptype::{NativePType, PType};
+use crate::validity::Validity;
+use crate::{match_each_integer_ptype, match_each_native_ptype};
+use vortex_error::{VortexError, VortexResult};
+use vortex_schema::DType;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -40,40 +42,35 @@ impl ArrayMetadata for PrimitiveMetadata {
     }
 }
 
-pub type PrimitiveView<'a> = TypedArrayView<'a, PrimitiveMetadata>;
-
-/// The "owned" version of a PrimitiveArray.
-/// Not all arrays have to be implemented using TypedArrayData, but it can short-cut a lot of
-/// implementation details. This should not preclude implementing the Array and Encoding traits
-/// directly.
-///
-/// Maybe we make a downcast_impl that takes an expression used to downcast an array and then
-/// re-invoke the function on it. For example,
-///      downcast_impl!(ArrayView, { view.as_typed::<T>() });
-#[allow(dead_code)]
-pub type PrimitiveData = TypedArrayData<PrimitiveMetadata>;
-
-impl<T: NativePType> ArrayCompute for &dyn PrimitiveTrait<T> {
-    fn take(&self) -> Option<&dyn TakeFn> {
-        Some(self)
-    }
+pub struct PrimitiveView<'a> {
+    ptype: PType,
+    buffer: &'a Buffer,
+    validity: Option<Validity>,
 }
 
-impl<T: NativePType> TakeFn for &dyn PrimitiveTrait<T> {
-    fn take(&self, _indices: &dyn Array) -> VortexResult<ArrayRef> {
-        todo!()
-    }
-}
+impl<'a> PrimitiveView<'a> {
+    pub fn try_new(view: &'a ArrayView<'a>) -> VortexResult<Self> {
+        // TODO(ngates): validate the number of buffers / children. We could even extract them?
+        let metadata = PrimitiveMetadata::try_from_bytes(view.metadata(), view.dtype())?;
+        let buffer = view
+            .buffers()
+            .first()
+            .ok_or_else(|| VortexError::InvalidSerde("Missing primitive buffer".into()))?;
+        let validity = view
+            .child(0, Validity::DTYPE)
+            // FIXME(ngates): avoid this clone.
+            .map(|v| Validity::Array(v.to_array()));
 
-impl<T: NativePType> From<Vec<T>> for PrimitiveData {
-    fn from(value: Vec<T>) -> Self {
-        PrimitiveData::new(
-            &PrimitiveEncoding,
-            DType::from(T::PTYPE),
-            PrimitiveMetadata::new(T::PTYPE),
-            Vec::new(),
-            vec![ScalarBuffer::from(value).into_inner()],
-        )
+        Ok(Self {
+            ptype: metadata.ptype,
+            buffer,
+            validity,
+        })
+    }
+
+    pub fn as_dyn<T: NativePType>(&self) -> &dyn PrimitiveTrait<T> {
+        assert_eq!(T::PTYPE, self.ptype);
+        self
     }
 }
 
@@ -81,49 +78,84 @@ impl<T: NativePType> From<Vec<T>> for PrimitiveData {
 // We can't use a trait since typed_data doesn't work? Or maybe we can but we just return Buffer?
 pub trait PrimitiveTrait<T: NativePType> {
     fn ptype(&self) -> PType;
+    fn validity(&self) -> Option<Validity>;
     fn typed_data(&self) -> &[T];
+    fn to_array(&self) -> ArrayRef;
 }
 
 impl<'a, T: NativePType> PrimitiveTrait<T> for PrimitiveView<'a> {
     fn ptype(&self) -> PType {
-        self.ptype()
+        self.ptype
+    }
+
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
     }
 
     fn typed_data(&self) -> &[T] {
-        self.buffer().typed_data::<T>()
-    }
-}
-
-impl VTable<ArrayData> for PrimitiveEncoding {
-    fn len(&self, _array: &ArrayData) -> usize {
-        todo!()
+        self.buffer.typed_data::<T>()
     }
 
-    fn validate(&self, _array: &ArrayData) -> VortexResult<()> {
-        todo!()
+    fn to_array(&self) -> ArrayRef {
+        PrimitiveArray::new(self.ptype, self.buffer.clone(), self.validity.clone()).into_array()
     }
 }
 
 impl<'view> VTable<ArrayView<'view>> for PrimitiveEncoding {
     fn len(&self, view: &ArrayView<'view>) -> usize {
-        view.try_as_typed::<PrimitiveMetadata>().unwrap().len()
+        let p = PrimitiveView::try_new(view).unwrap();
+        p.buffer.len() / p.ptype.byte_width()
+    }
+
+    fn to_array(&self, view: &ArrayView<'view>) -> ArrayRef {
+        // TODO(ngates): seems silly to switch on PType for this?
+        let pv = PrimitiveView::try_new(view).unwrap();
+        match_each_native_ptype!(pv.ptype, |$T| {
+            (&pv as &dyn PrimitiveTrait<$T>).to_array()
+        })
+    }
+
+    fn compute(&self) -> &dyn ComputeVTable<ArrayView<'view>> {
+        self
     }
 
     fn validate(&self, view: &ArrayView<'view>) -> VortexResult<()> {
-        view.try_as_typed::<PrimitiveMetadata>().map(|_| ())
+        PrimitiveView::try_new(view).map(|_| ())
     }
 }
 
-impl PrimitiveView<'_> {
-    pub fn ptype(&self) -> PType {
-        self.metadata().ptype
+impl<'view> ComputeVTable<ArrayView<'view>> for PrimitiveEncoding {
+    fn take(&self) -> Option<&dyn TakeFn<ArrayView<'view>>> {
+        Some(self)
     }
+}
 
-    pub fn nullability(&self) -> Nullability {
-        self.metadata().dtype.nullability()
+impl<'view> TakeFn<ArrayView<'view>> for PrimitiveEncoding {
+    fn take(&self, array: &ArrayView<'view>, indices: &dyn Array) -> VortexResult<ArrayRef> {
+        use crate::compute::take::TakeFn;
+        let view = PrimitiveView::try_new(array)?;
+        match_each_native_ptype!(view.ptype, |$T| {
+            view.as_dyn::<$T>().take(indices)
+        })
     }
+}
 
-    pub fn buffer(&self) -> &Buffer {
-        self.view().buffers().first().expect("Missing buffer")
+impl<T: NativePType> crate::compute::take::TakeFn for &dyn PrimitiveTrait<T> {
+    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
+        let validity = self.validity().map(|v| v.take(indices)).transpose()?;
+        let indices = flatten_primitive(indices)?;
+        match_each_integer_ptype!(indices.ptype(), |$I| {
+            Ok(PrimitiveArray::from_nullable(
+                take_primitive(self.typed_data(), indices.typed_data::<$I>()),
+                validity,
+            ).into_array())
+        })
     }
+}
+
+fn take_primitive<T: NativePType, I: NativePType + PrimInt>(array: &[T], indices: &[I]) -> Vec<T> {
+    indices
+        .iter()
+        .map(|&idx| array[idx.to_usize().unwrap()])
+        .collect()
 }

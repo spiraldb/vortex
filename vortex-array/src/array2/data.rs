@@ -1,5 +1,5 @@
 use crate::array::{Array, ArrayRef};
-use crate::array2::{ArrayData, ArrayMetadata, TypedArrayData};
+use crate::array2::ArrayMetadata;
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -13,6 +13,18 @@ use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
+
+#[allow(dead_code)]
+pub struct TypedArrayData<M: ArrayMetadata> {
+    encoding: EncodingRef,
+    dtype: DType,
+    metadata: M,
+    children: Arc<[ArrayData]>,
+    buffers: Arc<[Buffer]>,
+}
+
+#[allow(dead_code)]
+pub type ArrayData = TypedArrayData<Option<Buffer>>;
 
 impl ArrayData {
     pub fn metadata(&self) -> Option<&[u8]> {

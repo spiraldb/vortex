@@ -1,4 +1,3 @@
-use crate::context::IPCContext;
 use crate::flatbuffers::ipc::Message;
 use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
 use arrow_buffer::Buffer;
@@ -6,7 +5,7 @@ use flatbuffers::root;
 use nougat::gat;
 use std::io;
 use std::io::{BufReader, Read};
-use vortex::array2::ArrayView;
+use vortex::array2::{ArrayView, ViewContext};
 use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::FlatBufferReader;
 use vortex_schema::DType;
@@ -18,7 +17,7 @@ use vortex_schema::Signedness::Signed;
 pub struct StreamReader<R: Read> {
     read: R,
 
-    pub(crate) ctx: IPCContext,
+    pub(crate) ctx: ViewContext,
     // Optionally take a projection?
 
     // Use replace to swap the scratch buffer.
@@ -42,7 +41,7 @@ impl<R: Read> StreamReader<R> {
         let fb_ctx = fb_msg.header_as_context().ok_or_else(|| {
             VortexError::InvalidSerde("Expected IPC Context as first message in stream".into())
         })?;
-        let ctx: IPCContext = fb_ctx.try_into()?;
+        let ctx: ViewContext = fb_ctx.try_into()?;
 
         Ok(Self {
             read,
@@ -86,7 +85,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
 #[allow(dead_code)]
 pub struct StreamArrayChunkReader<'a, R: Read> {
     read: &'a mut R,
-    ctx: &'a IPCContext,
+    ctx: &'a ViewContext,
     dtype: DType,
     fb_buffer: Vec<u8>,
     buffers: Vec<Buffer>,
@@ -168,10 +167,8 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
                 io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
             });
 
-        let encoding = self.ctx.find_encoding(col_array.encoding()).unwrap();
-
         let view = ArrayView::try_new(
-            encoding,
+            self.ctx,
             // FIXME(ngates): avoid this clone?
             self.dtype.clone(),
             col_array,
@@ -180,10 +177,7 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
 
         // Validate the array once here so we can ignore metadata parsing errors from now on.
         // TODO(ngates): should we convert to heap-allocated array if this is missing?
-        let vtable = encoding.view_vtable().ok_or_else(|| {
-            VortexError::InvalidSerde("Encoding does not have a view vtable".into())
-        })?;
-        vtable.validate(&view)?;
+        view.vtable().validate(&view)?;
 
         Ok(Some(view))
     }
