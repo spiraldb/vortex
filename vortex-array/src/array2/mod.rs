@@ -8,8 +8,6 @@ pub use view::*;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-mod typed_view;
-pub use typed_view::*;
 mod context;
 mod vtable;
 pub use context::*;
