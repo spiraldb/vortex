@@ -16,7 +16,6 @@ use vortex_schema::{DType, Nullability};
 use crate::accessor::ArrayAccessor;
 use crate::array::IntoArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
-use crate::array2::ArrayViewVTable;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
@@ -29,6 +28,8 @@ mod compute;
 mod serde;
 mod stats;
 mod view;
+
+use crate::serde::vtable::ArrayViewVTable;
 pub use view::*;
 
 #[derive(Debug, Clone)]

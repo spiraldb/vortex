@@ -5,7 +5,8 @@ use flatbuffers::root;
 use nougat::gat;
 use std::io;
 use std::io::{BufReader, Read};
-use vortex::array2::{ArrayView, ViewContext};
+use vortex::serde::context::SerdeContext;
+use vortex::serde::ArrayView;
 use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::FlatBufferReader;
 use vortex_schema::DType;
@@ -17,7 +18,7 @@ use vortex_schema::Signedness::Signed;
 pub struct StreamReader<R: Read> {
     read: R,
 
-    pub(crate) ctx: ViewContext,
+    pub(crate) ctx: SerdeContext,
     // Optionally take a projection?
 
     // Use replace to swap the scratch buffer.
@@ -41,7 +42,7 @@ impl<R: Read> StreamReader<R> {
         let fb_ctx = fb_msg.header_as_context().ok_or_else(|| {
             VortexError::InvalidSerde("Expected IPC Context as first message in stream".into())
         })?;
-        let ctx: ViewContext = fb_ctx.try_into()?;
+        let ctx: SerdeContext = fb_ctx.try_into()?;
 
         Ok(Self {
             read,
@@ -85,7 +86,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
 #[allow(dead_code)]
 pub struct StreamArrayChunkReader<'a, R: Read> {
     read: &'a mut R,
-    ctx: &'a ViewContext,
+    ctx: &'a SerdeContext,
     dtype: DType,
     fb_buffer: Vec<u8>,
     buffers: Vec<Buffer>,

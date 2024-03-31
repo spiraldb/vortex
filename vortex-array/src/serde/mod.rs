@@ -15,8 +15,13 @@ use vortex_error::{VortexError, VortexResult};
 use vortex_schema::Serialize;
 use vortex_schema::{DType, Deserialize, IntWidth, Nullability, SchemaError, Signedness};
 
+pub mod context;
 pub mod data;
 mod ptype;
+pub mod view;
+pub mod vtable;
+
+pub use view::*;
 
 pub trait ArraySerde: Debug {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;

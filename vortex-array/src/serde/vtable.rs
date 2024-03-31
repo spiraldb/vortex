@@ -1,5 +1,5 @@
 use crate::array::{Array, ArrayRef};
-use crate::array2::ArrayView;
+use crate::serde::ArrayView;
 use vortex_error::VortexResult;
 
 // A VTable for the ArrayData and ArrayView implementations

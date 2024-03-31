@@ -1,11 +1,11 @@
 use crate::array::{Array, ArrayRef};
-use crate::array2::context::ViewContext;
-use crate::array2::ArrayViewVTable;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::flatbuffers::array as fb;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::serde::context::SerdeContext;
+use crate::serde::vtable::ArrayViewVTable;
 use crate::stats::Stats;
 use crate::validity::{ArrayValidity, Validity};
 use arrow_buffer::Buffer;
@@ -21,7 +21,7 @@ pub struct ArrayView<'a> {
     dtype: DType,
     array: fb::Array<'a>,
     buffers: &'a [Buffer],
-    ctx: &'a ViewContext,
+    ctx: &'a SerdeContext,
 }
 
 impl<'a> Debug for ArrayView<'a> {
@@ -38,7 +38,7 @@ impl<'a> Debug for ArrayView<'a> {
 
 impl<'a> ArrayView<'a> {
     pub fn try_new(
-        ctx: &'a ViewContext,
+        ctx: &'a SerdeContext,
         dtype: DType,
         array: fb::Array<'a>,
         buffers: &'a [Buffer],

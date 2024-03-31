@@ -40,10 +40,10 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
-    use vortex::array2::ViewContext;
 
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::take::take;
+    use vortex::serde::context::SerdeContext;
 
     use crate::reader::StreamReader;
 
@@ -54,7 +54,7 @@ mod tests {
         let array = PrimitiveArray::from_iter(vec![Some(1), None, None, Some(4), Some(5)]);
 
         let mut cursor = Cursor::new(Vec::new());
-        let ctx = ViewContext::default();
+        let ctx = SerdeContext::default();
         let mut writer = StreamWriter::try_new_unbuffered(&mut cursor, ctx).unwrap();
         writer.write(&array).unwrap();
         cursor.flush().unwrap();

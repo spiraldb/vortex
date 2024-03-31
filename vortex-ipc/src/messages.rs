@@ -2,9 +2,9 @@ use crate::flatbuffers::ipc as fb;
 use crate::{missing, ALIGNMENT};
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex::array2::ViewContext;
 use vortex::encoding::find_encoding;
 use vortex::flatbuffers::array as fba;
+use vortex::serde::context::SerdeContext;
 use vortex::serde::data::ColumnData;
 use vortex_error::VortexError;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
@@ -17,11 +17,11 @@ pub(crate) enum IPCMessage<'a> {
     ChunkColumn(IPCChunkColumn<'a>),
 }
 
-pub(crate) struct IPCContext<'a>(pub &'a ViewContext);
+pub(crate) struct IPCContext<'a>(pub &'a SerdeContext);
 pub(crate) struct IPCSchema<'a>(pub &'a DType);
 pub(crate) struct IPCChunk<'a>(pub &'a [u64]);
-pub(crate) struct IPCChunkColumn<'a>(pub &'a ViewContext, pub &'a ColumnData);
-pub(crate) struct IPCArray<'a>(pub &'a ViewContext, pub &'a ColumnData);
+pub(crate) struct IPCChunkColumn<'a>(pub &'a SerdeContext, pub &'a ColumnData);
+pub(crate) struct IPCArray<'a>(pub &'a SerdeContext, pub &'a ColumnData);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
 impl WriteFlatBuffer for IPCMessage<'_> {
@@ -84,7 +84,7 @@ impl<'a> WriteFlatBuffer for IPCContext<'a> {
     }
 }
 
-impl<'a> TryFrom<fb::Context<'a>> for ViewContext {
+impl<'a> TryFrom<fb::Context<'a>> for SerdeContext {
     type Error = VortexError;
 
     fn try_from(value: fb::Context<'a>) -> Result<Self, Self::Error> {

@@ -1,5 +1,5 @@
-use crate::array2::ArrayViewVTable;
 use crate::compress::EncodingCompression;
+use crate::serde::vtable::ArrayViewVTable;
 use crate::serde::EncodingSerde;
 use linkme::distributed_slice;
 use std::fmt::{Debug, Display, Formatter};

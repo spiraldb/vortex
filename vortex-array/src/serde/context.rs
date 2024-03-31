@@ -2,13 +2,12 @@ use crate::encoding::{EncodingId, EncodingRef, ENCODINGS};
 use itertools::Itertools;
 use std::sync::Arc;
 
-// TODO(ngates): come up with a better name
 #[derive(Debug)]
-pub struct ViewContext {
+pub struct SerdeContext {
     encodings: Arc<[EncodingRef]>,
 }
 
-impl ViewContext {
+impl SerdeContext {
     pub fn new(encodings: Arc<[EncodingRef]>) -> Self {
         Self { encodings }
     }
@@ -29,7 +28,7 @@ impl ViewContext {
     }
 }
 
-impl Default for ViewContext {
+impl Default for SerdeContext {
     fn default() -> Self {
         Self {
             encodings: ENCODINGS.iter().cloned().collect_vec().into(),
