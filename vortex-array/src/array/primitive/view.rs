@@ -4,43 +4,12 @@ use num_traits::PrimInt;
 use crate::array::primitive::PrimitiveEncoding;
 use crate::array::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
-use crate::array2::{ArrayMetadata, ArrayView, ComputeVTable, TakeFn, VTable};
+use crate::array2::{ArrayView, ComputeVTable, TakeFn, VTable};
 use crate::compute::flatten::flatten_primitive;
 use crate::ptype::{NativePType, PType};
 use crate::validity::Validity;
 use crate::{match_each_integer_ptype, match_each_native_ptype};
 use vortex_error::{VortexError, VortexResult};
-use vortex_schema::DType;
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct PrimitiveMetadata {
-    dtype: DType,
-    ptype: PType,
-}
-
-impl PrimitiveMetadata {
-    pub fn new(ptype: PType) -> Self {
-        Self {
-            dtype: DType::from(ptype),
-            ptype,
-        }
-    }
-}
-
-impl ArrayMetadata for PrimitiveMetadata {
-    fn to_bytes(&self) -> Option<Vec<u8>> {
-        None
-    }
-
-    fn try_from_bytes(_bytes: Option<&[u8]>, dtype: &DType) -> VortexResult<Self> {
-        let ptype = PType::try_from(dtype)?;
-        Ok(PrimitiveMetadata {
-            dtype: dtype.clone(),
-            ptype,
-        })
-    }
-}
 
 pub struct PrimitiveView<'a> {
     ptype: PType,
@@ -51,7 +20,7 @@ pub struct PrimitiveView<'a> {
 impl<'a> PrimitiveView<'a> {
     pub fn try_new(view: &'a ArrayView<'a>) -> VortexResult<Self> {
         // TODO(ngates): validate the number of buffers / children. We could even extract them?
-        let metadata = PrimitiveMetadata::try_from_bytes(view.metadata(), view.dtype())?;
+        let ptype = PType::try_from(view.dtype())?;
         let buffer = view
             .buffers()
             .first()
@@ -62,7 +31,7 @@ impl<'a> PrimitiveView<'a> {
             .map(|v| Validity::Array(v.to_array()));
 
         Ok(Self {
-            ptype: metadata.ptype,
+            ptype,
             buffer,
             validity,
         })
