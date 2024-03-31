@@ -15,6 +15,7 @@ use vortex_error::{VortexError, VortexResult};
 pub struct PrimitiveView<'a> {
     ptype: PType,
     buffer: &'a Buffer,
+    // Note(ngates): for other array views, children should be stored as &dyn Array.
     validity: Option<Validity>,
 }
 
@@ -36,11 +37,6 @@ impl<'a> PrimitiveView<'a> {
             buffer,
             validity,
         })
-    }
-
-    pub fn as_dyn<T: NativePType>(&self) -> &dyn PrimitiveTrait<T> {
-        assert_eq!(T::PTYPE, self.ptype);
-        self
     }
 }
 
@@ -103,9 +99,9 @@ impl<'view> ComputeVTable<ArrayView<'view>> for PrimitiveEncoding {
 impl<'view> TakeFn<ArrayView<'view>> for PrimitiveEncoding {
     fn take(&self, array: &ArrayView<'view>, indices: &dyn Array) -> VortexResult<ArrayRef> {
         use crate::compute::take::TakeFn;
-        let view = PrimitiveView::try_new(array)?;
-        match_each_native_ptype!(view.ptype, |$T| {
-            view.as_dyn::<$T>().take(indices)
+        let pv = PrimitiveView::try_new(array)?;
+        match_each_native_ptype!(pv.ptype, |$T| {
+            (&pv as &dyn PrimitiveTrait<$T>).take(indices)
         })
     }
 }

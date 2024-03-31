@@ -29,7 +29,6 @@ mod serde;
 mod stats;
 mod view;
 
-use crate::serde::vtable::ArrayViewVTable;
 pub use view::*;
 
 #[derive(Debug, Clone)]
@@ -251,10 +250,6 @@ impl Encoding for PrimitiveEncoding {
     }
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
-    }
-
-    fn view_vtable(&self) -> Option<&ArrayViewVTable> {
         Some(self)
     }
 }

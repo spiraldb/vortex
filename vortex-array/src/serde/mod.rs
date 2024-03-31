@@ -21,6 +21,7 @@ mod ptype;
 pub mod view;
 pub mod vtable;
 
+use crate::serde::vtable::ComputeVTable;
 pub use view::*;
 
 pub trait ArraySerde: Debug {
@@ -32,6 +33,22 @@ pub trait ArraySerde: Debug {
 }
 
 pub trait EncodingSerde {
+    fn validate(&self, _view: &ArrayView) -> VortexResult<()> {
+        todo!("Validate not implemented for {}", _view.encoding().id());
+    }
+
+    fn to_array(&self, _view: &ArrayView) -> ArrayRef {
+        todo!("to_array not implemented for {}", _view.encoding().id());
+    }
+
+    fn len(&self, _view: &ArrayView) -> usize {
+        todo!("len not implemented for {}", _view.encoding().id());
+    }
+
+    fn compute(&self, _view: &ArrayView) -> Option<&dyn ComputeVTable<ArrayView>> {
+        None
+    }
+
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef>;
 }
 

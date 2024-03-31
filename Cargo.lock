@@ -988,6 +988,7 @@ dependencies = [
  "vortex-dict",
  "vortex-error",
  "vortex-fastlanes",
+ "vortex-ipc",
  "vortex-ree",
  "vortex-roaring",
  "vortex-schema",

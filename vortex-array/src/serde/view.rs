@@ -1,14 +1,15 @@
 use crate::array::{Array, ArrayRef};
-use crate::compute::take::TakeFn;
+use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::flatbuffers::array as fb;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::context::SerdeContext;
-use crate::serde::vtable::ArrayViewVTable;
+use crate::serde::EncodingSerde;
 use crate::stats::Stats;
 use crate::validity::{ArrayValidity, Validity};
 use arrow_buffer::Buffer;
+use log::info;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
@@ -46,10 +47,10 @@ impl<'a> ArrayView<'a> {
         let encoding = ctx
             .find_encoding(array.encoding())
             .ok_or_else(|| VortexError::InvalidSerde("Encoding ID out of bounds".into()))?;
-        let _vtable = encoding.view_vtable().ok_or_else(|| {
+        let _vtable = encoding.serde().ok_or_else(|| {
             // TODO(ngates): we could fall-back to heap-allocating?
             VortexError::InvalidSerde(
-                format!("Encoding {} does not support reading from view", encoding).into(),
+                format!("Encoding {} does not support serde", encoding).into(),
             )
         })?;
         Ok(Self {
@@ -65,8 +66,8 @@ impl<'a> ArrayView<'a> {
         self.encoding
     }
 
-    pub fn vtable(&self) -> &ArrayViewVTable {
-        self.encoding.view_vtable().unwrap()
+    pub fn vtable(&self) -> &dyn EncodingSerde {
+        self.encoding.serde().unwrap()
     }
 
     pub fn dtype(&self) -> &DType {
@@ -207,11 +208,21 @@ impl<'a> ArrayCompute for ArrayView<'a> {
 
 impl<'a> TakeFn for ArrayView<'a> {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        self.encoding()
-            .view_vtable()
-            .map(|vt| vt.compute())
+        let serde = self
+            .encoding()
+            .serde()
+            .ok_or_else(|| VortexError::InvalidSerde("Serde not implemented".into()))?;
+
+        serde
+            .compute(self)
             .and_then(|compute| compute.take())
             .map(|t| t.take(self, indices))
-            .ok_or_else(|| VortexError::NotImplemented("take", self.encoding().id().name()))?
+            .unwrap_or_else(|| {
+                info!(
+                    "Serde compute not implemented for {}. Allocating...",
+                    self.encoding().id()
+                );
+                take(&serde.to_array(self), indices)
+            })
     }
 }

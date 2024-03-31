@@ -1,5 +1,4 @@
 use crate::compress::EncodingCompression;
-use crate::serde::vtable::ArrayViewVTable;
 use crate::serde::EncodingSerde;
 use linkme::distributed_slice;
 use std::fmt::{Debug, Display, Formatter};
@@ -35,10 +34,6 @@ pub trait Encoding: Debug + Send + Sync + 'static {
 
     /// Array serialization
     fn serde(&self) -> Option<&dyn EncodingSerde> {
-        None
-    }
-
-    fn view_vtable(&self) -> Option<&ArrayViewVTable> {
         None
     }
 }

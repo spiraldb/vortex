@@ -1,7 +1,5 @@
 extern crate core;
 
-use crate::iter::FallibleLendingIterator;
-use crate::writer::StreamWriter;
 use vortex_error::VortexError;
 
 pub const ALIGNMENT: usize = 64;
@@ -41,13 +39,13 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 mod tests {
     use std::io::{Cursor, Write};
 
+    use crate::iter::FallibleLendingIterator;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::take::take;
     use vortex::serde::context::SerdeContext;
 
     use crate::reader::StreamReader;
-
-    use super::*;
+    use crate::writer::StreamWriter;
 
     #[test]
     fn test_write_flatbuffer() {
