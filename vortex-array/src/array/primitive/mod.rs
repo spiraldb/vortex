@@ -29,6 +29,7 @@ mod compute;
 mod serde;
 mod stats;
 mod view;
+pub use view::*;
 
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {

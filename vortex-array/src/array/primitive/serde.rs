@@ -1,7 +1,8 @@
 use vortex_error::VortexResult;
 
-use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
+use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding, PrimitiveMetadata};
 use crate::array::{Array, ArrayRef};
+use crate::array2::ArrayMetadata;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use crate::validity::ArrayValidity;
 
@@ -13,12 +14,8 @@ impl ArraySerde for PrimitiveArray {
     }
 
     fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
-        let mut vec = Vec::new();
-        let mut ctx = WriteCtx::new(&mut vec);
-        ctx.ptype(self.ptype())?;
-        ctx.nullability(self.nullability())?;
-        ctx.write_validity(self.validity())?;
-        Ok(Some(vec))
+        let meta = PrimitiveMetadata::new(self.ptype);
+        Ok(meta.to_bytes())
     }
 }
 

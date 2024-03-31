@@ -17,14 +17,16 @@ pub use vtable::*;
 use crate::encoding::EncodingRef;
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub struct ArrayData {
+pub struct TypedArrayData<M: ArrayMetadata> {
     encoding: EncodingRef,
     dtype: DType,
-    metadata: Option<Buffer>,
+    metadata: M,
     children: Arc<[ArrayData]>,
     buffers: Arc<[Buffer]>,
 }
+
+#[allow(dead_code)]
+pub type ArrayData = TypedArrayData<Option<Buffer>>;
 
 #[derive(Clone)]
 pub struct ArrayView<'a> {
@@ -46,5 +48,7 @@ impl<'a> Debug for ArrayView<'a> {
 }
 
 pub trait ArrayMetadata: Send + Sync + Sized {
+    fn to_bytes(&self) -> Option<Vec<u8>>;
+
     fn try_from_bytes<'a>(bytes: Option<&'a [u8]>, dtype: &DType) -> VortexResult<Self>;
 }

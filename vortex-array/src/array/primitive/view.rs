@@ -4,10 +4,10 @@ use crate::array2::{ArrayData, ArrayMetadata, ArrayView, TypedArrayData, TypedAr
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::ptype::PType;
+use crate::ptype::{NativePType, PType};
 use crate::stats::Stats;
 use crate::validity::{ArrayValidity, Validity};
-use arrow_buffer::Buffer;
+use arrow_buffer::{Buffer, ScalarBuffer};
 use std::any::Any;
 use std::sync::Arc;
 use vortex_error::VortexResult;
@@ -22,17 +22,45 @@ pub struct PrimitiveMetadata {
     dtype: DType,
     ptype: PType,
 }
-type PrimitiveView<'a> = TypedArrayView<'a, PrimitiveMetadata>;
+
+impl PrimitiveMetadata {
+    pub fn new(ptype: PType) -> Self {
+        Self {
+            dtype: DType::from(ptype),
+            ptype,
+        }
+    }
+}
+
+pub type PrimitiveView<'a> = TypedArrayView<'a, PrimitiveMetadata>;
 
 /// The "owned" version of a PrimitiveArray.
 /// Not all arrays have to be implemented using TypedArrayData, but it can short-cut a lot of
 /// implementation details. This should not preclude implementing the Array and Encoding traits
 /// directly.
 #[allow(dead_code)]
-type PrimitiveData = TypedArrayData<PrimitiveMetadata>;
+pub type PrimitiveData = TypedArrayData<PrimitiveMetadata>;
+
+impl<T: NativePType> From<Vec<T>> for PrimitiveData {
+    fn from(value: Vec<T>) -> Self {
+        PrimitiveData::new(
+            &PrimitiveEncoding,
+            DType::from(T::PTYPE),
+            PrimitiveMetadata::new(T::PTYPE),
+            Vec::new(),
+            vec![ScalarBuffer::from(value).into_inner()],
+        )
+    }
+}
+
+// Need some trait for primitive arrays?
 
 impl ArrayMetadata for PrimitiveMetadata {
-    fn try_from_bytes<'a>(_bytes: Option<&'a [u8]>, dtype: &DType) -> VortexResult<Self> {
+    fn to_bytes(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    fn try_from_bytes(_bytes: Option<&[u8]>, dtype: &DType) -> VortexResult<Self> {
         let ptype = PType::try_from(dtype)?;
         Ok(PrimitiveMetadata {
             dtype: dtype.clone(),
@@ -52,17 +80,12 @@ impl VTable<ArrayData> for PrimitiveEncoding {
 }
 
 impl<'view> VTable<ArrayView<'view>> for PrimitiveEncoding {
-    // fn to_array(&self, view: &ArrayView<'view>) -> VortexResult<ArrayRef> {
-    //     let p = PrimitiveView::try_new(view)?;
-    //     Ok(p.to_array())
-    // }
-
     fn len(&self, view: &ArrayView<'view>) -> usize {
-        PrimitiveView::try_new(view).unwrap().len()
+        view.try_as_typed::<PrimitiveMetadata>().unwrap().len()
     }
 
-    fn validate(&self, array: &ArrayView<'view>) -> VortexResult<()> {
-        PrimitiveMetadata::try_from_bytes(array.metadata(), array.dtype()).map(|_| ())
+    fn validate(&self, view: &ArrayView<'view>) -> VortexResult<()> {
+        view.try_as_typed::<PrimitiveMetadata>().map(|_| ())
     }
 }
 

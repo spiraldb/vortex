@@ -43,7 +43,7 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 mod tests {
     use std::io::{Cursor, Write};
 
-    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::primitive::PrimitiveData;
     use vortex::formatter::display_tree;
 
     use crate::reader::StreamReader;
@@ -52,7 +52,8 @@ mod tests {
 
     #[test]
     fn test_write_flatbuffer() {
-        let array = PrimitiveArray::from(vec![1, 2, 3, 4, 5]);
+        let array = PrimitiveData::from(vec![1, 2, 3, 4, 5]);
+        // let array = PrimitiveArray::from(vec![1, 2, 3, 4, 5]);
 
         let mut cursor = Cursor::new(Vec::new());
         let ctx = IPCContext::default();
