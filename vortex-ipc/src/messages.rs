@@ -1,10 +1,12 @@
 use crate::flatbuffers::ipc as fb;
-use crate::ALIGNMENT;
+use crate::{missing, ALIGNMENT};
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex::array2::ViewContext;
+use vortex::encoding::find_encoding;
 use vortex::flatbuffers::array as fba;
 use vortex::serde::data::ColumnData;
+use vortex_error::VortexError;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 use vortex_schema::DType;
 
@@ -79,6 +81,24 @@ impl<'a> WriteFlatBuffer for IPCContext<'a> {
                 encodings: Some(fb_encodings),
             },
         )
+    }
+}
+
+impl<'a> TryFrom<fb::Context<'a>> for ViewContext {
+    type Error = VortexError;
+
+    fn try_from(value: fb::Context<'a>) -> Result<Self, Self::Error> {
+        let fb_encodings = value.encodings().ok_or_else(missing("encodings"))?;
+        let mut encodings = Vec::with_capacity(fb_encodings.len());
+        for fb_encoding in fb_encodings {
+            let encoding_id = fb_encoding.id().ok_or_else(missing("encoding.id"))?;
+            encodings.push(find_encoding(encoding_id).ok_or_else(|| {
+                VortexError::InvalidArgument(
+                    format!("Stream uses unknown encoding {}", encoding_id).into(),
+                )
+            })?);
+        }
+        Ok(Self::new(encodings.into()))
     }
 }
 

@@ -28,7 +28,6 @@ pub mod flatbuffers {
 }
 
 mod chunked;
-pub mod context;
 mod iter;
 mod messages;
 pub mod reader;

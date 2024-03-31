@@ -17,11 +17,11 @@ use vortex_schema::DType;
 
 #[derive(Clone)]
 pub struct ArrayView<'a> {
-    ctx: &'a ViewContext,
     encoding: EncodingRef,
     dtype: DType,
     array: fb::Array<'a>,
     buffers: &'a [Buffer],
+    ctx: &'a ViewContext,
 }
 
 impl<'a> Debug for ArrayView<'a> {
@@ -31,6 +31,7 @@ impl<'a> Debug for ArrayView<'a> {
             .field("dtype", &self.dtype)
             // .field("array", &self.array)
             .field("buffers", &self.buffers)
+            .field("ctx", &self.ctx)
             .finish()
     }
 }
@@ -52,11 +53,11 @@ impl<'a> ArrayView<'a> {
             )
         })?;
         Ok(Self {
-            ctx,
             encoding,
             dtype,
             array,
             buffers,
+            ctx,
         })
     }
 

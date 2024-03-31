@@ -3,6 +3,7 @@ use itertools::Itertools;
 use std::sync::Arc;
 
 // TODO(ngates): come up with a better name
+#[derive(Debug)]
 pub struct ViewContext {
     encodings: Arc<[EncodingRef]>,
 }
