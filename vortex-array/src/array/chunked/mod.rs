@@ -17,6 +17,7 @@ use crate::{impl_array, ArrayWalker};
 mod compute;
 mod serde;
 mod stats;
+mod view;
 
 #[derive(Debug, Clone)]
 pub struct ChunkedArray {

@@ -3,7 +3,8 @@ use vortex_error::VortexResult;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
+use crate::serde::vtable::ComputeVTable;
+use crate::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for ChunkedArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
@@ -27,6 +28,10 @@ impl ArraySerde for ChunkedArray {
 }
 
 impl EncodingSerde for ChunkedEncoding {
+    fn compute(&self, _view: &ArrayView) -> Option<&dyn ComputeVTable<ArrayView>> {
+        Some(self)
+    }
+
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let chunk_len = ctx.read_usize()?;
         let mut chunks = Vec::<ArrayRef>::with_capacity(chunk_len);
