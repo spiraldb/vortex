@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 
@@ -24,11 +23,14 @@ pub mod vtable;
 use crate::serde::vtable::ComputeVTable;
 pub use view::*;
 
-pub trait ArraySerde: Debug {
+pub trait ArraySerde {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;
 
     fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
-        Ok(None)
+        let mut bytes = Vec::new();
+        let mut ctx = WriteCtx::new(&mut bytes);
+        self.write(&mut ctx)?;
+        Ok(Some(bytes))
     }
 }
 

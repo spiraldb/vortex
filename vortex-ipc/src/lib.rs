@@ -26,7 +26,7 @@ pub mod flatbuffers {
 }
 
 mod chunked;
-mod iter;
+pub mod iter;
 mod messages;
 pub mod reader;
 pub mod writer;
