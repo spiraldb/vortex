@@ -22,15 +22,33 @@ impl From<flatbuffers::InvalidFlatbuffer> for Error {
     }
 }
 
+pub trait ReadFlatBuffer<Ctx>: Sized {
+    type Source<'a>;
+    type Error;
+
+    fn read_flatbuffer<'a>(ctx: &Ctx, fb: &Self::Source<'a>) -> Result<Self, Self::Error>;
+}
+
+pub trait WriteFlatBuffer {
+    type Target<'a>;
+
+    fn write_flatbuffer<'fb>(
+        &self,
+        fbb: &mut FlatBufferBuilder<'fb>,
+    ) -> WIPOffset<Self::Target<'fb>>;
+}
+
+pub trait FlatBufferRoot {}
+
 pub trait FlatBufferReader {
     /// Returns Ok(None) if the reader has reached EOF.
-    fn read_flatbuffer<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> Result<Option<F>>
+    fn read_message<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> Result<Option<F>>
     where
         F: 'a + Follow<'a, Inner = F> + Verifiable;
 }
 
 impl<R: Read> FlatBufferReader for R {
-    fn read_flatbuffer<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> Result<Option<F>>
+    fn read_message<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> Result<Option<F>>
     where
         F: 'a + Follow<'a, Inner = F> + Verifiable,
     {
@@ -47,21 +65,10 @@ impl<R: Read> FlatBufferReader for R {
     }
 }
 
-pub trait WriteFlatBuffer {
-    type Target<'a>;
-
-    fn write_flatbuffer<'fb>(
-        &self,
-        fbb: &mut FlatBufferBuilder<'fb>,
-    ) -> WIPOffset<Self::Target<'fb>>;
-}
-
-pub trait FlatBufferRoot {}
-
 pub trait FlatBufferWriter {
     // Write the given FlatBuffer message, appending padding until the total bytes written
     // are a multiple of `alignment`.
-    fn write_flatbuffer<F: WriteFlatBuffer + FlatBufferRoot>(
+    fn write_message<F: WriteFlatBuffer + FlatBufferRoot>(
         &mut self,
         msg: &F,
         alignment: usize,
@@ -69,7 +76,7 @@ pub trait FlatBufferWriter {
 }
 
 impl<W: Write> FlatBufferWriter for W {
-    fn write_flatbuffer<F: WriteFlatBuffer + FlatBufferRoot>(
+    fn write_message<F: WriteFlatBuffer + FlatBufferRoot>(
         &mut self,
         msg: &F,
         alignment: usize,

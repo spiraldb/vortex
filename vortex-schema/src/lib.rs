@@ -7,9 +7,13 @@ pub use error::SchemaResult;
 pub use serde::Deserialize;
 pub use serde::Serialize;
 
+pub mod composite;
+mod deserialize;
 mod dtype;
 mod error;
 mod serde;
+
+pub use deserialize::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 pub struct CompositeID(pub &'static str);

@@ -28,14 +28,14 @@ impl<W: Write> StreamWriter<BufWriter<W>> {
 impl<W: Write> StreamWriter<W> {
     pub fn try_new_unbuffered(mut write: W, ctx: SerdeContext) -> VortexResult<Self> {
         // Write the IPC context to the stream
-        write.write_flatbuffer(&IPCMessage::Context(IPCContext(&ctx)), ALIGNMENT)?;
+        write.write_message(&IPCMessage::Context(IPCContext(&ctx)), ALIGNMENT)?;
         Ok(Self { write, ctx })
     }
 
     pub fn write(&mut self, array: &dyn Array) -> VortexResult<()> {
         // First, write a schema message indicating the start of an array.
         self.write
-            .write_flatbuffer(&IPCMessage::Schema(IPCSchema(array.dtype())), ALIGNMENT)?;
+            .write_message(&IPCMessage::Schema(IPCSchema(array.dtype())), ALIGNMENT)?;
 
         // Then we write the array in chunks.
         // TODO(ngates): should we do any chunking ourselves?
@@ -63,7 +63,7 @@ impl<W: Write> StreamWriter<W> {
 
             // Serialize the ChunkColumn message and add its offset.
             let mut vec = Vec::new();
-            vec.write_flatbuffer(
+            vec.write_message(
                 &IPCMessage::ChunkColumn(IPCChunkColumn(&self.ctx, &column_data)),
                 ALIGNMENT,
             )?;
@@ -79,7 +79,7 @@ impl<W: Write> StreamWriter<W> {
         }
 
         // Now we can construct a Chunk message with the offsets to each column.
-        self.write.write_flatbuffer(
+        self.write.write_message(
             &IPCMessage::Chunk(IPCChunk(&chunk_column_offsets)),
             ALIGNMENT,
         )?;

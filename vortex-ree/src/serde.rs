@@ -14,6 +14,10 @@ impl ArraySerde for REEArray {
         ctx.write(self.ends())?;
         ctx.write(self.values())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(None)
+    }
 }
 
 impl EncodingSerde for REEEncoding {

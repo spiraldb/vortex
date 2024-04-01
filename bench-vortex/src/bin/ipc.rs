@@ -2,8 +2,8 @@ use log::LevelFilter;
 use std::fs::File;
 
 use bench_vortex::reader::open_vortex;
+use bench_vortex::setup_logger;
 use bench_vortex::taxi_data::taxi_data_vortex;
-use bench_vortex::{idempotent, setup_logger};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compute::take::take;
 use vortex::serde::context::SerdeContext;
@@ -16,13 +16,15 @@ pub fn main() -> VortexResult<()> {
     setup_logger(LevelFilter::Error);
 
     let array = open_vortex(&taxi_data_vortex())?;
+    println!("Array {}", &array);
 
-    let ipc = idempotent("ipc.vortex", |path| {
-        let mut write = File::create(path)?;
-        let ctx = SerdeContext::default();
-        let mut writer = StreamWriter::try_new(&mut write, ctx)?;
-        writer.write(&array)
-    })?;
+    //let ipc = idempotent("ipc.vortex", |path| {
+    let ipc = "bench-vortex/data/ipc.vortex";
+    let mut write = File::create("bench-vortex/data/ipc.vortex")?;
+    let ctx = SerdeContext::default();
+    let mut writer = StreamWriter::try_new(&mut write, ctx)?;
+    writer.write(&array)?;
+    //})?;
 
     // Now try to read from the IPC stream.
     let mut read = File::open(&ipc)?;

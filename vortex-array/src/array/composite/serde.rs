@@ -1,11 +1,12 @@
+use flatbuffers::FlatBufferBuilder;
 use std::sync::Arc;
-
-use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::array::composite::{CompositeArray, CompositeEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
+use vortex_error::VortexResult;
+use vortex_flatbuffers::WriteFlatBuffer;
+use vortex_schema::DType;
 
 impl ArraySerde for CompositeArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
@@ -13,6 +14,13 @@ impl ArraySerde for CompositeArray {
         let underlying = self.underlying();
         ctx.dtype(underlying.dtype())?;
         ctx.write(self.underlying())
+    }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        let mut fbb = FlatBufferBuilder::new();
+        let dtype = self.underlying().dtype().write_flatbuffer(&mut fbb);
+        fbb.finish_minimal(dtype);
+        Ok(Some(fbb.finished_data().to_vec()))
     }
 }
 

@@ -12,6 +12,10 @@ impl ArraySerde for BoolArray {
         ctx.write_validity(self.validity())?;
         ctx.write_buffer(self.len(), &self.buffer().sliced())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(None)
+    }
 }
 
 impl EncodingSerde for BoolEncoding {

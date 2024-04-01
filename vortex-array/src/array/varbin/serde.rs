@@ -12,6 +12,10 @@ impl ArraySerde for VarBinArray {
         ctx.write(self.offsets())?;
         ctx.write(self.bytes())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(None)
+    }
 }
 
 impl EncodingSerde for VarBinEncoding {

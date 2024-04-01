@@ -8,11 +8,8 @@ use std::io::{BufReader, Read};
 use vortex::serde::context::SerdeContext;
 use vortex::serde::ArrayView;
 use vortex_error::{VortexError, VortexResult};
-use vortex_flatbuffers::FlatBufferReader;
-use vortex_schema::DType;
-use vortex_schema::IntWidth::_32;
-use vortex_schema::Nullability::Nullable;
-use vortex_schema::Signedness::Signed;
+use vortex_flatbuffers::{FlatBufferReader, ReadFlatBuffer};
+use vortex_schema::{DType, DTypeSerdeContext};
 
 #[allow(dead_code)]
 pub struct StreamReader<R: Read> {
@@ -37,7 +34,7 @@ impl<R: Read> StreamReader<R> {
     pub fn try_new_unbuffered(mut read: R) -> VortexResult<Self> {
         let mut msg_vec = Vec::new();
         let fb_msg = read
-            .read_flatbuffer::<Message>(&mut msg_vec)?
+            .read_message::<Message>(&mut msg_vec)?
             .ok_or_else(|| VortexError::InvalidSerde("Unexpected EOF reading IPC format".into()))?;
         let fb_ctx = fb_msg.header_as_context().ok_or_else(|| {
             VortexError::InvalidSerde("Expected IPC Context as first message in stream".into())
@@ -63,20 +60,32 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
         &'next mut self,
     ) -> Result<Option<StreamArrayChunkReader<'next, R>>, Self::Error> {
         let mut fb_vec = Vec::new();
-        let msg = self.read.read_flatbuffer::<Message>(&mut fb_vec)?;
+        let msg = self.read.read_message::<Message>(&mut fb_vec)?;
         if msg.is_none() {
             // End of the stream
             return Ok(None);
         }
         let msg = msg.unwrap();
 
-        let _schema = msg
+        // FIXME(ngates): parse the schema?
+        let schema = msg
             .header_as_schema()
             .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Schema message".into()))?;
+
+        // TODO(ngates): construct this from the SerdeContext.
+        let dtype_ctx = DTypeSerdeContext::new(Vec::new());
+        let dtype = DType::read_flatbuffer(
+            &dtype_ctx,
+            &schema
+                .dtype()
+                .ok_or_else(|| VortexError::InvalidSerde("Schema missing DType".into()))?,
+        )
+        .map_err(|e| VortexError::InvalidSerde(format!("Failed to parse DType: {}", e).into()))?;
+
         Ok(Some(StreamArrayChunkReader {
             read: &mut self.read,
             ctx: &self.ctx,
-            dtype: DType::Int(_32, Signed, Nullable),
+            dtype,
             fb_buffer: Vec::new(),
             buffers: Vec::new(),
         }))
@@ -105,7 +114,7 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
 
     fn next<'next>(&'next mut self) -> Result<Option<ArrayView<'next>>, Self::Error> {
         let mut fb_vec: Vec<u8> = Vec::new();
-        let msg = self.read.read_flatbuffer::<Message>(&mut fb_vec)?;
+        let msg = self.read.read_message::<Message>(&mut fb_vec)?;
         if msg.is_none() {
             // End of the stream
             return Ok(None);

@@ -9,12 +9,6 @@ use crate::array::composite::CompositeMetadata;
 use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 
-pub trait CompositeExtension: Debug + Send + Sync + 'static {
-    fn id(&self) -> CompositeID;
-
-    fn as_typed_compute(&self, array: &CompositeArray) -> Box<dyn ArrayCompute>;
-}
-
 pub type CompositeExtensionRef = &'static dyn CompositeExtension;
 
 #[derive(Debug, Clone)]

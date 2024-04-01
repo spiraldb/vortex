@@ -26,12 +26,7 @@ pub use view::*;
 pub trait ArraySerde {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;
 
-    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
-        let mut bytes = Vec::new();
-        let mut ctx = WriteCtx::new(&mut bytes);
-        self.write(&mut ctx)?;
-        Ok(Some(bytes))
-    }
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>>;
 }
 
 pub trait EncodingSerde {

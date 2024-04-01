@@ -1,3 +1,4 @@
+use flexbuffers::Builder;
 use vortex_error::VortexResult;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
@@ -11,6 +12,17 @@ impl ArraySerde for ChunkedArray {
             ctx.write(c.as_ref())?;
         }
         Ok(())
+    }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        // TODO(ngates) #163 - the chunk lengths should probably themselves be an array?
+        let mut builder = Builder::default();
+        let mut vec = builder.start_vector();
+        for end in self.chunk_ends() {
+            vec.push(*end);
+        }
+        vec.end_vector();
+        Ok(Some(builder.take_buffer()))
     }
 }
 

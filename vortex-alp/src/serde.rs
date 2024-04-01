@@ -13,6 +13,15 @@ impl ArraySerde for ALPArray {
         ctx.write_fixed_slice([self.exponents().e, self.exponents().f])?;
         ctx.write(self.encoded())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        let mut vec = Vec::new();
+        let mut ctx = WriteCtx::new(&mut vec);
+        ctx.write_optional_array(self.patches())?;
+        ctx.write_fixed_slice([self.exponents().e, self.exponents().f])?;
+        ctx.write(self.encoded())?;
+        Ok(Some(vec))
+    }
 }
 
 impl EncodingSerde for ALPEncoding {

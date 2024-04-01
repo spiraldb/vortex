@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
@@ -37,8 +35,8 @@ pub trait Deserialize<'a>: Sized {
     ) -> SchemaResult<Self>;
 }
 
-impl FlatBufferRoot for DType {}
-impl WriteFlatBuffer for DType {
+impl FlatBufferRoot for &DType {}
+impl WriteFlatBuffer for &DType {
     type Target<'a> = fb::DType<'a>;
 
     fn write_flatbuffer<'fb>(
@@ -306,81 +304,10 @@ impl<'a> Deserialize<'a> for DType {
     }
 
     fn convert_from_fb(
-        fb_type: Self::OffsetType,
-        find_id: fn(&str) -> Option<CompositeID>,
+        _fb_type: Self::OffsetType,
+        _find_id: fn(&str) -> Option<CompositeID>,
     ) -> SchemaResult<Self> {
-        match fb_type.type_type() {
-            fb::Type::Null => Ok(DType::Null),
-            fb::Type::Bool => Ok(DType::Bool(
-                fb_type.type__as_bool().unwrap().nullability().try_into()?,
-            )),
-            fb::Type::Int => {
-                let fb_int = fb_type.type__as_int().unwrap();
-                Ok(DType::Int(
-                    fb_int.width().try_into()?,
-                    fb_int.signedness().try_into()?,
-                    fb_int.nullability().try_into()?,
-                ))
-            }
-            fb::Type::Float => {
-                let fb_float = fb_type.type__as_float().unwrap();
-                Ok(DType::Float(
-                    fb_float.width().try_into()?,
-                    fb_float.nullability().try_into()?,
-                ))
-            }
-            fb::Type::Decimal => {
-                let fb_decimal = fb_type.type__as_decimal().unwrap();
-                Ok(DType::Decimal(
-                    fb_decimal.precision(),
-                    fb_decimal.scale(),
-                    fb_decimal.nullability().try_into()?,
-                ))
-            }
-            fb::Type::Binary => Ok(DType::Binary(
-                fb_type
-                    .type__as_binary()
-                    .unwrap()
-                    .nullability()
-                    .try_into()?,
-            )),
-            fb::Type::Utf8 => Ok(DType::Utf8(
-                fb_type.type__as_utf_8().unwrap().nullability().try_into()?,
-            )),
-            fb::Type::List => {
-                let fb_list = fb_type.type__as_list().unwrap();
-                let element_dtype =
-                    DType::convert_from_fb(fb_list.element_type().unwrap(), find_id)?;
-                Ok(DType::List(
-                    Box::new(element_dtype),
-                    fb_list.nullability().try_into()?,
-                ))
-            }
-            fb::Type::Struct_ => {
-                let fb_struct = fb_type.type__as_struct_().unwrap();
-                let names = fb_struct
-                    .names()
-                    .unwrap()
-                    .iter()
-                    .map(|n| Arc::new(n.to_string()))
-                    .collect::<Vec<_>>();
-                let fields: Vec<DType> = fb_struct
-                    .fields()
-                    .unwrap()
-                    .iter()
-                    .map(|f| DType::convert_from_fb(f, find_id))
-                    .collect::<SchemaResult<Vec<_>>>()?;
-                Ok(DType::Struct(names, fields))
-            }
-            fb::Type::Composite => {
-                let fb_composite = fb_type.type__as_composite().unwrap();
-                let id = find_id(fb_composite.id().unwrap()).ok_or_else(|| {
-                    SchemaError::InvalidArgument("Couldn't find composite id".into())
-                })?;
-                Ok(DType::Composite(id, fb_composite.nullability().try_into()?))
-            }
-            _ => Err(SchemaError::InvalidArgument("Unknown DType variant".into())),
-        }
+        todo!()
     }
 }
 
@@ -486,12 +413,12 @@ impl TryFrom<fb::FloatWidth> for FloatWidth {
 mod test {
     use std::sync::Arc;
 
-    use crate::{DType, Deserialize, FloatWidth, IntWidth, Nullability, Serialize, Signedness};
+    use crate::{DType, FloatWidth, IntWidth, Nullability, Serialize, Signedness};
 
     fn roundtrip_dtype(dtype: DType) {
         let (bytes, head) = dtype.serialize();
         let deserialized =
-            DType::deserialize(&bytes[head..], |_| panic!("no composite ids")).unwrap();
+            DType::read_flatbuffer(&bytes[head..], |_| panic!("no composite ids")).unwrap();
         assert_eq!(dtype, deserialized);
     }
 

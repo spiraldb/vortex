@@ -13,6 +13,10 @@ impl ArraySerde for StructArray {
         }
         Ok(())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(None)
+    }
 }
 
 impl EncodingSerde for StructEncoding {

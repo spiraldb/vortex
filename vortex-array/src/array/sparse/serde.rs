@@ -16,6 +16,16 @@ impl ArraySerde for SparseArray {
         ctx.write(self.indices())?;
         ctx.write(self.values())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        // FIXME(ngates): use flatbuffer / serde.
+        let mut vec = Vec::new();
+        let mut ctx = WriteCtx::new(&mut vec);
+        ctx.write_usize(self.len())?;
+        // TODO(robert): Rewrite indices and don't store offset
+        ctx.write_usize(self.indices_offset())?;
+        Ok(Some(vec))
+    }
 }
 
 impl EncodingSerde for SparseEncoding {
