@@ -8,12 +8,6 @@ pub struct DTypeSerdeContext {
     composite_ids: Vec<CompositeID>,
 }
 
-impl Default for DTypeSerdeContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl DTypeSerdeContext {
     pub fn new(composite_ids: Vec<CompositeID>) -> Self {
         Self { composite_ids }

@@ -2,8 +2,10 @@ use std::io;
 use std::io::{ErrorKind, Read, Write};
 
 use arrow_buffer::buffer::{Buffer, MutableBuffer};
+use flatbuffers::root;
+use itertools::Itertools;
 
-use crate::array::composite::find_extension_id;
+use crate::array::composite::COMPOSITE_EXTENSIONS;
 use crate::array::{Array, ArrayRef};
 use crate::encoding::{find_encoding, EncodingId, ENCODINGS};
 use crate::ptype::PType;
@@ -11,8 +13,8 @@ use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 use crate::serde::ptype::PTypeTag;
 use crate::validity::Validity;
 use vortex_error::{VortexError, VortexResult};
-use vortex_schema::Serialize;
-use vortex_schema::{DType, Deserialize, IntWidth, Nullability, SchemaError, Signedness};
+use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+use vortex_schema::{DTypeSerdeContext, Serialize};
 
 pub mod context;
 pub mod data;
@@ -22,6 +24,7 @@ pub mod vtable;
 
 use crate::serde::vtable::ComputeVTable;
 pub use view::*;
+use vortex_flatbuffers::ReadFlatBuffer;
 
 pub trait ArraySerde {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;
@@ -31,7 +34,8 @@ pub trait ArraySerde {
 
 pub trait EncodingSerde {
     fn validate(&self, _view: &ArrayView) -> VortexResult<()> {
-        todo!("Validate not implemented for {}", _view.encoding().id());
+        Ok(())
+        // todo!("Validate not implemented for {}", _view.encoding().id());
     }
 
     fn to_array(&self, _view: &ArrayView) -> ArrayRef {
@@ -108,9 +112,12 @@ impl<'a> ReadCtx<'a> {
     #[inline]
     pub fn dtype(&mut self) -> VortexResult<DType> {
         let dtype_bytes = self.read_slice()?;
-        DType::deserialize(&dtype_bytes, find_extension_id).map_err(|e| match e {
-            SchemaError::InvalidArgument(s) => VortexError::InvalidArgument(s),
-        })
+        let ctx = DTypeSerdeContext::new(COMPOSITE_EXTENSIONS.iter().map(|e| e.id()).collect_vec());
+        DType::read_flatbuffer(
+            &ctx,
+            &(root::<vortex_schema::flatbuffers::DType>(&dtype_bytes)?),
+        )
+        .map_err(|e| VortexError::InvalidSerde(format!("Failed to read DType {}", e).into()))
     }
 
     pub fn ptype(&mut self) -> VortexResult<PType> {

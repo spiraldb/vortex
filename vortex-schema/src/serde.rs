@@ -3,10 +3,7 @@ use itertools::Itertools;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 
 use crate::flatbuffers as fb;
-use crate::flatbuffers::root_as_dtype;
-use crate::{
-    CompositeID, DType, FloatWidth, IntWidth, Nullability, SchemaError, SchemaResult, Signedness,
-};
+use crate::{DType, FloatWidth, IntWidth, Nullability, SchemaError, SchemaResult, Signedness};
 
 #[allow(dead_code)]
 pub trait Serialize<'a> {
@@ -22,17 +19,6 @@ pub trait Serialize<'a> {
     }
 
     fn serialize_to_builder(&self, fbb: &mut FlatBufferBuilder<'a>) -> WIPOffset<Self::OffsetType>;
-}
-
-pub trait Deserialize<'a>: Sized {
-    type OffsetType;
-
-    fn deserialize(bytes: &[u8], find_id: fn(&str) -> Option<CompositeID>) -> SchemaResult<Self>;
-
-    fn convert_from_fb(
-        fb_type: Self::OffsetType,
-        find_id: fn(&str) -> Option<CompositeID>,
-    ) -> SchemaResult<Self>;
 }
 
 impl FlatBufferRoot for &DType {}
@@ -289,25 +275,6 @@ impl<'a> Serialize<'a> for DType {
                 type_: Some(dtype_union),
             },
         )
-    }
-}
-
-impl<'a> Deserialize<'a> for DType {
-    type OffsetType = fb::DType<'a>;
-
-    fn deserialize(bytes: &[u8], find_id: fn(&str) -> Option<CompositeID>) -> SchemaResult<Self> {
-        root_as_dtype(bytes)
-            .map_err(|e| {
-                SchemaError::InvalidArgument(format!("Unable to read bytes as DType: {}", e).into())
-            })
-            .and_then(|d| Self::convert_from_fb(d, find_id))
-    }
-
-    fn convert_from_fb(
-        _fb_type: Self::OffsetType,
-        _find_id: fn(&str) -> Option<CompositeID>,
-    ) -> SchemaResult<Self> {
-        todo!()
     }
 }
 

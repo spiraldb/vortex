@@ -5,6 +5,7 @@ use flatbuffers::root;
 use nougat::gat;
 use std::io;
 use std::io::{BufReader, Read};
+use vortex::array::composite::COMPOSITE_EXTENSIONS;
 use vortex::serde::context::SerdeContext;
 use vortex::serde::ArrayView;
 use vortex_error::{VortexError, VortexResult};
@@ -73,7 +74,8 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
             .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Schema message".into()))?;
 
         // TODO(ngates): construct this from the SerdeContext.
-        let dtype_ctx = DTypeSerdeContext::new(Vec::new());
+        let dtype_ctx =
+            DTypeSerdeContext::new(COMPOSITE_EXTENSIONS.iter().map(|e| e.id()).collect());
         let dtype = DType::read_flatbuffer(
             &dtype_ctx,
             &schema
