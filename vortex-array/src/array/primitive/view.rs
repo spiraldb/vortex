@@ -28,7 +28,7 @@ impl<'a> PrimitiveView<'a> {
             .first()
             .ok_or_else(|| VortexError::InvalidSerde("Missing primitive buffer".into()))?;
         let validity = view
-            .child(0, Validity::DTYPE)
+            .child(0, &Validity::DTYPE)
             // FIXME(ngates): avoid this clone.
             .map(|v| Validity::Array(v.to_array()));
 

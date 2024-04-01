@@ -179,13 +179,7 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
                 io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
             });
 
-        let view = ArrayView::try_new(
-            self.ctx,
-            // FIXME(ngates): avoid this clone?
-            self.dtype.clone(),
-            col_array,
-            &self.buffers,
-        )?;
+        let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, &self.buffers)?;
 
         // Validate the array once here so we can ignore metadata parsing errors from now on.
         // TODO(ngates): should we convert to heap-allocated array if this is missing?

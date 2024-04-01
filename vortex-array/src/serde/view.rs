@@ -20,7 +20,7 @@ use vortex_schema::DType;
 #[derive(Clone)]
 pub struct ArrayView<'a> {
     encoding: EncodingRef,
-    dtype: DType,
+    dtype: &'a DType,
     array: fb::Array<'a>,
     buffers: &'a [Buffer],
     ctx: &'a SerdeContext,
@@ -41,7 +41,7 @@ impl<'a> Debug for ArrayView<'a> {
 impl<'a> ArrayView<'a> {
     pub fn try_new(
         ctx: &'a SerdeContext,
-        dtype: DType,
+        dtype: &'a DType,
         array: fb::Array<'a>,
         buffers: &'a [Buffer],
     ) -> VortexResult<Self> {
@@ -79,7 +79,11 @@ impl<'a> ArrayView<'a> {
         self.array.metadata().map(|m| m.bytes())
     }
 
-    pub fn child(&self, idx: usize, dtype: DType) -> Option<ArrayView<'a>> {
+    pub fn nchildren(&self) -> usize {
+        self.array.children().map(|c| c.len()).unwrap_or_default()
+    }
+
+    pub fn child(&self, idx: usize, dtype: &'a vortex_schema::DType) -> Option<ArrayView<'a>> {
         let child = self.array_child(idx)?;
 
         // Figure out how many buffers to skip...
@@ -91,7 +95,7 @@ impl<'a> ArrayView<'a> {
             .take(idx)
             .map(|child| Self::cumulative_nbuffers(child))
             .sum();
-        let buffer_count = child.buffers().unwrap_or_default().len();
+        let buffer_count = Self::cumulative_nbuffers(child);
 
         Some(
             Self::try_new(
