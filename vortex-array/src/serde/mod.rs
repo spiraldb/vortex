@@ -39,14 +39,17 @@ pub trait EncodingSerde {
     }
 
     fn to_array(&self, _view: &ArrayView) -> ArrayRef {
-        todo!("to_array not implemented for {}", _view.encoding().id());
+        todo!(
+            "EncodingSerde.to_array not implemented for {}",
+            _view.encoding().id()
+        );
     }
 
-    fn len(&self, view: &ArrayView) -> usize {
-        (0..view.nchildren())
-            .map(|c| view.child(c, view.dtype()).unwrap())
-            .map(|v| v.len())
-            .sum()
+    fn len(&self, _view: &ArrayView) -> usize {
+        todo!(
+            "EncodingSerde.len not implemented for {}",
+            _view.encoding().id()
+        );
     }
 
     fn compute(&self, _view: &ArrayView) -> Option<&dyn ComputeVTable<ArrayView>> {

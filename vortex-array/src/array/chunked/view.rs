@@ -8,6 +8,7 @@ use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::serde::vtable::ComputeVTable;
 use crate::serde::ArrayView;
+use flexbuffers::Reader;
 use vortex_error::VortexResult;
 
 // Need to design some trait that can be satisfied by both the ChunkedView and the ChunkedArray,
@@ -30,7 +31,8 @@ pub trait ChunkedTrait: Array {
     ) -> VortexResult<ArrayRef>;
 
     // Some way to get chunk lengths.
-    fn chunk_ends(&self) -> &[u64];
+    // FIXME(ngates): make this a child array.
+    fn chunk_ends(&self) -> Vec<u64>;
 
     fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
@@ -72,8 +74,15 @@ impl<'a> ChunkedTrait for ArrayView<'a> {
     //     f(&child)
     // }
 
-    fn chunk_ends(&self) -> &[u64] {
-        todo!()
+    fn chunk_ends(&self) -> Vec<u64> {
+        let reader = Reader::get_root(self.metadata().unwrap()).unwrap();
+        let mut ends = Vec::new();
+        reader
+            .as_vector()
+            .iter()
+            .map(|i| i.as_u64())
+            .for_each(|end| ends.push(end));
+        ends
     }
 }
 

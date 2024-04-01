@@ -28,6 +28,15 @@ impl ArraySerde for ChunkedArray {
 }
 
 impl EncodingSerde for ChunkedEncoding {
+    fn len(&self, view: &ArrayView) -> usize {
+        let length = (0..view.nchildren())
+            .map(|c| view.child(c, view.dtype()).unwrap())
+            .map(|v| v.len())
+            .sum();
+        println!("LENGTH {}", length);
+        length
+    }
+
     fn compute(&self, _view: &ArrayView) -> Option<&dyn ComputeVTable<ArrayView>> {
         Some(self)
     }

@@ -24,19 +24,21 @@ mod serde;
 pub struct StructArray {
     fields: Vec<ArrayRef>,
     dtype: DType,
+    len: usize,
     stats: Arc<RwLock<StatsSet>>,
 }
 
 impl StructArray {
-    pub fn new(names: FieldNames, fields: Vec<ArrayRef>) -> Self {
+    pub fn new(names: FieldNames, fields: Vec<ArrayRef>, len: usize) -> Self {
         assert!(
-            fields.iter().map(|v| v.len()).all_equal(),
+            fields.iter().all(|v| v.len() == len),
             "Fields didn't have the same length"
         );
         let dtype = DType::Struct(names, fields.iter().map(|a| a.dtype().clone()).collect());
         Self {
             fields,
             dtype,
+            len,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
@@ -67,7 +69,7 @@ impl Array for StructArray {
     impl_array!();
 
     fn len(&self) -> usize {
-        self.fields.first().map_or(0, |a| a.len())
+        self.len
     }
 
     #[inline]
@@ -96,6 +98,7 @@ impl Array for StructArray {
         Ok(Self {
             fields,
             dtype: self.dtype.clone(),
+            len: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
         .into_array())

@@ -242,7 +242,10 @@ impl CompressCtx {
                     .iter()
                     .map(|field| self.compress_array(field))
                     .collect();
-                Ok(StructArray::new(strct.names().clone(), compressed_fields?).into_array())
+                Ok(
+                    StructArray::new(strct.names().clone(), compressed_fields?, strct.len())
+                        .into_array(),
+                )
             }
             _ => {
                 // Otherwise, we run sampled compression over pluggable encodings

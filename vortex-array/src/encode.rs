@@ -170,6 +170,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayRef {
                 .zip(value.fields())
                 .map(|(c, field)| ArrayRef::from_arrow(c.clone(), field.is_nullable()))
                 .collect(),
+            value.len(),
         )
         .into_array()
     }
