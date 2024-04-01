@@ -1,4 +1,4 @@
-use crate::{flatbuffers as fb, SchemaResult};
+use crate::{flatbuffers as fb, FloatWidth, IntWidth, Nullability, SchemaResult, Signedness};
 use crate::{CompositeID, DType, SchemaError};
 use std::sync::Arc;
 use vortex_flatbuffers::ReadFlatBuffer;
@@ -94,6 +94,65 @@ impl ReadFlatBuffer<DTypeSerdeContext> for DType {
                 Ok(DType::Composite(id, fb_composite.nullability().try_into()?))
             }
             _ => Err(SchemaError::InvalidArgument("Unknown DType variant".into())),
+        }
+    }
+}
+
+impl TryFrom<fb::Nullability> for Nullability {
+    type Error = SchemaError;
+
+    fn try_from(value: fb::Nullability) -> SchemaResult<Self> {
+        match value {
+            fb::Nullability::NonNullable => Ok(Nullability::NonNullable),
+            fb::Nullability::Nullable => Ok(Nullability::Nullable),
+            _ => Err(SchemaError::InvalidArgument(
+                "Unknown nullability value".into(),
+            )),
+        }
+    }
+}
+
+impl TryFrom<fb::IntWidth> for IntWidth {
+    type Error = SchemaError;
+
+    fn try_from(value: fb::IntWidth) -> SchemaResult<Self> {
+        match value {
+            fb::IntWidth::_8 => Ok(IntWidth::_8),
+            fb::IntWidth::_16 => Ok(IntWidth::_16),
+            fb::IntWidth::_32 => Ok(IntWidth::_32),
+            fb::IntWidth::_64 => Ok(IntWidth::_64),
+            _ => Err(SchemaError::InvalidArgument(
+                "Unknown IntWidth value".into(),
+            )),
+        }
+    }
+}
+
+impl TryFrom<fb::Signedness> for Signedness {
+    type Error = SchemaError;
+
+    fn try_from(value: fb::Signedness) -> SchemaResult<Self> {
+        match value {
+            fb::Signedness::Unsigned => Ok(Signedness::Unsigned),
+            fb::Signedness::Signed => Ok(Signedness::Signed),
+            _ => Err(SchemaError::InvalidArgument(
+                "Unknown Signedness value".into(),
+            )),
+        }
+    }
+}
+
+impl TryFrom<fb::FloatWidth> for FloatWidth {
+    type Error = SchemaError;
+
+    fn try_from(value: fb::FloatWidth) -> SchemaResult<Self> {
+        match value {
+            fb::FloatWidth::_16 => Ok(FloatWidth::_16),
+            fb::FloatWidth::_32 => Ok(FloatWidth::_32),
+            fb::FloatWidth::_64 => Ok(FloatWidth::_64),
+            _ => Err(SchemaError::InvalidArgument(
+                "Unknown IntWidth value".into(),
+            )),
         }
     }
 }

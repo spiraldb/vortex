@@ -4,12 +4,11 @@ pub use dtype::*;
 pub use error::ErrString;
 pub use error::SchemaError;
 pub use error::SchemaResult;
-pub use serde::Serialize;
 
 mod deserialize;
 mod dtype;
 mod error;
-mod serde;
+mod serialize;
 
 pub use deserialize::*;
 

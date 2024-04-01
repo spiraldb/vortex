@@ -38,7 +38,20 @@ pub trait WriteFlatBuffer {
     ) -> WIPOffset<Self::Target<'fb>>;
 }
 
+pub trait FlatBufferToBytes {
+    fn flatbuffer_to_bytes(&self) -> (Vec<u8>, usize);
+}
+
 pub trait FlatBufferRoot {}
+
+impl<F: WriteFlatBuffer + FlatBufferRoot> FlatBufferToBytes for F {
+    fn flatbuffer_to_bytes(&self) -> (Vec<u8>, usize) {
+        let mut fbb = FlatBufferBuilder::new();
+        let root_offset = self.write_flatbuffer(&mut fbb);
+        fbb.finish_minimal(root_offset);
+        fbb.collapse()
+    }
+}
 
 pub trait FlatBufferReader {
     /// Returns Ok(None) if the reader has reached EOF.

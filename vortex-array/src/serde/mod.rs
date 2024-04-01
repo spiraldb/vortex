@@ -13,8 +13,8 @@ use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 use crate::serde::ptype::PTypeTag;
 use crate::validity::Validity;
 use vortex_error::{VortexError, VortexResult};
+use vortex_schema::DTypeSerdeContext;
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
-use vortex_schema::{DTypeSerdeContext, Serialize};
 
 pub mod context;
 pub mod data;
@@ -24,7 +24,7 @@ pub mod vtable;
 
 use crate::serde::vtable::ComputeVTable;
 pub use view::*;
-use vortex_flatbuffers::ReadFlatBuffer;
+use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
 pub trait ArraySerde {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;
@@ -234,8 +234,8 @@ impl<'a> WriteCtx<'a> {
     }
 
     pub fn dtype(&mut self, dtype: &DType) -> VortexResult<()> {
-        let (bytes, head) = dtype.serialize();
-        self.write_slice(&bytes[head..])
+        let (bytes, offset) = dtype.flatbuffer_to_bytes();
+        self.write_slice(&bytes[offset..])
     }
 
     pub fn ptype(&mut self, ptype: PType) -> VortexResult<()> {

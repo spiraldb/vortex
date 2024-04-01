@@ -5,6 +5,7 @@ use bench_vortex::reader::open_vortex;
 use bench_vortex::setup_logger;
 use bench_vortex::taxi_data::taxi_data_vortex;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::array::Array;
 use vortex::compute::take::take;
 use vortex::serde::context::SerdeContext;
 use vortex_error::VortexResult;
@@ -36,9 +37,9 @@ pub fn main() -> VortexResult<()> {
     println!("DType: {:?}", array_reader.dtype());
     // Read some number of chunks from the stream.
     while let Some(chunk) = array_reader.next().unwrap() {
-        println!("VIEW: {:?}", &chunk);
+        println!("VIEW: {}", (&chunk as &dyn Array));
         let taken = take(&chunk, &PrimitiveArray::from(vec![0, 1, 0, 1])).unwrap();
-        println!("Taken: {:?}", &taken);
+        println!("Taken: {}", &taken);
     }
 
     Ok(())
