@@ -8,7 +8,7 @@ use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
-use vortex::{compute, impl_array};
+use vortex::{compute, impl_array, ArrayWalker};
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
@@ -154,6 +154,11 @@ impl Array for REEArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.values())?;
+        walker.visit_child(self.ends())
     }
 }
 

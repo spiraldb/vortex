@@ -14,12 +14,12 @@ use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::iterator::ArrayIter;
 use crate::ptype::NativePType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
 
 mod accessor;
 mod builder;
@@ -248,6 +248,11 @@ impl Array for VarBinArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.offsets())?;
+        walker.visit_child(self.bytes())
     }
 }
 

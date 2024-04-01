@@ -9,10 +9,10 @@ use vortex_schema::{DType, FieldNames};
 use crate::compress::EncodingCompression;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
 
 use super::{check_slice_bounds, Array, ArrayRef};
 
@@ -112,6 +112,13 @@ impl Array for StructArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        for field in self.fields() {
+            walker.visit_child(field)?;
+        }
+        Ok(())
     }
 }
 

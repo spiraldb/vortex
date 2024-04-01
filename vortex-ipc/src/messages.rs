@@ -141,21 +141,8 @@ impl<'a> WriteFlatBuffer for IPCChunkColumn<'a> {
         let array = Some(IPCArray(self.0, self.1).write_flatbuffer(fbb));
 
         // Walk the ColumnData depth-first to compute the buffer offsets.
-        let mut offset: u64 = 0;
-        let mut buffer_offsets = vec![];
-        let mut col_datas = vec![self.1];
-        while let Some(col_data) = col_datas.pop() {
-            for buffer in col_data.buffers() {
-                buffer_offsets.push(offset);
-                let buffer_size = buffer.len();
-                let aligned_size = (buffer_size + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
-                offset += aligned_size as u64;
-            }
-            col_data.children().iter().for_each(|c| col_datas.push(c));
-        }
-        buffer_offsets.push(offset);
-
-        let buffer_offsets = Some(fbb.create_vector(buffer_offsets.as_slice()));
+        let buffer_offsets = self.1.all_buffer_offsets(ALIGNMENT);
+        let buffer_offsets = Some(fbb.create_vector(&buffer_offsets));
 
         fb::ChunkColumn::create(
             fbb,

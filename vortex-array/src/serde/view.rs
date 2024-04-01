@@ -8,6 +8,7 @@ use crate::serde::context::SerdeContext;
 use crate::serde::EncodingSerde;
 use crate::stats::Stats;
 use crate::validity::{ArrayValidity, Validity};
+use crate::ArrayWalker;
 use arrow_buffer::Buffer;
 use log::info;
 use std::any::Any;
@@ -178,6 +179,10 @@ impl<'a> Array for ArrayView<'a> {
 
     fn nbytes(&self) -> usize {
         self.buffers.iter().map(|b| b.len()).sum()
+    }
+
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        todo!()
     }
 }
 

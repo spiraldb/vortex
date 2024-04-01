@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
+use itertools::Itertools;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 
 use crate::flatbuffers as fb;
@@ -63,12 +64,55 @@ impl WriteFlatBuffer for DType {
             )
             .as_union_value(),
             DType::Decimal(_, _, _) => todo!(),
-            DType::Float(_, _) => todo!(),
-            DType::Utf8(_) => todo!(),
-            DType::Binary(_) => todo!(),
-            DType::Struct(_, _) => todo!(),
+            DType::Float(width, n) => fb::Float::create(
+                fbb,
+                &fb::FloatArgs {
+                    width: width.into(),
+                    nullability: n.into(),
+                },
+            )
+            .as_union_value(),
+            DType::Utf8(n) => fb::Utf8::create(
+                fbb,
+                &fb::Utf8Args {
+                    nullability: n.into(),
+                },
+            )
+            .as_union_value(),
+            DType::Binary(n) => fb::Binary::create(
+                fbb,
+                &fb::BinaryArgs {
+                    nullability: n.into(),
+                },
+            )
+            .as_union_value(),
+            DType::Struct(names, dtypes) => {
+                let names = names
+                    .iter()
+                    .map(|n| fbb.create_string(n.as_str()))
+                    .collect_vec();
+                let names = Some(fbb.create_vector(&names));
+
+                let dtypes = dtypes
+                    .iter()
+                    .map(|dtype| dtype.write_flatbuffer(fbb))
+                    .collect_vec();
+                let fields = Some(fbb.create_vector(&dtypes));
+
+                fb::Struct_::create(fbb, &fb::Struct_Args { names, fields }).as_union_value()
+            }
             DType::List(_, _) => todo!(),
-            DType::Composite(_, _) => todo!(),
+            DType::Composite(id, n) => {
+                let id = Some(fbb.create_string(id.0));
+                fb::Composite::create(
+                    fbb,
+                    &fb::CompositeArgs {
+                        id,
+                        nullability: n.into(),
+                    },
+                )
+                .as_union_value()
+            }
         };
 
         let dtype_type = match self {

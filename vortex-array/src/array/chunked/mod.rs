@@ -9,10 +9,10 @@ use vortex_schema::DType;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
 
 mod compute;
 mod serde;
@@ -146,6 +146,13 @@ impl Array for ChunkedArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        for chunk in self.chunks() {
+            walker.visit_child(&chunk)?;
+        }
+        Ok(())
     }
 }
 

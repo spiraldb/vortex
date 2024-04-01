@@ -81,10 +81,7 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
         None
     }
 
-    #[allow(unused_variables)]
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        todo!("Walk not implemented for {}", self.encoding().id())
-    }
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()>;
 }
 
 pub trait IntoArray {
@@ -340,6 +337,10 @@ impl<'a, T: Array + Clone> Array for &'a T {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         T::serde(self)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        T::walk(self, walker)
     }
 }
 

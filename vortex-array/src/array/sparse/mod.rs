@@ -13,11 +13,11 @@ use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::ptype::PType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
 
 mod compress;
 mod compute;
@@ -141,6 +141,11 @@ impl Array for SparseArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.indices())?;
+        walker.visit_child(self.values())
     }
 }
 

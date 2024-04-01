@@ -1,4 +1,5 @@
 use flatbuffers::root_unchecked;
+use itertools::Itertools;
 use std::io::{BufWriter, Write};
 
 use vortex::array::Array;
@@ -87,18 +88,20 @@ impl<W: Write> StreamWriter<W> {
         for (msg, column_data) in chunk_column_msgs.iter().zip(data.columns()) {
             self.write.write_all(&msg)?;
 
-            // FIXME(ngates): not implemented yet.
-            let buffer_offsets = column_data.buffer_offsets(ALIGNMENT);
+            let buffer_offsets = column_data.all_buffer_offsets(ALIGNMENT);
             let mut current_offset = 0;
-            for (buffer_end, buffer) in buffer_offsets.iter().skip(1).zip(column_data.buffers()) {
+            for (buffer, &buffer_end) in column_data
+                .depth_first_traversal()
+                .flat_map(|data| data.buffers().iter())
+                .zip_eq(buffer_offsets.iter().skip(1))
+            {
                 self.write.write_all(&buffer.as_slice())?;
                 current_offset += buffer.len();
-                let padding = buffer_end - current_offset;
+                let padding = (buffer_end as usize) - current_offset;
                 self.write.write_all(&vec![0; padding])?;
             }
         }
 
-        // First, convert the array to ArrayData.
         Ok(())
     }
 }

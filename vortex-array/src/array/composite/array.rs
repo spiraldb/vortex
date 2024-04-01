@@ -12,10 +12,10 @@ use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::serde::{ArraySerde, BytesSerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
 
 pub trait CompositeMetadata:
     'static + Debug + Display + Send + Sync + Sized + Clone + BytesSerde
@@ -120,6 +120,10 @@ impl Array for CompositeArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.underlying())
     }
 }
 

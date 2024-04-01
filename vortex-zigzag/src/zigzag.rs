@@ -4,10 +4,10 @@ use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
+use vortex::{impl_array, ArrayWalker};
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::{DType, Signedness};
 
@@ -90,6 +90,10 @@ impl Array for ZigZagArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.encoded())
     }
 }
 

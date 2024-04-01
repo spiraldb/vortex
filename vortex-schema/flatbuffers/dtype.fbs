@@ -51,7 +51,6 @@ table Float {
 
 table Utf8 {
     nullability: Nullability;
-
 }
 
 table Binary {
