@@ -72,8 +72,7 @@ impl<W: Write> StreamWriter<W> {
             let chunk_col = unsafe { root_unchecked::<fb::Message>(&vec[4..]) }
                 .header_as_chunk_column()
                 .unwrap();
-            let total_buffer_size = chunk_col.buffer_offsets().unwrap().iter().last().unwrap();
-            offset += total_buffer_size;
+            offset += chunk_col.buffer_size();
 
             chunk_column_msgs.push(vec);
         }

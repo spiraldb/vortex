@@ -152,32 +152,20 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
         // Read all the column's buffers
         self.buffers.clear();
         let mut offset = 0;
-        for (buffer_offset, buffer_def) in col_msg
-            .buffer_offsets()
-            .unwrap_or_default()
-            .iter()
-            .zip(col_array.buffers().unwrap_or_default().iter())
-        {
-            let to_kill = buffer_offset - offset;
+        for buffer in col_msg.buffers().unwrap_or_default().iter() {
+            let to_kill = buffer.offset() - offset;
             io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
 
-            let mut buffer = vec![0u8; buffer_def.length() as usize];
-            self.read.read_exact(&mut buffer).unwrap();
-            self.buffers.push(Buffer::from_vec(buffer));
+            let mut bytes = vec![0u8; buffer.length() as usize];
+            self.read.read_exact(&mut bytes).unwrap();
+            self.buffers.push(Buffer::from_vec(bytes));
 
-            offset = buffer_offset + buffer_def.length();
+            offset = buffer.offset() + buffer.length();
         }
 
         // Consume any remaining padding after the final buffer.
-        col_msg
-            .buffer_offsets()
-            .unwrap()
-            .iter()
-            .last()
-            .map(|last_offset| {
-                let to_kill = last_offset - offset;
-                io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
-            });
+        let to_kill = col_msg.buffer_size() - offset;
+        io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
 
         let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, &self.buffers)?;
 
@@ -189,6 +177,8 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
     }
 }
 
+/// FIXME(ngates): this exists to detach the lifetimes of the object as read by read_flatbuffer.
+///  We should be able to fix that.
 pub fn read_into<R: Read>(read: &mut R, buffer: &mut Vec<u8>) -> VortexResult<()> {
     buffer.clear();
 

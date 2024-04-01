@@ -4,21 +4,12 @@ enum Version: uint8 {
   V0 = 0,
 }
 
-enum Compression: uint8 {
-    None = 0,
-}
-
-struct Buffer {
-    length: uint64;
-    compression: Compression;
-}
-
 table Array {
     version: Version = V0;
     encoding: uint16;
     metadata: [ubyte];
     children: [Array];
-    buffers: [Buffer];
+    nbuffers: uint16;
 }
 
 root_type Array;

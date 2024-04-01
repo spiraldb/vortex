@@ -28,9 +28,16 @@ enum Compression: uint8 {
     None = 0,
 }
 
+struct Buffer {
+    offset: uint64;
+    length: uint64;
+    compression: Compression;
+}
+
 table ChunkColumn {
     array: vortex.array.Array;
-    buffer_offsets: [uint64];
+    buffers: [Buffer];
+    buffer_size: uint64;
 }
 
 union MessageHeader {

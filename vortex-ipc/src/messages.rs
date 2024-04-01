@@ -1,4 +1,5 @@
 use crate::flatbuffers::ipc as fb;
+use crate::flatbuffers::ipc::Compression;
 use crate::{missing, ALIGNMENT};
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
@@ -138,17 +139,31 @@ impl<'a> WriteFlatBuffer for IPCChunkColumn<'a> {
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
-        let array = Some(IPCArray(self.0, self.1).write_flatbuffer(fbb));
+        let col_data = self.1;
+        let array = Some(IPCArray(self.0, col_data).write_flatbuffer(fbb));
 
         // Walk the ColumnData depth-first to compute the buffer offsets.
-        let buffer_offsets = self.1.all_buffer_offsets(ALIGNMENT);
-        let buffer_offsets = Some(fbb.create_vector(&buffer_offsets));
+        let mut buffers = Vec::with_capacity(col_data.buffers().len());
+        let mut offset = 0;
+        for col_data in col_data.depth_first_traversal() {
+            for buffer in col_data.buffers() {
+                buffers.push(fb::Buffer::new(
+                    offset as u64,
+                    buffer.len() as u64,
+                    Compression::None,
+                ));
+                let aligned_size = (buffer.len() + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
+                offset += aligned_size;
+            }
+        }
+        let buffers = Some(fbb.create_vector(&buffers));
 
         fb::ChunkColumn::create(
             fbb,
             &fb::ChunkColumnArgs {
                 array,
-                buffer_offsets,
+                buffers,
+                buffer_size: offset as u64,
             },
         )
     }
@@ -180,12 +195,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
             .collect_vec();
         let children = Some(fbb.create_vector(&children));
 
-        let buffers = column_data
-            .buffers()
-            .iter()
-            .map(|buffer| fba::Buffer::new(buffer.len() as u64, fba::Compression::None))
-            .collect_vec();
-        let buffers = Some(fbb.create_vector(&buffers));
+        let nbuffers = column_data.buffers().len() as u16; // TODO(ngates): checked cast
 
         fba::Array::create(
             fbb,
@@ -194,7 +204,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
                 encoding,
                 metadata,
                 children,
-                buffers,
+                nbuffers,
             },
         )
     }

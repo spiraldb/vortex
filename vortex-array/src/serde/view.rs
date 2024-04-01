@@ -54,6 +54,18 @@ impl<'a> ArrayView<'a> {
                 format!("Encoding {} does not support serde", encoding).into(),
             )
         })?;
+
+        if buffers.len() != Self::cumulative_nbuffers(array) {
+            return Err(VortexError::InvalidSerde(
+                format!(
+                    "Incorrect number of buffers {}, expected {}",
+                    buffers.len(),
+                    Self::cumulative_nbuffers(array)
+                )
+                .into(),
+            ));
+        }
+
         Ok(Self {
             encoding,
             dtype,
@@ -119,12 +131,12 @@ impl<'a> ArrayView<'a> {
 
     /// The number of buffers used by the current Array.
     pub fn nbuffers(&self) -> usize {
-        self.array.buffers().unwrap_or_default().len()
+        self.array.nbuffers() as usize
     }
 
     /// The number of buffers used by the current Array and all its children.
     fn cumulative_nbuffers(array: fb::Array) -> usize {
-        let mut nbuffers = array.buffers().unwrap_or_default().len();
+        let mut nbuffers = array.nbuffers() as usize;
         for child in array.children().unwrap_or_default() {
             nbuffers += Self::cumulative_nbuffers(child);
         }
