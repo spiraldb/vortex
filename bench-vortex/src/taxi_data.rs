@@ -1,14 +1,13 @@
+use crate::data_downloads::{data_lance, data_vortex, data_vortex_uncompressed, download_data};
 use std::fs::File;
 use std::path::PathBuf;
-use crate::data_downloads::{data_lance, data_vortex, data_vortex_uncompressed, download_data};
-
 
 fn download_taxi_data() -> PathBuf {
     let taxi_parquet_fname = "yellow-tripdata-2023-11.parquet";
-    let taxi_data_url = "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-11.parquet";
+    let taxi_data_url =
+        "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-11.parquet";
     download_data(taxi_parquet_fname, taxi_data_url)
 }
-
 
 pub fn taxi_data_parquet() -> PathBuf {
     download_taxi_data()

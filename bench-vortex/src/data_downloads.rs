@@ -1,33 +1,28 @@
-use std::fs::File;
-use std::path::PathBuf;
+use crate::idempotent;
+use crate::reader::{compress_parquet_to_vortex, BATCH_SIZE};
 use arrow_array::RecordBatchReader;
 use itertools::Itertools;
-use lance::Dataset;
 use lance::dataset::WriteParams;
-use tokio::runtime::Runtime;
-use crate::idempotent;
+use lance::Dataset;
 use lance_parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder as LanceParquetRecordBatchReaderBuilder;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use std::fs::File;
+use std::path::PathBuf;
+use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::IntoArray;
 use vortex::arrow::FromArrowType;
 use vortex::serde::WriteCtx;
 use vortex_schema::DType;
-use crate::reader::{BATCH_SIZE, compress_parquet_to_vortex};
-
 
 pub fn download_data(fname: &str, data_url: &str) -> PathBuf {
     idempotent(fname, |path| {
         let mut file = File::create(path).unwrap();
 
-        reqwest::blocking::get(
-            data_url,
-        )
-            .unwrap()
-            .copy_to(&mut file)
-    }).unwrap()
+        reqwest::blocking::get(data_url).unwrap().copy_to(&mut file)
+    })
+    .unwrap()
 }
-
 
 pub fn data_lance(lance_fname: &str, read: File) -> PathBuf {
     idempotent(lance_fname, |path| {
@@ -42,14 +37,16 @@ pub fn data_lance(lance_fname: &str, read: File) -> PathBuf {
             path.to_str().unwrap(),
             Some(write_params),
         ))
-    }).unwrap()
+    })
+    .unwrap()
 }
 
 pub fn data_vortex(fname: &str, data_to_compress: PathBuf) -> PathBuf {
     idempotent(fname, |path| {
         let mut write = File::create(path).unwrap();
         compress_parquet_to_vortex(&data_to_compress, &mut write)
-    }).unwrap()
+    })
+    .unwrap()
 }
 
 pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> PathBuf {
@@ -73,5 +70,5 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
         write_ctx.dtype(&dtype)?;
         write_ctx.write(&chunked)
     })
-        .unwrap()
+    .unwrap()
 }

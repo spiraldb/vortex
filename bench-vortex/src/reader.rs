@@ -37,7 +37,10 @@ pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
     read_ctx.with_schema(&dtype).read()
 }
 
-pub fn compress_parquet_to_vortex<W: Write>(parquet_path: &Path, write: &mut W) -> VortexResult<()> {
+pub fn compress_parquet_to_vortex<W: Write>(
+    parquet_path: &Path,
+    write: &mut W,
+) -> VortexResult<()> {
     let taxi_pq = File::open(parquet_path)?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq)?;
 

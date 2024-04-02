@@ -25,9 +25,9 @@ use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
 
+mod data_downloads;
 pub mod reader;
 pub mod taxi_data;
-mod data_downloads;
 
 pub fn idempotent<T, E>(name: &str, f: impl FnOnce(&Path) -> Result<T, E>) -> Result<PathBuf, E> {
     let path = data_path(name);
