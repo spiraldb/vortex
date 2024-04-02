@@ -4,7 +4,7 @@ use arrow_array::{ArrayRef as ArrowArrayRef, BinaryViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::varbinview::VarBinViewArray;
@@ -99,7 +99,7 @@ impl AsArrowArray for VarBinViewArray {
                 data,
                 nulls,
             )),
-            _ => return Err(VortexError::InvalidDType(self.dtype().clone())),
+            _ => vortex_bail!(MismatchedTypes: "utf8 or binary", self.dtype()),
         })
     }
 }

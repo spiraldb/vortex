@@ -1,4 +1,4 @@
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::constant::ConstantArray;
 use crate::array::{Array, ArrayKind, ArrayRef};
@@ -9,7 +9,7 @@ pub fn add(lhs: &dyn Array, rhs: &dyn Array) -> VortexResult<ArrayRef> {
     // Check that the arrays are the same length.
     let length = lhs.len();
     if rhs.len() != length {
-        return Err("Arrays have different lengths".into());
+        vortex_bail!("Arrays have different lengths");
     }
 
     match (ArrayKind::from(lhs), ArrayKind::from(rhs)) {

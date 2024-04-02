@@ -41,11 +41,11 @@ impl StatsSet {
         StatsSet(HashMap::from([(stat, value)]))
     }
 
-    fn get_as<T: TryFrom<Scalar, Error = VortexError>>(
+    fn get_as<T: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: &Stat,
     ) -> VortexResult<Option<T>> {
-        self.0.get(stat).map(|v| T::try_from(v.clone())).transpose()
+        self.0.get(stat).map(|v| T::try_from(v)).transpose()
     }
 
     pub fn set(&mut self, stat: Stat, value: Scalar) {

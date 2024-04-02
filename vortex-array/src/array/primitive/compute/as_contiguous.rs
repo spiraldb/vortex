@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
@@ -18,9 +18,7 @@ impl AsContiguousFn for PrimitiveArray {
             .map(|chunk| chunk.as_primitive().ptype())
             .all_equal()
         {
-            return Err(VortexError::ComputeError(
-                "Chunks have differing ptypes".into(),
-            ));
+            vortex_bail!(ComputeError: "Chunks have differing ptypes");
         }
         let ptype = arrays[0].as_primitive().ptype();
 

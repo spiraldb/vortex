@@ -5268,7 +5268,6 @@ dependencies = [
  "arrow-schema 51.0.0",
  "parquet 51.0.0",
  "thiserror",
- "vortex-schema",
 ]
 
 [[package]]
@@ -5325,6 +5324,7 @@ dependencies = [
  "flatc",
  "itertools 0.12.1",
  "thiserror",
+ "vortex-error",
  "walkdir",
 ]
 

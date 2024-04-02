@@ -1,80 +1,139 @@
-use std::error::Error;
+#![feature(error_generic_member_access)]
+
+use std::backtrace::Backtrace;
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
-use std::io;
+use std::ops::Deref;
+use std::{env, fmt, io};
 
-use vortex_schema::{DType, ErrString};
+#[derive(Debug)]
+pub struct ErrString(Cow<'static, str>);
 
-#[derive(Debug, thiserror::Error, PartialEq)]
+impl<T> From<T> for ErrString
+where
+    T: Into<Cow<'static, str>>,
+{
+    fn from(msg: T) -> Self {
+        if env::var("VORTEX_PANIC_ON_ERR").as_deref().unwrap_or("") == "1" {
+            panic!("{}", msg.into())
+        } else {
+            ErrString(msg.into())
+        }
+    }
+}
+
+impl AsRef<str> for ErrString {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Deref for ErrString {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for ErrString {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum VortexError {
-    #[error("index {0} out of bounds from {1} to {2}")]
-    OutOfBounds(usize, usize, usize),
-    #[error("{0}")]
-    ComputeError(ErrString),
-    #[error("{0}")]
-    InvalidArgument(ErrString),
-    // Used when a function is not implemented for a given array type.
-    #[error("function {0} not implemented for {1}")]
-    NotImplemented(&'static str, &'static str),
-    #[error("missing kernel {0} for {1} and {2:?}")]
-    MissingKernel(&'static str, &'static str, Vec<&'static str>),
-    #[error("invalid data type: {0}")]
-    InvalidDType(DType),
-    #[error("Expected type {0} but found type {1}")]
-    MismatchedTypes(DType, DType),
-    #[error("unexpected arrow data type: {0:?}")]
-    InvalidArrowDataType(arrow_schema::DataType),
-    #[error("unsupported DType {0} for data array")]
-    UnsupportedDataArrayDType(DType),
-    #[error("unsupported DType {0} for offsets array")]
-    UnsupportedOffsetsArrayDType(DType),
-    #[error("array containing indices or run ends must be strictly monotonically increasing")]
-    IndexArrayMustBeStrictSorted,
+    #[error("index {0} out of bounds from {1} to {2}\nBacktrace:\n{3}")]
+    OutOfBounds(usize, usize, usize, Backtrace),
+    #[error("{0}\nBacktrace:\n{1}")]
+    ComputeError(ErrString, Backtrace),
+    #[error("{0}\nBacktrace:\n{1}")]
+    InvalidArgument(ErrString, Backtrace),
+    #[error("function {0} not implemented for {1}\nBacktrace:\n{2}")]
+    NotImplemented(ErrString, ErrString, Backtrace),
+    #[error("expected type: {0} but instead got {1}\nBacktrace:\n{2}")]
+    MismatchedTypes(ErrString, ErrString, Backtrace),
     #[error(transparent)]
-    ArrowError(ArrowError),
+    ArrowError(
+        #[from]
+        #[backtrace]
+        arrow_schema::ArrowError,
+    ),
     #[error(transparent)]
-    IOError(IOError),
+    IOError(
+        #[from]
+        #[backtrace]
+        io::Error,
+    ),
     #[cfg(feature = "parquet")]
     #[error(transparent)]
-    ParquetError(ParquetError),
+    ParquetError(
+        #[from]
+        #[backtrace]
+        parquet::errors::ParquetError,
+    ),
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;
 
-impl From<&str> for VortexError {
-    fn from(value: &str) -> Self {
-        VortexError::InvalidArgument(value.to_string().into())
-    }
-}
-
-macro_rules! wrapped_error {
-    ($E:ty, $e:ident) => {
-        #[derive(Debug)]
-        pub struct $e(pub $E);
-
-        impl PartialEq for $e {
-            fn eq(&self, _other: &Self) -> bool {
-                false
-            }
-        }
-
-        impl From<$E> for VortexError {
-            fn from(err: $E) -> Self {
-                VortexError::$e($e(err))
-            }
-        }
-
-        impl Display for $e {
-            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", self)
-            }
-        }
-
-        impl Error for $e {}
+#[macro_export]
+macro_rules! vortex_err {
+    (OutOfBounds: $idx:expr, $start:expr, $stop:expr) => {{
+        use std::backtrace::Backtrace;
+        $crate::__private::must_use(
+            $crate::VortexError::OutOfBounds($idx, $start, $stop, Backtrace::capture())
+        )
+    }};
+    (NotImplemented: $func:expr, $arr:expr) => {{
+        use std::backtrace::Backtrace;
+        $crate::__private::must_use(
+            $crate::VortexError::NotImplemented($func.into(), $arr.into(), Backtrace::capture())
+        )
+    }};
+    (MismatchedTypes: $expected:literal, $actual:expr) => {{
+        use std::backtrace::Backtrace;
+        $crate::__private::must_use(
+            $crate::VortexError::MismatchedTypes($expected.into(), $actual.to_string().into(), Backtrace::capture())
+        )
+    }};
+    (MismatchedTypes: $expected:expr, $actual:expr) => {{
+        use std::backtrace::Backtrace;
+        $crate::__private::must_use(
+            $crate::VortexError::MismatchedTypes($expected.to_string().into(), $actual.to_string().into(), Backtrace::capture())
+        )
+    }};
+    ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {{
+        use std::backtrace::Backtrace;
+        $crate::__private::must_use(
+            $crate::VortexError::$variant(format!($fmt, $($arg),*).into(), Backtrace::capture())
+        )
+    }};
+    ($variant:ident: $err:expr $(,)?) => {{}
+        $crate::__private::must_use(
+            $crate::VortexError::$variant($err)
+        )
+    };
+    ($fmt:literal $(, $arg:expr)* $(,)?) => {
+        $crate::vortex_err!(InvalidArgument: $fmt, $($arg),*)
     };
 }
 
-wrapped_error!(arrow_schema::ArrowError, ArrowError);
-wrapped_error!(io::Error, IOError);
+#[macro_export]
+macro_rules! vortex_bail {
+    ($($tt:tt)+) => {
+        return Err($crate::vortex_err!($($tt)+))
+    };
+}
 
-#[cfg(feature = "parquet")]
-wrapped_error!(parquet::errors::ParquetError, ParquetError);
+// Not public, referenced by macros only.
+#[doc(hidden)]
+pub mod __private {
+    #[doc(hidden)]
+    #[inline]
+    #[cold]
+    #[must_use]
+    pub fn must_use(error: crate::VortexError) -> crate::VortexError {
+        error
+    }
+}

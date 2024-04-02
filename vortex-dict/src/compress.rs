@@ -242,11 +242,11 @@ where
 #[cfg(test)]
 mod test {
     use std::str;
+
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::scalar::PrimitiveScalar;
-    use vortex_schema::Nullability::Nullable;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
 
@@ -276,18 +276,16 @@ mod test {
             &[1, 1, 0, 2, 2, 0, 2, 0]
         );
         assert_eq!(
-            scalar_at(&values, 0),
-            Ok(PrimitiveScalar::try_new::<i32>(None, Nullable)
-                .unwrap()
-                .into())
+            scalar_at(&values, 0).unwrap(),
+            PrimitiveScalar::nullable::<i32>(None).into()
         );
         assert_eq!(
-            scalar_at(&values, 1),
-            Ok(PrimitiveScalar::nullable(Some(1)).into())
+            scalar_at(&values, 1).unwrap(),
+            PrimitiveScalar::nullable(Some(1)).into()
         );
         assert_eq!(
-            scalar_at(&values, 2),
-            Ok(PrimitiveScalar::nullable(Some(3)).into())
+            scalar_at(&values, 2).unwrap(),
+            PrimitiveScalar::nullable(Some(3)).into()
         );
     }
 

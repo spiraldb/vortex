@@ -15,7 +15,7 @@ fn offset_at(array: &dyn Array, index: usize) -> usize {
             parray.typed_data::<$P>()[index].as_()
         })
     } else {
-        scalar_at(array, index).unwrap().try_into().unwrap()
+        scalar_at(array, index).and_then(|s| s.try_into()).unwrap()
     }
 }
 

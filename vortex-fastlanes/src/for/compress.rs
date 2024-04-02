@@ -1,8 +1,6 @@
 use itertools::Itertools;
 use num_traits::PrimInt;
 
-use crate::downcast::DowncastFastlanes;
-use crate::{FoRArray, FoREncoding};
 use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -15,6 +13,9 @@ use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
 use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
+
+use crate::downcast::DowncastFastlanes;
+use crate::{FoRArray, FoREncoding};
 
 impl EncodingCompression for FoREncoding {
     fn cost(&self) -> u8 {
@@ -164,7 +165,10 @@ mod test {
 
         let compressed = ctx.compress(&array, None).unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
-        assert_eq!(compressed.as_for().reference().try_into(), Ok(1_000_000u32));
+        assert_eq!(
+            u32::try_from(compressed.as_for().reference()).unwrap(),
+            1_000_000u32
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use arrow_array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::composite::array::CompositeArray;
 use crate::array::downcast::DowncastArrayBuiltin;
@@ -43,12 +43,9 @@ impl AsArrowArray for CompositeArray {
             .as_arrow()
             .map(|a| a.as_arrow())
             .unwrap_or_else(|| {
-                Err(VortexError::InvalidArgument(
-                    format!(
-                        "as_arrow not implemented for composite extension {}",
-                        self.id()
-                    )
-                    .into(),
+                Err(vortex_err!(
+                    NotImplemented: "as_arrow",
+                    format!("composite extension {}", self.id())
                 ))
             })
     }

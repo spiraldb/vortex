@@ -16,6 +16,7 @@ name = "vortex_schema"
 path = "src/lib.rs"
 
 [dependencies]
+vortex-error = { path = "../vortex-error" }
 arrow-schema = { workspace = true }
 flatbuffers = { workspace = true }
 itertools = { workspace = true }
