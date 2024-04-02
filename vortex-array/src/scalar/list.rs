@@ -48,7 +48,7 @@ impl ListScalar {
                 };
                 Ok(ListScalar::new(new_type, new_fields).into())
             }
-            _ => Err(vortex_err!(MismatchedTypes:  "any list", dtype)),
+            _ => Err(vortex_err!(MismatchedTypes: "any list", dtype)),
         }
     }
 
@@ -85,7 +85,7 @@ impl<T: TryFrom<Scalar, Error = VortexError>> TryFrom<Scalar> for ListScalarVec<
                 Err(vortex_err!("can't extract present value from null scalar",))
             }
         } else {
-            Err(vortex_err!(MismatchedTypes:  "any list", value.dtype()))
+            Err(vortex_err!(MismatchedTypes: "any list", value.dtype()))
         }
     }
 }
@@ -103,7 +103,7 @@ impl<'a, T: TryFrom<&'a Scalar, Error = VortexError>> TryFrom<&'a Scalar> for Li
                 Err(vortex_err!("can't extract present value from null scalar",))
             }
         } else {
-            Err(vortex_err!(MismatchedTypes:  "any list", value.dtype()))
+            Err(vortex_err!(MismatchedTypes: "any list", value.dtype()))
         }
     }
 }

@@ -40,7 +40,7 @@ impl BitPackedArray {
         len: usize,
     ) -> VortexResult<Self> {
         if encoded.dtype() != &Self::ENCODED_DTYPE {
-            vortex_bail!(MismatchedTypes:  Self::ENCODED_DTYPE, encoded.dtype());
+            vortex_bail!(MismatchedTypes: Self::ENCODED_DTYPE, encoded.dtype());
         }
         if let Some(v) = &validity {
             assert_eq!(v.len(), len);

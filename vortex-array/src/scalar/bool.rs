@@ -20,7 +20,7 @@ impl BoolScalar {
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
         match dtype {
             DType::Bool(_) => Ok(self.clone().into()),
-            _ => Err(vortex_err!(MismatchedTypes:  "bool", dtype)),
+            _ => Err(vortex_err!(MismatchedTypes: "bool", dtype)),
         }
     }
 
@@ -41,7 +41,7 @@ impl TryFrom<&Scalar> for bool {
 
     fn try_from(value: &Scalar) -> VortexResult<Self> {
         let Scalar::Bool(b) = value else {
-            vortex_bail!(MismatchedTypes:  "bool", value.dtype());
+            vortex_bail!(MismatchedTypes: "bool", value.dtype());
         };
         b.value()
             .cloned()
@@ -54,7 +54,7 @@ impl TryFrom<Scalar> for bool {
 
     fn try_from(value: Scalar) -> VortexResult<Self> {
         let Scalar::Bool(b) = value else {
-            vortex_bail!(MismatchedTypes:  "bool", value.dtype());
+            vortex_bail!(MismatchedTypes: "bool", value.dtype());
         };
         b.into_value()
             .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))

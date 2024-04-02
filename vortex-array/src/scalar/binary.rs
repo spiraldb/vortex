@@ -38,7 +38,7 @@ impl TryFrom<Scalar> for Vec<u8> {
 
     fn try_from(value: Scalar) -> VortexResult<Self> {
         let Scalar::Binary(b) = value else {
-            vortex_bail!(MismatchedTypes:  "binary", value.dtype());
+            vortex_bail!(MismatchedTypes: "binary", value.dtype());
         };
         b.value()
             .cloned()

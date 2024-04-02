@@ -132,7 +132,7 @@ impl AsArrowArray for VarBinArray {
                 )),
                 _ => panic!("Invalid offsets type"),
             },
-            _ => vortex_bail!(MismatchedTypes:  "utf8 or binary", self.dtype()),
+            _ => vortex_bail!(MismatchedTypes: "utf8 or binary", self.dtype()),
         })
     }
 }

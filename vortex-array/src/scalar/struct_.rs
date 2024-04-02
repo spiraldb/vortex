@@ -43,7 +43,7 @@ impl StructScalar {
             DType::Struct(names, field_dtypes) => {
                 if field_dtypes.len() != self.values.len() {
                     vortex_bail!(
-                        MismatchedTypes:  format!("Struct with {} fields", self.values.len()),
+                        MismatchedTypes: format!("Struct with {} fields", self.values.len()),
                         dtype
                     );
                 }
@@ -61,7 +61,7 @@ impl StructScalar {
                 );
                 Ok(StructScalar::new(new_type, new_fields).into())
             }
-            _ => Err(vortex_err!(MismatchedTypes:  "struct", dtype)),
+            _ => Err(vortex_err!(MismatchedTypes: "struct", dtype)),
         }
     }
 
