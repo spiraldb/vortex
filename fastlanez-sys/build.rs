@@ -14,7 +14,7 @@ fn main() {
         .expect("Failed to canonicalize root dir");
     let fastlanez_dir = root_dir.join("deps/fastlanez");
 
-    // Tell cargo to tell rustc to link codecz
+    // Tell cargo to tell rustc to link fastlanez
     println!(
         "cargo:rustc-link-search={}",
         fastlanez_dir.join("zig-out/lib").to_str().unwrap()
