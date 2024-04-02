@@ -1898,6 +1898,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastlanez"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "fastlanez-sys",
+ "num-traits",
+ "paste",
+ "seq-macro",
+ "uninit",
+]
+
+[[package]]
 name = "fastlanez-sys"
 version = "0.1.0"
 dependencies = [
@@ -5275,7 +5287,7 @@ name = "vortex-fastlanes"
 version = "0.1.0"
 dependencies = [
  "arrayref",
- "fastlanez-sys",
+ "fastlanez",
  "itertools 0.12.1",
  "linkme",
  "log",

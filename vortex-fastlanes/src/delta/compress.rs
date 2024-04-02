@@ -3,7 +3,7 @@ use std::mem::size_of;
 use arrayref::array_ref;
 use num_traits::{WrappingAdd, WrappingSub};
 
-use fastlanez_sys::{transpose, untranspose, Delta};
+use fastlanez::{transpose, untranspose_into, Delta};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
@@ -88,7 +88,7 @@ where
     let mut bases = Vec::with_capacity(num_chunks * lanes + 1);
     let mut deltas = Vec::with_capacity(array.len());
 
-    // Loop over all of the 1024-element chunks.
+    // Loop over all the 1024-element chunks.
     if num_chunks > 0 {
         let mut transposed: [T; 1024] = [T::default(); 1024];
         let mut base = [T::default(); 128 / size_of::<T>()];
@@ -167,7 +167,7 @@ where
             // Initialize the base vector for this chunk
             base.copy_from_slice(&bases[i * lanes..(i + 1) * lanes]);
             Delta::decode_transposed(chunk, &mut base, &mut transposed);
-            untranspose(&transposed, &mut output);
+            untranspose_into(&transposed, &mut output);
         }
     }
     assert_eq!(output.len() % 1024, 0);

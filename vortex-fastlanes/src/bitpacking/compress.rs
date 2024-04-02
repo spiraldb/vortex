@@ -1,6 +1,6 @@
 use arrayref::array_ref;
 
-use fastlanez_sys::TryBitPack;
+use fastlanez::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
@@ -131,7 +131,7 @@ fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize)
     (0..num_chunks).for_each(|i| {
         let start_elem = i * 1024;
         let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
-        TryBitPack::try_bitpack_into(chunk, bit_width, &mut output).unwrap();
+        TryBitPack::try_pack_into(chunk, bit_width, &mut output).unwrap();
     });
 
     // Pad the last chunk with zeros to a full 1024 elements.
@@ -139,7 +139,7 @@ fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize)
     if last_chunk_size > 0 {
         let mut last_chunk: [T; 1024] = [T::default(); 1024];
         last_chunk[..last_chunk_size].copy_from_slice(&array[array.len() - last_chunk_size..]);
-        TryBitPack::try_bitpack_into(&last_chunk, bit_width, &mut output).unwrap();
+        TryBitPack::try_pack_into(&last_chunk, bit_width, &mut output).unwrap();
     }
 
     output
@@ -163,7 +163,7 @@ fn bitpack_patches(
     })
 }
 
-pub fn bitunpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
+pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
     let encoded = flatten_primitive(cast(array.encoded(), PType::U8.into())?.as_ref())?;
@@ -171,19 +171,19 @@ pub fn bitunpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
 
     let mut unpacked = match ptype {
         I8 | U8 => PrimitiveArray::from_nullable(
-            bitunpack_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, length),
+            unpack_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, length),
             array.validity(),
         ),
         I16 | U16 => PrimitiveArray::from_nullable(
-            bitunpack_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, length),
+            unpack_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, length),
             array.validity(),
         ),
         I32 | U32 => PrimitiveArray::from_nullable(
-            bitunpack_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, length),
+            unpack_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, length),
             array.validity(),
         ),
         I64 | U64 => PrimitiveArray::from_nullable(
-            bitunpack_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, length),
+            unpack_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, length),
             array.validity(),
         ),
         _ => panic!("Unsupported ptype {:?}", ptype),
@@ -203,7 +203,7 @@ pub fn bitunpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     flatten_primitive(&unpacked)
 }
 
-fn bitunpack_primitive<T: NativePType + TryBitPack>(
+fn unpack_primitive<T: NativePType + TryBitPack>(
     packed: &[u8],
     bit_width: usize,
     length: usize,
@@ -222,14 +222,14 @@ fn bitunpack_primitive<T: NativePType + TryBitPack>(
     let bytes_per_chunk = 128 * bit_width;
     (0..num_chunks).for_each(|i| {
         let chunk: &[u8] = &packed[i * bytes_per_chunk..][0..bytes_per_chunk];
-        TryBitPack::try_bitunpack_into(chunk, bit_width, &mut output).unwrap();
+        TryBitPack::try_unpack_into(chunk, bit_width, &mut output).unwrap();
     });
 
     // Handle the final chunk which may contain padding.
     let last_chunk_size = length % 1024;
     if last_chunk_size > 0 {
         let mut last_output = Vec::with_capacity(1024);
-        TryBitPack::try_bitunpack_into(
+        TryBitPack::try_unpack_into(
             &packed[num_chunks * bytes_per_chunk..],
             bit_width,
             &mut last_output,
@@ -318,11 +318,10 @@ mod test {
         let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
         let ctx = CompressCtx::new(Arc::new(cfg));
 
-        let values = PrimitiveArray::from(Vec::from_iter((0..n).map(|i| (i % 63) as u8)));
+        let values = PrimitiveArray::from(Vec::from_iter((0..n).map(|i| (i % 2047) as u16)));
         let compressed = ctx.compress(&values, None).unwrap();
-        assert_eq!(compressed.encoding().id(), BitPackedEncoding.id());
-
-        let decompressed = flatten_primitive(compressed.as_ref()).unwrap();
-        assert_eq!(decompressed.typed_data::<u8>(), values.typed_data::<u8>());
+        let compressed = compressed.as_bitpacked();
+        let decompressed = flatten_primitive(compressed).unwrap();
+        assert_eq!(decompressed.typed_data::<u16>(), values.typed_data::<u16>());
     }
 }

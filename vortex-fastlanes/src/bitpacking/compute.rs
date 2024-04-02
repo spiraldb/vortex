@@ -9,7 +9,7 @@ use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex_error::VortexResult;
 
-use crate::bitpacking::compress::bitunpack;
+use crate::bitpacking::compress::unpack;
 use crate::downcast::DowncastFastlanes;
 use crate::BitPackedArray;
 
@@ -25,7 +25,7 @@ impl ArrayCompute for BitPackedArray {
 
 impl FlattenFn for BitPackedArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
-        bitunpack(self).map(FlattenedArray::Primitive)
+        unpack(self).map(FlattenedArray::Primitive)
     }
 }
 
@@ -34,11 +34,11 @@ impl TakeFn for BitPackedArray {
         let prim_indices = flatten_primitive(indices)?;
         // Group indices into 1024 chunks and relativise them to the beginning of each chunk
         let relative_indices: Vec<(usize, Vec<u16>)> = match_each_integer_ptype!(prim_indices.ptype(), |$P| {
-            let groupped_indices = prim_indices
+            let grouped_indices = prim_indices
                 .typed_data::<$P>()
                 .iter()
                 .group_by(|idx| (**idx / 1024) as usize);
-            groupped_indices
+            grouped_indices
                 .into_iter()
                 .map(|(k, g)| (k, g.map(|idx| (*idx % 1024) as u16).collect()))
                 .collect()
@@ -50,7 +50,7 @@ impl TakeFn for BitPackedArray {
                 let sliced = self.slice(chunk * 1024, (chunk + 1) * 1024)?;
 
                 take(
-                    &bitunpack(sliced.as_bitpacked())?,
+                    &unpack(sliced.as_bitpacked())?,
                     &PrimitiveArray::from(offsets),
                 )
             })
