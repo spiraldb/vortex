@@ -34,7 +34,7 @@ impl TryFrom<&DataType> for PType {
             DataType::Date64 => Ok(PType::I64),
             DataType::Duration(_) => Ok(PType::I64),
             _ => Err(vortex_err!(
-                "Arrow datatype {:?} cannot be converted to ptyp",
+                "Arrow datatype {:?} cannot be converted to ptype",
                 value
             )),
         }
