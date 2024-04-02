@@ -74,7 +74,7 @@ canonical representations of each of the logical data types. The canonical encod
 
 ### Compressed Encodings
 
-Vortex includes a set of highly data-parallel, vectorized encodings. These encodings each correspond to a compressed 
+Vortex includes a set of highly data-parallel, vectorized encodings. These encodings each correspond to a compressed
 in-memory array implementation, allowing us to defer decompression. Currently, these are:
 
 * Adaptive Lossless Floating Point (ALP)
@@ -92,7 +92,7 @@ in-memory array implementation, allowing us to defer decompression. Currently, t
 
 ### Compression
 
-Vortex's top-level compression strategy is based on the 
+Vortex's top-level compression strategy is based on the
 [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
 
 Roughly, for each chunk of data, a sample of at least ~1% of the data is taken. Compression is then attempted (
@@ -155,6 +155,13 @@ In Arrow, `RunLengthArray` and `DictionaryArray` are separate incompatible types
 While we hope to turn Vortex into a community project, its current rapid rate of change makes taking contributions
 without prior discussion infeasible. If you are interested in contributing, please open an issue to discuss your ideas.
 
+## Setup
+
+This repo uses submodules for non-Rust dependencies (e.g., for the zig fastlanez repo). Before building make sure to run
+
+* `git submodule update --init --recursive`
+* `./zigup` (this will install the zig version required by fastlanez)
+
 ## License
 
 Licensed under the Apache License, Version 2.0 (the "License").
@@ -162,7 +169,7 @@ Licensed under the Apache License, Version 2.0 (the "License").
 ## Acknowledgments 🏆
 
 This project is inspired by and--in some cases--directly based upon the existing, excellent work of many researchers
-and OSS developers. 
+and OSS developers.
 
 In particular, the following academic papers greatly influenced the development:
 * Maximilian Kuschewski, David Sauerwein, Adnan Alhomssi, and Viktor Leis. 2023. [BtrBlocks: Efficient Columnar Compression 
