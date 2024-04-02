@@ -27,6 +27,7 @@ use vortex_schema::DType;
 
 pub mod reader;
 pub mod taxi_data;
+mod data_downloads;
 
 pub fn idempotent<T, E>(name: &str, f: impl FnOnce(&Path) -> Result<T, E>) -> Result<PathBuf, E> {
     let path = data_path(name);
