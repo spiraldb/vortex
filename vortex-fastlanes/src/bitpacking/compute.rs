@@ -4,17 +4,23 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::as_contiguous::as_contiguous;
 use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
+use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
+use vortex::scalar::Scalar;
 use vortex_error::VortexResult;
 
-use crate::bitpacking::compress::unpack;
+use crate::bitpacking::compress::{unpack, unpack_single};
 use crate::downcast::DowncastFastlanes;
 use crate::BitPackedArray;
 
 impl ArrayCompute for BitPackedArray {
     fn flatten(&self) -> Option<&dyn FlattenFn> {
+        Some(self)
+    }
+
+    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
 
@@ -26,6 +32,12 @@ impl ArrayCompute for BitPackedArray {
 impl FlattenFn for BitPackedArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
         unpack(self).map(FlattenedArray::Primitive)
+    }
+}
+
+impl ScalarAtFn for BitPackedArray {
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
+        unpack_single(self, index)
     }
 }
 

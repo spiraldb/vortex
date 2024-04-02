@@ -13,10 +13,10 @@ use vortex::compute::patch::patch;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::ptype::{NativePType, PType};
-use vortex::scalar::ListScalarVec;
+use vortex::scalar::{ListScalarVec, Scalar};
 use vortex::stats::Stat;
 use vortex::validity::ArrayValidity;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::downcast::DowncastFastlanes;
 use crate::{BitPackedArray, BitPackedEncoding};
@@ -241,6 +241,74 @@ fn unpack_primitive<T: NativePType + TryBitPack>(
     output
 }
 
+pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
+    let bit_width = array.bit_width();
+    let length = array.len();
+    let encoded = flatten_primitive(cast(array.encoded(), PType::U8.into())?.as_ref())?;
+    let ptype: PType = array.dtype().try_into()?;
+
+    let scalar: Scalar = match ptype {
+        I8 | U8 => {
+            unpack_single_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, length, index)
+                .map(|v| v.into())
+        }
+        I16 | U16 => {
+            unpack_single_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, length, index)
+                .map(|v| v.into())
+        }
+        I32 | U32 => {
+            unpack_single_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, length, index)
+                .map(|v| v.into())
+        }
+        I64 | U64 => {
+            unpack_single_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, length, index)
+                .map(|v| v.into())
+        }
+        _ => vortex_bail!("Unsupported ptype {:?}", ptype),
+    }?;
+
+    // Cast to signed if necessary
+    if ptype.is_signed_int() {
+        scalar.cast(&ptype.into())
+    } else {
+        Ok(scalar)
+    }
+}
+
+pub fn unpack_single_primitive<T: NativePType + TryBitPack>(
+    packed: &[u8],
+    bit_width: usize,
+    length: usize,
+    index_to_decode: usize,
+) -> VortexResult<T> {
+    if index_to_decode >= length {
+        return Err(vortex_err!(OutOfBounds:index_to_decode, 0, length));
+    }
+    if bit_width == 0 {
+        return Ok(T::default());
+    }
+    if bit_width > 64 {
+        return Err(vortex_err!("Unsupported bit width {}", bit_width));
+    }
+
+    let bytes_per_tranche = 128 * bit_width;
+    let expected_packed_size = ((length + 1023) / 1024) * bytes_per_tranche;
+    if packed.len() != expected_packed_size {
+        return Err(vortex_err!(
+            "Expected {} packed bytes, got {}",
+            expected_packed_size,
+            packed.len()
+        ));
+    }
+
+    let tranche_index = index_to_decode / 1024;
+    let tranche_bytes = &packed[tranche_index * bytes_per_tranche..][0..bytes_per_tranche];
+    let index_in_tranche = index_to_decode % 1024;
+
+    <T as TryBitPack>::try_unpack_single(tranche_bytes, bit_width, index_in_tranche)
+        .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))
+}
+
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
 /// We could try to be clever, but we can never really predict how the exceptions will compress.
 fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> usize {
@@ -323,5 +391,19 @@ mod test {
         let compressed = compressed.as_bitpacked();
         let decompressed = flatten_primitive(compressed).unwrap();
         assert_eq!(decompressed.typed_data::<u16>(), values.typed_data::<u16>());
+
+        values
+            .typed_data::<u16>()
+            .iter()
+            .enumerate()
+            .for_each(|(i, v)| {
+                let scalar_at: u16 =
+                    if let Scalar::Primitive(pscalar) = unpack_single(compressed, i).unwrap() {
+                        pscalar.value().unwrap().try_into().unwrap()
+                    } else {
+                        panic!("expected u8 scalar")
+                    };
+                assert_eq!(scalar_at, *v);
+            });
     }
 }
