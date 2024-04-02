@@ -1,10 +1,10 @@
 use itertools::Itertools;
 use num_traits::{PrimInt, WrappingAdd, WrappingSub};
 
-use vortex::array::{Array, ArrayRef};
 use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::match_each_integer_ptype;
@@ -14,8 +14,8 @@ use vortex::stats::Stat;
 use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
-use crate::{FoRArray, FoREncoding};
 use crate::downcast::DowncastFastlanes;
+use crate::{FoRArray, FoREncoding};
 
 impl EncodingCompression for FoREncoding {
     fn cost(&self) -> u8 {
