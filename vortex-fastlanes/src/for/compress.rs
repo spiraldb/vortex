@@ -151,6 +151,7 @@ mod test {
     use std::sync::Arc;
 
     use vortex::array::{Encoding, EncodingRef};
+    use vortex::compute::scalar_at::ScalarAtFn;
 
     use crate::BitPackedEncoding;
 
@@ -208,5 +209,12 @@ mod test {
 
         let decompressed = flatten_primitive(compressed).unwrap();
         assert_eq!(decompressed.typed_data::<i8>(), array.typed_data::<i8>());
+        array
+            .typed_data::<i8>()
+            .iter()
+            .enumerate()
+            .for_each(|(i, v)| {
+                assert_eq!(*v, compressed.scalar_at(i).unwrap().try_into().unwrap());
+            });
     }
 }
