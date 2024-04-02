@@ -3,10 +3,8 @@ use std::io::{ErrorKind, Read, Write};
 
 use arrow_buffer::buffer::{Buffer, MutableBuffer};
 
-use vortex_error::{VortexError, VortexResult};
-use vortex_schema::{
-    DType, FbDeserialize, FbSerialize, IntWidth, Nullability, SchemaError, Signedness,
-};
+use vortex_error::{vortex_err, VortexResult};
+use vortex_schema::{DType, FbDeserialize, FbSerialize, IntWidth, Nullability, Signedness};
 
 use crate::array::composite::find_extension_id;
 use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
@@ -84,9 +82,7 @@ impl<'a> ReadCtx<'a> {
     #[inline]
     pub fn dtype(&mut self) -> VortexResult<DType> {
         let dtype_bytes = self.read_slice()?;
-        DType::deserialize(&dtype_bytes, find_extension_id).map_err(|e| match e {
-            SchemaError::InvalidArgument(s) => VortexError::InvalidArgument(s),
-        })
+        DType::deserialize(&dtype_bytes, find_extension_id)
     }
 
     pub fn ptype(&mut self) -> VortexResult<PType> {
@@ -99,9 +95,7 @@ impl<'a> ReadCtx<'a> {
         match self.read_nbytes::<1>()? {
             [0] => Ok(Nullability::NonNullable),
             [1] => Ok(Nullability::Nullable),
-            _ => Err(VortexError::InvalidArgument(
-                "Invalid nullability tag".into(),
-            )),
+            _ => Err(vortex_err!("Invalid nullability tag")),
         }
     }
 
@@ -141,7 +135,7 @@ impl<'a> ReadCtx<'a> {
 
     pub fn read_usize(&mut self) -> VortexResult<usize> {
         leb128::read::unsigned(self.r)
-            .map_err(|_| VortexError::InvalidArgument("Failed to parse leb128 usize".into()))
+            .map_err(|_| vortex_err!("Failed to parse leb128 usize"))
             .map(|u| u as usize)
     }
 
@@ -184,9 +178,7 @@ impl<'a> ReadCtx<'a> {
         {
             serde.read(self)
         } else {
-            Err(VortexError::InvalidArgument(
-                "Failed to recognize encoding ID".into(),
-            ))
+            Err(vortex_err!("Failed to recognize encoding ID",))
         }
     }
 }
@@ -227,7 +219,7 @@ impl<'a> WriteCtx<'a> {
 
     pub fn write_usize(&mut self, u: usize) -> VortexResult<()> {
         leb128::write::unsigned(self.w, u as u64)
-            .map_err(|_| VortexError::InvalidArgument("Failed to write leb128 usize".into()))
+            .map_err(|_| vortex_err!("Failed to write leb128 usize"))
             .map(|_| ())
     }
 
@@ -300,8 +292,9 @@ impl<'a> WriteCtx<'a> {
             .ok_or(io::Error::new(ErrorKind::InvalidInput, "unknown encoding"))?;
         self.write_usize(encoding_id)?;
         array.serde().map(|s| s.write(self)).unwrap_or_else(|| {
-            Err(VortexError::InvalidArgument(
-                format!("Serialization not supported for {}", array.encoding().id()).into(),
+            Err(vortex_err!(
+                "Serialization not supported for {}",
+                array.encoding().id()
             ))
         })
     }

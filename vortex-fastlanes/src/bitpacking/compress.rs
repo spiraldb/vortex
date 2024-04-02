@@ -1,6 +1,5 @@
 use arrayref::array_ref;
 
-use crate::{BitPackedArray, BitPackedEncoding};
 use fastlanez_sys::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -18,6 +17,9 @@ use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
 use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
+
+use crate::downcast::DowncastFastlanes;
+use crate::{BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -65,7 +67,7 @@ impl EncodingCompression for BitPackedEncoding {
             .unwrap()
             .0;
 
-        let like_bp = like.map(|l| l.as_any().downcast_ref::<BitPackedArray>().unwrap());
+        let like_bp = like.map(|l| l.as_bitpacked());
         let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception(parray.ptype()));
         let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
@@ -120,13 +122,13 @@ fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize)
     }
 
     // How many fastlanes vectors we will process.
-    let num_chunks = (array.len() + 1023) / 1024;
+    let num_chunks = array.len() / 1024;
 
     // Allocate a result byte array.
     let mut output = Vec::with_capacity(num_chunks * bit_width * 128);
 
     // Loop over all but the last chunk.
-    (0..num_chunks - 1).for_each(|i| {
+    (0..num_chunks).for_each(|i| {
         let start_elem = i * 1024;
         let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
         TryBitPack::try_bitpack_into(chunk, bit_width, &mut output).unwrap();
@@ -211,14 +213,14 @@ fn bitunpack_primitive<T: NativePType + TryBitPack>(
     }
 
     // How many fastlanes vectors we will process.
-    let num_chunks = (length + 1023) / 1024;
+    let num_chunks = length / 1024;
 
     // Allocate a result vector.
     let mut output = Vec::with_capacity(length);
 
     // Loop over all but the last chunk.
     let bytes_per_chunk = 128 * bit_width;
-    (0..num_chunks - 1).for_each(|i| {
+    (0..num_chunks).for_each(|i| {
         let chunk: &[u8] = &packed[i * bytes_per_chunk..][0..bytes_per_chunk];
         TryBitPack::try_bitunpack_into(chunk, bit_width, &mut output).unwrap();
     });
@@ -228,7 +230,7 @@ fn bitunpack_primitive<T: NativePType + TryBitPack>(
     if last_chunk_size > 0 {
         let mut last_output = Vec::with_capacity(1024);
         TryBitPack::try_bitunpack_into(
-            &packed[(num_chunks - 1) * bytes_per_chunk..],
+            &packed[num_chunks * bytes_per_chunk..],
             bit_width,
             &mut last_output,
         )
@@ -301,19 +303,22 @@ mod test {
             )
             .unwrap();
         assert_eq!(compressed.encoding().id(), BitPackedEncoding.id());
-        let bp = compressed
-            .as_any()
-            .downcast_ref::<BitPackedArray>()
-            .unwrap();
-        assert_eq!(bp.bit_width(), 6);
+        assert_eq!(compressed.as_bitpacked().bit_width(), 6);
     }
 
     #[test]
-    fn test_decompress() {
+    fn test_compression_roundtrip() {
+        compression_roundtrip(125);
+        compression_roundtrip(1024);
+        compression_roundtrip(10_000);
+        compression_roundtrip(10_240);
+    }
+
+    fn compression_roundtrip(n: usize) {
         let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
         let ctx = CompressCtx::new(Arc::new(cfg));
 
-        let values = PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8)));
+        let values = PrimitiveArray::from(Vec::from_iter((0..n).map(|i| (i % 63) as u8)));
         let compressed = ctx.compress(&values, None).unwrap();
         assert_eq!(compressed.encoding().id(), BitPackedEncoding.id());
 

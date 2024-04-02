@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::{
@@ -103,9 +103,7 @@ impl VarBinViewArray {
             views.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
-            return Err(VortexError::UnsupportedOffsetsArrayDType(
-                views.dtype().clone(),
-            ));
+            vortex_bail!(MismatchedTypes: "u8", views.dtype());
         }
 
         for d in data.iter() {
@@ -113,12 +111,12 @@ impl VarBinViewArray {
                 d.dtype(),
                 DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
             ) {
-                return Err(VortexError::UnsupportedDataArrayDType(d.dtype().clone()));
+                vortex_bail!(MismatchedTypes: "u8", d.dtype());
             }
         }
 
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
-            return Err(VortexError::InvalidDType(dtype));
+            vortex_bail!(MismatchedTypes: "utf8 or binary", dtype);
         }
 
         let dtype = if validity.is_some() && !dtype.is_nullable() {
@@ -277,6 +275,7 @@ impl ArrayDisplay for VarBinViewArray {
 mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::compute::scalar_at::scalar_at;
+    use crate::scalar::Scalar;
 
     use super::*;
 
@@ -312,19 +311,22 @@ mod test {
     pub fn varbin_view() {
         let binary_arr = binary_array();
         assert_eq!(binary_arr.len(), 2);
-        assert_eq!(scalar_at(&binary_arr, 0), Ok("hello world".into()));
         assert_eq!(
-            scalar_at(&binary_arr, 1),
-            Ok("hello world this is a long string".into())
-        )
+            scalar_at(&binary_arr, 0).unwrap(),
+            Scalar::from("hello world")
+        );
+        assert_eq!(
+            scalar_at(&binary_arr, 1).unwrap(),
+            Scalar::from("hello world this is a long string")
+        );
     }
 
     #[test]
     pub fn slice() {
         let binary_arr = binary_array().slice(1, 2).unwrap();
         assert_eq!(
-            scalar_at(&binary_arr, 0),
-            Ok("hello world this is a long string".into())
+            scalar_at(&binary_arr, 0).unwrap(),
+            Scalar::from("hello world this is a long string")
         );
     }
 }

@@ -1,4 +1,4 @@
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;
@@ -33,7 +33,7 @@ fn cast<T: NativePType>(array: &PrimitiveArray) -> VortexResult<Vec<T>> {
             // TODO(ngates): allow configurable checked/unchecked casting
             .map(|&v| {
                 T::from(v).ok_or_else(|| {
-                    VortexError::ComputeError(format!("Failed to cast {} to {:?}", v, T::PTYPE).into())
+                    vortex_err!(ComputeError: "Failed to cast {} to {:?}", v, T::PTYPE)
                 })
             })
             .collect()
@@ -69,9 +69,10 @@ mod test {
     #[test]
     fn cast_i32_u32() {
         let arr = vec![-1i32].into_array();
-        assert_eq!(
-            compute::cast::cast(&arr, PType::U32.into()).err().unwrap(),
-            VortexError::ComputeError("Failed to cast -1 to U32".into())
-        )
+        let error = compute::cast::cast(&arr, PType::U32.into()).err().unwrap();
+        let VortexError::ComputeError(s, _) = error else {
+            unreachable!()
+        };
+        assert_eq!(s.to_string(), "Failed to cast -1 to U32");
     }
 }

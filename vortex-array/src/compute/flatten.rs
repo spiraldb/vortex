@@ -1,4 +1,4 @@
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
@@ -42,10 +42,7 @@ impl FlattenedArray {
 /// This does not guarantee that the array is recursively flattened.
 pub fn flatten(array: &dyn Array) -> VortexResult<FlattenedArray> {
     array.flatten().map(|f| f.flatten()).unwrap_or_else(|| {
-        Err(VortexError::NotImplemented(
-            "flatten",
-            array.encoding().id().name(),
-        ))
+        Err(vortex_err!(NotImplemented: "flatten", array.encoding().id().name()))
     })
 }
 
@@ -53,9 +50,7 @@ pub fn flatten_varbin(array: &dyn Array) -> VortexResult<VarBinArray> {
     if let FlattenedArray::VarBin(vb) = flatten(array)? {
         Ok(vb)
     } else {
-        Err(VortexError::InvalidArgument(
-            format!("Cannot flatten array {} into varbin", array).into(),
-        ))
+        Err(vortex_err!("Cannot flatten array {} into varbin", array))
     }
 }
 
@@ -63,9 +58,7 @@ pub fn flatten_bool(array: &dyn Array) -> VortexResult<BoolArray> {
     if let FlattenedArray::Bool(b) = flatten(array)? {
         Ok(b)
     } else {
-        Err(VortexError::InvalidArgument(
-            format!("Cannot flatten array {} into bool", array).into(),
-        ))
+        Err(vortex_err!("Cannot flatten array {} into bool", array))
     }
 }
 
@@ -73,9 +66,7 @@ pub fn flatten_primitive(array: &dyn Array) -> VortexResult<PrimitiveArray> {
     if let FlattenedArray::Primitive(p) = flatten(array)? {
         Ok(p)
     } else {
-        Err(VortexError::InvalidArgument(
-            format!("Cannot flatten array {} into primitive", array).into(),
-        ))
+        Err(vortex_err!("Cannot flatten array {} into primitive", array))
     }
 }
 
@@ -83,8 +74,6 @@ pub fn flatten_struct(array: &dyn Array) -> VortexResult<StructArray> {
     if let FlattenedArray::Struct(s) = flatten(array)? {
         Ok(s)
     } else {
-        Err(VortexError::InvalidArgument(
-            format!("Cannot flatten array {} into struct", array).into(),
-        ))
+        Err(vortex_err!("Cannot flatten array {} into struct", array))
     }
 }

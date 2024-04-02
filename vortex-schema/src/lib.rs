@@ -1,14 +1,10 @@
 use std::fmt::{Display, Formatter};
 
 pub use dtype::*;
-pub use error::ErrString;
-pub use error::SchemaError;
-pub use error::SchemaResult;
 pub use serde::FbDeserialize;
 pub use serde::FbSerialize;
 
 mod dtype;
-mod error;
 mod serde;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]

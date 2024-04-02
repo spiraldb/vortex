@@ -1,14 +1,16 @@
+use std::cmp::min;
 use std::sync::{Arc, RwLock};
 
 use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
 use vortex::compress::EncodingCompression;
+use vortex::compute::flatten::flatten_primitive;
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
-use vortex_error::VortexResult;
-use vortex_schema::DType;
+use vortex_error::{vortex_bail, VortexResult};
+use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 mod compress;
 mod compute;
@@ -26,6 +28,9 @@ pub struct BitPackedArray {
 }
 
 impl BitPackedArray {
+    const ENCODED_DTYPE: DType =
+        DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable);
+
     pub fn try_new(
         encoded: ArrayRef,
         validity: Option<Validity>,
@@ -34,10 +39,12 @@ impl BitPackedArray {
         dtype: DType,
         len: usize,
     ) -> VortexResult<Self> {
+        if encoded.dtype() != &Self::ENCODED_DTYPE {
+            vortex_bail!(MismatchedTypes: Self::ENCODED_DTYPE, encoded.dtype());
+        }
         if let Some(v) = &validity {
             assert_eq!(v.len(), len);
         }
-        // TODO(ngates): check encoded has type u8
 
         Ok(Self {
             encoded,
@@ -89,8 +96,33 @@ impl Array for BitPackedArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {
-        unimplemented!("BitPackedArray::slice")
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        if start % 1024 != 0 || stop % 1024 != 0 {
+            return flatten_primitive(self)?.slice(start, stop);
+        }
+
+        if start > self.len() {
+            vortex_bail!(OutOfBounds: start, 0, self.len());
+        }
+        // If we are slicing more than one 1024 element chunk beyond end, we consider this out of bounds
+        if stop / 1024 > ((self.len() + 1023) / 1024) {
+            vortex_bail!(OutOfBounds: stop, 0, self.len());
+        }
+
+        let encoded_start = (start / 8) * self.bit_width;
+        let encoded_stop = (stop / 8) * self.bit_width;
+        Self::try_new(
+            self.encoded().slice(encoded_start, encoded_stop)?,
+            self.validity()
+                .map(|v| v.slice(start, min(stop, self.len()))),
+            self.patches()
+                .map(|p| p.slice(start, min(stop, self.len())))
+                .transpose()?,
+            self.bit_width(),
+            self.dtype().clone(),
+            min(stop - start, self.len()),
+        )
+        .map(|a| a.into_array())
     }
 
     #[inline]

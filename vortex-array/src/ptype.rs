@@ -1,11 +1,11 @@
-use arrow_buffer::ArrowNativeType;
 use std::fmt::{Debug, Display, Formatter};
 use std::panic::RefUnwindSafe;
 
+use arrow_buffer::ArrowNativeType;
 use half::f16;
 use num_traits::{Num, NumCast};
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::DType::*;
 use vortex_schema::{DType, FloatWidth, IntWidth};
 
@@ -44,6 +44,7 @@ pub trait NativePType:
     + Into<Scalar>
     + TryFrom<Scalar, Error = VortexError>
     + Into<PScalar>
+    + TryFrom<PScalar, Error = VortexError>
 {
     const PTYPE: PType;
 }
@@ -196,9 +197,7 @@ impl TryFrom<&DType> for PType {
                 FloatWidth::_32 => Ok(PType::F32),
                 FloatWidth::_64 => Ok(PType::F64),
             },
-            _ => Err(VortexError::InvalidArgument(
-                format!("Cannot convert DType {} into PType", value.clone()).into(),
-            )),
+            _ => Err(vortex_err!("Cannot convert DType {} into PType", value)),
         }
     }
 }

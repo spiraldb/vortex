@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::{DType, Nullability::NonNullable, Nullability::Nullable};
 
 use crate::scalar::value::ScalarValue;
@@ -43,11 +43,12 @@ impl TryFrom<Scalar> for String {
 
     fn try_from(value: Scalar) -> Result<Self, Self::Error> {
         let Scalar::Utf8(u) = value else {
-            return Err(VortexError::InvalidDType(value.dtype().clone()));
+            vortex_bail!(MismatchedTypes: "Utf8", value.dtype());
         };
-        let dt = u.dtype().clone();
         match u.into_value() {
-            None => Err(VortexError::InvalidDType(dt)),
+            None => Err(vortex_err!(
+                "cannot extract present value out of null scalar",
+            )),
             Some(s) => Ok(s),
         }
     }
@@ -58,10 +59,12 @@ impl TryFrom<&Scalar> for String {
 
     fn try_from(value: &Scalar) -> Result<Self, Self::Error> {
         let Scalar::Utf8(u) = value else {
-            return Err(VortexError::InvalidDType(value.dtype().clone()));
+            vortex_bail!(MismatchedTypes: "Utf8", value.dtype());
         };
         match u.value() {
-            None => Err(VortexError::InvalidDType(u.dtype().clone())),
+            None => Err(vortex_err!(
+                "cannot extract present value out of null scalar",
+            )),
             Some(s) => Ok(s.to_string()),
         }
     }
