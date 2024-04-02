@@ -9,7 +9,7 @@ pub trait TakeFn {
 }
 
 pub fn take(array: &dyn Array, indices: &dyn Array) -> VortexResult<ArrayRef> {
-    if let Some(take) = array.take() {
+    if let Some(take) = array.compute().and_then(|c| c.take()) {
         return take.take(indices);
     }
 

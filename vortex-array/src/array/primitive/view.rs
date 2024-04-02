@@ -1,10 +1,12 @@
 use arrow_buffer::Buffer;
 use num_traits::PrimInt;
+use std::fmt::{Debug, Formatter};
 
 use crate::array::primitive::PrimitiveEncoding;
 use crate::array::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
-use crate::compute::flatten::flatten_primitive;
+use crate::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
+use crate::compute::ArrayCompute;
 use crate::ptype::{NativePType, PType};
 use crate::serde::vtable::{ComputeVTable, TakeFn, VTable};
 use crate::serde::ArrayView;
@@ -30,7 +32,7 @@ impl<'a> PrimitiveView<'a> {
         let validity = view
             .child(0, &Validity::DTYPE)
             // FIXME(ngates): avoid this clone.
-            .map(|v| Validity::Array(v.to_array()));
+            .map(|v| Validity::Array(Array::to_array(&v)));
 
         Ok(Self {
             ptype,
@@ -47,6 +49,14 @@ pub trait PrimitiveTrait<T: NativePType> {
     fn validity(&self) -> Option<Validity>;
     fn typed_data(&self) -> &[T];
     fn to_array(&self) -> ArrayRef;
+
+    fn compute(&self) -> &dyn ArrayCompute;
+}
+
+impl<'a, T: NativePType> Debug for &'a dyn PrimitiveTrait<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("primitive doooo")
+    }
 }
 
 impl<'a, T: NativePType> PrimitiveTrait<T> for PrimitiveView<'a> {
@@ -64,6 +74,32 @@ impl<'a, T: NativePType> PrimitiveTrait<T> for PrimitiveView<'a> {
 
     fn to_array(&self) -> ArrayRef {
         PrimitiveArray::new(self.ptype, self.buffer.clone(), self.validity.clone()).into_array()
+    }
+
+    fn compute(&self) -> &dyn ArrayCompute {
+        todo!()
+    }
+}
+
+impl<'a, T: NativePType> PrimitiveTrait<T> for ArrayView<'a> {
+    fn ptype(&self) -> PType {
+        todo!()
+    }
+
+    fn validity(&self) -> Option<Validity> {
+        todo!()
+    }
+
+    fn typed_data(&self) -> &[T] {
+        todo!()
+    }
+
+    fn to_array(&self) -> ArrayRef {
+        todo!()
+    }
+
+    fn compute(&self) -> &dyn ArrayCompute {
+        self
     }
 }
 
@@ -97,12 +133,30 @@ impl<'view> ComputeVTable<ArrayView<'view>> for PrimitiveEncoding {
 }
 
 impl<'view> TakeFn<ArrayView<'view>> for PrimitiveEncoding {
-    fn take(&self, array: &ArrayView<'view>, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        use crate::compute::take::TakeFn;
-        let pv = PrimitiveView::try_new(array)?;
-        match_each_native_ptype!(pv.ptype, |$T| {
-            (&pv as &dyn PrimitiveTrait<$T>).take(indices)
-        })
+    fn take(&self, _array: &ArrayView<'view>, _indices: &dyn Array) -> VortexResult<ArrayRef> {
+        todo!()
+        // let pv = PrimitiveView::try_new(array)?;
+        // TakeFn::take((&pv as &dyn PrimitiveTrait<u16>), )
+        // match_each_native_ptype!(pv.ptype, |$T| {
+        //     TakeFn::
+        //     .take(indices)
+        // })
+    }
+}
+
+impl<'a, T: NativePType> ArrayCompute for &'a dyn PrimitiveTrait<T> {
+    fn flatten(&self) -> Option<&dyn FlattenFn> {
+        Some(self)
+    }
+
+    fn take(&self) -> Option<&dyn crate::compute::take::TakeFn> {
+        Some(self)
+    }
+}
+
+impl<T: NativePType> FlattenFn for &dyn PrimitiveTrait<T> {
+    fn flatten(&self) -> VortexResult<FlattenedArray> {
+        todo!()
     }
 }
 

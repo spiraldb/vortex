@@ -1,5 +1,4 @@
 use crate::array::{Array, ArrayRef};
-use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::flatbuffers::array as fb;
@@ -10,7 +9,6 @@ use crate::stats::Stats;
 use crate::validity::{ArrayValidity, Validity};
 use crate::ArrayWalker;
 use arrow_buffer::Buffer;
-use log::info;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
@@ -197,6 +195,15 @@ impl<'a> Array for ArrayView<'a> {
         self.buffers.iter().map(|b| b.len()).sum()
     }
 
+    fn compute(&self) -> Option<&dyn ArrayCompute> {
+        let compute = self
+            .encoding()
+            .serde()
+            .and_then(|serde| serde.view_compute(self));
+        println!("ARRAY VIEW COMPUTE {:?}", compute);
+        compute
+    }
+
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         todo!()
     }
@@ -221,29 +228,4 @@ impl<'a> ArrayDisplay for ArrayView<'a> {
     }
 }
 
-impl<'a> ArrayCompute for ArrayView<'a> {
-    fn take(&self) -> Option<&dyn TakeFn> {
-        Some(self)
-    }
-}
-
-impl<'a> TakeFn for ArrayView<'a> {
-    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        let serde = self
-            .encoding()
-            .serde()
-            .ok_or_else(|| VortexError::InvalidSerde("Serde not implemented".into()))?;
-
-        serde
-            .compute(self)
-            .and_then(|compute| compute.take())
-            .map(|t| t.take(self, indices))
-            .unwrap_or_else(|| {
-                info!(
-                    "Serde compute not implemented for {}. Allocating...",
-                    self.encoding().id()
-                );
-                take(&serde.to_array(self), indices)
-            })
-    }
-}
+impl<'a> ArrayCompute for ArrayView<'a> {}

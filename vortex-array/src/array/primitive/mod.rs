@@ -29,6 +29,7 @@ mod serde;
 mod stats;
 mod view;
 
+use crate::compute::ArrayCompute;
 pub use view::*;
 
 #[derive(Debug, Clone)]
@@ -197,6 +198,10 @@ impl Array for PrimitiveArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.buffer.len()
+    }
+
+    fn compute(&self) -> Option<&dyn ArrayCompute> {
+        Some(self)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

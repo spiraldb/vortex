@@ -77,6 +77,11 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
 
+    fn compute(&self) -> Option<&dyn ArrayCompute> {
+        // FIXME(ngates): remove this when Array no longer depends on ArrayCompute
+        None
+    }
+
     fn serde(&self) -> Option<&dyn ArraySerde> {
         None
     }
