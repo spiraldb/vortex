@@ -4,27 +4,28 @@ use itertools::Itertools;
 use vortex_error::{VortexError, VortexResult};
 
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::Array;
+use crate::array::{Array, WithArrayCompute};
 use crate::compute::flatten::flatten;
-use crate::compute::ArrayCompute;
 
 pub trait AsArrowArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef>;
 }
 
 pub fn as_arrow(array: &dyn Array) -> VortexResult<ArrowArrayRef> {
-    // If as_arrow is implemented, then invoke that.
-    if let Some(a) = array.as_arrow() {
-        return a.as_arrow();
-    }
+    array.with_compute(|c| {
+        // If as_arrow is implemented, then invoke that.
+        if let Some(a) = c.as_arrow() {
+            return a.as_arrow();
+        }
 
-    // Otherwise, flatten and try again.
-    let array = flatten(array)?.into_array();
-    array.as_arrow().map(|a| a.as_arrow()).unwrap_or_else(|| {
-        Err(VortexError::NotImplemented(
-            "as_arrow",
-            array.encoding().id().name(),
-        ))
+        // Otherwise, flatten and try again.
+        let array = flatten(array)?.into_array();
+        return c.as_arrow().map(|a| a.as_arrow()).unwrap_or_else(|| {
+            Err(VortexError::NotImplemented(
+                "as_arrow",
+                array.encoding().id().name(),
+            ))
+        });
     })
 }
 

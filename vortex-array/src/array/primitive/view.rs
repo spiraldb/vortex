@@ -40,22 +40,14 @@ impl<'a> PrimitiveView<'a> {
             validity,
         })
     }
-}
 
-// The question is how can we implement ArrayCompute for PrimitiveArray + PrimitiveView?
-// We can't use a trait since typed_data doesn't work? Or maybe we can but we just return Buffer?
-pub trait PrimitiveTrait<T: NativePType> {
-    fn ptype(&self) -> PType;
-    fn validity(&self) -> Option<Validity>;
-    fn typed_data(&self) -> &[T];
-    fn to_array(&self) -> ArrayRef;
+    pub fn ptype(&self) -> PType {
+        self.ptype
+    }
 
-    fn compute(&self) -> &dyn ArrayCompute;
-}
-
-impl<'a, T: NativePType> Debug for &'a dyn PrimitiveTrait<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("primitive doooo")
+    pub fn as_trait<T: NativePType>(&self) -> &dyn PrimitiveTrait<T> {
+        assert_eq!(self.ptype, T::PTYPE);
+        self
     }
 }
 
@@ -75,13 +67,24 @@ impl<'a, T: NativePType> PrimitiveTrait<T> for PrimitiveView<'a> {
     fn to_array(&self) -> ArrayRef {
         PrimitiveArray::new(self.ptype, self.buffer.clone(), self.validity.clone()).into_array()
     }
+}
 
-    fn compute(&self) -> &dyn ArrayCompute {
-        todo!()
+// The question is how can we implement ArrayCompute for PrimitiveArray + PrimitiveView?
+// We can't use a trait since typed_data doesn't work? Or maybe we can but we just return Buffer?
+pub trait PrimitiveTrait<T: NativePType> {
+    fn ptype(&self) -> PType;
+    fn validity(&self) -> Option<Validity>;
+    fn typed_data(&self) -> &[T];
+    fn to_array(&self) -> ArrayRef;
+}
+
+impl<T: NativePType> Debug for dyn PrimitiveTrait<T> + '_ {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("primitive doooo")
     }
 }
 
-impl<'a, T: NativePType> PrimitiveTrait<T> for ArrayView<'a> {
+impl<'a, T: NativePType> PrimitiveTrait<T> for &ArrayView<'a> {
     fn ptype(&self) -> PType {
         todo!()
     }
@@ -96,10 +99,6 @@ impl<'a, T: NativePType> PrimitiveTrait<T> for ArrayView<'a> {
 
     fn to_array(&self) -> ArrayRef {
         todo!()
-    }
-
-    fn compute(&self) -> &dyn ArrayCompute {
-        self
     }
 }
 
@@ -144,7 +143,7 @@ impl<'view> TakeFn<ArrayView<'view>> for PrimitiveEncoding {
     }
 }
 
-impl<'a, T: NativePType> ArrayCompute for &'a dyn PrimitiveTrait<T> {
+impl<T: NativePType> ArrayCompute for &dyn PrimitiveTrait<T> {
     fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }

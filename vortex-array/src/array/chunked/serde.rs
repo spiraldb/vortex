@@ -3,7 +3,6 @@ use vortex_error::VortexResult;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::serde::vtable::ComputeVTable;
 use crate::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for ChunkedArray {
@@ -35,10 +34,6 @@ impl EncodingSerde for ChunkedEncoding {
             .sum();
         println!("LENGTH {}", length);
         length
-    }
-
-    fn compute(&self, _view: &ArrayView) -> Option<&dyn ComputeVTable<ArrayView>> {
-        Some(self)
     }
 
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {

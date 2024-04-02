@@ -6,7 +6,6 @@ use flatten::*;
 use patch::PatchFn;
 use scalar_at::ScalarAtFn;
 use search_sorted::SearchSortedFn;
-use std::fmt::Debug;
 use take::TakeFn;
 
 pub mod add;
@@ -21,7 +20,11 @@ pub mod scalar_at;
 pub mod search_sorted;
 pub mod take;
 
-pub trait ArrayCompute: Debug {
+pub trait ArrayCompute {
+    fn name(&self) -> &'static str {
+        "todo"
+    }
+
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         None
     }

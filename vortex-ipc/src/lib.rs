@@ -38,7 +38,6 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
-    use vortex::array::Array;
 
     use crate::iter::FallibleLendingIterator;
     use vortex::array::primitive::PrimitiveArray;
@@ -47,11 +46,6 @@ mod tests {
 
     use crate::reader::StreamReader;
     use crate::writer::StreamWriter;
-
-    #[test]
-    fn test_primitive() {
-        let array = PrimitiveArray::from(vec![0, 1, 2, 3]);
-    }
 
     #[test]
     fn test_write_flatbuffer() {

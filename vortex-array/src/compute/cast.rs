@@ -1,7 +1,7 @@
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, WithArrayCompute};
 
 pub trait CastFn {
     fn cast(&self, dtype: &DType) -> VortexResult<ArrayRef>;
@@ -13,10 +13,12 @@ pub fn cast(array: &dyn Array, dtype: &DType) -> VortexResult<ArrayRef> {
     }
 
     // TODO(ngates): check for null_count if dtype is non-nullable
-    array.cast().map(|f| f.cast(dtype)).unwrap_or_else(|| {
-        Err(VortexError::NotImplemented(
-            "cast",
-            array.encoding().id().name(),
-        ))
+    array.with_compute(|c| {
+        c.cast().map(|f| f.cast(dtype)).unwrap_or_else(|| {
+            Err(VortexError::NotImplemented(
+                "cast",
+                array.encoding().id().name(),
+            ))
+        })
     })
 }

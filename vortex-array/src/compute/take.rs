@@ -1,7 +1,7 @@
 use log::info;
 use vortex_error::{VortexError, VortexResult};
 
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, WithArrayCompute};
 use crate::compute::flatten::flatten;
 
 pub trait TakeFn {
@@ -9,20 +9,20 @@ pub trait TakeFn {
 }
 
 pub fn take(array: &dyn Array, indices: &dyn Array) -> VortexResult<ArrayRef> {
-    if let Some(take) = array.compute().and_then(|c| c.take()) {
-        return take.take(indices);
-    }
+    array.with_compute(|c| {
+        if let Some(take) = c.take() {
+            return take.take(indices);
+        }
 
-    // Otherwise, flatten and try again.
-    info!("TakeFn not implemented for {}, flattening", array);
-    flatten(array)?
-        .into_array()
-        .take()
-        .map(|t| t.take(indices))
-        .unwrap_or_else(|| {
-            Err(VortexError::NotImplemented(
-                "take",
-                array.encoding().id().name(),
-            ))
+        // Otherwise, flatten and try again.
+        info!("TakeFn not implemented for {}, flattening", array);
+        flatten(array)?.into_array().with_compute(|c| {
+            c.take().map(|t| t.take(indices)).unwrap_or_else(|| {
+                Err(VortexError::NotImplemented(
+                    "take",
+                    array.encoding().id().name(),
+                ))
+            })
         })
+    })
 }

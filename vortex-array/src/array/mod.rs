@@ -15,15 +15,6 @@ use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
-use crate::compute::as_arrow::AsArrowArray;
-use crate::compute::as_contiguous::AsContiguousFn;
-use crate::compute::cast::CastFn;
-use crate::compute::fill::FillForwardFn;
-use crate::compute::flatten::FlattenFn;
-use crate::compute::patch::PatchFn;
-use crate::compute::scalar_at::ScalarAtFn;
-use crate::compute::search_sorted::SearchSortedFn;
-use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::ArraySerde;
@@ -51,7 +42,7 @@ pub type ArrayRef = Arc<dyn Array>;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sync {
+pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
     fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
@@ -77,9 +68,11 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
 
-    fn compute(&self) -> Option<&dyn ArrayCompute> {
-        // FIXME(ngates): remove this when Array no longer depends on ArrayCompute
-        None
+    fn with_compute_mut(
+        &self,
+        _f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        Err(VortexError::ComputeError("Not Implemented".into()))
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
@@ -87,6 +80,25 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
     }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()>;
+}
+
+pub trait WithArrayCompute {
+    fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(&self, f: F)
+        -> VortexResult<R>;
+}
+
+impl WithArrayCompute for dyn Array + '_ {
+    fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
+        &self,
+        f: F,
+    ) -> VortexResult<R> {
+        let mut result: Option<R> = None;
+        self.with_compute_mut(&mut |compute| {
+            result = Some(f(compute)?);
+            Ok(())
+        })?;
+        Ok(result.unwrap())
+    }
 }
 
 pub trait IntoArray {
@@ -121,44 +133,6 @@ macro_rules! impl_array {
 use crate::encoding::EncodingRef;
 use crate::ArrayWalker;
 pub use impl_array;
-
-impl ArrayCompute for ArrayRef {
-    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        self.as_ref().as_arrow()
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
-        self.as_ref().as_contiguous()
-    }
-
-    fn cast(&self) -> Option<&dyn CastFn> {
-        self.as_ref().cast()
-    }
-
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
-        self.as_ref().flatten()
-    }
-
-    fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
-        self.as_ref().fill_forward()
-    }
-
-    fn patch(&self) -> Option<&dyn PatchFn> {
-        self.as_ref().patch()
-    }
-
-    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        self.as_ref().scalar_at()
-    }
-
-    fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
-        self.as_ref().search_sorted()
-    }
-
-    fn take(&self) -> Option<&dyn TakeFn> {
-        self.as_ref().take()
-    }
-}
 
 impl ArrayValidity for ArrayRef {
     fn nullability(&self) -> Nullability {
@@ -236,44 +210,6 @@ impl Array for ArrayRef {
 impl ArrayDisplay for ArrayRef {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
         ArrayDisplay::fmt(self.as_ref(), fmt)
-    }
-}
-
-impl<'a, T: ArrayCompute> ArrayCompute for &'a T {
-    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        T::as_arrow(self)
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
-        T::as_contiguous(self)
-    }
-
-    fn cast(&self) -> Option<&dyn CastFn> {
-        T::cast(self)
-    }
-
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
-        T::flatten(self)
-    }
-
-    fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
-        T::fill_forward(self)
-    }
-
-    fn patch(&self) -> Option<&dyn PatchFn> {
-        T::patch(self)
-    }
-
-    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        T::scalar_at(self)
-    }
-
-    fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
-        T::search_sorted(self)
-    }
-
-    fn take(&self) -> Option<&dyn TakeFn> {
-        T::take(self)
     }
 }
 

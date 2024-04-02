@@ -1,10 +1,9 @@
 use vortex_error::VortexResult;
 
-use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding, PrimitiveTrait};
+use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding, PrimitiveView};
 use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::match_each_native_ptype;
-use crate::ptype::PType;
 use crate::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
 use crate::validity::ArrayValidity;
 
@@ -21,11 +20,14 @@ impl ArraySerde for PrimitiveArray {
 }
 
 impl EncodingSerde for PrimitiveEncoding {
-    fn view_compute<'view>(&self, view: &'view ArrayView) -> Option<&'view dyn ArrayCompute> {
-        let ptype = PType::try_from(view.dtype()).unwrap();
-        match_each_native_ptype!(ptype, |$T| {
-            let primitive_view: &dyn PrimitiveTrait<$T> = view;
-            Some(primitive_view.compute())
+    fn with_view_compute<'view>(
+        &self,
+        view: &'view ArrayView,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        let view = PrimitiveView::try_new(view)?;
+        match_each_native_ptype!(view.ptype(), |$T| {
+            f(&view.as_trait::<$T>())
         })
     }
 

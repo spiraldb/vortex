@@ -1,12 +1,12 @@
 use vortex_error::{VortexError, VortexResult};
 
-use crate::array::Array;
+use crate::array::{Array, WithArrayCompute};
 use crate::compute::flatten::flatten;
-use crate::compute::ArrayCompute;
 use crate::scalar::Scalar;
 use log::info;
 use std::cmp::Ordering;
 
+#[derive(Debug, Copy, Clone)]
 pub enum SearchSortedSide {
     Left,
     Right,
@@ -22,22 +22,24 @@ pub fn search_sorted<T: Into<Scalar>>(
     side: SearchSortedSide,
 ) -> VortexResult<usize> {
     let scalar = target.into().cast(array.dtype())?;
-    if let Some(search_sorted) = array.search_sorted() {
-        return search_sorted.search_sorted(&scalar, side);
-    }
+    array.with_compute(|c| {
+        if let Some(search_sorted) = c.search_sorted() {
+            return search_sorted.search_sorted(&scalar, side);
+        }
 
-    // Otherwise, flatten and try again.
-    info!("SearchSorted not implemented for {}, flattening", array);
-    flatten(array)?
-        .into_array()
-        .search_sorted()
-        .map(|f| f.search_sorted(&scalar, side))
-        .unwrap_or_else(|| {
-            Err(VortexError::NotImplemented(
-                "search_sorted",
-                array.encoding().id().name(),
-            ))
+        // Otherwise, flatten and try again.
+        info!("SearchSorted not implemented for {}, flattening", array);
+        flatten(array)?.into_array().with_compute(|c| {
+            c.search_sorted()
+                .map(|f| f.search_sorted(&scalar, side))
+                .unwrap_or_else(|| {
+                    Err(VortexError::NotImplemented(
+                        "search_sorted",
+                        array.encoding().id().name(),
+                    ))
+                })
         })
+    })
 }
 
 pub trait SearchSorted<T> {

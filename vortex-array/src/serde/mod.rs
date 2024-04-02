@@ -23,7 +23,6 @@ pub mod view;
 pub mod vtable;
 
 use crate::compute::ArrayCompute;
-use crate::serde::vtable::ComputeVTable;
 pub use view::*;
 use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
@@ -53,12 +52,12 @@ pub trait EncodingSerde {
         );
     }
 
-    fn compute(&self, _view: &ArrayView) -> Option<&dyn ComputeVTable<ArrayView>> {
-        None
-    }
-
-    fn view_compute<'view>(&self, _view: &'view ArrayView) -> Option<&'view dyn ArrayCompute> {
-        None
+    fn with_view_compute<'view>(
+        &self,
+        _view: &'view ArrayView,
+        _f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        Err(VortexError::ComputeError("Compute not implemented".into()))
     }
 
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef>;

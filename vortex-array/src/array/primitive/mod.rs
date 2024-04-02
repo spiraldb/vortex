@@ -200,8 +200,11 @@ impl Array for PrimitiveArray {
         self.buffer.len()
     }
 
-    fn compute(&self) -> Option<&dyn ArrayCompute> {
-        Some(self)
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

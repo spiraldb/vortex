@@ -195,17 +195,18 @@ impl<'a> Array for ArrayView<'a> {
         self.buffers.iter().map(|b| b.len()).sum()
     }
 
-    fn compute(&self) -> Option<&dyn ArrayCompute> {
-        let compute = self
-            .encoding()
-            .serde()
-            .and_then(|serde| serde.view_compute(self));
-        println!("ARRAY VIEW COMPUTE {:?}", compute);
-        compute
-    }
-
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         todo!()
+    }
+
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        self.encoding()
+            .serde()
+            .expect("TODO(ngates): heap allocate ArrayView and invoke compute")
+            .with_view_compute(self, f)
     }
 }
 
@@ -227,5 +228,3 @@ impl<'a> ArrayDisplay for ArrayView<'a> {
         Ok(())
     }
 }
-
-impl<'a> ArrayCompute for ArrayView<'a> {}
