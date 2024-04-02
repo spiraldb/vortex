@@ -1,6 +1,6 @@
 extern crate core;
 
-use vortex_error::VortexError;
+use vortex_error::{vortex_err, VortexError};
 
 pub const ALIGNMENT: usize = 64;
 
@@ -32,7 +32,7 @@ pub mod reader;
 pub mod writer;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
-    move || VortexError::InvalidSerde(format!("missing field: {}", field).into())
+    move || vortex_err!(InvalidSerde: "missing field: {}", field)
 }
 
 #[cfg(test)]

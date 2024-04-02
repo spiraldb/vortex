@@ -12,7 +12,7 @@ use crate::serde::vtable::{ComputeVTable, TakeFn, VTable};
 use crate::serde::ArrayView;
 use crate::validity::Validity;
 use crate::{match_each_integer_ptype, match_each_native_ptype};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 pub struct PrimitiveView<'a> {
     ptype: PType,
@@ -28,7 +28,7 @@ impl<'a> PrimitiveView<'a> {
         let buffer = view
             .buffers()
             .first()
-            .ok_or_else(|| VortexError::InvalidSerde("Missing primitive buffer".into()))?;
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Missing primitive buffer"))?;
         let validity = view
             .child(0, &Validity::DTYPE)
             // FIXME(ngates): avoid this clone.

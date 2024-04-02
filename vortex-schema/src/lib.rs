@@ -1,13 +1,9 @@
 use std::fmt::{Display, Formatter};
 
 pub use dtype::*;
-pub use error::ErrString;
-pub use error::SchemaError;
-pub use error::SchemaResult;
 
 mod deserialize;
 mod dtype;
-mod error;
 mod serialize;
 
 pub use deserialize::*;

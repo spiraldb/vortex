@@ -8,7 +8,7 @@ use std::io::{BufReader, Read};
 use vortex::array::composite::COMPOSITE_EXTENSIONS;
 use vortex::serde::context::SerdeContext;
 use vortex::serde::ArrayView;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferReader, ReadFlatBuffer};
 use vortex_schema::{DType, DTypeSerdeContext};
 
@@ -36,10 +36,10 @@ impl<R: Read> StreamReader<R> {
         let mut msg_vec = Vec::new();
         let fb_msg = read
             .read_message::<Message>(&mut msg_vec)?
-            .ok_or_else(|| VortexError::InvalidSerde("Unexpected EOF reading IPC format".into()))?;
-        let fb_ctx = fb_msg.header_as_context().ok_or_else(|| {
-            VortexError::InvalidSerde("Expected IPC Context as first message in stream".into())
-        })?;
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Unexpected EOF reading IPC format"))?;
+        let fb_ctx = fb_msg.header_as_context().ok_or_else(
+            || vortex_err!(InvalidSerde: "Expected IPC Context as first message in stream"),
+        )?;
         let ctx: SerdeContext = fb_ctx.try_into()?;
 
         Ok(Self {
@@ -71,7 +71,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
         // FIXME(ngates): parse the schema?
         let schema = msg
             .header_as_schema()
-            .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Schema message".into()))?;
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Expected IPC Schema message"))?;
 
         // TODO(ngates): construct this from the SerdeContext.
         let dtype_ctx =
@@ -80,9 +80,9 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
             &dtype_ctx,
             &schema
                 .dtype()
-                .ok_or_else(|| VortexError::InvalidSerde("Schema missing DType".into()))?,
+                .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
         )
-        .map_err(|e| VortexError::InvalidSerde(format!("Failed to parse DType: {}", e).into()))?;
+        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
         Ok(Some(StreamArrayChunkReader {
             read: &mut self.read,
@@ -125,14 +125,14 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
 
         let chunk = msg
             .header_as_chunk()
-            .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Chunk message".into()))
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Expected IPC Chunk message"))
             .unwrap();
 
         let col_offsets = chunk
             .column_offsets()
-            .ok_or_else(|| {
-                VortexError::InvalidSerde("Expected column offsets in IPC Chunk message".into())
-            })
+            .ok_or_else(
+                || vortex_err!(InvalidSerde: "Expected column offsets in IPC Chunk message"),
+            )
             .unwrap();
         assert_eq!(col_offsets.len(), 1);
 
@@ -141,12 +141,12 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
         let col_msg = root::<Message>(&self.fb_buffer)
             .unwrap()
             .header_as_chunk_column()
-            .ok_or_else(|| VortexError::InvalidSerde("Expected IPC Chunk Column message".into()))
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Expected IPC Chunk Column message"))
             .unwrap();
 
         let col_array = col_msg
             .array()
-            .ok_or_else(|| VortexError::InvalidSerde("Chunk column missing Array".into()))
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Chunk column missing Array"))
             .unwrap();
 
         // Read all the column's buffers

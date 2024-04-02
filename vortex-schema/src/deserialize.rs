@@ -1,6 +1,7 @@
-use crate::{flatbuffers as fb, FloatWidth, IntWidth, Nullability, SchemaResult, Signedness};
-use crate::{CompositeID, DType, SchemaError};
+use crate::{flatbuffers as fb, FloatWidth, IntWidth, Nullability, Signedness};
+use crate::{CompositeID, DType};
 use std::sync::Arc;
+use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 
 #[allow(dead_code)]
@@ -20,7 +21,7 @@ impl DTypeSerdeContext {
 
 impl ReadFlatBuffer<DTypeSerdeContext> for DType {
     type Source<'a> = fb::DType<'a>;
-    type Error = SchemaError;
+    type Error = VortexError;
 
     fn read_flatbuffer<'a>(
         ctx: &DTypeSerdeContext,
@@ -81,78 +82,68 @@ impl ReadFlatBuffer<DTypeSerdeContext> for DType {
                     .unwrap()
                     .iter()
                     .map(|f| DType::read_flatbuffer(ctx, &f))
-                    .collect::<SchemaResult<Vec<_>>>()?;
+                    .collect::<VortexResult<Vec<_>>>()?;
                 Ok(DType::Struct(names, fields))
             }
             fb::Type::Composite => {
                 let fb_composite = fb.type__as_composite().unwrap();
                 let id = ctx
                     .find_composite_id(fb_composite.id().unwrap())
-                    .ok_or_else(|| {
-                        SchemaError::InvalidArgument("Couldn't find composite id".into())
-                    })?;
+                    .ok_or_else(|| vortex_err!("Couldn't find composite id"))?;
                 Ok(DType::Composite(id, fb_composite.nullability().try_into()?))
             }
-            _ => Err(SchemaError::InvalidArgument("Unknown DType variant".into())),
+            _ => Err(vortex_err!("Unknown DType variant")),
         }
     }
 }
 
 impl TryFrom<fb::Nullability> for Nullability {
-    type Error = SchemaError;
+    type Error = VortexError;
 
-    fn try_from(value: fb::Nullability) -> SchemaResult<Self> {
+    fn try_from(value: fb::Nullability) -> VortexResult<Self> {
         match value {
             fb::Nullability::NonNullable => Ok(Nullability::NonNullable),
             fb::Nullability::Nullable => Ok(Nullability::Nullable),
-            _ => Err(SchemaError::InvalidArgument(
-                "Unknown nullability value".into(),
-            )),
+            _ => Err(vortex_err!("Unknown nullability value")),
         }
     }
 }
 
 impl TryFrom<fb::IntWidth> for IntWidth {
-    type Error = SchemaError;
+    type Error = VortexError;
 
-    fn try_from(value: fb::IntWidth) -> SchemaResult<Self> {
+    fn try_from(value: fb::IntWidth) -> VortexResult<Self> {
         match value {
             fb::IntWidth::_8 => Ok(IntWidth::_8),
             fb::IntWidth::_16 => Ok(IntWidth::_16),
             fb::IntWidth::_32 => Ok(IntWidth::_32),
             fb::IntWidth::_64 => Ok(IntWidth::_64),
-            _ => Err(SchemaError::InvalidArgument(
-                "Unknown IntWidth value".into(),
-            )),
+            _ => Err(vortex_err!("Unknown IntWidth value")),
         }
     }
 }
 
 impl TryFrom<fb::Signedness> for Signedness {
-    type Error = SchemaError;
+    type Error = VortexError;
 
-    fn try_from(value: fb::Signedness) -> SchemaResult<Self> {
+    fn try_from(value: fb::Signedness) -> VortexResult<Self> {
         match value {
             fb::Signedness::Unsigned => Ok(Signedness::Unsigned),
             fb::Signedness::Signed => Ok(Signedness::Signed),
-            _ => Err(SchemaError::InvalidArgument(
-                "Unknown Signedness value".into(),
-            )),
+            _ => Err(vortex_err!("Unknown Signedness value")),
         }
     }
 }
 
 impl TryFrom<fb::FloatWidth> for FloatWidth {
-    type Error = SchemaError;
+    type Error = VortexError;
 
-    fn try_from(value: fb::FloatWidth) -> SchemaResult<Self> {
+    fn try_from(value: fb::FloatWidth) -> VortexResult<Self> {
         match value {
             fb::FloatWidth::_16 => Ok(FloatWidth::_16),
             fb::FloatWidth::_32 => Ok(FloatWidth::_32),
             fb::FloatWidth::_64 => Ok(FloatWidth::_64),
-            _ => Err(SchemaError::InvalidArgument(
-                "Unknown IntWidth value".into(),
-            )),
+            _ => Err(vortex_err!("Unknown IntWidth value")),
         }
     }
 }

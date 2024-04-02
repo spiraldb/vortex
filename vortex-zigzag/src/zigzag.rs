@@ -8,7 +8,7 @@ use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, ArrayWalker};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, Signedness};
 
 use crate::compress::zigzag_encode;
@@ -30,7 +30,7 @@ impl ZigZagArray {
             DType::Int(width, Signedness::Unsigned, nullability) => {
                 DType::Int(*width, Signedness::Signed, *nullability)
             }
-            d => return Err(VortexError::InvalidDType(d.clone())),
+            d => vortex_bail!(MismatchedTypes: "unsigned int", d),
         };
         Ok(Self {
             encoded,
@@ -42,7 +42,7 @@ impl ZigZagArray {
     pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(zigzag_encode(p)?.into_array()),
-            _ => Err("ZigZag can only encoding primitive arrays".into()),
+            _ => Err(vortex_err!("ZigZag can only encoding primitive arrays")),
         }
     }
 

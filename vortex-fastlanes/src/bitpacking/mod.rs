@@ -10,7 +10,7 @@ use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, ArrayWalker};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 mod compress;
@@ -41,10 +41,7 @@ impl BitPackedArray {
         len: usize,
     ) -> VortexResult<Self> {
         if encoded.dtype() != &Self::ENCODED_DTYPE {
-            return Err(VortexError::MismatchedTypes(
-                Self::ENCODED_DTYPE,
-                encoded.dtype().clone(),
-            ));
+            vortex_bail!(MismatchedTypes: Self::ENCODED_DTYPE, encoded.dtype());
         }
         if let Some(v) = &validity {
             assert_eq!(v.len(), len);
@@ -106,11 +103,11 @@ impl Array for BitPackedArray {
         }
 
         if start > self.len() {
-            return Err(VortexError::OutOfBounds(start, 0, self.len()));
+            vortex_bail!(OutOfBounds: start, 0, self.len());
         }
         // If we are slicing more than one 1024 element chunk beyond end, we consider this out of bounds
         if stop / 1024 > ((self.len() + 1023) / 1024) {
-            return Err(VortexError::OutOfBounds(stop, 0, self.len()));
+            vortex_bail!(OutOfBounds: stop, 0, self.len());
         }
 
         let encoded_start = (start / 8) * self.bit_width;

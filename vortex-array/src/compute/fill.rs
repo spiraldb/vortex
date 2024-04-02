@@ -1,4 +1,4 @@
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::{Array, ArrayRef, WithArrayCompute};
 
@@ -15,9 +15,9 @@ pub fn fill_forward(array: &dyn Array) -> VortexResult<ArrayRef> {
         c.fill_forward()
             .map(|t| t.fill_forward())
             .unwrap_or_else(|| {
-                Err(VortexError::NotImplemented(
-                    "fill_forward",
-                    array.encoding().id().name(),
+                Err(vortex_err!(
+                    NotImplemented: "fill_forward",
+                    array.encoding().id().name()
                 ))
             })
     })

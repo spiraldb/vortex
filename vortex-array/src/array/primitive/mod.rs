@@ -10,7 +10,7 @@ use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
 
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
@@ -49,7 +49,7 @@ impl PrimitiveArray {
     pub fn try_new(ptype: PType, buffer: Buffer, validity: Option<Validity>) -> VortexResult<Self> {
         if let Some(v) = &validity {
             if v.len() != buffer.len() / ptype.byte_width() {
-                return Err("Validity length does not match buffer length".into());
+                vortex_bail!("Validity length does not match buffer length");
             }
             assert_eq!(v.len(), buffer.len() / ptype.byte_width());
         }
@@ -311,11 +311,12 @@ impl ArrayDisplay for PrimitiveArray {
 
 #[cfg(test)]
 mod test {
+    use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+
     use crate::array::primitive::PrimitiveArray;
     use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
     use crate::ptype::PType;
-    use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
     #[test]
     fn from_arrow() {
@@ -328,9 +329,9 @@ mod test {
         );
 
         // Ensure we can fetch the scalar at the given index.
-        assert_eq!(scalar_at(&arr, 0).unwrap().try_into(), Ok(1));
-        assert_eq!(scalar_at(&arr, 1).unwrap().try_into(), Ok(2));
-        assert_eq!(scalar_at(&arr, 2).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(&arr, 0).unwrap(), 1.into());
+        assert_eq!(scalar_at(&arr, 1).unwrap(), 2.into());
+        assert_eq!(scalar_at(&arr, 2).unwrap(), 3.into());
     }
 
     #[test]
@@ -339,8 +340,8 @@ mod test {
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
-        assert_eq!(scalar_at(&arr, 0).unwrap().try_into(), Ok(2));
-        assert_eq!(scalar_at(&arr, 1).unwrap().try_into(), Ok(3));
-        assert_eq!(scalar_at(&arr, 2).unwrap().try_into(), Ok(4));
+        assert_eq!(scalar_at(&arr, 0).unwrap(), 2.into());
+        assert_eq!(scalar_at(&arr, 1).unwrap(), 3.into());
+        assert_eq!(scalar_at(&arr, 2).unwrap(), 4.into());
     }
 }

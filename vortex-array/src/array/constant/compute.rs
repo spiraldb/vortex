@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::Nullability;
 
 use crate::array::bool::BoolArray;
@@ -46,7 +46,9 @@ impl AsContiguousFn for ConstantArray {
             .into_array())
         } else {
             // TODO(ngates): we need to flatten the constant arrays and then concatenate them
-            Err("Cannot concatenate constant arrays with differing scalars".into())
+            Err(vortex_err!(
+                "Cannot concatenate constant arrays with differing scalars"
+            ))
         }
     }
 }

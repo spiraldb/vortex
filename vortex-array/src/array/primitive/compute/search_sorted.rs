@@ -17,17 +17,30 @@ impl SearchSortedFn for PrimitiveArray {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use crate::array::IntoArray;
     use crate::compute::search_sorted::search_sorted;
+
+    use super::*;
 
     #[test]
     fn test_searchsorted_primitive() {
         let values = vec![1u16, 2, 3].into_array();
 
-        assert_eq!(search_sorted(&values, 0, SearchSortedSide::Left), Ok(0));
-        assert_eq!(search_sorted(&values, 1, SearchSortedSide::Left), Ok(0));
-        assert_eq!(search_sorted(&values, 1, SearchSortedSide::Right), Ok(1));
-        assert_eq!(search_sorted(&values, 4, SearchSortedSide::Left), Ok(3));
+        assert_eq!(
+            search_sorted(&values, 0, SearchSortedSide::Left).unwrap(),
+            0
+        );
+        assert_eq!(
+            search_sorted(&values, 1, SearchSortedSide::Left).unwrap(),
+            0
+        );
+        assert_eq!(
+            search_sorted(&values, 1, SearchSortedSide::Right).unwrap(),
+            1
+        );
+        assert_eq!(
+            search_sorted(&values, 4, SearchSortedSide::Left).unwrap(),
+            3
+        );
     }
 }

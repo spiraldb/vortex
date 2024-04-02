@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::array::{Array, ArrayRef, WithArrayCompute};
 
@@ -10,12 +10,12 @@ pub trait AsContiguousFn {
 
 pub fn as_contiguous(arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
     if arrays.is_empty() {
-        return Err(VortexError::ComputeError("No arrays to concatenate".into()));
+        vortex_bail!(ComputeError: "No arrays to concatenate");
     }
     if !arrays.iter().map(|chunk| chunk.encoding().id()).all_equal() {
-        return Err(VortexError::ComputeError(
-            "Chunks have differing encodings".into(),
-        ));
+        vortex_bail!(ComputeError:
+            "Chunks have differing encodings",
+        );
     }
 
     let first = arrays.first().unwrap();
@@ -23,9 +23,9 @@ pub fn as_contiguous(arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         c.as_contiguous()
             .map(|f| f.as_contiguous(arrays))
             .unwrap_or_else(|| {
-                Err(VortexError::NotImplemented(
-                    "as_contiguous",
-                    first.encoding().id().name(),
+                Err(vortex_err!(
+                    NotImplemented: "as_contiguous",
+                    first.encoding().id().name()
                 ))
             })
     })

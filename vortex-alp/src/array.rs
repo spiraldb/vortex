@@ -1,6 +1,5 @@
 use std::sync::{Arc, RwLock};
 
-use crate::alp::Exponents;
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
@@ -9,9 +8,10 @@ use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, ArrayWalker};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, IntWidth, Signedness};
 
+use crate::alp::Exponents;
 use crate::compress::alp_encode;
 
 #[derive(Debug, Clone)]
@@ -34,12 +34,13 @@ impl ALPArray {
         patches: Option<ArrayRef>,
     ) -> VortexResult<Self> {
         let dtype = match encoded.dtype() {
-            d @ DType::Int(width, Signedness::Signed, nullability) => match width {
-                IntWidth::_32 => DType::Float(32.into(), *nullability),
-                IntWidth::_64 => DType::Float(64.into(), *nullability),
-                _ => return Err(VortexError::InvalidDType(d.clone())),
-            },
-            d => return Err(VortexError::InvalidDType(d.clone())),
+            DType::Int(IntWidth::_32, Signedness::Signed, nullability) => {
+                DType::Float(32.into(), *nullability)
+            }
+            DType::Int(IntWidth::_64, Signedness::Signed, nullability) => {
+                DType::Float(64.into(), *nullability)
+            }
+            d => vortex_bail!(MismatchedTypes: "int32 or int64", d),
         };
         Ok(Self {
             encoded,
@@ -53,7 +54,7 @@ impl ALPArray {
     pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(alp_encode(p)?.into_array()),
-            _ => Err("ALP can only encoding primitive arrays".into()),
+            _ => Err(vortex_err!("ALP can only encoding primitive arrays")),
         }
     }
 

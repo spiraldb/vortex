@@ -76,8 +76,8 @@ mod test {
                 CompressCtx::default(),
             )
             .unwrap();
-        assert_eq!(scalar_at(&forarr, 0), Ok(11.into()));
-        assert_eq!(scalar_at(&forarr, 1), Ok(15.into()));
-        assert_eq!(scalar_at(&forarr, 2), Ok(19.into()));
+        assert_eq!(scalar_at(&forarr, 0).unwrap(), 11.into());
+        assert_eq!(scalar_at(&forarr, 1).unwrap(), 15.into());
+        assert_eq!(scalar_at(&forarr, 2).unwrap(), 19.into());
     }
 }

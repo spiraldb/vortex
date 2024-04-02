@@ -2,7 +2,7 @@ use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::{BoolArray, BoolEncoding};
@@ -72,7 +72,7 @@ pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
         &self,
         _f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()> {
-        Err(VortexError::ComputeError("Not Implemented".into()))
+        vortex_bail!("Not Implemented")
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
@@ -293,10 +293,10 @@ impl<'a, T: ArrayDisplay> ArrayDisplay for &'a T {
 
 pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> VortexResult<()> {
     if start > array.len() {
-        return Err(VortexError::OutOfBounds(start, 0, array.len()));
+        vortex_bail!(OutOfBounds: start, 0, array.len());
     }
     if stop > array.len() {
-        return Err(VortexError::OutOfBounds(stop, 0, array.len()));
+        vortex_bail!(OutOfBounds: stop, 0, array.len());
     }
     Ok(())
 }
@@ -304,21 +304,15 @@ pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> Vorte
 pub fn check_validity_buffer(validity: Option<&ArrayRef>, expected_len: usize) -> VortexResult<()> {
     if let Some(v) = validity {
         if !matches!(v.dtype(), DType::Bool(Nullability::NonNullable)) {
-            return Err(VortexError::MismatchedTypes(
-                validity.unwrap().dtype().clone(),
-                DType::Bool(Nullability::NonNullable),
-            ));
+            vortex_bail!(MismatchedTypes: DType::Bool(Nullability::NonNullable), v.dtype());
         }
         if v.len() != expected_len {
-            return Err(VortexError::InvalidArgument(
-                format!(
-                    "Validity buffer {} has incorrect length {}, expected {}",
-                    v,
-                    v.len(),
-                    expected_len
-                )
-                .into(),
-            ));
+            vortex_bail!(
+                "Validity buffer {} has incorrect length {}, expected {}",
+                v,
+                v.len(),
+                expected_len
+            );
         }
     }
 

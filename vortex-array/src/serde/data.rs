@@ -2,7 +2,7 @@ use crate::array::Array;
 use crate::encoding::EncodingId;
 use crate::walk::ArrayWalker;
 use arrow_buffer::Buffer;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 pub struct ArrayData {
     columns: Vec<ColumnData>,
@@ -33,9 +33,7 @@ impl ColumnData {
             metadata: array
                 .serde()
                 .ok_or_else(|| {
-                    VortexError::InvalidSerde(
-                        format!("Array {} does not support serde", array.encoding()).into(),
-                    )
+                    vortex_err!(InvalidSerde: "Array {} does not support serde", array.encoding())
                 })?
                 .metadata()?
                 .map(Buffer::from_vec),

@@ -197,8 +197,9 @@ impl FromIterator<Option<bool>> for BoolArray {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use crate::compute::scalar_at::scalar_at;
+
+    use super::*;
 
     #[test]
     fn slice() {
@@ -206,9 +207,9 @@ mod test {
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
-        assert_eq!(scalar_at(&arr, 0).unwrap().try_into(), Ok(true));
-        assert_eq!(scalar_at(&arr, 1).unwrap().try_into(), Ok(false));
-        assert_eq!(scalar_at(&arr, 2).unwrap().try_into(), Ok(false));
+        assert_eq!(scalar_at(&arr, 0).unwrap(), true.into());
+        assert_eq!(scalar_at(&arr, 1).unwrap(), false.into());
+        assert_eq!(scalar_at(&arr, 2).unwrap(), false.into());
     }
 
     #[test]

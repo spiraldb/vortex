@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linkme::distributed_slice;
 
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::{check_slice_bounds, Array, ArrayRef};
@@ -49,9 +49,7 @@ impl SparseArray {
         indices_offset: usize,
     ) -> VortexResult<Self> {
         if !matches!(indices.dtype(), &DType::IDX) {
-            return Err(VortexError::InvalidArgument(
-                format!("Cannot use {} as indices", indices.dtype().clone()).into(),
-            ));
+            vortex_bail!("Cannot use {} as indices", indices.dtype());
         }
 
         Ok(Self {
@@ -264,10 +262,13 @@ mod test {
             usize::try_from(scalar_at(&sparse_array(), 2).unwrap()).unwrap(),
             100
         );
-        assert_eq!(
-            scalar_at(&sparse_array(), 10).err().unwrap(),
-            VortexError::OutOfBounds(10, 0, 10)
-        );
+        let error = scalar_at(&sparse_array(), 10).err().unwrap();
+        let VortexError::OutOfBounds(i, start, stop, _) = error else {
+            unreachable!()
+        };
+        assert_eq!(i, 10);
+        assert_eq!(start, 0);
+        assert_eq!(stop, 10);
     }
 
     #[test]
@@ -277,10 +278,13 @@ mod test {
             usize::try_from(scalar_at(sliced.as_ref(), 0).unwrap()).unwrap(),
             100
         );
-        assert_eq!(
-            scalar_at(sliced.as_ref(), 5).err().unwrap(),
-            VortexError::OutOfBounds(5, 0, 5)
-        );
+        let error = scalar_at(sliced.as_ref(), 5).err().unwrap();
+        let VortexError::OutOfBounds(i, start, stop, _) = error else {
+            unreachable!()
+        };
+        assert_eq!(i, 5);
+        assert_eq!(start, 0);
+        assert_eq!(stop, 5);
     }
 
     #[test]
@@ -290,19 +294,25 @@ mod test {
             usize::try_from(scalar_at(sliced_once.as_ref(), 1).unwrap()).unwrap(),
             100
         );
-        assert_eq!(
-            scalar_at(sliced_once.as_ref(), 7).err().unwrap(),
-            VortexError::OutOfBounds(7, 0, 7)
-        );
+        let error = scalar_at(sliced_once.as_ref(), 7).err().unwrap();
+        let VortexError::OutOfBounds(i, start, stop, _) = error else {
+            unreachable!()
+        };
+        assert_eq!(i, 7);
+        assert_eq!(start, 0);
+        assert_eq!(stop, 7);
 
         let sliced_twice = sliced_once.slice(1, 6).unwrap();
         assert_eq!(
             usize::try_from(scalar_at(sliced_twice.as_ref(), 3).unwrap()).unwrap(),
             200
         );
-        assert_eq!(
-            scalar_at(sliced_twice.as_ref(), 5).err().unwrap(),
-            VortexError::OutOfBounds(5, 0, 5)
-        );
+        let error2 = scalar_at(sliced_twice.as_ref(), 5).err().unwrap();
+        let VortexError::OutOfBounds(i, start, stop, _) = error2 else {
+            unreachable!()
+        };
+        assert_eq!(i, 5);
+        assert_eq!(start, 0);
+        assert_eq!(stop, 5);
     }
 }

@@ -7,7 +7,7 @@ use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex::scalar::Scalar;
 use vortex::validity::ArrayValidity;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::compress::ree_decode;
 use crate::REEArray;
@@ -30,9 +30,7 @@ impl FlattenFn for REEArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
         let ends = flatten(self.ends())?;
         let FlattenedArray::Primitive(pends) = ends else {
-            return Err(VortexError::InvalidArgument(
-                "REE Ends array didn't flatten to primitive".into(),
-            ));
+            vortex_bail!("REE Ends array didn't flatten to primitive",);
         };
 
         let values = flatten(self.values())?;
@@ -40,9 +38,7 @@ impl FlattenFn for REEArray {
             ree_decode(&pends, &pvalues, self.validity(), self.offset(), self.len())
                 .map(FlattenedArray::Primitive)
         } else {
-            Err(VortexError::InvalidArgument(
-                "Cannot yet flatten non-primitive REE array".into(),
-            ))
+            Err(vortex_err!("Cannot yet flatten non-primitive REE array",))
         }
     }
 }

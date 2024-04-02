@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::struct_::{StructArray, StructEncoding};
@@ -54,7 +54,7 @@ impl EncodingSerde for StructEncoding {
             fields.push(ctx.subfield(i).read()?);
         }
         let DType::Struct(names, _) = ctx.schema() else {
-            return Err(VortexError::InvalidDType(ctx.schema().clone()));
+            vortex_bail!(MismatchedTypes: "any struct", ctx.schema());
         };
         Ok(StructArray::new(names.clone(), fields, len).into_array())
     }
@@ -82,6 +82,7 @@ mod test {
                 vec![7u8, 37, 71, 97].into_array(),
                 PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]).into_array(),
             ],
+            4,
         );
 
         let read_arr = roundtrip_array(&arr).unwrap();

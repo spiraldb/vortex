@@ -7,7 +7,7 @@ use vortex::encoding::find_encoding;
 use vortex::flatbuffers::array as fba;
 use vortex::serde::context::SerdeContext;
 use vortex::serde::data::ColumnData;
-use vortex_error::VortexError;
+use vortex_error::{vortex_err, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 use vortex_schema::DType;
 
@@ -93,11 +93,10 @@ impl<'a> TryFrom<fb::Context<'a>> for SerdeContext {
         let mut encodings = Vec::with_capacity(fb_encodings.len());
         for fb_encoding in fb_encodings {
             let encoding_id = fb_encoding.id().ok_or_else(missing("encoding.id"))?;
-            encodings.push(find_encoding(encoding_id).ok_or_else(|| {
-                VortexError::InvalidArgument(
-                    format!("Stream uses unknown encoding {}", encoding_id).into(),
-                )
-            })?);
+            encodings.push(
+                find_encoding(encoding_id)
+                    .ok_or_else(|| vortex_err!("Stream uses unknown encoding {}", encoding_id))?,
+            );
         }
         Ok(Self::new(encodings.into()))
     }

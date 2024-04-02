@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use itertools::Itertools;
 use linkme::distributed_slice;
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::{check_slice_bounds, Array, ArrayRef};
@@ -35,10 +35,7 @@ impl ChunkedArray {
     pub fn try_new(chunks: Vec<ArrayRef>, dtype: DType) -> VortexResult<Self> {
         for chunk in &chunks {
             if chunk.dtype() != &dtype {
-                return Err(VortexError::MismatchedTypes(
-                    dtype.clone(),
-                    chunk.dtype().clone(),
-                ));
+                vortex_bail!(MismatchedTypes: dtype, chunk.dtype());
             }
         }
         let chunk_ends = chunks

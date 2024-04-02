@@ -12,7 +12,7 @@ use arrow_buffer::Buffer;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
 #[derive(Clone)]
@@ -45,23 +45,18 @@ impl<'a> ArrayView<'a> {
     ) -> VortexResult<Self> {
         let encoding = ctx
             .find_encoding(array.encoding())
-            .ok_or_else(|| VortexError::InvalidSerde("Encoding ID out of bounds".into()))?;
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Encoding ID out of bounds"))?;
         let _vtable = encoding.serde().ok_or_else(|| {
             // TODO(ngates): we could fall-back to heap-allocating?
-            VortexError::InvalidSerde(
-                format!("Encoding {} does not support serde", encoding).into(),
-            )
+            vortex_err!(InvalidSerde: "Encoding {} does not support serde", encoding)
         })?;
 
         if buffers.len() != Self::cumulative_nbuffers(array) {
-            return Err(VortexError::InvalidSerde(
-                format!(
-                    "Incorrect number of buffers {}, expected {}",
-                    buffers.len(),
-                    Self::cumulative_nbuffers(array)
-                )
-                .into(),
-            ));
+            vortex_bail!(InvalidSerde:
+                "Incorrect number of buffers {}, expected {}",
+                buffers.len(),
+                Self::cumulative_nbuffers(array)
+            )
         }
 
         Ok(Self {

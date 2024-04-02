@@ -8,7 +8,7 @@ use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, ArrayWalker};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 /// An array that decomposes a datetime into days, seconds, and nanoseconds.
@@ -41,13 +41,13 @@ impl DateTimeArray {
         dtype: DType,
     ) -> VortexResult<Self> {
         if !matches!(days.dtype(), DType::Int(_, _, _)) {
-            return Err(VortexError::InvalidDType(days.dtype().clone()));
+            vortex_bail!(MismatchedTypes: "any integer", days.dtype());
         }
         if !matches!(seconds.dtype(), DType::Int(_, _, _)) {
-            return Err(VortexError::InvalidDType(seconds.dtype().clone()));
+            vortex_bail!(MismatchedTypes: "any integer", seconds.dtype());
         }
         if !matches!(subsecond.dtype(), DType::Int(_, _, _)) {
-            return Err(VortexError::InvalidDType(subsecond.dtype().clone()));
+            vortex_bail!(MismatchedTypes: "any integer", subsecond.dtype());
         }
 
         Ok(Self {

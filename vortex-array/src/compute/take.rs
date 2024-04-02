@@ -1,5 +1,6 @@
 use log::info;
-use vortex_error::{VortexError, VortexResult};
+
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::{Array, ArrayRef, WithArrayCompute};
 use crate::compute::flatten::flatten;
@@ -18,10 +19,7 @@ pub fn take(array: &dyn Array, indices: &dyn Array) -> VortexResult<ArrayRef> {
         info!("TakeFn not implemented for {}, flattening", array);
         flatten(array)?.into_array().with_compute(|c| {
             c.take().map(|t| t.take(indices)).unwrap_or_else(|| {
-                Err(VortexError::NotImplemented(
-                    "take",
-                    array.encoding().id().name(),
-                ))
+                Err(vortex_err!(NotImplemented: "take", array.encoding().id().name()))
             })
         })
     })

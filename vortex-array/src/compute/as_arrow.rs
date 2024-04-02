@@ -1,7 +1,7 @@
 use arrow_array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
 
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::{Array, WithArrayCompute};
@@ -20,12 +20,9 @@ pub fn as_arrow(array: &dyn Array) -> VortexResult<ArrowArrayRef> {
 
         // Otherwise, flatten and try again.
         let array = flatten(array)?.into_array();
-        return c.as_arrow().map(|a| a.as_arrow()).unwrap_or_else(|| {
-            Err(VortexError::NotImplemented(
-                "as_arrow",
-                array.encoding().id().name(),
-            ))
-        });
+        c.as_arrow().map(|a| a.as_arrow()).unwrap_or_else(|| {
+            Err(vortex_err!(NotImplemented: "as_arrow", array.encoding().id().name()))
+        })
     })
 }
 

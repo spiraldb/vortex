@@ -1,26 +1,7 @@
 use flatbuffers::{root, FlatBufferBuilder, Follow, Verifiable, WIPOffset};
 use std::io;
 use std::io::{Read, Write};
-
-// FIXME(ngates): This is a temporary solution to avoid a cyclic dependency between vortex-error and vortex-flatbuffers.
-#[derive(Debug)]
-pub enum Error {
-    IOError(io::Error),
-    FlatBufferError(flatbuffers::InvalidFlatbuffer),
-}
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-impl From<io::Error> for Error {
-    fn from(value: io::Error) -> Self {
-        Error::IOError(value)
-    }
-}
-
-impl From<flatbuffers::InvalidFlatbuffer> for Error {
-    fn from(value: flatbuffers::InvalidFlatbuffer) -> Self {
-        Error::FlatBufferError(value)
-    }
-}
+use vortex_error::VortexResult;
 
 pub trait ReadFlatBuffer<Ctx>: Sized {
     type Source<'a>;
@@ -55,13 +36,13 @@ impl<F: WriteFlatBuffer + FlatBufferRoot> FlatBufferToBytes for F {
 
 pub trait FlatBufferReader {
     /// Returns Ok(None) if the reader has reached EOF.
-    fn read_message<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> Result<Option<F>>
+    fn read_message<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> VortexResult<Option<F>>
     where
         F: 'a + Follow<'a, Inner = F> + Verifiable;
 }
 
 impl<R: Read> FlatBufferReader for R {
-    fn read_message<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> Result<Option<F>>
+    fn read_message<'a, F>(&mut self, buffer: &'a mut Vec<u8>) -> VortexResult<Option<F>>
     where
         F: 'a + Follow<'a, Inner = F> + Verifiable,
     {

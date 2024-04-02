@@ -9,7 +9,7 @@ use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{compute, impl_array, ArrayWalker};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::compress::ree_encode;
@@ -49,7 +49,7 @@ impl REEArray {
             .get_as::<bool>(&Stat::IsStrictSorted)
             .unwrap_or(true)
         {
-            return Err(VortexError::IndexArrayMustBeStrictSorted);
+            vortex_bail!("Ends array must be strictly sorted",);
         }
 
         // TODO(ngates): https://github.com/fulcrum-so/spiral/issues/873
@@ -83,7 +83,7 @@ impl REEArray {
                 )
                 .into_array())
             }
-            _ => Err("REE can only encode primitive arrays".into()),
+            _ => Err(vortex_err!("REE can only encode primitive arrays")),
         }
     }
 
@@ -225,10 +225,10 @@ mod test {
         // 0, 1 => 1
         // 2, 3, 4 => 2
         // 5, 6, 7, 8, 9 => 3
-        assert_eq!(scalar_at(&arr, 0).unwrap().try_into(), Ok(1));
-        assert_eq!(scalar_at(&arr, 2).unwrap().try_into(), Ok(2));
-        assert_eq!(scalar_at(&arr, 5).unwrap().try_into(), Ok(3));
-        assert_eq!(scalar_at(&arr, 9).unwrap().try_into(), Ok(3));
+        assert_eq!(scalar_at(&arr, 0).unwrap(), 1.into());
+        assert_eq!(scalar_at(&arr, 2).unwrap(), 2.into());
+        assert_eq!(scalar_at(&arr, 5).unwrap(), 3.into());
+        assert_eq!(scalar_at(&arr, 9).unwrap(), 3.into());
     }
 
     #[test]
