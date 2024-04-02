@@ -278,22 +278,30 @@ impl From<usize> for Scalar {
     }
 }
 
+impl TryFrom<&PrimitiveScalar> for usize {
+    type Error = VortexError;
+
+    fn try_from(value: &PrimitiveScalar) -> Result<Self, Self::Error> {
+        match_each_integer_ptype!(value.ptype(), |$V| {
+            match value.typed_value::<$V>() {
+                None => Err(vortex_err!(ComputeError: "required non null scalar")),
+                Some(v) => {
+                    if is_negative(v) {
+                        vortex_bail!(ComputeError: "required positive integer");
+                    }
+                    Ok(v as usize)
+                }
+            }
+        })
+    }
+}
+
 impl TryFrom<Scalar> for usize {
     type Error = VortexError;
 
     fn try_from(value: Scalar) -> VortexResult<Self> {
         match value {
-            Scalar::Primitive(p) => match_each_integer_ptype!(p.ptype(), |$V| {
-                match p.typed_value::<$V>() {
-                    None => Err(vortex_err!(ComputeError: "required non null scalar")),
-                    Some(v) => {
-                        if is_negative(v) {
-                            vortex_bail!(ComputeError: "required positive integer");
-                        }
-                        Ok(v as usize)
-                    }
-                }
-            }),
+            Scalar::Primitive(p) => (&p).try_into(),
             _ => Err(vortex_err!("can't extract usize out of scalar: {}", value)),
         }
     }
@@ -304,17 +312,7 @@ impl TryFrom<&Scalar> for usize {
 
     fn try_from(value: &Scalar) -> VortexResult<Self> {
         match value {
-            Scalar::Primitive(p) => match_each_integer_ptype!(p.ptype(), |$V| {
-                match p.typed_value::<$V>() {
-                    None => Err(vortex_err!(ComputeError: "required non null scalar")),
-                    Some(v) => {
-                        if is_negative(v) {
-                            vortex_bail!(ComputeError: "required positive integer");
-                        }
-                        Ok(v as usize)
-                    }
-                }
-            }),
+            Scalar::Primitive(p) => p.try_into(),
             _ => Err(vortex_err!("can't extract usize out of scalar: {}", value)),
         }
     }
