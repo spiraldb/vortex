@@ -44,15 +44,15 @@ impl Display for ErrString {
 
 #[derive(Debug, thiserror::Error)]
 pub enum VortexError {
-    #[error("index {0} out of bounds from {1} to {2}\n{3}")]
+    #[error("index {0} out of bounds from {1} to {2}\nBacktrace:\n{3}")]
     OutOfBounds(usize, usize, usize, Backtrace),
-    #[error("{0}\n{1}")]
+    #[error("{0}\nBacktrace:\n{1}")]
     ComputeError(ErrString, Backtrace),
-    #[error("{0}\n{1}")]
+    #[error("{0}\nBacktrace:\n{1}")]
     InvalidArgument(ErrString, Backtrace),
-    #[error("function {0} not implemented for {1}\n{2}")]
+    #[error("function {0} not implemented for {1}\nBacktrace:\n{2}")]
     NotImplemented(ErrString, ErrString, Backtrace),
-    #[error("expected type: {0} but instead got {1}\n{2}")]
+    #[error("expected type: {0} but instead got {1}\nBacktrace:\n{2}")]
     MismatchedTypes(ErrString, ErrString, Backtrace),
     #[error(transparent)]
     ArrowError(
