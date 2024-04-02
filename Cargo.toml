@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "bench-vortex",
+    "fastlanez",
     "fastlanez-sys",
     "pyvortex",
     "vortex-alloc",
