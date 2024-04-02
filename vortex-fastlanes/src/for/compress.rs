@@ -1,10 +1,10 @@
 use itertools::Itertools;
 use num_traits::{PrimInt, WrappingAdd, WrappingSub};
 
+use vortex::array::{Array, ArrayRef};
 use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::match_each_integer_ptype;
@@ -14,8 +14,8 @@ use vortex::stats::Stat;
 use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
-use crate::downcast::DowncastFastlanes;
 use crate::{FoRArray, FoREncoding};
+use crate::downcast::DowncastFastlanes;
 
 impl EncodingCompression for FoREncoding {
     fn cost(&self) -> u8 {
@@ -112,7 +112,11 @@ pub fn decompress(array: &FoRArray) -> VortexResult<PrimitiveArray> {
     }))
 }
 
-fn decompress_primitive<T: NativePType + WrappingAdd + PrimInt>(values: &[T], reference: T, shift: u8) -> Vec<T> {
+fn decompress_primitive<T: NativePType + WrappingAdd + PrimInt>(
+    values: &[T],
+    reference: T,
+    shift: u8,
+) -> Vec<T> {
     if shift > 0 {
         let shifted_reference = reference << shift as usize;
         values
@@ -121,7 +125,10 @@ fn decompress_primitive<T: NativePType + WrappingAdd + PrimInt>(values: &[T], re
             .map(|v| v.wrapping_add(&shifted_reference))
             .collect_vec()
     } else {
-        values.iter().map(|&v| v.wrapping_add(&reference)).collect_vec()
+        values
+            .iter()
+            .map(|&v| v.wrapping_add(&reference))
+            .collect_vec()
     }
 }
 
@@ -189,10 +196,17 @@ mod test {
         let ctx = compress_ctx();
 
         // Create a range offset by a million
-        let array = PrimitiveArray::from((0i32..10_000).map(|v| v + 1_000_000).collect_vec());
-        let compressed = ctx.compress(&array, None).unwrap();
-        assert_eq!(compressed.encoding().id(), FoREncoding.id());
-        let fa = compressed.as_any().downcast_ref::<FoRArray>().unwrap();
-        assert_eq!(fa.reference().try_into(), Ok(1_000_000u32));
+        let array = PrimitiveArray::from((i8::MIN..i8::MAX).collect_vec());
+        let compressed = FoREncoding {}.compress(&array, None, ctx).unwrap();
+        let compressed = compressed.as_for();
+        assert_eq!(i8::MIN, compressed.reference().try_into().unwrap());
+
+        let encoded = flatten_primitive(compressed.encoded()).unwrap();
+        let bitcast: &[u8] = unsafe { std::mem::transmute(encoded.typed_data::<i8>()) };
+        let unsigned: Vec<u8> = (0..u8::MAX).collect_vec();
+        assert_eq!(bitcast, unsigned.as_slice());
+
+        let decompressed = flatten_primitive(compressed).unwrap();
+        assert_eq!(decompressed.typed_data::<i8>(), array.typed_data::<i8>());
     }
 }
