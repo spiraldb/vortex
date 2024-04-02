@@ -17,11 +17,11 @@ pub fn patch(array: &dyn Array, patch: &dyn Array) -> VortexResult<ArrayRef> {
     }
 
     if array.dtype().as_nullable() != patch.dtype().as_nullable() {
-        vortex_bail!(mt = array.dtype(), patch.dtype());
+        vortex_bail!(MismatchedTypes:  array.dtype(), patch.dtype());
     }
 
     array
         .patch()
         .map(|t| t.patch(patch))
-        .unwrap_or_else(|| Err(vortex_err!(ni = "take", array.encoding().id().name())))
+        .unwrap_or_else(|| Err(vortex_err!(NotImplemented: "take", array.encoding().id().name())))
 }

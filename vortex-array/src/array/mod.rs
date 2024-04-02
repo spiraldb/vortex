@@ -339,10 +339,10 @@ impl<'a, T: ArrayDisplay> ArrayDisplay for &'a T {
 
 pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> VortexResult<()> {
     if start > array.len() {
-        vortex_bail!(start, 0, array.len());
+        vortex_bail!(OutOfBounds: start, 0, array.len());
     }
     if stop > array.len() {
-        vortex_bail!(stop, 0, array.len());
+        vortex_bail!(OutOfBounds: stop, 0, array.len());
     }
     Ok(())
 }
@@ -350,7 +350,7 @@ pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> Vorte
 pub fn check_validity_buffer(validity: Option<&ArrayRef>, expected_len: usize) -> VortexResult<()> {
     if let Some(v) = validity {
         if !matches!(v.dtype(), DType::Bool(Nullability::NonNullable)) {
-            vortex_bail!(mt = DType::Bool(Nullability::NonNullable), v.dtype());
+            vortex_bail!(MismatchedTypes:  DType::Bool(Nullability::NonNullable), v.dtype());
         }
         if v.len() != expected_len {
             vortex_bail!(

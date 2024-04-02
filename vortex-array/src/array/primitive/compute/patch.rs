@@ -15,7 +15,7 @@ impl PatchFn for PrimitiveArray {
         match patch.encoding().id() {
             SparseEncoding::ID => patch_with_sparse(self, patch.as_sparse()),
             // TODO(ngates): support a default implementation based on iter_arrow?
-            _ => Err(vortex_err!(ni = "patch", self.encoding().id().0)),
+            _ => Err(vortex_err!(NotImplemented: "patch", self.encoding().id().0)),
         }
     }
 }
@@ -26,7 +26,7 @@ fn patch_with_sparse(array: &PrimitiveArray, patch: &SparseArray) -> VortexResul
         let mut values = Vec::from(array.typed_data::<$T>());
         let patch_values = compute::flatten::flatten_primitive(patch.values())?;
         if (array.ptype() != patch_values.ptype()) {
-            vortex_bail!(mt = array.dtype(), patch_values.dtype())
+            vortex_bail!(MismatchedTypes: array.dtype(), patch_values.dtype())
         }
         for (idx, value) in patch_indices.iter().zip_eq(patch_values.typed_data::<$T>().iter()) {
             values[*idx] = *value;

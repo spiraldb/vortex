@@ -24,7 +24,7 @@ pub fn as_contiguous(arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         .map(|f| f.as_contiguous(arrays))
         .unwrap_or_else(|| {
             Err(vortex_err!(
-                ni = "as_contiguous",
+                NotImplemented: "as_contiguous",
                 first.encoding().id().name()
             ))
         })

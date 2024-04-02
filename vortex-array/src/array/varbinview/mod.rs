@@ -103,7 +103,7 @@ impl VarBinViewArray {
             views.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
-            vortex_bail!(mt = "u8", views.dtype());
+            vortex_bail!(MismatchedTypes:  "u8", views.dtype());
         }
 
         for d in data.iter() {
@@ -111,12 +111,12 @@ impl VarBinViewArray {
                 d.dtype(),
                 DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
             ) {
-                vortex_bail!(mt = "u8", d.dtype());
+                vortex_bail!(MismatchedTypes:  "u8", d.dtype());
             }
         }
 
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
-            vortex_bail!(mt = "utf8 or binary", dtype);
+            vortex_bail!(MismatchedTypes:  "utf8 or binary", dtype);
         }
 
         let dtype = if validity.is_some() && !dtype.is_nullable() {

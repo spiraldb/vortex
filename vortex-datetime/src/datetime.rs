@@ -40,13 +40,13 @@ impl DateTimeArray {
         dtype: DType,
     ) -> VortexResult<Self> {
         if !matches!(days.dtype(), DType::Int(_, _, _)) {
-            vortex_bail!(mt = "any integer", days.dtype());
+            vortex_bail!(MismatchedTypes:  "any integer", days.dtype());
         }
         if !matches!(seconds.dtype(), DType::Int(_, _, _)) {
-            vortex_bail!(mt = "any integer", seconds.dtype());
+            vortex_bail!(MismatchedTypes:  "any integer", seconds.dtype());
         }
         if !matches!(subsecond.dtype(), DType::Int(_, _, _)) {
-            vortex_bail!(mt = "any integer", subsecond.dtype());
+            vortex_bail!(MismatchedTypes:  "any integer", subsecond.dtype());
         }
 
         Ok(Self {

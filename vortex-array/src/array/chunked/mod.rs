@@ -35,7 +35,7 @@ impl ChunkedArray {
     pub fn try_new(chunks: Vec<ArrayRef>, dtype: DType) -> VortexResult<Self> {
         for chunk in &chunks {
             if chunk.dtype() != &dtype {
-                vortex_bail!(mt = dtype, chunk.dtype());
+                vortex_bail!(MismatchedTypes: dtype, chunk.dtype());
             }
         }
         let chunk_ends = chunks

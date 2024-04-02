@@ -43,7 +43,7 @@ impl TryFrom<Scalar> for String {
 
     fn try_from(value: Scalar) -> Result<Self, Self::Error> {
         let Scalar::Utf8(u) = value else {
-            vortex_bail!(mt = "Utf8", value.dtype());
+            vortex_bail!(MismatchedTypes:  "Utf8", value.dtype());
         };
         match u.into_value() {
             None => Err(vortex_err!(
@@ -59,7 +59,7 @@ impl TryFrom<&Scalar> for String {
 
     fn try_from(value: &Scalar) -> Result<Self, Self::Error> {
         let Scalar::Utf8(u) = value else {
-            vortex_bail!(mt = "Utf8", value.dtype());
+            vortex_bail!(MismatchedTypes:  "Utf8", value.dtype());
         };
         match u.value() {
             None => Err(vortex_err!(

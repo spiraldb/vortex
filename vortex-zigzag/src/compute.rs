@@ -25,10 +25,10 @@ impl ScalarAtFn for ZigZagArray {
                     PScalar::U16(u) => Ok(i16::decode(u).into()),
                     PScalar::U32(u) => Ok(i32::decode(u).into()),
                     PScalar::U64(u) => Ok(i64::decode(u).into()),
-                    _ => Err(vortex_err!(mt = "unsigned int", self.dtype())),
+                    _ => Err(vortex_err!(MismatchedTypes:  "unsigned int", self.dtype())),
                 },
             },
-            _ => Err(vortex_err!(mt = "primitive scalar", self.dtype())),
+            _ => Err(vortex_err!(MismatchedTypes:  "primitive scalar", self.dtype())),
         }
     }
 }

@@ -29,7 +29,7 @@ impl ZigZagArray {
             DType::Int(width, Signedness::Unsigned, nullability) => {
                 DType::Int(*width, Signedness::Signed, *nullability)
             }
-            d => vortex_bail!(mt = "unsigned int", d),
+            d => vortex_bail!(MismatchedTypes:  "unsigned int", d),
         };
         Ok(Self {
             encoded,

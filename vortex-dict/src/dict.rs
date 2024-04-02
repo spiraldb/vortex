@@ -24,7 +24,7 @@ impl DictArray {
 
     pub fn try_new(codes: ArrayRef, dict: ArrayRef) -> VortexResult<Self> {
         if !matches!(codes.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
-            vortex_bail!(mt = "unsigned int", codes.dtype());
+            vortex_bail!(MismatchedTypes:  "unsigned int", codes.dtype());
         }
         Ok(Self {
             codes,

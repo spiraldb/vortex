@@ -20,10 +20,9 @@ pub fn as_arrow(array: &dyn Array) -> VortexResult<ArrowArrayRef> {
 
     // Otherwise, flatten and try again.
     let array = flatten(array)?.into_array();
-    array
-        .as_arrow()
-        .map(|a| a.as_arrow())
-        .unwrap_or_else(|| Err(vortex_err!(ni = "as_arrow", array.encoding().id().name())))
+    array.as_arrow().map(|a| a.as_arrow()).unwrap_or_else(|| {
+        Err(vortex_err!(NotImplemented: "as_arrow", array.encoding().id().name()))
+    })
 }
 
 // TODO(ngates): return a RecordBatchReader instead?

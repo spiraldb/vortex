@@ -20,5 +20,5 @@ pub fn take(array: &dyn Array, indices: &dyn Array) -> VortexResult<ArrayRef> {
         .into_array()
         .take()
         .map(|t| t.take(indices))
-        .unwrap_or_else(|| Err(vortex_err!(ni = "take", array.encoding().id().name())))
+        .unwrap_or_else(|| Err(vortex_err!(NotImplemented: "take", array.encoding().id().name())))
 }

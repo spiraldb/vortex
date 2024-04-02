@@ -32,7 +32,7 @@ pub fn search_sorted<T: Into<Scalar>>(
     }
 
     Err(vortex_err!(
-        ni = "search_sorted",
+        NotImplemented: "search_sorted",
         array.encoding().id().name()
     ))
 }

@@ -16,5 +16,5 @@ pub fn cast(array: &dyn Array, dtype: &DType) -> VortexResult<ArrayRef> {
     array
         .cast()
         .map(|f| f.cast(dtype))
-        .unwrap_or_else(|| Err(vortex_err!(ni = "cast", array.encoding().id().name())))
+        .unwrap_or_else(|| Err(vortex_err!(NotImplemented: "cast", array.encoding().id().name())))
 }

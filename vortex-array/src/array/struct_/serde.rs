@@ -24,7 +24,7 @@ impl EncodingSerde for StructEncoding {
             fields.push(ctx.subfield(i).read()?);
         }
         let DType::Struct(names, _) = ctx.schema() else {
-            vortex_bail!(mt = "any struct", ctx.schema());
+            vortex_bail!(MismatchedTypes: "any struct", ctx.schema());
         };
         Ok(StructArray::new(names.clone(), fields).into_array())
     }

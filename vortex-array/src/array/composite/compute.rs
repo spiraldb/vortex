@@ -44,7 +44,7 @@ impl AsArrowArray for CompositeArray {
             .map(|a| a.as_arrow())
             .unwrap_or_else(|| {
                 Err(vortex_err!(
-                    ni = "as_arrow",
+                    NotImplemented: "as_arrow",
                     format!("composite extension {}", self.id())
                 ))
             })

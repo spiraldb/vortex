@@ -55,16 +55,16 @@ impl VarBinArray {
         validity: Option<Validity>,
     ) -> VortexResult<Self> {
         if !matches!(offsets.dtype(), DType::Int(_, _, Nullability::NonNullable)) {
-            vortex_bail!(mt = "non nullable int", offsets.dtype());
+            vortex_bail!(MismatchedTypes:  "non nullable int", offsets.dtype());
         }
         if !matches!(
             bytes.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
-            vortex_bail!(mt = "u8", bytes.dtype());
+            vortex_bail!(MismatchedTypes:  "u8", bytes.dtype());
         }
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
-            vortex_bail!(mt = "utf8 or binary", dtype);
+            vortex_bail!(MismatchedTypes:  "utf8 or binary", dtype);
         }
 
         if let Some(v) = &validity {

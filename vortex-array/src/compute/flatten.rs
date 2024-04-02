@@ -41,10 +41,9 @@ impl FlattenedArray {
 /// Flatten an array into one of the flat encodings.
 /// This does not guarantee that the array is recursively flattened.
 pub fn flatten(array: &dyn Array) -> VortexResult<FlattenedArray> {
-    array
-        .flatten()
-        .map(|f| f.flatten())
-        .unwrap_or_else(|| Err(vortex_err!(ni = "flatten", array.encoding().id().name())))
+    array.flatten().map(|f| f.flatten()).unwrap_or_else(|| {
+        Err(vortex_err!(NotImplemented: "flatten", array.encoding().id().name()))
+    })
 }
 
 pub fn flatten_varbin(array: &dyn Array) -> VortexResult<VarBinArray> {

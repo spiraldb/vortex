@@ -26,7 +26,7 @@ impl EncodingSerde for ALPEncoding {
             DType::Float(FloatWidth::_64, nullability) => {
                 DType::Int(64.into(), Signedness::Signed, *nullability)
             }
-            _ => vortex_bail!(mt = "f32 or f64", ctx.schema()),
+            _ => vortex_bail!(MismatchedTypes:  "f32 or f64", ctx.schema()),
         };
         let encoded = ctx.with_schema(&encoded_dtype).read()?;
         Ok(ALPArray::new(

@@ -156,7 +156,7 @@ impl PScalar {
                     PType::F16 => Ok((f16::from_f32(*$v as f32)).into()),
                     PType::F32 => Ok((*$v as f32).into()),
                     PType::F64 => Ok((*$v as f64).into()),
-                    _ => Err(vortex_err!(mt = "any float", ptype)),
+                    _ => Err(vortex_err!(MismatchedTypes:  "any float", ptype)),
                 }
             };
         }
@@ -174,7 +174,7 @@ impl PScalar {
                 PType::F16 => Ok((*v).into()),
                 PType::F32 => Ok(v.to_f32().into()),
                 PType::F64 => Ok(v.to_f64().into()),
-                _ => Err(vortex_err!(mt = "any float", ptype)),
+                _ => Err(vortex_err!(MismatchedTypes:  "any float", ptype)),
             },
             PScalar::F32(v) => from_floating!(ptype, v),
             PScalar::F64(v) => from_floating!(ptype, v),
@@ -211,7 +211,7 @@ macro_rules! pscalar {
                         ..
                     }) => match pscalar {
                         PScalar::$ptype(v) => Ok(*v),
-                        _ => Err(vortex_err!(mt = "$T", pscalar.ptype())),
+                        _ => Err(vortex_err!(MismatchedTypes:  "$T", pscalar.ptype())),
                     },
                     _ => Err(vortex_err!("can't extract $T from scalar: {}", value)),
                 }

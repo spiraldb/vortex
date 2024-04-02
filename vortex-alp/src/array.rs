@@ -39,7 +39,7 @@ impl ALPArray {
             DType::Int(IntWidth::_64, Signedness::Signed, nullability) => {
                 DType::Float(64.into(), *nullability)
             }
-            d => vortex_bail!(mt = "int32 or int64", d),
+            d => vortex_bail!(MismatchedTypes:  "int32 or int64", d),
         };
         Ok(Self {
             encoded,

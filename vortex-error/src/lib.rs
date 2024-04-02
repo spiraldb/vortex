@@ -79,6 +79,30 @@ pub type VortexResult<T> = Result<T, VortexError>;
 
 #[macro_export]
 macro_rules! vortex_err {
+    (OutOfBounds: $idx:expr, $start:expr, $stop:expr) => {{
+        use std::backtrace::Backtrace;
+        $crate::__private::must_use(
+            $crate::VortexError::OutOfBounds($idx, $start, $stop, Backtrace::capture())
+        )
+    }};
+    (NotImplemented: $func:expr, $arr:expr) => {{
+        use std::backtrace::Backtrace;
+        $crate::__private::must_use(
+            $crate::VortexError::NotImplemented($func.into(), $arr.into(), Backtrace::capture())
+        )
+    }};
+    (MismatchedTypes: $expected:literal, $actual:expr) => {{
+        use std::backtrace::Backtrace;
+        $crate::__private::must_use(
+            $crate::VortexError::MismatchedTypes($expected.into(), $actual.to_string().into(), Backtrace::capture())
+        )
+    }};
+    (MismatchedTypes: $expected:expr, $actual:expr) => {{
+        use std::backtrace::Backtrace;
+        $crate::__private::must_use(
+            $crate::VortexError::MismatchedTypes($expected.to_string().into(), $actual.to_string().into(), Backtrace::capture())
+        )
+    }};
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {{
         use std::backtrace::Backtrace;
         $crate::__private::must_use(
@@ -92,39 +116,6 @@ macro_rules! vortex_err {
     };
     ($fmt:literal $(, $arg:expr)* $(,)?) => {
         $crate::vortex_err!(InvalidArgument: $fmt, $($arg),*)
-    };
-    ($idx:expr, $start:expr, $stop:expr) => {{
-        use std::backtrace::Backtrace;
-        $crate::__private::must_use(
-            $crate::VortexError::OutOfBounds($idx, $start, $stop, Backtrace::capture())
-        )
-    }};
-    (ni = $func:expr, $arr:expr) => {{
-        use std::backtrace::Backtrace;
-        $crate::__private::must_use(
-            $crate::VortexError::NotImplemented($func.into(), $arr.into(), Backtrace::capture())
-        )
-    }};
-    (mt = $expected:literal, $actual:expr) => {{
-        use std::backtrace::Backtrace;
-        $crate::__private::must_use(
-            $crate::VortexError::MismatchedTypes($expected.into(), $actual.to_string().into(), Backtrace::capture())
-        )
-    }};
-    (mt = $expected:expr, $actual:expr) => {{
-        use std::backtrace::Backtrace;
-        $crate::__private::must_use(
-            $crate::VortexError::MismatchedTypes($expected.to_string().into(), $actual.to_string().into(), Backtrace::capture())
-        )
-    }};
-    (ae = $err:expr) => {
-        $crate::vortex_err!(ArrowError: $err)
-    };
-    (io = $err:expr) => {
-        $crate::vortex_err!(IOError: $err)
-    };
-    (pq = $err:expr) => {
-        $crate::vortex_err!(ParquetError: $err)
     };
 }
 
