@@ -61,7 +61,7 @@ impl StructScalar {
                 );
                 Ok(StructScalar::new(new_type, new_fields).into())
             }
-            _ => Err(vortex_err!(mt = "Struct", dtype)),
+            _ => Err(vortex_err!(mt = "struct", dtype)),
         }
     }
 

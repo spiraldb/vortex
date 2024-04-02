@@ -61,10 +61,10 @@ impl VarBinArray {
             bytes.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
-            vortex_bail!(mt = "U8", bytes.dtype());
+            vortex_bail!(mt = "u8", bytes.dtype());
         }
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
-            vortex_bail!(mt = "Binary or Utf8", dtype);
+            vortex_bail!(mt = "utf8 or binary", dtype);
         }
 
         if let Some(v) = &validity {

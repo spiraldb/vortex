@@ -227,7 +227,11 @@ macro_rules! pscalar {
                         value: Some(pscalar),
                         ..
                     }) => pscalar.try_into(),
-                    _ => Err(vortex_err!(mt = "primitive scalar", value.dtype())),
+                    _ => Err(vortex_err!(
+                        "Can't extract value of type {} from primitive scalar: {}",
+                        any::type_name::<Self>(),
+                        value
+                    )),
                 }
             }
         }
