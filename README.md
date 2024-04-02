@@ -157,10 +157,10 @@ without prior discussion infeasible. If you are interested in contributing, plea
 
 ## Setup
 
-This repo uses submodules for non rust dependencies. Before building make sure to run
+This repo uses submodules for non-Rust dependencies (e.g., for the zig fastlanez repo). Before building make sure to run
 
 * `git submodule update --init --recursive`
-* Fetch zig compiler version used by [Fastlanez](https://github.com/fulcrum-so/fastlanez/)
+* `./zigup` (this will install the zig version required by fastlanez)
 
 ## License
 
