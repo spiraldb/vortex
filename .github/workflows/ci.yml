@@ -18,6 +18,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
       - uses: ./.github/actions/setup-zig
       - uses: ./.github/actions/setup-rust
       - uses: ./.github/actions/setup-python
