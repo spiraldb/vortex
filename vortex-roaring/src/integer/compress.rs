@@ -1,7 +1,6 @@
 use croaring::Bitmap;
 use log::debug;
 use num_traits::NumCast;
-
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef};

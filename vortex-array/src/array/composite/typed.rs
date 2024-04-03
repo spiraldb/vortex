@@ -60,13 +60,14 @@ impl<M: CompositeMetadata> TypedCompositeArray<M> {
 
 macro_rules! composite_impl {
     ($id:expr, $T:ty) => {
+        use linkme::distributed_slice;
+        use paste::paste;
+        use vortex_schema::{DType, Nullability};
+
         use crate::array::composite::{
             CompositeArray, CompositeExtension, CompositeMetadata, COMPOSITE_EXTENSIONS,
         };
         use crate::compute::ArrayCompute;
-        use linkme::distributed_slice;
-        use paste::paste;
-        use vortex_schema::{DType, Nullability};
 
         paste! {
             #[derive(Debug)]

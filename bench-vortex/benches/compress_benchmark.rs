@@ -1,7 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-
 use bench_vortex::compress_taxi_data;
 use bench_vortex::taxi_data::taxi_data_parquet;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn vortex_compress(c: &mut Criterion) {
     taxi_data_parquet();

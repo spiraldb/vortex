@@ -1,10 +1,9 @@
-use zigzag::ZigZag;
-
 use vortex::array::Array;
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
 use vortex::scalar::{PScalar, Scalar};
 use vortex_error::{vortex_err, VortexResult};
+use zigzag::ZigZag;
 
 use crate::ZigZagArray;
 

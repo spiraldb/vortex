@@ -5,7 +5,6 @@ use arrow_array::{
     ArrayRef as ArrowArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray,
     TimestampNanosecondArray, TimestampSecondArray,
 };
-
 use vortex_error::VortexResult;
 use vortex_schema::CompositeID;
 

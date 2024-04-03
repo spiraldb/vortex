@@ -2,7 +2,6 @@ use std::fmt::{Debug, Display};
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
-
 use vortex_error::VortexResult;
 use vortex_schema::{CompositeID, DType};
 

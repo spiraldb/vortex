@@ -1,6 +1,5 @@
 use std::sync::{Arc, RwLock};
 
-use crate::compress::ree_encode;
 use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::search_sorted::SearchSortedSide;
@@ -13,6 +12,8 @@ use vortex::validity::{ArrayValidity, Validity};
 use vortex::{compute, impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
+
+use crate::compress::ree_encode;
 
 #[derive(Debug, Clone)]
 pub struct REEArray {

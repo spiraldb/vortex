@@ -1,9 +1,8 @@
 use std::mem::size_of;
 
 use arrayref::array_ref;
-use num_traits::{WrappingAdd, WrappingSub};
-
 use fastlanez::{transpose, untranspose_into, Delta};
+use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};

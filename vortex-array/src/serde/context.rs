@@ -1,6 +1,8 @@
-use crate::encoding::{EncodingId, EncodingRef, ENCODINGS};
-use itertools::Itertools;
 use std::sync::Arc;
+
+use itertools::Itertools;
+
+use crate::encoding::{EncodingId, EncodingRef, ENCODINGS};
 
 #[derive(Debug)]
 pub struct SerdeContext {

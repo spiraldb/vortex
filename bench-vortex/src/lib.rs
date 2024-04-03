@@ -8,8 +8,6 @@ use log::{info, warn, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-
-use crate::taxi_data::taxi_data_parquet;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::IntoArray;
@@ -25,6 +23,8 @@ use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
+
+use crate::taxi_data::taxi_data_parquet;
 
 mod data_downloads;
 pub mod reader;
@@ -146,7 +146,6 @@ mod test {
     use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-
     use vortex::array::ArrayRef;
     use vortex::compute::as_arrow::as_arrow;
     use vortex::encode::FromArrowArray;

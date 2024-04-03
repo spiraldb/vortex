@@ -1,5 +1,4 @@
 use croaring::Bitmap;
-
 use vortex::array::bool::{BoolArray, BoolEncoding};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::{Array, ArrayRef};

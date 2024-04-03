@@ -1,9 +1,10 @@
-use crate::DateTimeArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
+
+use crate::DateTimeArray;
 
 impl ArrayCompute for DateTimeArray {
     fn take(&self) -> Option<&dyn TakeFn> {

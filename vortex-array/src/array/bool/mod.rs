@@ -2,7 +2,10 @@ use std::sync::{Arc, RwLock};
 
 use arrow_buffer::buffer::BooleanBuffer;
 use linkme::distributed_slice;
+use vortex_error::VortexResult;
+use vortex_schema::{DType, Nullability};
 
+use super::{check_slice_bounds, Array, ArrayRef};
 use crate::array::IntoArray;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -11,10 +14,6 @@ use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
 use crate::{impl_array, ArrayWalker};
-use vortex_error::VortexResult;
-use vortex_schema::{DType, Nullability};
-
-use super::{check_slice_bounds, Array, ArrayRef};
 
 mod compute;
 mod serde;
@@ -197,9 +196,8 @@ impl FromIterator<Option<bool>> for BoolArray {
 
 #[cfg(test)]
 mod test {
-    use crate::compute::scalar_at::scalar_at;
-
     use super::*;
+    use crate::compute::scalar_at::scalar_at;
 
     #[test]
     fn slice() {

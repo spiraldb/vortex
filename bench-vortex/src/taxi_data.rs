@@ -1,10 +1,12 @@
+use std::fs::File;
+use std::path::PathBuf;
+
+use vortex_error::VortexError;
+
 use crate::data_downloads::{
     data_vortex_uncompressed, download_data, parquet_to_lance, parquet_to_vortex,
 };
 use crate::idempotent;
-use std::fs::File;
-use std::path::PathBuf;
-use vortex_error::VortexError;
 
 fn download_taxi_data() -> PathBuf {
     let taxi_parquet_fname = "yellow-tripdata-2023-11.parquet";

@@ -2,7 +2,6 @@ use std::io;
 use std::io::ErrorKind;
 
 use croaring::{Bitmap, Portable};
-
 use vortex::array::{Array, ArrayRef};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use vortex_error::VortexResult;
@@ -37,9 +36,9 @@ impl EncodingSerde for RoaringBoolEncoding {
 
 #[cfg(test)]
 mod test {
-    use crate::downcast::DowncastRoaring;
     use croaring::Bitmap;
 
+    use crate::downcast::DowncastRoaring;
     use crate::serde_tests::test::roundtrip_array;
     use crate::RoaringBoolArray;
 

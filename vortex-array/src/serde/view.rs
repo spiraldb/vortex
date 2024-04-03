@@ -1,3 +1,11 @@
+use std::any::Any;
+use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
+
+use arrow_buffer::Buffer;
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_schema::DType;
+
 use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
@@ -8,12 +16,6 @@ use crate::serde::EncodingSerde;
 use crate::stats::Stats;
 use crate::validity::{ArrayValidity, Validity};
 use crate::ArrayWalker;
-use arrow_buffer::Buffer;
-use std::any::Any;
-use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_schema::DType;
 
 #[derive(Clone)]
 pub struct ArrayView<'a> {

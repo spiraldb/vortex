@@ -4,7 +4,6 @@ use arrow_array::{
     ArrayRef as ArrowArrayRef, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray,
 };
 use itertools::Itertools;
-
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 

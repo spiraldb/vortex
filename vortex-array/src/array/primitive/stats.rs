@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::mem::size_of;
 
 use arrow_buffer::buffer::BooleanBuffer;
-
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;

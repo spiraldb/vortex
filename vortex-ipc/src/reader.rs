@@ -1,16 +1,18 @@
-use crate::flatbuffers::ipc::Message;
-use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
+use std::io;
+use std::io::{BufReader, Read};
+
 use arrow_buffer::Buffer;
 use flatbuffers::root;
 use nougat::gat;
-use std::io;
-use std::io::{BufReader, Read};
 use vortex::array::composite::COMPOSITE_EXTENSIONS;
 use vortex::serde::context::SerdeContext;
 use vortex::serde::ArrayView;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferReader, ReadFlatBuffer};
 use vortex_schema::{DType, DTypeSerdeContext};
+
+use crate::flatbuffers::ipc::Message;
+use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
 
 #[allow(dead_code)]
 pub struct StreamReader<R: Read> {

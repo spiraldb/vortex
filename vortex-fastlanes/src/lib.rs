@@ -1,10 +1,9 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
-use linkme::distributed_slice;
-
 pub use bitpacking::*;
 pub use delta::*;
+use linkme::distributed_slice;
 pub use r#for::*;
 use vortex::encoding::{EncodingRef, ENCODINGS};
 

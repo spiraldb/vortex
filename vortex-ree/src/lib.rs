@@ -1,7 +1,6 @@
 use linkme::distributed_slice;
-use vortex::encoding::{EncodingRef, ENCODINGS};
-
 pub use ree::*;
+use vortex::encoding::{EncodingRef, ENCODINGS};
 
 mod compress;
 mod compute;

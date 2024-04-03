@@ -1,5 +1,4 @@
 use itertools::Itertools;
-
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::as_contiguous::as_contiguous;

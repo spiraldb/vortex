@@ -2,7 +2,6 @@ use std::cmp::min;
 
 use itertools::Itertools;
 use num_traits::AsPrimitive;
-
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef};

@@ -1,9 +1,9 @@
-use flatc::flatc;
 use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use flatc::flatc;
 use walkdir::WalkDir;
 
 fn main() {

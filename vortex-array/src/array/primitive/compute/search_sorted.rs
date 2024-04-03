@@ -17,10 +17,9 @@ impl SearchSortedFn for PrimitiveArray {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::array::IntoArray;
     use crate::compute::search_sorted::search_sorted;
-
-    use super::*;
 
     #[test]
     fn test_searchsorted_primitive() {

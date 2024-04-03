@@ -141,9 +141,10 @@ macro_rules! impl_array {
     };
 }
 
+pub use impl_array;
+
 use crate::encoding::EncodingRef;
 use crate::ArrayWalker;
-pub use impl_array;
 
 impl ArrayValidity for ArrayRef {
     fn nullability(&self) -> Nullability {

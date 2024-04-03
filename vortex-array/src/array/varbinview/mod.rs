@@ -2,7 +2,6 @@ use std::mem;
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
-
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
@@ -281,11 +280,10 @@ impl ArrayDisplay for VarBinViewArray {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::array::primitive::PrimitiveArray;
     use crate::compute::scalar_at::scalar_at;
     use crate::scalar::Scalar;
-
-    use super::*;
 
     fn binary_array() -> VarBinViewArray {
         let values = PrimitiveArray::from("hello world this is a long string".as_bytes().to_vec());

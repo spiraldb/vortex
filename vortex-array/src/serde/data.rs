@@ -1,8 +1,9 @@
+use arrow_buffer::Buffer;
+use vortex_error::{vortex_err, VortexResult};
+
 use crate::array::Array;
 use crate::encoding::EncodingId;
 use crate::walk::ArrayWalker;
-use arrow_buffer::Buffer;
-use vortex_error::{vortex_err, VortexResult};
 
 pub struct ArrayData {
     columns: Vec<ColumnData>,
