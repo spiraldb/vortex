@@ -1,6 +1,5 @@
 use itertools::Itertools;
 use num_traits::{PrimInt, WrappingAdd, WrappingSub};
-
 use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -152,9 +151,8 @@ mod test {
     use vortex::compute::scalar_at::ScalarAtFn;
     use vortex::encoding::{Encoding, EncodingRef};
 
-    use crate::BitPackedEncoding;
-
     use super::*;
+    use crate::BitPackedEncoding;
 
     fn compress_ctx() -> CompressCtx {
         let cfg = CompressConfig::new()

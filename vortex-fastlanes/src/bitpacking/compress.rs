@@ -1,5 +1,4 @@
 use arrayref::array_ref;
-
 use fastlanez::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;

@@ -1,10 +1,11 @@
+use std::fs::File;
+use std::os::unix::prelude::MetadataExt;
+use std::path::PathBuf;
+
 use bench_vortex::reader::{compress_parquet_to_vortex, open_vortex};
 use bench_vortex::setup_logger;
 use bench_vortex::taxi_data::taxi_data_parquet;
 use log::LevelFilter;
-use std::fs::File;
-use std::os::unix::prelude::MetadataExt;
-use std::path::PathBuf;
 use vortex::array::Array;
 use vortex::formatter::display_tree;
 

@@ -1,6 +1,5 @@
-use linkme::distributed_slice;
-
 pub use array::*;
+use linkme::distributed_slice;
 pub use typed::*;
 use vortex_schema::CompositeID;
 

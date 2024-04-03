@@ -2,7 +2,10 @@ use std::sync::{Arc, RwLock};
 
 use itertools::Itertools;
 use linkme::distributed_slice;
+use vortex_error::VortexResult;
+use vortex_schema::{DType, FieldNames};
 
+use super::{check_slice_bounds, Array, ArrayRef};
 use crate::array::validity::Validity;
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
@@ -11,10 +14,6 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::{impl_array, ArrayWalker};
-use vortex_error::VortexResult;
-use vortex_schema::{DType, FieldNames};
-
-use super::{check_slice_bounds, Array, ArrayRef};
 
 mod compress;
 mod compute;

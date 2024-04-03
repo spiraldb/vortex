@@ -1,5 +1,4 @@
 use itertools::Itertools;
-
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::array::{Array, ArrayRef, WithArrayCompute};

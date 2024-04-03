@@ -1,6 +1,3 @@
-use crate::flatbuffers::ipc as fb;
-use crate::flatbuffers::ipc::Compression;
-use crate::{missing, ALIGNMENT};
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex::encoding::find_encoding;
@@ -10,6 +7,10 @@ use vortex::serde::data::ColumnData;
 use vortex_error::{vortex_err, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 use vortex_schema::DType;
+
+use crate::flatbuffers::ipc as fb;
+use crate::flatbuffers::ipc::Compression;
+use crate::{missing, ALIGNMENT};
 
 pub(crate) enum IPCMessage<'a> {
     Context(IPCContext<'a>),

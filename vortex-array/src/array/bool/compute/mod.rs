@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef as ArrowArrayRef, BooleanArray as ArrowBoolArray};
 use arrow_buffer::buffer::BooleanBuffer;
-
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;

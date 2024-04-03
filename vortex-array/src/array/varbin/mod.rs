@@ -2,7 +2,6 @@ use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
 use num_traits::{FromPrimitive, Unsigned};
-
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 

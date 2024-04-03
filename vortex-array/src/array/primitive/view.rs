@@ -1,5 +1,6 @@
 use arrow_buffer::Buffer;
 use num_traits::PrimInt;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::validity::Validity;
 use crate::array::PrimitiveArray;
@@ -10,7 +11,6 @@ use crate::compute::ArrayCompute;
 use crate::match_each_integer_ptype;
 use crate::ptype::{NativePType, PType};
 use crate::serde::ArrayView;
-use vortex_error::{vortex_err, VortexResult};
 
 pub struct PrimitiveView<'a> {
     ptype: PType,

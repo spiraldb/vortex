@@ -1,10 +1,13 @@
-use arrow_buffer::BooleanBuffer;
 use std::io;
 use std::io::{Cursor, ErrorKind, Read, Write};
 
 use arrow_buffer::buffer::{Buffer, MutableBuffer};
+use arrow_buffer::BooleanBuffer;
 use flatbuffers::root;
 use itertools::Itertools;
+use vortex_error::{vortex_err, VortexResult};
+use vortex_schema::DTypeSerdeContext;
+use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::composite::COMPOSITE_EXTENSIONS;
 use crate::array::validity::Validity;
@@ -13,19 +16,17 @@ use crate::encoding::{find_encoding, EncodingId, ENCODINGS};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 use crate::serde::ptype::PTypeTag;
-use vortex_error::{vortex_err, VortexResult};
-use vortex_schema::DTypeSerdeContext;
-use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 pub mod context;
 pub mod data;
 mod ptype;
 pub mod view;
 
-use crate::array::bool::BoolArray;
-use crate::compute::ArrayCompute;
 pub use view::*;
 use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
+
+use crate::array::bool::BoolArray;
+use crate::compute::ArrayCompute;
 
 pub trait ArraySerde {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;

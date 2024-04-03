@@ -1,6 +1,8 @@
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
+use vortex_error::VortexResult;
+use vortex_schema::DType;
 
 use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
@@ -11,8 +13,6 @@ use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 use crate::{impl_array, ArrayWalker};
-use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 mod compute;
 mod serde;

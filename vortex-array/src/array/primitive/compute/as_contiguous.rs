@@ -1,5 +1,4 @@
 use itertools::Itertools;
-
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 use vortex_error::{vortex_bail, VortexResult};
 

@@ -1,8 +1,10 @@
-use crate::{flatbuffers as fb, FloatWidth, IntWidth, Nullability, Signedness};
-use crate::{CompositeID, DType};
 use std::sync::Arc;
+
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
+
+use crate::{flatbuffers as fb, FloatWidth, IntWidth, Nullability, Signedness};
+use crate::{CompositeID, DType};
 
 #[allow(dead_code)]
 pub struct DTypeSerdeContext {

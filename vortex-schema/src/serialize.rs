@@ -104,14 +104,14 @@ impl WriteFlatBuffer for DType {
         let dtype_type = match self {
             DType::Null => fb::Type::Null,
             DType::Bool(_) => fb::Type::Bool,
-            DType::Int(_, _, _) => fb::Type::Int,
-            DType::Decimal(_, _, _) => fb::Type::Decimal,
-            DType::Float(_, _) => fb::Type::Float,
+            DType::Int(..) => fb::Type::Int,
+            DType::Decimal(..) => fb::Type::Decimal,
+            DType::Float(..) => fb::Type::Float,
             DType::Utf8(_) => fb::Type::Utf8,
             DType::Binary(_) => fb::Type::Binary,
-            DType::Struct(_, _) => fb::Type::Struct_,
-            DType::List(_, _) => fb::Type::List,
-            DType::Composite(_, _) => fb::Type::Composite,
+            DType::Struct(..) => fb::Type::Struct_,
+            DType::List(..) => fb::Type::List,
+            DType::Composite(..) => fb::Type::Composite,
         };
 
         fb::DType::create(
@@ -174,11 +174,12 @@ impl From<&FloatWidth> for fb::FloatWidth {
 
 #[cfg(test)]
 mod test {
-    use crate::flatbuffers as fb;
-    use flatbuffers::{root, FlatBufferBuilder};
     use std::sync::Arc;
+
+    use flatbuffers::{root, FlatBufferBuilder};
     use vortex_flatbuffers::{ReadFlatBuffer, WriteFlatBuffer};
 
+    use crate::flatbuffers as fb;
     use crate::{DType, DTypeSerdeContext, FloatWidth, IntWidth, Nullability, Signedness};
 
     fn roundtrip_dtype(dtype: DType) {

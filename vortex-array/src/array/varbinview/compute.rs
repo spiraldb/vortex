@@ -3,7 +3,6 @@ use std::sync::Arc;
 use arrow_array::{ArrayRef as ArrowArrayRef, BinaryViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
-
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 

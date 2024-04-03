@@ -1,6 +1,7 @@
-use flatbuffers::{root, FlatBufferBuilder, Follow, Verifiable, WIPOffset};
 use std::io;
 use std::io::{Read, Write};
+
+use flatbuffers::{root, FlatBufferBuilder, Follow, Verifiable, WIPOffset};
 use vortex_error::{vortex_err, VortexResult};
 
 pub trait ReadFlatBuffer<Ctx>: Sized {

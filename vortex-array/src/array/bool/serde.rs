@@ -1,5 +1,4 @@
 use arrow_buffer::buffer::BooleanBuffer;
-
 use vortex_error::VortexResult;
 
 use crate::array::bool::{BoolArray, BoolEncoding};

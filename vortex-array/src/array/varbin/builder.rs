@@ -1,11 +1,12 @@
+use arrow_buffer::NullBufferBuilder;
+use num_traits::PrimInt;
+use vortex_schema::DType;
+
 use crate::array::primitive::PrimitiveArray;
 use crate::array::validity::Validity;
 use crate::array::varbin::VarBinArray;
 use crate::array::Array;
 use crate::ptype::NativePType;
-use arrow_buffer::NullBufferBuilder;
-use num_traits::PrimInt;
-use vortex_schema::DType;
 
 pub struct VarBinBuilder<O: NativePType + PrimInt> {
     offsets: Vec<O>,
@@ -63,13 +64,13 @@ impl<O: NativePType + PrimInt> VarBinBuilder<O> {
 
 #[cfg(test)]
 mod test {
+    use vortex_schema::DType;
+    use vortex_schema::Nullability::Nullable;
 
     use crate::array::varbin::builder::VarBinBuilder;
     use crate::array::{Array, ArrayValidity};
     use crate::compute::scalar_at::scalar_at;
     use crate::scalar::Scalar;
-    use vortex_schema::DType;
-    use vortex_schema::Nullability::Nullable;
 
     #[test]
     fn test_builder() {

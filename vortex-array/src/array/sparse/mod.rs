@@ -2,6 +2,8 @@ use std::sync::{Arc, RwLock};
 
 use itertools::Itertools;
 use linkme::distributed_slice;
+use vortex_error::{vortex_bail, VortexResult};
+use vortex_schema::DType;
 
 use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
@@ -16,8 +18,6 @@ use crate::ptype::PType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::{impl_array, ArrayWalker};
-use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::DType;
 
 mod compress;
 mod compute;
@@ -188,7 +188,6 @@ impl Encoding for SparseEncoding {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-
     use vortex_error::VortexError;
 
     use crate::array::sparse::SparseArray;

@@ -1,7 +1,8 @@
-use crate::{DateTimeArray, DateTimeEncoding};
 use vortex::array::{Array, ArrayRef};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use vortex_error::VortexResult;
+
+use crate::{DateTimeArray, DateTimeEncoding};
 
 impl ArraySerde for DateTimeArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {

@@ -1,9 +1,9 @@
-use log::LevelFilter;
 use std::fs::File;
 
 use bench_vortex::reader::open_vortex;
 use bench_vortex::setup_logger;
 use bench_vortex::taxi_data::taxi_data_vortex;
+use log::LevelFilter;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::Array;
 use vortex::compute::take::take;

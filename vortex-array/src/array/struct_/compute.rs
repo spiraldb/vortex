@@ -5,7 +5,6 @@ use arrow_array::{
 };
 use arrow_schema::{Field, Fields};
 use itertools::Itertools;
-
 use vortex_error::VortexResult;
 
 use crate::array::downcast::DowncastArrayBuiltin;

@@ -8,8 +8,6 @@ use std::sync::{Arc, RwLock};
 use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
-
-use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
@@ -17,6 +15,7 @@ use crate::accessor::ArrayAccessor;
 use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::array::{ArrayValidity, IntoArray};
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
@@ -29,8 +28,9 @@ mod serde;
 mod stats;
 mod view;
 
-use crate::compute::ArrayCompute;
 pub use view::*;
+
+use crate::compute::ArrayCompute;
 
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {

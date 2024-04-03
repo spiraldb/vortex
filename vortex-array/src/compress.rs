@@ -3,7 +3,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
 use log::{debug, info, warn};
-
 use vortex_error::VortexResult;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};

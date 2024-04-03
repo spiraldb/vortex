@@ -1,12 +1,11 @@
 use std::mem::size_of;
 
 use arrayref::array_mut_ref;
-use uninit::prelude::VecCapacity;
-
 use fastlanez_sys::{
     fl_transpose_u16, fl_transpose_u32, fl_transpose_u64, fl_transpose_u8, fl_untranspose_u16,
     fl_untranspose_u32, fl_untranspose_u64, fl_untranspose_u8,
 };
+use uninit::prelude::VecCapacity;
 
 const fn transposable<T: Sized, U: Sized>() -> bool {
     let sizeOfT = size_of::<T>();

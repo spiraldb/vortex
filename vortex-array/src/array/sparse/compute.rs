@@ -1,6 +1,5 @@
 use arrow_buffer::BooleanBufferBuilder;
 use itertools::Itertools;
-
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::downcast::DowncastArrayBuiltin;

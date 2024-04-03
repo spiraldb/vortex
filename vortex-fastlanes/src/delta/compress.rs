@@ -1,11 +1,8 @@
 use std::mem::size_of;
 
 use arrayref::array_ref;
-use num_traits::{WrappingAdd, WrappingSub};
-
-use crate::downcast::DowncastFastlanes;
-use crate::{DeltaArray, DeltaEncoding};
 use fastlanez::{transpose, untranspose_into, Delta};
+use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::validity::Validity;
@@ -16,6 +13,9 @@ use vortex::compute::flatten::flatten_primitive;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
 use vortex_error::VortexResult;
+
+use crate::downcast::DowncastFastlanes;
+use crate::{DeltaArray, DeltaEncoding};
 
 impl EncodingCompression for DeltaEncoding {
     fn can_compress(

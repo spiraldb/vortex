@@ -1,7 +1,6 @@
-use linkme::distributed_slice;
-
 pub use boolean::*;
 pub use integer::*;
+use linkme::distributed_slice;
 use vortex::encoding::{EncodingRef, ENCODINGS};
 
 mod boolean;

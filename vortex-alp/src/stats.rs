@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+
+use vortex::stats::{Stat, StatsCompute, StatsSet};
 use vortex_error::VortexResult;
 
 use crate::ALPArray;
-use vortex::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for ALPArray {
     fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
