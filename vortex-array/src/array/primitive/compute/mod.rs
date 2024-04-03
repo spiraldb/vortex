@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use arrow_buffer::Buffer;
+pub use patch::patch_owned;
 use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;

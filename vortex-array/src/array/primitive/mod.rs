@@ -8,30 +8,31 @@ use std::sync::{Arc, RwLock};
 use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
+
+pub use compute::patch_owned;
+pub use view::*;
+pub use view::*;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
+use crate::{ArrayWalker, impl_array};
 use crate::accessor::ArrayAccessor;
-use crate::array::validity::{Validity, ValidityView};
+use crate::array::{Array, ArrayRef, check_slice_bounds};
 use crate::array::IntoArray;
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::primitive::compute::PrimitiveTrait;
+use crate::array::validity::{Validity, ValidityView};
+use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
-use crate::{impl_array, ArrayWalker};
 
 mod compute;
 mod serde;
 mod stats;
 mod view;
-
-pub use view::*;
-
-use crate::array::primitive::compute::PrimitiveTrait;
-use crate::compute::ArrayCompute;
 
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {
@@ -341,8 +342,8 @@ impl ArrayDisplay for PrimitiveArray {
 mod test {
     use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-    use crate::array::primitive::PrimitiveArray;
     use crate::array::Array;
+    use crate::array::primitive::PrimitiveArray;
     use crate::compute::scalar_at::scalar_at;
     use crate::ptype::PType;
 

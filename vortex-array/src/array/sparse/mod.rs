@@ -8,13 +8,11 @@ use vortex_schema::DType;
 use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
-use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::ptype::PType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::{impl_array, ArrayWalker};
@@ -78,7 +76,7 @@ impl SparseArray {
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        flatten_primitive(cast(self.indices(), PType::U64.into()).unwrap().as_ref())
+        flatten_primitive(self.indices())
             .unwrap()
             .typed_data::<u64>()
             .iter()

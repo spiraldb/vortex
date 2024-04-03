@@ -1,14 +1,13 @@
 use arrayref::array_ref;
 use fastlanez::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::primitive::{patch_owned, PrimitiveArray};
 use vortex::array::sparse::SparseArray;
 use vortex::array::IntoArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
-use vortex::compute::patch::patch;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::ptype::{NativePType, PType};
@@ -165,7 +164,7 @@ fn bitpack_patches(
 pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
-    let encoded = flatten_primitive(cast(array.encoded(), PType::U8.into())?.as_ref())?;
+    let encoded = flatten_primitive(cast(array.encoded(), U8.into())?.as_ref())?;
     let ptype: PType = array.dtype().try_into()?;
 
     let mut unpacked = match ptype {
@@ -186,20 +185,34 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
             array.validity(),
         ),
         _ => panic!("Unsupported ptype {:?}", ptype),
-    }
-    .into_array();
+    };
 
     // Cast to signed if necessary
-    // TODO(ngates): do this more efficiently since we know it's a safe cast. unchecked_cast maybe?
     if ptype.is_signed_int() {
-        unpacked = cast(&unpacked, &ptype.into())?
+        unpacked = reinterpret_cast(unpacked, ptype);
     }
 
     if let Some(patches) = array.patches() {
-        unpacked = patch(unpacked.as_ref(), patches)?;
+        patch_owned(unpacked, patches)
+    } else {
+        Ok(unpacked)
+    }
+}
+
+fn reinterpret_cast(array: PrimitiveArray, ptype: PType) -> PrimitiveArray {
+    if array.ptype() == ptype {
+        return array;
     }
 
-    flatten_primitive(&unpacked)
+    assert_eq!(
+        array.ptype().byte_width(),
+        ptype.byte_width(),
+        "can't reinterpret cast between integers of two different widths"
+    );
+
+    let (buffer, validity) = array.into_children();
+
+    PrimitiveArray::new(ptype, buffer, validity)
 }
 
 pub fn unpack_primitive<T: NativePType + TryBitPack>(
