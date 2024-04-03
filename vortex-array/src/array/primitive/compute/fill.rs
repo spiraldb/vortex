@@ -1,13 +1,13 @@
-use num_traits::Zero;
 use vortex_error::VortexResult;
 
+use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::IntoArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::fill::FillForwardFn;
-use crate::match_each_native_ptype;
+use crate::ptype::NativePType;
 
-impl FillForwardFn for PrimitiveArray {
+impl<T: NativePType> FillForwardFn for &dyn PrimitiveTrait<T> {
     fn fill_forward(&self) -> VortexResult<ArrayRef> {
         if self.validity().is_none() {
             return Ok(self.to_array());
@@ -18,21 +18,19 @@ impl FillForwardFn for PrimitiveArray {
             return Ok(PrimitiveArray::new(self.ptype(), self.buffer().clone(), None).into_array());
         }
 
-        match_each_native_ptype!(self.ptype(), |$P| {
-            let typed_data = self.typed_data::<$P>();
-            let mut last_value = $P::zero();
-            let filled = typed_data
-                .iter()
-                .zip(validity.to_bool_array().into_buffer().into_iter())
-                .map(|(v, valid)| {
-                    if valid {
-                        last_value = *v;
-                    }
-                    last_value
-                })
-                .collect::<Vec<_>>();
-            Ok(filled.into_array())
-        })
+        let mut last_value = T::zero();
+        let filled = self
+            .typed_data()
+            .iter()
+            .zip(validity.to_bool_array().into_buffer().into_iter())
+            .map(|(v, valid)| {
+                if valid {
+                    last_value = *v;
+                }
+                last_value
+            })
+            .collect::<Vec<_>>();
+        Ok(filled.into_array())
     }
 }
 

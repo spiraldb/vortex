@@ -8,7 +8,6 @@ use vortex_schema::{DType, Nullability};
 use super::{check_slice_bounds, Array, ArrayRef};
 use crate::array::validity::Validity;
 use crate::array::IntoArray;
-use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -33,7 +32,7 @@ impl BoolArray {
 
     pub fn try_new(buffer: BooleanBuffer, validity: Option<Validity>) -> VortexResult<Self> {
         if let Some(v) = &validity {
-            assert_eq!(v.len(), buffer.len());
+            assert_eq!(Array::len(v), buffer.len());
         }
         Ok(Self {
             buffer,
@@ -97,7 +96,10 @@ impl Array for BoolArray {
         Ok(Self {
             buffer: self.buffer.slice(start, stop - start),
             stats: Arc::new(RwLock::new(StatsSet::new())),
-            validity: self.validity.as_ref().map(|v| v.slice(start, stop)),
+            validity: self
+                .validity
+                .as_ref()
+                .map(|v| v.as_view().slice(start, stop)),
         }
         .into_array())
     }

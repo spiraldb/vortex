@@ -12,7 +12,6 @@ use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
-use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
@@ -225,7 +224,9 @@ impl Array for VarBinArray {
             self.offsets.slice(start, stop + 1)?,
             self.bytes.clone(),
             self.dtype.clone(),
-            self.validity.as_ref().map(|v| v.slice(start, stop)),
+            self.validity
+                .as_ref()
+                .map(|v| v.as_view().slice(start, stop)),
         )
         .into_array())
     }

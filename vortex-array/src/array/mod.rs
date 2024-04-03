@@ -73,7 +73,7 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync {
 
     fn with_compute_mut(
         &self,
-        _f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()> {
         vortex_bail!(
             "with_compute_mut not implemented for {}",
@@ -89,11 +89,11 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync {
 }
 
 pub trait WithArrayCompute {
-    fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(&self, f: F)
-        -> VortexResult<R>;
-}
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()>;
 
-impl WithArrayCompute for dyn Array + '_ {
     fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
         &self,
         f: F,
@@ -104,6 +104,18 @@ impl WithArrayCompute for dyn Array + '_ {
             Ok(())
         })?;
         Ok(result.unwrap())
+    }
+}
+
+impl<T> WithArrayCompute for T
+where
+    T: ArrayCompute,
+{
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
     }
 }
 
@@ -154,14 +166,6 @@ macro_rules! impl_array {
         #[inline]
         fn into_array(self) -> ArrayRef {
             std::sync::Arc::new(self)
-        }
-
-        #[inline]
-        fn with_compute_mut(
-            &self,
-            f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-        ) -> VortexResult<()> {
-            f(self)
         }
     };
 }

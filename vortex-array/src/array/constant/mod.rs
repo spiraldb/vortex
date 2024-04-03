@@ -6,7 +6,6 @@ use vortex_schema::DType;
 
 use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
-use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
