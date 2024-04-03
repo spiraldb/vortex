@@ -576,7 +576,7 @@ checksum = "30c5ef0ede93efbf733c1a727f3b6b5a1060bbedd5600183e66f6e4be4af0ec5"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -587,7 +587,7 @@ checksum = "a507401cad91ec6a857ed5513a2073c82a9b9048762b885bb98655b306964681"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -1014,7 +1014,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "syn 2.0.57",
+ "syn 2.0.58",
  "which",
 ]
 
@@ -1843,7 +1843,7 @@ checksum = "27540baf49be0d484d8f0130d7d8da3011c32a44d4fc873368154f1510e574a2"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -1899,7 +1899,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "ext-trait"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1926,7 +1925,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a296e5a895621edf9fa8329c83aa1cb69a964643e36cf54d8d7a69b789089537"
 dependencies = [
  "ext-trait",
-=======
+]
+
+[[package]]
 name = "fastlanez"
 version = "0.1.0"
 dependencies = [
@@ -1936,7 +1937,6 @@ dependencies = [
  "paste",
  "seq-macro",
  "uninit",
->>>>>>> develop
 ]
 
 [[package]]
@@ -2091,7 +2091,7 @@ checksum = "87750cf4b7a4c0625b1529e4c543c2182106e4dedc60a2a6455e00d212c489ac"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -2580,9 +2580,9 @@ dependencies = [
 
 [[package]]
 name = "lance"
-version = "0.10.6"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8df8e94ea819b6a3cf442055293af3636d3dab98df0e63ad097a2985301b0ba"
+checksum = "89669e7ace91c716c253208f5d6c53c405d6da2ebd6c8798f205a773b99635e7"
 dependencies = [
  "arrow 50.0.0",
  "arrow-arith 50.0.0",
@@ -2638,9 +2638,9 @@ dependencies = [
 
 [[package]]
 name = "lance-arrow"
-version = "0.10.6"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adfe099e9e2ef503e418a796314771a130d130a54647502393b42e06054a0d3d"
+checksum = "f6b5e663bd15a2ea3dd2f998db34d7843526b210b730791d55746baaeafb3e4e"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-buffer 50.0.0",
@@ -2657,9 +2657,9 @@ dependencies = [
 
 [[package]]
 name = "lance-core"
-version = "0.10.6"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d7a66fadeb49be0d52129a72c1a37f59efb4674ad47d9465aae3b23df75d3b5"
+checksum = "c2aa28b21beef26fdfc09cf13436306fdf6ed4545972e3268be26974578ef8cb"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-buffer 50.0.0",
@@ -2692,9 +2692,9 @@ dependencies = [
 
 [[package]]
 name = "lance-datafusion"
-version = "0.10.6"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89fe63a1a65dc390b8bdc3377a3239cf6eb353417c9cd2442e0468aa1d824625"
+checksum = "80afb083dda662157b95adfbd35009d8804c4d4d77b7f62c69cff99eb36b7d15"
 dependencies = [
  "arrow 50.0.0",
  "arrow-array 50.0.0",
@@ -2715,9 +2715,9 @@ dependencies = [
 
 [[package]]
 name = "lance-datagen"
-version = "0.10.6"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bbc172bd4f7ee2f72079ed221a58aaedd0b291fe056a205e1e22b20ab0ca2c7"
+checksum = "7e462c472fed261cad4e7b3bfff77516d6a368c2848d4ea5a834964d6d4a0d18"
 dependencies = [
  "arrow 50.0.0",
  "arrow-array 50.0.0",
@@ -2731,9 +2731,9 @@ dependencies = [
 
 [[package]]
 name = "lance-file"
-version = "0.10.6"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b0009294ca98334640151d0120005e1fc2d2a5cd13460b0b43ec7a321601b0f"
+checksum = "8cf410862c083785165d615349155474fa91ce3fbcb0da9a41235bf22f6edc75"
 dependencies = [
  "arrow-arith 50.0.0",
  "arrow-array 50.0.0",
@@ -2760,9 +2760,9 @@ dependencies = [
 
 [[package]]
 name = "lance-index"
-version = "0.10.6"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c5b0a869f5e09340a83ecb3d29c79fdbc81a047c5ba5bfc26fc366248a12864"
+checksum = "bcf64473aae15d2ed1ed6f11887ab9a06667d91e9131020141321f34ee0d860e"
 dependencies = [
  "arrow 50.0.0",
  "arrow-array 50.0.0",
@@ -2806,9 +2806,9 @@ dependencies = [
 
 [[package]]
 name = "lance-io"
-version = "0.10.6"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8235a49dad74ee58468a2ce5bfc984bef02a4fc653225ad782508fc6952b88f2"
+checksum = "f45be6af4e101c838bcdd29f5a0ab40500bbba675d055d9a4e311fd725544fec"
 dependencies = [
  "arrow 50.0.0",
  "arrow-arith 50.0.0",
@@ -2844,9 +2844,9 @@ dependencies = [
 
 [[package]]
 name = "lance-linalg"
-version = "0.10.6"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d74eeb0ab23e7c450280e50922c498ee72b9680cd88232fb3a3b308a94c285d1"
+checksum = "c839f75209a94ead48be4bca7fc6e5ac1d6b974410c56cbad89e067fbcb58984"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-ord 50.0.0",
@@ -2867,9 +2867,9 @@ dependencies = [
 
 [[package]]
 name = "lance-table"
-version = "0.10.6"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d0fda64325f641599b350422ff8f16f866fb2c32ce3c362ccef603f188d5cf9"
+checksum = "99d7e5691cec82369133ac1f83a0c7ec9d88cfc279052368c67bfbe0f4ad4592"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-buffer 50.0.0",
@@ -3081,7 +3081,7 @@ checksum = "adf157a4dc5a29b7b464aa8fe7edeff30076e07e13646a1c3874f58477dc99f8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -3437,7 +3437,7 @@ dependencies = [
  "proc-macro-crate 3.1.0",
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -3524,7 +3524,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -3757,7 +3757,7 @@ checksum = "2f38a4412a78282e09a2cf38d195ea5420d15ba0602cb375210efbc877243965"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -3837,7 +3837,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d3928fb5db768cb86f891ff014f0144589297e3c6a1aba6ed7cecfdace270c7"
 dependencies = [
  "proc-macro2",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -3895,7 +3895,7 @@ dependencies = [
  "prost",
  "prost-types",
  "regex",
- "syn 2.0.57",
+ "syn 2.0.58",
  "tempfile",
  "which",
 ]
@@ -3910,7 +3910,7 @@ dependencies = [
  "itertools 0.11.0",
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -3991,7 +3991,7 @@ dependencies = [
  "proc-macro2",
  "pyo3-macros-backend",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -4004,7 +4004,7 @@ dependencies = [
  "proc-macro2",
  "pyo3-build-config",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -4549,7 +4549,7 @@ checksum = "7eb0b34b42edc17f6b7cac84a52a1c5f0e1bb2227e997ca9011ea3dd34e8610b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -4583,7 +4583,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -4753,7 +4753,7 @@ checksum = "01b2e185515564f15375f593fb966b5718bc624ba77fe49fa4616ad619690554"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -4793,7 +4793,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustversion",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -4806,7 +4806,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustversion",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -4826,7 +4826,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "syn 2.0.57",
+ "syn 2.0.58",
  "typify",
  "walkdir",
 ]
@@ -4850,9 +4850,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.57"
+version = "2.0.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11a6ae1e52eb25aab8f3fb9fca13be982a373b8f1157ca14b897a825ba4a2d35"
+checksum = "44cfb93f38070beee36b3fef7d4f5a16f27751d94b187b666a5cc5e9b0d30687"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4946,7 +4946,7 @@ checksum = "c61f3ba182994efc43764a46c018c347bc492c79f024e705f46567b418f6d4f7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -5052,7 +5052,7 @@ checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -5176,7 +5176,7 @@ checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -5239,7 +5239,7 @@ dependencies = [
  "regress",
  "schemars",
  "serde_json",
- "syn 2.0.57",
+ "syn 2.0.58",
  "thiserror",
  "unicode-ident",
 ]
@@ -5256,7 +5256,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_tokenstream",
- "syn 2.0.57",
+ "syn 2.0.58",
  "typify-impl",
 ]
 
@@ -5611,7 +5611,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
  "wasm-bindgen-shared",
 ]
 
@@ -5645,7 +5645,7 @@ checksum = "e94f17b526d0a461a191c78ea52bbce64071ed5c04c9ffe424dcb38f74171bb7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -5914,7 +5914,7 @@ checksum = "9ce1b18ccd8e73a9321186f97e46f9f04b778851177567b1975109d26a08d2a6"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
