@@ -57,9 +57,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
     type Error = VortexError;
     type Item<'next> =  StreamArrayChunkReader<'next, R> where Self: 'next;
 
-    fn next(
-        &mut self,
-    ) -> Result<Option<StreamArrayChunkReader<'_, R>>, Self::Error> {
+    fn next(&mut self) -> Result<Option<StreamArrayChunkReader<'_, R>>, Self::Error> {
         let mut fb_vec = Vec::new();
         let msg = self.read.read_message::<Message>(&mut fb_vec)?;
         if msg.is_none() {
