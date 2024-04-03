@@ -2,25 +2,24 @@ use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
 use num_traits::{FromPrimitive, Unsigned};
-
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{
-    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
-};
+use crate::array::validity::Validity;
+use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::ArrayCompute;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::iterator::ArrayIter;
 use crate::ptype::NativePType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
 
 mod accessor;
 mod builder;
@@ -55,20 +54,16 @@ impl VarBinArray {
         validity: Option<Validity>,
     ) -> VortexResult<Self> {
         if !matches!(offsets.dtype(), DType::Int(_, _, Nullability::NonNullable)) {
-            return Err(VortexError::UnsupportedOffsetsArrayDType(
-                offsets.dtype().clone(),
-            ));
+            vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype());
         }
         if !matches!(
             bytes.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
-            return Err(VortexError::UnsupportedDataArrayDType(
-                bytes.dtype().clone(),
-            ));
+            vortex_bail!(MismatchedTypes: "u8", bytes.dtype());
         }
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
-            return Err(VortexError::InvalidDType(dtype));
+            vortex_bail!(MismatchedTypes: "utf8 or binary", dtype);
         }
 
         if let Some(v) = &validity {
@@ -180,9 +175,7 @@ impl VarBinArray {
     pub fn iter_primitive(&self) -> VortexResult<VarBinIter<&[u8]>> {
         self.bytes()
             .maybe_primitive()
-            .ok_or_else(|| {
-                VortexError::ComputeError("Bytes array was not a primitive array".into())
-            })
+            .ok_or_else(|| vortex_err!(ComputeError: "Bytes array was not a primitive array"))
             .map(|_| ArrayIter::new(self))
     }
 
@@ -200,7 +193,7 @@ impl VarBinArray {
     }
 }
 
-pub type VarBinIter<'a, T> = ArrayIter<&'a VarBinArray, T>;
+pub type VarBinIter<'a, T> = ArrayIter<'a, VarBinArray, T>;
 
 impl Array for VarBinArray {
     impl_array!();
@@ -250,11 +243,14 @@ impl Array for VarBinArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
-}
 
-impl ArrayValidity for VarBinArray {
     fn validity(&self) -> Option<Validity> {
         self.validity.clone()
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.offsets())?;
+        walker.visit_child(self.bytes())
     }
 }
 
@@ -367,10 +363,10 @@ mod test {
     pub fn test_scalar_at() {
         let binary_arr = binary_array();
         assert_eq!(binary_arr.len(), 2);
-        assert_eq!(scalar_at(&binary_arr, 0), Ok("hello world".into()));
+        assert_eq!(scalar_at(&binary_arr, 0).unwrap(), "hello world".into());
         assert_eq!(
-            scalar_at(&binary_arr, 1),
-            Ok("hello world this is a long string".into())
+            scalar_at(&binary_arr, 1).unwrap(),
+            "hello world this is a long string".into()
         )
     }
 
@@ -378,8 +374,8 @@ mod test {
     pub fn slice() {
         let binary_arr = binary_array().slice(1, 2).unwrap();
         assert_eq!(
-            scalar_at(&binary_arr, 0),
-            Ok("hello world this is a long string".into())
+            scalar_at(&binary_arr, 0).unwrap(),
+            "hello world this is a long string".into()
         );
     }
 }

@@ -2,21 +2,20 @@ use std::sync::{Arc, RwLock};
 
 use arrow_buffer::buffer::BooleanBuffer;
 use linkme::distributed_slice;
-
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
+use super::{check_slice_bounds, Array, ArrayRef};
+use crate::array::validity::Validity;
 use crate::array::IntoArray;
+use crate::compute::ArrayCompute;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
-
-use super::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
+use crate::{impl_array, ArrayWalker};
 
 mod compute;
-mod flatten;
 mod serde;
 mod stats;
 
@@ -49,6 +48,10 @@ impl BoolArray {
             BooleanBuffer::from(vec![false; n]),
             Some(Validity::Invalid(n)),
         )
+    }
+
+    pub fn from_nullable(values: Vec<bool>, validity: Option<Validity>) -> Self {
+        BoolArray::new(BooleanBuffer::from(values), validity)
     }
 
     #[inline]
@@ -99,6 +102,10 @@ impl Array for BoolArray {
         .into_array())
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &BoolEncoding
@@ -112,11 +119,13 @@ impl Array for BoolArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
-}
 
-impl ArrayValidity for BoolArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        if let Some(v) = self.validity() {
+            // FIXME(ngates): Validity to implement Array?
+            walker.visit_child(&v.to_array())?;
+        }
+        walker.visit_buffer(self.buffer.inner())
     }
 }
 
@@ -194,9 +203,9 @@ mod test {
             .slice(1, 4)
             .unwrap();
         assert_eq!(arr.len(), 3);
-        assert_eq!(scalar_at(&arr, 0).unwrap().try_into(), Ok(true));
-        assert_eq!(scalar_at(&arr, 1).unwrap().try_into(), Ok(false));
-        assert_eq!(scalar_at(&arr, 2).unwrap().try_into(), Ok(false));
+        assert_eq!(scalar_at(&arr, 0).unwrap(), true.into());
+        assert_eq!(scalar_at(&arr, 1).unwrap(), false.into());
+        assert_eq!(scalar_at(&arr, 2).unwrap(), false.into());
     }
 
     #[test]

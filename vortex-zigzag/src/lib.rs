@@ -1,6 +1,5 @@
 use linkme::distributed_slice;
-use vortex::array::{EncodingRef, ENCODINGS};
-
+use vortex::encoding::{EncodingRef, ENCODINGS};
 pub use zigzag::*;
 
 mod compress;

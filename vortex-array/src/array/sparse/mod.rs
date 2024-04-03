@@ -2,22 +2,22 @@ use std::sync::{Arc, RwLock};
 
 use itertools::Itertools;
 use linkme::distributed_slice;
-
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::ENCODINGS;
-use crate::array::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef};
+use crate::array::validity::Validity;
+use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
+use crate::compute::ArrayCompute;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::ptype::PType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
 
 mod compress;
 mod compute;
@@ -49,9 +49,7 @@ impl SparseArray {
         indices_offset: usize,
     ) -> VortexResult<Self> {
         if !matches!(indices.dtype(), &DType::IDX) {
-            return Err(VortexError::InvalidArgument(
-                format!("Cannot use {} as indices", indices.dtype().clone()).into(),
-            ));
+            vortex_bail!("Cannot use {} as indices", indices.dtype());
         }
 
         Ok(Self {
@@ -142,6 +140,15 @@ impl Array for SparseArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
+    fn validity(&self) -> Option<Validity> {
+        todo!()
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.indices())?;
+        walker.visit_child(self.values())
+    }
 }
 
 impl StatsCompute for SparseArray {}
@@ -151,12 +158,6 @@ impl ArrayDisplay for SparseArray {
         f.property("offset", self.indices_offset())?;
         f.child("indices", self.indices())?;
         f.child("values", self.values())
-    }
-}
-
-impl ArrayValidity for SparseArray {
-    fn validity(&self) -> Option<Validity> {
-        todo!()
     }
 }
 
@@ -187,7 +188,6 @@ impl Encoding for SparseEncoding {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-
     use vortex_error::VortexError;
 
     use crate::array::sparse::SparseArray;
@@ -259,10 +259,13 @@ mod test {
             usize::try_from(scalar_at(&sparse_array(), 2).unwrap()).unwrap(),
             100
         );
-        assert_eq!(
-            scalar_at(&sparse_array(), 10).err().unwrap(),
-            VortexError::OutOfBounds(10, 0, 10)
-        );
+        let error = scalar_at(&sparse_array(), 10).err().unwrap();
+        let VortexError::OutOfBounds(i, start, stop, _) = error else {
+            unreachable!()
+        };
+        assert_eq!(i, 10);
+        assert_eq!(start, 0);
+        assert_eq!(stop, 10);
     }
 
     #[test]
@@ -272,10 +275,13 @@ mod test {
             usize::try_from(scalar_at(sliced.as_ref(), 0).unwrap()).unwrap(),
             100
         );
-        assert_eq!(
-            scalar_at(sliced.as_ref(), 5).err().unwrap(),
-            VortexError::OutOfBounds(5, 0, 5)
-        );
+        let error = scalar_at(sliced.as_ref(), 5).err().unwrap();
+        let VortexError::OutOfBounds(i, start, stop, _) = error else {
+            unreachable!()
+        };
+        assert_eq!(i, 5);
+        assert_eq!(start, 0);
+        assert_eq!(stop, 5);
     }
 
     #[test]
@@ -285,19 +291,25 @@ mod test {
             usize::try_from(scalar_at(sliced_once.as_ref(), 1).unwrap()).unwrap(),
             100
         );
-        assert_eq!(
-            scalar_at(sliced_once.as_ref(), 7).err().unwrap(),
-            VortexError::OutOfBounds(7, 0, 7)
-        );
+        let error = scalar_at(sliced_once.as_ref(), 7).err().unwrap();
+        let VortexError::OutOfBounds(i, start, stop, _) = error else {
+            unreachable!()
+        };
+        assert_eq!(i, 7);
+        assert_eq!(start, 0);
+        assert_eq!(stop, 7);
 
         let sliced_twice = sliced_once.slice(1, 6).unwrap();
         assert_eq!(
             usize::try_from(scalar_at(sliced_twice.as_ref(), 3).unwrap()).unwrap(),
             200
         );
-        assert_eq!(
-            scalar_at(sliced_twice.as_ref(), 5).err().unwrap(),
-            VortexError::OutOfBounds(5, 0, 5)
-        );
+        let error2 = scalar_at(sliced_twice.as_ref(), 5).err().unwrap();
+        let VortexError::OutOfBounds(i, start, stop, _) = error2 else {
+            unreachable!()
+        };
+        assert_eq!(i, 5);
+        assert_eq!(start, 0);
+        assert_eq!(stop, 5);
     }
 }

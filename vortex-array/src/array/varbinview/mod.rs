@@ -2,19 +2,18 @@ use std::mem;
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
-
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-use crate::array::{
-    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
-};
+use crate::array::validity::Validity;
+use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
+use crate::compute::ArrayCompute;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
 
 mod compute;
 mod serde;
@@ -103,9 +102,7 @@ impl VarBinViewArray {
             views.dtype(),
             DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
         ) {
-            return Err(VortexError::UnsupportedOffsetsArrayDType(
-                views.dtype().clone(),
-            ));
+            vortex_bail!(MismatchedTypes: "u8", views.dtype());
         }
 
         for d in data.iter() {
@@ -113,12 +110,12 @@ impl VarBinViewArray {
                 d.dtype(),
                 DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
             ) {
-                return Err(VortexError::UnsupportedDataArrayDType(d.dtype().clone()));
+                vortex_bail!(MismatchedTypes: "u8", d.dtype());
             }
         }
 
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
-            return Err(VortexError::InvalidDType(dtype));
+            vortex_bail!(MismatchedTypes: "utf8 or binary", dtype);
         }
 
         let dtype = if validity.is_some() && !dtype.is_nullable() {
@@ -235,11 +232,17 @@ impl Array for VarBinViewArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
-}
 
-impl ArrayValidity for VarBinViewArray {
     fn validity(&self) -> Option<Validity> {
         self.validity.clone()
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.views())?;
+        for data in self.data() {
+            walker.visit_child(data)?;
+        }
+        Ok(())
     }
 }
 
@@ -275,10 +278,10 @@ impl ArrayDisplay for VarBinViewArray {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::array::primitive::PrimitiveArray;
     use crate::compute::scalar_at::scalar_at;
-
-    use super::*;
+    use crate::scalar::Scalar;
 
     fn binary_array() -> VarBinViewArray {
         let values = PrimitiveArray::from("hello world this is a long string".as_bytes().to_vec());
@@ -312,19 +315,22 @@ mod test {
     pub fn varbin_view() {
         let binary_arr = binary_array();
         assert_eq!(binary_arr.len(), 2);
-        assert_eq!(scalar_at(&binary_arr, 0), Ok("hello world".into()));
         assert_eq!(
-            scalar_at(&binary_arr, 1),
-            Ok("hello world this is a long string".into())
-        )
+            scalar_at(&binary_arr, 0).unwrap(),
+            Scalar::from("hello world")
+        );
+        assert_eq!(
+            scalar_at(&binary_arr, 1).unwrap(),
+            Scalar::from("hello world this is a long string")
+        );
     }
 
     #[test]
     pub fn slice() {
         let binary_arr = binary_array().slice(1, 2).unwrap();
         assert_eq!(
-            scalar_at(&binary_arr, 0),
-            Ok("hello world this is a long string".into())
+            scalar_at(&binary_arr, 0).unwrap(),
+            Scalar::from("hello world this is a long string")
         );
     }
 }

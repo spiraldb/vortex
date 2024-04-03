@@ -3,13 +3,13 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use itertools::Itertools;
-
 use DType::*;
 
 use crate::CompositeID;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Nullability {
+    #[default]
     NonNullable,
     Nullable,
 }
@@ -35,7 +35,6 @@ impl Display for Nullability {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Signedness {
-    Unknown,
     Unsigned,
     Signed,
 }
@@ -53,7 +52,6 @@ impl From<bool> for Signedness {
 impl Display for Signedness {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Signedness::Unknown => write!(f, "unknown"),
             Signedness::Unsigned => write!(f, "unsigned"),
             Signedness::Signed => write!(f, "signed"),
         }
@@ -62,7 +60,6 @@ impl Display for Signedness {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum IntWidth {
-    Unknown,
     _8,
     _16,
     _32,
@@ -76,7 +73,7 @@ impl From<u16> for IntWidth {
             16 => IntWidth::_16,
             32 => IntWidth::_32,
             64 => IntWidth::_64,
-            _ => IntWidth::Unknown,
+            _ => panic!("Invalid int width: {}", item),
         }
     }
 }
@@ -84,7 +81,6 @@ impl From<u16> for IntWidth {
 impl Display for IntWidth {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            IntWidth::Unknown => write!(f, "_"),
             IntWidth::_8 => write!(f, "8"),
             IntWidth::_16 => write!(f, "16"),
             IntWidth::_32 => write!(f, "32"),
@@ -95,7 +91,6 @@ impl Display for IntWidth {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum FloatWidth {
-    Unknown,
     _16,
     _32,
     _64,
@@ -107,7 +102,7 @@ impl From<i8> for FloatWidth {
             16 => FloatWidth::_16,
             32 => FloatWidth::_32,
             64 => FloatWidth::_64,
-            _ => FloatWidth::Unknown,
+            _ => panic!("Invalid float width: {}", item),
         }
     }
 }
@@ -115,7 +110,6 @@ impl From<i8> for FloatWidth {
 impl Display for FloatWidth {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            FloatWidth::Unknown => write!(f, "_"),
             FloatWidth::_16 => write!(f, "16"),
             FloatWidth::_32 => write!(f, "32"),
             FloatWidth::_64 => write!(f, "64"),
@@ -208,9 +202,8 @@ impl Display for DType {
             Null => write!(f, "null"),
             Bool(n) => write!(f, "bool{}", n),
             Int(w, s, n) => match s {
-                Unknown => write!(f, "int({}){}", w, n),
-                Unsigned => write!(f, "unsigned_int({}){}", w, n),
-                Signed => write!(f, "signed_int({}){}", w, n),
+                Unsigned => write!(f, "uint({}){}", w, n),
+                Signed => write!(f, "int({}){}", w, n),
             },
             Decimal(p, s, n) => write!(f, "decimal({}, {}){}", p, s, n),
             Float(w, n) => write!(f, "float({}){}", w, n),

@@ -5,15 +5,15 @@ use arrow::pyarrow::FromPyArrow;
 use arrow::record_batch::RecordBatchReader;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-
-use crate::array::PyArray;
-use crate::vortex_arrow::map_arrow_err;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::IntoArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::arrow::FromArrowType;
 use vortex::encode::FromArrowArray;
 use vortex_schema::DType;
+
+use crate::array::PyArray;
+use crate::vortex_arrow::map_arrow_err;
 
 /// The main entry point for creating enc arrays from other Python objects.
 ///

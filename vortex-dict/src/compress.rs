@@ -4,9 +4,9 @@ use ahash::RandomState;
 use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
 use num_traits::AsPrimitive;
-
 use vortex::array::bool::BoolArray;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
+use vortex::array::validity::Validity;
 use vortex::array::varbin::{VarBinArray, VarBinEncoding};
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
@@ -14,7 +14,6 @@ use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::AsBytes;
 use vortex::stats::Stat;
-use vortex::validity::Validity;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
@@ -242,10 +241,10 @@ where
 #[cfg(test)]
 mod test {
     use std::str;
+
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
-    use vortex::ptype::PType;
     use vortex::scalar::PrimitiveScalar;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
@@ -276,11 +275,17 @@ mod test {
             &[1, 1, 0, 2, 2, 0, 2, 0]
         );
         assert_eq!(
-            scalar_at(&values, 0),
-            Ok(PrimitiveScalar::none(PType::I32).into())
+            scalar_at(&values, 0).unwrap(),
+            PrimitiveScalar::nullable::<i32>(None).into()
         );
-        assert_eq!(scalar_at(&values, 1), Ok(1.into()));
-        assert_eq!(scalar_at(&values, 2), Ok(3.into()));
+        assert_eq!(
+            scalar_at(&values, 1).unwrap(),
+            PrimitiveScalar::nullable(Some(1)).into()
+        );
+        assert_eq!(
+            scalar_at(&values, 2).unwrap(),
+            PrimitiveScalar::nullable(Some(3)).into()
+        );
     }
 
     #[test]

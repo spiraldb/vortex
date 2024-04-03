@@ -7,7 +7,6 @@ use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
 use vortex::datetime::{LocalDateTime, LocalDateTimeArray, LocalDateTimeExtension, TimeUnit};
 use vortex::ptype::PType;
-use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
 use crate::{DateTimeArray, DateTimeEncoding};

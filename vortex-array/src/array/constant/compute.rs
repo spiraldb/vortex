@@ -1,12 +1,13 @@
 use itertools::Itertools;
-
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
+use vortex_schema::Nullability;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::validity::Validity;
+use crate::array::{Array, ArrayRef, ArrayValidity};
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
@@ -44,34 +45,35 @@ impl AsContiguousFn for ConstantArray {
             .into_array())
         } else {
             // TODO(ngates): we need to flatten the constant arrays and then concatenate them
-            Err("Cannot concatenate constant arrays with differing scalars".into())
+            Err(vortex_err!(
+                "Cannot concatenate constant arrays with differing scalars"
+            ))
         }
     }
 }
 
 impl FlattenFn for ConstantArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
+        let validity = match self.nullability() {
+            Nullability::NonNullable => None,
+            Nullability::Nullable => Some(match self.scalar().is_null() {
+                true => Validity::Invalid(self.len()),
+                false => Validity::Valid(self.len()),
+            }),
+        };
+
         Ok(match self.scalar() {
-            Scalar::Bool(b) => {
-                if let Some(bv) = b.value() {
-                    FlattenedArray::Bool(BoolArray::from(vec![bv; self.len()]))
-                } else {
-                    FlattenedArray::Bool(BoolArray::null(self.len()))
-                }
-            }
+            Scalar::Bool(b) => FlattenedArray::Bool(BoolArray::from_nullable(
+                vec![b.value().copied().unwrap_or_default(); self.len()],
+                validity,
+            )),
             Scalar::Primitive(p) => {
-                if let Some(ps) = p.value() {
-                    match_each_native_ptype!(ps.ptype(), |$P| {
-                        FlattenedArray::Primitive(PrimitiveArray::from_value::<$P>(
-                            $P::try_from(self.scalar())?,
-                            self.len(),
-                        ))
-                    })
-                } else {
-                    match_each_native_ptype!(p.ptype(), |$P| {
-                        FlattenedArray::Primitive(PrimitiveArray::null::<$P>(self.len()))
-                    })
-                }
+                match_each_native_ptype!(p.ptype(), |$P| {
+                    FlattenedArray::Primitive(PrimitiveArray::from_nullable::<$P>(
+                        vec![$P::try_from(self.scalar())?; self.len()],
+                        validity,
+                    ))
+                })
             }
             _ => panic!("Unsupported scalar type {}", self.dtype()),
         })

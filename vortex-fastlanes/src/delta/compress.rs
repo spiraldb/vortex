@@ -1,20 +1,20 @@
 use std::mem::size_of;
 
 use arrayref::array_ref;
+use fastlanez::{transpose, untranspose_into, Delta};
 use num_traits::{WrappingAdd, WrappingSub};
-
-use fastlanez_sys::{transpose, untranspose, Delta};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::array::validity::Validity;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::compute::flatten::flatten_primitive;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
-use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
+use crate::downcast::DowncastFastlanes;
 use crate::{DeltaArray, DeltaEncoding};
 
 impl EncodingCompression for DeltaEncoding {
@@ -41,7 +41,7 @@ impl EncodingCompression for DeltaEncoding {
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let parray = array.as_primitive();
-        let like_delta = like.map(|l| l.as_any().downcast_ref::<DeltaArray>().unwrap());
+        let like_delta = like.map(|l| l.as_delta());
 
         let validity = ctx.compress_validity(parray.validity())?;
 
@@ -51,7 +51,13 @@ impl EncodingCompression for DeltaEncoding {
         // Compress the filled array
         let (bases, deltas) = match_each_integer_ptype!(parray.ptype(), |$T| {
             let (bases, deltas) = compress_primitive(filled.as_primitive().typed_data::<$T>());
-            (PrimitiveArray::from(bases), PrimitiveArray::from(deltas))
+            let base_validity = validity.is_some().then(|| Validity::Valid(bases.len()));
+            let delta_validity = validity.is_some().then(|| Validity::Valid(deltas.len()));
+            (
+                // To preserve nullability, we include Validity
+                PrimitiveArray::from_nullable(bases, base_validity),
+                PrimitiveArray::from_nullable(deltas, delta_validity),
+            )
         });
 
         // Recursively compress the bases and deltas
@@ -80,7 +86,7 @@ where
     let mut bases = Vec::with_capacity(num_chunks * lanes + 1);
     let mut deltas = Vec::with_capacity(array.len());
 
-    // Loop over all of the 1024-element chunks.
+    // Loop over all the 1024-element chunks.
     if num_chunks > 0 {
         let mut transposed: [T; 1024] = [T::default(); 1024];
         let mut base = [T::default(); 128 / size_of::<T>()];
@@ -159,7 +165,7 @@ where
             // Initialize the base vector for this chunk
             base.copy_from_slice(&bases[i * lanes..(i + 1) * lanes]);
             Delta::decode_transposed(chunk, &mut base, &mut transposed);
-            untranspose(&transposed, &mut output);
+            untranspose_into(&transposed, &mut output);
         }
     }
     assert_eq!(output.len() % 1024, 0);
@@ -184,7 +190,7 @@ where
 mod test {
     use std::sync::Arc;
 
-    use vortex::array::{Encoding, EncodingRef};
+    use vortex::encoding::{Encoding, EncodingRef};
 
     use super::*;
 
@@ -212,7 +218,7 @@ mod test {
             .unwrap();
 
         assert_eq!(compressed.encoding().id(), DeltaEncoding.id());
-        let delta = compressed.as_any().downcast_ref::<DeltaArray>().unwrap();
+        let delta = compressed.as_delta();
 
         let decompressed = decompress(delta).unwrap();
         let decompressed_slice = decompressed.typed_data::<T>();

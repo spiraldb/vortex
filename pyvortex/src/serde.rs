@@ -3,7 +3,6 @@ use std::io::{ErrorKind, Read, Write};
 
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::{ffi, pyfunction, FromPyPointer, IntoPy, Py, PyAny, PyResult, Python};
-
 use vortex::serde::{ReadCtx, WriteCtx};
 
 use crate::array::PyArray;

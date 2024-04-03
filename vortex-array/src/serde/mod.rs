@@ -1,27 +1,70 @@
 use std::io;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{Cursor, ErrorKind, Read, Write};
 
 use arrow_buffer::buffer::{Buffer, MutableBuffer};
+use arrow_buffer::BooleanBuffer;
+use flatbuffers::root;
+use itertools::Itertools;
+use vortex_error::{vortex_err, VortexResult};
+use vortex_schema::DTypeSerdeContext;
+use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-use vortex_error::{VortexError, VortexResult};
-use vortex_schema::{
-    DType, FbDeserialize, FbSerialize, IntWidth, Nullability, SchemaError, Signedness,
-};
-
-use crate::array::composite::find_extension_id;
-use crate::array::{Array, ArrayRef, EncodingId, ENCODINGS};
+use crate::array::composite::COMPOSITE_EXTENSIONS;
+use crate::array::validity::Validity;
+use crate::array::{Array, ArrayRef};
+use crate::encoding::{find_encoding, EncodingId, ENCODINGS};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 use crate::serde::ptype::PTypeTag;
-use crate::validity::Validity;
 
+pub mod context;
+pub mod data;
 mod ptype;
+pub mod view;
+
+pub use view::*;
+use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
+
+use crate::array::bool::BoolArray;
+use crate::compute::ArrayCompute;
 
 pub trait ArraySerde {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>>;
 }
 
 pub trait EncodingSerde {
+    fn validate(&self, _view: &ArrayView) -> VortexResult<()> {
+        Ok(())
+        // todo!("Validate not implemented for {}", _view.encoding().id());
+    }
+
+    fn to_array(&self, view: &ArrayView) -> ArrayRef {
+        BoolArray::new(
+            BooleanBuffer::new(view.buffers().first().unwrap().clone(), 0, view.len()),
+            view.child(0, &Validity::DTYPE)
+                .map(|c| Validity::Array(c.into_array())),
+        )
+        .into_array()
+    }
+
+    // TODO(ngates): remove this ideally? It can error... Maybe store lengths in array views?
+    fn len(&self, _view: &ArrayView) -> usize {
+        todo!(
+            "EncodingSerde.len not implemented for {}",
+            _view.encoding().id()
+        );
+    }
+
+    fn with_view_compute<'view>(
+        &self,
+        _view: &'view ArrayView,
+        _f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        Err(vortex_err!(ComputeError: "Compute not implemented"))
+    }
+
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef>;
 }
 
@@ -32,6 +75,22 @@ where
     fn serialize(&self) -> Vec<u8>;
 
     fn deserialize(data: &[u8]) -> VortexResult<Self>;
+}
+
+impl BytesSerde for usize {
+    fn serialize(&self) -> Vec<u8> {
+        let mut vec = Vec::new();
+        // IOError only happens on EOF.
+        leb128::write::unsigned(&mut vec, *self as u64).unwrap();
+        vec
+    }
+
+    fn deserialize(data: &[u8]) -> VortexResult<Self> {
+        let mut cursor = Cursor::new(data);
+        leb128::read::unsigned(&mut cursor)
+            .map(|v| v as usize)
+            .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse leb128 {}", e))
+    }
 }
 
 pub struct ReadCtx<'a> {
@@ -84,15 +143,25 @@ impl<'a> ReadCtx<'a> {
     #[inline]
     pub fn dtype(&mut self) -> VortexResult<DType> {
         let dtype_bytes = self.read_slice()?;
-        DType::deserialize(&dtype_bytes, find_extension_id).map_err(|e| match e {
-            SchemaError::InvalidArgument(s) => VortexError::InvalidArgument(s),
-        })
+        let ctx = DTypeSerdeContext::new(COMPOSITE_EXTENSIONS.iter().map(|e| e.id()).collect_vec());
+        DType::read_flatbuffer(
+            &ctx,
+            &(root::<vortex_schema::flatbuffers::DType>(&dtype_bytes)?),
+        )
     }
 
     pub fn ptype(&mut self) -> VortexResult<PType> {
         let typetag = PTypeTag::try_from(self.read_nbytes::<1>()?[0])
             .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))?;
         Ok(typetag.into())
+    }
+
+    pub fn nullability(&mut self) -> VortexResult<Nullability> {
+        match self.read_nbytes::<1>()? {
+            [0] => Ok(Nullability::NonNullable),
+            [1] => Ok(Nullability::Nullable),
+            _ => Err(vortex_err!("Invalid nullability tag")),
+        }
     }
 
     #[inline]
@@ -131,7 +200,7 @@ impl<'a> ReadCtx<'a> {
 
     pub fn read_usize(&mut self) -> VortexResult<usize> {
         leb128::read::unsigned(self.r)
-            .map_err(|_| VortexError::InvalidArgument("Failed to parse leb128 usize".into()))
+            .map_err(|_| vortex_err!("Failed to parse leb128 usize"))
             .map(|u| u as usize)
     }
 
@@ -166,17 +235,12 @@ impl<'a> ReadCtx<'a> {
 
     pub fn read(&mut self) -> VortexResult<ArrayRef> {
         let encoding_id = self.read_usize()?;
-        if let Some(serde) = ENCODINGS
-            .iter()
-            .filter(|e| e.id().name() == self.encodings[encoding_id].name())
-            .flat_map(|e| e.serde())
-            .next()
+        if let Some(serde) =
+            find_encoding(self.encodings[encoding_id].name()).and_then(|e| e.serde())
         {
             serde.read(self)
         } else {
-            Err(VortexError::InvalidArgument(
-                "Failed to recognize encoding ID".into(),
-            ))
+            Err(vortex_err!("Failed to recognize encoding ID",))
         }
     }
 }
@@ -196,12 +260,19 @@ impl<'a> WriteCtx<'a> {
     }
 
     pub fn dtype(&mut self, dtype: &DType) -> VortexResult<()> {
-        let (bytes, head) = dtype.serialize();
-        self.write_slice(&bytes[head..])
+        let (bytes, offset) = dtype.flatbuffer_to_bytes();
+        self.write_slice(&bytes[offset..])
     }
 
     pub fn ptype(&mut self, ptype: PType) -> VortexResult<()> {
         self.write_fixed_slice([PTypeTag::from(ptype).into()])
+    }
+
+    pub fn nullability(&mut self, nullability: Nullability) -> VortexResult<()> {
+        match nullability {
+            Nullability::NonNullable => self.write_fixed_slice([0u8]),
+            Nullability::Nullable => self.write_fixed_slice([1u8]),
+        }
     }
 
     pub fn scalar(&mut self, scalar: &Scalar) -> VortexResult<()> {
@@ -210,7 +281,7 @@ impl<'a> WriteCtx<'a> {
 
     pub fn write_usize(&mut self, u: usize) -> VortexResult<()> {
         leb128::write::unsigned(self.w, u as u64)
-            .map_err(|_| VortexError::InvalidArgument("Failed to write leb128 usize".into()))
+            .map_err(|_| vortex_err!("Failed to write leb128 usize"))
             .map(|_| ())
     }
 
@@ -283,8 +354,9 @@ impl<'a> WriteCtx<'a> {
             .ok_or(io::Error::new(ErrorKind::InvalidInput, "unknown encoding"))?;
         self.write_usize(encoding_id)?;
         array.serde().map(|s| s.write(self)).unwrap_or_else(|| {
-            Err(VortexError::InvalidArgument(
-                format!("Serialization not supported for {}", array.encoding().id()).into(),
+            Err(vortex_err!(
+                "Serialization not supported for {}",
+                array.encoding().id()
             ))
         })
     }

@@ -9,6 +9,10 @@ impl ArraySerde for ZigZagArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.write(self.encoded())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(None)
+    }
 }
 
 impl EncodingSerde for ZigZagEncoding {

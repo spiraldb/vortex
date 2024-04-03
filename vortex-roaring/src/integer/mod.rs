@@ -1,19 +1,18 @@
 use std::sync::{Arc, RwLock};
 
-use croaring::{Bitmap, Native};
-
 use compress::roaring_encode;
-use vortex::array::{
-    check_slice_bounds, Array, ArrayKind, ArrayRef, Encoding, EncodingId, EncodingRef,
-};
+use croaring::{Bitmap, Native};
+use vortex::array::validity::Validity;
+use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
+use vortex::compute::ArrayCompute;
+use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::impl_array;
 use vortex::ptype::PType;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
-use vortex_error::VortexResult;
+use vortex::{impl_array, ArrayWalker};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
 mod compress;
@@ -35,7 +34,7 @@ impl RoaringIntArray {
 
     pub fn try_new(bitmap: Bitmap, ptype: PType) -> VortexResult<Self> {
         if !ptype.is_unsigned_int() {
-            return Err("RoaringInt expected unsigned int".into());
+            vortex_bail!("RoaringInt expected unsigned int");
         }
 
         Ok(Self {
@@ -56,7 +55,7 @@ impl RoaringIntArray {
     pub fn encode(array: &dyn Array) -> VortexResult<Self> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(roaring_encode(p)),
-            _ => Err("RoaringInt can only encode primitive arrays".into()),
+            _ => Err(vortex_err!("RoaringInt can only encode primitive arrays")),
         }
     }
 }
@@ -101,20 +100,22 @@ impl Array for RoaringIntArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
-}
 
-impl ArrayDisplay for RoaringIntArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.property("bitmap", format!("{:?}", self.bitmap()))
-    }
-}
-
-impl ArrayValidity for RoaringIntArray {
     fn validity(&self) -> Option<Validity> {
         match self.dtype().is_nullable() {
             true => Some(Validity::Valid(self.len())),
             false => None,
         }
+    }
+
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        todo!()
+    }
+}
+
+impl ArrayDisplay for RoaringIntArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        f.property("bitmap", format!("{:?}", self.bitmap()))
     }
 }
 
@@ -152,8 +153,8 @@ mod test {
         let ints = PrimitiveArray::from(vec![2u32, 12, 22, 32]);
         let array = RoaringIntArray::encode(&ints)?;
 
-        assert_eq!(scalar_at(&array, 0), Ok(2u32.into()));
-        assert_eq!(scalar_at(&array, 1), Ok(12u32.into()));
+        assert_eq!(scalar_at(&array, 0).unwrap(), 2u32.into());
+        assert_eq!(scalar_at(&array, 1).unwrap(), 12u32.into());
 
         Ok(())
     }

@@ -1,8 +1,9 @@
+use flexbuffers::Builder;
 use vortex_error::VortexResult;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
+use crate::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for ChunkedArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
@@ -12,9 +13,27 @@ impl ArraySerde for ChunkedArray {
         }
         Ok(())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        // TODO(ngates) #163 - the chunk lengths should probably themselves be an array?
+        let mut builder = Builder::default();
+        let mut vec = builder.start_vector();
+        for end in self.chunk_ends() {
+            vec.push(*end);
+        }
+        vec.end_vector();
+        Ok(Some(builder.take_buffer()))
+    }
 }
 
 impl EncodingSerde for ChunkedEncoding {
+    fn len(&self, view: &ArrayView) -> usize {
+        (0..view.nchildren())
+            .map(|c| view.child(c, view.dtype()).unwrap())
+            .map(|v| v.len())
+            .sum()
+    }
+
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let chunk_len = ctx.read_usize()?;
         let mut chunks = Vec::<ArrayRef>::with_capacity(chunk_len);

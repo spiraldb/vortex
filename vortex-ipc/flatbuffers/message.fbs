@@ -1,0 +1,55 @@
+include "vortex-array/flatbuffers/array.fbs";
+include "vortex-schema/flatbuffers/dtype.fbs";
+
+namespace vortex.ipc;
+
+enum Version: uint8 {
+  V0 = 0,
+}
+
+table Context {
+    encodings: [Encoding];
+}
+
+table Encoding {
+    id: string;
+}
+
+table Schema {
+    dtype: vortex.dtype.DType;
+}
+
+table Chunk {
+    // Indicates the forward offsets for each ChunkColumn message.
+    column_offsets: [uint64];
+}
+
+enum Compression: uint8 {
+    None = 0,
+}
+
+struct Buffer {
+    offset: uint64;
+    length: uint64;
+    compression: Compression;
+}
+
+table ChunkColumn {
+    array: vortex.array.Array;
+    buffers: [Buffer];
+    buffer_size: uint64;
+}
+
+union MessageHeader {
+  Context,
+  Schema,
+  Chunk,
+  ChunkColumn,
+}
+
+table Message {
+  version: Version = V0;
+  header: MessageHeader;
+}
+
+root_type Message;

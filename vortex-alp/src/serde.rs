@@ -1,9 +1,9 @@
-use crate::alp::Exponents;
 use vortex::array::{Array, ArrayRef};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FloatWidth, Signedness};
 
+use crate::alp::Exponents;
 use crate::ALPArray;
 use crate::ALPEncoding;
 
@@ -13,6 +13,10 @@ impl ArraySerde for ALPArray {
         ctx.write_fixed_slice([self.exponents().e, self.exponents().f])?;
         ctx.write(self.encoded())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(Some(vec![self.exponents().e, self.exponents().f]))
+    }
 }
 
 impl EncodingSerde for ALPEncoding {
@@ -20,12 +24,13 @@ impl EncodingSerde for ALPEncoding {
         let patches = ctx.read_optional_array()?;
         let exponents = ctx.read_nbytes::<2>()?;
         let encoded_dtype = match ctx.schema() {
-            DType::Float(width, nullability) => match width {
-                FloatWidth::_32 => DType::Int(32.into(), Signedness::Signed, *nullability),
-                FloatWidth::_64 => DType::Int(64.into(), Signedness::Signed, *nullability),
-                _ => return Err(VortexError::InvalidDType(ctx.schema().clone())),
-            },
-            _ => return Err(VortexError::InvalidDType(ctx.schema().clone())),
+            DType::Float(FloatWidth::_32, nullability) => {
+                DType::Int(32.into(), Signedness::Signed, *nullability)
+            }
+            DType::Float(FloatWidth::_64, nullability) => {
+                DType::Int(64.into(), Signedness::Signed, *nullability)
+            }
+            _ => vortex_bail!(MismatchedTypes: "f32 or f64", ctx.schema()),
         };
         let encoded = ctx.with_schema(&encoded_dtype).read()?;
         Ok(ALPArray::new(

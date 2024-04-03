@@ -1,5 +1,4 @@
 use itertools::Itertools;
-
 use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;

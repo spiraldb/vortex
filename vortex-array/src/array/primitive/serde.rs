@@ -1,9 +1,10 @@
 use vortex_error::VortexResult;
 
-use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
+use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding, PrimitiveView};
 use crate::array::{Array, ArrayRef};
-use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
-use crate::validity::ArrayValidity;
+use crate::compute::ArrayCompute;
+use crate::match_each_native_ptype;
+use crate::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for PrimitiveArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
@@ -11,9 +12,24 @@ impl ArraySerde for PrimitiveArray {
         ctx.write_validity(self.validity())?;
         ctx.write_buffer(self.len(), self.buffer())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(None)
+    }
 }
 
 impl EncodingSerde for PrimitiveEncoding {
+    fn with_view_compute<'view>(
+        &self,
+        view: &'view ArrayView,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        let view = PrimitiveView::try_new(view)?;
+        match_each_native_ptype!(view.ptype(), |$T| {
+            f(&view.as_trait::<$T>())
+        })
+    }
+
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let ptype = ctx.ptype()?;
         let validity = ctx.read_validity()?;
@@ -26,8 +42,8 @@ impl EncodingSerde for PrimitiveEncoding {
 mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
+    use crate::array::Array;
     use crate::serde::test::roundtrip_array;
-    use crate::validity::ArrayValidity;
 
     #[test]
     fn roundtrip() {

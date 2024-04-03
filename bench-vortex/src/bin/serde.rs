@@ -1,10 +1,11 @@
+use bench_vortex::reader::take_vortex;
 use bench_vortex::setup_logger;
-use bench_vortex::taxi_data::{take_taxi_data, write_taxi_data};
+use bench_vortex::taxi_data::taxi_data_vortex;
 use log::LevelFilter;
 
 pub fn main() {
-    setup_logger(LevelFilter::Debug);
-    let taxi_spiral = write_taxi_data();
-    let rows = take_taxi_data(&taxi_spiral, &[10, 11, 12, 13]); //, 100_000, 3_000_000]);
+    setup_logger(LevelFilter::Error);
+    let taxi_vortex = taxi_data_vortex();
+    let rows = take_vortex(&taxi_vortex, &[10, 11, 12, 13, 100_000, 3_000_000]).unwrap();
     println!("TAKE TAXI DATA: {:?}", rows);
 }

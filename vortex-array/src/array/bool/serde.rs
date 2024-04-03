@@ -1,20 +1,26 @@
 use arrow_buffer::buffer::BooleanBuffer;
-
 use vortex_error::VortexResult;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
-use crate::validity::ArrayValidity;
+use crate::serde::{ArraySerde, ArrayView, BytesSerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for BoolArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
         ctx.write_validity(self.validity())?;
         ctx.write_buffer(self.len(), &self.buffer().sliced())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(Some(self.len().serialize()))
+    }
 }
 
 impl EncodingSerde for BoolEncoding {
+    fn len(&self, view: &ArrayView) -> usize {
+        usize::deserialize(view.metadata().unwrap()).unwrap()
+    }
+
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let validity = ctx.read_validity()?;
         let (logical_len, buf) = ctx.read_buffer(|len| (len + 7) / 8)?;
@@ -26,8 +32,8 @@ impl EncodingSerde for BoolEncoding {
 mod test {
     use crate::array::bool::BoolArray;
     use crate::array::downcast::DowncastArrayBuiltin;
+    use crate::array::Array;
     use crate::serde::test::roundtrip_array;
-    use crate::validity::ArrayValidity;
 
     #[test]
     fn roundtrip() {

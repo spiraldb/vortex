@@ -1,7 +1,6 @@
 use arrow_buffer::BooleanBufferBuilder;
 use itertools::Itertools;
-
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
@@ -81,8 +80,8 @@ impl FlattenFn for SparseArray {
                 )))
             })
         } else {
-            Err(VortexError::InvalidArgument(
-                "Cannot flatten SparseArray with non-primitive values".into(),
+            Err(vortex_err!(
+                "Cannot flatten SparseArray with non-primitive values"
             ))
         }
     }

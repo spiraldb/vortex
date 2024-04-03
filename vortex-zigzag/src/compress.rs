@@ -1,16 +1,15 @@
-use zigzag::ZigZag;
-
-use crate::downcast::DowncastZigzag;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::array::validity::Validity;
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
-use vortex::validity::{ArrayValidity, Validity};
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 use vortex_error::VortexResult;
+use zigzag::ZigZag;
 
+use crate::downcast::DowncastZigzag;
 use crate::zigzag::{ZigZagArray, ZigZagEncoding};
 
 impl EncodingCompression for ZigZagEncoding {

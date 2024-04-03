@@ -1,6 +1,7 @@
+use std::sync::Arc;
+
 use paste::paste;
 use pyo3::prelude::*;
-
 use vortex::array::bool::{BoolArray, BoolEncoding};
 use vortex::array::chunked::{ChunkedArray, ChunkedEncoding};
 use vortex::array::composite::{CompositeArray, CompositeEncoding};
@@ -10,7 +11,9 @@ use vortex::array::sparse::{SparseArray, SparseEncoding};
 use vortex::array::struct_::{StructArray, StructEncoding};
 use vortex::array::varbin::{VarBinArray, VarBinEncoding};
 use vortex::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
-use vortex::array::{Array, ArrayKind, ArrayRef, EncodingRef};
+use vortex::array::{Array, ArrayKind, ArrayRef};
+use vortex::compute::take::take;
+use vortex::encoding::EncodingRef;
 use vortex_alp::{ALPArray, ALPEncoding};
 use vortex_dict::{DictArray, DictEncoding};
 use vortex_fastlanes::{
@@ -23,8 +26,6 @@ use vortex_zigzag::{ZigZagArray, ZigZagEncoding};
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
 use crate::vortex_arrow;
-use std::sync::Arc;
-use vortex::compute::take::take;
 
 #[pyclass(name = "Array", module = "vortex", sequence, subclass)]
 pub struct PyArray {

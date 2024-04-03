@@ -2,18 +2,17 @@ use std::sync::{Arc, RwLock};
 
 use itertools::Itertools;
 use linkme::distributed_slice;
-
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::{
-    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
-};
+use crate::array::validity::Validity;
+use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::compute::ArrayCompute;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
 
 mod compute;
 mod serde;
@@ -35,10 +34,7 @@ impl ChunkedArray {
     pub fn try_new(chunks: Vec<ArrayRef>, dtype: DType) -> VortexResult<Self> {
         for chunk in &chunks {
             if chunk.dtype() != &dtype {
-                return Err(VortexError::MismatchedTypes(
-                    dtype.clone(),
-                    chunk.dtype().clone(),
-                ));
+                vortex_bail!(MismatchedTypes: dtype, chunk.dtype());
             }
         }
         let chunk_ends = chunks
@@ -148,9 +144,7 @@ impl Array for ChunkedArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
-}
 
-impl ArrayValidity for ChunkedArray {
     fn validity(&self) -> Option<Validity> {
         if !self.dtype.is_nullable() {
             return None;
@@ -161,6 +155,13 @@ impl ArrayValidity for ChunkedArray {
                 .validity()
                 .unwrap_or_else(|| Validity::Valid(chunk.len()))
         })))
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        for chunk in self.chunks() {
+            walker.visit_child(chunk)?;
+        }
+        Ok(())
     }
 }
 

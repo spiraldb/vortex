@@ -3,8 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use itertools::Itertools;
-
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::scalar::Scalar;
@@ -42,7 +41,10 @@ impl StructScalar {
         match dtype {
             DType::Struct(names, field_dtypes) => {
                 if field_dtypes.len() != self.values.len() {
-                    return Err(VortexError::InvalidDType(dtype.clone()));
+                    vortex_bail!(
+                        MismatchedTypes: format!("Struct with {} fields", self.values.len()),
+                        dtype
+                    );
                 }
 
                 let new_fields: Vec<Scalar> = self
@@ -58,7 +60,7 @@ impl StructScalar {
                 );
                 Ok(StructScalar::new(new_type, new_fields).into())
             }
-            _ => Err(VortexError::InvalidDType(dtype.clone())),
+            _ => Err(vortex_err!(MismatchedTypes: "struct", dtype)),
         }
     }
 

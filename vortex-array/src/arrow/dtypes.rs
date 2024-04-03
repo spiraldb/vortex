@@ -3,8 +3,7 @@ use std::sync::Arc;
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::{DataType, Field, SchemaRef};
 use itertools::Itertools;
-
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::{DType, FloatWidth, IntWidth, Nullability};
 
 use crate::arrow::FromArrowType;
@@ -29,11 +28,14 @@ impl TryFrom<&DataType> for PType {
             DataType::Float64 => Ok(PType::F64),
             DataType::Time32(_) => Ok(PType::I32),
             DataType::Time64(_) => Ok(PType::I64),
-            DataType::Timestamp(_, _) => Ok(PType::I64),
+            DataType::Timestamp(..) => Ok(PType::I64),
             DataType::Date32 => Ok(PType::I32),
             DataType::Date64 => Ok(PType::I64),
             DataType::Duration(_) => Ok(PType::I64),
-            _ => Err(VortexError::InvalidArrowDataType(value.clone())),
+            _ => Err(vortex_err!(
+                "Arrow datatype {:?} cannot be converted to ptype",
+                value
+            )),
         }
     }
 }

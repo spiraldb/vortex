@@ -1,8 +1,9 @@
 use core::ptr::NonNull;
 
-use super::VORTEX_ALIGNMENT;
 use allocator_api2::alloc::*;
 use allocator_api2::vec::Vec;
+
+use super::VORTEX_ALIGNMENT;
 
 #[derive(Copy, Clone, Debug)]
 pub struct AlignedAllocator {

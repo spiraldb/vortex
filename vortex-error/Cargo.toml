@@ -17,7 +17,8 @@ path = "src/lib.rs"
 
 [dependencies]
 arrow-schema = { workspace = true }
-vortex-schema = { path = "../vortex-schema" }
+flatbuffers = { workspace = true }
+parquet = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [lints]

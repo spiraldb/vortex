@@ -1,8 +1,7 @@
-use linkme::distributed_slice;
-use vortex::array::{EncodingRef, ENCODINGS};
-
 pub use compress::*;
 pub use dict::*;
+use linkme::distributed_slice;
+use vortex::encoding::{EncodingRef, ENCODINGS};
 
 mod compress;
 mod compute;

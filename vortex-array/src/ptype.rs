@@ -1,11 +1,10 @@
-use arrow_buffer::ArrowNativeType;
 use std::fmt::{Debug, Display, Formatter};
 use std::panic::RefUnwindSafe;
 
+use arrow_buffer::ArrowNativeType;
 use half::f16;
 use num_traits::{Num, NumCast};
-
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::DType::*;
 use vortex_schema::{DType, FloatWidth, IntWidth};
 
@@ -44,6 +43,7 @@ pub trait NativePType:
     + Into<Scalar>
     + TryFrom<Scalar, Error = VortexError>
     + Into<PScalar>
+    + TryFrom<PScalar, Error = VortexError>
 {
     const PTYPE: PType;
 }
@@ -182,26 +182,21 @@ impl TryFrom<&DType> for PType {
         use vortex_schema::Signedness::*;
         match value {
             Int(w, s, _) => match (w, s) {
-                (IntWidth::Unknown, Unknown | Signed) => Ok(PType::I64),
-                (IntWidth::_8, Unknown | Signed) => Ok(PType::I8),
-                (IntWidth::_16, Unknown | Signed) => Ok(PType::I16),
-                (IntWidth::_32, Unknown | Signed) => Ok(PType::I32),
-                (IntWidth::_64, Unknown | Signed) => Ok(PType::I64),
-                (IntWidth::Unknown, Unsigned) => Ok(PType::U64),
+                (IntWidth::_8, Signed) => Ok(PType::I8),
+                (IntWidth::_16, Signed) => Ok(PType::I16),
+                (IntWidth::_32, Signed) => Ok(PType::I32),
+                (IntWidth::_64, Signed) => Ok(PType::I64),
                 (IntWidth::_8, Unsigned) => Ok(PType::U8),
                 (IntWidth::_16, Unsigned) => Ok(PType::U16),
                 (IntWidth::_32, Unsigned) => Ok(PType::U32),
                 (IntWidth::_64, Unsigned) => Ok(PType::U64),
             },
             Float(f, _) => match f {
-                FloatWidth::Unknown => Ok(PType::F64),
                 FloatWidth::_16 => Ok(PType::F16),
                 FloatWidth::_32 => Ok(PType::F32),
                 FloatWidth::_64 => Ok(PType::F64),
             },
-            _ => Err(VortexError::InvalidArgument(
-                format!("Cannot convert DType {} into PType", value.clone()).into(),
-            )),
+            _ => Err(vortex_err!("Cannot convert DType {} into PType", value)),
         }
     }
 }

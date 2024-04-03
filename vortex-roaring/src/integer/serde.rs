@@ -2,7 +2,6 @@ use std::io;
 use std::io::ErrorKind;
 
 use croaring::{Bitmap, Portable};
-
 use vortex::array::{Array, ArrayRef};
 use vortex::ptype::PType;
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
@@ -15,6 +14,10 @@ impl ArraySerde for RoaringIntArray {
         let mut data = Vec::new();
         self.bitmap().serialize_into::<Portable>(&mut data);
         ctx.write_slice(data.as_slice())
+    }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(None)
     }
 }
 
@@ -37,7 +40,6 @@ impl EncodingSerde for RoaringIntEncoding {
 #[cfg(test)]
 mod test {
     use croaring::Bitmap;
-
     use vortex::ptype::PType;
 
     use crate::downcast::DowncastRoaring;

@@ -1,45 +1,49 @@
+use std::any;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use half::f16;
-
-use vortex_error::{VortexError, VortexResult};
-use vortex_schema::DType;
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_schema::{DType, Nullability};
 
 use crate::ptype::{NativePType, PType};
-use crate::scalar::composite::CompositeScalar;
 use crate::scalar::Scalar;
+use crate::{match_each_integer_ptype, match_each_native_ptype};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct PrimitiveScalar {
     ptype: PType,
+    dtype: DType,
+    nullability: Nullability,
     value: Option<PScalar>,
-    exponent: u8,
 }
 
 impl PrimitiveScalar {
-    pub fn new(ptype: PType, value: Option<PScalar>) -> Self {
-        Self {
-            ptype,
-            value,
-            exponent: 0,
+    pub fn try_new<T: NativePType>(
+        value: Option<T>,
+        nullability: Nullability,
+    ) -> VortexResult<Self> {
+        if value.is_none() && nullability == Nullability::NonNullable {
+            vortex_bail!("Value cannot be None for NonNullable Scalar");
         }
+        Ok(Self {
+            ptype: T::PTYPE,
+            dtype: DType::from(T::PTYPE).with_nullability(nullability),
+            nullability,
+            value: value.map(|v| Into::<PScalar>::into(v)),
+        })
     }
 
-    pub fn some(value: PScalar) -> Self {
-        Self {
-            ptype: value.ptype(),
-            value: Some(value),
-            exponent: 0,
-        }
+    pub fn nullable<T: NativePType>(value: Option<T>) -> Self {
+        Self::try_new(value, Nullability::Nullable).unwrap()
     }
 
-    pub fn none(ptype: PType) -> Self {
-        Self {
-            ptype,
-            value: None,
-            exponent: 0,
-        }
+    pub fn some<T: NativePType>(value: T) -> Self {
+        Self::try_new::<T>(Some(value), Nullability::default()).unwrap()
+    }
+
+    pub fn none<T: NativePType>() -> Self {
+        Self::try_new::<T>(None, Nullability::Nullable).unwrap()
     }
 
     #[inline]
@@ -47,9 +51,13 @@ impl PrimitiveScalar {
         self.value
     }
 
-    #[inline]
-    pub fn factor(&self) -> u8 {
-        self.exponent
+    pub fn typed_value<T: NativePType>(&self) -> Option<T> {
+        assert_eq!(
+            T::PTYPE,
+            self.ptype,
+            "typed_value called with incorrect ptype"
+        );
+        self.value.map(|v| v.try_into().unwrap())
     }
 
     #[inline]
@@ -59,23 +67,21 @@ impl PrimitiveScalar {
 
     #[inline]
     pub fn dtype(&self) -> &DType {
-        self.ptype.into()
+        &self.dtype
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
-        let ptype: VortexResult<PType> = dtype.try_into();
-        ptype
-            .and_then(|p| match self.value() {
-                None => Ok(PrimitiveScalar::none(p).into()),
-                Some(ps) => ps.cast_ptype(p),
-            })
-            .or_else(|_| self.cast_dtype(dtype))
-    }
-
-    // General conversion function that handles casting primitive scalar to non-primitive.
-    // TODO(robert): Implement storage conversions
-    fn cast_dtype(&self, dtype: &DType) -> VortexResult<Scalar> {
-        Ok(CompositeScalar::new(dtype.clone(), Box::new(self.clone().into())).into())
+        let ptype: PType = dtype.try_into()?;
+        match_each_native_ptype!(ptype, |$T| {
+            Ok(PrimitiveScalar::try_new(
+                self.value()
+                .map(|ps| ps.cast_ptype(ptype))
+                .transpose()?
+                .map(|s| $T::try_from(s))
+                .transpose()?,
+                self.nullability,
+            )?.into())
+        })
     }
 
     pub fn nbytes(&self) -> usize {
@@ -126,7 +132,7 @@ impl PScalar {
 
     pub fn cast_ptype(&self, ptype: PType) -> VortexResult<Scalar> {
         macro_rules! from_int {
-            ($ptype:ident , $v:ident) => {
+            ($ptype:ident, $v:ident) => {
                 match $ptype {
                     PType::U8 => Ok((*$v as u8).into()),
                     PType::U16 => Ok((*$v as u16).into()),
@@ -149,7 +155,7 @@ impl PScalar {
                     PType::F16 => Ok((f16::from_f32(*$v as f32)).into()),
                     PType::F32 => Ok((*$v as f32).into()),
                     PType::F64 => Ok((*$v as f64).into()),
-                    _ => Err(VortexError::InvalidDType(ptype.into())),
+                    _ => Err(vortex_err!(MismatchedTypes: "any float", ptype)),
                 }
             };
         }
@@ -167,7 +173,7 @@ impl PScalar {
                 PType::F16 => Ok((*v).into()),
                 PType::F32 => Ok(v.to_f32().into()),
                 PType::F64 => Ok(v.to_f64().into()),
-                _ => Err(VortexError::InvalidDType(ptype.into())),
+                _ => Err(vortex_err!(MismatchedTypes: "any float", ptype)),
             },
             PScalar::F32(v) => from_floating!(ptype, v),
             PScalar::F64(v) => from_floating!(ptype, v),
@@ -190,7 +196,7 @@ macro_rules! pscalar {
 
         impl From<$T> for Scalar {
             fn from(value: $T) -> Self {
-                PrimitiveScalar::some(PScalar::from(value)).into()
+                PrimitiveScalar::some(value).into()
             }
         }
 
@@ -204,9 +210,9 @@ macro_rules! pscalar {
                         ..
                     }) => match pscalar {
                         PScalar::$ptype(v) => Ok(*v),
-                        _ => Err(VortexError::InvalidDType(pscalar.ptype().into())),
+                        _ => Err(vortex_err!(MismatchedTypes: any::type_name::<Self>(), pscalar.ptype())),
                     },
-                    _ => Err(VortexError::InvalidDType(value.dtype().clone())),
+                    _ => Err(vortex_err!("can't extract {} from scalar: {}", any::type_name::<Self>(), value)),
                 }
             }
         }
@@ -219,11 +225,27 @@ macro_rules! pscalar {
                     Scalar::Primitive(PrimitiveScalar {
                         value: Some(pscalar),
                         ..
-                    }) => match pscalar {
-                        PScalar::$ptype(v) => Ok(v),
-                        _ => Err(VortexError::InvalidDType(pscalar.ptype().into())),
-                    },
-                    _ => Err(VortexError::InvalidDType(value.dtype().clone())),
+                    }) => pscalar.try_into(),
+                    _ => Err(vortex_err!(
+                        "Can't extract value of type {} from primitive scalar: {}",
+                        any::type_name::<Self>(),
+                        value
+                    )),
+                }
+            }
+        }
+
+        impl TryFrom<PScalar> for $T {
+            type Error = VortexError;
+
+            fn try_from(value: PScalar) -> Result<Self, Self::Error> {
+                match value {
+                    PScalar::$ptype(v) => Ok(v),
+                    _ => Err(vortex_err!(
+                        "Expected {} type but got {}",
+                        any::type_name::<Self>(),
+                        value
+                    )),
                 }
             }
         }
@@ -244,17 +266,32 @@ pscalar!(f64, F64);
 
 impl<T: NativePType> From<Option<T>> for Scalar {
     fn from(value: Option<T>) -> Self {
-        match value {
-            Some(value) => value.into(),
-            None => PrimitiveScalar::new(T::PTYPE, None).into(),
-        }
+        PrimitiveScalar::nullable(value).into()
     }
 }
 
 impl From<usize> for Scalar {
     #[inline]
     fn from(value: usize) -> Self {
-        PrimitiveScalar::new(PType::U64, Some(PScalar::U64(value as u64))).into()
+        PrimitiveScalar::some::<u64>(value as u64).into()
+    }
+}
+
+impl TryFrom<&PrimitiveScalar> for usize {
+    type Error = VortexError;
+
+    fn try_from(value: &PrimitiveScalar) -> Result<Self, Self::Error> {
+        match_each_integer_ptype!(value.ptype(), |$V| {
+            match value.typed_value::<$V>() {
+                None => Err(vortex_err!(ComputeError: "required non null scalar")),
+                Some(v) => {
+                    if is_negative(v) {
+                        vortex_bail!(ComputeError: "required positive integer");
+                    }
+                    Ok(v as usize)
+                }
+            }
+        })
     }
 }
 
@@ -262,34 +299,9 @@ impl TryFrom<Scalar> for usize {
     type Error = VortexError;
 
     fn try_from(value: Scalar) -> VortexResult<Self> {
-        macro_rules! match_each_pscalar_integer {
-            ($self:expr, | $_:tt $pscalar:ident | $($body:tt)*) => ({
-                macro_rules! __with_pscalar__ {( $_ $pscalar:ident ) => ( $($body)* )}
-                match $self {
-                    PScalar::U8(v) => __with_pscalar__! { v },
-                    PScalar::U16(v) => __with_pscalar__! { v },
-                    PScalar::U32(v) => __with_pscalar__! { v },
-                    PScalar::U64(v) => __with_pscalar__! { v },
-                    PScalar::I8(v) => __with_pscalar__! { v },
-                    PScalar::I16(v) => __with_pscalar__! { v },
-                    PScalar::I32(v) => __with_pscalar__! { v },
-                    PScalar::I64(v) => __with_pscalar__! { v },
-                    _ => Err(VortexError::InvalidDType($self.ptype().into())),
-                }
-            })
-        }
-
         match value {
-            Scalar::Primitive(PrimitiveScalar {
-                value: Some(pscalar),
-                ..
-            }) => match_each_pscalar_integer!(pscalar, |$V| {
-                if is_negative($V) {
-                    return Err(VortexError::ComputeError("required positive integer".into()));
-                }
-                Ok($V as usize)
-            }),
-            _ => Err(VortexError::InvalidDType(value.dtype().clone())),
+            Scalar::Primitive(p) => (&p).try_into(),
+            _ => Err(vortex_err!("can't extract usize out of scalar: {}", value)),
         }
     }
 }
@@ -298,34 +310,9 @@ impl TryFrom<&Scalar> for usize {
     type Error = VortexError;
 
     fn try_from(value: &Scalar) -> VortexResult<Self> {
-        macro_rules! match_each_pscalar_integer {
-            ($self:expr, | $_:tt $pscalar:ident | $($body:tt)*) => ({
-                macro_rules! __with_pscalar__ {( $_ $pscalar:ident ) => ( $($body)* )}
-                match $self {
-                    PScalar::U8(v) => __with_pscalar__! { v },
-                    PScalar::U16(v) => __with_pscalar__! { v },
-                    PScalar::U32(v) => __with_pscalar__! { v },
-                    PScalar::U64(v) => __with_pscalar__! { v },
-                    PScalar::I8(v) => __with_pscalar__! { v },
-                    PScalar::I16(v) => __with_pscalar__! { v },
-                    PScalar::I32(v) => __with_pscalar__! { v },
-                    PScalar::I64(v) => __with_pscalar__! { v },
-                    _ => Err(VortexError::InvalidDType($self.ptype().into())),
-                }
-            })
-        }
-
         match value {
-            Scalar::Primitive(PrimitiveScalar {
-                value: Some(pscalar),
-                ..
-            }) => match_each_pscalar_integer!(pscalar, |$V| {
-                if is_negative(*$V) {
-                    return Err(VortexError::ComputeError("required positive integer".into()));
-                }
-                Ok(*$V as usize)
-            }),
-            _ => Err(VortexError::InvalidDType(value.dtype().clone())),
+            Scalar::Primitive(p) => p.try_into(),
+            _ => Err(vortex_err!("can't extract usize out of scalar: {}", value)),
         }
     }
 }
@@ -359,17 +346,16 @@ mod test {
     #[test]
     fn into_from() {
         let scalar: Scalar = 10u16.into();
-        assert_eq!(scalar.clone().try_into(), Ok(10u16));
+        assert_eq!(u16::try_from(scalar.clone()).unwrap(), 10u16);
         // All integers should be convertible to usize
-        assert_eq!(scalar.try_into(), Ok(10usize));
+        assert_eq!(usize::try_from(scalar).unwrap(), 10usize);
 
         let scalar: Scalar = (-10i16).into();
-        assert_eq!(
-            scalar.try_into(),
-            Err::<usize, VortexError>(VortexError::ComputeError(
-                "required positive integer".into()
-            ))
-        );
+        let error = usize::try_from(scalar).err().unwrap();
+        let VortexError::ComputeError(s, _) = error else {
+            unreachable!()
+        };
+        assert_eq!(s.to_string(), "required positive integer");
     }
 
     #[test]

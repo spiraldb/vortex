@@ -2,15 +2,15 @@ use std::marker::PhantomData;
 
 use crate::accessor::ArrayAccessor;
 
-pub struct ArrayIter<A: ArrayAccessor<T>, T> {
-    array: A,
+pub struct ArrayIter<'a, A: ArrayAccessor<'a, T>, T> {
+    array: &'a A,
     current: usize,
     end: usize,
     phantom: PhantomData<T>,
 }
 
-impl<A: ArrayAccessor<T>, T> ArrayIter<A, T> {
-    pub fn new(array: A) -> Self {
+impl<'a, A: ArrayAccessor<'a, T>, T> ArrayIter<'a, A, T> {
+    pub fn new(array: &'a A) -> Self {
         let len = array.len();
         ArrayIter {
             array,
@@ -21,7 +21,7 @@ impl<A: ArrayAccessor<T>, T> ArrayIter<A, T> {
     }
 }
 
-impl<A: ArrayAccessor<T>, T> Iterator for ArrayIter<A, T> {
+impl<'a, A: ArrayAccessor<'a, T>, T> Iterator for ArrayIter<'a, A, T> {
     type Item = Option<T>;
 
     #[inline]
@@ -43,7 +43,7 @@ impl<A: ArrayAccessor<T>, T> Iterator for ArrayIter<A, T> {
     }
 }
 
-impl<A: ArrayAccessor<T>, T> DoubleEndedIterator for ArrayIter<A, T> {
+impl<'a, A: ArrayAccessor<'a, T>, T> DoubleEndedIterator for ArrayIter<'a, A, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.end == self.current {
             None
@@ -54,4 +54,4 @@ impl<A: ArrayAccessor<T>, T> DoubleEndedIterator for ArrayIter<A, T> {
     }
 }
 
-impl<A: ArrayAccessor<T>, T> ExactSizeIterator for ArrayIter<A, T> {}
+impl<'a, A: ArrayAccessor<'a, T>, T> ExactSizeIterator for ArrayIter<'a, A, T> {}

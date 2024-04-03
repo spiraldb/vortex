@@ -21,13 +21,13 @@ use arrow_array::{BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit};
-
 use vortex_schema::DType;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
+use crate::array::validity::Validity;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::array::IntoArray;
@@ -36,7 +36,6 @@ use crate::datetime::{LocalDateTime, LocalDateTimeArray};
 use crate::ptype::{NativePType, PType};
 use crate::scalar::NullScalar;
 use crate::stats::Stat;
-use crate::validity::Validity;
 
 pub trait FromArrowArray<A> {
     fn from_arrow(array: A, nullable: bool) -> Self;
@@ -170,6 +169,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayRef {
                 .zip(value.fields())
                 .map(|(c, field)| ArrayRef::from_arrow(c.clone(), field.is_nullable()))
                 .collect(),
+            value.len(),
         )
         .into_array()
     }

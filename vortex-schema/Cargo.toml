@@ -19,7 +19,10 @@ path = "src/lib.rs"
 arrow-schema = { workspace = true }
 flatbuffers = { workspace = true }
 itertools = { workspace = true }
+linkme = { workspace = true }
 thiserror = { workspace = true }
+vortex-error = { path = "../vortex-error" }
+vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 
 [build-dependencies]
 flatc = { workspace = true }

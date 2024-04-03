@@ -1,13 +1,15 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
+use vortex::array::validity::Validity;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
+use vortex::compute::ArrayCompute;
+use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
-use vortex::{impl_array, match_each_integer_ptype};
-use vortex_error::{VortexError, VortexResult};
+use vortex::{impl_array, match_each_integer_ptype, ArrayWalker};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 mod compress;
@@ -31,24 +33,18 @@ impl DeltaArray {
         validity: Option<Validity>,
     ) -> VortexResult<Self> {
         if bases.dtype() != deltas.dtype() {
-            return Err(VortexError::InvalidArgument(
-                format!(
-                    "DeltaArray: bases and deltas must have the same dtype, got {:?} and {:?}",
-                    bases.dtype(),
-                    deltas.dtype()
-                )
-                .into(),
-            ));
+            vortex_bail!(
+                "DeltaArray: bases and deltas must have the same dtype, got {:?} and {:?}",
+                bases.dtype(),
+                deltas.dtype()
+            );
         }
         if deltas.len() != len {
-            return Err(VortexError::InvalidArgument(
-                format!(
-                    "DeltaArray: provided deltas array of len {} does not match array len {}",
-                    deltas.len(),
-                    len
-                )
-                .into(),
-            ));
+            vortex_bail!(
+                "DeltaArray: provided deltas array of len {} does not match array len {}",
+                deltas.len(),
+                len
+            );
         }
 
         let delta = Self {
@@ -65,16 +61,13 @@ impl DeltaArray {
             num_chunks * delta.lanes() + remainder_base_size
         };
         if delta.bases.len() != expected_bases_len {
-            return Err(VortexError::InvalidArgument(
-                format!(
-                    "DeltaArray: bases.len() ({}) != expected_bases_len ({}), based on len ({}) and lane count ({})",
-                    delta.bases.len(),
-                    expected_bases_len,
-                    len,
-                    delta.lanes()
-                )
-                .into(),
-            ));
+            vortex_bail!(
+                "DeltaArray: bases.len() ({}) != expected_bases_len ({}), based on len ({}) and lane count ({})",
+                delta.bases.len(),
+                expected_bases_len,
+                len,
+                delta.lanes()
+            );
         }
         Ok(delta)
     }
@@ -93,7 +86,7 @@ impl DeltaArray {
     fn lanes(&self) -> usize {
         let ptype = self.dtype().try_into().unwrap();
         match_each_integer_ptype!(ptype, |$T| {
-            <$T as fastlanez_sys::Delta>::lanes()
+            <$T as fastlanez::Delta>::lanes()
         })
     }
 }
@@ -140,6 +133,15 @@ impl Array for DeltaArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.bases())?;
+        walker.visit_child(self.deltas())
+    }
 }
 
 impl<'arr> AsRef<(dyn Array + 'arr)> for DeltaArray {
@@ -153,12 +155,6 @@ impl ArrayDisplay for DeltaArray {
         f.child("bases", self.bases())?;
         f.child("deltas", self.deltas())?;
         f.validity(self.validity())
-    }
-}
-
-impl ArrayValidity for DeltaArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 }
 

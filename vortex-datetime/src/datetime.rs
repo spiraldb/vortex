@@ -1,13 +1,15 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
+use vortex::array::validity::Validity;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
+use vortex::compute::ArrayCompute;
+use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsCompute, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
-use vortex_error::{VortexError, VortexResult};
+use vortex::{impl_array, ArrayWalker};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 /// An array that decomposes a datetime into days, seconds, and nanoseconds.
@@ -40,13 +42,13 @@ impl DateTimeArray {
         dtype: DType,
     ) -> VortexResult<Self> {
         if !matches!(days.dtype(), DType::Int(_, _, _)) {
-            return Err(VortexError::InvalidDType(days.dtype().clone()));
+            vortex_bail!(MismatchedTypes: "any integer", days.dtype());
         }
         if !matches!(seconds.dtype(), DType::Int(_, _, _)) {
-            return Err(VortexError::InvalidDType(seconds.dtype().clone()));
+            vortex_bail!(MismatchedTypes: "any integer", seconds.dtype());
         }
         if !matches!(subsecond.dtype(), DType::Int(_, _, _)) {
-            return Err(VortexError::InvalidDType(subsecond.dtype().clone()));
+            vortex_bail!(MismatchedTypes: "any integer", subsecond.dtype());
         }
 
         Ok(Self {
@@ -116,6 +118,16 @@ impl Array for DateTimeArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.days())?;
+        walker.visit_child(self.seconds())?;
+        walker.visit_child(self.subsecond())
+    }
 }
 
 impl StatsCompute for DateTimeArray {}
@@ -125,12 +137,6 @@ impl ArrayDisplay for DateTimeArray {
         f.child("days", self.days())?;
         f.child("seconds", self.seconds())?;
         f.child("subsecond", self.subsecond())
-    }
-}
-
-impl ArrayValidity for DateTimeArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 }
 

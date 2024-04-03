@@ -74,15 +74,17 @@ canonical representations of each of the logical data types. The canonical encod
 
 ### Compressed Encodings
 
-Vortex includes a set of compressed encodings that can hold compression in-memory arrays allowing us to defer
-compression. These are:
+Vortex includes a set of highly data-parallel, vectorized encodings. These encodings each correspond to a compressed
+in-memory array implementation, allowing us to defer decompression. Currently, these are:
 
-* BitPacked
+* Adaptive Lossless Floating Point (ALP)
+* BitPacked (FastLanes)
 * Constant
 * Chunked
+* Delta (FastLanes)
 * Dictionary
 * Frame-of-Reference
-* Run-end
+* Run-end Encoding
 * RoaringUInt
 * RoaringBool
 * Sparse
@@ -90,8 +92,8 @@ compression. These are:
 
 ### Compression
 
-Vortex's compression scheme is based on
-the [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
+Vortex's top-level compression strategy is based on the
+[BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
 
 Roughly, for each chunk of data, a sample of at least ~1% of the data is taken. Compression is then attempted (
 recursively) with a set of lightweight encodings. The best-performing combination of encodings is then chosen to encode
@@ -135,13 +137,13 @@ Vortex serde is currently in the design phase. The goals of this implementation 
 * Forward statistical information (such as sortedness) to consumers.
 * To provide a building block for file format authors to store compressed array data.
 
-## Vs Apache Arrow
+## Integration with Apache Arrow
 
-It is important to note that Vortex and Arrow have different design goals. As such, it is somewhat
-unfair to make any comparison at all. But given both can be used as array libraries, it is worth noting the differences.
+Apache Arrow is the de facto standard for interoperating on columnar array data. Naturally, Vortex is designed to
+be maximally compatible with Apache Arrow. All Arrow arrays can be converted into Vortex arrays with zero-copy,
+and a Vortex array constructed from an Arrow array can be converted back to Arrow, again with zero-copy.
 
-Vortex is designed to be maximally compatible with Apache Arrow. All Arrow arrays can be converted into Vortex arrays
-with zero-copy, and a Vortex array constructed from an Arrow array can be converted back to Arrow, again with zero-copy.
+It is important to note that Vortex and Arrow have different--albeit complementary--goals.
 
 Vortex explicitly separates logical types from physical encodings, distinguishing it from Arrow. This allows
 Vortex to model more complex arrays while still exposing a logical interface. For example, Vortex can model a UTF8
@@ -153,6 +155,56 @@ In Arrow, `RunLengthArray` and `DictionaryArray` are separate incompatible types
 While we hope to turn Vortex into a community project, its current rapid rate of change makes taking contributions
 without prior discussion infeasible. If you are interested in contributing, please open an issue to discuss your ideas.
 
+## Setup
+
+This repo uses submodules for non-Rust dependencies (e.g., for the zig fastlanez repo). Before building make sure to run
+
+```bash
+git submodule update --init --recursive
+
+# Install the zig version required by fastlanez
+./zigup
+
+# Install Rye from https://rye-up.com, and setup the virtualenv
+rye sync
+```
+
 ## License
 
 Licensed under the Apache License, Version 2.0 (the "License").
+
+## Acknowledgments 🏆
+
+This project is inspired by and--in some cases--directly based upon the existing, excellent work of many researchers
+and OSS developers.
+
+In particular, the following academic papers greatly influenced the development:
+
+* Maximilian Kuschewski, David Sauerwein, Adnan Alhomssi, and Viktor Leis.
+    2023. [BtrBlocks: Efficient Columnar Compression
+          for Data Lakes](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf). Proc. ACM Manag. Data 1,
+          2,
+          Article 118 (June 2023), 14 pages. https://doi.org/10.1145/3589263
+* Azim Afroozeh and Peter
+  Boncz. [The FastLanes Compression Layout: Decoding >100 Billion Integers per Second with Scalar
+  Code](https://www.vldb.org/pvldb/vol16/p2132-afroozeh.pdf). PVLDB, 16(9): 2132 - 2144, 2023.
+* Peter Boncz, Thomas Neumann, and Viktor Leis. [FSST: Fast Random Access String
+  Compression](https://www.vldb.org/pvldb/vol13/p2649-boncz.pdf).
+  PVLDB, 13(11): 2649-2661, 2020.
+* Azim Afroozeh, Leonardo X. Kuffo, and Peter Boncz. 2023. [ALP: Adaptive Lossless floating-Point
+  Compression](https://ir.cwi.nl/pub/33334/33334.pdf). Proc. ACM
+  Manag. Data 1, 4 (SIGMOD), Article 230 (December 2023), 26 pages. https://doi.org/10.1145/3626717
+
+Additionally, we benefited greatly from:
+
+* the collected OSS work of [Daniel Lemire](https://github.com/lemire), such
+  as [FastPFor](https://github.com/lemire/FastPFor),
+  and [StreamVByte](https://github.com/lemire/streamvbyte).
+* the [parquet2](https://github.com/jorgecarleitao/parquet2) project
+  by [Jorge Leitao](https://github.com/jorgecarleitao).
+* the public discussions around choices of compression codecs, as well as the C++ implementations thereof,
+  from [duckdb](https://github.com/duckdb/duckdb).
+* the existence, ideas, & implementation of the [Apache Arrow](https://arrow.apache.org) project.
+* the [Velox](https://github.com/facebookincubator/velox) project and discussions with its maintainers.
+
+Thanks to all of the aforementioned for sharing their work and knowledge with the world! 🚀
