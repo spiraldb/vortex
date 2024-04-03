@@ -7,7 +7,7 @@ use lance::Dataset;
 use lance_parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder as LanceParquetRecordBatchReaderBuilder;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::fs::File;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::IntoArray;
@@ -24,29 +24,28 @@ pub fn download_data(fname: &str, data_url: &str) -> PathBuf {
     .unwrap()
 }
 
-pub fn data_lance(lance_fname: &str, read: File) -> PathBuf {
-    idempotent(lance_fname, |path| {
-        let write_params = WriteParams::default();
-        let reader = LanceParquetRecordBatchReaderBuilder::try_new(read)
-            .unwrap()
-            .build()
-            .unwrap();
+pub fn parquet_to_lance(lance_fname: &Path, read: File) -> PathBuf {
+    let write_params = WriteParams::default();
+    let reader = LanceParquetRecordBatchReaderBuilder::try_new(read)
+        .unwrap()
+        .build()
+        .unwrap();
 
-        Runtime::new().unwrap().block_on(Dataset::write(
+    Runtime::new()
+        .unwrap()
+        .block_on(Dataset::write(
             reader,
-            path.to_str().unwrap(),
+            lance_fname.to_str().unwrap(),
             Some(write_params),
         ))
-    })
-    .unwrap()
+        .unwrap();
+    PathBuf::from(lance_fname)
 }
 
-pub fn data_vortex(fname: &str, data_to_compress: PathBuf) -> PathBuf {
-    idempotent(fname, |path| {
-        let mut write = File::create(path).unwrap();
-        compress_parquet_to_vortex(&data_to_compress, &mut write)
-    })
-    .unwrap()
+pub fn parquet_to_vortex(output_fname: &Path, data_to_compress: PathBuf) -> PathBuf {
+    let mut write = File::create(output_fname).unwrap();
+    compress_parquet_to_vortex(&data_to_compress, &mut write).unwrap();
+    output_fname.to_path_buf()
 }
 
 pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> PathBuf {
