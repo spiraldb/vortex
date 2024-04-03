@@ -189,10 +189,7 @@ impl Array for PrimitiveArray {
         Ok(Self {
             buffer: self.buffer.slice_with_length(byte_start, byte_length),
             ptype: self.ptype,
-            validity: self
-                .validity
-                .as_ref()
-                .map(|v| v.as_view().slice(start, stop)),
+            validity: self.validity.as_ref().map(|v| v.slice(start, stop)),
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }

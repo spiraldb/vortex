@@ -97,10 +97,7 @@ impl Array for BoolArray {
         Ok(Self {
             buffer: self.buffer.slice(start, stop - start),
             stats: Arc::new(RwLock::new(StatsSet::new())),
-            validity: self
-                .validity
-                .as_ref()
-                .map(|v| v.as_view().slice(start, stop)),
+            validity: self.validity.as_ref().map(|v| v.slice(start, stop)),
         }
         .into_array())
     }

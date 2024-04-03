@@ -225,9 +225,7 @@ impl Array for VarBinArray {
             self.offsets.slice(start, stop + 1)?,
             self.bytes.clone(),
             self.dtype.clone(),
-            self.validity
-                .as_ref()
-                .map(|v| v.as_view().slice(start, stop)),
+            self.validity.as_ref().map(|v| v.slice(start, stop)),
         )
         .into_array())
     }

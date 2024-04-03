@@ -39,6 +39,10 @@ impl Validity {
         self.as_view().to_bool_array()
     }
 
+    pub fn slice(&self, start: usize, stop: usize) -> Validity {
+        self.as_view().slice(start, stop)
+    }
+
     pub fn as_view(&self) -> ValidityView {
         match self {
             Self::Valid(len) => ValidityView::Valid(*len),
@@ -152,7 +156,7 @@ impl Array for Validity {
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(self.as_view().slice(start, stop).into_array())
+        Ok(self.slice(start, stop).into_array())
     }
 
     fn encoding(&self) -> EncodingRef {

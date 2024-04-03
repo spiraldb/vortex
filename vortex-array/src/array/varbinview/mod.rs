@@ -214,10 +214,7 @@ impl Array for VarBinViewArray {
             views: self.views.slice(start * VIEW_SIZE, stop * VIEW_SIZE)?,
             data: self.data.clone(),
             dtype: self.dtype.clone(),
-            validity: self
-                .validity
-                .as_ref()
-                .map(|v| v.as_view().slice(start, stop)),
+            validity: self.validity.as_ref().map(|v| v.slice(start, stop)),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
         .into_array())

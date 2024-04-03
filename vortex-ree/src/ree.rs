@@ -141,9 +141,7 @@ impl Array for REEArray {
         Ok(Self {
             ends: self.ends.slice(slice_begin, slice_end + 1)?,
             values: self.values.slice(slice_begin, slice_end + 1)?,
-            validity: self
-                .validity()
-                .map(|v| v.as_view().slice(slice_begin, slice_end + 1)),
+            validity: self.validity().map(|v| v.slice(slice_begin, slice_end + 1)),
             offset: start,
             length: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),

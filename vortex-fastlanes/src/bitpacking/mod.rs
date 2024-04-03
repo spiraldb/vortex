@@ -123,7 +123,7 @@ impl Array for BitPackedArray {
         Self::try_new(
             self.encoded().slice(encoded_start, encoded_stop)?,
             self.validity()
-                .map(|v| v.as_view().slice(start, min(stop, self.len()))),
+                .map(|v| v.slice(start, min(stop, self.len()))),
             self.patches()
                 .map(|p| p.slice(start, min(stop, self.len())))
                 .transpose()?,
