@@ -30,8 +30,12 @@ fn pack_unpack(c: &mut Criterion) {
         b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, values.len())));
     });
 
-    c.bench_function("unpack_singles", |b| {
+    c.bench_function("unpack_all_singles", |b| {
         b.iter(|| black_box(unpack_singles(&packed, 8, values.len())));
+    });
+
+    c.bench_function("unpack_single_primitive", |b| {
+        b.iter(|| black_box(unpack_single_primitive::<u32>(&packed, 8, values.len(), 0)));
     });
 }
 
