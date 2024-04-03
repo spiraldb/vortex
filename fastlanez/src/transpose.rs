@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::mem::{MaybeUninit, size_of};
 
 use arrayref::array_mut_ref;
 use uninit::prelude::VecCapacity;
@@ -8,18 +8,9 @@ use fastlanez_sys::{
     fl_untranspose_u32, fl_untranspose_u64, fl_untranspose_u8,
 };
 
-const fn transposable<T: Sized, U: Sized>() -> bool {
-    let sizeOfT = size_of::<T>();
-    sizeOfT == size_of::<U>() && (sizeOfT == 1 || sizeOfT == 2 || sizeOfT == 4 || sizeOfT == 8)
-}
-
-pub fn transpose<T: Sized, U: Sized>(input: &[T; 1024], output: &mut [U; 1024]) {
-    assert!(
-        transposable::<T, U>(),
-        "Cannot transpose {} into {}",
-        std::any::type_name::<T>(),
-        std::any::type_name::<U>()
-    );
+#[allow(clippy::let_unit_value)]
+pub fn transpose<T: Sized, U: Transposable<T>>(input: &[T; 1024], output: &mut [U; 1024]) {
+    let _ = U::CHECK_SIZE; // compile time size check
     unsafe {
         match size_of::<T>() {
             1 => fl_transpose_u8(
@@ -51,13 +42,9 @@ pub fn transpose_into<T: Sized>(input: &[T; 1024], output: &mut Vec<T>) {
     }
 }
 
-pub fn untranspose<T: Sized, U: Sized>(input: &[T; 1024], output: &mut [U; 1024]) {
-    assert!(
-        transposable::<T, U>(),
-        "Cannot untranspose {} into {}",
-        std::any::type_name::<T>(),
-        std::any::type_name::<U>()
-    );
+#[allow(clippy::let_unit_value)]
+pub fn untranspose<T: Sized, U: Transposable<T>>(input: &[T; 1024], output: &mut [U; 1024]) {
+    let _ = U::CHECK_SIZE; // compile time size check
     unsafe {
         match size_of::<T>() {
             1 => fl_untranspose_u8(
@@ -87,6 +74,22 @@ pub fn untranspose_into<T: Sized>(input: &[T; 1024], output: &mut Vec<T>) {
         output.set_len(output.len() + input.len());
     }
 }
+
+pub trait Transposable<T: Sized> {
+    // must be referenced to force compile-time size checking
+    const CHECK_SIZE: () = {
+        assert!(
+            size_of::<T>() == 1
+                || size_of::<T>() == 2
+                || size_of::<T>() == 4
+                || size_of::<T>() == 8,
+            "T must be 1, 2, 4 or 8 bytes in size"
+        );
+    };
+}
+
+impl<T: Sized> Transposable<T> for T {}
+impl<T: Sized> Transposable<T> for MaybeUninit<T> {}
 
 #[cfg(test)]
 mod test {
