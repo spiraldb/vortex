@@ -68,7 +68,7 @@ impl EncodingCompression for FoREncoding {
             .named("for")
             .excluding(&FoREncoding)
             .compress(&child, like.map(|l| l.as_for().encoded()))?;
-        Ok(FoRArray::try_new(compressed_child, min.clone(), shift)?.into_array())
+        Ok(FoRArray::try_new(compressed_child, min, shift)?.into_array())
     }
 }
 
