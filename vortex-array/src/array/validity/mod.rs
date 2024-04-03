@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use arrow_buffer::{BooleanBuffer, NullBuffer};
 use itertools::Itertools;
+use linkme::distributed_slice;
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
@@ -9,7 +10,7 @@ use crate::array::bool::BoolArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::ArrayCompute;
-use crate::encoding::{Encoding, EncodingId, EncodingRef};
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::stats::Stats;
 use crate::{impl_array, ArrayWalker};
@@ -17,6 +18,8 @@ mod serde;
 mod view;
 
 pub use view::*;
+
+use crate::serde::{ArraySerde, EncodingSerde};
 
 #[derive(Debug, Clone)]
 pub enum Validity {
@@ -155,12 +158,23 @@ impl Array for Validity {
         todo!()
     }
 
+    fn validity(&self) -> Option<Validity> {
+        None
+    }
+
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         Ok(self.slice(start, stop).into_array())
     }
 
     fn encoding(&self) -> EncodingRef {
         &ValidityEncoding
+    }
+
+    fn nbytes(&self) -> usize {
+        match self {
+            Validity::Valid(_) | Validity::Invalid(_) => 8,
+            Validity::Array(a) => a.nbytes(),
+        }
     }
 
     #[inline]
@@ -171,15 +185,8 @@ impl Array for Validity {
         f(self)
     }
 
-    fn nbytes(&self) -> usize {
-        match self {
-            Validity::Valid(_) | Validity::Invalid(_) => 8,
-            Validity::Array(a) => a.nbytes(),
-        }
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        None
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
@@ -199,6 +206,9 @@ impl ArrayDisplay for Validity {
 
 impl ArrayCompute for Validity {}
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_VALIDITY: EncodingRef = &ValidityEncoding;
+
 #[derive(Debug)]
 struct ValidityEncoding;
 
@@ -209,5 +219,9 @@ impl ValidityEncoding {
 impl Encoding for ValidityEncoding {
     fn id(&self) -> EncodingId {
         ValidityEncoding::ID
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
+        Some(self)
     }
 }

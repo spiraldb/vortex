@@ -79,7 +79,9 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync {
     }
 
     fn is_valid(&self, index: usize) -> bool {
-        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
+        self.validity()
+            .map(|v| v.as_view().is_valid(index))
+            .unwrap_or(true)
     }
 
     /// Limit array to start..stop range

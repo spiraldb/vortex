@@ -54,7 +54,7 @@ impl<'a, T: NativePType> PrimitiveTrait<T> for PrimitiveView<'a> {
     }
 
     fn validity_view(&self) -> Option<ValidityView> {
-        todo!()
+        self.validity.clone()
     }
 
     fn buffer(&self) -> &Buffer {

@@ -91,6 +91,10 @@ impl Array for BoolArray {
         Stats::new(&self.stats, self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -100,10 +104,6 @@ impl Array for BoolArray {
             validity: self.validity.as_ref().map(|v| v.slice(start, stop)),
         }
         .into_array())
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 
     #[inline]
@@ -116,16 +116,16 @@ impl Array for BoolArray {
         (self.len() + 7) / 8
     }
 
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
     #[inline]
     fn with_compute_mut(
         &self,
         f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()> {
         f(self)
+    }
+
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {

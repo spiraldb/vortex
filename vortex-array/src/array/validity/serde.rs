@@ -10,7 +10,8 @@ impl ArraySerde for Validity {
     }
 
     fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
-        todo!()
+        // TODO: Implement this
+        Ok(None)
     }
 }
 

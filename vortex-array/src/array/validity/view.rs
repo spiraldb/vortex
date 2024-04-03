@@ -124,7 +124,7 @@ impl ArrayCompute for ValidityView<'_> {}
 
 impl<'a> From<ArrayView<'a>> for ValidityView<'a> {
     fn from(_value: ArrayView<'a>) -> Self {
-        // Parse the metadata, and return the appropriate ValidityView
-        todo!()
+        // FIXME(ngates): parse the metadata, and return the appropriate ValidityView
+        ValidityView::Valid(100)
     }
 }
