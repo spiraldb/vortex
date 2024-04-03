@@ -15,7 +15,8 @@ where
     Pred<{ W > 0 }>: Satisfied,
     Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
 {
-    const NUM_LANES: usize = 1024 / W;
+    // fastlanez processes 1024 elements in chunks of 1024 bits at a time
+    const NUM_LANES: usize;
     const MASK: Self;
 
     /// Packs 1024 elements into W bits each -> (1024 * W / 8) -> 128 * W bytes
@@ -88,44 +89,44 @@ where
 macro_rules! bitpack_impl {
     ($T:ty, $BITS:literal) => {
         paste::item! {
-            seq!(N in 1..$BITS {
-                impl BitPack<N> for $T {
-                    // fastlanez processes 1024 elements in chunks of 1024 bits at a time
-                    const MASK: $T = ((1 as $T) << N) - 1;
+            seq!(W in 1..$BITS {
+                impl BitPack<W> for $T {
+                    const NUM_LANES: usize = 128 / size_of::<$T>();
+                    const MASK: $T = ((1 as $T) << W) - 1;
 
                     #[inline]
                     fn pack<'a>(
                         input: &[Self; 1024],
-                        output: &'a mut [MaybeUninit<u8>; 128 * N],
-                    ) -> &'a [u8; 128 * N] {
+                        output: &'a mut [MaybeUninit<u8>; 128 * W],
+                    ) -> &'a [u8; 128 * W] {
                             unsafe {
-                                let output_array: &mut [u8; 128 * N] = std::mem::transmute(output);
-                                [<fl_bitpack_ $T _u >]~N(input, output_array);
+                                let output_array: &mut [u8; 128 * W] = std::mem::transmute(output);
+                                [<fl_bitpack_ $T _u >]~W(input, output_array);
                                 output_array
                             }
                     }
 
                     #[inline]
                     fn unpack<'a>(
-                        input: &[u8; 128 * N],
+                        input: &[u8; 128 * W],
                         output: &'a mut [MaybeUninit<Self>; 1024],
                     ) -> &'a [Self; 1024] {
                         unsafe {
                             let output_array: &mut [Self; 1024] = std::mem::transmute(output);
-                            [<fl_bitunpack_ $T _u >]~N(input, output_array);
+                            [<fl_bitunpack_ $T _u >]~W(input, output_array);
                             output_array
                         }
                     }
 
                     #[inline]
                     fn unpack_single(
-                        input: &[u8; 128 * N],
+                        input: &[u8; 128 * W],
                         index: usize
                     ) -> Self {
                         // lane_index is the index of the row
-                        let lane_index = index % <$T as BitPack<N>>::NUM_LANES;
+                        let lane_index = index % <$T as BitPack<W>>::NUM_LANES;
                         // lane_start_bit is the bit offset in the combined columns of the row
-                        let lane_start_bit = (index / <$T as BitPack<N>>::NUM_LANES) * N;
+                        let lane_start_bit = (index / <$T as BitPack<W>>::NUM_LANES) * W;
 
                         let words: [Self; 2] = {
                             // each tranche is laid out as a column-major 2D array of words
@@ -139,24 +140,24 @@ macro_rules! bitpack_impl {
 
                             // the value may be split across two words
                             let lane_start_word = lane_start_bit / ($T::BITS as usize);
-                            let lane_end_word_inclusive = (lane_start_bit + N - 1) / ($T::BITS as usize);
+                            let lane_end_word_inclusive = (lane_start_bit + W - 1) / ($T::BITS as usize);
 
                             [
-                                tranche_words[lane_start_word * <$T as BitPack<N>>::NUM_LANES + lane_index],
-                                tranche_words[lane_end_word_inclusive * <$T as BitPack<N>>::NUM_LANES + lane_index], // this may be a duplicate
+                                tranche_words[lane_start_word * <$T as BitPack<W>>::NUM_LANES + lane_index],
+                                tranche_words[lane_end_word_inclusive * <$T as BitPack<W>>::NUM_LANES + lane_index], // this may be a duplicate
                             ]
                         };
 
                         let start_bit = lane_start_bit % ($T::BITS as usize);
                         let bits_left_in_first_word = ($T::BITS as usize) - start_bit;
-                        if bits_left_in_first_word >= N {
+                        if bits_left_in_first_word >= W {
                             // all the bits we need are in the same word
-                            (words[0] >> start_bit) & <$T as BitPack<N>>::MASK
+                            (words[0] >> start_bit) & <$T as BitPack<W>>::MASK
                         } else {
                             // we need to use two words
                             let lo = words[0] >> start_bit;
                             let hi = words[1] << bits_left_in_first_word;
-                            (lo | hi) & <$T as BitPack<N>>::MASK
+                            (lo | hi) & <$T as BitPack<W>>::MASK
                         }
                     }
                 }
