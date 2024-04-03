@@ -193,7 +193,7 @@ impl VarBinArray {
     }
 }
 
-pub type VarBinIter<'a, T> = ArrayIter<&'a VarBinArray, T>;
+pub type VarBinIter<'a, T> = ArrayIter<'a, VarBinArray, T>;
 
 impl Array for VarBinArray {
     impl_array!();

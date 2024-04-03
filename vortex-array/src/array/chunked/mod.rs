@@ -159,7 +159,7 @@ impl Array for ChunkedArray {
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         for chunk in self.chunks() {
-            walker.visit_child(&chunk)?;
+            walker.visit_child(chunk)?;
         }
         Ok(())
     }

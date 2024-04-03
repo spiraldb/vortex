@@ -1,5 +1,5 @@
 use crate::array::Array;
 
-pub trait ArrayAccessor<T>: Array {
-    fn value(&self, index: usize) -> Option<T>;
+pub trait ArrayAccessor<'a, T>: Array {
+    fn value(&'a self, index: usize) -> Option<T>;
 }

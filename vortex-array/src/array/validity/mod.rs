@@ -104,7 +104,7 @@ impl Validity {
         match self {
             Validity::Valid(_) => true,
             Validity::Invalid(_) => false,
-            Validity::Array(a) => scalar_at(&a, idx).and_then(|s| s.try_into()).unwrap(),
+            Validity::Array(a) => scalar_at(a, idx).and_then(|s| s.try_into()).unwrap(),
         }
     }
 
