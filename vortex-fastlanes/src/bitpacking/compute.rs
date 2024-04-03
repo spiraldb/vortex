@@ -8,7 +8,7 @@ use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex::scalar::Scalar;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::bitpacking::compress::{unpack, unpack_single};
 use crate::downcast::DowncastFastlanes;
@@ -36,6 +36,15 @@ impl FlattenFn for BitPackedArray {
 
 impl ScalarAtFn for BitPackedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
+        if index >= self.len() {
+            return Err(vortex_err!(OutOfBounds:index, 0, self.len()));
+        }
+        if self.bit_width() == 0 {
+            let ptype = self.dtype().try_into()?;
+            match_each_integer_ptype!(&ptype, |$P| {
+                return Ok(Scalar::from(0 as $P));
+            })
+        }
         unpack_single(self, index)
     }
 }

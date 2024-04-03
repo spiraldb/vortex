@@ -1,23 +1,24 @@
 use arrayref::array_ref;
+
 use fastlanez::TryBitPack;
+use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
+use vortex::array::IntoArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::array::IntoArray;
-use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::patch::patch;
 use vortex::match_each_integer_ptype;
-use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::ptype::{NativePType, PType};
+use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::scalar::{ListScalarVec, Scalar};
 use vortex::stats::Stat;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::downcast::DowncastFastlanes;
 use crate::{BitPackedArray, BitPackedEncoding};
+use crate::downcast::DowncastFastlanes;
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -240,31 +241,30 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
     output
 }
 
-pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
+pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
     let bit_width = array.bit_width();
-    let length = array.len();
     let encoded = flatten_primitive(cast(array.encoded(), PType::U8.into())?.as_ref())?;
     let ptype: PType = array.dtype().try_into()?;
 
-    let scalar: Scalar = match ptype {
-        I8 | U8 => {
-            unpack_single_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, length, index)
-                .map(|v| v.into())
-        }
-        I16 | U16 => {
-            unpack_single_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, length, index)
-                .map(|v| v.into())
-        }
-        I32 | U32 => {
-            unpack_single_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, length, index)
-                .map(|v| v.into())
-        }
-        I64 | U64 => {
-            unpack_single_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, length, index)
-                .map(|v| v.into())
-        }
-        _ => vortex_bail!("Unsupported ptype {:?}", ptype),
-    }?;
+    let scalar: Scalar = unsafe {
+        match ptype {
+            I8 | U8 => unpack_single_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, index)
+                .map(|v| v.into()),
+            I16 | U16 => {
+                unpack_single_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, index)
+                    .map(|v| v.into())
+            }
+            I32 | U32 => {
+                unpack_single_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, index)
+                    .map(|v| v.into())
+            }
+            I64 | U64 => {
+                unpack_single_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, index)
+                    .map(|v| v.into())
+            }
+            _ => vortex_bail!("Unsupported ptype {:?}", ptype),
+        }?
+    };
 
     // Cast to signed if necessary
     if ptype.is_signed_int() {
@@ -274,37 +274,23 @@ pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scala
     }
 }
 
-pub fn unpack_single_primitive<T: NativePType + TryBitPack>(
+/// # Safety
+///
+/// The caller must ensure the following invariants hold:
+/// * `packed.len() == (length + 1023) / 1024 * 128 * bit_width`
+/// * `index_to_decode < length`
+/// Where `length` is the length of the array/slice backed by `packed` (but is not provided to this function).
+pub unsafe fn unpack_single_primitive<T: NativePType + TryBitPack>(
     packed: &[u8],
     bit_width: usize,
-    length: usize,
     index_to_decode: usize,
 ) -> VortexResult<T> {
-    if index_to_decode >= length {
-        return Err(vortex_err!(OutOfBounds:index_to_decode, 0, length));
-    }
-    if bit_width == 0 {
-        return Ok(T::default());
-    }
-    if bit_width > 64 {
-        return Err(vortex_err!("Unsupported bit width {}", bit_width));
-    }
+    let bytes_per_chunk = 128 * bit_width;
+    let chunk_index = index_to_decode / 1024;
+    let chunk_bytes = &packed[chunk_index * bytes_per_chunk..][0..bytes_per_chunk];
+    let index_in_chunk = index_to_decode % 1024;
 
-    let bytes_per_tranche = 128 * bit_width;
-    let expected_packed_size = ((length + 1023) / 1024) * bytes_per_tranche;
-    if packed.len() != expected_packed_size {
-        return Err(vortex_err!(
-            "Expected {} packed bytes, got {}",
-            expected_packed_size,
-            packed.len()
-        ));
-    }
-
-    let tranche_index = index_to_decode / 1024;
-    let tranche_bytes = &packed[tranche_index * bytes_per_tranche..][0..bytes_per_tranche];
-    let index_in_tranche = index_to_decode % 1024;
-
-    <T as TryBitPack>::try_unpack_single(tranche_bytes, bit_width, index_in_tranche)
+    <T as TryBitPack>::try_unpack_single(chunk_bytes, bit_width, index_in_chunk)
         .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))
 }
 
