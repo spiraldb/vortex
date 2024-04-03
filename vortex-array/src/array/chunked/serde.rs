@@ -28,12 +28,10 @@ impl ArraySerde for ChunkedArray {
 
 impl EncodingSerde for ChunkedEncoding {
     fn len(&self, view: &ArrayView) -> usize {
-        let length = (0..view.nchildren())
+        (0..view.nchildren())
             .map(|c| view.child(c, view.dtype()).unwrap())
             .map(|v| v.len())
-            .sum();
-        println!("LENGTH {}", length);
-        length
+            .sum()
     }
 
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {

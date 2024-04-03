@@ -21,10 +21,6 @@ pub mod search_sorted;
 pub mod take;
 
 pub trait ArrayCompute {
-    fn name(&self) -> &'static str {
-        "todo"
-    }
-
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         None
     }

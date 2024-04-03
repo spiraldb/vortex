@@ -7,7 +7,7 @@ pub trait ReadFlatBuffer<Ctx>: Sized {
     type Source<'a>;
     type Error;
 
-    fn read_flatbuffer<'a>(ctx: &Ctx, fb: &Self::Source<'a>) -> Result<Self, Self::Error>;
+    fn read_flatbuffer(ctx: &Ctx, fb: &Self::Source<'_>) -> Result<Self, Self::Error>;
 }
 
 pub trait WriteFlatBuffer {

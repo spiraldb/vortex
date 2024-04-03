@@ -23,9 +23,9 @@ impl ReadFlatBuffer<DTypeSerdeContext> for DType {
     type Source<'a> = fb::DType<'a>;
     type Error = VortexError;
 
-    fn read_flatbuffer<'a>(
+    fn read_flatbuffer(
         ctx: &DTypeSerdeContext,
-        fb: &Self::Source<'a>,
+        fb: &Self::Source<'_>,
     ) -> Result<Self, Self::Error> {
         match fb.type_type() {
             fb::Type::Null => Ok(DType::Null),

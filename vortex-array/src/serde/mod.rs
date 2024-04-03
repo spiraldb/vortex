@@ -1,6 +1,6 @@
 use arrow_buffer::BooleanBuffer;
 use std::io;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{Cursor, ErrorKind, Read, Write};
 
 use arrow_buffer::buffer::{Buffer, MutableBuffer};
 use flatbuffers::root;
@@ -21,7 +21,6 @@ pub mod context;
 pub mod data;
 mod ptype;
 pub mod view;
-pub mod vtable;
 
 use crate::array::bool::BoolArray;
 use crate::compute::ArrayCompute;
@@ -49,7 +48,7 @@ pub trait EncodingSerde {
         .into_array()
     }
 
-    // TODO(ngates): remove this ideally?
+    // TODO(ngates): remove this ideally? It can error... Maybe store lengths in array views?
     fn len(&self, _view: &ArrayView) -> usize {
         todo!(
             "EncodingSerde.len not implemented for {}",
@@ -75,6 +74,22 @@ where
     fn serialize(&self) -> Vec<u8>;
 
     fn deserialize(data: &[u8]) -> VortexResult<Self>;
+}
+
+impl BytesSerde for usize {
+    fn serialize(&self) -> Vec<u8> {
+        let mut vec = Vec::new();
+        // IOError only happens on EOF.
+        leb128::write::unsigned(&mut vec, *self as u64).unwrap();
+        vec
+    }
+
+    fn deserialize(data: &[u8]) -> VortexResult<Self> {
+        let mut cursor = Cursor::new(data);
+        leb128::read::unsigned(&mut cursor)
+            .map(|v| v as usize)
+            .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse leb128 {}", e))
+    }
 }
 
 pub struct ReadCtx<'a> {

@@ -1,5 +1,5 @@
 use vortex::array::{Array, ArrayRef};
-use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
+use vortex::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FloatWidth, Signedness};
 
@@ -15,12 +15,7 @@ impl ArraySerde for ALPArray {
     }
 
     fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
-        let mut vec = Vec::new();
-        let mut ctx = WriteCtx::new(&mut vec);
-        ctx.write_optional_array(self.patches())?;
-        ctx.write_fixed_slice([self.exponents().e, self.exponents().f])?;
-        ctx.write(self.encoded())?;
-        Ok(Some(vec))
+        Ok(Some(vec![self.exponents().e, self.exponents().f]))
     }
 }
 

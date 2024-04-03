@@ -77,7 +77,7 @@ impl<'a> ArrayView<'a> {
     }
 
     pub fn dtype(&self) -> &DType {
-        &self.dtype
+        self.dtype
     }
 
     pub fn metadata(&self) -> Option<&'a [u8]> {
@@ -170,7 +170,7 @@ impl<'a> Array for ArrayView<'a> {
     }
 
     fn dtype(&self) -> &DType {
-        &self.dtype
+        self.dtype
     }
 
     fn stats(&self) -> Stats {
@@ -190,10 +190,6 @@ impl<'a> Array for ArrayView<'a> {
         self.buffers.iter().map(|b| b.len()).sum()
     }
 
-    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        todo!()
-    }
-
     fn with_compute_mut(
         &self,
         f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
@@ -202,6 +198,10 @@ impl<'a> Array for ArrayView<'a> {
             .serde()
             .expect("TODO(ngates): heap allocate ArrayView and invoke compute")
             .with_view_compute(self, f)
+    }
+
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        todo!()
     }
 }
 
@@ -214,12 +214,8 @@ impl<'a> ArrayValidity for ArrayView<'a> {
 impl<'a> ArrayDisplay for ArrayView<'a> {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
         fmt.property("encoding", self.encoding)?;
-        fmt.property("dtype", &self.dtype)?;
+        fmt.property("dtype", self.dtype)?;
         fmt.property("metadata", format!("{:?}", self.array.metadata()))?;
-        // for (_i, _child) in self.array.children().unwrap_or_default().iter().enumerate() {
-        //     // TODO(ngates): children?
-        //     // fmt.child(&format!("{}", i), &child)?;
-        // }
-        Ok(())
+        fmt.property("nchildren", self.nchildren())
     }
 }
