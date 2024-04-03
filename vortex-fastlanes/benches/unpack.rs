@@ -1,61 +1,25 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::distributions::{Alphanumeric, Uniform};
-use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::varbin::VarBinArray;
-use vortex::array::Array;
-use vortex::match_each_native_ptype;
-use vortex_dict::dict_encode_typed_primitive;
+use vortex_fastlanes::{bitpack_primitive, unpack_primitive};
 
-fn gen_primitive_dict(len: usize, uniqueness: f64) -> PrimitiveArray {
+fn values(len: usize, bits: usize) -> Vec<u32> {
     let mut rng = thread_rng();
-    let value_range = len as f64 * uniqueness;
-    let range = Uniform::new(-(value_range / 2.0) as i32, (value_range / 2.0) as i32);
-    let data: Vec<i32> = (0..len).map(|_| rng.sample(range)).collect();
-
-    PrimitiveArray::from(data)
-}
-
-fn gen_varbin_dict(len: usize, uniqueness: f64) -> VarBinArray {
-    let mut rng = thread_rng();
-    let uniq_cnt = (len as f64 * uniqueness) as usize;
-    let dict: Vec<String> = (0..uniq_cnt)
-        .map(|_| {
-            (&mut rng)
-                .sample_iter(&Alphanumeric)
-                .take(16)
-                .map(char::from)
-                .collect()
-        })
-        .collect();
-    let words: Vec<&str> = (0..len)
-        .map(|_| dict.choose(&mut rng).unwrap().as_str())
-        .collect();
-    VarBinArray::from(words)
-}
-
-fn dict_encode_primitive(arr: &PrimitiveArray) -> usize {
-    let (codes, values) = match_each_native_ptype!(arr.ptype(), |$P| {
-        dict_encode_typed_primitive::<$P>(arr)
-    });
-    (codes.nbytes() + values.nbytes()) / arr.nbytes()
-}
-
-fn dict_encode_varbin(arr: &VarBinArray) -> usize {
-    let (codes, values) = vortex_dict::dict_encode_varbin(arr);
-    (codes.nbytes() + values.nbytes()) / arr.nbytes()
+    let range = Uniform::new(0_u32, 2_u32.pow(bits as u32));
+    rng.sample_iter(range).take(len).collect()
 }
 
 fn dict_encode(c: &mut Criterion) {
-    let primitive_arr = gen_primitive_dict(1_000_000, 0.00005);
-    let varbin_arr = gen_varbin_dict(1_000_000, 0.00005);
+    let bits: usize = 8;
+    let values = values(1_000_000, bits);
 
-    c.bench_function("dict_encode_primitives", |b| {
-        b.iter(|| black_box(dict_encode_primitive(&primitive_arr)));
+    c.bench_function("bitpack_primitive", |b| {
+        b.iter(|| black_box(bitpack_primitive(&values, bits)));
     });
-    c.bench_function("dict_encode_varbin", |b| {
-        b.iter(|| black_box(dict_encode_varbin(&varbin_arr)));
+    
+    let packed = bitpack_primitive(&values, bits);
+    c.bench_function("unpack_primitive", |b| {
+        b.iter(|| black_box(unpack_primitive(&packed, bits)));
     });
 }
 

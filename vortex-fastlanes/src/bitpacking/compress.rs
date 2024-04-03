@@ -114,28 +114,29 @@ fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
     PrimitiveArray::from(bytes).into_array()
 }
 
-fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize) -> Vec<u8> {
+pub fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize) -> Vec<u8> {
     if bit_width == 0 {
         return Vec::new();
     }
 
     // How many fastlanes vectors we will process.
-    let num_chunks = array.len() / 1024;
+    let num_chunks = (array.len() + 1023) / 1024;
+    let num_full_chunks = array.len() / 1024;
 
     // Allocate a result byte array.
     let mut output = Vec::with_capacity(num_chunks * bit_width * 128);
 
     // Loop over all but the last chunk.
-    (0..num_chunks).for_each(|i| {
+    (0..num_full_chunks).for_each(|i| {
         let start_elem = i * 1024;
         let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
         TryBitPack::try_pack_into(chunk, bit_width, &mut output).unwrap();
     });
 
     // Pad the last chunk with zeros to a full 1024 elements.
-    let last_chunk_size = array.len() % 1024;
-    if last_chunk_size > 0 {
-        let mut last_chunk: [T; 1024] = [T::default(); 1024];
+    if num_chunks != num_full_chunks {
+        let last_chunk_size = array.len() % 1024;
+        let mut last_chunk: [T; 1024] = [T::zero(); 1024];
         last_chunk[..last_chunk_size].copy_from_slice(&array[array.len() - last_chunk_size..]);
         TryBitPack::try_pack_into(&last_chunk, bit_width, &mut output).unwrap();
     }
@@ -201,13 +202,13 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     flatten_primitive(&unpacked)
 }
 
-fn unpack_primitive<T: NativePType + TryBitPack>(
+pub fn unpack_primitive<T: NativePType + TryBitPack>(
     packed: &[u8],
     bit_width: usize,
     length: usize,
 ) -> Vec<T> {
     if bit_width == 0 {
-        return vec![T::default(); length];
+        return vec![T::zero(); length];
     }
 
     // How many fastlanes vectors we will process.

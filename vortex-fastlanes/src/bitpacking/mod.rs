@@ -1,16 +1,17 @@
 use std::cmp::min;
 use std::sync::{Arc, RwLock};
 
-use vortex::array::validity::Validity;
+pub use compress::*;
+use vortex::{ArrayWalker, impl_array};
 use vortex::array::{Array, ArrayRef};
+use vortex::array::validity::Validity;
 use vortex::compress::EncodingCompression;
-use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::ArrayCompute;
+use vortex::compute::flatten::flatten_primitive;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
-use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
