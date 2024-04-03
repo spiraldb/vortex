@@ -123,7 +123,6 @@ mod test {
     use crate::array::bool::BoolArray;
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::Array;
-
     use crate::compute;
 
     #[test]

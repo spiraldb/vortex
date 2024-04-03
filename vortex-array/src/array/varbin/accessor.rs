@@ -2,7 +2,6 @@ use num_traits::AsPrimitive;
 
 use crate::accessor::ArrayAccessor;
 use crate::array::downcast::DowncastArrayBuiltin;
-
 use crate::array::varbin::VarBinArray;
 use crate::array::Array;
 use crate::array::ArrayValidity;

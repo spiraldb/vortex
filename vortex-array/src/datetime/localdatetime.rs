@@ -5,13 +5,11 @@ use arrow_array::{
     ArrayRef as ArrowArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray,
     TimestampNanosecondArray, TimestampSecondArray,
 };
-
-use crate::array::Array;
 use vortex_error::VortexResult;
 use vortex_schema::CompositeID;
 
 use crate::array::composite::{composite_impl, TypedCompositeArray};
-
+use crate::array::Array;
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::cast::cast;

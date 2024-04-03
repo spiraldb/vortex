@@ -1,7 +1,6 @@
 use vortex_error::VortexResult;
 
 use crate::array::downcast::DowncastArrayBuiltin;
-
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};

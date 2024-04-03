@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use arrow_buffer::{BooleanBuffer, NullBuffer};
 use itertools::Itertools;
-
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
