@@ -19,8 +19,8 @@ fn offset_at(array: &dyn Array, index: usize) -> usize {
     }
 }
 
-impl<'a> ArrayAccessor<&'a [u8]> for &'a VarBinArray {
-    fn value(&self, index: usize) -> Option<&'a [u8]> {
+impl<'a> ArrayAccessor<'a, &'a [u8]> for VarBinArray {
+    fn value(&'a self, index: usize) -> Option<&'a [u8]> {
         if self.is_valid(index) {
             let start = offset_at(self.offsets(), index);
             let end = offset_at(self.offsets(), index + 1);
@@ -31,7 +31,7 @@ impl<'a> ArrayAccessor<&'a [u8]> for &'a VarBinArray {
     }
 }
 
-impl<'a> ArrayAccessor<Vec<u8>> for &'a VarBinArray {
+impl ArrayAccessor<'_, Vec<u8>> for VarBinArray {
     fn value(&self, index: usize) -> Option<Vec<u8>> {
         if self.is_valid(index) {
             let start = offset_at(self.offsets(), index);
