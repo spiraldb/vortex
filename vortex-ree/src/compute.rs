@@ -6,7 +6,6 @@ use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex::scalar::Scalar;
-use vortex::validity::ArrayValidity;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::compress::ree_decode;

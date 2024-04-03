@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 use croaring::{Bitmap, Native};
 
 use compress::roaring_encode;
+use vortex::array::validity::Validity;
 use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
@@ -11,7 +12,6 @@ use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::ptype::PType;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
@@ -101,7 +101,12 @@ impl Array for RoaringIntArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
-
+    fn validity(&self) -> Option<Validity> {
+        match self.dtype().is_nullable() {
+            true => Some(Validity::Valid(self.len())),
+            false => None,
+        }
+    }
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         todo!()
     }
@@ -110,15 +115,6 @@ impl Array for RoaringIntArray {
 impl ArrayDisplay for RoaringIntArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("bitmap", format!("{:?}", self.bitmap()))
-    }
-}
-
-impl ArrayValidity for RoaringIntArray {
-    fn validity(&self) -> Option<Validity> {
-        match self.dtype().is_nullable() {
-            true => Some(Validity::Valid(self.len())),
-            false => None,
-        }
     }
 }
 

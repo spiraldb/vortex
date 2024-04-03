@@ -41,6 +41,7 @@ impl FillForwardFn for PrimitiveArray {
 mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
+    use crate::array::Array;
 
     use crate::compute;
 

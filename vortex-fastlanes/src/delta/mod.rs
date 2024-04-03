@@ -1,5 +1,6 @@
 use std::sync::{Arc, RwLock};
 
+use vortex::array::validity::Validity;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
@@ -7,7 +8,6 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, match_each_integer_ptype, ArrayWalker};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
@@ -133,6 +133,9 @@ impl Array for DeltaArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.bases())?;
@@ -151,12 +154,6 @@ impl ArrayDisplay for DeltaArray {
         f.child("bases", self.bases())?;
         f.child("deltas", self.deltas())?;
         f.validity(self.validity())
-    }
-}
-
-impl ArrayValidity for DeltaArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 }
 

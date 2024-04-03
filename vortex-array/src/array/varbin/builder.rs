@@ -65,7 +65,7 @@ impl<O: NativePType + PrimInt> VarBinBuilder<O> {
 mod test {
 
     use crate::array::varbin::builder::VarBinBuilder;
-    use crate::array::Array;
+    use crate::array::{Array, ArrayValidity};
     use crate::compute::scalar_at::scalar_at;
     use crate::scalar::Scalar;
     use vortex_schema::DType;

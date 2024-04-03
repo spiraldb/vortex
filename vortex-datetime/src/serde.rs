@@ -1,7 +1,6 @@
 use crate::{DateTimeArray, DateTimeEncoding};
 use vortex::array::{Array, ArrayRef};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
-use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
 impl ArraySerde for DateTimeArray {

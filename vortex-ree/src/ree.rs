@@ -1,6 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use crate::compress::ree_encode;
+use vortex::array::validity::Validity;
 use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::search_sorted::SearchSortedSide;
@@ -9,7 +10,6 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
 use vortex::{compute, impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
@@ -155,6 +155,9 @@ impl Array for REEArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.values())?;
@@ -163,12 +166,6 @@ impl Array for REEArray {
 }
 
 impl StatsCompute for REEArray {}
-
-impl ArrayValidity for REEArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-}
 
 #[derive(Debug)]
 pub struct REEEncoding;
