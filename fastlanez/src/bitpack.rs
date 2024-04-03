@@ -11,25 +11,26 @@ use crate::{Pred, Satisfied};
 /// BitPack into a compile-time known bit-width.
 pub trait BitPack<const W: usize>
 where
-    Self: Sized,
+    Self: Sized + Unsigned + PrimInt,
     Pred<{ W > 0 }>: Satisfied,
     Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
 {
-    // 1024 elements compress to W bits each -> (1024 * W / 8) bytes
-    const BYTES_PER_TRANCHE: usize = 128 * W;
     const NUM_LANES: usize = 1024 / W;
     const MASK: Self;
 
+    /// Packs 1024 elements into W bits each -> (1024 * W / 8) -> 128 * W bytes
     fn pack<'a>(
         input: &[Self; 1024],
         output: &'a mut [MaybeUninit<u8>; 128 * W],
     ) -> &'a [u8; 128 * W];
 
+    /// Unpacks 1024 elements that have been packed into W bits each
     fn unpack<'a>(
         input: &[u8; 128 * W],
         output: &'a mut [MaybeUninit<Self>; 1024],
     ) -> &'a [Self; 1024];
 
+    /// Unpacks a single element (at provided index) that has been packed into W bits
     fn unpack_single(input: &[u8; 128 * W], index: usize) -> Self;
 }
 
@@ -85,12 +86,11 @@ where
 }
 
 macro_rules! bitpack_impl {
-    ($T:ty, $W:literal) => {
+    ($T:ty, $BITS:literal) => {
         paste::item! {
-            seq!(N in 1..$W {
+            seq!(N in 1..$BITS {
                 impl BitPack<N> for $T {
                     // fastlanez processes 1024 elements in chunks of 1024 bits at a time
-                    const NUM_LANES: usize = 1024 / $W;
                     const MASK: $T = ((1 as $T) << N) - 1;
 
                     #[inline]
