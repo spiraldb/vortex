@@ -1,11 +1,10 @@
-use std::mem::{MaybeUninit, size_of};
+use std::mem::{size_of, MaybeUninit};
 
 use arrayref::{array_mut_ref, array_ref};
+use fastlanez_sys::*;
 use num_traits::{PrimInt, Unsigned};
 use seq_macro::seq;
 use uninit::prelude::VecCapacity;
-
-use fastlanez_sys::*;
 
 use crate::{Pred, Satisfied};
 
