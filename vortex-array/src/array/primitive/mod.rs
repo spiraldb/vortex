@@ -217,7 +217,7 @@ impl Array for PrimitiveArray {
     }
 }
 
-impl<T: NativePType> ArrayAccessor<T> for PrimitiveArray {
+impl<T: NativePType> ArrayAccessor<'_, T> for PrimitiveArray {
     fn value(&self, index: usize) -> Option<T> {
         if self.is_valid(index) {
             Some(self.typed_data::<T>()[index])
@@ -229,7 +229,7 @@ impl<T: NativePType> ArrayAccessor<T> for PrimitiveArray {
 
 impl PrimitiveArray {
     pub fn iter<T: NativePType>(&self) -> ArrayIter<PrimitiveArray, T> {
-        ArrayIter::new(self.clone())
+        ArrayIter::new(self)
     }
 }
 
