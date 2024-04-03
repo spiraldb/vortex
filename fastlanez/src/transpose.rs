@@ -8,11 +8,10 @@ use fastlanez_sys::{
     fl_untranspose_u32, fl_untranspose_u64, fl_untranspose_u8,
 };
 
-#[allow(clippy::let_unit_value)]
 pub fn transpose<T: Sized, U: Transposable<T>>(input: &[T; 1024], output: &mut [U; 1024]) {
-    let _ = U::CHECK_SIZE; // compile time size check
     unsafe {
-        match size_of::<T>() {
+        // referencing U::SIZE forces a compile time size check; it is equal to size_of::<T>()
+        match U::SIZE {
             1 => fl_transpose_u8(
                 input.as_ptr() as *const [u8; 1024],
                 output.as_ptr() as *mut [u8; 1024],
@@ -42,11 +41,10 @@ pub fn transpose_into<T: Sized>(input: &[T; 1024], output: &mut Vec<T>) {
     }
 }
 
-#[allow(clippy::let_unit_value)]
 pub fn untranspose<T: Sized, U: Transposable<T>>(input: &[T; 1024], output: &mut [U; 1024]) {
-    let _ = U::CHECK_SIZE; // compile time size check
     unsafe {
-        match size_of::<T>() {
+        // referencing U::SIZE forces a compile time size check; it is equal to size_of::<T>()
+        match U::SIZE {
             1 => fl_untranspose_u8(
                 input.as_ptr() as *const [u8; 1024],
                 output.as_mut_ptr() as *mut [u8; 1024],
@@ -77,7 +75,7 @@ pub fn untranspose_into<T: Sized>(input: &[T; 1024], output: &mut Vec<T>) {
 
 pub trait Transposable<T: Sized> {
     // must be referenced to force compile-time size checking
-    const CHECK_SIZE: () = {
+    const SIZE: usize = {
         assert!(
             size_of::<T>() == 1
                 || size_of::<T>() == 2
@@ -85,6 +83,7 @@ pub trait Transposable<T: Sized> {
                 || size_of::<T>() == 8,
             "T must be 1, 2, 4 or 8 bytes in size"
         );
+        size_of::<T>()
     };
 }
 
