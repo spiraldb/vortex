@@ -6,6 +6,7 @@ use vortex_error::VortexResult;
 use vortex_schema::{CompositeID, DType};
 
 use crate::array::composite::{find_extension, CompositeExtensionRef, TypedCompositeArray};
+use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
@@ -13,7 +14,6 @@ use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, BytesSerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
 use crate::{impl_array, ArrayWalker};
 
 pub trait CompositeMetadata:
@@ -121,18 +121,16 @@ impl Array for CompositeArray {
         Some(self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.underlying().validity()
+    }
+
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.underlying())
     }
 }
 
 impl StatsCompute for CompositeArray {}
-
-impl ArrayValidity for CompositeArray {
-    fn validity(&self) -> Option<Validity> {
-        self.underlying().validity()
-    }
-}
 
 impl ArrayDisplay for CompositeArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {

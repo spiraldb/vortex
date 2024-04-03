@@ -4,7 +4,6 @@ use vortex_error::VortexResult;
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::serde::{ArraySerde, ArrayView, BytesSerde, EncodingSerde, ReadCtx, WriteCtx};
-use crate::validity::ArrayValidity;
 
 impl ArraySerde for BoolArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
@@ -33,8 +32,8 @@ impl EncodingSerde for BoolEncoding {
 mod test {
     use crate::array::bool::BoolArray;
     use crate::array::downcast::DowncastArrayBuiltin;
+    use crate::array::Array;
     use crate::serde::test::roundtrip_array;
-    use crate::validity::ArrayValidity;
 
     #[test]
     fn roundtrip() {

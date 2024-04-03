@@ -5,6 +5,7 @@ use linkme::distributed_slice;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
+use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::cast::cast;
@@ -16,7 +17,6 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::PType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
 use crate::{impl_array, ArrayWalker};
 
 mod compress;
@@ -141,6 +141,10 @@ impl Array for SparseArray {
         Some(self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        todo!()
+    }
+
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.indices())?;
         walker.visit_child(self.values())
@@ -154,12 +158,6 @@ impl ArrayDisplay for SparseArray {
         f.property("offset", self.indices_offset())?;
         f.child("indices", self.indices())?;
         f.child("values", self.values())
-    }
-}
-
-impl ArrayValidity for SparseArray {
-    fn validity(&self) -> Option<Validity> {
-        todo!()
     }
 }
 

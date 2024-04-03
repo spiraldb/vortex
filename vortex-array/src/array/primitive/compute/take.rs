@@ -6,7 +6,6 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;
 use crate::ptype::NativePType;
-use crate::validity::ArrayValidity;
 use crate::{match_each_integer_ptype, match_each_native_ptype};
 
 impl TakeFn for PrimitiveArray {

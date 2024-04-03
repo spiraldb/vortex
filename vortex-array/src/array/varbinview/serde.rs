@@ -3,7 +3,6 @@ use vortex_error::VortexResult;
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
-use crate::validity::ArrayValidity;
 
 impl ArraySerde for VarBinViewArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {

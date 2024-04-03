@@ -6,13 +6,13 @@ use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
 use super::{check_slice_bounds, Array, ArrayRef};
+use crate::array::validity::Validity;
 use crate::array::IntoArray;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
 use crate::{impl_array, ArrayWalker};
 
 mod compute;
@@ -102,6 +102,10 @@ impl Array for BoolArray {
         .into_array())
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &BoolEncoding
@@ -122,12 +126,6 @@ impl Array for BoolArray {
             walker.visit_child(&v.to_array())?;
         }
         walker.visit_buffer(self.buffer.inner())
-    }
-}
-
-impl ArrayValidity for BoolArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 }
 

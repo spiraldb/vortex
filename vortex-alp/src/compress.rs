@@ -7,7 +7,6 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::patch::patch;
 use vortex::ptype::{NativePType, PType};
-use vortex::validity::ArrayValidity;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::alp::ALPFloat;

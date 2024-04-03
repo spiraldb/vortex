@@ -12,15 +12,15 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
-use crate::array::IntoArray;
+use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{ArrayValidity, IntoArray};
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
 use crate::{impl_array, ArrayWalker};
 
 mod compute;
@@ -204,18 +204,16 @@ impl Array for PrimitiveArray {
         Some(self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         if let Some(v) = self.validity() {
             // FIXME(ngates): should validity implement Array?
             walker.visit_child(&v.to_array())?;
         }
         walker.visit_buffer(self.buffer())
-    }
-}
-
-impl ArrayValidity for PrimitiveArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 }
 

@@ -2,6 +2,7 @@ use num_traits::PrimInt;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::array::validity::Validity;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
@@ -9,7 +10,6 @@ use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;
 use crate::match_each_integer_ptype;
 use crate::ptype::NativePType;
-use crate::validity::{ArrayValidity, Validity};
 
 impl TakeFn for VarBinArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {

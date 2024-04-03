@@ -10,7 +10,6 @@ use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
-use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
 use crate::downcast::DowncastFastlanes;

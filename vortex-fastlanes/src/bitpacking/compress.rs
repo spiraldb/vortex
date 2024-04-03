@@ -14,7 +14,6 @@ use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
-use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
 use crate::downcast::DowncastFastlanes;

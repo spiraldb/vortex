@@ -13,13 +13,13 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::struct_::{StructArray, StructEncoding};
+use crate::array::validity::Validity;
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::compute::ArrayCompute;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::ArraySerde;
 use crate::stats::Stats;
-use crate::validity::{ArrayValidity, Validity};
 
 pub mod bool;
 pub mod chunked;
@@ -29,6 +29,7 @@ pub mod downcast;
 pub mod primitive;
 pub mod sparse;
 pub mod struct_;
+pub mod validity;
 pub mod varbin;
 pub mod varbinview;
 
@@ -42,7 +43,7 @@ pub type ArrayRef = Arc<dyn Array>;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
+pub trait Array: ArrayDisplay + Debug + Send + Sync {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
     fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
@@ -60,6 +61,8 @@ pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
     /// TODO(ngates): this is interesting. What type do we return from this?
     /// Maybe we actually need to model stats more like compute?
     fn stats(&self) -> Stats;
+
+    fn validity(&self) -> Option<Validity>;
 
     /// Limit array to start..stop range
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef>;
@@ -104,6 +107,28 @@ impl WithArrayCompute for dyn Array + '_ {
     }
 }
 
+pub trait ArrayValidity {
+    fn nullability(&self) -> Nullability;
+
+    fn logical_validity(&self) -> Option<Validity>;
+
+    fn is_valid(&self, index: usize) -> bool;
+}
+
+impl<A: Array> ArrayValidity for A {
+    fn nullability(&self) -> Nullability {
+        self.validity().is_some().into()
+    }
+
+    fn logical_validity(&self) -> Option<Validity> {
+        self.validity().and_then(|v| v.logical_validity())
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
+    }
+}
+
 pub trait IntoArray {
     fn into_array(self) -> ArrayRef;
 }
@@ -145,24 +170,6 @@ pub use impl_array;
 
 use crate::encoding::EncodingRef;
 use crate::ArrayWalker;
-
-impl ArrayValidity for ArrayRef {
-    fn nullability(&self) -> Nullability {
-        self.as_ref().nullability()
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        self.as_ref().validity()
-    }
-
-    fn logical_validity(&self) -> Option<Validity> {
-        self.as_ref().logical_validity()
-    }
-
-    fn is_valid(&self, index: usize) -> bool {
-        self.as_ref().is_valid(index)
-    }
-}
 
 impl Array for ArrayRef {
     fn as_any(&self) -> &dyn Any {
@@ -220,6 +227,10 @@ impl Array for ArrayRef {
         self.as_ref().serde()
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.as_ref().validity()
+    }
+
     #[allow(unused_variables)]
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         self.as_ref().walk(walker)
@@ -229,24 +240,6 @@ impl Array for ArrayRef {
 impl ArrayDisplay for ArrayRef {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
         ArrayDisplay::fmt(self.as_ref(), fmt)
-    }
-}
-
-impl<'a, T: ArrayValidity> ArrayValidity for &'a T {
-    fn nullability(&self) -> Nullability {
-        T::nullability(self)
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        T::validity(self)
-    }
-
-    fn logical_validity(&self) -> Option<Validity> {
-        T::logical_validity(self)
-    }
-
-    fn is_valid(&self, index: usize) -> bool {
-        T::is_valid(self, index)
     }
 }
 
@@ -281,6 +274,10 @@ impl<'a, T: Array + Clone> Array for &'a T {
 
     fn stats(&self) -> Stats {
         T::stats(self)
+    }
+
+    fn validity(&self) -> Option<Validity> {
+        T::validity(self)
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {

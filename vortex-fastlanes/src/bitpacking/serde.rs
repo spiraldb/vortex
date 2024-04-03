@@ -1,6 +1,5 @@
 use vortex::array::{Array, ArrayRef};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
-use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
 use crate::{BitPackedArray, BitPackedEncoding};

@@ -10,6 +10,7 @@ use crate::array::composite::CompositeEncoding;
 use crate::array::constant::ConstantArray;
 use crate::array::sparse::SparseEncoding;
 use crate::array::struct_::{StructArray, StructEncoding};
+use crate::array::validity::Validity;
 use crate::array::varbin::VarBinEncoding;
 use crate::array::{Array, ArrayKind, ArrayRef};
 use crate::compute;
@@ -18,7 +19,6 @@ use crate::encoding::{Encoding, EncodingRef, ENCODINGS};
 use crate::formatter::display_tree;
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
-use crate::validity::Validity;
 
 pub trait EncodingCompression: Encoding {
     fn cost(&self) -> u8 {

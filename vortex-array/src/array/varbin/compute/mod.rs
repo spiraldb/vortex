@@ -9,7 +9,9 @@ use vortex_schema::DType;
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
+use crate::array::validity::Validity;
 use crate::array::varbin::VarBinArray;
+use crate::array::ArrayValidity;
 use crate::array::{Array, ArrayRef};
 use crate::arrow::wrappers::{as_nulls, as_offset_buffer};
 use crate::compute::as_arrow::AsArrowArray;
@@ -21,7 +23,6 @@ use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
-use crate::validity::{ArrayValidity, Validity};
 
 mod take;
 

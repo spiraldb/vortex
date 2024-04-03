@@ -27,6 +27,7 @@ use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
+use crate::array::validity::Validity;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::array::IntoArray;
@@ -35,7 +36,6 @@ use crate::datetime::{LocalDateTime, LocalDateTimeArray};
 use crate::ptype::{NativePType, PType};
 use crate::scalar::NullScalar;
 use crate::stats::Stat;
-use crate::validity::Validity;
 
 pub trait FromArrowArray<A> {
     fn from_arrow(array: A, nullable: bool) -> Self;

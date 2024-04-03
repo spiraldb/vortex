@@ -1,6 +1,7 @@
 use std::cmp::min;
 use std::sync::{Arc, RwLock};
 
+use vortex::array::validity::Validity;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::flatten::flatten_primitive;
@@ -9,7 +10,6 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
@@ -145,6 +145,10 @@ impl Array for BitPackedArray {
         Some(self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.encoded())
     }
@@ -156,12 +160,6 @@ impl ArrayDisplay for BitPackedArray {
         f.child("encoded", self.encoded())?;
         f.maybe_child("patches", self.patches())?;
         f.validity(self.validity())
-    }
-}
-
-impl ArrayValidity for BitPackedArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 }
 

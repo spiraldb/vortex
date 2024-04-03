@@ -6,7 +6,6 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::cast::CastFn;
 use crate::match_each_native_ptype;
 use crate::ptype::{NativePType, PType};
-use crate::validity::ArrayValidity;
 
 impl CastFn for PrimitiveArray {
     fn cast(&self, dtype: &DType) -> VortexResult<ArrayRef> {

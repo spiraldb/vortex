@@ -7,7 +7,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::varbinview::VarBinViewArray;
-use crate::array::Array;
+use crate::array::{Array, ArrayValidity};
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
@@ -15,7 +15,6 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::Scalar;
-use crate::validity::ArrayValidity;
 
 impl ArrayCompute for VarBinViewArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {

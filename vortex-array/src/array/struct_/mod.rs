@@ -6,13 +6,13 @@ use vortex_error::VortexResult;
 use vortex_schema::{DType, FieldNames};
 
 use super::{check_slice_bounds, Array, ArrayRef};
+use crate::array::validity::Validity;
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
 use crate::{impl_array, ArrayWalker};
 
 mod compress;
@@ -116,17 +116,15 @@ impl Array for StructArray {
         Some(self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        todo!()
+    }
+
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         for field in self.fields() {
             walker.visit_child(field)?;
         }
         Ok(())
-    }
-}
-
-impl ArrayValidity for StructArray {
-    fn validity(&self) -> Option<Validity> {
-        todo!()
     }
 }
 

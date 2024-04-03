@@ -4,6 +4,7 @@ use linkme::distributed_slice;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -11,7 +12,6 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
 use crate::{impl_array, ArrayWalker};
 
 mod compute;
@@ -96,12 +96,6 @@ impl Array for ConstantArray {
         Some(self)
     }
 
-    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        Ok(())
-    }
-}
-
-impl ArrayValidity for ConstantArray {
     fn validity(&self) -> Option<Validity> {
         match self.scalar.dtype().is_nullable() {
             true => match self.scalar().is_null() {
@@ -110,6 +104,10 @@ impl ArrayValidity for ConstantArray {
             },
             false => None,
         }
+    }
+
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        Ok(())
     }
 }
 

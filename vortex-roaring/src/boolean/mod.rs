@@ -2,6 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use compress::roaring_encode;
 use croaring::{Bitmap, Native};
+use vortex::array::validity::Validity;
 use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
@@ -9,7 +10,6 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
@@ -99,6 +99,13 @@ impl Array for RoaringBoolArray {
         Some(self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        match self.dtype().is_nullable() {
+            true => Some(Validity::Valid(self.length)),
+            false => None,
+        }
+    }
+
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         // TODO(ngates): should we store a buffer in memory? Or delay serialization?
         //  Or serialize into metadata? The only reason we support buffers is so we can write to
@@ -111,15 +118,6 @@ impl Array for RoaringBoolArray {
 impl ArrayDisplay for RoaringBoolArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("bitmap", format!("{:?}", self.bitmap()))
-    }
-}
-
-impl ArrayValidity for RoaringBoolArray {
-    fn validity(&self) -> Option<Validity> {
-        match self.dtype().is_nullable() {
-            true => Some(Validity::Valid(self.length)),
-            false => None,
-        }
     }
 }
 

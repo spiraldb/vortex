@@ -1,10 +1,10 @@
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::array::ArrayValidity;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::match_each_native_ptype;
 use crate::scalar::{PrimitiveScalar, Scalar};
-use crate::validity::ArrayValidity;
 
 impl ScalarAtFn for PrimitiveArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {

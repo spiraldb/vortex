@@ -3,8 +3,8 @@ use std::fmt::{Display, Write};
 
 use humansize::{format_size, DECIMAL};
 
+use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
-use crate::validity::Validity;
 
 pub trait ArrayDisplay {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> fmt::Result;
