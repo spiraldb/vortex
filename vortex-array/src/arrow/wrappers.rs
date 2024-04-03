@@ -14,7 +14,7 @@ pub fn as_offset_buffer<T: NativePType>(array: PrimitiveArray) -> OffsetBuffer<T
     OffsetBuffer::new(as_scalar_buffer(array))
 }
 
-pub fn as_nulls_view(validity: Option<&ValidityView>) -> VortexResult<Option<NullBuffer>> {
+pub fn as_nulls_view(validity: Option<ValidityView>) -> VortexResult<Option<NullBuffer>> {
     if validity.is_none() {
         return Ok(None);
     }
@@ -37,6 +37,6 @@ pub fn as_nulls_view(validity: Option<&ValidityView>) -> VortexResult<Option<Nul
 pub fn as_nulls(validity: Option<Validity>) -> VortexResult<Option<NullBuffer>> {
     match validity {
         None => Ok(None),
-        Some(v) => as_nulls_view(Some(&v.as_view())),
+        Some(v) => as_nulls_view(Some(v.as_view())),
     }
 }

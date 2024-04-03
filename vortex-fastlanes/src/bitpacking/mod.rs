@@ -77,6 +77,13 @@ impl BitPackedArray {
 
 impl Array for BitPackedArray {
     impl_array!();
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
 
     #[inline]
     fn len(&self) -> usize {
@@ -116,7 +123,7 @@ impl Array for BitPackedArray {
         Self::try_new(
             self.encoded().slice(encoded_start, encoded_stop)?,
             self.validity()
-                .map(|v| v.slice(start, min(stop, self.len()))),
+                .map(|v| v.as_view().slice(start, min(stop, self.len()))),
             self.patches()
                 .map(|p| p.slice(start, min(stop, self.len())))
                 .transpose()?,

@@ -5,6 +5,7 @@ use croaring::{Bitmap, Native};
 use vortex::array::validity::Validity;
 use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
+use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
@@ -49,6 +50,13 @@ impl RoaringBoolArray {
 
 impl Array for RoaringBoolArray {
     impl_array!();
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
 
     #[inline]
     fn len(&self) -> usize {

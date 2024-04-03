@@ -159,6 +159,14 @@ impl Array for Validity {
         &ValidityEncoding
     }
 
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
+
     fn nbytes(&self) -> usize {
         match self {
             Validity::Valid(_) | Validity::Invalid(_) => 8,

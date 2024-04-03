@@ -80,6 +80,14 @@ impl DateTimeArray {
 impl Array for DateTimeArray {
     impl_array!();
 
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
+
     fn len(&self) -> usize {
         self.days.len()
     }
@@ -101,7 +109,7 @@ impl Array for DateTimeArray {
             self.days.slice(start, stop)?,
             self.seconds.slice(start, stop)?,
             self.subsecond.slice(start, stop)?,
-            self.validity().map(|v| v.slice(start, stop)),
+            self.validity().map(|v| v.as_view().slice(start, stop)),
             self.dtype.clone(),
         )
         .into_array())

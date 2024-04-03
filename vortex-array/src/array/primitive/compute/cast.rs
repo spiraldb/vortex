@@ -18,7 +18,7 @@ impl<T: NativePType> CastFn for &dyn PrimitiveTrait<T> {
             match_each_native_ptype!(into_ptype, |$P| {
                 Ok(PrimitiveArray::from_nullable(
                     cast::<T, $P>(self.typed_data())?,
-                    self.validity().map(|v| v.to_validity()),
+                    self.validity_view().map(|v| v.to_validity()),
                 ).into_array())
             })
         }

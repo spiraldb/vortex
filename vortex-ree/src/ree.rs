@@ -106,6 +106,13 @@ impl REEArray {
 
 impl Array for REEArray {
     impl_array!();
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
 
     #[inline]
     fn len(&self) -> usize {
@@ -134,7 +141,9 @@ impl Array for REEArray {
         Ok(Self {
             ends: self.ends.slice(slice_begin, slice_end + 1)?,
             values: self.values.slice(slice_begin, slice_end + 1)?,
-            validity: self.validity().map(|v| v.slice(slice_begin, slice_end + 1)),
+            validity: self
+                .validity()
+                .map(|v| v.as_view().slice(slice_begin, slice_end + 1)),
             offset: start,
             length: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),

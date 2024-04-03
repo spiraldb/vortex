@@ -11,6 +11,7 @@ use crate::compress::EncodingCompression;
 use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
+use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::PType;
@@ -132,6 +133,13 @@ impl Array for SparseArray {
     }
 
     #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
+
     fn nbytes(&self) -> usize {
         self.indices.nbytes() + self.values.nbytes()
     }

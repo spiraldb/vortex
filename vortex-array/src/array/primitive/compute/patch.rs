@@ -29,7 +29,7 @@ fn patch_with_sparse<T: NativePType>(
     let patch_values = compute::flatten::flatten_primitive(patch.values())?;
 
     if array.ptype() != patch_values.ptype() {
-        vortex_bail!(MismatchedTypes: array.dtype(), patch_values.dtype())
+        vortex_bail!(MismatchedTypes: array.dtype(), Array::dtype(&patch_values))
     }
 
     for (idx, value) in patch_indices
@@ -42,7 +42,7 @@ fn patch_with_sparse<T: NativePType>(
     Ok(PrimitiveArray::from_nullable(
         values,
         // TODO(ngates): if patch values has null, we need to patch into the validity buffer
-        array.validity().map(|v| v.to_validity()),
+        array.validity_view().map(|v| v.to_validity()),
     )
     .into_array())
 }

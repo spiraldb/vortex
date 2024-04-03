@@ -12,7 +12,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
-use crate::array::validity::Validity;
+use crate::array::validity::{Validity, ValidityView};
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::array::{ArrayValidity, IntoArray};
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -29,6 +29,9 @@ mod stats;
 mod view;
 
 pub use view::*;
+
+use crate::array::primitive::compute::PrimitiveTrait;
+use crate::compute::ArrayCompute;
 
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {
@@ -104,7 +107,7 @@ impl PrimitiveArray {
     }
 
     pub fn into_nullable(self, nullability: Nullability) -> Self {
-        let dtype = self.dtype().with_nullability(nullability);
+        let dtype = Array::dtype(&self).with_nullability(nullability);
         if self.validity().is_some() && nullability == Nullability::NonNullable {
             panic!("Cannot convert nullable array to non-nullable array")
         }
@@ -146,6 +149,11 @@ impl PrimitiveArray {
             );
         }
         self.buffer().typed_data()
+    }
+
+    pub(crate) fn as_trait<T: NativePType>(&self) -> &dyn PrimitiveTrait<T> {
+        assert_eq!(self.ptype, T::PTYPE);
+        self
     }
 }
 
@@ -197,6 +205,15 @@ impl Array for PrimitiveArray {
     }
 
     #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        match_each_native_ptype!(self.ptype(), |$P| {
+            f(&self.as_trait::<$P>())
+        })
+    }
+
     fn nbytes(&self) -> usize {
         self.buffer.len()
     }
@@ -215,6 +232,31 @@ impl Array for PrimitiveArray {
             walker.visit_child(&v.to_array())?;
         }
         walker.visit_buffer(self.buffer())
+    }
+}
+
+impl<T: NativePType> PrimitiveTrait<T> for PrimitiveArray {
+    fn dtype(&self) -> &DType {
+        &self.dtype
+    }
+
+    fn ptype(&self) -> PType {
+        self.ptype
+    }
+
+    fn validity_view(&self) -> Option<ValidityView> {
+        match &self.validity {
+            None => None,
+            Some(v) => Some(v.as_view()),
+        }
+    }
+
+    fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    fn to_primitive(&self) -> PrimitiveArray {
+        self.clone()
     }
 }
 

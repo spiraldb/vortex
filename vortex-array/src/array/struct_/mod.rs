@@ -8,6 +8,7 @@ use vortex_schema::{DType, FieldNames};
 use super::{check_slice_bounds, Array, ArrayRef};
 use crate::array::validity::Validity;
 use crate::compress::EncodingCompression;
+use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
@@ -105,6 +106,14 @@ impl Array for StructArray {
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &StructEncoding
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
     }
 
     fn nbytes(&self) -> usize {

@@ -12,6 +12,7 @@ use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
@@ -237,6 +238,13 @@ impl Array for VarBinArray {
     }
 
     #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
+
     fn nbytes(&self) -> usize {
         self.bytes.nbytes() + self.offsets.nbytes()
     }

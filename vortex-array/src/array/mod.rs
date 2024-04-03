@@ -69,17 +69,13 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync {
     /// Encoding kind of the array
     fn encoding(&self) -> EncodingRef;
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
+
     fn nbytes(&self) -> usize;
 
     fn with_compute_mut(
         &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        vortex_bail!(
-            "with_compute_mut not implemented for {}",
-            self.encoding().id()
-        )
-    }
+        _f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()>;
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         None
@@ -89,11 +85,11 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync {
 }
 
 pub trait WithArrayCompute {
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()>;
+    fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(&self, f: F)
+        -> VortexResult<R>;
+}
 
+impl WithArrayCompute for dyn Array + '_ {
     fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
         &self,
         f: F,
@@ -104,18 +100,6 @@ pub trait WithArrayCompute {
             Ok(())
         })?;
         Ok(result.unwrap())
-    }
-}
-
-impl<T> WithArrayCompute for T
-where
-    T: ArrayCompute,
-{
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
     }
 }
 
@@ -244,6 +228,77 @@ impl Array for ArrayRef {
 impl ArrayDisplay for ArrayRef {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
         ArrayDisplay::fmt(self.as_ref(), fmt)
+    }
+}
+
+impl<'a, T: Array + Clone> Array for &'a T {
+    fn as_any(&self) -> &dyn Any {
+        T::as_any(self)
+    }
+
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+        T::into_any(Arc::new((*self).clone()))
+    }
+
+    fn to_array(&self) -> ArrayRef {
+        T::to_array(self)
+    }
+
+    fn into_array(self) -> ArrayRef {
+        self.to_array()
+    }
+
+    fn len(&self) -> usize {
+        T::len(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        T::is_empty(self)
+    }
+
+    fn dtype(&self) -> &DType {
+        T::dtype(self)
+    }
+
+    fn stats(&self) -> Stats {
+        T::stats(self)
+    }
+
+    fn validity(&self) -> Option<Validity> {
+        T::validity(self)
+    }
+
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        T::slice(self, start, stop)
+    }
+
+    fn encoding(&self) -> EncodingRef {
+        T::encoding(self)
+    }
+
+    fn nbytes(&self) -> usize {
+        T::nbytes(self)
+    }
+
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        T::serde(self)
+    }
+
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        T::with_compute_mut(self, f)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        T::walk(self, walker)
+    }
+}
+
+impl<'a, T: ArrayDisplay> ArrayDisplay for &'a T {
+    fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
+        ArrayDisplay::fmt(*self, fmt)
     }
 }
 

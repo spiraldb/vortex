@@ -7,6 +7,8 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
+use crate::compute::ArrayCompute;
+use crate::serde::ArrayView;
 use crate::stats::Stat;
 
 #[derive(Debug, Clone)]
@@ -110,10 +112,19 @@ impl ValidityView<'_> {
         }
     }
 
-    pub fn nbytes(&self) -> usize {
-        match self {
-            Self::Valid(_) | Self::Invalid(_) => 4,
-            Self::Array(a) => a.nbytes(),
-        }
+    pub fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
+}
+
+impl ArrayCompute for ValidityView<'_> {}
+
+impl<'a> From<ArrayView<'a>> for ValidityView<'a> {
+    fn from(_value: ArrayView<'a>) -> Self {
+        // Parse the metadata, and return the appropriate ValidityView
+        todo!()
     }
 }

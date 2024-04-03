@@ -13,7 +13,7 @@ impl<T: NativePType> FillForwardFn for &dyn PrimitiveTrait<T> {
             return Ok(self.to_array());
         }
 
-        let validity = self.validity().unwrap();
+        let validity = self.validity_view().unwrap();
         if validity.all_valid() {
             return Ok(PrimitiveArray::new(self.ptype(), self.buffer().clone(), None).into_array());
         }
