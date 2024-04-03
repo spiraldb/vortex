@@ -212,31 +212,33 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
     }
 
     // How many fastlanes vectors we will process.
-    let num_chunks = length / 1024;
+    let num_chunks = (length + 1023) / 1024;
+    let bytes_per_chunk = 128 * bit_width;
+    assert_eq!(
+        packed.len(),
+        num_chunks * bytes_per_chunk,
+        "Invalid packed length: got {}, expected {}",
+        packed.len(),
+        num_chunks * bytes_per_chunk
+    );
 
     // Allocate a result vector.
-    let mut output = Vec::with_capacity(length);
-
-    // Loop over all but the last chunk.
-    let bytes_per_chunk = 128 * bit_width;
+    let mut output = Vec::with_capacity(num_chunks * 1024);
+    // Loop over all the chunks.
     (0..num_chunks).for_each(|i| {
         let chunk: &[u8] = &packed[i * bytes_per_chunk..][0..bytes_per_chunk];
         TryBitPack::try_unpack_into(chunk, bit_width, &mut output).unwrap();
     });
 
-    // Handle the final chunk which may contain padding.
-    let last_chunk_size = length % 1024;
-    if last_chunk_size > 0 {
-        let mut last_output = Vec::with_capacity(1024);
-        TryBitPack::try_unpack_into(
-            &packed[num_chunks * bytes_per_chunk..],
-            bit_width,
-            &mut last_output,
-        )
-        .unwrap();
-        output.extend_from_slice(&last_output[..last_chunk_size]);
-    }
+    // The final chunk may have had padding
+    output.truncate(length);
 
+    // For small vectors, the overhead of rounding up is more noticable.
+    // Shrink to fit may or may not reallocate depending on the implementation.
+    // But for very small vectors, the reallocation is cheap enough even if it does happen.
+    if output.len() < 1024 {
+        output.shrink_to_fit();
+    }
     output
 }
 

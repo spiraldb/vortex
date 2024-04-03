@@ -39,8 +39,12 @@ fn pack_unpack(c: &mut Criterion) {
 
     // 1024 elements pack into `128 * bits` bytes
     let packed_1024 = &packed[0..128 * bits];
+    c.bench_function("unpack_1024_alloc", |b| {
+        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, values.len())));
+    });
+
     let mut output: Vec<u32> = Vec::with_capacity(1024);
-    c.bench_function("unpack_1024", |b| {
+    c.bench_function("unpack_1024_noalloc", |b| {
         b.iter(|| {
             output.clear();
             TryBitPack::try_unpack_into(packed_1024, bits, &mut output).unwrap();
