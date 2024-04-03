@@ -111,7 +111,7 @@ impl PrimitiveArray {
         if self.validity().is_some() && nullability == Nullability::NonNullable {
             panic!("Cannot convert nullable array to non-nullable array")
         }
-        let len = self.len();
+        let len = Array::len(&self);
         let validity = if nullability == Nullability::Nullable {
             Some(self.validity().unwrap_or_else(|| Validity::Valid(len)))
         } else {
@@ -180,6 +180,10 @@ impl Array for PrimitiveArray {
         Stats::new(&self.stats, self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -201,6 +205,10 @@ impl Array for PrimitiveArray {
         &PrimitiveEncoding
     }
 
+    fn nbytes(&self) -> usize {
+        self.buffer.len()
+    }
+
     #[inline]
     fn with_compute_mut(
         &self,
@@ -211,16 +219,8 @@ impl Array for PrimitiveArray {
         })
     }
 
-    fn nbytes(&self) -> usize {
-        self.buffer.len()
-    }
-
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
@@ -333,8 +333,8 @@ impl ArrayDisplay for PrimitiveArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         match_each_native_ptype!(self.ptype(), |$P| {
             f.property("values", format!("{:?}{}",
-                &self.buffer().typed_data::<$P>()[..min(10, self.len())],
-                if self.len() > 10 { "..." } else { "" }))
+                &self.buffer().typed_data::<$P>()[..min(10, Array::len(self))],
+                if Array::len(self) > 10 { "..." } else { "" }))
         })?;
         f.validity(self.validity())
     }

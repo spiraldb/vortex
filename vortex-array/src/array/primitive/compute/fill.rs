@@ -9,7 +9,7 @@ use crate::ptype::NativePType;
 
 impl<T: NativePType> FillForwardFn for &dyn PrimitiveTrait<T> {
     fn fill_forward(&self) -> VortexResult<ArrayRef> {
-        if self.validity().is_none() {
+        if self.validity_view().is_none() {
             return Ok(self.to_array());
         }
 

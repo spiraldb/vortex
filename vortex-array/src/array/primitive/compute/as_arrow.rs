@@ -7,7 +7,6 @@ use arrow_buffer::ScalarBuffer;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::compute::PrimitiveTrait;
-use crate::array::Array;
 use crate::arrow::wrappers::as_nulls_view;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::ptype::{AsArrowPrimitiveType, NativePType};

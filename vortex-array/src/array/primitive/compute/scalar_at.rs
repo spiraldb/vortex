@@ -1,7 +1,6 @@
 use vortex_error::VortexResult;
 
 use crate::array::primitive::compute::PrimitiveTrait;
-use crate::array::Array;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::ptype::NativePType;
 use crate::scalar::{PrimitiveScalar, Scalar};
