@@ -1,6 +1,5 @@
 use itertools::Itertools;
 use num_traits::{PrimInt, WrappingAdd, WrappingSub};
-
 use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
@@ -11,7 +10,6 @@ use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
-use vortex::validity::ArrayValidity;
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::downcast::DowncastFastlanes;
@@ -55,9 +53,8 @@ impl EncodingCompression for FoREncoding {
         let shift = trailing_zeros(parray);
         let min = parray
             .stats()
-            .get_or_compute(&Stat::Min).ok_or_else(|| {
-            vortex_err!("Min stat not found")
-        })?;
+            .get_or_compute(&Stat::Min)
+            .ok_or_else(|| vortex_err!("Min stat not found"))?;
 
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
             if shift == <$T>::PTYPE.bit_width() as u8 {
@@ -154,9 +151,8 @@ mod test {
     use vortex::compute::scalar_at::ScalarAtFn;
     use vortex::encoding::{Encoding, EncodingRef};
 
-    use crate::BitPackedEncoding;
-
     use super::*;
+    use crate::BitPackedEncoding;
 
     fn compress_ctx() -> CompressCtx {
         let cfg = CompressConfig::new()

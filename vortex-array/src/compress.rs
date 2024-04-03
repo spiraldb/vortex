@@ -3,7 +3,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
 use log::{debug, info, warn};
-
 use vortex_error::VortexResult;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
@@ -13,13 +12,13 @@ use crate::array::sparse::SparseEncoding;
 use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::varbin::VarBinEncoding;
 use crate::array::{Array, ArrayKind, ArrayRef};
+use crate::array::validity::Validity;
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
 use crate::encoding::{Encoding, EncodingRef, ENCODINGS};
 use crate::formatter::display_tree;
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
-use crate::validity::Validity;
 
 pub trait EncodingCompression: Encoding {
     fn cost(&self) -> u8 {
@@ -362,7 +361,10 @@ fn find_best_compression<'a>(
             compression.id(),
             sample
         );
-        if compression.can_compress(sample, ctx.options.as_ref()).is_none() {
+        if compression
+            .can_compress(sample, ctx.options.as_ref())
+            .is_none()
+        {
             continue;
         }
         let compressed_sample =
