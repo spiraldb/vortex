@@ -38,13 +38,13 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
-    use vortex::array::downcast::DowncastArrayBuiltin;
 
-    use crate::iter::FallibleLendingIterator;
+    use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::take::take;
     use vortex::serde::context::SerdeContext;
 
+    use crate::iter::FallibleLendingIterator;
     use crate::reader::StreamReader;
     use crate::writer::StreamWriter;
 
