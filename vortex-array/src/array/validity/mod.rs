@@ -256,6 +256,7 @@ impl Array for Validity {
             Validity::Array(a) => a.nbytes(),
         }
     }
+
     fn validity(&self) -> Option<Validity> {
         None
     }

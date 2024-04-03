@@ -113,6 +113,7 @@ impl Array for ALPArray {
     fn nbytes(&self) -> usize {
         self.encoded().nbytes() + self.patches().map(|p| p.nbytes()).unwrap_or(0)
     }
+
     fn validity(&self) -> Option<Validity> {
         self.encoded().validity()
     }

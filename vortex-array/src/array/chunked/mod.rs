@@ -145,6 +145,7 @@ impl Array for ChunkedArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
     fn validity(&self) -> Option<Validity> {
         if !self.dtype.is_nullable() {
             return None;
@@ -156,6 +157,7 @@ impl Array for ChunkedArray {
                 .unwrap_or_else(|| Validity::Valid(chunk.len()))
         })))
     }
+
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         for chunk in self.chunks() {
             walker.visit_child(&chunk)?;

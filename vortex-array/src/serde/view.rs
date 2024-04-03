@@ -199,6 +199,7 @@ impl<'a> Array for ArrayView<'a> {
             .expect("TODO(ngates): heap allocate ArrayView and invoke compute")
             .with_view_compute(self, f)
     }
+
     fn validity(&self) -> Option<Validity> {
         todo!()
     }

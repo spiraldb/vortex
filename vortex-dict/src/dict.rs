@@ -82,9 +82,11 @@ impl Array for DictArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
     fn validity(&self) -> Option<Validity> {
         todo!()
     }
+
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.values())?;
         walker.visit_child(self.codes())

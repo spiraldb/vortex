@@ -101,12 +101,14 @@ impl Array for RoaringIntArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
     fn validity(&self) -> Option<Validity> {
         match self.dtype().is_nullable() {
             true => Some(Validity::Valid(self.len())),
             false => None,
         }
     }
+
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         todo!()
     }

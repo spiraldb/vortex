@@ -102,9 +102,11 @@ impl Array for FoRArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
     fn validity(&self) -> Option<Validity> {
         self.encoded().validity()
     }
+
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.encoded())
     }

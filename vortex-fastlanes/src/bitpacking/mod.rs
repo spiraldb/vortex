@@ -144,6 +144,7 @@ impl Array for BitPackedArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
     fn validity(&self) -> Option<Validity> {
         self.validity.clone()
     }

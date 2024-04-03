@@ -18,6 +18,7 @@ impl ArrayCompute for FoRArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
+
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }

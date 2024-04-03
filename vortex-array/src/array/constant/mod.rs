@@ -95,6 +95,7 @@ impl Array for ConstantArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
     fn validity(&self) -> Option<Validity> {
         match self.scalar.dtype().is_nullable() {
             true => match self.scalar().is_null() {
@@ -104,6 +105,7 @@ impl Array for ConstantArray {
             false => None,
         }
     }
+
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         Ok(())
     }

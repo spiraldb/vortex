@@ -278,6 +278,7 @@ impl<'a, T: Array + Clone> Array for &'a T {
     fn validity(&self) -> Option<Validity> {
         T::validity(self)
     }
+
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         T::slice(self, start, stop)
     }
