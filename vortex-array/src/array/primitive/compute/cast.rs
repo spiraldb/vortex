@@ -13,7 +13,7 @@ impl<T: NativePType> CastFn for &dyn PrimitiveTrait<T> {
         // TODO(ngates): check validity
         let into_ptype = PType::try_from(dtype)?;
         if into_ptype == self.ptype() {
-            return Ok(self.to_array());
+            Ok(self.to_array())
         } else {
             match_each_native_ptype!(into_ptype, |$P| {
                 Ok(PrimitiveArray::from_nullable(

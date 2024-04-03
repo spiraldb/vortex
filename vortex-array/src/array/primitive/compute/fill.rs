@@ -2,8 +2,7 @@ use vortex_error::VortexResult;
 
 use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::IntoArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, IntoArray};
 use crate::compute::fill::FillForwardFn;
 use crate::ptype::NativePType;
 
@@ -22,7 +21,7 @@ impl<T: NativePType> FillForwardFn for &dyn PrimitiveTrait<T> {
         let filled = self
             .typed_data()
             .iter()
-            .zip(validity.to_bool_array().into_buffer().into_iter())
+            .zip(validity.to_bool_array().into_buffer().iter())
             .map(|(v, valid)| {
                 if valid {
                     last_value = *v;

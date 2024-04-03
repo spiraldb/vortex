@@ -242,10 +242,7 @@ impl<T: NativePType> PrimitiveTrait<T> for PrimitiveArray {
     }
 
     fn validity_view(&self) -> Option<ValidityView> {
-        match &self.validity {
-            None => None,
-            Some(v) => Some(v.as_view()),
-        }
+        self.validity.as_ref().map(|v| v.as_view())
     }
 
     fn buffer(&self) -> &Buffer {
