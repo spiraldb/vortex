@@ -1,6 +1,7 @@
+use std::mem::size_of;
+
 use itertools::Itertools;
 use num_traits::{Float, NumCast, PrimInt, Zero};
-use std::mem::size_of;
 
 const SAMPLE_SIZE: usize = 32;
 

@@ -4,7 +4,6 @@ use std::panic::RefUnwindSafe;
 use arrow_buffer::ArrowNativeType;
 use half::f16;
 use num_traits::{Num, NumCast};
-
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::DType::*;
 use vortex_schema::{DType, FloatWidth, IntWidth};

@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
-
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 

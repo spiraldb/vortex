@@ -1,19 +1,21 @@
-use crate::idempotent;
-use crate::reader::{compress_parquet_to_vortex, BATCH_SIZE};
+use std::fs::File;
+use std::path::{Path, PathBuf};
+
 use arrow_array::RecordBatchReader;
 use itertools::Itertools;
 use lance::dataset::WriteParams;
 use lance::Dataset;
 use lance_parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder as LanceParquetRecordBatchReaderBuilder;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use std::fs::File;
-use std::path::{Path, PathBuf};
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::IntoArray;
 use vortex::arrow::FromArrowType;
 use vortex::serde::WriteCtx;
 use vortex_schema::DType;
+
+use crate::idempotent;
+use crate::reader::{compress_parquet_to_vortex, BATCH_SIZE};
 
 pub fn download_data(fname: &str, data_url: &str) -> PathBuf {
     idempotent(fname, |path| {

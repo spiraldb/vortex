@@ -2,7 +2,6 @@ use std::io;
 use std::io::ErrorKind;
 
 use croaring::{Bitmap, Portable};
-
 use vortex::array::{Array, ArrayRef};
 use vortex::ptype::PType;
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
@@ -41,7 +40,6 @@ impl EncodingSerde for RoaringIntEncoding {
 #[cfg(test)]
 mod test {
     use croaring::Bitmap;
-
     use vortex::ptype::PType;
 
     use crate::downcast::DowncastRoaring;

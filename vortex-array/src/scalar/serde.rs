@@ -2,11 +2,10 @@ use std::io;
 use std::sync::Arc;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-
-use crate::match_each_native_ptype;
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
+use crate::match_each_native_ptype;
 use crate::scalar::composite::CompositeScalar;
 use crate::scalar::{
     BinaryScalar, BoolScalar, ListScalar, NullScalar, PScalar, PrimitiveScalar, Scalar,

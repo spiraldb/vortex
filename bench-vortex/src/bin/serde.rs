@@ -1,8 +1,7 @@
-use log::LevelFilter;
-
 use bench_vortex::reader::take_vortex;
 use bench_vortex::setup_logger;
 use bench_vortex::taxi_data::taxi_data_vortex;
+use log::LevelFilter;
 
 pub fn main() {
     setup_logger(LevelFilter::Error);

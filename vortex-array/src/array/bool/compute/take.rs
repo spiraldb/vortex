@@ -1,6 +1,5 @@
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
-
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;

@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
+use arrow_array::RecordBatch;
+
 use crate::array::struct_::StructArray;
 use crate::array::{Array, ArrayRef, IntoArray};
 use crate::encode::FromArrowArray;
-use arrow_array::RecordBatch;
-use std::sync::Arc;
 
 impl IntoArray for &RecordBatch {
     fn into_array(self) -> ArrayRef {

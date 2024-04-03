@@ -1,9 +1,4 @@
 use itertools::Itertools;
-
-use crate::alp::ALPFloat;
-use crate::array::{ALPArray, ALPEncoding};
-use crate::downcast::DowncastALP;
-use crate::Exponents;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
@@ -14,6 +9,11 @@ use vortex::compute::patch::patch;
 use vortex::ptype::{NativePType, PType};
 use vortex::validity::ArrayValidity;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+
+use crate::alp::ALPFloat;
+use crate::array::{ALPArray, ALPEncoding};
+use crate::downcast::DowncastALP;
+use crate::Exponents;
 
 #[macro_export]
 macro_rules! match_each_alp_float_ptype {

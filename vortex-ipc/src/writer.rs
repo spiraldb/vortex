@@ -1,17 +1,16 @@
-use flatbuffers::root_unchecked;
-use itertools::Itertools;
 use std::io::{BufWriter, Write};
 
+use flatbuffers::root_unchecked;
+use itertools::Itertools;
 use vortex::array::Array;
 use vortex::serde::context::SerdeContext;
 use vortex::serde::data::{ArrayData, ColumnData};
-
-use crate::ALIGNMENT;
 use vortex_error::VortexResult;
 use vortex_flatbuffers::FlatBufferWriter;
 
 use crate::flatbuffers::ipc as fb;
 use crate::messages::{IPCChunk, IPCChunkColumn, IPCContext, IPCMessage, IPCSchema};
+use crate::ALIGNMENT;
 
 #[allow(dead_code)]
 pub struct StreamWriter<W: Write> {

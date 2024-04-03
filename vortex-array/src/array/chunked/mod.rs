@@ -2,7 +2,6 @@ use std::sync::{Arc, RwLock};
 
 use itertools::Itertools;
 use linkme::distributed_slice;
-
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 

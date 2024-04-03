@@ -1,7 +1,6 @@
+use dtype::PyDType;
 use log::debug;
 use pyo3::prelude::*;
-
-use dtype::PyDType;
 use vortex_schema::DType;
 use vortex_schema::Signedness::{Signed, Unsigned};
 

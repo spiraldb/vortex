@@ -4,7 +4,6 @@ use arrow_array::{
     ArrayRef as ArrowArrayRef, ArrowPrimitiveType, PrimitiveArray as ArrowPrimitiveArray,
 };
 use arrow_buffer::ScalarBuffer;
-
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;

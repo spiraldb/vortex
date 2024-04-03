@@ -1,3 +1,8 @@
+use arrow_buffer::{BooleanBuffer, NullBuffer};
+use itertools::Itertools;
+use vortex_error::VortexResult;
+use vortex_schema::{DType, Nullability};
+
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::{Array, ArrayRef};
@@ -6,10 +11,6 @@ use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
 use crate::stats::Stat;
-use arrow_buffer::{BooleanBuffer, NullBuffer};
-use itertools::Itertools;
-use vortex_error::VortexResult;
-use vortex_schema::{DType, Nullability};
 
 #[derive(Debug, Clone)]
 pub enum Validity {

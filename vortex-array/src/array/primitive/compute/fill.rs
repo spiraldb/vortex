@@ -1,5 +1,4 @@
 use num_traits::Zero;
-
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;

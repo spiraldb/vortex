@@ -1,8 +1,7 @@
 use std::sync::{Arc, RwLock};
 
-use croaring::{Bitmap, Native};
-
 use compress::roaring_encode;
+use croaring::{Bitmap, Native};
 use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;

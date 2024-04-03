@@ -3,7 +3,6 @@ use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use half::f16;
-
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::{DType, Nullability};
 
@@ -133,7 +132,7 @@ impl PScalar {
 
     pub fn cast_ptype(&self, ptype: PType) -> VortexResult<Scalar> {
         macro_rules! from_int {
-            ($ptype:ident , $v:ident) => {
+            ($ptype:ident, $v:ident) => {
                 match $ptype {
                     PType::U8 => Ok((*$v as u8).into()),
                     PType::U16 => Ok((*$v as u16).into()),

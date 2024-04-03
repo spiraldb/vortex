@@ -1,8 +1,10 @@
-use crate::compress::EncodingCompression;
-use crate::serde::EncodingSerde;
-use linkme::distributed_slice;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+
+use linkme::distributed_slice;
+
+use crate::compress::EncodingCompression;
+use crate::serde::EncodingSerde;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct EncodingId(&'static str);
