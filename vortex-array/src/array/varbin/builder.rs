@@ -1,8 +1,8 @@
 use crate::array::primitive::PrimitiveArray;
+use crate::array::validity::Validity;
 use crate::array::varbin::VarBinArray;
 use crate::array::Array;
 use crate::ptype::NativePType;
-use crate::validity::Validity;
 use arrow_buffer::NullBufferBuilder;
 use num_traits::PrimInt;
 use vortex_schema::DType;
@@ -63,11 +63,11 @@ impl<O: NativePType + PrimInt> VarBinBuilder<O> {
 
 #[cfg(test)]
 mod test {
+    use crate::array::validity::ArrayValidity;
     use crate::array::varbin::builder::VarBinBuilder;
     use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
     use crate::scalar::Scalar;
-    use crate::validity::ArrayValidity;
     use vortex_schema::DType;
     use vortex_schema::Nullability::Nullable;
 

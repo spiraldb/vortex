@@ -1,6 +1,7 @@
 use arrow_buffer::Buffer;
 use num_traits::PrimInt;
 
+use crate::array::validity::Validity;
 use crate::array::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
@@ -9,13 +10,12 @@ use crate::compute::ArrayCompute;
 use crate::match_each_integer_ptype;
 use crate::ptype::{NativePType, PType};
 use crate::serde::ArrayView;
-use crate::validity::Validity;
 use vortex_error::{vortex_err, VortexResult};
 
 pub struct PrimitiveView<'a> {
     ptype: PType,
     buffer: &'a Buffer,
-    // TODO(ngates): look at a ValidityView?
+    // TODO(ngates): switch to ValidityView
     validity: Option<Validity>,
 }
 

@@ -14,6 +14,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
+use crate::array::validity::{ArrayValidity, Validity};
 use crate::array::IntoArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -21,7 +22,6 @@ use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
 use crate::{impl_array, ArrayWalker};
 
 mod compute;

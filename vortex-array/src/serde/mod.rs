@@ -7,12 +7,12 @@ use flatbuffers::root;
 use itertools::Itertools;
 
 use crate::array::composite::COMPOSITE_EXTENSIONS;
+use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::encoding::{find_encoding, EncodingId, ENCODINGS};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 use crate::serde::ptype::PTypeTag;
-use crate::validity::Validity;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DTypeSerdeContext;
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};

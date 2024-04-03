@@ -2,12 +2,12 @@ use num_traits::AsPrimitive;
 
 use crate::accessor::ArrayAccessor;
 use crate::array::downcast::DowncastArrayBuiltin;
+use crate::array::validity::ArrayValidity;
 use crate::array::varbin::VarBinArray;
 use crate::array::Array;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::match_each_native_ptype;
-use crate::validity::ArrayValidity;
 
 fn offset_at(array: &dyn Array, index: usize) -> usize {
     if let Some(parray) = array.maybe_primitive() {

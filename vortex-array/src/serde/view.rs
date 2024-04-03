@@ -1,3 +1,4 @@
+use crate::array::validity::{ArrayValidity, Validity};
 use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
@@ -6,7 +7,6 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::context::SerdeContext;
 use crate::serde::EncodingSerde;
 use crate::stats::Stats;
-use crate::validity::{ArrayValidity, Validity};
 use crate::ArrayWalker;
 use arrow_buffer::Buffer;
 use std::any::Any;

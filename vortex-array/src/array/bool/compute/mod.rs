@@ -7,6 +7,7 @@ use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
+use crate::array::validity::{ArrayValidity, Validity};
 use crate::array::{Array, ArrayRef};
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
@@ -17,7 +18,6 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::scalar::{BoolScalar, Scalar};
-use crate::validity::{ArrayValidity, Validity};
 
 mod take;
 
@@ -123,8 +123,8 @@ impl FillForwardFn for BoolArray {
 mod test {
     use crate::array::bool::BoolArray;
     use crate::array::downcast::DowncastArrayBuiltin;
+    use crate::array::validity::ArrayValidity;
     use crate::compute;
-    use crate::validity::ArrayValidity;
 
     #[test]
     fn fill_forward() {

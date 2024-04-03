@@ -6,11 +6,11 @@ use arrow_buffer::buffer::BooleanBuffer;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::array::validity::ArrayValidity;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, PScalar};
 use crate::stats::{Stat, StatsCompute, StatsSet};
-use crate::validity::ArrayValidity;
 
 impl StatsCompute for PrimitiveArray {
     fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {

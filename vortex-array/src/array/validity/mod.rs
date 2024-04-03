@@ -1,3 +1,11 @@
+use std::sync::Arc;
+
+use arrow_buffer::{BooleanBuffer, NullBuffer};
+use itertools::Itertools;
+
+use vortex_error::VortexResult;
+use vortex_schema::{DType, Nullability};
+
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::{Array, ArrayRef};
@@ -5,11 +13,15 @@ use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
-use crate::stats::Stat;
-use arrow_buffer::{BooleanBuffer, NullBuffer};
-use itertools::Itertools;
-use vortex_error::VortexResult;
-use vortex_schema::{DType, Nullability};
+use crate::compute::ArrayCompute;
+use crate::encoding::{Encoding, EncodingId, EncodingRef};
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::stats::{Stat, Stats};
+use crate::{impl_array, ArrayWalker};
+mod serde;
+mod view;
+
+pub use view::*;
 
 #[derive(Debug, Clone)]
 pub enum Validity {
@@ -213,5 +225,86 @@ pub trait ArrayValidity {
 
     fn is_valid(&self, index: usize) -> bool {
         self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
+    }
+}
+
+impl Array for Validity {
+    impl_array!();
+
+    fn len(&self) -> usize {
+        match self {
+            Validity::Valid(len) | Validity::Invalid(len) => *len,
+            Validity::Array(a) => a.len(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        match self {
+            Validity::Valid(len) | Validity::Invalid(len) => *len == 0,
+            Validity::Array(a) => a.is_empty(),
+        }
+    }
+
+    fn dtype(&self) -> &DType {
+        &Validity::DTYPE
+    }
+
+    fn stats(&self) -> Stats {
+        todo!()
+    }
+
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(match self {
+            Validity::Valid(_) => Validity::Valid(stop - start),
+            Validity::Invalid(_) => Validity::Invalid(stop - start),
+            Validity::Array(a) => Validity::Array(a.slice(start, stop)?),
+        }
+        .into_array())
+    }
+
+    fn encoding(&self) -> EncodingRef {
+        &ValidityEncoding
+    }
+
+    fn nbytes(&self) -> usize {
+        match self {
+            Validity::Valid(_) | Validity::Invalid(_) => 8,
+            Validity::Array(a) => a.nbytes(),
+        }
+    }
+
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        Ok(())
+    }
+}
+
+impl ArrayValidity for Validity {
+    fn validity(&self) -> Option<Validity> {
+        None
+    }
+}
+
+impl ArrayDisplay for Validity {
+    fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
+        match self {
+            Validity::Valid(_) => fmt.property("all", "valid"),
+            Validity::Invalid(_) => fmt.property("all", "invalid"),
+            Validity::Array(a) => fmt.child("validity", a),
+        }
+    }
+}
+
+impl ArrayCompute for Validity {}
+
+#[derive(Debug)]
+struct ValidityEncoding;
+
+impl ValidityEncoding {
+    const ID: EncodingId = EncodingId::new("vortex.validity");
+}
+
+impl Encoding for ValidityEncoding {
+    fn id(&self) -> EncodingId {
+        ValidityEncoding::ID
     }
 }
