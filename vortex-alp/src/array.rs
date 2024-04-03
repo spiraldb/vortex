@@ -113,6 +113,9 @@ impl Array for ALPArray {
     fn nbytes(&self) -> usize {
         self.encoded().nbytes() + self.patches().map(|p| p.nbytes()).unwrap_or(0)
     }
+    fn validity(&self) -> Option<Validity> {
+        self.encoded().validity()
+    }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
@@ -128,12 +131,6 @@ impl ArrayDisplay for ALPArray {
         f.property("exponents", format!("{:?}", self.exponents()))?;
         f.child("encoded", self.encoded())?;
         f.maybe_child("patches", self.patches())
-    }
-}
-
-impl ArrayValidity for ALPArray {
-    fn validity(&self) -> Option<Validity> {
-        self.encoded().validity()
     }
 }
 

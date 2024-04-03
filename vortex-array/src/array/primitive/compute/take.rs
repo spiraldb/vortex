@@ -1,5 +1,4 @@
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::ArrayValidity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;

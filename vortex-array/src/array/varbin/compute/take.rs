@@ -1,4 +1,4 @@
-use crate::array::validity::{ArrayValidity, Validity};
+use crate::array::validity::Validity;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};

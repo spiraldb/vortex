@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use itertools::Itertools;
 use linkme::distributed_slice;
 
-use crate::array::validity::{ArrayValidity, Validity};
+use crate::array::validity::Validity;
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -116,18 +116,15 @@ impl Array for StructArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+    fn validity(&self) -> Option<Validity> {
+        todo!()
+    }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         for field in self.fields() {
             walker.visit_child(field)?;
         }
         Ok(())
-    }
-}
-
-impl ArrayValidity for StructArray {
-    fn validity(&self) -> Option<Validity> {
-        todo!()
     }
 }
 

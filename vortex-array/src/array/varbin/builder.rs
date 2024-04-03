@@ -63,7 +63,7 @@ impl<O: NativePType + PrimInt> VarBinBuilder<O> {
 
 #[cfg(test)]
 mod test {
-    use crate::array::validity::ArrayValidity;
+
     use crate::array::varbin::builder::VarBinBuilder;
     use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;

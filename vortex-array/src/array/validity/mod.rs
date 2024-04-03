@@ -212,22 +212,6 @@ impl FromIterator<Validity> for Validity {
     }
 }
 
-pub trait ArrayValidity {
-    fn nullability(&self) -> Nullability {
-        self.validity().is_some().into()
-    }
-
-    fn validity(&self) -> Option<Validity>;
-
-    fn logical_validity(&self) -> Option<Validity> {
-        self.validity().and_then(|v| v.logical_validity())
-    }
-
-    fn is_valid(&self, index: usize) -> bool {
-        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
-    }
-}
-
 impl Array for Validity {
     impl_array!();
 
@@ -272,15 +256,12 @@ impl Array for Validity {
             Validity::Array(a) => a.nbytes(),
         }
     }
+    fn validity(&self) -> Option<Validity> {
+        None
+    }
 
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         Ok(())
-    }
-}
-
-impl ArrayValidity for Validity {
-    fn validity(&self) -> Option<Validity> {
-        None
     }
 }
 

@@ -5,7 +5,6 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::{SparseArray, SparseEncoding};
-use crate::array::validity::ArrayValidity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::patch::PatchFn;
 use crate::{compute, match_each_native_ptype};

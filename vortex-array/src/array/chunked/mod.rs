@@ -6,7 +6,7 @@ use linkme::distributed_slice;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::validity::{ArrayValidity, Validity};
+use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -145,16 +145,6 @@ impl Array for ChunkedArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
-
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        for chunk in self.chunks() {
-            walker.visit_child(&chunk)?;
-        }
-        Ok(())
-    }
-}
-
-impl ArrayValidity for ChunkedArray {
     fn validity(&self) -> Option<Validity> {
         if !self.dtype.is_nullable() {
             return None;
@@ -165,6 +155,12 @@ impl ArrayValidity for ChunkedArray {
                 .validity()
                 .unwrap_or_else(|| Validity::Valid(chunk.len()))
         })))
+    }
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        for chunk in self.chunks() {
+            walker.visit_child(&chunk)?;
+        }
+        Ok(())
     }
 }
 

@@ -8,7 +8,7 @@ use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::{ArrayValidity, Validity};
+use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
@@ -244,16 +244,13 @@ impl Array for VarBinArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.offsets())?;
         walker.visit_child(self.bytes())
-    }
-}
-
-impl ArrayValidity for VarBinArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 }
 

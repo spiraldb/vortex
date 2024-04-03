@@ -6,7 +6,7 @@ use linkme::distributed_slice;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-use crate::array::validity::{ArrayValidity, Validity};
+use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::ArrayCompute;
@@ -233,6 +233,9 @@ impl Array for VarBinViewArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.views())?;
@@ -240,12 +243,6 @@ impl Array for VarBinViewArray {
             walker.visit_child(data)?;
         }
         Ok(())
-    }
-}
-
-impl ArrayValidity for VarBinViewArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 }
 

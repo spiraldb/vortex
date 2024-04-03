@@ -1,7 +1,6 @@
 use vortex_error::VortexResult;
 
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding, PrimitiveView};
-use crate::array::validity::ArrayValidity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::match_each_native_ptype;
@@ -43,7 +42,7 @@ impl EncodingSerde for PrimitiveEncoding {
 mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::validity::ArrayValidity;
+
     use crate::serde::test::roundtrip_array;
 
     #[test]

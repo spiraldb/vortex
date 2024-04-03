@@ -7,9 +7,8 @@ use itertools::Itertools;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::validity::ArrayValidity;
 use crate::array::varbinview::VarBinViewArray;
-use crate::array::Array;
+use crate::array::{Array, ArrayValidity};
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};

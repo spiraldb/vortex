@@ -1,4 +1,4 @@
-use crate::array::validity::{ArrayValidity, Validity};
+use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
@@ -199,14 +199,11 @@ impl<'a> Array for ArrayView<'a> {
             .expect("TODO(ngates): heap allocate ArrayView and invoke compute")
             .with_view_compute(self, f)
     }
-
-    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+    fn validity(&self) -> Option<Validity> {
         todo!()
     }
-}
 
-impl<'a> ArrayValidity for ArrayView<'a> {
-    fn validity(&self) -> Option<Validity> {
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         todo!()
     }
 }

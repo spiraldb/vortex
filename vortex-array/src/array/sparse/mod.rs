@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use itertools::Itertools;
 use linkme::distributed_slice;
 
-use crate::array::validity::{ArrayValidity, Validity};
+use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::cast::cast;
@@ -140,6 +140,9 @@ impl Array for SparseArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+    fn validity(&self) -> Option<Validity> {
+        todo!()
+    }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.indices())?;
@@ -154,12 +157,6 @@ impl ArrayDisplay for SparseArray {
         f.property("offset", self.indices_offset())?;
         f.child("indices", self.indices())?;
         f.child("values", self.values())
-    }
-}
-
-impl ArrayValidity for SparseArray {
-    fn validity(&self) -> Option<Validity> {
-        todo!()
     }
 }
 

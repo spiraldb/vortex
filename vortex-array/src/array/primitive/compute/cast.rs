@@ -2,7 +2,6 @@ use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::ArrayValidity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::cast::CastFn;
 use crate::match_each_native_ptype;

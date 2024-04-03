@@ -3,7 +3,6 @@ use arrow_buffer::buffer::BooleanBuffer;
 use vortex_error::VortexResult;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
-use crate::array::validity::ArrayValidity;
 use crate::array::{Array, ArrayRef};
 use crate::serde::{ArraySerde, ArrayView, BytesSerde, EncodingSerde, ReadCtx, WriteCtx};
 
@@ -34,7 +33,7 @@ impl EncodingSerde for BoolEncoding {
 mod test {
     use crate::array::bool::BoolArray;
     use crate::array::downcast::DowncastArrayBuiltin;
-    use crate::array::validity::ArrayValidity;
+
     use crate::serde::test::roundtrip_array;
 
     #[test]

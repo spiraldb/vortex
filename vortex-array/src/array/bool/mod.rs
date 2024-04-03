@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use arrow_buffer::buffer::BooleanBuffer;
 use linkme::distributed_slice;
 
-use crate::array::validity::{ArrayValidity, Validity};
+use crate::array::validity::Validity;
 use crate::array::IntoArray;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -103,6 +103,10 @@ impl Array for BoolArray {
         .into_array())
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &BoolEncoding
@@ -123,12 +127,6 @@ impl Array for BoolArray {
             walker.visit_child(&v.to_array())?;
         }
         walker.visit_buffer(self.buffer.inner())
-    }
-}
-
-impl ArrayValidity for BoolArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
     }
 }
 

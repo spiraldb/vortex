@@ -3,7 +3,6 @@ use num_traits::Zero;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::ArrayValidity;
 use crate::array::IntoArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::fill::FillForwardFn;
@@ -42,7 +41,7 @@ impl FillForwardFn for PrimitiveArray {
 mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::validity::ArrayValidity;
+
     use crate::compute;
 
     #[test]

@@ -5,13 +5,11 @@ use arrow_array::{
 };
 use itertools::Itertools;
 
-use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::DType;
-
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::{ArrayValidity, Validity};
+use crate::array::validity::Validity;
 use crate::array::varbin::VarBinArray;
+use crate::array::ArrayValidity;
 use crate::array::{Array, ArrayRef};
 use crate::arrow::wrappers::{as_nulls, as_offset_buffer};
 use crate::compute::as_arrow::AsArrowArray;
@@ -23,6 +21,8 @@ use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
+use vortex_error::{vortex_bail, VortexResult};
+use vortex_schema::DType;
 
 mod take;
 
