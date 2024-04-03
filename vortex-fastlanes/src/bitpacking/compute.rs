@@ -1,18 +1,20 @@
+use fastlanez::TryBitPack;
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compute::as_contiguous::as_contiguous;
+use vortex::compute::cast::cast;
 use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::ScalarAtFn;
-use vortex::compute::take::{take, TakeFn};
+use vortex::compute::take::TakeFn;
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
+use vortex::ptype::NativePType;
 use vortex::scalar::Scalar;
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::bitpacking::compress::{unpack, unpack_single};
 use crate::downcast::DowncastFastlanes;
-use crate::BitPackedArray;
+use crate::{match_integers_by_width, unpack_single_primitive, BitPackedArray};
 
 impl ArrayCompute for BitPackedArray {
     fn flatten(&self) -> Option<&dyn FlattenFn> {
@@ -52,31 +54,48 @@ impl ScalarAtFn for BitPackedArray {
 impl TakeFn for BitPackedArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
         let prim_indices = flatten_primitive(indices)?;
-        // Group indices into 1024 chunks and relativise them to the beginning of each chunk
+
+        // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
         let relative_indices: Vec<(usize, Vec<u16>)> = match_each_integer_ptype!(prim_indices.ptype(), |$P| {
-            let grouped_indices = prim_indices
+            prim_indices
                 .typed_data::<$P>()
                 .iter()
-                .group_by(|idx| (**idx / 1024) as usize);
-            grouped_indices
+                .sorted()
+                .group_by(|idx| (**idx / 1024) as usize)
                 .into_iter()
                 .map(|(k, g)| (k, g.map(|idx| (*idx % 1024) as u16).collect()))
                 .collect()
         });
 
-        let taken = relative_indices
-            .into_iter()
-            .map(|(chunk, offsets)| {
-                let sliced = self.slice(chunk * 1024, (chunk + 1) * 1024)?;
-
-                take(
-                    &unpack(sliced.as_bitpacked())?,
-                    &PrimitiveArray::from(offsets),
-                )
-            })
-            .collect::<VortexResult<Vec<_>>>()?;
-        as_contiguous(&taken)
+        let ptype = self.dtype().try_into()?;
+        let taken = match_integers_by_width!(ptype, |$P| {
+            PrimitiveArray::from(take_primitive::<$P>(self, &relative_indices, prim_indices.len())?)
+        });
+        // TODO(wmanning): this should be a reinterpret_cast
+        cast(&taken, self.dtype())
     }
+}
+
+fn take_primitive<T: NativePType + TryBitPack>(
+    array: &BitPackedArray,
+    relative_indices: &[(usize, Vec<u16>)],
+    size_hint: usize,
+) -> VortexResult<Vec<T>> {
+    let mut output = Vec::with_capacity(size_hint);
+    for (chunk, offsets) in relative_indices {
+        let sliced = array.slice(chunk * 1024, (chunk + 1) * 1024).unwrap();
+        let sliced = sliced.as_bitpacked();
+        let packed = flatten_primitive(sliced.encoded()).unwrap();
+        let packed = packed.typed_data::<u8>();
+
+        // TODO(wmanning): if offsets.len() over threshold, unpack the whole thing
+        for index in offsets {
+            output.push(unsafe {
+                unpack_single_primitive::<T>(packed, sliced.bit_width(), *index as usize).unwrap();
+            });
+        }
+    }
+    Ok(output)
 }
 
 #[cfg(test)]

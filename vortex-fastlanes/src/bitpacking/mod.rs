@@ -2,16 +2,16 @@ use std::cmp::min;
 use std::sync::{Arc, RwLock};
 
 pub use compress::*;
-use vortex::array::validity::Validity;
+use vortex::{ArrayWalker, impl_array};
 use vortex::array::{Array, ArrayRef};
+use vortex::array::validity::Validity;
 use vortex::compress::EncodingCompression;
-use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::ArrayCompute;
+use vortex::compute::flatten::flatten_primitive;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
-use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
@@ -204,4 +204,20 @@ impl Encoding for BitPackedEncoding {
     fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
     }
+}
+
+#[macro_export]
+macro_rules! match_integers_by_width {
+    ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
+        macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
+        use vortex::ptype::PType;
+        use vortex_error::vortex_bail;
+        match $self {
+            PType::I8 | PType::U8 => __with__! { u8 },
+            PType::I16 | PType::U16 => __with__! { u16 },
+            PType::I32 | PType::U32 => __with__! { u32 },
+            PType::I64 | PType::U64 => __with__! { u64 },
+            _ => vortex_bail!("Unsupported ptype {}", $self),
+        }
+    })
 }

@@ -1,23 +1,23 @@
 use arrayref::array_ref;
+
 use fastlanez::TryBitPack;
+use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
+use vortex::array::IntoArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::array::IntoArray;
-use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::patch::patch;
 use vortex::match_each_integer_ptype;
-use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::{ListScalarVec, Scalar};
 use vortex::stats::Stat;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
+use crate::{BitPackedArray, BitPackedEncoding, match_integers_by_width};
 use crate::downcast::DowncastFastlanes;
-use crate::{BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -74,7 +74,7 @@ impl EncodingCompression for BitPackedEncoding {
             return Ok(parray.clone().into_array());
         }
 
-        let packed = bitpack(parray, bit_width);
+        let packed = bitpack(parray, bit_width)?;
 
         let validity = ctx.compress_validity(parray.validity())?;
 
@@ -100,18 +100,13 @@ impl EncodingCompression for BitPackedEncoding {
     }
 }
 
-fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
+fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<ArrayRef> {
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     // TODO(ngates): we should implement this using a vortex cast to centralize this hack.
-    use PType::*;
-    let bytes = match parray.ptype() {
-        I8 | U8 => bitpack_primitive(parray.buffer().typed_data::<u8>(), bit_width),
-        I16 | U16 => bitpack_primitive(parray.buffer().typed_data::<u16>(), bit_width),
-        I32 | U32 => bitpack_primitive(parray.buffer().typed_data::<u32>(), bit_width),
-        I64 | U64 => bitpack_primitive(parray.buffer().typed_data::<u64>(), bit_width),
-        _ => panic!("Unsupported ptype {:?}", parray.ptype()),
-    };
-    PrimitiveArray::from(bytes).into_array()
+    let bytes = match_integers_by_width!(parray.ptype(), |$P| {
+        bitpack_primitive(parray.buffer().typed_data::<$P>(), bit_width)
+    });
+    Ok(PrimitiveArray::from(bytes).into_array())
 }
 
 pub fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize) -> Vec<u8> {
@@ -168,25 +163,12 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     let encoded = flatten_primitive(cast(array.encoded(), PType::U8.into())?.as_ref())?;
     let ptype: PType = array.dtype().try_into()?;
 
-    let mut unpacked = match ptype {
-        I8 | U8 => PrimitiveArray::from_nullable(
-            unpack_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, length),
+    let mut unpacked = match_integers_by_width!(ptype, |$P| {
+        PrimitiveArray::from_nullable(
+            unpack_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, length),
             array.validity(),
-        ),
-        I16 | U16 => PrimitiveArray::from_nullable(
-            unpack_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity(),
-        ),
-        I32 | U32 => PrimitiveArray::from_nullable(
-            unpack_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity(),
-        ),
-        I64 | U64 => PrimitiveArray::from_nullable(
-            unpack_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity(),
-        ),
-        _ => panic!("Unsupported ptype {:?}", ptype),
-    }
+        )
+    })
     .into_array();
 
     // Cast to signed if necessary
@@ -247,25 +229,11 @@ pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResul
     let encoded = flatten_primitive(cast(array.encoded(), PType::U8.into())?.as_ref())?;
     let ptype: PType = array.dtype().try_into()?;
 
-    let scalar: Scalar = unsafe {
-        match ptype {
-            I8 | U8 => unpack_single_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, index)
-                .map(|v| v.into()),
-            I16 | U16 => {
-                unpack_single_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, index)
-                    .map(|v| v.into())
-            }
-            I32 | U32 => {
-                unpack_single_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, index)
-                    .map(|v| v.into())
-            }
-            I64 | U64 => {
-                unpack_single_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, index)
-                    .map(|v| v.into())
-            }
-            _ => vortex_bail!("Unsupported ptype {:?}", ptype),
-        }?
-    };
+    let scalar: Scalar = match_integers_by_width!(ptype, |$P| {
+        unsafe {
+            unpack_single_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, index).map(|v| v.into())
+        }
+    })?;
 
     // Cast to signed if necessary
     if ptype.is_signed_int() {
