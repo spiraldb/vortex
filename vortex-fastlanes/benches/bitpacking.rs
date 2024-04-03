@@ -12,7 +12,9 @@ fn values(len: usize, bits: usize) -> Vec<u32> {
 fn unpack_singles(packed: &[u8], bit_width: usize, length: usize) -> Vec<u32> {
     let mut output = Vec::with_capacity(length);
     for i in 0..length {
-        output.push(unpack_single_primitive(packed, bit_width, length, i).unwrap());
+        unsafe {
+            output.push(unpack_single_primitive(packed, bit_width, i).unwrap());
+        }
     }
     output
 }
@@ -35,7 +37,7 @@ fn pack_unpack(c: &mut Criterion) {
     });
 
     c.bench_function("unpack_single_primitive", |b| {
-        b.iter(|| black_box(unpack_single_primitive::<u32>(&packed, 8, values.len(), 0)));
+        b.iter(|| black_box(unsafe { unpack_single_primitive::<u32>(&packed, 8, 0) }));
     });
 }
 
