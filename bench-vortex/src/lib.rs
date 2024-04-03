@@ -26,6 +26,7 @@ use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
 
+mod data_downloads;
 pub mod reader;
 pub mod taxi_data;
 

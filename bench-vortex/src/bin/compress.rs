@@ -1,4 +1,4 @@
-use bench_vortex::reader::{compress_vortex, open_vortex};
+use bench_vortex::reader::{compress_parquet_to_vortex, open_vortex};
 use bench_vortex::setup_logger;
 use bench_vortex::taxi_data::taxi_data_parquet;
 use log::LevelFilter;
@@ -14,7 +14,7 @@ pub fn main() {
     let path: PathBuf = "taxi_data.vortex".into();
     {
         let mut write = File::create(&path).unwrap();
-        compress_vortex(&taxi_data_parquet(), &mut write).unwrap();
+        compress_parquet_to_vortex(&taxi_data_parquet(), &mut write).unwrap();
     }
 
     let taxi_vortex = open_vortex(&path).unwrap();

@@ -27,6 +27,8 @@ use vortex::serde::{ReadCtx, WriteCtx};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+pub const BATCH_SIZE: usize = 65_536;
+
 pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
     let mut file = File::open(path)?;
     let dummy_dtype: DType = PType::U8.into();
@@ -35,12 +37,15 @@ pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
     read_ctx.with_schema(&dtype).read()
 }
 
-pub fn compress_vortex<W: Write>(parquet_path: &Path, write: &mut W) -> VortexResult<()> {
+pub fn compress_parquet_to_vortex<W: Write>(
+    parquet_path: &Path,
+    write: &mut W,
+) -> VortexResult<()> {
     let taxi_pq = File::open(parquet_path)?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq)?;
 
     // FIXME(ngates): #157 the compressor should handle batch size.
-    let reader = builder.with_batch_size(65_536).build()?;
+    let reader = builder.with_batch_size(BATCH_SIZE).build()?;
 
     let dtype = DType::from_arrow(reader.schema());
     let ctx = compress_ctx();
