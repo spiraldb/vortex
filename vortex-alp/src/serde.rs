@@ -1,5 +1,5 @@
 use vortex::array::{Array, ArrayRef};
-use vortex::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
+use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FloatWidth, Signedness};
 

@@ -121,7 +121,7 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
-        let offsets = fbb.create_vector_from_iter(self.0.iter().map(|offset| *offset as u64));
+        let offsets = fbb.create_vector_from_iter(self.0.iter().copied());
         fb::Chunk::create(
             fbb,
             &fb::ChunkArgs {

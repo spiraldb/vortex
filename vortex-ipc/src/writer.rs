@@ -64,7 +64,7 @@ impl<W: Write> StreamWriter<W> {
             // Serialize the ChunkColumn message and add its offset.
             let mut vec = Vec::new();
             vec.write_message(
-                &IPCMessage::ChunkColumn(IPCChunkColumn(&self.ctx, &column_data)),
+                &IPCMessage::ChunkColumn(IPCChunkColumn(&self.ctx, column_data)),
                 ALIGNMENT,
             )?;
 
@@ -85,7 +85,7 @@ impl<W: Write> StreamWriter<W> {
 
         // Then write each chunk column chunk message, followed by its buffers.
         for (msg, column_data) in chunk_column_msgs.iter().zip(data.columns()) {
-            self.write.write_all(&msg)?;
+            self.write.write_all(msg)?;
 
             let buffer_offsets = column_data.all_buffer_offsets(ALIGNMENT);
             let mut current_offset = 0;
@@ -94,7 +94,7 @@ impl<W: Write> StreamWriter<W> {
                 .flat_map(|data| data.buffers().iter())
                 .zip_eq(buffer_offsets.iter().skip(1))
             {
-                self.write.write_all(&buffer.as_slice())?;
+                self.write.write_all(buffer.as_slice())?;
                 current_offset += buffer.len();
                 let padding = (buffer_end as usize) - current_offset;
                 self.write.write_all(&vec![0; padding])?;

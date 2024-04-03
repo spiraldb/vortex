@@ -28,7 +28,7 @@ pub fn main() -> VortexResult<()> {
     //})?;
 
     // Now try to read from the IPC stream.
-    let mut read = File::open(&ipc)?;
+    let mut read = File::open(ipc)?;
     let mut ipc_reader = StreamReader::try_new(&mut read)?;
 
     // We know we only wrote a single array.
