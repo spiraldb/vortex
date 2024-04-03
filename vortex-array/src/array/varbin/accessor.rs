@@ -4,7 +4,6 @@ use crate::accessor::ArrayAccessor;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::varbin::VarBinArray;
 use crate::array::Array;
-use crate::array::ArrayValidity;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::match_each_native_ptype;

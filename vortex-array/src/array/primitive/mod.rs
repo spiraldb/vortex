@@ -13,8 +13,8 @@ use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
 use crate::array::validity::{Validity, ValidityView};
+use crate::array::IntoArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
-use crate::array::{ArrayValidity, IntoArray};
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;

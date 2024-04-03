@@ -64,6 +64,24 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync {
 
     fn validity(&self) -> Option<Validity>;
 
+    fn nullability(&self) -> Nullability {
+        if self.validity().is_some() {
+            assert_eq!(self.dtype().nullability(), Nullability::Nullable);
+            Nullability::Nullable
+        } else {
+            assert_eq!(self.dtype().nullability(), Nullability::NonNullable);
+            Nullability::NonNullable
+        }
+    }
+
+    fn logical_validity(&self) -> Option<Validity> {
+        self.validity().and_then(|v| v.as_view().logical_validity())
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
+    }
+
     /// Limit array to start..stop range
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef>;
     /// Encoding kind of the array
@@ -100,28 +118,6 @@ impl WithArrayCompute for dyn Array + '_ {
             Ok(())
         })?;
         Ok(result.unwrap())
-    }
-}
-
-pub trait ArrayValidity {
-    fn nullability(&self) -> Nullability;
-
-    fn logical_validity(&self) -> Option<Validity>;
-
-    fn is_valid(&self, index: usize) -> bool;
-}
-
-impl<A: Array> ArrayValidity for A {
-    fn nullability(&self) -> Nullability {
-        self.validity().is_some().into()
-    }
-
-    fn logical_validity(&self) -> Option<Validity> {
-        self.validity().and_then(|v| v.logical_validity())
-    }
-
-    fn is_valid(&self, index: usize) -> bool {
-        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
     }
 }
 
