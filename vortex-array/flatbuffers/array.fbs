@@ -1,0 +1,15 @@
+namespace vortex.array;
+
+enum Version: uint8 {
+  V0 = 0,
+}
+
+table Array {
+    version: Version = V0;
+    encoding: uint16;
+    metadata: [ubyte];
+    children: [Array];
+    nbuffers: uint16;
+}
+
+root_type Array;

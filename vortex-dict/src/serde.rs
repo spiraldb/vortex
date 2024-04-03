@@ -11,6 +11,10 @@ impl ArraySerde for DictArray {
         ctx.dtype(self.codes().dtype())?;
         ctx.write(self.codes())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(None)
+    }
 }
 
 impl EncodingSerde for DictEncoding {

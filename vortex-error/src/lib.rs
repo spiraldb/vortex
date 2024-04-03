@@ -2,7 +2,7 @@
 
 use std::backtrace::Backtrace;
 use std::borrow::Cow;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use std::{env, fmt, io};
 
@@ -42,7 +42,7 @@ impl Display for ErrString {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(thiserror::Error)]
 pub enum VortexError {
     #[error("index {0} out of bounds from {1} to {2}\nBacktrace:\n{3}")]
     OutOfBounds(usize, usize, usize, Backtrace),
@@ -50,6 +50,8 @@ pub enum VortexError {
     ComputeError(ErrString, Backtrace),
     #[error("{0}\nBacktrace:\n{1}")]
     InvalidArgument(ErrString, Backtrace),
+    #[error("{0}\nBacktrace:\n{1}")]
+    InvalidSerde(ErrString, Backtrace),
     #[error("function {0} not implemented for {1}\nBacktrace:\n{2}")]
     NotImplemented(ErrString, ErrString, Backtrace),
     #[error("expected type: {0} but instead got {1}\nBacktrace:\n{2}")]
@@ -59,6 +61,12 @@ pub enum VortexError {
         #[from]
         #[backtrace]
         arrow_schema::ArrowError,
+    ),
+    #[error(transparent)]
+    FlatBuffersError(
+        #[from]
+        #[backtrace]
+        flatbuffers::InvalidFlatbuffer,
     ),
     #[error(transparent)]
     IOError(
@@ -76,6 +84,12 @@ pub enum VortexError {
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;
+
+impl Debug for VortexError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self, f)
+    }
+}
 
 #[macro_export]
 macro_rules! vortex_err {
@@ -109,7 +123,7 @@ macro_rules! vortex_err {
             $crate::VortexError::$variant(format!($fmt, $($arg),*).into(), Backtrace::capture())
         )
     }};
-    ($variant:ident: $err:expr $(,)?) => {{}
+    ($variant:ident: $err:expr $(,)?) => {
         $crate::__private::must_use(
             $crate::VortexError::$variant($err)
         )

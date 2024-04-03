@@ -5,8 +5,9 @@ use num_traits::AsPrimitive;
 
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-use vortex::array::{Array, ArrayRef, Encoding};
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::encoding::Encoding;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{match_each_native_ptype, NativePType};
 use vortex::stats::Stat;

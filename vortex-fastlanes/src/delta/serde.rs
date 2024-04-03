@@ -12,6 +12,10 @@ impl ArraySerde for DeltaArray {
         ctx.write(self.deltas())?;
         ctx.write_validity(self.validity())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        todo!()
+    }
 }
 
 impl EncodingSerde for DeltaEncoding {

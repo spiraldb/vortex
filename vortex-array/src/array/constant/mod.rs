@@ -2,18 +2,17 @@ use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
 
-use vortex_error::VortexResult;
-use vortex_schema::DType;
-
-use crate::array::{
-    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
-};
+use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::compute::ArrayCompute;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
+use vortex_error::VortexResult;
+use vortex_schema::DType;
 
 mod compute;
 mod serde;
@@ -95,6 +94,10 @@ impl Array for ConstantArray {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
+    }
+
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        Ok(())
     }
 }
 

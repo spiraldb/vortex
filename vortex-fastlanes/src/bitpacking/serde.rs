@@ -13,6 +13,14 @@ impl ArraySerde for BitPackedArray {
         ctx.write_usize(self.bit_width())?;
         ctx.write_usize(self.len())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        let mut vec = Vec::new();
+        let mut ctx = WriteCtx::new(&mut vec);
+        ctx.write_usize(self.bit_width())?;
+        ctx.write_usize(self.len())?;
+        Ok(Some(vec))
+    }
 }
 
 impl EncodingSerde for BitPackedEncoding {

@@ -6,7 +6,7 @@ use linkme::distributed_slice;
 pub use bitpacking::*;
 pub use delta::*;
 pub use r#for::*;
-use vortex::array::{EncodingRef, ENCODINGS};
+use vortex::encoding::{EncodingRef, ENCODINGS};
 
 mod bitpacking;
 mod delta;

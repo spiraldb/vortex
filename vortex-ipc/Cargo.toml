@@ -1,0 +1,31 @@
+[package]
+name = "vortex-ipc"
+version = { workspace = true }
+description = "Vortex IPC"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+arrow-buffer = { workspace = true }
+flatbuffers = { workspace = true }
+itertools = { workspace = true }
+lending-iterator = "0.1.7"
+nougat = "0.2.4"
+streaming-iterator = "0.1.9"
+vortex-array = { path = "../vortex-array" }
+vortex-error = { path = "../vortex-error" }
+vortex-flatbuffers = { path = "../vortex-flatbuffers" }
+vortex-schema = { path = "../vortex-schema" }
+
+[build-dependencies]
+flatc = { workspace = true }
+walkdir = { workspace = true }
+
+[lints]
+# workspace = false

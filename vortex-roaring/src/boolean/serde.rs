@@ -16,6 +16,10 @@ impl ArraySerde for RoaringBoolArray {
         self.bitmap().serialize_into::<Portable>(&mut data);
         ctx.write_slice(data.as_slice())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        todo!()
+    }
 }
 
 impl EncodingSerde for RoaringBoolEncoding {

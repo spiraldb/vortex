@@ -14,6 +14,11 @@ impl ArraySerde for DateTimeArray {
         ctx.write(self.subsecond())?;
         ctx.write_validity(self.validity())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        // FIXME(ngates): I think we need child dtypes?
+        Ok(None)
+    }
 }
 
 impl EncodingSerde for DateTimeEncoding {

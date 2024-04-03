@@ -150,8 +150,8 @@ fn trailing_zeros(array: &dyn Array) -> u8 {
 mod test {
     use std::sync::Arc;
 
-    use vortex::array::{Encoding, EncodingRef};
     use vortex::compute::scalar_at::ScalarAtFn;
+    use vortex::encoding::{Encoding, EncodingRef};
 
     use crate::BitPackedEncoding;
 

@@ -192,7 +192,7 @@ where
 mod test {
     use std::sync::Arc;
 
-    use vortex::array::{Encoding, EncodingRef};
+    use vortex::encoding::{Encoding, EncodingRef};
 
     use super::*;
 

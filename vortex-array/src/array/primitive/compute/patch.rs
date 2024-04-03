@@ -15,7 +15,7 @@ impl PatchFn for PrimitiveArray {
         match patch.encoding().id() {
             SparseEncoding::ID => patch_with_sparse(self, patch.as_sparse()),
             // TODO(ngates): support a default implementation based on iter_arrow?
-            _ => Err(vortex_err!(NotImplemented: "patch", self.encoding().id().0)),
+            _ => Err(vortex_err!(NotImplemented: "patch", self.encoding().id().name())),
         }
     }
 }

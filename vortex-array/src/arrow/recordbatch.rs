@@ -19,6 +19,7 @@ impl IntoArray for &RecordBatch {
                 .zip(self.schema().fields())
                 .map(|(array, field)| ArrayRef::from_arrow(array.clone(), field.is_nullable()))
                 .collect(),
+            self.num_rows(),
         )
         .into_array()
     }
