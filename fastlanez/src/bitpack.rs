@@ -1,10 +1,11 @@
-use std::mem::{size_of, MaybeUninit};
+use std::mem::{MaybeUninit, size_of};
 
 use arrayref::{array_mut_ref, array_ref};
-use fastlanez_sys::*;
 use num_traits::{PrimInt, Unsigned};
 use seq_macro::seq;
 use uninit::prelude::VecCapacity;
+
+use fastlanez_sys::*;
 
 use crate::{Pred, Satisfied};
 
@@ -169,9 +170,9 @@ macro_rules! bitpack_impl {
                 width: usize,
                 output: &'a mut [MaybeUninit<u8>],
             ) -> Result<&'a [u8], UnsupportedBitWidth> {
-                seq!(N in 1..$W {
+                seq!(W in 1..$BITS {
                     match width {
-                        #(N => Ok(BitPack::<N>::pack(input, array_mut_ref![output, 0, N * 128]).as_slice()),)*
+                        #(W => Ok(BitPack::<W>::pack(input, array_mut_ref![output, 0, W * 128]).as_slice()),)*
                         _ => Err(UnsupportedBitWidth),
                     }
                 })
@@ -182,18 +183,18 @@ macro_rules! bitpack_impl {
                 width: usize,
                 output: &'a mut [MaybeUninit<Self>; 1024],
             ) -> Result<&'a [Self; 1024], UnsupportedBitWidth> {
-                seq!(N in 1..$W {
+                seq!(W in 1..$BITS {
                     match width {
-                        #(N => Ok(BitPack::<N>::unpack(array_ref![input, 0, N * 128], output)),)*
+                        #(W => Ok(BitPack::<W>::unpack(array_ref![input, 0, W * 128], output)),)*
                         _ => Err(UnsupportedBitWidth),
                     }
                 })
             }
 
             fn try_unpack_single(input: &[u8], width: usize, index: usize) -> Result<Self, UnsupportedBitWidth> {
-                seq!(N in 1..$W {
+                seq!(W in 1..$BITS {
                     match width {
-                        #(N => Ok(BitPack::<N>::unpack_single(array_ref![input, 0, N * 128], index)),)*
+                        #(W => Ok(BitPack::<W>::unpack_single(array_ref![input, 0, W * 128], index)),)*
                         _ => Err(UnsupportedBitWidth),
                     }
                 })

@@ -31,5 +31,5 @@ rand = { workspace = true }
 simplelog = { workspace = true }
 
 [[bench]]
-name = "unpack"
+name = "bitpacking"
 harness = false
