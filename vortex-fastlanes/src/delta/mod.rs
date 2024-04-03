@@ -86,7 +86,7 @@ impl DeltaArray {
     fn lanes(&self) -> usize {
         let ptype = self.dtype().try_into().unwrap();
         match_each_integer_ptype!(ptype, |$T| {
-            <$T as fastlanez_sys::Delta>::lanes()
+            <$T as fastlanez::Delta>::lanes()
         })
     }
 }

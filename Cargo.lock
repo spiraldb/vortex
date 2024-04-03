@@ -1899,6 +1899,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "ext-trait"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1925,6 +1926,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a296e5a895621edf9fa8329c83aa1cb69a964643e36cf54d8d7a69b789089537"
 dependencies = [
  "ext-trait",
+=======
+name = "fastlanez"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "fastlanez-sys",
+ "num-traits",
+ "paste",
+ "seq-macro",
+ "uninit",
+>>>>>>> develop
 ]
 
 [[package]]
@@ -5454,7 +5466,7 @@ name = "vortex-fastlanes"
 version = "0.1.0"
 dependencies = [
  "arrayref",
- "fastlanez-sys",
+ "fastlanez",
  "itertools 0.12.1",
  "linkme",
  "log",

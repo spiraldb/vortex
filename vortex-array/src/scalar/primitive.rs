@@ -211,9 +211,9 @@ macro_rules! pscalar {
                         ..
                     }) => match pscalar {
                         PScalar::$ptype(v) => Ok(*v),
-                        _ => Err(vortex_err!(MismatchedTypes: "$T", pscalar.ptype())),
+                        _ => Err(vortex_err!(MismatchedTypes: any::type_name::<Self>(), pscalar.ptype())),
                     },
-                    _ => Err(vortex_err!("can't extract $T from scalar: {}", value)),
+                    _ => Err(vortex_err!("can't extract {} from scalar: {}", any::type_name::<Self>(), value)),
                 }
             }
         }
