@@ -3,21 +3,21 @@ use std::sync::{Arc, RwLock};
 use itertools::Itertools;
 use linkme::distributed_slice;
 
-use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
-use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::DType;
-
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
+use crate::compute::ArrayCompute;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::PType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::validity::{ArrayValidity, Validity};
 use crate::{impl_array, ArrayWalker};
+use vortex_error::{vortex_bail, VortexResult};
+use vortex_schema::DType;
 
 mod compress;
 mod compute;

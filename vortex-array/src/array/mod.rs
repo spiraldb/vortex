@@ -72,7 +72,10 @@ pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
         &self,
         _f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()> {
-        vortex_bail!("Not Implemented")
+        vortex_bail!(
+            "with_compute_mut not implemented for {}",
+            self.encoding().id()
+        )
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
@@ -126,6 +129,14 @@ macro_rules! impl_array {
         #[inline]
         fn into_array(self) -> ArrayRef {
             std::sync::Arc::new(self)
+        }
+
+        #[inline]
+        fn with_compute_mut(
+            &self,
+            f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+        ) -> VortexResult<()> {
+            f(self)
         }
     };
 }
@@ -195,6 +206,13 @@ impl Array for ArrayRef {
 
     fn nbytes(&self) -> usize {
         self.as_ref().nbytes()
+    }
+
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        self.as_ref().with_compute_mut(f)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
@@ -280,6 +298,13 @@ impl<'a, T: Array + Clone> Array for &'a T {
         T::serde(self)
     }
 
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        T::with_compute_mut(self, f)
+    }
+
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         T::walk(self, walker)
     }
@@ -354,7 +379,8 @@ impl Display for dyn Array + '_ {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}({}, len={})",
+            "{}({}, {}, len={})",
+            std::any::type_name::<Self>(),
             self.encoding().id(),
             self.dtype(),
             self.len()

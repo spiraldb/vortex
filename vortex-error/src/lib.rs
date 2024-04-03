@@ -2,7 +2,7 @@
 
 use std::backtrace::Backtrace;
 use std::borrow::Cow;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use std::{env, fmt, io};
 
@@ -42,7 +42,7 @@ impl Display for ErrString {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(thiserror::Error)]
 pub enum VortexError {
     #[error("index {0} out of bounds from {1} to {2}\nBacktrace:\n{3}")]
     OutOfBounds(usize, usize, usize, Backtrace),
@@ -84,6 +84,12 @@ pub enum VortexError {
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;
+
+impl Debug for VortexError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self, f)
+    }
+}
 
 #[macro_export]
 macro_rules! vortex_err {

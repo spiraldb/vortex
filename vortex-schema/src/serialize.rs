@@ -189,7 +189,7 @@ mod test {
         let bytes = fbb.finished_data();
         let deserialized = DType::read_flatbuffer(
             &DTypeSerdeContext::new(vec![]),
-            root::<fb::DType>(bytes).unwrap(),
+            &root::<fb::DType>(bytes).unwrap(),
         )
         .unwrap();
         assert_eq!(dtype, deserialized);

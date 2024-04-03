@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::flatten::flatten_primitive;
+use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
