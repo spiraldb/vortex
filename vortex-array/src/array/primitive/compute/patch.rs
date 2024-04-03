@@ -1,5 +1,4 @@
 use itertools::Itertools;
-
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::array::downcast::DowncastArrayBuiltin;
@@ -7,7 +6,6 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compute::patch::PatchFn;
-use crate::validity::ArrayValidity;
 use crate::{compute, match_each_native_ptype};
 
 impl PatchFn for PrimitiveArray {
@@ -15,7 +13,7 @@ impl PatchFn for PrimitiveArray {
         match patch.encoding().id() {
             SparseEncoding::ID => patch_with_sparse(self, patch.as_sparse()),
             // TODO(ngates): support a default implementation based on iter_arrow?
-            _ => Err(vortex_err!(NotImplemented: "patch", self.encoding().id().0)),
+            _ => Err(vortex_err!(NotImplemented: "patch", self.encoding().id().name())),
         }
     }
 }

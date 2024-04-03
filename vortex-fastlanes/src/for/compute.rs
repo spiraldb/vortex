@@ -18,6 +18,7 @@ impl ArrayCompute for FoRArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
+
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
@@ -48,8 +49,9 @@ impl ScalarAtFn for FoRArray {
             (Scalar::Primitive(p), Scalar::Primitive(r)) => match p.value() {
                 None => Ok(encoded_scalar),
                 Some(pv) => match_each_integer_ptype!(pv.ptype(), |$P| {
+                    use num_traits::WrappingAdd;
                     Ok(PrimitiveScalar::try_new::<$P>(
-                        Some((p.typed_value::<$P>().unwrap() << self.shift()) + r.typed_value::<$P>().unwrap()),
+                        Some((p.typed_value::<$P>().unwrap() << self.shift()).wrapping_add(r.typed_value::<$P>().unwrap())),
                         p.dtype().nullability()
                     ).unwrap().into())
                 }),

@@ -2,7 +2,6 @@ use std::io;
 use std::io::ErrorKind;
 
 use croaring::{Bitmap, Portable};
-
 use vortex::array::{Array, ArrayRef};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use vortex_error::VortexResult;
@@ -15,6 +14,10 @@ impl ArraySerde for RoaringBoolArray {
         let mut data = Vec::new();
         self.bitmap().serialize_into::<Portable>(&mut data);
         ctx.write_slice(data.as_slice())
+    }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        todo!()
     }
 }
 
@@ -33,9 +36,9 @@ impl EncodingSerde for RoaringBoolEncoding {
 
 #[cfg(test)]
 mod test {
-    use crate::downcast::DowncastRoaring;
     use croaring::Bitmap;
 
+    use crate::downcast::DowncastRoaring;
     use crate::serde_tests::test::roundtrip_array;
     use crate::RoaringBoolArray;
 

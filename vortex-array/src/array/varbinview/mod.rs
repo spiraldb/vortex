@@ -2,19 +2,18 @@ use std::mem;
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
-
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-use crate::array::{
-    check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS,
-};
+use crate::array::validity::Validity;
+use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
+use crate::compute::ArrayCompute;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
+use crate::{impl_array, ArrayWalker};
 
 mod compute;
 mod serde;
@@ -233,11 +232,17 @@ impl Array for VarBinViewArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
-}
 
-impl ArrayValidity for VarBinViewArray {
     fn validity(&self) -> Option<Validity> {
         self.validity.clone()
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.views())?;
+        for data in self.data() {
+            walker.visit_child(data)?;
+        }
+        Ok(())
     }
 }
 
@@ -273,11 +278,10 @@ impl ArrayDisplay for VarBinViewArray {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::array::primitive::PrimitiveArray;
     use crate::compute::scalar_at::scalar_at;
     use crate::scalar::Scalar;
-
-    use super::*;
 
     fn binary_array() -> VarBinViewArray {
         let values = PrimitiveArray::from("hello world this is a long string".as_bytes().to_vec());

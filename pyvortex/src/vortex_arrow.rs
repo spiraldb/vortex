@@ -4,7 +4,6 @@ use arrow::pyarrow::ToPyArrow;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyList};
-
 use vortex::array::Array;
 use vortex::compute::as_arrow::as_arrow_chunks;
 

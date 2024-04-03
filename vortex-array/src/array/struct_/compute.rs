@@ -5,7 +5,6 @@ use arrow_array::{
 };
 use arrow_schema::{Field, Fields};
 use itertools::Itertools;
-
 use vortex_error::VortexResult;
 
 use crate::array::downcast::DowncastArrayBuiltin;
@@ -87,6 +86,7 @@ impl AsContiguousFn for StructArray {
                 .iter()
                 .map(|field_arrays| as_contiguous(field_arrays))
                 .try_collect()?,
+            self.len,
         )
         .into_array())
     }
@@ -100,6 +100,7 @@ impl FlattenFn for StructArray {
                 .iter()
                 .map(|field| flatten(field.as_ref()).map(FlattenedArray::into_array))
                 .try_collect()?,
+            self.len,
         )))
     }
 }
@@ -125,6 +126,7 @@ impl TakeFn for StructArray {
                 .iter()
                 .map(|field| take(field, indices))
                 .try_collect()?,
+            indices.len(),
         )
         .into_array())
     }

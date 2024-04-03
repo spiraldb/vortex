@@ -3,7 +3,7 @@ use std::cmp::Ordering::{Equal, Greater, Less};
 
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::array::Array;
+use crate::array::{Array, WithArrayCompute};
 use crate::compute::scalar_at::scalar_at;
 use crate::scalar::Scalar;
 
@@ -23,18 +23,20 @@ pub fn search_sorted<T: Into<Scalar>>(
     side: SearchSortedSide,
 ) -> VortexResult<usize> {
     let scalar = target.into().cast(array.dtype())?;
-    if let Some(search_sorted) = array.search_sorted() {
-        return search_sorted.search_sorted(&scalar, side);
-    }
+    array.with_compute(|c| {
+        if let Some(search_sorted) = c.search_sorted() {
+            return search_sorted.search_sorted(&scalar, side);
+        }
 
-    if array.scalar_at().is_some() {
-        return Ok(SearchSorted::search_sorted(&array, &scalar, side));
-    }
+        if c.scalar_at().is_some() {
+            return Ok(SearchSorted::search_sorted(&array, &scalar, side));
+        }
 
-    Err(vortex_err!(
-        NotImplemented: "search_sorted",
-        array.encoding().id().name()
-    ))
+        Err(vortex_err!(
+            NotImplemented: "search_sorted",
+            array.encoding().id().name()
+        ))
+    })
 }
 
 pub trait IndexOrd<V> {

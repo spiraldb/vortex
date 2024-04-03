@@ -1,4 +1,9 @@
-use crate::compress_ctx;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
+use std::sync::Arc;
+
 use arrow_array::types::Int64Type;
 use arrow_array::{
     ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray, RecordBatch,
@@ -10,11 +15,6 @@ use itertools::Itertools;
 use lance::Dataset;
 use lance_arrow_array::RecordBatch as LanceRecordBatch;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
-use std::sync::Arc;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
@@ -27,6 +27,10 @@ use vortex::serde::{ReadCtx, WriteCtx};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::compress_ctx;
+
+pub const BATCH_SIZE: usize = 65_536;
+
 pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
     let mut file = File::open(path)?;
     let dummy_dtype: DType = PType::U8.into();
@@ -35,12 +39,15 @@ pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
     read_ctx.with_schema(&dtype).read()
 }
 
-pub fn compress_vortex<W: Write>(parquet_path: &Path, write: &mut W) -> VortexResult<()> {
+pub fn compress_parquet_to_vortex<W: Write>(
+    parquet_path: &Path,
+    write: &mut W,
+) -> VortexResult<()> {
     let taxi_pq = File::open(parquet_path)?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq)?;
 
     // FIXME(ngates): #157 the compressor should handle batch size.
-    let reader = builder.with_batch_size(65_536).build()?;
+    let reader = builder.with_batch_size(BATCH_SIZE).build()?;
 
     let dtype = DType::from_arrow(reader.schema());
     let ctx = compress_ctx();

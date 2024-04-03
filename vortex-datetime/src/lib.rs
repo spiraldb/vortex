@@ -1,7 +1,6 @@
-use linkme::distributed_slice;
-
 pub use datetime::*;
-use vortex::array::{EncodingRef, ENCODINGS};
+use linkme::distributed_slice;
+use vortex::encoding::{EncodingRef, ENCODINGS};
 
 mod compress;
 mod compute;

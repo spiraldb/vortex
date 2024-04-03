@@ -1,12 +1,12 @@
+use num_traits::PrimInt;
+use vortex_error::VortexResult;
+
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;
 use crate::ptype::NativePType;
-use crate::validity::ArrayValidity;
 use crate::{match_each_integer_ptype, match_each_native_ptype};
-use num_traits::PrimInt;
-use vortex_error::VortexResult;
 
 impl TakeFn for PrimitiveArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {

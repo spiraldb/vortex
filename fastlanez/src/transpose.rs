@@ -1,12 +1,11 @@
 use std::mem::{MaybeUninit, size_of};
 
 use arrayref::array_mut_ref;
-use uninit::prelude::VecCapacity;
-
 use fastlanez_sys::{
     fl_transpose_u16, fl_transpose_u32, fl_transpose_u64, fl_transpose_u8, fl_untranspose_u16,
     fl_untranspose_u32, fl_untranspose_u64, fl_untranspose_u8,
 };
+use uninit::prelude::VecCapacity;
 
 pub fn transpose<T: Sized, U: Transposable<T>>(input: &[T; 1024], output: &mut [U; 1024]) {
     unsafe {

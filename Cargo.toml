@@ -11,6 +11,8 @@ members = [
     "vortex-dict",
     "vortex-error",
     "vortex-fastlanes",
+    "vortex-flatbuffers",
+    "vortex-ipc",
     "vortex-ree",
     "vortex-roaring",
     "vortex-schema",
@@ -47,6 +49,7 @@ criterion = { version = "0.5.1", features = ["html_reports"] }
 croaring = "1.0.1"
 divan = "0.1.14"
 flatbuffers = "23.5.26"
+flexbuffers = "2.0.0"
 flatc = "0.2.2"
 half = { version = "^2", features = ["std", "num-traits"] }
 hashbrown = "0.14.3"

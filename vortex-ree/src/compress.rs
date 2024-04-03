@@ -2,15 +2,15 @@ use std::cmp::min;
 
 use itertools::Itertools;
 use num_traits::AsPrimitive;
-
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-use vortex::array::{Array, ArrayRef, Encoding};
+use vortex::array::validity::Validity;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::encoding::Encoding;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{match_each_native_ptype, NativePType};
 use vortex::stats::Stat;
-use vortex::validity::{ArrayValidity, Validity};
 use vortex_error::VortexResult;
 
 use crate::downcast::DowncastREE;
@@ -156,8 +156,8 @@ pub fn ree_decode_primitive<E: NativePType + AsPrimitive<usize> + Ord, T: Native
 mod test {
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::validity::Validity;
     use vortex::array::{Array, IntoArray};
-    use vortex::validity::{ArrayValidity, Validity};
 
     use crate::compress::{ree_decode, ree_encode};
     use crate::REEArray;

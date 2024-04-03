@@ -1,6 +1,5 @@
 use vortex::array::{Array, ArrayRef};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
-use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
 use crate::{REEArray, REEEncoding};
@@ -13,6 +12,10 @@ impl ArraySerde for REEArray {
         ctx.dtype(self.ends().dtype())?;
         ctx.write(self.ends())?;
         ctx.write(self.values())
+    }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(None)
     }
 }
 

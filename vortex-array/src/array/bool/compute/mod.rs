@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef as ArrowArrayRef, BooleanArray as ArrowBoolArray};
 use arrow_buffer::buffer::BooleanBuffer;
-
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::{Array, ArrayRef};
+use crate::array::validity::Validity;
+use crate::array::{Array, ArrayRef, ArrayValidity};
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::AsContiguousFn;
@@ -17,7 +17,6 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::scalar::{BoolScalar, Scalar};
-use crate::validity::{ArrayValidity, Validity};
 
 mod take;
 
@@ -123,8 +122,8 @@ impl FillForwardFn for BoolArray {
 mod test {
     use crate::array::bool::BoolArray;
     use crate::array::downcast::DowncastArrayBuiltin;
+    use crate::array::Array;
     use crate::compute;
-    use crate::validity::ArrayValidity;
 
     #[test]
     fn fill_forward() {

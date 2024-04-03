@@ -1,5 +1,4 @@
 use itertools::Itertools;
-
 use vortex_error::VortexResult;
 
 use crate::array::downcast::DowncastArrayBuiltin;
@@ -36,6 +35,6 @@ impl EncodingCompression for StructEncoding {
             })
             .try_collect()?;
 
-        Ok(StructArray::new(struct_array.names().clone(), fields).into_array())
+        Ok(StructArray::new(struct_array.names().clone(), fields, array.len()).into_array())
     }
 }

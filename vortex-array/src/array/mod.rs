@@ -1,9 +1,6 @@
 use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-
-use linkme::distributed_slice;
 
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
@@ -16,23 +13,13 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::struct_::{StructArray, StructEncoding};
+use crate::array::validity::Validity;
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
-use crate::compress::EncodingCompression;
-use crate::compute::as_arrow::AsArrowArray;
-use crate::compute::as_contiguous::AsContiguousFn;
-use crate::compute::cast::CastFn;
-use crate::compute::fill::FillForwardFn;
-use crate::compute::flatten::FlattenFn;
-use crate::compute::patch::PatchFn;
-use crate::compute::scalar_at::ScalarAtFn;
-use crate::compute::search_sorted::SearchSortedFn;
-use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::serde::{ArraySerde, EncodingSerde};
+use crate::serde::ArraySerde;
 use crate::stats::Stats;
-use crate::validity::{ArrayValidity, Validity};
 
 pub mod bool;
 pub mod chunked;
@@ -42,6 +29,7 @@ pub mod downcast;
 pub mod primitive;
 pub mod sparse;
 pub mod struct_;
+pub mod validity;
 pub mod varbin;
 pub mod varbinview;
 
@@ -55,7 +43,7 @@ pub type ArrayRef = Arc<dyn Array>;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sync {
+pub trait Array: ArrayDisplay + Debug + Send + Sync {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
     fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
@@ -68,8 +56,14 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
     fn is_empty(&self) -> bool;
     /// Get the dtype of the array
     fn dtype(&self) -> &DType;
+
     /// Get statistics for the array
+    /// TODO(ngates): this is interesting. What type do we return from this?
+    /// Maybe we actually need to model stats more like compute?
     fn stats(&self) -> Stats;
+
+    fn validity(&self) -> Option<Validity>;
+
     /// Limit array to start..stop range
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef>;
     /// Encoding kind of the array
@@ -77,8 +71,61 @@ pub trait Array: ArrayCompute + ArrayValidity + ArrayDisplay + Debug + Send + Sy
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
     fn nbytes(&self) -> usize;
 
+    fn with_compute_mut(
+        &self,
+        _f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        vortex_bail!(
+            "with_compute_mut not implemented for {}",
+            self.encoding().id()
+        )
+    }
+
     fn serde(&self) -> Option<&dyn ArraySerde> {
         None
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()>;
+}
+
+pub trait WithArrayCompute {
+    fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(&self, f: F)
+        -> VortexResult<R>;
+}
+
+impl WithArrayCompute for dyn Array + '_ {
+    fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
+        &self,
+        f: F,
+    ) -> VortexResult<R> {
+        let mut result: Option<R> = None;
+        self.with_compute_mut(&mut |compute| {
+            result = Some(f(compute)?);
+            Ok(())
+        })?;
+        Ok(result.unwrap())
+    }
+}
+
+pub trait ArrayValidity {
+    fn nullability(&self) -> Nullability;
+
+    fn logical_validity(&self) -> Option<Validity>;
+
+    fn is_valid(&self, index: usize) -> bool;
+}
+
+impl<A: Array> ArrayValidity for A {
+    fn nullability(&self) -> Nullability {
+        self.validity().is_some().into()
+    }
+
+    fn logical_validity(&self) -> Option<Validity> {
+        self.validity().and_then(|v| v.logical_validity())
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
     }
 }
 
@@ -108,66 +155,21 @@ macro_rules! impl_array {
         fn into_array(self) -> ArrayRef {
             std::sync::Arc::new(self)
         }
+
+        #[inline]
+        fn with_compute_mut(
+            &self,
+            f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+        ) -> VortexResult<()> {
+            f(self)
+        }
     };
 }
 
 pub use impl_array;
 
-impl ArrayCompute for ArrayRef {
-    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        self.as_ref().as_arrow()
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
-        self.as_ref().as_contiguous()
-    }
-
-    fn cast(&self) -> Option<&dyn CastFn> {
-        self.as_ref().cast()
-    }
-
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
-        self.as_ref().flatten()
-    }
-
-    fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
-        self.as_ref().fill_forward()
-    }
-
-    fn patch(&self) -> Option<&dyn PatchFn> {
-        self.as_ref().patch()
-    }
-
-    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        self.as_ref().scalar_at()
-    }
-
-    fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
-        self.as_ref().search_sorted()
-    }
-
-    fn take(&self) -> Option<&dyn TakeFn> {
-        self.as_ref().take()
-    }
-}
-
-impl ArrayValidity for ArrayRef {
-    fn nullability(&self) -> Nullability {
-        self.as_ref().nullability()
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        self.as_ref().validity()
-    }
-
-    fn logical_validity(&self) -> Option<Validity> {
-        self.as_ref().logical_validity()
-    }
-
-    fn is_valid(&self, index: usize) -> bool {
-        self.as_ref().is_valid(index)
-    }
-}
+use crate::encoding::EncodingRef;
+use crate::ArrayWalker;
 
 impl Array for ArrayRef {
     fn as_any(&self) -> &dyn Any {
@@ -214,70 +216,30 @@ impl Array for ArrayRef {
         self.as_ref().nbytes()
     }
 
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        self.as_ref().with_compute_mut(f)
+    }
+
     fn serde(&self) -> Option<&dyn ArraySerde> {
         self.as_ref().serde()
+    }
+
+    fn validity(&self) -> Option<Validity> {
+        self.as_ref().validity()
+    }
+
+    #[allow(unused_variables)]
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        self.as_ref().walk(walker)
     }
 }
 
 impl ArrayDisplay for ArrayRef {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
         ArrayDisplay::fmt(self.as_ref(), fmt)
-    }
-}
-
-impl<'a, T: ArrayCompute> ArrayCompute for &'a T {
-    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        T::as_arrow(self)
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
-        T::as_contiguous(self)
-    }
-
-    fn cast(&self) -> Option<&dyn CastFn> {
-        T::cast(self)
-    }
-
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
-        T::flatten(self)
-    }
-
-    fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
-        T::fill_forward(self)
-    }
-
-    fn patch(&self) -> Option<&dyn PatchFn> {
-        T::patch(self)
-    }
-
-    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        T::scalar_at(self)
-    }
-
-    fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
-        T::search_sorted(self)
-    }
-
-    fn take(&self) -> Option<&dyn TakeFn> {
-        T::take(self)
-    }
-}
-
-impl<'a, T: ArrayValidity> ArrayValidity for &'a T {
-    fn nullability(&self) -> Nullability {
-        T::nullability(self)
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        T::validity(self)
-    }
-
-    fn logical_validity(&self) -> Option<Validity> {
-        T::logical_validity(self)
-    }
-
-    fn is_valid(&self, index: usize) -> bool {
-        T::is_valid(self, index)
     }
 }
 
@@ -314,6 +276,10 @@ impl<'a, T: Array + Clone> Array for &'a T {
         T::stats(self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        T::validity(self)
+    }
+
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         T::slice(self, start, stop)
     }
@@ -328,6 +294,17 @@ impl<'a, T: Array + Clone> Array for &'a T {
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         T::serde(self)
+    }
+
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        T::with_compute_mut(self, f)
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        T::walk(self, walker)
     }
 }
 
@@ -364,65 +341,6 @@ pub fn check_validity_buffer(validity: Option<&ArrayRef>, expected_len: usize) -
 
     Ok(())
 }
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub struct EncodingId(&'static str);
-
-impl EncodingId {
-    pub const fn new(id: &'static str) -> Self {
-        Self(id)
-    }
-
-    #[inline]
-    pub fn name(&self) -> &'static str {
-        self.0
-    }
-}
-
-impl Display for EncodingId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(self.0, f)
-    }
-}
-
-pub trait Encoding: Debug + Send + Sync + 'static {
-    fn id(&self) -> EncodingId;
-
-    /// Whether this encoding provides a compressor.
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        None
-    }
-
-    /// Array serialization
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        None
-    }
-}
-
-impl Display for dyn Encoding {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.id())
-    }
-}
-
-pub type EncodingRef = &'static dyn Encoding;
-
-impl PartialEq<Self> for EncodingRef {
-    fn eq(&self, other: &Self) -> bool {
-        self.id() == other.id()
-    }
-}
-
-impl Eq for EncodingRef {}
-
-impl Hash for EncodingRef {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.id().hash(state)
-    }
-}
-
-#[distributed_slice]
-pub static ENCODINGS: [EncodingRef] = [..];
 
 #[derive(Debug, Clone)]
 pub enum ArrayKind<'a> {

@@ -10,6 +10,14 @@ impl ArraySerde for FoRArray {
         ctx.write_usize(self.shift() as usize)?;
         ctx.write(self.encoded())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        let mut vec = Vec::new();
+        let mut ctx = WriteCtx::new(&mut vec);
+        ctx.scalar(self.reference())?;
+        ctx.write_usize(self.shift() as usize)?;
+        Ok(Some(vec))
+    }
 }
 
 impl EncodingSerde for FoREncoding {

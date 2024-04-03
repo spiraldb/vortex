@@ -8,14 +8,13 @@ use log::{info, warn, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-
-use crate::taxi_data::taxi_data_parquet;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::IntoArray;
-use vortex::array::{Array, ArrayRef, EncodingRef, ENCODINGS};
+use vortex::array::{Array, ArrayRef};
 use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
+use vortex::encoding::{EncodingRef, ENCODINGS};
 use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_datetime::DateTimeEncoding;
@@ -25,6 +24,9 @@ use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
 
+use crate::taxi_data::taxi_data_parquet;
+
+mod data_downloads;
 pub mod reader;
 pub mod taxi_data;
 
@@ -144,7 +146,6 @@ mod test {
     use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-
     use vortex::array::ArrayRef;
     use vortex::compute::as_arrow::as_arrow;
     use vortex::encode::FromArrowArray;

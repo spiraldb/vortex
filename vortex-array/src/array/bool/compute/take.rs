@@ -1,6 +1,5 @@
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
-
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
@@ -8,7 +7,6 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;
 use crate::match_each_integer_ptype;
-use crate::validity::ArrayValidity;
 
 impl TakeFn for BoolArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {

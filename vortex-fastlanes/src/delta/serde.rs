@@ -1,6 +1,5 @@
 use vortex::array::{Array, ArrayRef};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
-use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
 use crate::{DeltaArray, DeltaEncoding};
@@ -11,6 +10,10 @@ impl ArraySerde for DeltaArray {
         ctx.write(self.bases())?;
         ctx.write(self.deltas())?;
         ctx.write_validity(self.validity())
+    }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        todo!()
     }
 }
 

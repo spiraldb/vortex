@@ -3,7 +3,6 @@ use arrow::pyarrow::FromPyArrow;
 use pyo3::types::PyType;
 use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
 use vortex::arrow::FromArrowType;
-
 use vortex_schema::DType;
 
 #[pyclass(name = "DType", module = "vortex", subclass)]

@@ -1,7 +1,6 @@
+use dtype::PyDType;
 use log::debug;
 use pyo3::prelude::*;
-
-use dtype::PyDType;
 use vortex_schema::DType;
 use vortex_schema::Signedness::{Signed, Unsigned};
 
@@ -23,7 +22,7 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
 
     debug!(
         "Discovered encodings: {:?}",
-        vortex::array::ENCODINGS
+        vortex::encoding::ENCODINGS
             .iter()
             .map(|e| e.id().to_string())
             .collect::<Vec<String>>()

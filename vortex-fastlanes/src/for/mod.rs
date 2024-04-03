@@ -1,13 +1,15 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{Array, ArrayRef, Encoding, EncodingId, EncodingRef};
+use vortex::array::validity::Validity;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
+use vortex::compute::ArrayCompute;
+use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::impl_array;
 use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
+use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
@@ -99,6 +101,14 @@ impl Array for FoRArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
+    fn validity(&self) -> Option<Validity> {
+        self.encoded().validity()
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.encoded())
+    }
 }
 
 impl ArrayDisplay for FoRArray {
@@ -106,12 +116,6 @@ impl ArrayDisplay for FoRArray {
         f.property("reference", self.reference())?;
         f.property("shift", self.shift())?;
         f.child("encoded", self.encoded())
-    }
-}
-
-impl ArrayValidity for FoRArray {
-    fn validity(&self) -> Option<Validity> {
-        self.encoded().validity()
     }
 }
 

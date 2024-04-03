@@ -1,25 +1,24 @@
 use arrayref::array_ref;
 
 use fastlanez::TryBitPack;
+use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
+use vortex::array::IntoArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::array::IntoArray;
-use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::patch::patch;
 use vortex::match_each_integer_ptype;
-use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::ptype::{NativePType, PType};
+use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::scalar::{ListScalarVec, Scalar};
 use vortex::stats::Stat;
-use vortex::validity::ArrayValidity;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::downcast::DowncastFastlanes;
 use crate::{BitPackedArray, BitPackedEncoding};
+use crate::downcast::DowncastFastlanes;
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -347,7 +346,7 @@ fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 mod test {
     use std::sync::Arc;
 
-    use vortex::array::{Encoding, EncodingRef};
+    use vortex::encoding::{Encoding, EncodingRef};
 
     use super::*;
 

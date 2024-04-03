@@ -7,7 +7,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, WithArrayCompute};
 
 pub trait FlattenFn {
     fn flatten(&self) -> VortexResult<FlattenedArray>;
@@ -41,8 +41,10 @@ impl FlattenedArray {
 /// Flatten an array into one of the flat encodings.
 /// This does not guarantee that the array is recursively flattened.
 pub fn flatten(array: &dyn Array) -> VortexResult<FlattenedArray> {
-    array.flatten().map(|f| f.flatten()).unwrap_or_else(|| {
-        Err(vortex_err!(NotImplemented: "flatten", array.encoding().id().name()))
+    array.with_compute(|c| {
+        c.flatten().map(|f| f.flatten()).unwrap_or_else(|| {
+            Err(vortex_err!(NotImplemented: "flatten", array.encoding().id().name()))
+        })
     })
 }
 

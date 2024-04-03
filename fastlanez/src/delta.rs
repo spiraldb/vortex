@@ -1,9 +1,8 @@
 use std::mem::size_of;
 
 use arrayref::array_mut_ref;
-use uninit::prelude::VecCapacity;
-
 use fastlanez_sys::*;
+use uninit::prelude::VecCapacity;
 
 pub trait Delta
 where

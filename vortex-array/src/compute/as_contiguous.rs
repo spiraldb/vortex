@@ -1,8 +1,7 @@
 use itertools::Itertools;
-
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::array::ArrayRef;
+use crate::array::{Array, ArrayRef, WithArrayCompute};
 
 pub trait AsContiguousFn {
     fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef>;
@@ -19,13 +18,14 @@ pub fn as_contiguous(arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
     }
 
     let first = arrays.first().unwrap();
-    first
-        .as_contiguous()
-        .map(|f| f.as_contiguous(arrays))
-        .unwrap_or_else(|| {
-            Err(vortex_err!(
-                NotImplemented: "as_contiguous",
-                first.encoding().id().name()
-            ))
-        })
+    first.with_compute(|c| {
+        c.as_contiguous()
+            .map(|f| f.as_contiguous(arrays))
+            .unwrap_or_else(|| {
+                Err(vortex_err!(
+                    NotImplemented: "as_contiguous",
+                    first.encoding().id().name()
+                ))
+            })
+    })
 }

@@ -17,6 +17,7 @@ path = "src/lib.rs"
 
 [dependencies]
 arrow-schema = { workspace = true }
+flatbuffers = { workspace = true }
 parquet = { workspace = true, optional = true }
 thiserror = { workspace = true }
 

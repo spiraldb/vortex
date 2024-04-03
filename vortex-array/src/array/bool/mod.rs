@@ -2,18 +2,18 @@ use std::sync::{Arc, RwLock};
 
 use arrow_buffer::buffer::BooleanBuffer;
 use linkme::distributed_slice;
-
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
+use super::{check_slice_bounds, Array, ArrayRef};
+use crate::array::validity::Validity;
 use crate::array::IntoArray;
+use crate::compute::ArrayCompute;
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::impl_array;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
-use crate::validity::{ArrayValidity, Validity};
-
-use super::{check_slice_bounds, Array, ArrayRef, Encoding, EncodingId, EncodingRef, ENCODINGS};
+use crate::{impl_array, ArrayWalker};
 
 mod compute;
 mod serde;
@@ -102,6 +102,10 @@ impl Array for BoolArray {
         .into_array())
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &BoolEncoding
@@ -115,11 +119,13 @@ impl Array for BoolArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
-}
 
-impl ArrayValidity for BoolArray {
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        if let Some(v) = self.validity() {
+            // FIXME(ngates): Validity to implement Array?
+            walker.visit_child(&v.to_array())?;
+        }
+        walker.visit_buffer(self.buffer.inner())
     }
 }
 
@@ -188,9 +194,8 @@ impl FromIterator<Option<bool>> for BoolArray {
 
 #[cfg(test)]
 mod test {
-    use crate::compute::scalar_at::scalar_at;
-
     use super::*;
+    use crate::compute::scalar_at::scalar_at;
 
     #[test]
     fn slice() {

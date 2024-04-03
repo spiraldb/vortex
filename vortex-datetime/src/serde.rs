@@ -1,8 +1,8 @@
-use crate::{DateTimeArray, DateTimeEncoding};
 use vortex::array::{Array, ArrayRef};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
-use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
+
+use crate::{DateTimeArray, DateTimeEncoding};
 
 impl ArraySerde for DateTimeArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
@@ -13,6 +13,11 @@ impl ArraySerde for DateTimeArray {
         ctx.dtype(self.subsecond().dtype())?;
         ctx.write(self.subsecond())?;
         ctx.write_validity(self.validity())
+    }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        // FIXME(ngates): I think we need child dtypes?
+        Ok(None)
     }
 }
 

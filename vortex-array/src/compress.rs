@@ -3,7 +3,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
 use log::{debug, info, warn};
-
 use vortex_error::VortexResult;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
@@ -11,14 +10,15 @@ use crate::array::composite::CompositeEncoding;
 use crate::array::constant::ConstantArray;
 use crate::array::sparse::SparseEncoding;
 use crate::array::struct_::{StructArray, StructEncoding};
+use crate::array::validity::Validity;
 use crate::array::varbin::VarBinEncoding;
-use crate::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingRef, ENCODINGS};
+use crate::array::{Array, ArrayKind, ArrayRef};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
+use crate::encoding::{Encoding, EncodingRef, ENCODINGS};
 use crate::formatter::display_tree;
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
-use crate::validity::Validity;
 
 pub trait EncodingCompression: Encoding {
     fn cost(&self) -> u8 {
@@ -241,7 +241,10 @@ impl CompressCtx {
                     .iter()
                     .map(|field| self.compress_array(field))
                     .collect();
-                Ok(StructArray::new(strct.names().clone(), compressed_fields?).into_array())
+                Ok(
+                    StructArray::new(strct.names().clone(), compressed_fields?, strct.len())
+                        .into_array(),
+                )
             }
             _ => {
                 // Otherwise, we run sampled compression over pluggable encodings

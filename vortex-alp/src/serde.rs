@@ -13,6 +13,10 @@ impl ArraySerde for ALPArray {
         ctx.write_fixed_slice([self.exponents().e, self.exponents().f])?;
         ctx.write(self.encoded())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        Ok(Some(vec![self.exponents().e, self.exponents().f]))
+    }
 }
 
 impl EncodingSerde for ALPEncoding {

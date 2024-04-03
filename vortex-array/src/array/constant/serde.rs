@@ -9,6 +9,15 @@ impl ArraySerde for ConstantArray {
         ctx.write_usize(self.len())?;
         ctx.scalar(self.scalar())
     }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        // FIXME(ngates): use flatbuffer / serde.
+        let mut vec = Vec::new();
+        let mut ctx = WriteCtx::new(&mut vec);
+        ctx.write_usize(self.len())?;
+        ctx.scalar(self.scalar())?;
+        Ok(Some(vec))
+    }
 }
 
 impl EncodingSerde for ConstantEncoding {

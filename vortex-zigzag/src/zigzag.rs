@@ -1,12 +1,14 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{Array, ArrayKind, ArrayRef, Encoding, EncodingId, EncodingRef};
+use vortex::array::validity::Validity;
+use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
+use vortex::compute::ArrayCompute;
+use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::impl_array;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
+use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, Signedness};
 
@@ -90,17 +92,19 @@ impl Array for ZigZagArray {
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
+
+    fn validity(&self) -> Option<Validity> {
+        self.encoded().validity()
+    }
+
+    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        walker.visit_child(self.encoded())
+    }
 }
 
 impl ArrayDisplay for ZigZagArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.child("zigzag", self.encoded())
-    }
-}
-
-impl ArrayValidity for ZigZagArray {
-    fn validity(&self) -> Option<Validity> {
-        self.encoded().validity()
     }
 }
 

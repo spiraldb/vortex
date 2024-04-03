@@ -1,9 +1,9 @@
-use half::f16;
 use std::fmt::{Debug, Display, Formatter};
 
 pub use binary::*;
 pub use bool::*;
 pub use composite::*;
+use half::f16;
 pub use list::*;
 pub use null::*;
 pub use primitive::*;
@@ -119,7 +119,7 @@ impl Scalar {
                 (IntWidth::_32, Signedness::Unsigned) => PrimitiveScalar::none::<u32>().into(),
                 (IntWidth::_64, Signedness::Unsigned) => PrimitiveScalar::none::<u64>().into(),
             },
-            DType::Decimal(_, _, _) => unimplemented!("DecimalScalar"),
+            DType::Decimal(..) => unimplemented!("DecimalScalar"),
             DType::Float(w, _) => match w {
                 FloatWidth::_16 => PrimitiveScalar::none::<f16>().into(),
                 FloatWidth::_32 => PrimitiveScalar::none::<f32>().into(),
@@ -127,9 +127,9 @@ impl Scalar {
             },
             DType::Utf8(_) => Utf8Scalar::none().into(),
             DType::Binary(_) => BinaryScalar::none().into(),
-            DType::Struct(_, _) => StructScalar::new(dtype.clone(), vec![]).into(),
-            DType::List(_, _) => ListScalar::new(dtype.clone(), None).into(),
-            DType::Composite(_, _) => unimplemented!("CompositeScalar"),
+            DType::Struct(..) => StructScalar::new(dtype.clone(), vec![]).into(),
+            DType::List(..) => ListScalar::new(dtype.clone(), None).into(),
+            DType::Composite(..) => unimplemented!("CompositeScalar"),
         }
     }
 }
