@@ -379,8 +379,7 @@ impl Display for dyn Array + '_ {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}({}, {}, len={})",
-            std::any::type_name::<Self>(),
+            "{}({}, len={})",
             self.encoding().id(),
             self.dtype(),
             self.len()
