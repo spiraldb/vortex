@@ -38,6 +38,7 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
+    use vortex::array::downcast::DowncastArrayBuiltin;
 
     use crate::iter::FallibleLendingIterator;
     use vortex::array::primitive::PrimitiveArray;
@@ -49,7 +50,7 @@ mod tests {
 
     #[test]
     fn test_write_flatbuffer() {
-        let array = PrimitiveArray::from_iter(vec![Some(1), None, None, Some(4), Some(5)]);
+        let array = PrimitiveArray::from_iter(vec![Some(1i32), None, None, Some(4), Some(5)]);
 
         let mut cursor = Cursor::new(Vec::new());
         let ctx = SerdeContext::default();
@@ -67,7 +68,8 @@ mod tests {
             // Read some number of chunks from the stream.
             while let Some(chunk) = array_reader.next().unwrap() {
                 println!("VIEW: {:?}", &chunk);
-                let taken = take(&chunk, &PrimitiveArray::from(vec![0, 1, 0, 1])).unwrap();
+                let taken = take(&chunk, &PrimitiveArray::from(vec![0, 3, 0, 1])).unwrap();
+                let taken = taken.as_primitive().typed_data::<i32>();
                 println!("Taken: {:?}", &taken);
             }
         }

@@ -1,7 +1,7 @@
 use flatbuffers::{root, FlatBufferBuilder, Follow, Verifiable, WIPOffset};
 use std::io;
 use std::io::{Read, Write};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
 pub trait ReadFlatBuffer<Ctx>: Sized {
     type Source<'a>;
@@ -50,10 +50,14 @@ impl<R: Read> FlatBufferReader for R {
         if let Err(e) = self.read_exact(&mut msg_size) {
             return match e.kind() {
                 io::ErrorKind::UnexpectedEof => Ok(None),
-                _ => Err(e.into()),
+                _ => Err(vortex_err!(IOError: e)),
             };
         }
         let msg_size = u32::from_le_bytes(msg_size) as u64;
+        if msg_size == 0 {
+            // FIXME(ngates): I think this is wrong.
+            return Ok(None);
+        }
         self.take(msg_size).read_to_end(buffer)?;
         Ok(Some(root::<F>(buffer)?))
     }

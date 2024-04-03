@@ -1,3 +1,4 @@
+use arrow_buffer::BooleanBuffer;
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 
@@ -22,6 +23,7 @@ mod ptype;
 pub mod view;
 pub mod vtable;
 
+use crate::array::bool::BoolArray;
 use crate::compute::ArrayCompute;
 pub use view::*;
 use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
@@ -38,13 +40,16 @@ pub trait EncodingSerde {
         // todo!("Validate not implemented for {}", _view.encoding().id());
     }
 
-    fn to_array(&self, _view: &ArrayView) -> ArrayRef {
-        todo!(
-            "EncodingSerde.to_array not implemented for {}",
-            _view.encoding().id()
-        );
+    fn to_array(&self, view: &ArrayView) -> ArrayRef {
+        BoolArray::new(
+            BooleanBuffer::new(view.buffers().first().unwrap().clone(), 0, view.len()),
+            view.child(0, &Validity::DTYPE)
+                .map(|c| Validity::Array(c.into_array())),
+        )
+        .into_array()
     }
 
+    // TODO(ngates): remove this ideally?
     fn len(&self, _view: &ArrayView) -> usize {
         todo!(
             "EncodingSerde.len not implemented for {}",

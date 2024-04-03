@@ -4,7 +4,7 @@ use vortex_error::VortexResult;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
+use crate::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
 use crate::validity::ArrayValidity;
 
 impl ArraySerde for BoolArray {
@@ -14,11 +14,15 @@ impl ArraySerde for BoolArray {
     }
 
     fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
-        Ok(None)
+        Ok(Some((self.len() as u64).to_le_bytes().to_vec()))
     }
 }
 
 impl EncodingSerde for BoolEncoding {
+    fn len(&self, view: &ArrayView) -> usize {
+        u64::from_le_bytes(view.metadata().unwrap().try_into().unwrap()) as usize
+    }
+
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let validity = ctx.read_validity()?;
         let (logical_len, buf) = ctx.read_buffer(|len| (len + 7) / 8)?;

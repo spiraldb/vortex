@@ -123,7 +123,7 @@ macro_rules! vortex_err {
             $crate::VortexError::$variant(format!($fmt, $($arg),*).into(), Backtrace::capture())
         )
     }};
-    ($variant:ident: $err:expr $(,)?) => {{}
+    ($variant:ident: $err:expr $(,)?) => {
         $crate::__private::must_use(
             $crate::VortexError::$variant($err)
         )
