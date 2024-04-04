@@ -1,3 +1,6 @@
+use std::any::Any;
+use std::sync::Arc;
+
 use arrow_buffer::{BooleanBuffer, NullBuffer};
 use itertools::Itertools;
 use vortex_error::{vortex_bail, VortexResult};
@@ -6,7 +9,14 @@ use vortex_schema::{DType, Nullability};
 use crate::array::bool::BoolArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::as_contiguous;
+use crate::compute::ArrayCompute;
+use crate::encoding::EncodingRef;
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::serde::{ArraySerde, WriteCtx};
+use crate::stats::Stats;
+use crate::validity::{ArrayValidity, ValidityEncoding};
 use crate::view::AsView;
+use crate::ArrayWalker;
 
 #[derive(Debug, Clone)]
 pub enum Validity {
@@ -54,7 +64,11 @@ impl Validity {
         self.clone()
     }
 
-    pub fn slice(&self, start: usize, stop: usize) -> Validity {
+    pub fn len(&self) -> usize {
+        self.as_view().len()
+    }
+
+    pub fn slice(&self, start: usize, stop: usize) -> VortexResult<Validity> {
         self.as_view().slice(start, stop)
     }
 }
@@ -134,5 +148,102 @@ impl FromIterator<Validity> for Validity {
             .map(|v| v.to_bool_array().into_array())
             .collect_vec();
         Self::Array(as_contiguous(&arrays).unwrap())
+    }
+}
+
+impl Array for Validity {
+    fn as_any(&self) -> &dyn Any {
+        todo!()
+    }
+
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+        todo!()
+    }
+
+    fn to_array(&self) -> ArrayRef {
+        todo!()
+    }
+
+    fn into_array(self) -> ArrayRef {
+        todo!()
+    }
+
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        match self {
+            Validity::Valid(len) | Validity::Invalid(len) => *len == 0,
+            Validity::Array(a) => a.is_empty(),
+        }
+    }
+
+    fn dtype(&self) -> &DType {
+        &Validity::DTYPE
+    }
+
+    fn stats(&self) -> Stats {
+        todo!()
+    }
+
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(Arc::new(self.as_view().slice(start, stop)?))
+    }
+
+    fn encoding(&self) -> EncodingRef {
+        &ValidityEncoding
+    }
+
+    fn nbytes(&self) -> usize {
+        match self {
+            Validity::Valid(_) | Validity::Invalid(_) => 8,
+            Validity::Array(a) => a.nbytes(),
+        }
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
+
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
+    }
+
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        Ok(())
+    }
+}
+
+impl ArrayValidity for Validity {
+    fn logical_validity(&self) -> Validity {
+        // Validity is a non-nullable boolean array.
+        Validity::Valid(self.len())
+    }
+
+    fn is_valid(&self, _index: usize) -> bool {
+        true
+    }
+}
+
+impl ArrayDisplay for Validity {
+    fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
+        self.as_view().fmt(fmt)
+    }
+}
+
+impl ArrayCompute for Validity {}
+
+impl ArraySerde for Validity {
+    fn write(&self, _ctx: &mut WriteCtx) -> VortexResult<()> {
+        todo!()
+    }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        self.as_view().serde().unwrap().metadata()
     }
 }

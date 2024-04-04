@@ -68,7 +68,7 @@ impl VarBinArray {
             vortex_bail!(MismatchedTypes: "utf8 or binary", dtype);
         }
 
-        if let Some(v) = &validity {
+        if let Some(v) = validity.as_view() {
             assert_eq!(v.len(), offsets.len() - 1);
         }
         let dtype = if validity.is_some() && !dtype.is_nullable() {
@@ -227,7 +227,7 @@ impl Array for VarBinArray {
             self.offsets.slice(start, stop + 1)?,
             self.bytes.clone(),
             self.dtype.clone(),
-            self.validity().map(|v| v.slice(start, stop)),
+            self.validity().map(|v| v.slice(start, stop)).transpose()?,
         )
         .into_array())
     }

@@ -1,4 +1,8 @@
+use std::any::Any;
+use std::sync::Arc;
+
 use vortex_error::VortexResult;
+use vortex_schema::DType;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
@@ -7,10 +11,14 @@ use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
 use crate::compute::ArrayCompute;
-use crate::serde::ArrayView;
-use crate::stats::Stat;
+use crate::encoding::EncodingRef;
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::serde::{ArraySerde, ArrayView, WriteCtx};
+use crate::stats::{Stat, Stats};
 use crate::validity::owned::Validity;
+use crate::validity::{ArrayValidity, ValidityEncoding};
 use crate::view::{AsView, ToOwnedView};
+use crate::ArrayWalker;
 
 #[derive(Debug, Clone)]
 pub enum ValidityView<'a> {
@@ -111,12 +119,12 @@ impl ValidityView<'_> {
         }
     }
 
-    pub fn slice(&self, start: usize, stop: usize) -> Validity {
-        match self {
+    pub fn slice(&self, start: usize, stop: usize) -> VortexResult<Validity> {
+        Ok(match self {
             Self::Valid(_) => Validity::Valid(stop - start),
             Self::Invalid(_) => Validity::Invalid(stop - start),
-            Self::Array(a) => Validity::Array(Array::slice(*a, start, stop).unwrap()),
-        }
+            Self::Array(a) => Validity::Array(Array::slice(*a, start, stop)?),
+        })
     }
 
     pub fn take(&self, indices: &dyn Array) -> VortexResult<Validity> {
@@ -135,11 +143,114 @@ impl ValidityView<'_> {
     }
 }
 
-impl ArrayCompute for ValidityView<'_> {}
-
 impl<'a> From<ArrayView<'a>> for ValidityView<'a> {
     fn from(_value: ArrayView<'a>) -> Self {
         // FIXME(ngates): parse the metadata, and return the appropriate ValidityView
         ValidityView::Valid(100)
+    }
+}
+
+impl Array for ValidityView<'_> {
+    fn as_any(&self) -> &dyn Any {
+        todo!()
+    }
+
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+        todo!()
+    }
+
+    fn to_array(&self) -> ArrayRef {
+        todo!()
+    }
+
+    fn into_array(self) -> ArrayRef {
+        todo!()
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            ValidityView::Valid(len) | ValidityView::Invalid(len) => *len,
+            ValidityView::Array(a) => a.len(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        match self {
+            ValidityView::Valid(len) | ValidityView::Invalid(len) => *len == 0,
+            ValidityView::Array(a) => a.is_empty(),
+        }
+    }
+
+    fn dtype(&self) -> &DType {
+        &Validity::DTYPE
+    }
+
+    fn stats(&self) -> Stats {
+        todo!()
+    }
+
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(Arc::new(self.slice(start, stop)?))
+    }
+
+    fn encoding(&self) -> EncodingRef {
+        &ValidityEncoding
+    }
+
+    fn nbytes(&self) -> usize {
+        match self {
+            ValidityView::Valid(_) | ValidityView::Invalid(_) => 8,
+            ValidityView::Array(a) => a.nbytes(),
+        }
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
+
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
+    }
+
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        Ok(())
+    }
+}
+
+impl ArrayValidity for ValidityView<'_> {
+    fn logical_validity(&self) -> Validity {
+        // Validity is a non-nullable boolean array.
+        Validity::Valid(self.len())
+    }
+
+    fn is_valid(&self, _index: usize) -> bool {
+        true
+    }
+}
+
+impl ArrayDisplay for ValidityView<'_> {
+    fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
+        match self {
+            ValidityView::Valid(_) => fmt.property("all", "valid"),
+            ValidityView::Invalid(_) => fmt.property("all", "invalid"),
+            ValidityView::Array(a) => fmt.child("validity", *a),
+        }
+    }
+}
+
+impl ArrayCompute for ValidityView<'_> {}
+
+impl ArraySerde for ValidityView<'_> {
+    fn write(&self, _ctx: &mut WriteCtx) -> VortexResult<()> {
+        todo!()
+    }
+
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        // TODO: Implement this
+        Ok(None)
     }
 }

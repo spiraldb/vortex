@@ -48,7 +48,7 @@ impl PrimitiveArray {
     }
 
     pub fn try_new(ptype: PType, buffer: Buffer, validity: Option<Validity>) -> VortexResult<Self> {
-        if let Some(v) = &validity {
+        if let Some(v) = validity.as_view() {
             if v.len() != buffer.len() / ptype.byte_width() {
                 vortex_bail!("Validity length does not match buffer length");
             }
@@ -193,7 +193,7 @@ impl Array for PrimitiveArray {
         Ok(Self {
             buffer: self.buffer.slice_with_length(byte_start, byte_length),
             ptype: self.ptype,
-            validity: self.validity().map(|v| v.slice(start, stop)),
+            validity: self.validity().map(|v| v.slice(start, stop)).transpose()?,
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }

@@ -111,7 +111,7 @@ impl Array for DateTimeArray {
             self.days.slice(start, stop)?,
             self.seconds.slice(start, stop)?,
             self.subsecond.slice(start, stop)?,
-            self.validity().map(|v| v.slice(start, stop)),
+            self.validity().map(|v| v.slice(start, stop)).transpose()?,
             self.dtype.clone(),
         )
         .into_array())

@@ -35,7 +35,7 @@ impl BoolArray {
 
     pub fn try_new(buffer: BooleanBuffer, validity: Option<Validity>) -> VortexResult<Self> {
         if let Some(v) = &validity {
-            assert_eq!(Array::len(v), buffer.len());
+            assert_eq!(v.as_view().len(), buffer.len());
         }
         Ok(Self {
             buffer,
@@ -99,7 +99,11 @@ impl Array for BoolArray {
         Ok(Self {
             buffer: self.buffer.slice(start, stop - start),
             stats: Arc::new(RwLock::new(StatsSet::new())),
-            validity: self.validity.as_view().map(|v| v.slice(start, stop)),
+            validity: self
+                .validity
+                .as_view()
+                .map(|v| v.slice(start, stop))
+                .transpose()?,
         }
         .into_array())
     }
