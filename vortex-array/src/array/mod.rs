@@ -13,13 +13,13 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::struct_::{StructArray, StructEncoding};
-use crate::array::validity::Validity;
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::compute::ArrayCompute;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::ArraySerde;
 use crate::stats::Stats;
+use crate::validity::Validity;
 
 pub mod bool;
 pub mod chunked;
@@ -29,7 +29,6 @@ pub mod downcast;
 pub mod primitive;
 pub mod sparse;
 pub mod struct_;
-pub mod validity;
 pub mod varbin;
 pub mod varbinview;
 
@@ -43,7 +42,7 @@ pub type ArrayRef = Arc<dyn Array>;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub trait Array: ArrayDisplay + Debug + Send + Sync {
+pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
     fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
@@ -56,33 +55,15 @@ pub trait Array: ArrayDisplay + Debug + Send + Sync {
     fn is_empty(&self) -> bool;
     /// Get the dtype of the array
     fn dtype(&self) -> &DType;
+    /// Get the nullability of the array
+    fn nullability(&self) -> Nullability {
+        self.dtype().nullability()
+    }
 
     /// Get statistics for the array
     /// TODO(ngates): this is interesting. What type do we return from this?
     /// Maybe we actually need to model stats more like compute?
     fn stats(&self) -> Stats;
-
-    fn validity(&self) -> Option<Validity>;
-
-    fn nullability(&self) -> Nullability {
-        if self.validity().is_some() {
-            assert_eq!(self.dtype().nullability(), Nullability::Nullable);
-            Nullability::Nullable
-        } else {
-            assert_eq!(self.dtype().nullability(), Nullability::NonNullable);
-            Nullability::NonNullable
-        }
-    }
-
-    fn logical_validity(&self) -> Option<Validity> {
-        self.validity().and_then(|v| v.as_view().logical_validity())
-    }
-
-    fn is_valid(&self, index: usize) -> bool {
-        self.validity()
-            .map(|v| v.as_view().is_valid(index))
-            .unwrap_or(true)
-    }
 
     /// Limit array to start..stop range
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef>;
@@ -136,7 +117,7 @@ macro_rules! impl_array {
         }
 
         #[inline]
-        fn into_any(self: Arc<Self>) -> std::sync::Arc<dyn std::any::Any + Send + Sync> {
+        fn into_any(self: std::sync::Arc<Self>) -> std::sync::Arc<dyn std::any::Any + Send + Sync> {
             self
         }
 
@@ -155,6 +136,7 @@ macro_rules! impl_array {
 pub use impl_array;
 
 use crate::encoding::EncodingRef;
+use crate::validity::ArrayValidity;
 use crate::ArrayWalker;
 
 impl Array for ArrayRef {
@@ -213,13 +195,19 @@ impl Array for ArrayRef {
         self.as_ref().serde()
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.as_ref().validity()
-    }
-
     #[allow(unused_variables)]
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         self.as_ref().walk(walker)
+    }
+}
+
+impl ArrayValidity for ArrayRef {
+    fn logical_validity(&self) -> Validity {
+        self.as_ref().logical_validity()
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.as_ref().is_valid(index)
     }
 }
 

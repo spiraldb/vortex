@@ -3,8 +3,8 @@ use std::fmt::{Display, Write};
 
 use humansize::{format_size, DECIMAL};
 
-use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
+use crate::validity::ValidityView;
 
 pub trait ArrayDisplay {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> fmt::Result;
@@ -68,12 +68,14 @@ impl<'a, 'b: 'a> ArrayFormatter<'a, 'b> {
         self.indent(|indent| ArrayDisplay::fmt(array, indent))
     }
 
-    pub fn validity(&mut self, validity: Option<Validity>) -> fmt::Result {
+    pub fn validity(&mut self, validity: Option<ValidityView>) -> fmt::Result {
         if let Some(validity) = validity {
             match validity {
-                Validity::Valid(_) => Ok(()),
-                Validity::Invalid(_) => writeln!(self.fmt, "{}validity: all invalid", self.indent),
-                Validity::Array(a) => self.child("validity", &a),
+                ValidityView::Valid(_) => Ok(()),
+                ValidityView::Invalid(_) => {
+                    writeln!(self.fmt, "{}validity: all invalid", self.indent)
+                }
+                ValidityView::Array(a) => self.child("validity", a),
             }
         } else {
             writeln!(self.fmt, "{}validity: None", self.indent)

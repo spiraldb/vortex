@@ -1,25 +1,22 @@
+use std::any::Any;
 use std::sync::Arc;
 
 use arrow_buffer::{BooleanBuffer, NullBuffer};
 use itertools::Itertools;
-use linkme::distributed_slice;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::BoolArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::ArrayCompute;
-use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
+use crate::encoding::EncodingRef;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::serde::{ArraySerde, WriteCtx};
 use crate::stats::Stats;
-use crate::{impl_array, ArrayWalker};
-mod serde;
-mod view;
-
-pub use view::*;
-
-use crate::serde::{ArraySerde, EncodingSerde};
+use crate::validity::{ArrayValidity, ValidityEncoding};
+use crate::view::AsView;
+use crate::ArrayWalker;
 
 #[derive(Debug, Clone)]
 pub enum Validity {
@@ -38,20 +35,42 @@ impl Validity {
         Self::Array(array)
     }
 
+    pub fn try_from_logical(
+        logical: Validity,
+        nullability: Nullability,
+    ) -> VortexResult<Option<Self>> {
+        match nullability {
+            Nullability::NonNullable => {
+                if !logical.as_view().all_valid() {
+                    vortex_bail!("Non-nullable validity must be all valid");
+                }
+                Ok(None)
+            }
+            Nullability::Nullable => Ok(Some(logical)),
+        }
+    }
+
     pub fn to_bool_array(&self) -> BoolArray {
         self.as_view().to_bool_array()
     }
 
-    pub fn slice(&self, start: usize, stop: usize) -> Validity {
-        self.as_view().slice(start, stop)
+    pub fn logical_validity(&self) -> Validity {
+        if self.as_view().all_valid() {
+            return Validity::Valid(self.len());
+        }
+        if self.as_view().all_invalid() {
+            return Validity::Invalid(self.len());
+        }
+        self.clone()
     }
 
-    pub fn as_view(&self) -> ValidityView {
-        match self {
-            Self::Valid(len) => ValidityView::Valid(*len),
-            Self::Invalid(len) => ValidityView::Invalid(*len),
-            Self::Array(a) => ValidityView::Array(a.as_ref()),
-        }
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self) -> usize {
+        self.as_view().len()
+    }
+
+    pub fn slice(&self, start: usize, stop: usize) -> VortexResult<Validity> {
+        self.as_view().slice(start, stop)
     }
 }
 
@@ -134,13 +153,24 @@ impl FromIterator<Validity> for Validity {
 }
 
 impl Array for Validity {
-    impl_array!();
+    fn as_any(&self) -> &dyn Any {
+        todo!()
+    }
+
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+        todo!()
+    }
+
+    fn to_array(&self) -> ArrayRef {
+        todo!()
+    }
+
+    fn into_array(self) -> ArrayRef {
+        todo!()
+    }
 
     fn len(&self) -> usize {
-        match self {
-            Validity::Valid(len) | Validity::Invalid(len) => *len,
-            Validity::Array(a) => a.len(),
-        }
+        self.len()
     }
 
     fn is_empty(&self) -> bool {
@@ -158,12 +188,8 @@ impl Array for Validity {
         todo!()
     }
 
-    fn validity(&self) -> Option<Validity> {
-        None
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(self.slice(start, stop).into_array())
+        Ok(Arc::new(self.as_view().slice(start, stop)?))
     }
 
     fn encoding(&self) -> EncodingRef {
@@ -194,34 +220,31 @@ impl Array for Validity {
     }
 }
 
+impl ArrayValidity for Validity {
+    fn logical_validity(&self) -> Validity {
+        // Validity is a non-nullable boolean array.
+        Validity::Valid(self.len())
+    }
+
+    fn is_valid(&self, _index: usize) -> bool {
+        true
+    }
+}
+
 impl ArrayDisplay for Validity {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
-        match self {
-            Validity::Valid(_) => fmt.property("all", "valid"),
-            Validity::Invalid(_) => fmt.property("all", "invalid"),
-            Validity::Array(a) => fmt.child("validity", a),
-        }
+        self.as_view().fmt(fmt)
     }
 }
 
 impl ArrayCompute for Validity {}
 
-#[distributed_slice(ENCODINGS)]
-static ENCODINGS_VALIDITY: EncodingRef = &ValidityEncoding;
-
-#[derive(Debug)]
-struct ValidityEncoding;
-
-impl ValidityEncoding {
-    const ID: EncodingId = EncodingId::new("vortex.validity");
-}
-
-impl Encoding for ValidityEncoding {
-    fn id(&self) -> EncodingId {
-        ValidityEncoding::ID
+impl ArraySerde for Validity {
+    fn write(&self, _ctx: &mut WriteCtx) -> VortexResult<()> {
+        todo!()
     }
 
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+    fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
+        self.as_view().serde().unwrap().metadata()
     }
 }

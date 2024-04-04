@@ -16,7 +16,6 @@ use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
 use crate::array::primitive::compute::PrimitiveTrait;
-use crate::array::validity::{Validity, ValidityView};
 use crate::array::IntoArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compute::ArrayCompute;
@@ -26,6 +25,9 @@ use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+use crate::validity::{ArrayValidity, OwnedValidity};
+use crate::validity::{Validity, ValidityView};
+use crate::view::{AsView, ToOwnedView};
 use crate::{impl_array, ArrayWalker};
 
 mod compute;
@@ -48,7 +50,7 @@ impl PrimitiveArray {
     }
 
     pub fn try_new(ptype: PType, buffer: Buffer, validity: Option<Validity>) -> VortexResult<Self> {
-        if let Some(v) = &validity {
+        if let Some(v) = validity.as_view() {
             if v.len() != buffer.len() / ptype.byte_width() {
                 vortex_bail!("Validity length does not match buffer length");
             }
@@ -113,7 +115,11 @@ impl PrimitiveArray {
         }
         let len = Array::len(&self);
         let validity = if nullability == Nullability::Nullable {
-            Some(self.validity().unwrap_or_else(|| Validity::Valid(len)))
+            Some(
+                self.validity()
+                    .to_owned_view()
+                    .unwrap_or_else(|| Validity::Valid(len)),
+            )
         } else {
             None
         };
@@ -188,7 +194,11 @@ impl PrimitiveArray {
             "can't reinterpret cast between integers of two different widths"
         );
 
-        PrimitiveArray::new(ptype, self.buffer().clone(), self.validity())
+        PrimitiveArray::new(
+            ptype,
+            self.buffer().clone(),
+            self.validity().to_owned_view(),
+        )
     }
 }
 
@@ -215,10 +225,6 @@ impl Array for PrimitiveArray {
         Stats::new(&self.stats, self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -228,7 +234,7 @@ impl Array for PrimitiveArray {
         Ok(Self {
             buffer: self.buffer.slice_with_length(byte_start, byte_length),
             ptype: self.ptype,
-            validity: self.validity.as_ref().map(|v| v.slice(start, stop)),
+            validity: self.validity().map(|v| v.slice(start, stop)).transpose()?,
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
@@ -267,17 +273,15 @@ impl Array for PrimitiveArray {
     }
 }
 
-impl<T: NativePType> PrimitiveTrait<T> for PrimitiveArray {
-    fn dtype(&self) -> &DType {
-        &self.dtype
+impl OwnedValidity for PrimitiveArray {
+    fn validity(&self) -> Option<ValidityView> {
+        self.validity.as_view()
     }
+}
 
+impl<T: NativePType> PrimitiveTrait<T> for PrimitiveArray {
     fn ptype(&self) -> PType {
         self.ptype
-    }
-
-    fn validity_view(&self) -> Option<ValidityView> {
-        self.validity.as_ref().map(|v| v.as_view())
     }
 
     fn buffer(&self) -> &Buffer {

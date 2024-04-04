@@ -6,7 +6,6 @@ use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
@@ -17,6 +16,9 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::scalar::{BoolScalar, Scalar};
+use crate::validity::ArrayValidity;
+use crate::validity::OwnedValidity;
+use crate::validity::Validity;
 
 mod take;
 
@@ -50,7 +52,7 @@ impl AsArrowArray for BoolArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         Ok(Arc::new(ArrowBoolArray::new(
             self.buffer().clone(),
-            as_nulls(self.validity())?,
+            as_nulls(self.logical_validity())?,
         )))
     }
 }
@@ -58,9 +60,9 @@ impl AsArrowArray for BoolArray {
 impl AsContiguousFn for BoolArray {
     fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
         let validity: Option<Validity> = if self.dtype().is_nullable() {
-            Some(Validity::from_iter(arrays.iter().map(|a| {
-                a.validity().unwrap_or_else(|| Validity::Valid(a.len()))
-            })))
+            Some(Validity::from_iter(
+                arrays.iter().map(|a| a.logical_validity()),
+            ))
         } else {
             None
         };
@@ -122,8 +124,8 @@ impl FillForwardFn for BoolArray {
 mod test {
     use crate::array::bool::BoolArray;
     use crate::array::downcast::DowncastArrayBuiltin;
-    use crate::array::Array;
     use crate::compute;
+    use crate::validity::OwnedValidity;
 
     #[test]
     fn fill_forward() {

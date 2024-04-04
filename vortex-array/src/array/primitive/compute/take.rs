@@ -11,7 +11,7 @@ use crate::ptype::NativePType;
 
 impl<T: NativePType> TakeFn for &dyn PrimitiveTrait<T> {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        let validity = self.validity_view().map(|v| v.take(indices)).transpose()?;
+        let validity = self.validity().map(|v| v.take(indices)).transpose()?;
         let indices = flatten_primitive(indices)?;
         match_each_integer_ptype!(indices.ptype(), |$I| {
             Ok(PrimitiveArray::from_nullable(

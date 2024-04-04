@@ -10,12 +10,12 @@ use vortex_schema::DTypeSerdeContext;
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::composite::COMPOSITE_EXTENSIONS;
-use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::encoding::{find_encoding, EncodingId, ENCODINGS};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
 use crate::serde::ptype::PTypeTag;
+use crate::validity::{Validity, ValidityView};
 
 pub mod context;
 pub mod data;
@@ -323,23 +323,23 @@ impl<'a> WriteCtx<'a> {
         }
     }
 
-    pub fn write_validity(&mut self, validity: Option<Validity>) -> VortexResult<()> {
+    pub fn write_validity(&mut self, validity: Option<ValidityView>) -> VortexResult<()> {
         match validity {
             None => self.write_option_tag(false),
             Some(v) => {
                 self.write_option_tag(true)?;
                 match v {
-                    Validity::Valid(len) => {
+                    ValidityView::Valid(len) => {
                         self.write_fixed_slice([0u8])?;
                         self.write_usize(len)
                     }
-                    Validity::Invalid(len) => {
+                    ValidityView::Invalid(len) => {
                         self.write_fixed_slice([1u8])?;
                         self.write_usize(len)
                     }
-                    Validity::Array(a) => {
+                    ValidityView::Array(a) => {
                         self.write_fixed_slice([2u8])?;
-                        self.write(&a)
+                        self.write(a)
                     }
                 }
             }

@@ -5,6 +5,7 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::match_each_native_ptype;
 use crate::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
+use crate::validity::OwnedValidity;
 
 impl ArraySerde for PrimitiveArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
@@ -42,8 +43,8 @@ impl EncodingSerde for PrimitiveEncoding {
 mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::Array;
     use crate::serde::test::roundtrip_array;
+    use crate::validity::ArrayValidity;
 
     #[test]
     fn roundtrip() {
@@ -53,6 +54,6 @@ mod test {
             arr.buffer().typed_data::<i32>(),
             read_arr.as_primitive().buffer().typed_data::<i32>()
         );
-        assert_eq!(arr.validity(), read_arr.validity());
+        assert_eq!(arr.logical_validity(), read_arr.logical_validity());
     }
 }

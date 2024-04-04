@@ -6,7 +6,6 @@ use arrow_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
@@ -15,6 +14,8 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::context::SerdeContext;
 use crate::serde::EncodingSerde;
 use crate::stats::Stats;
+use crate::validity::ArrayValidity;
+use crate::validity::Validity;
 use crate::ArrayWalker;
 
 #[derive(Clone)]
@@ -202,11 +203,17 @@ impl<'a> Array for ArrayView<'a> {
             .with_view_compute(self, f)
     }
 
-    fn validity(&self) -> Option<Validity> {
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        todo!()
+    }
+}
+
+impl ArrayValidity for ArrayView<'_> {
+    fn logical_validity(&self) -> Validity {
         todo!()
     }
 
-    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+    fn is_valid(&self, _index: usize) -> bool {
         todo!()
     }
 }

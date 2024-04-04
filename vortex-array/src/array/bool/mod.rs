@@ -6,13 +6,15 @@ use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
 use super::{check_slice_bounds, Array, ArrayRef};
-use crate::array::validity::Validity;
 use crate::array::IntoArray;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
+use crate::validity::OwnedValidity;
+use crate::validity::{Validity, ValidityView};
+use crate::view::AsView;
 use crate::{impl_array, ArrayWalker};
 
 mod compute;
@@ -33,7 +35,7 @@ impl BoolArray {
 
     pub fn try_new(buffer: BooleanBuffer, validity: Option<Validity>) -> VortexResult<Self> {
         if let Some(v) = &validity {
-            assert_eq!(Array::len(v), buffer.len());
+            assert_eq!(v.as_view().len(), buffer.len());
         }
         Ok(Self {
             buffer,
@@ -91,17 +93,17 @@ impl Array for BoolArray {
         Stats::new(&self.stats, self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
         Ok(Self {
             buffer: self.buffer.slice(start, stop - start),
             stats: Arc::new(RwLock::new(StatsSet::new())),
-            validity: self.validity.as_ref().map(|v| v.slice(start, stop)),
+            validity: self
+                .validity
+                .as_view()
+                .map(|v| v.slice(start, stop))
+                .transpose()?,
         }
         .into_array())
     }
@@ -137,6 +139,22 @@ impl Array for BoolArray {
     }
 }
 
+impl OwnedValidity for BoolArray {
+    fn validity(&self) -> Option<ValidityView> {
+        self.validity.as_view()
+    }
+}
+
+impl ArrayDisplay for BoolArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        let true_count = self.stats().get_or_compute_or(0usize, &Stat::TrueCount);
+        let false_count = self.len() - true_count;
+        f.property("n_true", true_count)?;
+        f.property("n_false", false_count)?;
+        f.validity(self.validity())
+    }
+}
+
 #[derive(Debug)]
 pub struct BoolEncoding;
 
@@ -154,16 +172,6 @@ impl Encoding for BoolEncoding {
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
-    }
-}
-
-impl ArrayDisplay for BoolArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        let true_count = self.stats().get_or_compute_or(0usize, &Stat::TrueCount);
-        let false_count = self.len() - true_count;
-        f.property("n_true", true_count)?;
-        f.property("n_false", false_count)?;
-        f.validity(self.validity())
     }
 }
 

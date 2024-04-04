@@ -39,7 +39,6 @@ impl ScalarAtFn for BitPackedArray {
         if index >= self.len() {
             return Err(vortex_err!(OutOfBounds:index, 0, self.len()));
         }
-
         if let Some(patches) = self.patches() {
             // NB: All non-null values are considered patches
             if self.bit_width == 0 || patches.is_valid(index) {
