@@ -1,6 +1,3 @@
-use std::io;
-use std::io::ErrorKind;
-
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
@@ -35,15 +32,14 @@ impl EncodingSerde for SparseEncoding {
         let offset = ctx.read_usize()?;
         let indices = ctx.with_schema(&DType::IDX).read()?;
         let values = ctx.read()?;
-        Ok(SparseArray::new_with_offset(
+        SparseArray::try_new_with_offset(
             indices,
             values,
             len,
             offset,
             Scalar::Null(NullScalar::new()),
         )
-        .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?
-        .into_array())
+        .map(|a| a.into_array())
     }
 }
 

@@ -47,10 +47,10 @@ impl SparseArray {
         len: usize,
         fill_value: Scalar,
     ) -> VortexResult<Self> {
-        Self::new_with_offset(indices, values, len, 0, fill_value)
+        Self::try_new_with_offset(indices, values, len, 0, fill_value)
     }
 
-    pub(crate) fn new_with_offset(
+    pub(crate) fn try_new_with_offset(
         indices: ArrayRef,
         values: ArrayRef,
         len: usize,
