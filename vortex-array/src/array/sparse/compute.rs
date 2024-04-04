@@ -62,7 +62,6 @@ impl AsContiguousFn for SparseArray {
     }
 }
 
-#[allow(unreachable_code)]
 impl FlattenFn for SparseArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
         // Resolve our indices into a vector of usize applying the offset
