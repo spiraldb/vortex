@@ -72,7 +72,7 @@ impl<'a, T: NativePType> PrimitiveTrait<T> for PrimitiveView<'a> {
 
 impl<'a> OwnedValidity for PrimitiveView<'a> {
     fn validity(&self) -> Option<ValidityView<'a>> {
-        todo!()
+        self.validity.clone()
     }
 }
 

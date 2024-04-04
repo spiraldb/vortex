@@ -14,10 +14,7 @@ where
 
 impl<'v, View: 'v, Owned: AsView<'v, View>> AsView<'v, Option<View>> for Option<Owned> {
     fn as_view(&'v self) -> Option<View> {
-        match self {
-            None => None,
-            Some(v) => Some(v.as_view()),
-        }
+        self.as_ref().map(|owned| owned.as_view())
     }
 }
 
@@ -29,9 +26,6 @@ where
     type Owned = Option<Owned>;
 
     fn to_owned_view(&'v self) -> Self::Owned {
-        match self {
-            None => None,
-            Some(view) => Some(view.to_owned_view()),
-        }
+        self.as_ref().map(|view| view.to_owned_view())
     }
 }
