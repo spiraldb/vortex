@@ -1,9 +1,10 @@
 use itertools::Itertools;
+use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::as_contiguous::as_contiguous;
 use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
-use vortex::compute::scalar_at::ScalarAtFn;
+use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
@@ -44,6 +45,12 @@ impl ScalarAtFn for BitPackedArray {
             match_each_integer_ptype!(&ptype, |$P| {
                 return Ok(Scalar::from(0 as $P));
             })
+        }
+        if let Some(patches) = self.patches() {
+            let patch = scalar_at(patches, index)?;
+            if !patch.is_null() {
+                return Ok(patch);
+            }
         }
         unpack_single(self, index)
     }
