@@ -1,6 +1,6 @@
 use arrow_buffer::BooleanBufferBuilder;
 use itertools::Itertools;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
@@ -35,10 +35,10 @@ impl AsContiguousFn for SparseArray {
             .iter()
             .map(|a| a.as_sparse().fill_value())
             .all_equal();
-        assert!(
-            all_fill_types_are_equal,
-            "Cannot concatenate SparseArrays with differing fill values"
-        );
+        if !all_fill_types_are_equal {
+            vortex_bail!("Cannot concatenate SparseArrays with differing fill values");
+        }
+
         Ok(SparseArray::new(
             as_contiguous(
                 &arrays
