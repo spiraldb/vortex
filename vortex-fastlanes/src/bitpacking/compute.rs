@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use fastlanez::TryBitPack;
 use itertools::Itertools;
 use vortex::array::downcast::DowncastArrayBuiltin;
@@ -111,11 +113,18 @@ fn take_primitive<T: NativePType + TryBitPack>(
     if let Some(patches) = array.patches() {
         if let Some(patches) = patches.maybe_sparse() {
             // we first find which of the taken indices need to be patched
+            let indices_map: HashMap<u64, u64> = patches
+                .resolved_indices()
+                .iter()
+                .enumerate()
+                .map(|(i, r)| (*r as u64, i as u64))
+                .collect();
             let (output_indices, patch_indices): (Vec<usize>, Vec<u64>) = match_each_integer_ptype!(indices.ptype(), |$P| {
                 indices.typed_data::<$P>()
                     .iter()
+                    .map(|i| *i as u64)
                     .enumerate()
-                    .filter_map(|(ti, pi)| patches.find_index(*pi as usize).unwrap().map(|i| (ti, i as u64)))
+                    .filter_map(|(i, pi)| indices_map.get(&pi).map(|ri| (i, *ri)))
                     .unzip()
             });
             let patch_indices = PrimitiveArray::from(patch_indices);
