@@ -12,7 +12,6 @@ use vortex::compute::patch::patch;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::PType::{I16, I32, I64, I8, U16, U32, U64, U8};
 use vortex::ptype::{NativePType, PType};
-use vortex::scalar::NullScalar;
 use vortex::scalar::{ListScalarVec, Scalar};
 use vortex::stats::Stat;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -159,7 +158,7 @@ fn bitpack_patches(
                 values.push(*v);
             }
         }
-        SparseArray::new(indices.into_array(), values.into_array(), parray.len(), Scalar::Null(NullScalar::new())).into_array()
+        SparseArray::new(indices.into_array(), values.into_array(), parray.len(), Scalar::null(&parray.dtype().as_nullable())).into_array()
     })
 }
 
@@ -268,12 +267,8 @@ pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResul
         }?
     };
 
-    // Cast to signed if necessary
-    if ptype.is_signed_int() {
-        scalar.cast(&ptype.into())
-    } else {
-        Ok(scalar)
-    }
+    // Cast to fix signedness and nullability
+    scalar.cast(array.dtype())
 }
 
 /// # Safety

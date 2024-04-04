@@ -39,18 +39,13 @@ impl ScalarAtFn for BitPackedArray {
         if index >= self.len() {
             return Err(vortex_err!(OutOfBounds:index, 0, self.len()));
         }
-        if self.bit_width() == 0 {
-            let ptype = self.dtype().try_into()?;
-            match_each_integer_ptype!(&ptype, |$P| {
-                return Ok(Scalar::from(0 as $P));
-            })
-        }
+
         if let Some(patches) = self.patches() {
-            if patches.is_valid(index) {
-                return scalar_at(patches, index);
+            if self.bit_width == 0 || patches.is_valid(index) {
+                return scalar_at(patches, index)?.cast(self.dtype());
             }
         }
-        unpack_single(self, index)
+        unpack_single(self, index)?.cast(self.dtype())
     }
 }
 

@@ -86,6 +86,11 @@ impl SparseArray {
         &self.indices
     }
 
+    #[inline]
+    fn fill_value(&self) -> &Scalar {
+        &self.fill_value
+    }
+
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
         flatten_primitive(cast(self.indices(), PType::U64.into()).unwrap().as_ref())
