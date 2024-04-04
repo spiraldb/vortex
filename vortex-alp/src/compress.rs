@@ -89,11 +89,6 @@ where
     T::ALPInt: NativePType,
 {
     let (exponents, encoded, exc_pos, exc) = T::encode(values.typed_data::<T>(), exponents);
-    let fill_value = if values.dtype().is_nullable() {
-        Scalar::null(values.dtype())
-    } else {
-        T::default().into()
-    };
     let len = encoded.len();
     (
         exponents,
@@ -105,7 +100,7 @@ where
                 PrimitiveArray::from(exc_pos).into_array(),
                 PrimitiveArray::from(exc).into_array(),
                 len,
-                fill_value,
+                Scalar::null(&values.dtype().as_nullable()),
             )
             .into_array()
         }),
