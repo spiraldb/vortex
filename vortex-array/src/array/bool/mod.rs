@@ -13,6 +13,7 @@ use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
+use crate::validity::OwnedValidity;
 use crate::{impl_array, ArrayWalker};
 
 mod compute;
@@ -102,10 +103,6 @@ impl Array for BoolArray {
         .into_array())
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &BoolEncoding
@@ -129,6 +126,22 @@ impl Array for BoolArray {
     }
 }
 
+impl OwnedValidity for BoolArray {
+    fn validity(&self) -> Option<&Validity> {
+        self.validity.as_ref()
+    }
+}
+
+impl ArrayDisplay for BoolArray {
+    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        let true_count = self.stats().get_or_compute_or(0usize, &Stat::TrueCount);
+        let false_count = self.len() - true_count;
+        f.property("n_true", true_count)?;
+        f.property("n_false", false_count)?;
+        f.validity(self.validity())
+    }
+}
+
 #[derive(Debug)]
 pub struct BoolEncoding;
 
@@ -146,16 +159,6 @@ impl Encoding for BoolEncoding {
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
-    }
-}
-
-impl ArrayDisplay for BoolArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        let true_count = self.stats().get_or_compute_or(0usize, &Stat::TrueCount);
-        let false_count = self.len() - true_count;
-        f.property("n_true", true_count)?;
-        f.property("n_false", false_count)?;
-        f.validity(self.validity())
     }
 }
 

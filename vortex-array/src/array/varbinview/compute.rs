@@ -15,6 +15,7 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::Scalar;
+use crate::validity::OwnedValidity;
 
 impl ArrayCompute for VarBinViewArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -58,7 +59,7 @@ impl FlattenFn for VarBinViewArray {
             views,
             data,
             self.dtype.clone(),
-            self.validity(),
+            self.validity().cloned(),
         )))
     }
 }
@@ -68,7 +69,7 @@ impl AsArrowArray for VarBinViewArray {
         // Views should be buffer of u8
         let views = flatten_primitive(self.views())?;
         assert_eq!(views.ptype(), PType::U8);
-        let nulls = as_nulls(self.validity())?;
+        let nulls = as_nulls(self.logical_validity())?;
 
         let data = self
             .data()

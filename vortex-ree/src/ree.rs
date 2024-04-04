@@ -10,6 +10,7 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
+use vortex::validity::OwnedValidity;
 use vortex::{compute, impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
@@ -71,10 +72,12 @@ impl REEArray {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => {
                 let (ends, values) = ree_encode(p);
-                Ok(
-                    REEArray::new(ends.into_array(), values.into_array(), p.validity())
-                        .into_array(),
+                Ok(REEArray::new(
+                    ends.into_array(),
+                    values.into_array(),
+                    p.validity().cloned(),
                 )
+                .into_array())
             }
             _ => Err(vortex_err!("REE can only encode primitive arrays")),
         }
@@ -149,13 +152,15 @@ impl Array for REEArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.values())?;
         walker.visit_child(self.ends())
+    }
+}
+
+impl OwnedValidity for REEArray {
+    fn validity(&self) -> Option<&Validity> {
+        self.validity.as_ref()
     }
 }
 

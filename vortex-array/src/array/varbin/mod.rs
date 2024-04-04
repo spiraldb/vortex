@@ -19,6 +19,7 @@ use crate::iterator::ArrayIter;
 use crate::ptype::NativePType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+use crate::validity::OwnedValidity;
 use crate::{impl_array, ArrayWalker};
 
 mod accessor;
@@ -244,13 +245,15 @@ impl Array for VarBinArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.offsets())?;
         walker.visit_child(self.bytes())
+    }
+}
+
+impl OwnedValidity for VarBinArray {
+    fn validity(&self) -> Option<&Validity> {
+        self.validity.as_ref()
     }
 }
 

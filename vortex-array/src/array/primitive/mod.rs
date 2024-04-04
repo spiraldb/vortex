@@ -31,6 +31,7 @@ mod view;
 pub use view::*;
 
 use crate::compute::ArrayCompute;
+use crate::validity::OwnedValidity;
 
 #[derive(Debug, Clone)]
 pub struct PrimitiveArray {
@@ -112,7 +113,11 @@ impl PrimitiveArray {
         }
         let len = self.len();
         let validity = if nullability == Nullability::Nullable {
-            Some(self.validity().unwrap_or_else(|| Validity::Valid(len)))
+            Some(
+                self.validity()
+                    .cloned()
+                    .unwrap_or_else(|| Validity::Valid(len)),
+            )
         } else {
             None
         };
@@ -204,16 +209,18 @@ impl Array for PrimitiveArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         if let Some(v) = self.validity() {
             // FIXME(ngates): should validity implement Array?
             walker.visit_child(&v.to_array())?;
         }
         walker.visit_buffer(self.buffer())
+    }
+}
+
+impl OwnedValidity for PrimitiveArray {
+    fn validity(&self) -> Option<&Validity> {
+        self.validity.as_ref()
     }
 }
 

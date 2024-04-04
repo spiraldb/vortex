@@ -6,6 +6,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compute::patch::PatchFn;
+use crate::validity::OwnedValidity;
 use crate::{compute, match_each_native_ptype};
 
 impl PatchFn for PrimitiveArray {
@@ -32,7 +33,7 @@ fn patch_with_sparse(array: &PrimitiveArray, patch: &SparseArray) -> VortexResul
         Ok(PrimitiveArray::from_nullable(
             values,
             // TODO(ngates): if patch values has null, we need to patch into the validity buffer
-            array.validity(),
+            array.validity().cloned(),
         ).into_array())
     })
 }

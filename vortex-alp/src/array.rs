@@ -8,6 +8,7 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
+use vortex::validity::ArrayValidity;
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, IntWidth, Signedness};
@@ -114,10 +115,6 @@ impl Array for ALPArray {
         self.encoded().nbytes() + self.patches().map(|p| p.nbytes()).unwrap_or(0)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.encoded().validity()
-    }
-
     fn serde(&self) -> Option<&dyn ArraySerde> {
         Some(self)
     }
@@ -132,6 +129,16 @@ impl ArrayDisplay for ALPArray {
         f.property("exponents", format!("{:?}", self.exponents()))?;
         f.child("encoded", self.encoded())?;
         f.maybe_child("patches", self.patches())
+    }
+}
+
+impl ArrayValidity for ALPArray {
+    fn logical_validity(&self) -> Validity {
+        self.encoded().logical_validity()
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.encoded().is_valid(index)
     }
 }
 

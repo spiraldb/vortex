@@ -10,6 +10,7 @@ use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;
 use crate::match_each_integer_ptype;
 use crate::ptype::NativePType;
+use crate::validity::OwnedValidity;
 
 impl TakeFn for VarBinArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
@@ -41,7 +42,7 @@ fn take<I: NativePType + PrimInt, O: NativePType + PrimInt>(
     offsets: &[O],
     data: &[u8],
     indices: &[I],
-    validity: Option<Validity>,
+    validity: Option<&Validity>,
 ) -> VarBinArray {
     if let Some(v) = validity {
         return take_nullable(dtype, offsets, data, indices, v);
@@ -62,7 +63,7 @@ fn take_nullable<I: NativePType + PrimInt, O: NativePType + PrimInt>(
     offsets: &[O],
     data: &[u8],
     indices: &[I],
-    validity: Validity,
+    validity: &Validity,
 ) -> VarBinArray {
     let mut builder = VarBinBuilder::<I>::with_capacity(indices.len());
     for &idx in indices {

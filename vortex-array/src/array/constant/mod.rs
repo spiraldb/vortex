@@ -12,6 +12,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
+use crate::validity::ArrayValidity;
 use crate::{impl_array, ArrayWalker};
 
 mod compute;
@@ -96,16 +97,6 @@ impl Array for ConstantArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        match self.scalar.dtype().is_nullable() {
-            true => match self.scalar().is_null() {
-                true => Some(Validity::Invalid(self.len())),
-                false => Some(Validity::Valid(self.len())),
-            },
-            false => None,
-        }
-    }
-
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         Ok(())
     }
@@ -114,6 +105,22 @@ impl Array for ConstantArray {
 impl ArrayDisplay for ConstantArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("scalar", self.scalar())
+    }
+}
+
+impl ArrayValidity for ConstantArray {
+    fn logical_validity(&self) -> Validity {
+        match self.scalar().is_null() {
+            true => Validity::Invalid(self.len()),
+            false => Validity::Valid(self.len()),
+        }
+    }
+
+    fn is_valid(&self, _index: usize) -> bool {
+        match self.scalar.dtype().is_nullable() {
+            true => !self.scalar().is_null(),
+            false => true,
+        }
     }
 }
 

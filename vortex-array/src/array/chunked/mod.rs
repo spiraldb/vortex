@@ -12,6 +12,7 @@ use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+use crate::validity::ArrayValidity;
 use crate::{impl_array, ArrayWalker};
 
 mod compute;
@@ -145,18 +146,6 @@ impl Array for ChunkedArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        if !self.dtype.is_nullable() {
-            return None;
-        }
-
-        Some(Validity::from_iter(self.chunks.iter().map(|chunk| {
-            chunk
-                .validity()
-                .unwrap_or_else(|| Validity::Valid(chunk.len()))
-        })))
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         for chunk in self.chunks() {
             walker.visit_child(chunk)?;
@@ -173,6 +162,19 @@ impl FromIterator<ArrayRef> for ChunkedArray {
             .map(|c| c.dtype().clone())
             .expect("Cannot create a chunked array from an empty iterator");
         Self::new(chunks, dtype)
+    }
+}
+
+impl ArrayValidity for ChunkedArray {
+    fn logical_validity(&self) -> Validity {
+        if !self.dtype.is_nullable() {
+            return Validity::Valid(self.len());
+        }
+        Validity::from_iter(self.chunks.iter().map(|chunk| chunk.logical_validity()))
+    }
+
+    fn is_valid(&self, _index: usize) -> bool {
+        todo!()
     }
 }
 

@@ -6,6 +6,7 @@ use crate::array::IntoArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::fill::FillForwardFn;
 use crate::match_each_native_ptype;
+use crate::validity::OwnedValidity;
 
 impl FillForwardFn for PrimitiveArray {
     fn fill_forward(&self) -> VortexResult<ArrayRef> {
@@ -40,8 +41,8 @@ impl FillForwardFn for PrimitiveArray {
 mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::Array;
     use crate::compute;
+    use crate::validity::OwnedValidity;
 
     #[test]
     fn leading_none() {

@@ -9,6 +9,7 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
+use crate::validity::ArrayValidity;
 
 impl AsContiguousFn for PrimitiveArray {
     fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
@@ -22,9 +23,9 @@ impl AsContiguousFn for PrimitiveArray {
         let ptype = arrays[0].as_primitive().ptype();
 
         let validity = if self.dtype().is_nullable() {
-            Some(Validity::from_iter(arrays.iter().map(|v| {
-                v.validity().unwrap_or_else(|| Validity::Valid(v.len()))
-            })))
+            Some(Validity::from_iter(
+                arrays.iter().map(|v| v.logical_validity()),
+            ))
         } else {
             None
         };

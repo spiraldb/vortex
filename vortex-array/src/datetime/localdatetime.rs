@@ -9,7 +9,6 @@ use vortex_error::VortexResult;
 use vortex_schema::CompositeID;
 
 use crate::array::composite::{composite_impl, TypedCompositeArray};
-use crate::array::Array;
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::cast::cast;
@@ -17,6 +16,7 @@ use crate::compute::flatten::flatten_primitive;
 use crate::datetime::TimeUnit;
 use crate::ptype::PType;
 use crate::serde::BytesSerde;
+use crate::validity::ArrayValidity;
 
 #[derive(Debug, Clone)]
 pub struct LocalDateTime {
@@ -64,7 +64,7 @@ impl AsArrowArray for LocalDateTimeArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         // A LocalDateTime maps to an Arrow Timestamp array with no timezone.
         let timestamps = flatten_primitive(cast(self.underlying(), PType::I64.into())?.as_ref())?;
-        let validity = as_nulls(timestamps.validity())?;
+        let validity = as_nulls(timestamps.logical_validity())?;
         let buffer = timestamps.scalar_buffer::<i64>();
 
         Ok(match self.metadata().time_unit {

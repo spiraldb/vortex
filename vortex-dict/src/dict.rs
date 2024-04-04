@@ -8,6 +8,7 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
+use vortex::validity::ArrayValidity;
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Signedness};
@@ -83,13 +84,19 @@ impl Array for DictArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        todo!()
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.values())?;
         walker.visit_child(self.codes())
+    }
+}
+
+impl ArrayValidity for DictArray {
+    fn logical_validity(&self) -> Validity {
+        todo!()
+    }
+
+    fn is_valid(&self, _index: usize) -> bool {
+        todo!()
     }
 }
 

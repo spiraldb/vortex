@@ -13,6 +13,7 @@ use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
+use crate::validity::ArrayValidity;
 use crate::{impl_array, ArrayWalker};
 
 mod compress;
@@ -116,10 +117,6 @@ impl Array for StructArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        todo!()
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         for field in self.fields() {
             walker.visit_child(field)?;
@@ -129,6 +126,16 @@ impl Array for StructArray {
 }
 
 impl StatsCompute for StructArray {}
+
+impl ArrayValidity for StructArray {
+    fn logical_validity(&self) -> Validity {
+        todo!()
+    }
+
+    fn is_valid(&self, _index: usize) -> bool {
+        todo!()
+    }
+}
 
 #[derive(Debug)]
 pub struct StructEncoding;

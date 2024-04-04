@@ -7,7 +7,7 @@ use crate::array::constant::ConstantArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::validity::Validity;
-use crate::array::{Array, ArrayRef, ArrayValidity};
+use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;

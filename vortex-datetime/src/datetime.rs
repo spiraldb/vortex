@@ -8,6 +8,7 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsCompute, StatsSet};
+use vortex::validity::OwnedValidity;
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
@@ -119,14 +120,16 @@ impl Array for DateTimeArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.days())?;
         walker.visit_child(self.seconds())?;
         walker.visit_child(self.subsecond())
+    }
+}
+
+impl OwnedValidity for DateTimeArray {
+    fn validity(&self) -> Option<&Validity> {
+        self.validity.as_ref()
     }
 }
 

@@ -208,11 +208,12 @@ impl CompressCtx {
         Ok(compressed)
     }
 
-    pub fn compress_validity(&self, validity: Option<Validity>) -> VortexResult<Option<Validity>> {
+    // TODO(ngates): implement a compressor for validity #197
+    pub fn compress_validity(&self, validity: Option<&Validity>) -> VortexResult<Option<Validity>> {
         if let Some(validity) = validity {
             match validity {
-                Validity::Valid(_) | Validity::Invalid(_) => Ok(Some(validity)),
-                Validity::Array(a) => Ok(Some(Validity::array(self.compress(&a, None)?))),
+                Validity::Valid(_) | Validity::Invalid(_) => Ok(Some(validity.clone())),
+                Validity::Array(a) => Ok(Some(Validity::array(self.compress(a, None)?))),
             }
         } else {
             Ok(None)

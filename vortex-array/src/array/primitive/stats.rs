@@ -5,7 +5,9 @@ use arrow_buffer::buffer::BooleanBuffer;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::array::validity::Validity;
 use crate::array::ArrayValidity;
+use crate::compute::flatten::flatten_bool;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, PScalar};
@@ -15,9 +17,10 @@ impl StatsCompute for PrimitiveArray {
     fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {
         match_each_native_ptype!(self.ptype(), |$P| {
             match self.logical_validity() {
-                None => self.typed_data::<$P>().compute(stat),
-                Some(validity_array) => {
-                    NullableValues(self.typed_data::<$P>(), validity_array.to_bool_array().buffer()).compute(stat)
+                Validity::Valid(_) => self.typed_data::<$P>().compute(stat),
+                Validity::Invalid(_) => all_null_stats::<$P>(),
+                Validity::Array(a) => {
+                    NullableValues(self.typed_data::<$P>(), flatten_bool(&a)?.buffer()).compute(stat)
                 }
             }
         })
@@ -35,6 +38,26 @@ impl<T: NativePType> StatsCompute for &[T] {
     }
 }
 
+fn all_null_stats<T: NativePType>() -> VortexResult<StatsSet> {
+    Ok(StatsSet::from(HashMap::from([
+        (Stat::Min, Option::<T>::None.into()),
+        (Stat::Max, Option::<T>::None.into()),
+        (Stat::IsConstant, true.into()),
+        (Stat::IsSorted, true.into()),
+        (Stat::IsStrictSorted, true.into()),
+        (Stat::RunCount, 1.into()),
+        (Stat::NullCount, 1.into()),
+        (
+            Stat::BitWidthFreq,
+            ListScalarVec(vec![0; size_of::<T>() * 8 + 1]).into(),
+        ),
+        (
+            Stat::TrailingZeroFreq,
+            ListScalarVec(vec![size_of::<T>() * 8; size_of::<T>() * 8 + 1]).into(),
+        ),
+    ])))
+}
+
 struct NullableValues<'a, T: NativePType>(&'a [T], &'a BooleanBuffer);
 
 impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
@@ -50,29 +73,10 @@ impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
             .enumerate()
             .skip_while(|(_, valid)| !*valid)
             .map(|(idx, _)| values[idx])
-            .next();
+            .next()
+            .expect("Must be at least one non-null value");
 
-        if first_non_null.is_none() {
-            return Ok(StatsSet::from(HashMap::from([
-                (Stat::Min, Option::<T>::None.into()),
-                (Stat::Max, Option::<T>::None.into()),
-                (Stat::IsConstant, true.into()),
-                (Stat::IsSorted, true.into()),
-                (Stat::IsStrictSorted, true.into()),
-                (Stat::RunCount, 1.into()),
-                (Stat::NullCount, 1.into()),
-                (
-                    Stat::BitWidthFreq,
-                    ListScalarVec(vec![0; size_of::<T>() * 8 + 1]).into(),
-                ),
-                (
-                    Stat::TrailingZeroFreq,
-                    ListScalarVec(vec![size_of::<T>() * 8; size_of::<T>() * 8 + 1]).into(),
-                ),
-            ])));
-        }
-
-        let mut stats = StatsAccumulator::new(first_non_null.unwrap());
+        let mut stats = StatsAccumulator::new(first_non_null);
         values
             .iter()
             .zip(self.1.iter())

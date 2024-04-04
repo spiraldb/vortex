@@ -323,7 +323,7 @@ impl<'a> WriteCtx<'a> {
         }
     }
 
-    pub fn write_validity(&mut self, validity: Option<Validity>) -> VortexResult<()> {
+    pub fn write_validity(&mut self, validity: Option<&Validity>) -> VortexResult<()> {
         match validity {
             None => self.write_option_tag(false),
             Some(v) => {
@@ -331,15 +331,15 @@ impl<'a> WriteCtx<'a> {
                 match v {
                     Validity::Valid(len) => {
                         self.write_fixed_slice([0u8])?;
-                        self.write_usize(len)
+                        self.write_usize(*len)
                     }
                     Validity::Invalid(len) => {
                         self.write_fixed_slice([1u8])?;
-                        self.write_usize(len)
+                        self.write_usize(*len)
                     }
                     Validity::Array(a) => {
                         self.write_fixed_slice([2u8])?;
-                        self.write(&a)
+                        self.write(a)
                     }
                 }
             }

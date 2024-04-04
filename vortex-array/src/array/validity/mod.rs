@@ -22,6 +22,8 @@ mod view;
 
 pub use view::*;
 
+use crate::validity::ArrayValidity;
+
 #[derive(Debug, Clone)]
 pub enum Validity {
     Valid(usize),
@@ -93,11 +95,14 @@ impl Validity {
         }
     }
 
-    pub fn logical_validity(&self) -> Option<Validity> {
-        match self.all_valid() {
-            true => None,
-            false => Some(self.clone()),
+    pub fn logical_validity(&self) -> Validity {
+        if self.all_valid() {
+            return Validity::Valid(self.len());
         }
+        if self.all_invalid() {
+            return Validity::Invalid(self.len());
+        }
+        self.clone()
     }
 
     pub fn is_valid(&self, idx: usize) -> bool {
@@ -256,12 +261,19 @@ impl Array for Validity {
         }
     }
 
-    fn validity(&self) -> Option<Validity> {
-        None
-    }
-
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         Ok(())
+    }
+}
+
+impl ArrayValidity for Validity {
+    fn logical_validity(&self) -> Validity {
+        // Validity is a non-nullable boolean array.
+        Validity::Valid(self.len())
+    }
+
+    fn is_valid(&self, _index: usize) -> bool {
+        true
     }
 }
 

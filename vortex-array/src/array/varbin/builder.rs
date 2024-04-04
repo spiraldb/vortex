@@ -68,7 +68,7 @@ mod test {
     use vortex_schema::Nullability::Nullable;
 
     use crate::array::varbin::builder::VarBinBuilder;
-    use crate::array::{Array, ArrayValidity};
+    use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
     use crate::scalar::Scalar;
 

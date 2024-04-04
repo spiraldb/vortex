@@ -1,11 +1,13 @@
 use arrow_buffer::{BooleanBuffer, Buffer};
 use vortex::array::bool::BoolArray;
+use vortex::array::validity::Validity;
 use vortex::array::Array;
 use vortex::compute::flatten::{FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::ArrayCompute;
 use vortex::scalar::{AsBytes, Scalar};
 use vortex_error::{vortex_err, VortexResult};
+use vortex_schema::Nullability;
 
 use crate::RoaringBoolArray;
 
@@ -32,7 +34,10 @@ impl FlattenFn for RoaringBoolArray {
         let buffer = Buffer::from_slice_ref(bytes);
         Ok(FlattenedArray::Bool(BoolArray::new(
             BooleanBuffer::new(buffer, 0, bitset.size_in_bits()),
-            self.validity(),
+            match self.nullability() {
+                Nullability::NonNullable => None,
+                Nullability::Nullable => Some(Validity::Valid(self.len())),
+            },
         )))
     }
 }

@@ -14,22 +14,12 @@ pub fn as_offset_buffer<T: NativePType>(array: PrimitiveArray) -> OffsetBuffer<T
     OffsetBuffer::new(as_scalar_buffer(array))
 }
 
-pub fn as_nulls(validity: Option<Validity>) -> VortexResult<Option<NullBuffer>> {
-    if validity.is_none() {
-        return Ok(None);
+pub fn as_nulls(validity: Validity) -> VortexResult<Option<NullBuffer>> {
+    match validity {
+        Validity::Valid(_) => Ok(None),
+        Validity::Invalid(_) => Ok(Some(NullBuffer::new_null(validity.len()))),
+        Validity::Array(_) => Ok(Some(NullBuffer::new(
+            validity.to_bool_array().buffer().clone(),
+        ))),
     }
-
-    // Short-circuit if the validity is constant
-    let validity = validity.unwrap();
-    if validity.all_valid() {
-        return Ok(None);
-    }
-
-    if validity.all_invalid() {
-        return Ok(Some(NullBuffer::new_null(validity.len())));
-    }
-
-    Ok(Some(NullBuffer::new(
-        validity.to_bool_array().buffer().clone(),
-    )))
 }

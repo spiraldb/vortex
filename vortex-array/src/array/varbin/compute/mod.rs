@@ -23,6 +23,7 @@ use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
+use crate::validity::OwnedValidity;
 
 mod take;
 
@@ -57,9 +58,9 @@ impl AsContiguousFn for VarBinArray {
         let bytes = as_contiguous(&bytes_chunks)?;
 
         let validity = if self.dtype().is_nullable() {
-            Some(Validity::from_iter(arrays.iter().map(|a| {
-                a.validity().unwrap_or_else(|| Validity::Valid(a.len()))
-            })))
+            Some(Validity::from_iter(
+                arrays.iter().map(|a| a.logical_validity()),
+            ))
         } else {
             None
         };
@@ -98,7 +99,7 @@ impl AsArrowArray for VarBinArray {
             }
             _ => flatten_primitive(cast(&offsets.to_array(), PType::I32.into())?.as_ref())?,
         };
-        let nulls = as_nulls(self.validity())?;
+        let nulls = as_nulls(self.logical_validity())?;
 
         let data = flatten_primitive(self.bytes())?;
         assert_eq!(data.ptype(), PType::U8);
@@ -145,7 +146,7 @@ impl FlattenFn for VarBinArray {
             offsets,
             bytes,
             self.dtype.clone(),
-            self.validity(),
+            self.validity().cloned(),
         )))
     }
 }

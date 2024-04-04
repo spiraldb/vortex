@@ -11,6 +11,7 @@ use crate::array::Array;
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::ptype::PType;
+use crate::validity::ArrayValidity;
 
 impl AsArrowArray for PrimitiveArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
@@ -36,6 +37,6 @@ fn as_arrow_array_primitive<T: ArrowPrimitiveType>(
 ) -> VortexResult<ArrowPrimitiveArray<T>> {
     Ok(ArrowPrimitiveArray::new(
         ScalarBuffer::<T::Native>::new(array.buffer().clone(), 0, array.len()),
-        as_nulls(array.validity())?,
+        as_nulls(array.logical_validity())?,
     ))
 }
