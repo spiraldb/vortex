@@ -9,7 +9,6 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{flatten, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
-use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::ArrayCompute;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
@@ -120,19 +119,9 @@ fn flatten_primitive<T: NativePType>(
 
 impl ScalarAtFn for SparseArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        // Check whether `true_patch_index` exists in the patch index array
-        // First, get the index of the patch index array that is the first index
-        // greater than or equal to the true index
-        let true_patch_index = index + self.indices_offset;
-        let idx = search_sorted(self.indices(), true_patch_index, SearchSortedSide::Left)?;
-
-        // If the value at this index is equal to the true index, then it exists in the patch index array,
-        // and we should return the value at the corresponding index in the patch values array
-        let patch_index: usize = scalar_at(self.indices(), idx)?.try_into()?;
-        if patch_index == true_patch_index {
-            scalar_at(self.values(), idx)?.cast(self.dtype())
-        } else {
-            Ok(self.fill_value().clone())
+        match self.find_index(index)? {
+            None => self.fill_value().clone().cast(self.dtype()),
+            Some(idx) => scalar_at(self.values(), idx)?.cast(self.dtype()),
         }
     }
 }
