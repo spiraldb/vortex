@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use fastlanez::TryBitPack;
 use itertools::Itertools;
 use vortex::array::downcast::DowncastArrayBuiltin;
@@ -57,6 +55,7 @@ impl TakeFn for BitPackedArray {
         let indices = flatten_primitive(indices)?;
         let ptype = self.dtype().try_into()?;
         let taken = match_integers_by_width!(ptype, |$T| {
+            // TODO(wmanning): `take` on validity
             PrimitiveArray::from(take_primitive::<$T>(self, &indices)?)
         });
         Ok(taken.reinterpret_cast(ptype).into_array())
@@ -111,21 +110,21 @@ fn take_primitive<T: NativePType + TryBitPack>(
 
     if let Some(patches) = array.patches() {
         if let Some(patches) = patches.maybe_sparse() {
-            let all_patch_indices: HashSet<usize> = HashSet::from_iter(patches.resolved_indices());
+            // we first find which of the taken indices need to be patched
             let (output_indices, patch_indices): (Vec<usize>, Vec<u64>) = match_each_integer_ptype!(indices.ptype(), |$P| {
                 indices.typed_data::<$P>()
                     .iter()
-                    .map(|idx| *idx as u64)
                     .enumerate()
-                    .filter(|(ti, pi)| all_patch_indices.contains(&(*pi as usize)))
+                    .filter_map(|(ti, pi)| patches.find_index(*pi as usize).unwrap().map(|i| (ti, i as u64)))
                     .unzip()
             });
             let patch_indices = PrimitiveArray::from(patch_indices);
+
+            // then we `take` the patched values and apply to our output
             let patch_values = flatten_primitive(&take(patches.values(), &patch_indices)?)?;
-            let patch_values = patch_values.typed_data::<T>();
             output_indices
                 .iter()
-                .zip(patch_values)
+                .zip(patch_values.typed_data::<T>())
                 .for_each(|(i, v)| output[*i] = *v)
         } else {
             vortex_bail!("Only sparse patches are currently supported!");
