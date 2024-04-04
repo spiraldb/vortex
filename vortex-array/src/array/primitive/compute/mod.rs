@@ -1,4 +1,11 @@
+use std::fmt::Debug;
+
+use arrow_buffer::Buffer;
+use vortex_schema::DType;
+
 use crate::array::primitive::PrimitiveArray;
+use crate::array::validity::ValidityView;
+use crate::array::{Array, ArrayRef};
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::cast::CastFn;
@@ -9,6 +16,7 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::search_sorted::SearchSortedFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
+use crate::ptype::{AsArrowPrimitiveType, NativePType, PType};
 
 mod as_arrow;
 mod as_contiguous;
@@ -20,7 +28,31 @@ mod scalar_at;
 mod search_sorted;
 mod take;
 
-impl ArrayCompute for PrimitiveArray {
+pub(crate) trait PrimitiveTrait<T: NativePType>: Debug + Send + Sync {
+    fn dtype(&self) -> &DType;
+
+    fn ptype(&self) -> PType;
+
+    fn len(&self) -> usize {
+        self.typed_data().len()
+    }
+
+    fn validity_view(&self) -> Option<ValidityView>;
+
+    fn buffer(&self) -> &Buffer;
+
+    fn to_primitive(&self) -> PrimitiveArray;
+
+    fn to_array(&self) -> ArrayRef {
+        self.to_primitive().into_array()
+    }
+
+    fn typed_data(&self) -> &[T] {
+        self.buffer().typed_data::<T>()
+    }
+}
+
+impl<T: NativePType + AsArrowPrimitiveType> ArrayCompute for &dyn PrimitiveTrait<T> {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }

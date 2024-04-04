@@ -11,7 +11,6 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::validity::Validity;
 use crate::array::varbin::VarBinArray;
-use crate::array::ArrayValidity;
 use crate::array::{Array, ArrayRef};
 use crate::arrow::wrappers::{as_nulls, as_offset_buffer};
 use crate::compute::as_arrow::AsArrowArray;

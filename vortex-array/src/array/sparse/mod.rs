@@ -110,6 +110,10 @@ impl Array for SparseArray {
         Stats::new(&self.stats, self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        todo!()
+    }
+
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -132,17 +136,20 @@ impl Array for SparseArray {
         &SparseEncoding
     }
 
-    #[inline]
     fn nbytes(&self) -> usize {
         self.indices.nbytes() + self.values.nbytes()
     }
 
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        todo!()
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {

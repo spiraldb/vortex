@@ -80,6 +80,14 @@ impl DateTimeArray {
 impl Array for DateTimeArray {
     impl_array!();
 
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
+
     fn len(&self) -> usize {
         self.days.len()
     }
