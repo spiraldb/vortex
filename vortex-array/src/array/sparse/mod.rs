@@ -6,19 +6,21 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::constant::ConstantArray;
-use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
+use crate::compute::scalar_at::scalar_at;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::PType;
-use crate::scalar::{BoolScalar, Scalar};
+use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
+use crate::validity::ArrayValidity;
+use crate::validity::Validity;
 use crate::{impl_array, ArrayWalker};
 
 mod compress;
@@ -91,6 +93,23 @@ impl SparseArray {
         &self.fill_value
     }
 
+    /// Returns the position of a given index in the indices array if it exists.
+    pub fn find_index(&self, index: usize) -> VortexResult<Option<usize>> {
+        let true_index = self.indices_offset + index;
+
+        // TODO(ngates): replace this with a binary search that tells us if we get an exact match.
+        let idx = search_sorted(self.indices(), true_index, SearchSortedSide::Left)?;
+
+        // If the value at this index is equal to the true index, then it exists in the
+        // indices array.
+        let patch_index: usize = scalar_at(self.indices(), idx)?.try_into()?;
+        if true_index == patch_index {
+            Ok(Some(idx))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
         flatten_primitive(cast(self.indices(), PType::U64.into()).unwrap().as_ref())
@@ -123,19 +142,6 @@ impl Array for SparseArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        let validity = SparseArray {
-            indices: self.indices.clone(),
-            values: ConstantArray::new(Scalar::Bool(BoolScalar::non_nullable(true)), self.len)
-                .into_array(),
-            indices_offset: self.indices_offset,
-            len: self.len,
-            stats: self.stats.clone(),
-            fill_value: Scalar::Bool(BoolScalar::non_nullable(false)),
-        };
-        Some(Validity::Array(validity.into_array()))
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
@@ -184,6 +190,45 @@ impl Array for SparseArray {
 }
 
 impl StatsCompute for SparseArray {}
+
+impl ArrayValidity for SparseArray {
+    fn logical_validity(&self) -> Validity {
+        let validity = if self.fill_value().is_null() {
+            // If we have a null fill value, then the result is a Sparse array with a fill_value
+            // of true, and patch values of false.
+            SparseArray::try_new_with_offset(
+                self.indices.clone(),
+                ConstantArray::new(false, self.len()).into_array(),
+                self.len(),
+                self.indices_offset,
+                true.into(),
+            )
+        } else {
+            // If the fill_value is non-null, then the validity is based on the validity of the
+            // existing values.
+            SparseArray::try_new_with_offset(
+                self.indices.clone(),
+                self.values()
+                    .logical_validity()
+                    .to_bool_array()
+                    .into_array(),
+                self.len(),
+                self.indices_offset,
+                true.into(),
+            )
+        }
+        .unwrap();
+
+        Validity::Array(validity.into_array())
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        match self.find_index(index).unwrap() {
+            None => !self.fill_value().is_null(),
+            Some(idx) => self.values().is_valid(idx),
+        }
+    }
+}
 
 impl ArrayDisplay for SparseArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
@@ -307,6 +352,14 @@ mod test {
             sliced_once.slice(1, 6).unwrap().as_ref(),
             &[Some(100), None, None, Some(200), None],
         );
+    }
+
+    #[test]
+    pub fn test_find_index() {
+        let sparse = sparse_array(nullable_fill());
+        assert_eq!(sparse.find_index(0).unwrap(), None);
+        assert_eq!(sparse.find_index(2).unwrap(), Some(0));
+        assert_eq!(sparse.find_index(5).unwrap(), Some(1));
     }
 
     #[test]

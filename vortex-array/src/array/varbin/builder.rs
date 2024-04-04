@@ -3,10 +3,10 @@ use num_traits::PrimInt;
 use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::Validity;
 use crate::array::varbin::VarBinArray;
 use crate::array::Array;
 use crate::ptype::NativePType;
+use crate::validity::Validity;
 
 pub struct VarBinBuilder<O: NativePType + PrimInt> {
     offsets: Vec<O>,

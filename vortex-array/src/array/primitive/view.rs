@@ -1,16 +1,25 @@
+use std::any::Any;
+use std::sync::Arc;
+
 use arrow_buffer::Buffer;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::primitive::compute::PrimitiveTrait;
-use crate::array::validity::{Validity, ValidityView};
-use crate::array::PrimitiveArray;
+use crate::array::{Array, ArrayRef, PrimitiveArray};
+use crate::compute::ArrayCompute;
+use crate::encoding::EncodingRef;
+use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::{NativePType, PType};
 use crate::serde::ArrayView;
+use crate::stats::Stats;
+use crate::validity::OwnedValidity;
+use crate::validity::{Validity, ValidityView};
+use crate::view::ToOwnedView;
+use crate::ArrayWalker;
 
 #[derive(Debug)]
 pub struct PrimitiveView<'a> {
-    view: &'a ArrayView<'a>,
     ptype: PType,
     buffer: &'a Buffer,
     validity: Option<ValidityView<'a>>,
@@ -27,7 +36,6 @@ impl<'a> PrimitiveView<'a> {
         let validity = view.child(0, &Validity::DTYPE).map(ValidityView::from);
 
         Ok(Self {
-            view,
             ptype,
             buffer,
             validity,
@@ -45,16 +53,8 @@ impl<'a> PrimitiveView<'a> {
 }
 
 impl<'a, T: NativePType> PrimitiveTrait<T> for PrimitiveView<'a> {
-    fn dtype(&self) -> &DType {
-        self.view.dtype()
-    }
-
     fn ptype(&self) -> PType {
         self.ptype
-    }
-
-    fn validity_view(&self) -> Option<ValidityView> {
-        self.validity.clone()
     }
 
     fn buffer(&self) -> &Buffer {
@@ -65,7 +65,76 @@ impl<'a, T: NativePType> PrimitiveTrait<T> for PrimitiveView<'a> {
         PrimitiveArray::new(
             self.ptype(),
             self.buffer.clone(),
-            self.validity.as_ref().map(|v| v.to_validity()),
+            self.validity.to_owned_view(),
         )
+    }
+}
+
+impl<'a> OwnedValidity for PrimitiveView<'a> {
+    fn validity(&self) -> Option<ValidityView<'a>> {
+        self.validity.clone()
+    }
+}
+
+impl Array for PrimitiveView<'_> {
+    fn as_any(&self) -> &dyn Any {
+        todo!()
+    }
+
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+        todo!()
+    }
+
+    fn to_array(&self) -> ArrayRef {
+        todo!()
+    }
+
+    fn into_array(self) -> ArrayRef {
+        todo!()
+    }
+
+    fn len(&self) -> usize {
+        todo!()
+    }
+
+    fn is_empty(&self) -> bool {
+        todo!()
+    }
+
+    fn dtype(&self) -> &DType {
+        todo!()
+    }
+
+    fn stats(&self) -> Stats {
+        todo!()
+    }
+
+    fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {
+        todo!()
+    }
+
+    fn encoding(&self) -> EncodingRef {
+        todo!()
+    }
+
+    fn nbytes(&self) -> usize {
+        todo!()
+    }
+
+    fn with_compute_mut(
+        &self,
+        _f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        todo!()
+    }
+
+    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
+        todo!()
+    }
+}
+
+impl ArrayDisplay for PrimitiveView<'_> {
+    fn fmt(&self, _fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
+        todo!()
     }
 }

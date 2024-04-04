@@ -1,6 +1,5 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::validity::Validity;
 use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::search_sorted::SearchSortedSide;
@@ -9,6 +8,9 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
+use vortex::validity::Validity;
+use vortex::validity::{OwnedValidity, ValidityView};
+use vortex::view::{AsView, ToOwnedView};
 use vortex::{compute, impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
@@ -79,7 +81,7 @@ impl REEArray {
                 Ok(REEArray::new(
                     ends.into_array(),
                     values.into_array(),
-                    p.validity(),
+                    p.validity().to_owned_view(),
                     p.len(),
                 )
                 .into_array())
@@ -141,7 +143,10 @@ impl Array for REEArray {
         Ok(Self {
             ends: self.ends.slice(slice_begin, slice_end + 1)?,
             values: self.values.slice(slice_begin, slice_end + 1)?,
-            validity: self.validity().map(|v| v.slice(slice_begin, slice_end + 1)),
+            validity: self
+                .validity()
+                .map(|v| v.slice(slice_begin, slice_end + 1))
+                .transpose()?,
             offset: start,
             length: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
@@ -164,13 +169,15 @@ impl Array for REEArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.values())?;
         walker.visit_child(self.ends())
+    }
+}
+
+impl OwnedValidity for REEArray {
+    fn validity(&self) -> Option<ValidityView> {
+        self.validity.as_view()
     }
 }
 

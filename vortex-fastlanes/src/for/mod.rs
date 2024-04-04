@@ -1,6 +1,5 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::validity::Validity;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
@@ -9,6 +8,8 @@ use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
+use vortex::validity::ArrayValidity;
+use vortex::validity::Validity;
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
@@ -102,10 +103,6 @@ impl Array for FoRArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.encoded().validity()
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.encoded())
     }
@@ -115,6 +112,16 @@ impl Array for FoRArray {
         f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()> {
         f(self)
+    }
+}
+
+impl ArrayValidity for FoRArray {
+    fn logical_validity(&self) -> Validity {
+        self.encoded().logical_validity()
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.encoded().is_valid(index)
     }
 }
 

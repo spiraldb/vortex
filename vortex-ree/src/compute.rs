@@ -6,6 +6,8 @@ use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex::scalar::Scalar;
+use vortex::validity::OwnedValidity;
+use vortex::view::ToOwnedView;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::compress::ree_decode;
@@ -34,8 +36,14 @@ impl FlattenFn for REEArray {
 
         let values = flatten(self.values())?;
         if let FlattenedArray::Primitive(pvalues) = values {
-            ree_decode(&pends, &pvalues, self.validity(), self.offset(), self.len())
-                .map(FlattenedArray::Primitive)
+            ree_decode(
+                &pends,
+                &pvalues,
+                self.validity().to_owned_view(),
+                self.offset(),
+                self.len(),
+            )
+            .map(FlattenedArray::Primitive)
         } else {
             Err(vortex_err!("Cannot yet flatten non-primitive REE array",))
         }

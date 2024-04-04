@@ -9,7 +9,6 @@ use vortex_schema::DType;
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::Validity;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
 use crate::arrow::wrappers::{as_nulls, as_offset_buffer};
@@ -22,6 +21,9 @@ use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
+use crate::validity::Validity;
+use crate::validity::{ArrayValidity, OwnedValidity};
+use crate::view::ToOwnedView;
 
 mod take;
 
@@ -56,9 +58,9 @@ impl AsContiguousFn for VarBinArray {
         let bytes = as_contiguous(&bytes_chunks)?;
 
         let validity = if self.dtype().is_nullable() {
-            Some(Validity::from_iter(arrays.iter().map(|a| {
-                a.validity().unwrap_or_else(|| Validity::Valid(a.len()))
-            })))
+            Some(Validity::from_iter(
+                arrays.iter().map(|a| a.logical_validity()),
+            ))
         } else {
             None
         };
@@ -97,7 +99,7 @@ impl AsArrowArray for VarBinArray {
             }
             _ => flatten_primitive(cast(&offsets.to_array(), PType::I32.into())?.as_ref())?,
         };
-        let nulls = as_nulls(self.validity())?;
+        let nulls = as_nulls(self.logical_validity())?;
 
         let data = flatten_primitive(self.bytes())?;
         assert_eq!(data.ptype(), PType::U8);
@@ -144,7 +146,7 @@ impl FlattenFn for VarBinArray {
             offsets,
             bytes,
             self.dtype.clone(),
-            self.validity(),
+            self.validity().to_owned_view(),
         )))
     }
 }

@@ -16,7 +16,8 @@ pub mod ptype;
 mod sampling;
 pub mod serde;
 pub mod stats;
-
+pub mod validity;
+pub mod view;
 mod walk;
 
 pub use walk::*;

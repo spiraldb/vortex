@@ -1,6 +1,5 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::validity::Validity;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
@@ -8,6 +7,9 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsCompute, StatsSet};
+use vortex::validity::Validity;
+use vortex::validity::{OwnedValidity, ValidityView};
+use vortex::view::AsView;
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
@@ -109,7 +111,7 @@ impl Array for DateTimeArray {
             self.days.slice(start, stop)?,
             self.seconds.slice(start, stop)?,
             self.subsecond.slice(start, stop)?,
-            self.validity().map(|v| v.slice(start, stop)),
+            self.validity().map(|v| v.slice(start, stop)).transpose()?,
             self.dtype.clone(),
         )
         .into_array())
@@ -127,14 +129,16 @@ impl Array for DateTimeArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.days())?;
         walker.visit_child(self.seconds())?;
         walker.visit_child(self.subsecond())
+    }
+}
+
+impl OwnedValidity for DateTimeArray {
+    fn validity(&self) -> Option<ValidityView> {
+        self.validity.as_view()
     }
 }
 

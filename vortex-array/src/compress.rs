@@ -10,7 +10,6 @@ use crate::array::composite::CompositeEncoding;
 use crate::array::constant::ConstantArray;
 use crate::array::sparse::SparseEncoding;
 use crate::array::struct_::{StructArray, StructEncoding};
-use crate::array::validity::Validity;
 use crate::array::varbin::VarBinEncoding;
 use crate::array::{Array, ArrayKind, ArrayRef};
 use crate::compute;
@@ -19,6 +18,8 @@ use crate::encoding::{Encoding, EncodingRef, ENCODINGS};
 use crate::formatter::display_tree;
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
+use crate::validity::{Validity, ValidityView};
+use crate::view::ToOwnedView;
 
 pub trait EncodingCompression: Encoding {
     fn cost(&self) -> u8 {
@@ -208,11 +209,17 @@ impl CompressCtx {
         Ok(compressed)
     }
 
-    pub fn compress_validity(&self, validity: Option<Validity>) -> VortexResult<Option<Validity>> {
+    // TODO(ngates): implement a compressor for validity #197
+    pub fn compress_validity(
+        &self,
+        validity: Option<ValidityView>,
+    ) -> VortexResult<Option<Validity>> {
         if let Some(validity) = validity {
             match validity {
-                Validity::Valid(_) | Validity::Invalid(_) => Ok(Some(validity)),
-                Validity::Array(a) => Ok(Some(Validity::array(self.compress(&a, None)?))),
+                ValidityView::Valid(_) | ValidityView::Invalid(_) => {
+                    Ok(Some(validity.to_owned_view()))
+                }
+                ValidityView::Array(a) => Ok(Some(Validity::array(self.compress(a, None)?))),
             }
         } else {
             Ok(None)

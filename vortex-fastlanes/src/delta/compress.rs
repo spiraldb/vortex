@@ -5,13 +5,15 @@ use fastlanez::{transpose, untranspose_into, Delta};
 use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::validity::Validity;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::compute::flatten::flatten_primitive;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
+use vortex::validity::OwnedValidity;
+use vortex::validity::Validity;
+use vortex::view::ToOwnedView;
 use vortex_error::VortexResult;
 
 use crate::downcast::DowncastFastlanes;
@@ -133,7 +135,7 @@ pub fn decompress(array: &DeltaArray) -> VortexResult<PrimitiveArray> {
     let decoded = match_each_integer_ptype!(deltas.ptype(), |$T| {
         PrimitiveArray::from_nullable(
             decompress_primitive::<$T>(bases.typed_data(), deltas.typed_data()),
-            array.validity()
+            array.validity().to_owned_view()
         )
     });
     Ok(decoded)

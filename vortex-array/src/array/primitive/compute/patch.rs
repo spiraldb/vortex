@@ -9,6 +9,7 @@ use crate::array::{Array, ArrayRef};
 use crate::compute;
 use crate::compute::patch::PatchFn;
 use crate::ptype::NativePType;
+use crate::view::ToOwnedView;
 
 impl<T: NativePType> PatchFn for &dyn PrimitiveTrait<T> {
     fn patch(&self, patch: &dyn Array) -> VortexResult<ArrayRef> {
@@ -42,7 +43,7 @@ fn patch_with_sparse<T: NativePType>(
     Ok(PrimitiveArray::from_nullable(
         values,
         // TODO(ngates): if patch values has null, we need to patch into the validity buffer
-        array.validity_view().map(|v| v.to_validity()),
+        array.validity().map(|v| v.to_owned_view()),
     )
     .into_array())
 }

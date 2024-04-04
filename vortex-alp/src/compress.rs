@@ -7,6 +7,8 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::Scalar;
+use vortex::validity::OwnedValidity;
+use vortex::view::ToOwnedView;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::alp::ALPFloat;
@@ -92,7 +94,7 @@ where
     (
         exponents,
         PrimitiveArray::from(encoded)
-            .into_nullable(values.validity().is_some().into())
+            .into_nullable(values.nullability())
             .into_array(),
         (!exc.is_empty()).then(|| {
             SparseArray::new(
@@ -120,7 +122,7 @@ pub fn decompress(array: &ALPArray) -> VortexResult<PrimitiveArray> {
     let decoded = match_each_alp_float_ptype!(array.dtype().try_into().unwrap(), |$T| {
         PrimitiveArray::from_nullable(
             decompress_primitive::<$T>(encoded.typed_data(), array.exponents()),
-            encoded.validity(),
+            encoded.validity().to_owned_view(),
         )
     })?;
 

@@ -10,6 +10,8 @@ use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::ListScalarVec;
 use vortex::stats::Stat;
+use vortex::validity::OwnedValidity;
+use vortex::view::ToOwnedView;
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::downcast::DowncastFastlanes;
@@ -94,7 +96,7 @@ fn compress_primitive<T: NativePType + WrappingSub + PrimInt>(
             .collect_vec()
     };
 
-    PrimitiveArray::from_nullable(values, parray.validity())
+    PrimitiveArray::from_nullable(values, parray.validity().to_owned_view())
 }
 
 pub fn decompress(array: &FoRArray) -> VortexResult<PrimitiveArray> {
@@ -105,7 +107,7 @@ pub fn decompress(array: &FoRArray) -> VortexResult<PrimitiveArray> {
         let reference: $T = array.reference().try_into()?;
         PrimitiveArray::from_nullable(
             decompress_primitive(encoded.typed_data::<$T>(), reference, shift),
-            encoded.validity(),
+            encoded.validity().to_owned_view(),
         )
     }))
 }

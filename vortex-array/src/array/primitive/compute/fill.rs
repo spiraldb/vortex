@@ -8,11 +8,11 @@ use crate::ptype::NativePType;
 
 impl<T: NativePType> FillForwardFn for &dyn PrimitiveTrait<T> {
     fn fill_forward(&self) -> VortexResult<ArrayRef> {
-        if self.validity_view().is_none() {
+        if self.validity().is_none() {
             return Ok(self.to_array());
         }
 
-        let validity = self.validity_view().unwrap();
+        let validity = self.validity().unwrap();
         if validity.all_valid() {
             return Ok(PrimitiveArray::new(self.ptype(), self.buffer().clone(), None).into_array());
         }
@@ -37,8 +37,8 @@ impl<T: NativePType> FillForwardFn for &dyn PrimitiveTrait<T> {
 mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::Array;
     use crate::compute;
+    use crate::validity::OwnedValidity;
 
     #[test]
     fn leading_none() {

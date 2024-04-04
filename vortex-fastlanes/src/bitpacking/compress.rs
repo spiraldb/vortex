@@ -13,6 +13,8 @@ use vortex::ptype::PType::U8;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::{ListScalarVec, Scalar};
 use vortex::stats::Stat;
+use vortex::validity::OwnedValidity;
+use vortex::view::ToOwnedView;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::downcast::DowncastFastlanes;
@@ -165,7 +167,7 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     let mut unpacked = match_integers_by_width!(ptype, |$P| {
         PrimitiveArray::from_nullable(
             unpack_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity(),
+            array.validity().to_owned_view(),
         )
     });
 

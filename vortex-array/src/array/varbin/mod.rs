@@ -7,7 +7,6 @@ use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
@@ -19,6 +18,9 @@ use crate::iterator::ArrayIter;
 use crate::ptype::NativePType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+use crate::validity::OwnedValidity;
+use crate::validity::{Validity, ValidityView};
+use crate::view::AsView;
 use crate::{impl_array, ArrayWalker};
 
 mod accessor;
@@ -66,7 +68,7 @@ impl VarBinArray {
             vortex_bail!(MismatchedTypes: "utf8 or binary", dtype);
         }
 
-        if let Some(v) = &validity {
+        if let Some(v) = validity.as_view() {
             assert_eq!(v.len(), offsets.len() - 1);
         }
         let dtype = if validity.is_some() && !dtype.is_nullable() {
@@ -225,7 +227,7 @@ impl Array for VarBinArray {
             self.offsets.slice(start, stop + 1)?,
             self.bytes.clone(),
             self.dtype.clone(),
-            self.validity.as_ref().map(|v| v.slice(start, stop)),
+            self.validity().map(|v| v.slice(start, stop)).transpose()?,
         )
         .into_array())
     }
@@ -251,13 +253,15 @@ impl Array for VarBinArray {
         Some(self)
     }
 
-    fn validity(&self) -> Option<Validity> {
-        self.validity.clone()
-    }
-
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         walker.visit_child(self.offsets())?;
         walker.visit_child(self.bytes())
+    }
+}
+
+impl OwnedValidity for VarBinArray {
+    fn validity(&self) -> Option<ValidityView> {
+        self.validity.as_view()
     }
 }
 
