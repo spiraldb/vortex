@@ -5,7 +5,6 @@ use linkme::distributed_slice;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::ArrayCompute;
@@ -14,6 +13,8 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::OwnedValidity;
+use crate::validity::{Validity, ValidityView};
+use crate::view::AsView;
 use crate::{impl_array, ArrayWalker};
 
 mod compute;
@@ -215,7 +216,7 @@ impl Array for VarBinViewArray {
             views: self.views.slice(start * VIEW_SIZE, stop * VIEW_SIZE)?,
             data: self.data.clone(),
             dtype: self.dtype.clone(),
-            validity: self.validity.as_ref().map(|v| v.slice(start, stop)),
+            validity: self.validity().map(|v| v.slice(start, stop)),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
         .into_array())
@@ -252,8 +253,8 @@ impl Array for VarBinViewArray {
 }
 
 impl OwnedValidity for VarBinViewArray {
-    fn validity(&self) -> Option<&Validity> {
-        self.validity.as_ref()
+    fn validity(&self) -> Option<ValidityView> {
+        self.validity.as_view()
     }
 }
 

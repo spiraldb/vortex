@@ -2,7 +2,6 @@ use std::sync::{Arc, RwLock};
 
 use compress::roaring_encode;
 use croaring::{Bitmap, Native};
-use vortex::array::validity::Validity;
 use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
@@ -11,6 +10,7 @@ use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsSet};
 use vortex::validity::ArrayValidity;
+use vortex::validity::Validity;
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;

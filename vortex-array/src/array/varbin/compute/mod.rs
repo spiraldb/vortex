@@ -9,7 +9,6 @@ use vortex_schema::DType;
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::Validity;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
 use crate::arrow::wrappers::{as_nulls, as_offset_buffer};
@@ -22,7 +21,9 @@ use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
-use crate::validity::OwnedValidity;
+use crate::validity::Validity;
+use crate::validity::{ArrayValidity, OwnedValidity};
+use crate::view::ToOwnedView;
 
 mod take;
 
@@ -145,7 +146,7 @@ impl FlattenFn for VarBinArray {
             offsets,
             bytes,
             self.dtype.clone(),
-            self.validity().cloned(),
+            self.validity().to_owned_view(),
         )))
     }
 }

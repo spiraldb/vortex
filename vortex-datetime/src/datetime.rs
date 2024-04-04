@@ -1,6 +1,5 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::validity::Validity;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
@@ -8,7 +7,9 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
 use vortex::stats::{Stats, StatsCompute, StatsSet};
-use vortex::validity::OwnedValidity;
+use vortex::validity::Validity;
+use vortex::validity::{OwnedValidity, ValidityView};
+use vortex::view::AsView;
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
@@ -136,8 +137,8 @@ impl Array for DateTimeArray {
 }
 
 impl OwnedValidity for DateTimeArray {
-    fn validity(&self) -> Option<&Validity> {
-        self.validity.as_ref()
+    fn validity(&self) -> Option<ValidityView> {
+        self.validity.as_view()
     }
 }
 

@@ -13,13 +13,13 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::struct_::{StructArray, StructEncoding};
-use crate::array::validity::Validity;
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::compute::ArrayCompute;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::ArraySerde;
 use crate::stats::Stats;
+use crate::validity::Validity;
 
 pub mod bool;
 pub mod chunked;
@@ -29,7 +29,6 @@ pub mod downcast;
 pub mod primitive;
 pub mod sparse;
 pub mod struct_;
-pub mod validity;
 pub mod varbin;
 pub mod varbinview;
 
@@ -118,7 +117,7 @@ macro_rules! impl_array {
         }
 
         #[inline]
-        fn into_any(self: Arc<Self>) -> std::sync::Arc<dyn std::any::Any + Send + Sync> {
+        fn into_any(self: std::sync::Arc<Self>) -> std::sync::Arc<dyn std::any::Any + Send + Sync> {
             self
         }
 

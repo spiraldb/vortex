@@ -2,7 +2,6 @@ use num_traits::PrimInt;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array::validity::Validity;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::array::{Array, ArrayRef};
@@ -11,6 +10,7 @@ use crate::compute::take::TakeFn;
 use crate::match_each_integer_ptype;
 use crate::ptype::NativePType;
 use crate::validity::OwnedValidity;
+use crate::validity::ValidityView;
 
 impl TakeFn for VarBinArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
@@ -42,7 +42,7 @@ fn take<I: NativePType + PrimInt, O: NativePType + PrimInt>(
     offsets: &[O],
     data: &[u8],
     indices: &[I],
-    validity: Option<&Validity>,
+    validity: Option<ValidityView>,
 ) -> VarBinArray {
     if let Some(v) = validity {
         return take_nullable(dtype, offsets, data, indices, v);
@@ -63,12 +63,12 @@ fn take_nullable<I: NativePType + PrimInt, O: NativePType + PrimInt>(
     offsets: &[O],
     data: &[u8],
     indices: &[I],
-    validity: &Validity,
+    validity: ValidityView,
 ) -> VarBinArray {
     let mut builder = VarBinBuilder::<I>::with_capacity(indices.len());
     for &idx in indices {
         let idx = idx.to_usize().unwrap();
-        if validity.as_view().is_valid(idx) {
+        if validity.is_valid(idx) {
             let start = offsets[idx].to_usize().unwrap();
             let stop = offsets[idx + 1].to_usize().unwrap();
             builder.push(Some(&data[start..stop]));

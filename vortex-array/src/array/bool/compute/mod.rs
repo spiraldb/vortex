@@ -6,7 +6,6 @@ use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
@@ -19,6 +18,7 @@ use crate::compute::ArrayCompute;
 use crate::scalar::{BoolScalar, Scalar};
 use crate::validity::ArrayValidity;
 use crate::validity::OwnedValidity;
+use crate::validity::Validity;
 
 mod take;
 

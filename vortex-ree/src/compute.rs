@@ -7,6 +7,7 @@ use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex::scalar::Scalar;
 use vortex::validity::OwnedValidity;
+use vortex::view::ToOwnedView;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::compress::ree_decode;
@@ -38,7 +39,7 @@ impl FlattenFn for REEArray {
             ree_decode(
                 &pends,
                 &pvalues,
-                self.validity().cloned(),
+                self.validity().to_owned_view(),
                 self.offset(),
                 self.len(),
             )

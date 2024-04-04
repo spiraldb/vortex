@@ -5,13 +5,13 @@ use arrow_buffer::buffer::BooleanBuffer;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::Validity;
 use crate::array::ArrayValidity;
 use crate::compute::flatten::flatten_bool;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, PScalar};
 use crate::stats::{Stat, StatsCompute, StatsSet};
+use crate::validity::Validity;
 
 impl StatsCompute for PrimitiveArray {
     fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {

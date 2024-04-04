@@ -6,7 +6,6 @@ use vortex_error::VortexResult;
 use vortex_schema::{CompositeID, DType};
 
 use crate::array::composite::{find_extension, CompositeExtensionRef, TypedCompositeArray};
-use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
@@ -15,6 +14,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, BytesSerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::validity::ArrayValidity;
+use crate::validity::Validity;
 use crate::{impl_array, ArrayWalker};
 
 pub trait CompositeMetadata:

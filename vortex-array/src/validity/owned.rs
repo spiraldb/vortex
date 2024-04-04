@@ -1,26 +1,12 @@
-use std::sync::Arc;
-
 use arrow_buffer::{BooleanBuffer, NullBuffer};
 use itertools::Itertools;
-use linkme::distributed_slice;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::BoolArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::as_contiguous;
-use crate::compute::ArrayCompute;
-use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
-use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::stats::Stats;
-use crate::{impl_array, ArrayWalker};
-mod serde;
-mod view;
-
-pub use view::*;
-
-use crate::serde::{ArraySerde, EncodingSerde};
-use crate::validity::ArrayValidity;
+use crate::view::AsView;
 
 #[derive(Debug, Clone)]
 pub enum Validity {
@@ -46,7 +32,7 @@ impl Validity {
         match nullability {
             Nullability::NonNullable => {
                 if !logical.as_view().all_valid() {
-                    return Err("Non-nullable validity must be all valid".into());
+                    vortex_bail!("Non-nullable validity must be all valid");
                 }
                 Ok(None)
             }
@@ -59,10 +45,10 @@ impl Validity {
     }
 
     pub fn logical_validity(&self) -> Validity {
-        if self.all_valid() {
+        if self.as_view().all_valid() {
             return Validity::Valid(self.len());
         }
-        if self.all_invalid() {
+        if self.as_view().all_invalid() {
             return Validity::Invalid(self.len());
         }
         self.clone()
@@ -70,14 +56,6 @@ impl Validity {
 
     pub fn slice(&self, start: usize, stop: usize) -> Validity {
         self.as_view().slice(start, stop)
-    }
-
-    pub fn as_view(&self) -> ValidityView {
-        match self {
-            Self::Valid(len) => ValidityView::Valid(*len),
-            Self::Invalid(len) => ValidityView::Invalid(*len),
-            Self::Array(a) => ValidityView::Array(a.as_ref()),
-        }
     }
 }
 
@@ -156,105 +134,5 @@ impl FromIterator<Validity> for Validity {
             .map(|v| v.to_bool_array().into_array())
             .collect_vec();
         Self::Array(as_contiguous(&arrays).unwrap())
-    }
-}
-
-impl Array for Validity {
-    impl_array!();
-
-    fn len(&self) -> usize {
-        match self {
-            Validity::Valid(len) | Validity::Invalid(len) => *len,
-            Validity::Array(a) => a.len(),
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        match self {
-            Validity::Valid(len) | Validity::Invalid(len) => *len == 0,
-            Validity::Array(a) => a.is_empty(),
-        }
-    }
-
-    fn dtype(&self) -> &DType {
-        &Validity::DTYPE
-    }
-
-    fn stats(&self) -> Stats {
-        todo!()
-    }
-
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(self.slice(start, stop).into_array())
-    }
-
-    fn encoding(&self) -> EncodingRef {
-        &ValidityEncoding
-    }
-
-    fn nbytes(&self) -> usize {
-        match self {
-            Validity::Valid(_) | Validity::Invalid(_) => 8,
-            Validity::Array(a) => a.nbytes(),
-        }
-    }
-
-    #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        Ok(())
-    }
-}
-
-impl ArrayValidity for Validity {
-    fn logical_validity(&self) -> Validity {
-        // Validity is a non-nullable boolean array.
-        Validity::Valid(self.len())
-    }
-
-    fn is_valid(&self, _index: usize) -> bool {
-        true
-    }
-}
-
-impl ArrayDisplay for Validity {
-    fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
-        match self {
-            Validity::Valid(_) => fmt.property("all", "valid"),
-            Validity::Invalid(_) => fmt.property("all", "invalid"),
-            Validity::Array(a) => fmt.child("validity", a),
-        }
-    }
-}
-
-impl ArrayCompute for Validity {}
-
-#[distributed_slice(ENCODINGS)]
-static ENCODINGS_VALIDITY: EncodingRef = &ValidityEncoding;
-
-#[derive(Debug)]
-struct ValidityEncoding;
-
-impl ValidityEncoding {
-    const ID: EncodingId = EncodingId::new("vortex.validity");
-}
-
-impl Encoding for ValidityEncoding {
-    fn id(&self) -> EncodingId {
-        ValidityEncoding::ID
-    }
-
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
     }
 }

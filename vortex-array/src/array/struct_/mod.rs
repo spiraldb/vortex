@@ -6,7 +6,6 @@ use vortex_error::VortexResult;
 use vortex_schema::{DType, FieldNames};
 
 use super::{check_slice_bounds, Array, ArrayRef};
-use crate::array::validity::Validity;
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -14,6 +13,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::validity::ArrayValidity;
+use crate::validity::Validity;
 use crate::{impl_array, ArrayWalker};
 
 mod compress;

@@ -5,11 +5,11 @@ use vortex_error::{vortex_bail, VortexResult};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::ptype::NativePType;
 use crate::validity::ArrayValidity;
+use crate::validity::Validity;
 
 impl<T: NativePType> AsContiguousFn for &dyn PrimitiveTrait<T> {
     fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {

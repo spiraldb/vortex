@@ -6,7 +6,6 @@ use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::primitive::compute::PrimitiveTrait;
-use crate::array::validity::{Validity, ValidityView};
 use crate::array::{Array, ArrayRef, PrimitiveArray};
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
@@ -14,12 +13,13 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::{NativePType, PType};
 use crate::serde::ArrayView;
 use crate::stats::Stats;
-use crate::validity::ArrayValidity;
+use crate::validity::OwnedValidity;
+use crate::validity::{Validity, ValidityView};
+use crate::view::ToOwnedView;
 use crate::ArrayWalker;
 
 #[derive(Debug)]
 pub struct PrimitiveView<'a> {
-    view: &'a ArrayView<'a>,
     ptype: PType,
     buffer: &'a Buffer,
     validity: Option<ValidityView<'a>>,
@@ -36,7 +36,6 @@ impl<'a> PrimitiveView<'a> {
         let validity = view.child(0, &Validity::DTYPE).map(ValidityView::from);
 
         Ok(Self {
-            view,
             ptype,
             buffer,
             validity,
@@ -66,8 +65,14 @@ impl<'a, T: NativePType> PrimitiveTrait<T> for PrimitiveView<'a> {
         PrimitiveArray::new(
             self.ptype(),
             self.buffer.clone(),
-            self.validity.as_ref().map(|v| v.to_validity()),
+            self.validity.to_owned_view(),
         )
+    }
+}
+
+impl<'a> OwnedValidity for PrimitiveView<'a> {
+    fn validity(&self) -> Option<ValidityView<'a>> {
+        todo!()
     }
 }
 
@@ -124,16 +129,6 @@ impl Array for PrimitiveView<'_> {
     }
 
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        todo!()
-    }
-}
-
-impl ArrayValidity for PrimitiveView<'_> {
-    fn logical_validity(&self) -> Validity {
-        todo!()
-    }
-
-    fn is_valid(&self, _index: usize) -> bool {
         todo!()
     }
 }

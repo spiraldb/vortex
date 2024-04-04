@@ -1,11 +1,11 @@
 use arrow_buffer::{BooleanBuffer, Buffer};
 use vortex::array::bool::BoolArray;
-use vortex::array::validity::Validity;
 use vortex::array::Array;
 use vortex::compute::flatten::{FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::ArrayCompute;
 use vortex::scalar::{AsBytes, Scalar};
+use vortex::validity::Validity;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::Nullability;
 

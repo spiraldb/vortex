@@ -7,7 +7,6 @@ use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::Validity;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
@@ -20,6 +19,8 @@ use crate::ptype::NativePType;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::OwnedValidity;
+use crate::validity::{Validity, ValidityView};
+use crate::view::AsView;
 use crate::{impl_array, ArrayWalker};
 
 mod accessor;
@@ -226,7 +227,7 @@ impl Array for VarBinArray {
             self.offsets.slice(start, stop + 1)?,
             self.bytes.clone(),
             self.dtype.clone(),
-            self.validity.as_ref().map(|v| v.slice(start, stop)),
+            self.validity().map(|v| v.slice(start, stop)),
         )
         .into_array())
     }
@@ -259,8 +260,8 @@ impl Array for VarBinArray {
 }
 
 impl OwnedValidity for VarBinArray {
-    fn validity(&self) -> Option<&Validity> {
-        self.validity.as_ref()
+    fn validity(&self) -> Option<ValidityView> {
+        self.validity.as_view()
     }
 }
 

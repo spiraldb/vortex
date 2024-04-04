@@ -8,6 +8,7 @@ use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::patch::patch;
 use vortex::ptype::{NativePType, PType};
 use vortex::validity::OwnedValidity;
+use vortex::view::ToOwnedView;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::alp::ALPFloat;
@@ -120,7 +121,7 @@ pub fn decompress(array: &ALPArray) -> VortexResult<PrimitiveArray> {
     let decoded = match_each_alp_float_ptype!(array.dtype().try_into().unwrap(), |$T| {
         PrimitiveArray::from_nullable(
             decompress_primitive::<$T>(encoded.typed_data(), array.exponents()),
-            encoded.validity().cloned(),
+            encoded.validity().to_owned_view(),
         )
     })?;
 

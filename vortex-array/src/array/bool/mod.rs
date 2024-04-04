@@ -2,21 +2,20 @@ use std::sync::{Arc, RwLock};
 
 use arrow_buffer::buffer::BooleanBuffer;
 use linkme::distributed_slice;
-
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
-use crate::{ArrayWalker, impl_array};
+use super::{check_slice_bounds, Array, ArrayRef};
 use crate::array::IntoArray;
-use crate::array::validity::Validity;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stat, Stats, StatsSet};
 use crate::validity::OwnedValidity;
-
-use super::{Array, ArrayRef, check_slice_bounds};
+use crate::validity::{Validity, ValidityView};
+use crate::view::AsView;
+use crate::{impl_array, ArrayWalker};
 
 mod compute;
 mod serde;
@@ -100,7 +99,7 @@ impl Array for BoolArray {
         Ok(Self {
             buffer: self.buffer.slice(start, stop - start),
             stats: Arc::new(RwLock::new(StatsSet::new())),
-            validity: self.validity.as_ref().map(|v| v.slice(start, stop)),
+            validity: self.validity.as_view().map(|v| v.slice(start, stop)),
         }
         .into_array())
     }
@@ -137,8 +136,8 @@ impl Array for BoolArray {
 }
 
 impl OwnedValidity for BoolArray {
-    fn validity(&self) -> Option<&Validity> {
-        self.validity.as_ref()
+    fn validity(&self) -> Option<ValidityView> {
+        self.validity.as_view()
     }
 }
 
@@ -207,9 +206,8 @@ impl FromIterator<Option<bool>> for BoolArray {
 
 #[cfg(test)]
 mod test {
-    use crate::compute::scalar_at::scalar_at;
-
     use super::*;
+    use crate::compute::scalar_at::scalar_at;
 
     #[test]
     fn slice() {

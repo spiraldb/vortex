@@ -15,6 +15,7 @@ use vortex::ptype::{NativePType, PType};
 use vortex::scalar::{ListScalarVec, Scalar};
 use vortex::stats::Stat;
 use vortex::validity::OwnedValidity;
+use vortex::view::ToOwnedView;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::downcast::DowncastFastlanes;
@@ -172,19 +173,19 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     let mut unpacked = match ptype {
         I8 | U8 => PrimitiveArray::from_nullable(
             unpack_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity().cloned(),
+            array.validity().to_owned_view(),
         ),
         I16 | U16 => PrimitiveArray::from_nullable(
             unpack_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity().cloned(),
+            array.validity().to_owned_view(),
         ),
         I32 | U32 => PrimitiveArray::from_nullable(
             unpack_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity().cloned(),
+            array.validity().to_owned_view(),
         ),
         I64 | U64 => PrimitiveArray::from_nullable(
             unpack_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, length),
-            array.validity().cloned(),
+            array.validity().to_owned_view(),
         ),
         _ => panic!("Unsupported ptype {:?}", ptype),
     }

@@ -8,17 +8,14 @@ use std::sync::{Arc, RwLock};
 use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use linkme::distributed_slice;
-
 pub use view::*;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
-use crate::{ArrayWalker, impl_array};
 use crate::accessor::ArrayAccessor;
-use crate::array::{Array, ArrayRef, check_slice_bounds};
-use crate::array::IntoArray;
 use crate::array::primitive::compute::PrimitiveTrait;
-use crate::array::validity::Validity;
+use crate::array::IntoArray;
+use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -27,6 +24,9 @@ use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::{ArrayValidity, OwnedValidity};
+use crate::validity::{Validity, ValidityView};
+use crate::view::{AsView, ToOwnedView};
+use crate::{impl_array, ArrayWalker};
 
 mod compute;
 mod serde;
@@ -115,7 +115,7 @@ impl PrimitiveArray {
         let validity = if nullability == Nullability::Nullable {
             Some(
                 self.validity()
-                    .cloned()
+                    .to_owned_view()
                     .unwrap_or_else(|| Validity::Valid(len)),
             )
         } else {
@@ -193,7 +193,7 @@ impl Array for PrimitiveArray {
         Ok(Self {
             buffer: self.buffer.slice_with_length(byte_start, byte_length),
             ptype: self.ptype,
-            validity: self.validity.as_ref().map(|v| v.slice(start, stop)),
+            validity: self.validity().map(|v| v.slice(start, stop)),
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
@@ -233,8 +233,8 @@ impl Array for PrimitiveArray {
 }
 
 impl OwnedValidity for PrimitiveArray {
-    fn validity(&self) -> Option<&Validity> {
-        self.validity.as_ref()
+    fn validity(&self) -> Option<ValidityView> {
+        self.validity.as_view()
     }
 }
 
@@ -339,8 +339,8 @@ impl ArrayDisplay for PrimitiveArray {
 mod test {
     use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-    use crate::array::Array;
     use crate::array::primitive::PrimitiveArray;
+    use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
     use crate::ptype::PType;
 

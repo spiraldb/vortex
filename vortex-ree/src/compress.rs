@@ -4,7 +4,6 @@ use itertools::Itertools;
 use num_traits::AsPrimitive;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-use vortex::array::validity::Validity;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::encoding::Encoding;
@@ -12,6 +11,7 @@ use vortex::match_each_integer_ptype;
 use vortex::ptype::{match_each_native_ptype, NativePType};
 use vortex::stats::Stat;
 use vortex::validity::OwnedValidity;
+use vortex::validity::Validity;
 use vortex_error::VortexResult;
 
 use crate::downcast::DowncastREE;
@@ -156,9 +156,10 @@ pub fn ree_decode_primitive<E: NativePType + AsPrimitive<usize> + Ord, T: Native
 mod test {
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::validity::Validity;
     use vortex::array::{Array, IntoArray};
+    use vortex::validity::Validity;
     use vortex::validity::{ArrayValidity, OwnedValidity};
+    use vortex::view::ToOwnedView;
 
     use crate::compress::{ree_decode, ree_encode};
     use crate::REEArray;
@@ -201,7 +202,7 @@ mod test {
         let decoded = ree_decode(
             arr.ends().as_primitive(),
             arr.values().as_primitive(),
-            arr.validity().cloned(),
+            arr.validity().to_owned_view(),
             0,
             arr.len(),
         )

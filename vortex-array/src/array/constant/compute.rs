@@ -6,7 +6,6 @@ use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
@@ -15,6 +14,7 @@ use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
+use crate::validity::Validity;
 
 impl ArrayCompute for ConstantArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {

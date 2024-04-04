@@ -15,6 +15,7 @@ use crate::compute::search_sorted::SearchSortedFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::{AsArrowPrimitiveType, NativePType, PType};
+use crate::validity::OwnedValidity;
 
 mod as_arrow;
 mod as_contiguous;
@@ -26,7 +27,9 @@ mod scalar_at;
 mod search_sorted;
 mod take;
 
-pub(crate) trait PrimitiveTrait<T: NativePType>: Array + Debug + Send + Sync {
+pub(crate) trait PrimitiveTrait<T: NativePType>:
+    OwnedValidity + Array + Debug + Send + Sync
+{
     fn ptype(&self) -> PType;
 
     fn buffer(&self) -> &Buffer;

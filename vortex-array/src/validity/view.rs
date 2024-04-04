@@ -2,7 +2,6 @@ use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
-use crate::array::validity::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
@@ -10,6 +9,8 @@ use crate::compute::take::take;
 use crate::compute::ArrayCompute;
 use crate::serde::ArrayView;
 use crate::stats::Stat;
+use crate::validity::owned::Validity;
+use crate::view::{AsView, ToOwnedView};
 
 #[derive(Debug, Clone)]
 pub enum ValidityView<'a> {
@@ -18,15 +19,29 @@ pub enum ValidityView<'a> {
     Array(&'a dyn Array),
 }
 
-impl ValidityView<'_> {
-    pub fn to_validity(&self) -> Validity {
+impl<'v> AsView<'v, ValidityView<'v>> for Validity {
+    fn as_view(&'v self) -> ValidityView<'v> {
+        match self {
+            Self::Valid(len) => ValidityView::Valid(*len),
+            Self::Invalid(len) => ValidityView::Invalid(*len),
+            Self::Array(a) => ValidityView::Array(a.as_ref()),
+        }
+    }
+}
+
+impl<'v> ToOwnedView<'v> for ValidityView<'v> {
+    type Owned = Validity;
+
+    fn to_owned_view(&self) -> Self::Owned {
         match self {
             Self::Valid(len) => Validity::Valid(*len),
             Self::Invalid(len) => Validity::Invalid(*len),
             Self::Array(a) => Validity::Array(a.to_array()),
         }
     }
+}
 
+impl ValidityView<'_> {
     pub fn len(&self) -> usize {
         match self {
             Self::Valid(len) | Self::Invalid(len) => *len,
@@ -84,7 +99,7 @@ impl ValidityView<'_> {
     pub fn logical_validity(&self) -> Option<Validity> {
         match self.all_valid() {
             true => None,
-            false => Some(self.to_validity()),
+            false => Some(self.to_owned_view()),
         }
     }
 
