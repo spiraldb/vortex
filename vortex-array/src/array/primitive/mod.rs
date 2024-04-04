@@ -9,18 +9,16 @@ use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
 use itertools::Itertools;
 use linkme::distributed_slice;
+use num_traits::AsPrimitive;
 pub use view::*;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
-use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::compute::PrimitiveTrait;
-use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::validity::{Validity, ValidityView};
 use crate::array::IntoArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
-use crate::compute::flatten::flatten_primitive;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -153,36 +151,44 @@ impl PrimitiveArray {
         self.buffer().typed_data()
     }
 
-    pub fn patch(self, patch: &dyn Array) -> VortexResult<Self> {
-        match patch.encoding().id() {
-            SparseEncoding::ID => {
-                match_each_native_ptype!(self.ptype(), |$T| {self.patch_with_sparse::<$T>(patch.as_sparse())})
-            }
-            _ => Err(vortex_err!(NotImplemented: "patch", self.encoding().id().name())),
-        }
-    }
-
-    fn patch_with_sparse<T: NativePType>(mut self, patch: &SparseArray) -> VortexResult<Self> {
-        let patch_indices = patch.resolved_indices();
-        let patch_values = flatten_primitive(patch.values())?;
-        let ptype = self.ptype();
-        if ptype != patch_values.ptype() {
-            vortex_bail!(MismatchedTypes: self.dtype, patch_values.dtype)
+    pub fn patch<P: AsPrimitive<usize>, T: NativePType>(
+        mut self,
+        positions: &[P],
+        values: &[T],
+    ) -> VortexResult<Self> {
+        if self.ptype() != T::PTYPE {
+            vortex_bail!(MismatchedTypes: self.dtype, T::PTYPE)
         }
 
-        let mut values = self.buffer.into_vec::<T>()
-            .map_err(|_| vortex_err!(ComputeError: "attempted to patch owned primitive array with unowned buffer"))?;
+        let mut own_values = self
+            .buffer
+            .into_vec::<T>()
+            .unwrap_or_else(|b| Vec::from(b.typed_data::<T>()));
         // TODO(robert): Also patch validity
-        for (idx, value) in patch_indices.iter().zip_eq(patch_values.typed_data::<T>()) {
-            values[*idx] = *value;
+        for (idx, value) in positions.iter().zip_eq(values.iter()) {
+            own_values[(*idx).as_()] = *value;
         }
-        self.buffer = Buffer::from_vec::<T>(values);
+        self.buffer = Buffer::from_vec::<T>(own_values);
         Ok(self)
     }
 
     pub(crate) fn as_trait<T: NativePType>(&self) -> &dyn PrimitiveTrait<T> {
         assert_eq!(self.ptype, T::PTYPE);
         self
+    }
+
+    pub fn reinterpret_cast(&self, ptype: PType) -> Self {
+        if self.ptype() == ptype {
+            return self.clone();
+        }
+
+        assert_eq!(
+            self.ptype().byte_width(),
+            ptype.byte_width(),
+            "can't reinterpret cast between integers of two different widths"
+        );
+
+        PrimitiveArray::new(ptype, self.buffer().clone(), self.validity())
     }
 
     pub fn into_children(self) -> (Buffer, Option<Validity>) {

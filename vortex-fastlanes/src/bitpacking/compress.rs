@@ -2,7 +2,7 @@ use arrayref::array_ref;
 use fastlanez::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::sparse::SparseArray;
+use vortex::array::sparse::{SparseArray, SparseEncoding};
 use vortex::array::IntoArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
@@ -188,32 +188,27 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
 
     // Cast to signed if necessary
     if ptype.is_signed_int() {
-        unpacked = reinterpret_cast(unpacked, ptype);
+        unpacked = unpacked.reinterpret_cast(ptype);
     }
 
     if let Some(patches) = array.patches() {
-        unpacked.patch(patches)
+        patch_unpacked(unpacked, patches)
     } else {
         Ok(unpacked)
     }
 }
 
-// This is in general unsafe to do unless you verify the bounds of the values.
-// We know that for bitpacked arrays all signed values have been shifted to be unsigned
-fn reinterpret_cast(array: PrimitiveArray, ptype: PType) -> PrimitiveArray {
-    if array.ptype() == ptype {
-        return array;
+fn patch_unpacked(array: PrimitiveArray, patches: &dyn Array) -> VortexResult<PrimitiveArray> {
+    match patches.encoding().id() {
+        SparseEncoding::ID => {
+            match_each_integer_ptype!(array.ptype(), |$T| {
+                array.patch(
+                    &patches.as_sparse().resolved_indices(),
+                    flatten_primitive(patches.as_sparse().values())?.typed_data::<$T>())
+            })
+        }
+        _ => panic!("can't patch bitpacked array with {}", patches),
     }
-
-    assert_eq!(
-        array.ptype().byte_width(),
-        ptype.byte_width(),
-        "can't reinterpret cast between integers of two different widths"
-    );
-
-    let (buffer, validity) = array.into_children();
-
-    PrimitiveArray::new(ptype, buffer, validity)
 }
 
 pub fn unpack_primitive<T: NativePType + TryBitPack>(
