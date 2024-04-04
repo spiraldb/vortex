@@ -76,7 +76,7 @@ impl SparseArray {
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        flatten_primitive(self.indices())
+        flatten_primitive(cast(self.indices(), PType::U64.into()).unwrap().as_ref())
             .unwrap()
             .typed_data::<u64>()
             .iter()
