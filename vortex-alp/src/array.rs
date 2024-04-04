@@ -103,6 +103,7 @@ impl Array for ALPArray {
         )?
         .into_array())
     }
+
     #[inline]
     fn with_compute_mut(
         &self,
