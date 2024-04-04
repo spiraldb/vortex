@@ -69,7 +69,7 @@ impl FlattenFn for SparseArray {
         let mut validity = BooleanBufferBuilder::new(self.len());
         validity.append_n(self.len(), false);
         let values = flatten(self.values())?;
-        let null_fill = self.fill_value.is_null();
+        let null_fill = self.fill_value().is_null();
         if let FlattenedArray::Primitive(ref parray) = values {
             match_each_native_ptype!(parray.ptype(), |$P| {
                 flatten_primitive::<$P>(
