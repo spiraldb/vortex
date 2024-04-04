@@ -84,14 +84,18 @@ fn take_primitive<T: NativePType + TryBitPack>(
     let packed = flatten_primitive(array.encoded())?;
     let packed = packed.typed_data::<u8>();
 
+    // assuming the buffer is already allocated (which will happen at most once)
+    // then unpacking all 1024 elements takes ~8.8x as long as unpacking a single element
+    // see https://github.com/fulcrum-so/vortex/pull/190#issue-2223752833
+    // however, the gap should be smaller with larger registers (e.g., AVX-512) vs the 128 bit
+    // ones on M2 Macbook Air.
+    let bulk_threshold = 8;
+
     let mut output = Vec::with_capacity(size_hint);
     let mut buffer: Vec<T> = Vec::new();
     for (chunk, offsets) in relative_indices {
         let packed_chunk = &packed[chunk * 128 * bit_width..][..128 * bit_width];
-        // assuming the buffer is already allocated (which will happen at most once)
-        // then unpacking all 1024 elements takes ~8.8x as long as unpacking a single element
-        // see https://github.com/fulcrum-so/vortex/pull/190#issue-2223752833
-        if offsets.len() > 8 {
+        if offsets.len() > bulk_threshold {
             buffer.clear();
             TryBitPack::try_unpack_into(packed_chunk, bit_width, &mut buffer)
                 .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))?;
