@@ -190,10 +190,6 @@ impl PrimitiveArray {
 
         PrimitiveArray::new(ptype, self.buffer().clone(), self.validity())
     }
-
-    pub fn into_children(self) -> (Buffer, Option<Validity>) {
-        (self.buffer, self.validity)
-    }
 }
 
 impl Array for PrimitiveArray {
