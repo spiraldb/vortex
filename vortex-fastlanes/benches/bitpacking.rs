@@ -1,9 +1,16 @@
+use std::sync::Arc;
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fastlanez::TryBitPack;
 use rand::distributions::Uniform;
 use rand::{thread_rng, Rng};
-use vortex::compress::EncodingCompression;
-use vortex_fastlanes::{bitpack_primitive, BitPackedEncoding, unpack_primitive, unpack_single_primitive};
+use vortex::array::primitive::PrimitiveArray;
+use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compute::take::take;
+use vortex::encoding::EncodingRef;
+use vortex_fastlanes::{
+    bitpack_primitive, unpack_primitive, unpack_single_primitive, BitPackedEncoding,
+};
 
 fn values(len: usize, bits: usize) -> Vec<u32> {
     let rng = thread_rng();
@@ -61,14 +68,21 @@ fn pack_unpack(c: &mut Criterion) {
     });
 }
 
-fn take(c: &mut Criterion) {
+fn bench_take(c: &mut Criterion) {
+    let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
+    let ctx = CompressCtx::new(Arc::new(cfg));
+
     let values = values(1_000_000, 8);
-    let packed = BitPackedEncoding{}.compress(values.into(), None, );
-    
+    let uncompressed = PrimitiveArray::from(values.clone());
+    let packed = BitPackedEncoding {}
+        .compress(&uncompressed, None, ctx)
+        .unwrap();
+
+    let scattered_indices: PrimitiveArray = (0..10).map(|i| i * 10_000).collect::<Vec<_>>().into();
     c.bench_function("take_10", |b| {
-        b.iter(|| black_box();
+        b.iter(|| black_box(take(&packed, &scattered_indices).unwrap()));
     });
 }
 
-criterion_group!(benches, pack_unpack, take);
+criterion_group!(benches, pack_unpack, bench_take);
 criterion_main!(benches);
