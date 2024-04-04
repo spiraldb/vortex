@@ -199,6 +199,8 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     }
 }
 
+// This is in general unsafe to do unless you verify the bounds of the values.
+// We know that for bitpacked arrays all signed values have been shifted to be unsigned
 fn reinterpret_cast(array: PrimitiveArray, ptype: PType) -> PrimitiveArray {
     if array.ptype() == ptype {
         return array;
