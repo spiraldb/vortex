@@ -1,18 +1,14 @@
 use num_traits::PrimInt;
+
 use vortex_error::VortexResult;
 
+use crate::array::{Array, ArrayRef};
 use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;
 use crate::match_each_integer_ptype;
 use crate::ptype::NativePType;
-<<<<<<< HEAD
-use crate::validity::OwnedValidity;
-use crate::{match_each_integer_ptype, match_each_native_ptype};
-=======
->>>>>>> develop
 
 impl<T: NativePType> TakeFn for &dyn PrimitiveTrait<T> {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {

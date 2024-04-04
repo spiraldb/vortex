@@ -39,6 +39,21 @@ impl Validity {
         Self::Array(array)
     }
 
+    pub fn try_from_logical(
+        logical: Validity,
+        nullability: Nullability,
+    ) -> VortexResult<Option<Self>> {
+        match nullability {
+            Nullability::NonNullable => {
+                if !logical.as_view().all_valid() {
+                    return Err("Non-nullable validity must be all valid".into());
+                }
+                Ok(None)
+            }
+            Nullability::Nullable => Ok(Some(logical)),
+        }
+    }
+
     pub fn to_bool_array(&self) -> BoolArray {
         self.as_view().to_bool_array()
     }

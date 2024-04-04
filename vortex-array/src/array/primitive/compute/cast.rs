@@ -3,11 +3,11 @@ use vortex_schema::DType;
 
 use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
+use crate::array::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::cast::CastFn;
 use crate::match_each_native_ptype;
 use crate::ptype::{NativePType, PType};
-use crate::validity::OwnedValidity;
 
 impl<T: NativePType> CastFn for &dyn PrimitiveTrait<T> {
     fn cast(&self, dtype: &DType) -> VortexResult<ArrayRef> {
@@ -19,7 +19,7 @@ impl<T: NativePType> CastFn for &dyn PrimitiveTrait<T> {
             match_each_native_ptype!(into_ptype, |$P| {
                 Ok(PrimitiveArray::from_nullable(
                     cast::<T, $P>(self.typed_data())?,
-                    self.validity().cloned(),
+                    Validity::try_from_logical(self.logical_validity(), self.nullability())?,
                 ).into_array())
             })
         }

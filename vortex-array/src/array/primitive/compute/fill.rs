@@ -5,7 +5,6 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::{Array, ArrayRef, IntoArray};
 use crate::compute::fill::FillForwardFn;
 use crate::ptype::NativePType;
-use crate::validity::OwnedValidity;
 
 impl<T: NativePType> FillForwardFn for &dyn PrimitiveTrait<T> {
     fn fill_forward(&self) -> VortexResult<ArrayRef> {

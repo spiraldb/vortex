@@ -5,13 +5,9 @@ use arrow_buffer::buffer::BooleanBuffer;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-<<<<<<< HEAD
 use crate::array::validity::Validity;
 use crate::array::ArrayValidity;
 use crate::compute::flatten::flatten_bool;
-=======
-use crate::array::Array;
->>>>>>> develop
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, PScalar};
