@@ -41,6 +41,7 @@ impl ScalarAtFn for BitPackedArray {
         }
 
         if let Some(patches) = self.patches() {
+            // NB: All non-null values are considered patches
             if self.bit_width == 0 || patches.is_valid(index) {
                 return scalar_at(patches, index)?.cast(self.dtype());
             }

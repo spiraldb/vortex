@@ -38,7 +38,7 @@ impl EncodingSerde for SparseEncoding {
             values,
             len,
             offset,
-            // N.B. we should deserialize the fill value from the source, but currently do not,
+            // NB: We should deserialize the fill value from the source, but currently do not,
             // so everything that goes through this read path is nullable
             Scalar::null(&fill_type),
         )
