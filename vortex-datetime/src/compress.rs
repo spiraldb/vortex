@@ -1,7 +1,7 @@
 use vortex::array::composite::CompositeEncoding;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, OwnedArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
@@ -15,7 +15,7 @@ use crate::{DateTimeArray, DateTimeEncoding};
 impl EncodingCompression for DateTimeEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &dyn OwnedArray,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         if array.encoding().id() != CompositeEncoding::ID {
@@ -32,8 +32,8 @@ impl EncodingCompression for DateTimeEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let array = array.as_composite();
@@ -53,7 +53,8 @@ fn compress_localdatetime(
     like: Option<&DateTimeArray>,
     ctx: CompressCtx,
 ) -> VortexResult<ArrayRef> {
-    let underlying = flatten_primitive(cast(array.underlying(), PType::I64.into())?.as_ref())?;
+    let underlying =
+        flatten_primitive(cast(array.underlying().as_ref(), PType::I64.into())?.as_ref())?;
 
     let divisor = match array.metadata().time_unit() {
         TimeUnit::Ns => 1_000_000_000,

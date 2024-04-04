@@ -56,7 +56,7 @@ pub fn compress_parquet_to_vortex<W: Write>(
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
             let vortex_array = record_batch.into_array();
-            ctx.compress(&vortex_array, None).unwrap()
+            ctx.compress(vortex_array.as_ref(), None).unwrap()
         })
         .collect_vec();
     let chunked = ChunkedArray::new(chunks, dtype.clone());

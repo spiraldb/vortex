@@ -1,4 +1,4 @@
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{ArrayRef, OwnedArray};
 
 use crate::{BitPackedArray, DeltaArray, FoRArray};
 
@@ -26,9 +26,9 @@ pub trait DowncastFastlanes: private::Sealed {
     }
 }
 
-impl private::Sealed for dyn Array + '_ {}
+impl private::Sealed for dyn OwnedArray + '_ {}
 
-impl DowncastFastlanes for dyn Array + '_ {
+impl DowncastFastlanes for dyn OwnedArray + '_ {
     fn maybe_for(&self) -> Option<&FoRArray> {
         self.as_any().downcast_ref()
     }

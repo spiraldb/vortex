@@ -35,21 +35,8 @@ where
 }
 
 /// AsView for Arc types.
-impl<'v, View: 'v, Owned: AsView<'v, View>> AsView<'v, Arc<View>> for Arc<Owned> {
-    fn as_view(&'v self) -> Arc<View> {
-        self.as_ref().map(|owned| owned.as_view())
-    }
-}
-
-/// ToOwnedView for Arc types.
-impl<'v, Owned, View> ToOwnedView<'v> for Arc<View>
-where
-    View: ToOwnedView<'v, Owned = Owned> + 'v,
-    Owned: AsView<'v, View>,
-{
-    type Owned = Arc<Owned>;
-
-    fn to_owned_view(&'v self) -> Self::Owned {
-        self.as_ref().map(|view| view.to_owned_view())
+impl<'v, View: 'v, Owned: AsView<'v, View>> AsView<'v, View> for Arc<Owned> {
+    fn as_view(&'v self) -> View {
+        self.as_ref().as_view()
     }
 }

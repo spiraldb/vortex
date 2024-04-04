@@ -4,7 +4,7 @@ use itertools::Itertools;
 use num_traits::AsPrimitive;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, OwnedArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::encoding::Encoding;
 use vortex::match_each_integer_ptype;
@@ -20,7 +20,7 @@ use crate::{REEArray, REEEncoding};
 impl EncodingCompression for REEEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &dyn OwnedArray,
         config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         if array.encoding().id() != PrimitiveEncoding.id() {
@@ -40,8 +40,8 @@ impl EncodingCompression for REEEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let ree_like = like.map(|like_arr| like_arr.as_ree());

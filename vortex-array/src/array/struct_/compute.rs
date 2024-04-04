@@ -9,7 +9,7 @@ use vortex_error::VortexResult;
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::struct_::StructArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::compute::as_arrow::{as_arrow, AsArrowArray};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{flatten, FlattenFn, FlattenedArray};

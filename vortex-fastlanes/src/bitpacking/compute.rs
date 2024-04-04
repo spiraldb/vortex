@@ -86,7 +86,7 @@ mod test {
     use itertools::Itertools;
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-    use vortex::array::Array;
+    use vortex::array::{Array, OwnedArray};
     use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::take::take;
@@ -118,7 +118,7 @@ mod test {
         let values = (0u32..257).collect_vec();
         let uncompressed = PrimitiveArray::from(values.clone()).into_array();
         let packed = BitPackedEncoding
-            .compress(&uncompressed, None, ctx)
+            .compress(uncompressed.as_ref(), None, ctx)
             .unwrap();
         let packed = packed.as_bitpacked();
         assert!(packed.patches().is_some());

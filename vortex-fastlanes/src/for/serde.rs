@@ -1,4 +1,4 @@
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{ArrayRef, OwnedArray};
 use vortex::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use vortex_error::VortexResult;
 

@@ -2,7 +2,7 @@ use std::cmp::min;
 use std::sync::{Arc, RwLock};
 
 pub use compress::*;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, OwnedArray};
 use vortex::compress::EncodingCompression;
 use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::ArrayCompute;

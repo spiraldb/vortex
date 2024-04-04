@@ -1,4 +1,4 @@
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, OwnedArray};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::validity::OwnedValidity;

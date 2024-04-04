@@ -1,4 +1,4 @@
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{ArrayRef, OwnedArray};
 
 use crate::ALPArray;
 
@@ -14,9 +14,9 @@ pub trait DowncastALP: private::Sealed {
     }
 }
 
-impl private::Sealed for dyn Array + '_ {}
+impl private::Sealed for dyn OwnedArray + '_ {}
 
-impl DowncastALP for dyn Array + '_ {
+impl DowncastALP for dyn OwnedArray + '_ {
     fn maybe_alp(&self) -> Option<&ALPArray> {
         self.as_any().downcast_ref()
     }

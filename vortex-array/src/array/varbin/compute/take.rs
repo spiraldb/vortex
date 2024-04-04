@@ -4,6 +4,7 @@ use vortex_schema::DType;
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
+use crate::array::OwnedArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;

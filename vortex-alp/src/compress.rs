@@ -2,7 +2,7 @@ use itertools::Itertools;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{SparseArray, SparseEncoding};
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, OwnedArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::ptype::{NativePType, PType};
@@ -34,7 +34,7 @@ macro_rules! match_each_alp_float_ptype {
 impl EncodingCompression for ALPEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &dyn OwnedArray,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
@@ -50,8 +50,8 @@ impl EncodingCompression for ALPEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let like_alp = like.map(|like_array| like_array.as_alp());
@@ -127,13 +127,13 @@ pub fn decompress(array: &ALPArray) -> VortexResult<PrimitiveArray> {
     })?;
 
     if let Some(patches) = array.patches() {
-        patch_decoded(decoded, patches)
+        patch_decoded(decoded, patches.as_ref())
     } else {
         Ok(decoded)
     }
 }
 
-fn patch_decoded(array: PrimitiveArray, patches: &dyn Array) -> VortexResult<PrimitiveArray> {
+fn patch_decoded(array: PrimitiveArray, patches: &dyn OwnedArray) -> VortexResult<PrimitiveArray> {
     match patches.encoding().id() {
         SparseEncoding::ID => {
             match_each_alp_float_ptype!(array.ptype(), |$T| {

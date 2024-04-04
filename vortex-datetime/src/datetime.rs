@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, OwnedArray};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};

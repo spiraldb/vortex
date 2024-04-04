@@ -357,7 +357,7 @@ mod test {
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;
-    use crate::array::Array;
+    use crate::array::{Array, OwnedArray};
     use crate::compute::scalar_at::scalar_at;
 
     fn binary_array() -> VarBinArray {

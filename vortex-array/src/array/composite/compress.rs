@@ -12,16 +12,16 @@ impl EncodingCompression for CompositeEncoding {
 
     fn can_compress(
         &self,
-        array: &dyn Array,
-        _config: &CompressConfig,
+        array: &dyn OwnedArray,
+        config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         (array.encoding().id() == Self::ID).then_some(self)
     }
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let composite_array = array.as_composite();
@@ -31,7 +31,7 @@ impl EncodingCompression for CompositeEncoding {
             composite_array.id(),
             composite_array.metadata().clone(),
             ctx.compress(
-                composite_array.underlying(),
+                composite_array.underlying().as_ref(),
                 composite_like.map(|c| c.underlying()),
             )?,
         )

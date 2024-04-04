@@ -1,3 +1,4 @@
+#![feature(trait_upcasting)]
 use std::fs::File;
 use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;

@@ -1,14 +1,15 @@
+use itertools::Itertools;
 use vortex_error::VortexResult;
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::struct_::{StructArray, StructEncoding};
-use crate::array::{Array, ArrayRef, OwnedArray};
+use crate::array::{ArrayRef, OwnedArray};
 use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 
 impl EncodingCompression for StructEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &dyn OwnedArray,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         (array.encoding().id() == Self::ID).then_some(self)
@@ -16,8 +17,8 @@ impl EncodingCompression for StructEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let struct_array = array.as_struct();
@@ -30,7 +31,7 @@ impl EncodingCompression for StructEncoding {
             .map(|(i, chunk)| {
                 let like_chunk = struct_like.and_then(|c_like| c_like.fields().get(i));
                 ctx.auxiliary(&format!("[{}]", i))
-                    .compress(chunk, like_chunk)
+                    .compress(chunk.as_ref(), like_chunk)
             })
             .try_collect()?;
 

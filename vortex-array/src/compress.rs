@@ -11,7 +11,7 @@ use crate::array::constant::ConstantArray;
 use crate::array::sparse::SparseEncoding;
 use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::varbin::VarBinEncoding;
-use crate::array::{Array, ArrayKind, ArrayRef};
+use crate::array::{Array, ArrayKind, ArrayRef, OwnedArray};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
 use crate::encoding::{Encoding, EncodingRef, ENCODINGS};
@@ -28,19 +28,19 @@ pub trait EncodingCompression: Encoding {
 
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &dyn OwnedArray,
         config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression>;
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef>;
 
     // For an array returned by this encoding, give the size in bytes minus any constant overheads.
-    fn compressed_nbytes(&self, array: &dyn Array) -> usize {
+    fn compressed_nbytes(&self, array: &dyn OwnedArray) -> usize {
         array.nbytes()
     }
 }
@@ -166,7 +166,11 @@ impl CompressCtx {
 
     // We don't take a reference to self to force the caller to think about whether to use
     // an auxilliary ctx.
-    pub fn compress(&self, arr: &dyn Array, like: Option<&ArrayRef>) -> VortexResult<ArrayRef> {
+    pub fn compress(
+        &self,
+        arr: &dyn OwnedArray,
+        like: Option<&ArrayRef>,
+    ) -> VortexResult<ArrayRef> {
         if arr.is_empty() {
             return Ok(arr.to_array());
         }
@@ -176,7 +180,7 @@ impl CompressCtx {
             if let Some(compressed) = l
                 .encoding()
                 .compression()
-                .map(|c| c.compress(arr, Some(l), self.for_encoding(c)))
+                .map(|c| c.compress(arr, Some(l.as_ref()), self.for_encoding(c)))
             {
                 let compressed = compressed?;
                 if compressed.dtype() != arr.dtype() {
@@ -219,21 +223,23 @@ impl CompressCtx {
                 ValidityView::Valid(_) | ValidityView::Invalid(_) => {
                     Ok(Some(validity.to_owned_view()))
                 }
-                ValidityView::Array(a) => Ok(Some(Validity::array(self.compress(a, None)?))),
+                ValidityView::Array(a) => Ok(Some(Validity::array(
+                    self.compress(a.to_array().as_ref(), None)?,
+                ))),
             }
         } else {
             Ok(None)
         }
     }
 
-    fn compress_array(&self, arr: &dyn Array) -> VortexResult<ArrayRef> {
+    fn compress_array(&self, arr: &dyn OwnedArray) -> VortexResult<ArrayRef> {
         match ArrayKind::from(arr) {
             ArrayKind::Chunked(chunked) => {
                 // For chunked arrays, we compress each chunk individually
                 let compressed_chunks: VortexResult<Vec<ArrayRef>> = chunked
                     .chunks()
                     .iter()
-                    .map(|chunk| self.compress_array(chunk))
+                    .map(|chunk| self.compress_array(chunk.as_ref()))
                     .collect();
                 Ok(ChunkedArray::new(compressed_chunks?, chunked.dtype().clone()).into_array())
             }
@@ -246,7 +252,7 @@ impl CompressCtx {
                 let compressed_fields: VortexResult<Vec<ArrayRef>> = strct
                     .fields()
                     .iter()
-                    .map(|field| self.compress_array(field))
+                    .map(|field| self.compress_array(field.as_ref()))
                     .collect();
                 Ok(
                     StructArray::new(strct.names().clone(), compressed_fields?, strct.len())
@@ -268,7 +274,10 @@ impl Default for CompressCtx {
     }
 }
 
-pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult<Option<ArrayRef>> {
+pub fn sampled_compression(
+    array: &dyn OwnedArray,
+    ctx: &CompressCtx,
+) -> VortexResult<Option<ArrayRef>> {
     // First, we try constant compression and shortcut any sampling.
     if !array.is_empty()
         && array
@@ -346,7 +355,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
         .collect::<Vec<_>>(),
     )?;
 
-    find_best_compression(candidates, &sample, ctx)?
+    find_best_compression(candidates, sample.as_ref(), ctx)?
         .map(|(compression, best)| {
             info!("{} compressing array {} like {}", ctx, array, best);
             ctx.for_encoding(compression).compress(array, Some(&best))
@@ -356,7 +365,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
 
 fn find_best_compression<'a>(
     candidates: Vec<&'a dyn EncodingCompression>,
-    sample: &dyn Array,
+    sample: &dyn OwnedArray,
     ctx: &CompressCtx,
 ) -> VortexResult<Option<(&'a dyn EncodingCompression, ArrayRef)>> {
     let mut best = None;

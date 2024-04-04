@@ -1,4 +1,4 @@
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{ArrayRef, OwnedArray};
 
 use crate::{RoaringBoolArray, RoaringIntArray};
 
@@ -21,9 +21,9 @@ pub trait DowncastRoaring: private::Sealed {
     }
 }
 
-impl private::Sealed for dyn Array {}
+impl private::Sealed for dyn OwnedArray {}
 
-impl DowncastRoaring for dyn Array {
+impl DowncastRoaring for dyn OwnedArray {
     fn maybe_roaring_int(&self) -> Option<&RoaringIntArray> {
         self.as_any().downcast_ref()
     }

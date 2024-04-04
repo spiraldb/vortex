@@ -37,7 +37,7 @@ impl StatsCompute for RoaringBoolArray {
 #[cfg(test)]
 mod test {
     use vortex::array::bool::BoolArray;
-    use vortex::array::Array;
+    use vortex::array::{Array, OwnedArray};
     use vortex::stats::Stat::*;
     use vortex_error::VortexResult;
 
@@ -45,7 +45,7 @@ mod test {
 
     #[test]
     pub fn stats_all_true() -> VortexResult<()> {
-        let bool: &dyn Array = &BoolArray::from(vec![true, true]);
+        let bool: &dyn OwnedArray = &BoolArray::from(vec![true, true]);
         let array = RoaringBoolArray::encode(bool)?;
 
         assert_eq!(
@@ -67,8 +67,8 @@ mod test {
 
     #[test]
     pub fn stats_all_false() -> VortexResult<()> {
-        let bool: &dyn Array = &BoolArray::from(vec![false, false]);
-        let array = RoaringBoolArray::encode(bool)?;
+        let bool = BoolArray::from(vec![false, false]);
+        let array = RoaringBoolArray::encode(&bool)?;
 
         assert_eq!(
             array.stats().get_or_compute_as::<bool>(&IsConstant),
@@ -89,8 +89,8 @@ mod test {
 
     #[test]
     pub fn stats_mixed() -> VortexResult<()> {
-        let bool: &dyn Array = &BoolArray::from(vec![false, true, true]);
-        let array = RoaringBoolArray::encode(bool)?;
+        let bool = BoolArray::from(vec![false, true, true]);
+        let array = RoaringBoolArray::encode(&bool)?;
 
         assert_eq!(
             array.stats().get_or_compute_as::<bool>(&IsConstant),

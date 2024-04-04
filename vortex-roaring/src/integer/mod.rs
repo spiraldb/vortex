@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use compress::roaring_encode;
 use croaring::{Bitmap, Native};
-use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
+use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef, OwnedArray};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
@@ -53,7 +53,7 @@ impl RoaringIntArray {
         self.ptype
     }
 
-    pub fn encode(array: &dyn Array) -> VortexResult<Self> {
+    pub fn encode(array: &dyn OwnedArray) -> VortexResult<Self> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(roaring_encode(p)),
             _ => Err(vortex_err!("RoaringInt can only encode primitive arrays")),

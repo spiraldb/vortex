@@ -1,4 +1,4 @@
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{ArrayRef, OwnedArray};
 
 use crate::DictArray;
 
@@ -14,9 +14,9 @@ pub trait DowncastDict: private::Sealed {
     }
 }
 
-impl private::Sealed for dyn Array + '_ {}
+impl private::Sealed for dyn OwnedArray + '_ {}
 
-impl DowncastDict for dyn Array + '_ {
+impl DowncastDict for dyn OwnedArray + '_ {
     fn maybe_dict(&self) -> Option<&DictArray> {
         self.as_any().downcast_ref()
     }

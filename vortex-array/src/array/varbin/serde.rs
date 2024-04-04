@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use crate::validity::OwnedValidity;
 

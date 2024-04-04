@@ -18,7 +18,7 @@ pub fn as_contiguous(arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
     }
 
     let first = arrays.first().unwrap();
-    first.with_compute(|c| {
+    first.as_ref().with_compute(|c| {
         c.as_contiguous()
             .map(|f| f.as_contiguous(arrays))
             .unwrap_or_else(|| {

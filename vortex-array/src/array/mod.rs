@@ -89,32 +89,12 @@ pub trait OwnedArray: Array + Send + Sync {
     fn into_array(self) -> ArrayRef;
 }
 
-impl<'v, T: Array> ToOwnedView<'v> for &'v T {
-    type Owned = ArrayRef;
-
-    fn to_owned_view(&self) -> ArrayRef {
-        self.clone().into_array()
-    }
-}
-
-impl<'v, T: Array> AsView<'v, &'v T> for ArrayRef {
-    fn as_view(&'v self) -> &'v T {
-        self.as_ref()
-    }
-}
-
-// impl<'v> AsView<'v, &'v dyn Array> for dyn OwnedArray + '_ {
-//     fn as_view(&self) -> &dyn Array {
-//         self
-//     }
-// }
-
 pub trait WithArrayCompute {
     fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(&self, f: F)
         -> VortexResult<R>;
 }
 
-impl WithArrayCompute for dyn Array + '_ {
+impl<T: ?Sized + Array> WithArrayCompute for T {
     fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
         &self,
         f: F,
@@ -267,8 +247,8 @@ pub enum ArrayKind<'a> {
     Other(&'a dyn Array),
 }
 
-impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
-    fn from(value: &'a dyn Array) -> Self {
+impl<'a> From<&'a dyn OwnedArray> for ArrayKind<'a> {
+    fn from(value: &'a dyn OwnedArray) -> Self {
         match value.encoding().id() {
             BoolEncoding::ID => ArrayKind::Bool(value.as_bool()),
             ChunkedEncoding::ID => ArrayKind::Chunked(value.as_chunked()),
@@ -281,6 +261,13 @@ impl<'a> From<&'a dyn Array> for ArrayKind<'a> {
             VarBinViewEncoding::ID => ArrayKind::VarBinView(value.as_varbinview()),
             _ => ArrayKind::Other(value),
         }
+    }
+}
+
+impl Display for dyn OwnedArray + '_ {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let array: &dyn Array = self;
+        Display::fmt(array, f)
     }
 }
 

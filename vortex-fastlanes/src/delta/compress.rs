@@ -5,7 +5,7 @@ use fastlanez::{transpose, untranspose_into, Delta};
 use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{ArrayRef, OwnedArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::compute::flatten::flatten_primitive;
@@ -22,7 +22,7 @@ use crate::{DeltaArray, DeltaEncoding};
 impl EncodingCompression for DeltaEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &dyn OwnedArray,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
@@ -38,8 +38,8 @@ impl EncodingCompression for DeltaEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let parray = array.as_primitive();

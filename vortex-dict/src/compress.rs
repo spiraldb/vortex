@@ -7,7 +7,7 @@ use num_traits::AsPrimitive;
 use vortex::array::bool::BoolArray;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::varbin::{VarBinArray, VarBinEncoding};
-use vortex::array::{Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef, OwnedArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
@@ -23,7 +23,7 @@ use crate::downcast::DowncastDict;
 impl EncodingCompression for DictEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &dyn OwnedArray,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // TODO(robert): Add support for VarBinView
@@ -48,8 +48,8 @@ impl EncodingCompression for DictEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let dict_like = like.map(|like_arr| like_arr.as_dict());

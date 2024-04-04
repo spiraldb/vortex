@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use compress::roaring_encode;
 use croaring::{Bitmap, Native};
-use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
+use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef, OwnedArray};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
@@ -41,7 +41,7 @@ impl RoaringBoolArray {
         &self.bitmap
     }
 
-    pub fn encode(array: &dyn Array) -> VortexResult<Self> {
+    pub fn encode(array: &dyn OwnedArray) -> VortexResult<Self> {
         match ArrayKind::from(array) {
             ArrayKind::Bool(p) => Ok(roaring_encode(p)),
             _ => Err(vortex_err!("RoaringBool can only encode bool arrays")),
@@ -163,7 +163,6 @@ impl Encoding for RoaringBoolEncoding {
 #[cfg(test)]
 mod test {
     use vortex::array::bool::BoolArray;
-    use vortex::array::Array;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::scalar::Scalar;
     use vortex_error::VortexResult;
@@ -172,8 +171,8 @@ mod test {
 
     #[test]
     pub fn iter() -> VortexResult<()> {
-        let bool: &dyn Array = &BoolArray::from(vec![true, false, true, true]);
-        let array = RoaringBoolArray::encode(bool)?;
+        let bool = BoolArray::from(vec![true, false, true, true]);
+        let array = RoaringBoolArray::encode(&bool)?;
 
         let values = array.bitmap().to_vec();
         assert_eq!(values, vec![0, 2, 3]);
@@ -183,8 +182,8 @@ mod test {
 
     #[test]
     pub fn test_scalar_at() -> VortexResult<()> {
-        let bool: &dyn Array = &BoolArray::from(vec![true, false, true, true]);
-        let array = RoaringBoolArray::encode(bool)?;
+        let bool = BoolArray::from(vec![true, false, true, true]);
+        let array = RoaringBoolArray::encode(&bool)?;
 
         let truthy: Scalar = true.into();
         let falsy: Scalar = false.into();

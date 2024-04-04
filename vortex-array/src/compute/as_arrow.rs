@@ -3,7 +3,7 @@ use itertools::Itertools;
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::{Array, WithArrayCompute};
+use crate::array::{Array, OwnedArray, WithArrayCompute};
 use crate::compute::flatten::flatten;
 
 pub trait AsArrowArray {
@@ -26,7 +26,7 @@ pub fn as_arrow(array: &dyn Array) -> VortexResult<ArrowArrayRef> {
 }
 
 // TODO(ngates): return a RecordBatchReader instead?
-pub fn as_arrow_chunks(array: &dyn Array) -> VortexResult<Vec<ArrowArrayRef>> {
+pub fn as_arrow_chunks(array: &dyn OwnedArray) -> VortexResult<Vec<ArrowArrayRef>> {
     if let Some(chunked) = array.maybe_chunked() {
         chunked
             .chunks()

@@ -4,14 +4,14 @@ use arrow::pyarrow::ToPyArrow;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyList};
-use vortex::array::Array;
+use vortex::array::OwnedArray;
 use vortex::compute::as_arrow::as_arrow_chunks;
 
 pub fn map_arrow_err(error: ArrowError) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
 
-pub fn export_array<'py>(py: Python<'py>, array: &dyn Array) -> PyResult<&'py PyAny> {
+pub fn export_array<'py>(py: Python<'py>, array: &dyn OwnedArray) -> PyResult<&'py PyAny> {
     // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
     // NOTE(robert): Return RecordBatchStreamReader always?
     let chunks = as_arrow_chunks(array).unwrap();

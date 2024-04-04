@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
+use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef, OwnedArray};
 use vortex::compress::EncodingCompression;
 use vortex::compute::search_sorted::SearchSortedSide;
 use vortex::compute::ArrayCompute;
@@ -74,7 +74,7 @@ impl REEArray {
         )
     }
 
-    pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
+    pub fn encode(array: &dyn OwnedArray) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => {
                 let (ends, values) = ree_encode(p);

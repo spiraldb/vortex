@@ -1,4 +1,4 @@
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, OwnedArray};
 use vortex::compute::flatten::{FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::take::{take, TakeFn};

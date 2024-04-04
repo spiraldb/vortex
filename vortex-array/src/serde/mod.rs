@@ -44,7 +44,7 @@ pub trait EncodingSerde {
         BoolArray::new(
             BooleanBuffer::new(view.buffers().first().unwrap().clone(), 0, view.len()),
             view.child(0, &Validity::DTYPE)
-                .map(|c| Validity::Array(c.into_array())),
+                .map(|c| Validity::Array(c.to_array())),
         )
         .into_array()
     }

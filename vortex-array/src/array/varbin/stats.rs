@@ -84,7 +84,7 @@ mod test {
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;
-    use crate::array::Array;
+    use crate::array::{Array, OwnedArray};
     use crate::stats::Stat;
 
     fn array(dtype: DType) -> VarBinArray {

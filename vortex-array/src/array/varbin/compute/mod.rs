@@ -10,7 +10,7 @@ use vortex_schema::DType;
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::arrow::wrappers::{as_nulls, as_offset_buffer};
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};

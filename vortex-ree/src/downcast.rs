@@ -1,4 +1,4 @@
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{ArrayRef, OwnedArray};
 
 use crate::REEArray;
 
@@ -14,9 +14,9 @@ pub trait DowncastREE: private::Sealed {
     }
 }
 
-impl private::Sealed for dyn Array + '_ {}
+impl private::Sealed for dyn OwnedArray + '_ {}
 
-impl DowncastREE for dyn Array + '_ {
+impl DowncastREE for dyn OwnedArray + '_ {
     fn maybe_ree(&self) -> Option<&REEArray> {
         self.as_any().downcast_ref()
     }

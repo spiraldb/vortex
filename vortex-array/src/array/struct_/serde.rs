@@ -33,7 +33,7 @@ impl EncodingSerde for StructEncoding {
             fields
                 .iter()
                 .enumerate()
-                .map(|(i, field)| view.child(i, field).unwrap().into_array())
+                .map(|(i, field)| view.child(i, field).unwrap().to_array())
                 .collect_vec(),
             self.len(view),
         )

@@ -1,6 +1,6 @@
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef, OwnedArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::Stat;
@@ -16,7 +16,7 @@ use crate::zigzag::{ZigZagArray, ZigZagEncoding};
 impl EncodingCompression for ZigZagEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &dyn OwnedArray,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
@@ -38,8 +38,8 @@ impl EncodingCompression for ZigZagEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let zigzag_like = like.map(|like_arr| like_arr.as_zigzag());
@@ -49,10 +49,10 @@ impl EncodingCompression for ZigZagEncoding {
         }
         .unwrap();
 
-        Ok(
-            ZigZagArray::new(ctx.compress(encoded.encoded(), zigzag_like.map(|z| z.encoded()))?)
-                .into_array(),
+        Ok(ZigZagArray::new(
+            ctx.compress(encoded.encoded().as_ref(), zigzag_like.map(|z| z.encoded()))?,
         )
+        .into_array())
     }
 }
 

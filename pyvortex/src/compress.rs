@@ -40,7 +40,7 @@ pub fn compress(
     let compress_opts = opts.unwrap_or_default().inner;
     let ctx = CompressCtx::new(Arc::new(compress_opts));
     let compressed = py
-        .allow_threads(|| ctx.compress(arr.unwrap(), None))
+        .allow_threads(|| ctx.compress(arr.unwrap().as_ref(), None))
         .map_err(PyVortexError::map_err)?;
     PyArray::wrap(py, compressed)
 }

@@ -1,3 +1,4 @@
+#![feature(trait_upcasting)]
 pub use compress::*;
 pub use dict::*;
 use linkme::distributed_slice;

@@ -12,7 +12,7 @@ use crate::ptype::NativePType;
 use crate::view::ToOwnedView;
 
 impl<T: NativePType> PatchFn for &dyn PrimitiveTrait<T> {
-    fn patch(&self, patch: &dyn Array) -> VortexResult<ArrayRef> {
+    fn patch(&self, patch: &dyn OwnedArray) -> VortexResult<ArrayRef> {
         match patch.encoding().id() {
             SparseEncoding::ID => patch_with_sparse(*self, patch.as_sparse()),
             // TODO(ngates): support a default implementation based on iter_arrow?

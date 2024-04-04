@@ -11,7 +11,7 @@ use vortex::array::sparse::{SparseArray, SparseEncoding};
 use vortex::array::struct_::{StructArray, StructEncoding};
 use vortex::array::varbin::{VarBinArray, VarBinEncoding};
 use vortex::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
-use vortex::array::{Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef, OwnedArray};
 use vortex::compute::take::take;
 use vortex::encoding::EncodingRef;
 use vortex_alp::{ALPArray, ALPEncoding};
@@ -173,7 +173,7 @@ impl PyArray {
 #[pymethods]
 impl PyArray {
     fn to_pyarrow(self_: PyRef<'_, Self>) -> PyResult<&PyAny> {
-        vortex_arrow::export_array(self_.py(), &self_.inner)
+        vortex_arrow::export_array(self_.py(), self_.inner.as_ref())
     }
 
     fn __len__(&self) -> usize {
@@ -210,7 +210,7 @@ impl PyArray {
 impl PyRoaringBoolArray {
     #[staticmethod]
     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
-        RoaringBoolArray::encode(array.unwrap())
+        RoaringBoolArray::encode(array.unwrap().as_ref())
             .map_err(PyVortexError::map_err)
             .and_then(|zarray| PyArray::wrap(array.py(), zarray.into_array()))
     }
@@ -220,7 +220,7 @@ impl PyRoaringBoolArray {
 impl PyRoaringIntArray {
     #[staticmethod]
     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
-        RoaringIntArray::encode(array.unwrap())
+        RoaringIntArray::encode(array.unwrap().as_ref())
             .map_err(PyVortexError::map_err)
             .and_then(|zarray| PyArray::wrap(array.py(), zarray.into_array()))
     }
@@ -230,7 +230,7 @@ impl PyRoaringIntArray {
 impl PyZigZagArray {
     #[staticmethod]
     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
-        ZigZagArray::encode(array.unwrap())
+        ZigZagArray::encode(array.unwrap().as_ref())
             .map_err(PyVortexError::map_err)
             .and_then(|zarray| PyArray::wrap(array.py(), zarray))
     }

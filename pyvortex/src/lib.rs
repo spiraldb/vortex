@@ -1,3 +1,4 @@
+#![feature(trait_upcasting)]
 use dtype::PyDType;
 use log::debug;
 use pyo3::prelude::*;

@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef, OwnedArray};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
@@ -40,7 +40,7 @@ impl ZigZagArray {
         })
     }
 
-    pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
+    pub fn encode(array: &dyn OwnedArray) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
             ArrayKind::Primitive(p) => Ok(zigzag_encode(p)?.into_array()),
             _ => Err(vortex_err!("ZigZag can only encoding primitive arrays")),

@@ -3,7 +3,7 @@ use num_traits::{PrimInt, WrappingAdd, WrappingSub};
 use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayRef, OwnedArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::match_each_integer_ptype;
@@ -24,7 +24,7 @@ impl EncodingCompression for FoREncoding {
 
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &dyn OwnedArray,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
@@ -47,8 +47,8 @@ impl EncodingCompression for FoREncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let parray = array.as_primitive();
@@ -69,7 +69,7 @@ impl EncodingCompression for FoREncoding {
         let compressed_child = ctx
             .named("for")
             .excluding(&FoREncoding)
-            .compress(&child, like.map(|l| l.as_for().encoded()))?;
+            .compress(child.as_ref(), like.map(|l| l.as_for().encoded()))?;
         Ok(FoRArray::try_new(compressed_child, min, shift)?.into_array())
     }
 }

@@ -8,7 +8,6 @@ use scalar_at::ScalarAtFn;
 use search_sorted::SearchSortedFn;
 use take::TakeFn;
 
-pub mod add;
 pub mod as_arrow;
 pub mod as_contiguous;
 pub mod cast;

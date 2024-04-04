@@ -1,4 +1,4 @@
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{ArrayRef, OwnedArray};
 
 use crate::ZigZagArray;
 
@@ -14,9 +14,9 @@ pub trait DowncastZigzag: private::Sealed {
     }
 }
 
-impl private::Sealed for dyn Array + '_ {}
+impl private::Sealed for dyn OwnedArray + '_ {}
 
-impl DowncastZigzag for dyn Array + '_ {
+impl DowncastZigzag for dyn OwnedArray + '_ {
     fn maybe_zigzag(&self) -> Option<&ZigZagArray> {
         self.as_any().downcast_ref()
     }

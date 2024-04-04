@@ -1,3 +1,4 @@
+#![feature(trait_upcasting)]
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -10,8 +11,8 @@ use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::IntoArray;
 use vortex::array::{Array, ArrayRef};
+use vortex::array::{IntoArray, OwnedArray};
 use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::encoding::{EncodingRef, ENCODINGS};
@@ -109,7 +110,7 @@ pub fn compress_taxi_data() -> ArrayRef {
         .map(|batch| batch.into_array())
         .map(|array| {
             uncompressed_size += array.nbytes();
-            ctx.clone().compress(&array, None).unwrap()
+            ctx.clone().compress(array.as_ref(), None).unwrap()
         })
         .collect_vec();
 

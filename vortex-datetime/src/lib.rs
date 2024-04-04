@@ -1,3 +1,4 @@
+#![feature(trait_upcasting)]
 pub use datetime::*;
 use linkme::distributed_slice;
 use vortex::encoding::{EncodingRef, ENCODINGS};

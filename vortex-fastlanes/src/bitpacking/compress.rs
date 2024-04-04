@@ -3,8 +3,8 @@ use fastlanez::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{SparseArray, SparseEncoding};
-use vortex::array::IntoArray;
 use vortex::array::{Array, ArrayRef};
+use vortex::array::{IntoArray, OwnedArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
@@ -27,7 +27,7 @@ impl EncodingCompression for BitPackedEncoding {
 
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &dyn OwnedArray,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
@@ -55,8 +55,8 @@ impl EncodingCompression for BitPackedEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &dyn OwnedArray,
+        like: Option<&dyn OwnedArray>,
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let parray = array.as_primitive();
@@ -81,7 +81,7 @@ impl EncodingCompression for BitPackedEncoding {
 
         let patches = if num_exceptions > 0 {
             Some(ctx.auxiliary("patches").compress(
-                &bitpack_patches(parray, bit_width, num_exceptions),
+                bitpack_patches(parray, bit_width, num_exceptions).as_ref(),
                 like_bp.and_then(|bp| bp.patches()),
             )?)
         } else {
@@ -194,13 +194,13 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     }
 
     if let Some(patches) = array.patches() {
-        patch_unpacked(unpacked, patches)
+        patch_unpacked(unpacked, patches.as_ref())
     } else {
         Ok(unpacked)
     }
 }
 
-fn patch_unpacked(array: PrimitiveArray, patches: &dyn Array) -> VortexResult<PrimitiveArray> {
+fn patch_unpacked(array: PrimitiveArray, patches: &dyn OwnedArray) -> VortexResult<PrimitiveArray> {
     match patches.encoding().id() {
         SparseEncoding::ID => {
             match_each_integer_ptype!(array.ptype(), |$T| {
