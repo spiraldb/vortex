@@ -31,7 +31,7 @@ fn cast<P: NativePType, T: NativePType>(array: &[P]) -> VortexResult<Vec<T>> {
         // TODO(ngates): allow configurable checked/unchecked casting
         .map(|&v| {
             T::from(v)
-                .ok_or_else(|| vortex_err!(ComputeError: "Failed to cast {} to {:?}", v, T::PTYPE))
+                .ok_or_else(|| vortex_err!(ComputeError: "Failed to cast {} to {}", v, T::PTYPE))
         })
         .collect()
 }
@@ -69,6 +69,6 @@ mod test {
         let VortexError::ComputeError(s, _) = error else {
             unreachable!()
         };
-        assert_eq!(s.to_string(), "Failed to cast -1 to U32");
+        assert_eq!(s.to_string(), "Failed to cast -1 to u32");
     }
 }

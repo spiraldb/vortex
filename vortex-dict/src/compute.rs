@@ -38,8 +38,7 @@ impl ScalarAtFn for DictArray {
 impl TakeFn for DictArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
         let codes = take(self.codes(), indices)?;
-        // TODO(ngates): Add function to remove unused entries from dictionary
-        Ok(DictArray::new(codes, self.values().clone()).to_array())
+        Ok(DictArray::new(codes, self.values().clone()).into_array())
     }
 }
 
@@ -59,7 +58,7 @@ mod test {
         let reference =
             PrimitiveArray::from_iter(vec![Some(42), Some(-9), None, Some(42), None, Some(-9)]);
         let (codes, values) = dict_encode_typed_primitive::<i32>(&reference);
-        let dict = DictArray::new(codes.to_array(), values.to_array());
+        let dict = DictArray::new(codes.into_array(), values.into_array());
         let flattened_dict = flatten_primitive(&dict).unwrap();
         assert_eq!(flattened_dict.buffer(), reference.buffer());
     }
@@ -71,7 +70,7 @@ mod test {
             DType::Utf8(Nullability::Nullable),
         );
         let (codes, values) = dict_encode_varbin(&reference);
-        let dict = DictArray::new(codes.to_array(), values.to_array());
+        let dict = DictArray::new(codes.into_array(), values.into_array());
         let flattened_dict = flatten_varbin(&dict).unwrap();
         assert_eq!(
             flattened_dict.offsets().as_primitive().buffer(),

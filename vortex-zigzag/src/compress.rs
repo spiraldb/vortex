@@ -67,7 +67,7 @@ pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
         PType::I64 => {
             zigzag_encode_primitive::<i64>(parray.buffer().typed_data(), parray.validity())
         }
-        _ => panic!("Unsupported ptype"),
+        _ => panic!("Unsupported ptype {}", parray.ptype()),
     };
     ZigZagArray::try_new(encoded.into_array())
 }
@@ -97,7 +97,7 @@ pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
         PType::U64 => {
             zigzag_decode_primitive::<i64>(parray.buffer().typed_data(), parray.validity())
         }
-        _ => panic!("Unsupported ptype"),
+        _ => panic!("Unsupported ptype {}", parray.ptype()),
     }
 }
 
