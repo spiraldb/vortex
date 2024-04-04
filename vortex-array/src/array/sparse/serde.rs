@@ -34,9 +34,11 @@ impl EncodingSerde for SparseEncoding {
         let offset = ctx.read_usize()?;
         let indices = ctx.with_schema(&DType::IDX).read()?;
         let values = ctx.read()?;
-        Ok(SparseArray::new_with_offset(indices, values, len, offset)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?
-            .into_array())
+        Ok(
+            SparseArray::try_new_with_offset(indices, values, len, offset)
+                .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?
+                .into_array(),
+        )
     }
 }
 

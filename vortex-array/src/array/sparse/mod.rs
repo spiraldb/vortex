@@ -27,6 +27,7 @@ mod serde;
 pub struct SparseArray {
     indices: ArrayRef,
     values: ArrayRef,
+    dtype: DType,
     // Offset value for patch indices as a result of slicing
     indices_offset: usize,
     len: usize,
@@ -39,10 +40,10 @@ impl SparseArray {
     }
 
     pub fn try_new(indices: ArrayRef, values: ArrayRef, len: usize) -> VortexResult<Self> {
-        Self::new_with_offset(indices, values, len, 0)
+        Self::try_new_with_offset(indices, values, len, 0)
     }
 
-    pub(crate) fn new_with_offset(
+    pub(crate) fn try_new_with_offset(
         indices: ArrayRef,
         values: ArrayRef,
         len: usize,
@@ -51,10 +52,11 @@ impl SparseArray {
         if !matches!(indices.dtype(), &DType::IDX) {
             vortex_bail!("Cannot use {} as indices", indices.dtype());
         }
-
+        let dtype = values.dtype().as_nullable();
         Ok(Self {
             indices,
             values,
+            dtype,
             indices_offset,
             len,
             stats: Arc::new(RwLock::new(StatsSet::new())),
@@ -102,7 +104,7 @@ impl Array for SparseArray {
 
     #[inline]
     fn dtype(&self) -> &DType {
-        self.values().dtype()
+        &self.dtype
     }
 
     #[inline]
@@ -124,6 +126,7 @@ impl Array for SparseArray {
         Ok(SparseArray {
             indices_offset: self.indices_offset + start,
             indices: self.indices.slice(index_start_index, index_end_index)?,
+            dtype: self.dtype.clone(),
             values: self.values.slice(index_start_index, index_end_index)?,
             len: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),

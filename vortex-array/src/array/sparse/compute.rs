@@ -97,13 +97,13 @@ impl ScalarAtFn for SparseArray {
             // If the value at this index is equal to the true index, then it exists in the patch index array,
             // and we should return the value at the corresponding index in the patch values array
             scalar_at(self.indices(), idx)
-                .or_else(|_| Ok(Scalar::null(self.values().dtype())))
+                .or_else(|_| Ok(Scalar::null(self.dtype())))
                 .and_then(usize::try_from)
                 .and_then(|patch_index| {
                     if patch_index == true_patch_index {
                         scalar_at(self.values(), idx)
                     } else {
-                        Ok(Scalar::null(self.values().dtype()))
+                        Ok(Scalar::null(self.dtype()))
                     }
                 })
         })
