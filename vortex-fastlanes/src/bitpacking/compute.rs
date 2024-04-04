@@ -4,7 +4,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
-use vortex::compute::scalar_at::ScalarAtFn;
+use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::take::TakeFn;
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
@@ -40,14 +40,14 @@ impl ScalarAtFn for BitPackedArray {
         if index >= self.len() {
             return Err(vortex_err!(OutOfBounds:index, 0, self.len()));
         }
-        if self.bit_width() == 0 {
-            let ptype = self.dtype().try_into()?;
-            match_each_integer_ptype!(&ptype, |$P| {
-                return Ok(Scalar::from(0 as $P));
-            })
+
+        if let Some(patches) = self.patches() {
+            // NB: All non-null values are considered patches
+            if self.bit_width == 0 || patches.is_valid(index) {
+                return scalar_at(patches, index)?.cast(self.dtype());
+            }
         }
-        // TODO(wmanning): check patches/validity!
-        unpack_single(self, index)
+        unpack_single(self, index)?.cast(self.dtype())
     }
 }
 
@@ -192,5 +192,26 @@ mod test {
                     Scalar::from(values[*i as usize])
                 );
             });
+    }
+
+    #[test]
+    fn test_scalar_at() {
+        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
+        let ctx = CompressCtx::new(Arc::new(cfg));
+
+        let values = (0u32..257).collect_vec();
+        let uncompressed = PrimitiveArray::from(values.clone()).into_array();
+        let packed = BitPackedEncoding
+            .compress(&uncompressed, None, ctx)
+            .unwrap();
+        let packed = packed.as_bitpacked();
+        assert!(packed.patches().is_some());
+
+        let patches = packed.patches().unwrap().as_sparse();
+        assert_eq!(patches.resolved_indices(), vec![256]);
+
+        values.iter().enumerate().for_each(|(i, v)| {
+            assert_eq!(scalar_at(packed, i).unwrap(), Scalar::from(*v));
+        });
     }
 }

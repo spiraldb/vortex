@@ -153,7 +153,7 @@ fn bitpack_patches(
                 values.push(*v);
             }
         }
-        SparseArray::new(indices.into_array(), values.into_array(), parray.len()).into_array()
+        SparseArray::new(indices.into_array(), values.into_array(), parray.len(), Scalar::null(&parray.dtype().as_nullable())).into_array()
     })
 }
 
@@ -235,12 +235,8 @@ pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResul
         }
     })?;
 
-    // Cast to signed if necessary
-    if ptype.is_signed_int() {
-        scalar.cast(&ptype.into())
-    } else {
-        Ok(scalar)
-    }
+    // Cast to fix signedness and nullability
+    scalar.cast(array.dtype())
 }
 
 /// # Safety

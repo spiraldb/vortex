@@ -32,6 +32,7 @@ impl EncodingCompression for SparseEncoding {
             ctx.named("values")
                 .compress(sparse_array.values(), sparse_like.map(|sa| sa.values()))?,
             sparse_array.len(),
+            sparse_array.fill_value.clone(),
         )
         .into_array())
     }
