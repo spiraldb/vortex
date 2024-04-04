@@ -1,19 +1,25 @@
 use vortex_error::VortexResult;
 
+<<<<<<< HEAD
 use crate::array::primitive::PrimitiveArray;
 use crate::array::Array;
 use crate::array::ArrayValidity;
+=======
+use crate::array::primitive::compute::PrimitiveTrait;
+>>>>>>> develop
 use crate::compute::scalar_at::ScalarAtFn;
-use crate::match_each_native_ptype;
+use crate::ptype::NativePType;
 use crate::scalar::{PrimitiveScalar, Scalar};
 
-impl ScalarAtFn for PrimitiveArray {
+impl<T: NativePType> ScalarAtFn for &dyn PrimitiveTrait<T> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        match_each_native_ptype!(self.ptype, |$T| {
-            Ok(PrimitiveScalar::try_new(
-                self.is_valid(index).then(|| self.typed_data::<$T>()[index]),
-                self.nullability(),
-            )?.into())
-        })
+        Ok(PrimitiveScalar::try_new(
+            self.validity_view()
+                .map(|v| v.is_valid(index))
+                .unwrap_or(true)
+                .then(|| self.typed_data()[index]),
+            self.dtype().nullability(),
+        )?
+        .into())
     }
 }

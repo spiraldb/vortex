@@ -12,9 +12,9 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
-use crate::array::validity::Validity;
+use crate::array::validity::{Validity, ValidityView};
+use crate::array::IntoArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
-use crate::array::{ArrayValidity, IntoArray};
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
@@ -30,6 +30,7 @@ mod view;
 
 pub use view::*;
 
+use crate::array::primitive::compute::PrimitiveTrait;
 use crate::compute::ArrayCompute;
 use crate::validity::OwnedValidity;
 
@@ -107,11 +108,11 @@ impl PrimitiveArray {
     }
 
     pub fn into_nullable(self, nullability: Nullability) -> Self {
-        let dtype = self.dtype().with_nullability(nullability);
+        let dtype = Array::dtype(&self).with_nullability(nullability);
         if self.validity().is_some() && nullability == Nullability::NonNullable {
             panic!("Cannot convert nullable array to non-nullable array")
         }
-        let len = self.len();
+        let len = Array::len(&self);
         let validity = if nullability == Nullability::Nullable {
             Some(
                 self.validity()
@@ -153,6 +154,11 @@ impl PrimitiveArray {
             );
         }
         self.buffer().typed_data()
+    }
+
+    pub(crate) fn as_trait<T: NativePType>(&self) -> &dyn PrimitiveTrait<T> {
+        assert_eq!(self.ptype, T::PTYPE);
+        self
     }
 }
 
@@ -200,9 +206,18 @@ impl Array for PrimitiveArray {
         &PrimitiveEncoding
     }
 
-    #[inline]
     fn nbytes(&self) -> usize {
         self.buffer.len()
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        match_each_native_ptype!(self.ptype(), |$P| {
+            f(&self.as_trait::<$P>())
+        })
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
@@ -221,6 +236,28 @@ impl Array for PrimitiveArray {
 impl OwnedValidity for PrimitiveArray {
     fn validity(&self) -> Option<&Validity> {
         self.validity.as_ref()
+    }
+}
+
+impl<T: NativePType> PrimitiveTrait<T> for PrimitiveArray {
+    fn dtype(&self) -> &DType {
+        &self.dtype
+    }
+
+    fn ptype(&self) -> PType {
+        self.ptype
+    }
+
+    fn validity_view(&self) -> Option<ValidityView> {
+        self.validity.as_ref().map(|v| v.as_view())
+    }
+
+    fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    fn to_primitive(&self) -> PrimitiveArray {
+        self.clone()
     }
 }
 
@@ -300,8 +337,8 @@ impl ArrayDisplay for PrimitiveArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         match_each_native_ptype!(self.ptype(), |$P| {
             f.property("values", format!("{:?}{}",
-                &self.buffer().typed_data::<$P>()[..min(10, self.len())],
-                if self.len() > 10 { "..." } else { "" }))
+                &self.buffer().typed_data::<$P>()[..min(10, Array::len(self))],
+                if Array::len(self) > 10 { "..." } else { "" }))
         })?;
         f.validity(self.validity())
     }

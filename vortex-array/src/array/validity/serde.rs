@@ -1,6 +1,6 @@
 use vortex_error::VortexResult;
 
-use crate::array::validity::Validity;
+use crate::array::validity::{Validity, ValidityEncoding};
 use crate::array::ArrayRef;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
@@ -10,11 +10,12 @@ impl ArraySerde for Validity {
     }
 
     fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
-        todo!()
+        // TODO: Implement this
+        Ok(None)
     }
 }
 
-impl EncodingSerde for Validity {
+impl EncodingSerde for ValidityEncoding {
     fn read(&self, _ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         todo!()
     }

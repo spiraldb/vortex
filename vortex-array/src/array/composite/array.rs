@@ -114,6 +114,13 @@ impl Array for CompositeArray {
     }
 
     #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
+
     fn nbytes(&self) -> usize {
         self.underlying.nbytes()
     }

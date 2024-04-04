@@ -68,7 +68,7 @@ fn take_nullable<I: NativePType + PrimInt, O: NativePType + PrimInt>(
     let mut builder = VarBinBuilder::<I>::with_capacity(indices.len());
     for &idx in indices {
         let idx = idx.to_usize().unwrap();
-        if validity.is_valid(idx) {
+        if validity.as_view().is_valid(idx) {
             let start = offsets[idx].to_usize().unwrap();
             let stop = offsets[idx + 1].to_usize().unwrap();
             builder.push(Some(&data[start..stop]));

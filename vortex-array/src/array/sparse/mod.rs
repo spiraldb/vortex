@@ -133,9 +133,16 @@ impl Array for SparseArray {
         &SparseEncoding
     }
 
-    #[inline]
     fn nbytes(&self) -> usize {
         self.indices.nbytes() + self.values.nbytes()
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

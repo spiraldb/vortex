@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::panic::RefUnwindSafe;
 
+use arrow_array::types::*;
 use arrow_buffer::ArrowNativeType;
 use half::f16;
 use num_traits::{Num, NumCast};
@@ -42,6 +43,7 @@ pub trait NativePType:
     + NumCast
     + Into<Scalar>
     + TryFrom<Scalar, Error = VortexError>
+    + for<'a> TryFrom<&'a Scalar, Error = VortexError>
     + Into<PScalar>
     + TryFrom<PScalar, Error = VortexError>
 {
@@ -67,6 +69,30 @@ native_ptype!(i64, I64);
 native_ptype!(f16, F16);
 native_ptype!(f32, F32);
 native_ptype!(f64, F64);
+
+pub trait AsArrowPrimitiveType {
+    type ArrowType: ArrowPrimitiveType;
+}
+
+macro_rules! impl_as_arrow_primitive_type {
+    ($T:ty, $A:ty) => {
+        impl AsArrowPrimitiveType for $T {
+            type ArrowType = $A;
+        }
+    };
+}
+
+impl_as_arrow_primitive_type!(u8, UInt8Type);
+impl_as_arrow_primitive_type!(u16, UInt16Type);
+impl_as_arrow_primitive_type!(u32, UInt32Type);
+impl_as_arrow_primitive_type!(u64, UInt64Type);
+impl_as_arrow_primitive_type!(i8, Int8Type);
+impl_as_arrow_primitive_type!(i16, Int16Type);
+impl_as_arrow_primitive_type!(i32, Int32Type);
+impl_as_arrow_primitive_type!(i64, Int64Type);
+impl_as_arrow_primitive_type!(f16, Float16Type);
+impl_as_arrow_primitive_type!(f32, Float32Type);
+impl_as_arrow_primitive_type!(f64, Float64Type);
 
 #[macro_export]
 macro_rules! match_each_native_ptype {

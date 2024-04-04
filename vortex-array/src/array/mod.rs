@@ -71,17 +71,13 @@ pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
     /// Encoding kind of the array
     fn encoding(&self) -> EncodingRef;
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
+
     fn nbytes(&self) -> usize;
 
     fn with_compute_mut(
         &self,
         _f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        vortex_bail!(
-            "with_compute_mut not implemented for {}",
-            self.encoding().id()
-        )
-    }
+    ) -> VortexResult<()>;
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
         None
@@ -134,14 +130,6 @@ macro_rules! impl_array {
         #[inline]
         fn into_array(self) -> ArrayRef {
             std::sync::Arc::new(self)
-        }
-
-        #[inline]
-        fn with_compute_mut(
-            &self,
-            f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-        ) -> VortexResult<()> {
-            f(self)
         }
     };
 }

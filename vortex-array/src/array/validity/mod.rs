@@ -2,26 +2,24 @@ use std::sync::Arc;
 
 use arrow_buffer::{BooleanBuffer, NullBuffer};
 use itertools::Itertools;
+use linkme::distributed_slice;
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::BoolArray;
-use crate::array::constant::ConstantArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::as_contiguous;
-use crate::compute::flatten::flatten_bool;
-use crate::compute::scalar_at::scalar_at;
-use crate::compute::take::take;
 use crate::compute::ArrayCompute;
-use crate::encoding::{Encoding, EncodingId, EncodingRef};
+use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::stats::{Stat, Stats};
+use crate::stats::Stats;
 use crate::{impl_array, ArrayWalker};
 mod serde;
 mod view;
 
 pub use view::*;
 
+use crate::serde::{ArraySerde, EncodingSerde};
 use crate::validity::ArrayValidity;
 
 #[derive(Debug, Clone)]
@@ -41,58 +39,8 @@ impl Validity {
         Self::Array(array)
     }
 
-    pub fn len(&self) -> usize {
-        match self {
-            Self::Valid(len) | Self::Invalid(len) => *len,
-            Self::Array(a) => a.len(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Valid(len) | Self::Invalid(len) => *len == 0,
-            Validity::Array(a) => a.is_empty(),
-        }
-    }
-
-    pub fn all_valid(&self) -> bool {
-        match self {
-            Self::Valid(_) => true,
-            Self::Invalid(_) => false,
-            Self::Array(a) => a
-                .stats()
-                .get_or_compute_as::<usize>(&Stat::TrueCount)
-                .map(|true_count| true_count == self.len())
-                .unwrap_or(false),
-        }
-    }
-
-    pub fn all_invalid(&self) -> bool {
-        match self {
-            Self::Valid(_) => false,
-            Self::Invalid(_) => true,
-            Self::Array(a) => a
-                .stats()
-                .get_or_compute_as::<usize>(&Stat::TrueCount)
-                .map(|true_count| true_count == 0)
-                .unwrap_or(false),
-        }
-    }
-
-    pub fn to_array(&self) -> ArrayRef {
-        match self {
-            Self::Valid(len) => ConstantArray::new(true, *len).into_array(),
-            Self::Invalid(len) => ConstantArray::new(false, *len).into_array(),
-            Self::Array(a) => a.clone(),
-        }
-    }
-
     pub fn to_bool_array(&self) -> BoolArray {
-        match self {
-            Self::Valid(len) => BoolArray::from(vec![true; *len]),
-            Self::Invalid(len) => BoolArray::from(vec![false; *len]),
-            Self::Array(a) => flatten_bool(a).unwrap(),
-        }
+        self.as_view().to_bool_array()
     }
 
     pub fn logical_validity(&self) -> Validity {
@@ -105,35 +53,15 @@ impl Validity {
         self.clone()
     }
 
-    pub fn is_valid(&self, idx: usize) -> bool {
-        match self {
-            Validity::Valid(_) => true,
-            Validity::Invalid(_) => false,
-            Validity::Array(a) => scalar_at(a, idx).and_then(|s| s.try_into()).unwrap(),
-        }
+    pub fn slice(&self, start: usize, stop: usize) -> Validity {
+        self.as_view().slice(start, stop)
     }
 
-    // TODO(ngates): maybe we want to impl Array for Validity?
-    pub fn slice(&self, start: usize, stop: usize) -> Self {
+    pub fn as_view(&self) -> ValidityView {
         match self {
-            Self::Valid(_) => Self::Valid(stop - start),
-            Self::Invalid(_) => Self::Invalid(stop - start),
-            Self::Array(a) => Self::Array(a.slice(start, stop).unwrap()),
-        }
-    }
-
-    pub fn take(&self, indices: &dyn Array) -> VortexResult<Validity> {
-        match self {
-            Self::Valid(_) => Ok(Self::Valid(indices.len())),
-            Self::Invalid(_) => Ok(Self::Invalid(indices.len())),
-            Self::Array(a) => Ok(Self::Array(take(a, indices)?)),
-        }
-    }
-
-    pub fn nbytes(&self) -> usize {
-        match self {
-            Self::Valid(_) | Self::Invalid(_) => 4,
-            Self::Array(a) => a.nbytes(),
+            Self::Valid(len) => ValidityView::Valid(*len),
+            Self::Invalid(len) => ValidityView::Invalid(*len),
+            Self::Array(a) => ValidityView::Array(a.as_ref()),
         }
     }
 }
@@ -199,11 +127,11 @@ impl FromIterator<Validity> for Validity {
         let total_len = validities.iter().map(|v| v.len()).sum();
 
         // If they're all valid, then return a single validity.
-        if validities.iter().all(|v| v.all_valid()) {
+        if validities.iter().all(|v| v.as_view().all_valid()) {
             return Self::Valid(total_len);
         }
         // If they're all invalid, then return a single invalidity.
-        if validities.iter().all(|v| v.all_invalid()) {
+        if validities.iter().all(|v| v.as_view().all_invalid()) {
             return Self::Invalid(total_len);
         }
 
@@ -242,12 +170,7 @@ impl Array for Validity {
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(match self {
-            Validity::Valid(_) => Validity::Valid(stop - start),
-            Validity::Invalid(_) => Validity::Invalid(stop - start),
-            Validity::Array(a) => Validity::Array(a.slice(start, stop)?),
-        }
-        .into_array())
+        Ok(self.slice(start, stop).into_array())
     }
 
     fn encoding(&self) -> EncodingRef {
@@ -259,6 +182,18 @@ impl Array for Validity {
             Validity::Valid(_) | Validity::Invalid(_) => 8,
             Validity::Array(a) => a.nbytes(),
         }
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
+
+    fn serde(&self) -> Option<&dyn ArraySerde> {
+        Some(self)
     }
 
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
@@ -289,6 +224,9 @@ impl ArrayDisplay for Validity {
 
 impl ArrayCompute for Validity {}
 
+#[distributed_slice(ENCODINGS)]
+static ENCODINGS_VALIDITY: EncodingRef = &ValidityEncoding;
+
 #[derive(Debug)]
 struct ValidityEncoding;
 
@@ -299,5 +237,9 @@ impl ValidityEncoding {
 impl Encoding for ValidityEncoding {
     fn id(&self) -> EncodingId {
         ValidityEncoding::ID
+    }
+
+    fn serde(&self) -> Option<&dyn EncodingSerde> {
+        Some(self)
     }
 }

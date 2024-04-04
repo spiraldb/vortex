@@ -11,7 +11,10 @@ use crate::validity::OwnedValidity;
 
 impl TakeFn for BoolArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        let validity = self.validity().map(|v| v.take(indices)).transpose()?;
+        let validity = self
+            .validity()
+            .map(|v| v.as_view().take(indices))
+            .transpose()?;
         let indices = flatten_primitive(indices)?;
         match_each_integer_ptype!(indices.ptype(), |$I| {
             Ok(BoolArray::from_nullable(

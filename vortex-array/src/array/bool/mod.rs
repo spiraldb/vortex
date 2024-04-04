@@ -34,7 +34,7 @@ impl BoolArray {
 
     pub fn try_new(buffer: BooleanBuffer, validity: Option<Validity>) -> VortexResult<Self> {
         if let Some(v) = &validity {
-            assert_eq!(v.len(), buffer.len());
+            assert_eq!(Array::len(v), buffer.len());
         }
         Ok(Self {
             buffer,
@@ -92,6 +92,10 @@ impl Array for BoolArray {
         Stats::new(&self.stats, self)
     }
 
+    fn validity(&self) -> Option<Validity> {
+        self.validity.clone()
+    }
+
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
@@ -111,6 +115,14 @@ impl Array for BoolArray {
     #[inline]
     fn nbytes(&self) -> usize {
         (self.len() + 7) / 8
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
