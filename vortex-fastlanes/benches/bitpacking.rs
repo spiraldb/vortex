@@ -5,12 +5,14 @@ use fastlanez::TryBitPack;
 use itertools::Itertools;
 use rand::distributions::Uniform;
 use rand::{thread_rng, Rng};
+use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::take::take;
 use vortex::encoding::EncodingRef;
 use vortex_fastlanes::{
     bitpack_primitive, unpack_primitive, unpack_single_primitive, BitPackedEncoding,
+    DowncastFastlanes,
 };
 
 fn values(len: usize, bits: usize) -> Vec<u32> {
@@ -107,5 +109,39 @@ fn bench_take(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, pack_unpack, bench_take);
+fn bench_take_patched(c: &mut Criterion) {
+    let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
+    let ctx = CompressCtx::new(Arc::new(cfg));
+
+    let big_base2 = 1048576;
+    let num_exceptions = 100;
+    let values = (0u32..big_base2 + num_exceptions).collect_vec();
+
+    let uncompressed = PrimitiveArray::from(values.clone());
+    let packed = BitPackedEncoding {}
+        .compress(&uncompressed, None, ctx)
+        .unwrap();
+    let packed = packed.as_bitpacked();
+    assert!(packed.patches().is_some());
+    assert_eq!(
+        packed.patches().unwrap().as_sparse().values().len(),
+        num_exceptions as usize
+    );
+
+    let not_patch_indices: PrimitiveArray = (0u32..10000).collect_vec().into();
+    c.bench_function("take_10K_not_patches", |b| {
+        b.iter(|| black_box(take(packed, &not_patch_indices).unwrap()));
+    });
+
+    let patch_indices: PrimitiveArray = (big_base2..big_base2 + num_exceptions)
+        .cycle()
+        .take(10000)
+        .collect_vec()
+        .into();
+    c.bench_function("take_10K_patches", |b| {
+        b.iter(|| black_box(take(packed, &patch_indices).unwrap()));
+    });
+}
+
+criterion_group!(benches, pack_unpack, bench_take, bench_take_patched);
 criterion_main!(benches);
