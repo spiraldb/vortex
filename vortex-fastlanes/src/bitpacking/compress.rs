@@ -1,23 +1,22 @@
 use arrayref::array_ref;
-
 use fastlanez::TryBitPack;
-use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::IntoArray;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::sparse::SparseArray;
+use vortex::array::sparse::{SparseArray, SparseEncoding};
+use vortex::array::IntoArray;
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::compute::flatten::flatten_primitive;
-use vortex::compute::patch::patch;
 use vortex::match_each_integer_ptype;
+use vortex::ptype::PType::U8;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::{ListScalarVec, Scalar};
 use vortex::stats::Stat;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::{BitPackedArray, BitPackedEncoding, match_integers_by_width};
 use crate::downcast::DowncastFastlanes;
+use crate::{match_integers_by_width, BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -160,7 +159,7 @@ fn bitpack_patches(
 pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
-    let encoded = flatten_primitive(cast(array.encoded(), PType::U8.into())?.as_ref())?;
+    let encoded = flatten_primitive(cast(array.encoded(), U8.into())?.as_ref())?;
     let ptype: PType = array.dtype().try_into()?;
 
     let mut unpacked = match_integers_by_width!(ptype, |$P| {
@@ -168,20 +167,31 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
             unpack_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, length),
             array.validity(),
         )
-    })
-    .into_array();
+    });
 
     // Cast to signed if necessary
-    // TODO(ngates): do this more efficiently since we know it's a safe cast. unchecked_cast maybe?
     if ptype.is_signed_int() {
-        unpacked = cast(&unpacked, &ptype.into())?
+        unpacked = unpacked.reinterpret_cast(ptype);
     }
 
     if let Some(patches) = array.patches() {
-        unpacked = patch(unpacked.as_ref(), patches)?;
+        patch_unpacked(unpacked, patches)
+    } else {
+        Ok(unpacked)
     }
+}
 
-    flatten_primitive(&unpacked)
+fn patch_unpacked(array: PrimitiveArray, patches: &dyn Array) -> VortexResult<PrimitiveArray> {
+    match patches.encoding().id() {
+        SparseEncoding::ID => {
+            match_each_integer_ptype!(array.ptype(), |$T| {
+                array.patch(
+                    &patches.as_sparse().resolved_indices(),
+                    flatten_primitive(patches.as_sparse().values())?.typed_data::<$T>())
+            })
+        }
+        _ => panic!("can't patch bitpacked array with {}", patches),
+    }
 }
 
 pub fn unpack_primitive<T: NativePType + TryBitPack>(
@@ -226,7 +236,7 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
 
 pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
     let bit_width = array.bit_width();
-    let encoded = flatten_primitive(cast(array.encoded(), PType::U8.into())?.as_ref())?;
+    let encoded = flatten_primitive(cast(array.encoded(), U8.into())?.as_ref())?;
     let ptype: PType = array.dtype().try_into()?;
 
     let scalar: Scalar = match_integers_by_width!(ptype, |$P| {

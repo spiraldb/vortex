@@ -131,7 +131,7 @@ macro_rules! match_each_integer_ptype {
             PType::U16 => __with__! { u16 },
             PType::U32 => __with__! { u32 },
             PType::U64 => __with__! { u64 },
-            _ => panic!("Unsupported ptype {:?}", $self),
+            _ => panic!("Unsupported ptype {}", $self),
         }
     })
 }

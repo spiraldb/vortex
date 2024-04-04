@@ -1,17 +1,16 @@
 use std::sync::Arc;
 
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
-use itertools::Itertools;
-use rand::{Rng, thread_rng};
-use rand::distributions::Uniform;
-
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fastlanez::TryBitPack;
+use itertools::Itertools;
+use rand::distributions::Uniform;
+use rand::{thread_rng, Rng};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::take::take;
 use vortex::encoding::EncodingRef;
 use vortex_fastlanes::{
-    bitpack_primitive, BitPackedEncoding, unpack_primitive, unpack_single_primitive,
+    bitpack_primitive, unpack_primitive, unpack_single_primitive, BitPackedEncoding,
 };
 
 fn values(len: usize, bits: usize) -> Vec<u32> {
