@@ -27,9 +27,7 @@ mod scalar_at;
 mod search_sorted;
 mod take;
 
-pub(crate) trait PrimitiveTrait<T: NativePType>:
-    OwnedValidity + Array + Debug + Send + Sync
-{
+pub(crate) trait PrimitiveTrait<T: NativePType>: OwnedValidity + Array + Debug {
     fn ptype(&self) -> PType;
 
     fn buffer(&self) -> &Buffer;

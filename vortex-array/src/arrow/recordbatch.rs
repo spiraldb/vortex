@@ -3,7 +3,7 @@ use std::sync::Arc;
 use arrow_array::RecordBatch;
 
 use crate::array::struct_::StructArray;
-use crate::array::{Array, ArrayRef, IntoArray};
+use crate::array::{ArrayRef, IntoArray, OwnedArray};
 use crate::encode::FromArrowArray;
 
 impl IntoArray for &RecordBatch {

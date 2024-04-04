@@ -61,8 +61,15 @@ impl RoaringIntArray {
     }
 }
 
-impl Array for RoaringIntArray {
+impl OwnedArray for RoaringIntArray {
     impl_array!();
+}
+
+impl Array for RoaringIntArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
+
     #[inline]
     fn with_compute_mut(
         &self,

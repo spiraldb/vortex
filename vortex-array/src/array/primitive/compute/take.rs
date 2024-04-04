@@ -3,6 +3,7 @@ use vortex_error::VortexResult;
 
 use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
+use crate::array::OwnedArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;

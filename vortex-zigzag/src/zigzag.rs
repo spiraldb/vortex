@@ -52,8 +52,14 @@ impl ZigZagArray {
     }
 }
 
-impl Array for ZigZagArray {
+impl OwnedArray for ZigZagArray {
     impl_array!();
+}
+
+impl Array for ZigZagArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn len(&self) -> usize {

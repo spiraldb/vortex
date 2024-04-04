@@ -5,7 +5,7 @@ use linkme::distributed_slice;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{check_slice_bounds, Array, ArrayRef, OwnedArray};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -76,8 +76,14 @@ impl ChunkedArray {
     }
 }
 
-impl Array for ChunkedArray {
+impl OwnedArray for ChunkedArray {
     impl_array!();
+}
+
+impl Array for ChunkedArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     fn len(&self) -> usize {
         self.chunk_ends.last().map(|&i| i as usize).unwrap_or(0)

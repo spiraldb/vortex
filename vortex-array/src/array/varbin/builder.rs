@@ -4,7 +4,7 @@ use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
-use crate::array::Array;
+use crate::array::{Array, OwnedArray};
 use crate::ptype::NativePType;
 use crate::validity::Validity;
 

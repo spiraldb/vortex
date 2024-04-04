@@ -79,8 +79,14 @@ impl DateTimeArray {
     }
 }
 
-impl Array for DateTimeArray {
+impl OwnedArray for DateTimeArray {
     impl_array!();
+}
+
+impl Array for DateTimeArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn with_compute_mut(

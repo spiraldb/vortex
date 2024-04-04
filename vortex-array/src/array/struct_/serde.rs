@@ -3,7 +3,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::struct_::{StructArray, StructEncoding};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for StructArray {
@@ -67,8 +67,8 @@ mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::struct_::StructArray;
-    use crate::array::Array;
     use crate::array::IntoArray;
+    use crate::array::OwnedArray;
     use crate::serde::test::roundtrip_array;
 
     #[test]

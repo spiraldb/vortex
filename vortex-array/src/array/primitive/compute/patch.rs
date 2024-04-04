@@ -5,7 +5,7 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::{SparseArray, SparseEncoding};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::compute;
 use crate::compute::patch::PatchFn;
 use crate::ptype::NativePType;

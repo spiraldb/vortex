@@ -7,7 +7,7 @@ use crate::array::sparse::SparseArray;
 use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 
 mod private {
     pub trait Sealed {}
@@ -69,9 +69,9 @@ pub trait DowncastArrayBuiltin: private::Sealed {
     }
 }
 
-impl private::Sealed for dyn Array + '_ {}
+impl private::Sealed for dyn OwnedArray + '_ {}
 
-impl DowncastArrayBuiltin for dyn Array + '_ {
+impl DowncastArrayBuiltin for dyn OwnedArray + '_ {
     fn maybe_primitive(&self) -> Option<&PrimitiveArray> {
         self.as_any().downcast_ref()
     }

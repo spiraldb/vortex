@@ -72,8 +72,14 @@ impl ALPArray {
     }
 }
 
-impl Array for ALPArray {
+impl OwnedArray for ALPArray {
     impl_array!();
+}
+
+impl Array for ALPArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn len(&self) -> usize {

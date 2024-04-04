@@ -2,7 +2,7 @@ use arrow_buffer::buffer::BooleanBuffer;
 use vortex_error::VortexResult;
 
 use crate::array::bool::{BoolArray, BoolEncoding};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::serde::{ArraySerde, ArrayView, BytesSerde, EncodingSerde, ReadCtx, WriteCtx};
 use crate::validity::OwnedValidity;
 

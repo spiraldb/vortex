@@ -5,8 +5,7 @@ use linkme::distributed_slice;
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
-use super::{check_slice_bounds, Array, ArrayRef};
-use crate::array::IntoArray;
+use crate::array::{check_slice_bounds, Array, ArrayRef, IntoArray, OwnedArray};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -66,8 +65,14 @@ impl BoolArray {
     }
 }
 
-impl Array for BoolArray {
+impl OwnedArray for BoolArray {
     impl_array!();
+}
+
+impl Array for BoolArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn len(&self) -> usize {

@@ -3,6 +3,7 @@ use vortex_schema::DType;
 
 use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
+use crate::array::OwnedArray;
 use crate::array::Validity;
 use crate::array::{Array, ArrayRef};
 use crate::compute::cast::CastFn;

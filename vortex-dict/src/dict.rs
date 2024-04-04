@@ -47,8 +47,14 @@ impl DictArray {
     }
 }
 
-impl Array for DictArray {
+impl OwnedArray for DictArray {
     impl_array!();
+}
+
+impl Array for DictArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     fn len(&self) -> usize {
         self.codes.len()

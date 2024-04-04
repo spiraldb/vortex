@@ -1,9 +1,8 @@
-use itertools::Itertools;
 use vortex_error::VortexResult;
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::struct_::{StructArray, StructEncoding};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 
 impl EncodingCompression for StructEncoding {

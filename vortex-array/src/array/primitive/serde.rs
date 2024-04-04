@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::primitive::{PrimitiveArray, PrimitiveEncoding, PrimitiveView};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::compute::ArrayCompute;
 use crate::match_each_native_ptype;
 use crate::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};

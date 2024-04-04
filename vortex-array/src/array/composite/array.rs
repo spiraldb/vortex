@@ -6,7 +6,7 @@ use vortex_error::VortexResult;
 use vortex_schema::{CompositeID, DType};
 
 use crate::array::composite::{find_extension, CompositeExtensionRef, TypedCompositeArray};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -76,8 +76,14 @@ impl CompositeArray {
     }
 }
 
-impl Array for CompositeArray {
+impl OwnedArray for CompositeArray {
     impl_array!();
+}
+
+impl Array for CompositeArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn len(&self) -> usize {

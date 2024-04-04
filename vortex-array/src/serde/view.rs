@@ -1,6 +1,4 @@
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
 
 use arrow_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -146,21 +144,8 @@ impl<'a> ArrayView<'a> {
 }
 
 impl<'a> Array for ArrayView<'a> {
-    fn as_any(&self) -> &dyn Any {
-        panic!("Not implemented for ArrayView")
-    }
-
-    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
-        panic!("Not implemented for ArrayView")
-    }
-
     fn to_array(&self) -> ArrayRef {
-        self.vtable().to_array(self)
-    }
-
-    fn into_array(self) -> ArrayRef {
-        // Not much point adding VTable.into_array for ArrayView since everything is by-reference.
-        self.vtable().to_array(&self)
+        todo!()
     }
 
     fn len(&self) -> usize {

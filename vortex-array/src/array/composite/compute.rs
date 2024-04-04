@@ -4,7 +4,7 @@ use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::composite::array::CompositeArray;
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{FlattenFn, FlattenedArray};

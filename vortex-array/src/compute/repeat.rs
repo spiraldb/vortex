@@ -1,5 +1,5 @@
 use crate::array::constant::ConstantArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::{ArrayRef, OwnedArray};
 use crate::scalar::Scalar;
 
 pub fn repeat(scalar: &Scalar, n: usize) -> ArrayRef {

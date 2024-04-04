@@ -32,7 +32,7 @@ pub mod struct_;
 pub mod varbin;
 pub mod varbinview;
 
-pub type ArrayRef = Arc<dyn Array>;
+pub type ArrayRef = Arc<dyn OwnedArray>;
 
 /// A Vortex Array is the base object representing all arrays in enc.
 ///
@@ -42,12 +42,8 @@ pub type ArrayRef = Arc<dyn Array>;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
-    /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
-    fn as_any(&self) -> &dyn Any;
-    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
+pub trait Array: ArrayValidity + ArrayDisplay + Debug {
     fn to_array(&self) -> ArrayRef;
-    fn into_array(self) -> ArrayRef;
 
     /// Get the length of the array
     fn len(&self) -> usize;
@@ -84,6 +80,34 @@ pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
 
     fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()>;
 }
+
+// TODO(ngates): OwnedArray -> Array, Array -> ArrayView.
+pub trait OwnedArray: Array + Send + Sync {
+    /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
+    fn as_any(&self) -> &dyn Any;
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
+    fn into_array(self) -> ArrayRef;
+}
+
+impl<'v, T: Array> ToOwnedView<'v> for &'v T {
+    type Owned = ArrayRef;
+
+    fn to_owned_view(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
+}
+
+impl<'v, T: Array> AsView<'v, &'v T> for ArrayRef {
+    fn as_view(&'v self) -> &'v T {
+        self.as_ref()
+    }
+}
+
+// impl<'v> AsView<'v, &'v dyn Array> for dyn OwnedArray + '_ {
+//     fn as_view(&self) -> &dyn Array {
+//         self
+//     }
+// }
 
 pub trait WithArrayCompute {
     fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(&self, f: F)
@@ -122,11 +146,6 @@ macro_rules! impl_array {
         }
 
         #[inline]
-        fn to_array(&self) -> ArrayRef {
-            self.clone().into_array()
-        }
-
-        #[inline]
         fn into_array(self) -> ArrayRef {
             std::sync::Arc::new(self)
         }
@@ -137,23 +156,12 @@ pub use impl_array;
 
 use crate::encoding::EncodingRef;
 use crate::validity::ArrayValidity;
+use crate::view::{AsView, ToOwnedView};
 use crate::ArrayWalker;
 
 impl Array for ArrayRef {
-    fn as_any(&self) -> &dyn Any {
-        self.as_ref().as_any()
-    }
-
-    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
-        self
-    }
-
     fn to_array(&self) -> ArrayRef {
         self.as_ref().to_array()
-    }
-
-    fn into_array(self) -> ArrayRef {
-        self
     }
 
     fn len(&self) -> usize {

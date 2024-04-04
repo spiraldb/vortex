@@ -56,8 +56,14 @@ impl FoRArray {
     }
 }
 
-impl Array for FoRArray {
+impl OwnedArray for FoRArray {
     impl_array!();
+}
+
+impl Array for FoRArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn len(&self) -> usize {

@@ -10,7 +10,7 @@ use vortex_schema::DTypeSerdeContext;
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::composite::COMPOSITE_EXTENSIONS;
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::encoding::{find_encoding, EncodingId, ENCODINGS};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};

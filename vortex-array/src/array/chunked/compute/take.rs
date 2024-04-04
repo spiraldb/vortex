@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
-use crate::array::{Array, ArrayRef, IntoArray};
+use crate::array::{Array, ArrayRef, IntoArray, OwnedArray};
 use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::{take, TakeFn};

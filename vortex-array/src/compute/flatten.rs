@@ -7,7 +7,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
-use crate::array::{Array, ArrayRef, WithArrayCompute};
+use crate::array::{Array, ArrayRef, OwnedArray, WithArrayCompute};
 
 pub trait FlattenFn {
     fn flatten(&self) -> VortexResult<FlattenedArray>;

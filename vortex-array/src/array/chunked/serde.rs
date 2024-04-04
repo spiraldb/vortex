@@ -2,7 +2,7 @@ use flexbuffers::Builder;
 use vortex_error::VortexResult;
 
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::serde::{ArraySerde, ArrayView, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for ChunkedArray {
@@ -52,7 +52,7 @@ mod test {
     use crate::array::chunked::ChunkedArray;
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::Array;
+    use crate::array::OwnedArray;
     use crate::serde::test::roundtrip_array;
 
     #[test]

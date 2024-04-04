@@ -7,7 +7,7 @@ use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{check_slice_bounds, Array, ArrayRef, OwnedArray};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
@@ -197,8 +197,14 @@ impl VarBinArray {
 
 pub type VarBinIter<'a, T> = ArrayIter<'a, VarBinArray, T>;
 
-impl Array for VarBinArray {
+impl OwnedArray for VarBinArray {
     impl_array!();
+}
+
+impl Array for VarBinArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn len(&self) -> usize {

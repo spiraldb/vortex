@@ -16,8 +16,7 @@ use vortex_schema::{DType, Nullability};
 
 use crate::accessor::ArrayAccessor;
 use crate::array::primitive::compute::PrimitiveTrait;
-use crate::array::IntoArray;
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{check_slice_bounds, Array, ArrayRef, IntoArray, OwnedArray};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -202,8 +201,14 @@ impl PrimitiveArray {
     }
 }
 
-impl Array for PrimitiveArray {
+impl OwnedArray for PrimitiveArray {
     impl_array!();
+}
+
+impl Array for PrimitiveArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn len(&self) -> usize {

@@ -2,7 +2,7 @@ use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::array::sparse::{SparseArray, SparseEncoding};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
@@ -51,8 +51,8 @@ mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::SparseArray;
-    use crate::array::Array;
     use crate::array::IntoArray;
+    use crate::array::OwnedArray;
     use crate::scalar::{NullScalar, Scalar};
     use crate::serde::test::roundtrip_array;
 

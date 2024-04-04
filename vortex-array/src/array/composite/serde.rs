@@ -6,7 +6,7 @@ use vortex_flatbuffers::WriteFlatBuffer;
 use vortex_schema::DType;
 
 use crate::array::composite::{CompositeArray, CompositeEncoding};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for CompositeArray {

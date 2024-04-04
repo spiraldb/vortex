@@ -1,7 +1,7 @@
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::constant::ConstantArray;
-use crate::array::{Array, ArrayKind, ArrayRef};
+use crate::array::{Array, ArrayKind, ArrayRef, OwnedArray};
 use crate::scalar::Scalar;
 
 // TODO(ngates): convert this to arithmetic operations with macro over the kernel.

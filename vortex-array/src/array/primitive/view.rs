@@ -1,6 +1,3 @@
-use std::any::Any;
-use std::sync::Arc;
-
 use arrow_buffer::Buffer;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
@@ -77,19 +74,7 @@ impl<'a> OwnedValidity for PrimitiveView<'a> {
 }
 
 impl Array for PrimitiveView<'_> {
-    fn as_any(&self) -> &dyn Any {
-        todo!()
-    }
-
-    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
-        todo!()
-    }
-
     fn to_array(&self) -> ArrayRef {
-        todo!()
-    }
-
-    fn into_array(self) -> ArrayRef {
         todo!()
     }
 

@@ -93,8 +93,15 @@ impl DeltaArray {
     }
 }
 
-impl Array for DeltaArray {
+impl OwnedArray for DeltaArray {
     impl_array!();
+}
+
+impl Array for DeltaArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
+
     #[inline]
     fn with_compute_mut(
         &self,

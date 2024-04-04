@@ -106,8 +106,15 @@ impl REEArray {
     }
 }
 
-impl Array for REEArray {
+impl OwnedArray for REEArray {
     impl_array!();
+}
+
+impl Array for REEArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
+
     #[inline]
     fn with_compute_mut(
         &self,

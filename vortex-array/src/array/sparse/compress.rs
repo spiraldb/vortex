@@ -2,7 +2,7 @@ use vortex_error::VortexResult;
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::sparse::{SparseArray, SparseEncoding};
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 
 impl EncodingCompression for SparseEncoding {

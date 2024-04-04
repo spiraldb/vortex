@@ -6,7 +6,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::constant::ConstantArray;
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{check_slice_bounds, Array, ArrayRef, OwnedArray};
 use crate::compress::EncodingCompression;
 use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
@@ -121,8 +121,14 @@ impl SparseArray {
     }
 }
 
-impl Array for SparseArray {
+impl OwnedArray for SparseArray {
     impl_array!();
+}
+
+impl Array for SparseArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn len(&self) -> usize {

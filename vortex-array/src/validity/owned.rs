@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::sync::Arc;
 
 use arrow_buffer::{BooleanBuffer, NullBuffer};
@@ -7,7 +6,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::BoolArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
@@ -16,7 +15,7 @@ use crate::serde::{ArraySerde, WriteCtx};
 use crate::stats::Stats;
 use crate::validity::{ArrayValidity, ValidityEncoding};
 use crate::view::AsView;
-use crate::ArrayWalker;
+use crate::{impl_array, ArrayWalker};
 
 #[derive(Debug, Clone)]
 pub enum Validity {
@@ -152,21 +151,13 @@ impl FromIterator<Validity> for Validity {
     }
 }
 
+impl OwnedArray for Validity {
+    impl_array!();
+}
+
 impl Array for Validity {
-    fn as_any(&self) -> &dyn Any {
-        todo!()
-    }
-
-    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
-        todo!()
-    }
-
     fn to_array(&self) -> ArrayRef {
-        todo!()
-    }
-
-    fn into_array(self) -> ArrayRef {
-        todo!()
+        self.clone().into_array()
     }
 
     fn len(&self) -> usize {

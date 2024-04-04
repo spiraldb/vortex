@@ -4,7 +4,7 @@ use linkme::distributed_slice;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{check_slice_bounds, Array, ArrayRef, OwnedArray};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -54,8 +54,14 @@ impl ConstantArray {
     }
 }
 
-impl Array for ConstantArray {
+impl OwnedArray for ConstantArray {
     impl_array!();
+}
+
+impl Array for ConstantArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn len(&self) -> usize {

@@ -5,7 +5,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::{ArrayRef, OwnedArray};
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::ptype::NativePType;
 use crate::validity::ArrayValidity;

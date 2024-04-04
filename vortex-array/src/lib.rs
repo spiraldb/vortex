@@ -1,5 +1,4 @@
-extern crate core;
-
+#![feature(trait_upcasting)]
 pub mod array;
 pub mod arrow;
 pub mod scalar;

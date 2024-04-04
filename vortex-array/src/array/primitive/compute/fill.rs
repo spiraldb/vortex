@@ -2,7 +2,7 @@ use vortex_error::VortexResult;
 
 use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayRef, IntoArray};
+use crate::array::{ ArrayRef, IntoArray, OwnedArray};
 use crate::compute::fill::FillForwardFn;
 use crate::ptype::NativePType;
 

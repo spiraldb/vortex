@@ -5,7 +5,7 @@ use linkme::distributed_slice;
 use vortex_error::VortexResult;
 use vortex_schema::{DType, FieldNames};
 
-use super::{check_slice_bounds, Array, ArrayRef};
+use super::{check_slice_bounds, Array, ArrayRef, OwnedArray};
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -65,8 +65,14 @@ impl StructArray {
     }
 }
 
-impl Array for StructArray {
+impl OwnedArray for StructArray {
     impl_array!();
+}
+
+impl Array for StructArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     fn len(&self) -> usize {
         self.len

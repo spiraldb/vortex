@@ -5,7 +5,7 @@ use linkme::distributed_slice;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{check_slice_bounds, Array, ArrayRef, OwnedArray};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -186,8 +186,14 @@ impl VarBinViewArray {
     }
 }
 
-impl Array for VarBinViewArray {
+impl OwnedArray for VarBinViewArray {
     impl_array!();
+}
+
+impl Array for VarBinViewArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
 
     #[inline]
     fn len(&self) -> usize {

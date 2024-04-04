@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::sync::Arc;
 
 use vortex_error::VortexResult;
@@ -6,7 +5,7 @@ use vortex_schema::DType;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
-use crate::array::{Array, ArrayRef};
+use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
@@ -151,19 +150,7 @@ impl<'a> From<ArrayView<'a>> for ValidityView<'a> {
 }
 
 impl Array for ValidityView<'_> {
-    fn as_any(&self) -> &dyn Any {
-        todo!()
-    }
-
-    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
-        todo!()
-    }
-
     fn to_array(&self) -> ArrayRef {
-        todo!()
-    }
-
-    fn into_array(self) -> ArrayRef {
         todo!()
     }
 

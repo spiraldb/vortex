@@ -94,8 +94,15 @@ impl BitPackedArray {
     }
 }
 
-impl Array for BitPackedArray {
+impl OwnedArray for BitPackedArray {
     impl_array!();
+}
+
+impl Array for BitPackedArray {
+    fn to_array(&self) -> ArrayRef {
+        self.clone().into_array()
+    }
+
     #[inline]
     fn with_compute_mut(
         &self,
