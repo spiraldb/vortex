@@ -3,7 +3,7 @@ use vortex_schema::DType;
 
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::{Array, ArrayRef};
-use crate::scalar::{NullScalar, Scalar};
+use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for SparseArray {
@@ -32,12 +32,15 @@ impl EncodingSerde for SparseEncoding {
         let offset = ctx.read_usize()?;
         let indices = ctx.with_schema(&DType::IDX).read()?;
         let values = ctx.read()?;
+        let fill_type = values.dtype().clone().as_nullable();
         SparseArray::try_new_with_offset(
             indices,
             values,
             len,
             offset,
-            Scalar::Null(NullScalar::new()),
+            // N.B. we should deserialize the fill value from the source, but currently do not,
+            // so everything that goes through this read path is nullable
+            Scalar::null(&fill_type),
         )
         .map(|a| a.into_array())
     }
