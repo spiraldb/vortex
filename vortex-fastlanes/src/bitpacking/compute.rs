@@ -1,20 +1,19 @@
-use itertools::Itertools;
-
 use fastlanez::TryBitPack;
-use vortex::array::{Array, ArrayRef};
+use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compute::ArrayCompute;
+use vortex::array::{Array, ArrayRef};
 use vortex::compute::cast::cast;
-use vortex::compute::flatten::{flatten_primitive, FlattenedArray, FlattenFn};
+use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::take::TakeFn;
+use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::Scalar;
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::{BitPackedArray, match_integers_by_width, unpack_single_primitive};
 use crate::bitpacking::compress::{unpack, unpack_single};
+use crate::{match_integers_by_width, unpack_single_primitive, BitPackedArray};
 
 impl ArrayCompute for BitPackedArray {
     fn flatten(&self) -> Option<&dyn FlattenFn> {
@@ -119,13 +118,19 @@ fn take_primitive<T: NativePType + TryBitPack>(
 mod test {
     use std::sync::Arc;
 
-    use vortex::array::Array;
+    use itertools::Itertools;
+    use rand::distributions::Uniform;
+    use rand::{thread_rng, Rng};
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-    use vortex::compress::{CompressConfig, CompressCtx};
+    use vortex::array::Array;
+    use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+    use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::take::take;
     use vortex::encoding::EncodingRef;
+    use vortex::scalar::Scalar;
 
+    use crate::downcast::DowncastFastlanes;
     use crate::BitPackedEncoding;
 
     #[test]
@@ -140,5 +145,52 @@ mod test {
         assert_eq!(result.encoding().id(), PrimitiveEncoding::ID);
         let res_bytes = result.as_primitive().typed_data::<u8>();
         assert_eq!(res_bytes, &[0, 62, 31, 33, 9, 18]);
+    }
+
+    #[test]
+    fn take_random_indices() {
+        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
+        let ctx = CompressCtx::new(Arc::new(cfg));
+
+        let num_patches: usize = 128;
+        let values = (0..u16::MAX as u32 + num_patches as u32).collect::<Vec<_>>();
+        let uncompressed = PrimitiveArray::from(values.clone());
+        let packed = BitPackedEncoding {}
+            .compress(&uncompressed, None, ctx)
+            .unwrap();
+        let packed = packed.as_bitpacked();
+        assert!(packed.patches().is_some());
+
+        let patches = packed.patches().unwrap().as_sparse();
+        assert_eq!(
+            patches.resolved_indices(),
+            ((values.len() + 1 - num_patches)..values.len()).collect_vec()
+        );
+
+        let rng = thread_rng();
+        let range = Uniform::new(0, values.len());
+        let random_indices: PrimitiveArray = rng
+            .sample_iter(range)
+            .take(10_000)
+            .map(|i| i as u32)
+            .collect_vec()
+            .into();
+        let taken = take(packed, &random_indices).unwrap();
+
+        // sanity check
+        random_indices
+            .typed_data::<u32>()
+            .iter()
+            .enumerate()
+            .for_each(|(ti, i)| {
+                assert_eq!(
+                    scalar_at(packed, *i as usize).unwrap(),
+                    Scalar::from(values[*i as usize])
+                );
+                assert_eq!(
+                    scalar_at(&taken, ti).unwrap(),
+                    Scalar::from(values[*i as usize])
+                );
+            });
     }
 }

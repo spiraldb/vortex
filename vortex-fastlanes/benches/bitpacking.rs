@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use fastlanez::TryBitPack;
+use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use itertools::Itertools;
+use rand::{Rng, thread_rng};
 use rand::distributions::Uniform;
-use rand::{thread_rng, Rng};
+
+use fastlanez::TryBitPack;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::take::take;
 use vortex::encoding::EncodingRef;
 use vortex_fastlanes::{
-    bitpack_primitive, unpack_primitive, unpack_single_primitive, BitPackedEncoding,
+    bitpack_primitive, BitPackedEncoding, unpack_primitive, unpack_single_primitive,
 };
 
 fn values(len: usize, bits: usize) -> Vec<u32> {
@@ -78,9 +80,31 @@ fn bench_take(c: &mut Criterion) {
         .compress(&uncompressed, None, ctx)
         .unwrap();
 
-    let scattered_indices: PrimitiveArray = (0..10).map(|i| i * 10_000).collect::<Vec<_>>().into();
-    c.bench_function("take_10", |b| {
-        b.iter(|| black_box(take(&packed, &scattered_indices).unwrap()));
+    let stratified_indices: PrimitiveArray = (0..10).map(|i| i * 10_000).collect::<Vec<_>>().into();
+    c.bench_function("take_10_stratified", |b| {
+        b.iter(|| black_box(take(&packed, &stratified_indices).unwrap()));
+    });
+
+    let contiguous_indices: PrimitiveArray = (0..10).collect::<Vec<_>>().into();
+    c.bench_function("take_10_contiguous", |b| {
+        b.iter(|| black_box(take(&packed, &contiguous_indices).unwrap()));
+    });
+
+    let rng = thread_rng();
+    let range = Uniform::new(0, values.len());
+    let random_indices: PrimitiveArray = rng
+        .sample_iter(range)
+        .take(10_000)
+        .map(|i| i as u32)
+        .collect_vec()
+        .into();
+    c.bench_function("take_10K_random", |b| {
+        b.iter(|| black_box(take(&packed, &random_indices).unwrap()));
+    });
+
+    let contiguous_indices: PrimitiveArray = (0..10_000).collect::<Vec<_>>().into();
+    c.bench_function("take_10K_contiguous", |b| {
+        b.iter(|| black_box(take(&packed, &contiguous_indices).unwrap()));
     });
 }
 
