@@ -102,7 +102,7 @@ impl EncodingCompression for BitPackedEncoding {
 fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     // TODO(ngates): we should implement this using a vortex cast to centralize this hack.
-    use PType::*;
+
     let bytes = match parray.ptype() {
         I8 | U8 => bitpack_primitive(parray.typed_data::<u8>(), bit_width),
         I16 | U16 => bitpack_primitive(parray.typed_data::<u16>(), bit_width),
@@ -259,7 +259,7 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
 
 pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
     let bit_width = array.bit_width();
-    let encoded = flatten_primitive(cast(array.encoded(), PType::U8.into())?.as_ref())?;
+    let encoded = flatten_primitive(cast(array.encoded(), U8.into())?.as_ref())?;
     let ptype: PType = array.dtype().try_into()?;
 
     let scalar: Scalar = unsafe {
