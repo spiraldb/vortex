@@ -2,7 +2,6 @@ use fastlanez::TryBitPack;
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
-use vortex::compute::cast::cast;
 use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::take::TakeFn;
@@ -53,34 +52,30 @@ impl ScalarAtFn for BitPackedArray {
 
 impl TakeFn for BitPackedArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        let prim_indices = flatten_primitive(indices)?;
-
-        // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
-        let relative_indices: Vec<(usize, Vec<u16>)> = match_each_integer_ptype!(prim_indices.ptype(), |$P| {
-            prim_indices
-                .typed_data::<$P>()
-                .iter()
-                .group_by(|idx| (**idx / 1024) as usize)
-                .into_iter()
-                .map(|(k, g)| (k, g.map(|idx| (*idx % 1024) as u16).collect()))
-                .collect()
-        });
-
+        let indices = flatten_primitive(indices)?;
         let ptype = self.dtype().try_into()?;
         let taken = match_integers_by_width!(ptype, |$P| {
-            PrimitiveArray::from(take_primitive::<$P>(self, &relative_indices, prim_indices.len())?)
+            PrimitiveArray::from(take_primitive::<$P>(self, &indices)?)
         });
-        // TODO(wmanning): handle patches & validity
-        // TODO(wmanning): this should be a reinterpret_cast
-        cast(&taken, self.dtype())
+        Ok(taken.reinterpret_cast(ptype).into_array())
     }
 }
 
 fn take_primitive<T: NativePType + TryBitPack>(
     array: &BitPackedArray,
-    relative_indices: &[(usize, Vec<u16>)],
-    size_hint: usize,
+    indices: &PrimitiveArray,
 ) -> VortexResult<Vec<T>> {
+    // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
+    let relative_indices: Vec<(usize, Vec<u16>)> = match_each_integer_ptype!(indices.ptype(), |$P| {
+        indices
+            .typed_data::<$P>()
+            .iter()
+            .group_by(|idx| (**idx / 1024) as usize)
+            .into_iter()
+            .map(|(k, g)| (k, g.map(|idx| (*idx % 1024) as u16).collect()))
+            .collect()
+    });
+
     let bit_width = array.bit_width();
     let packed = flatten_primitive(array.encoded())?;
     let packed = packed.typed_data::<u8>();
@@ -92,7 +87,7 @@ fn take_primitive<T: NativePType + TryBitPack>(
     // ones on M2 Macbook Air.
     let bulk_threshold = 8;
 
-    let mut output = Vec::with_capacity(size_hint);
+    let mut output = Vec::with_capacity(indices.len());
     let mut buffer: Vec<T> = Vec::new();
     for (chunk, offsets) in relative_indices {
         let packed_chunk = &packed[chunk * 128 * bit_width..][..128 * bit_width];
@@ -101,16 +96,18 @@ fn take_primitive<T: NativePType + TryBitPack>(
             TryBitPack::try_unpack_into(packed_chunk, bit_width, &mut buffer)
                 .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))?;
             for index in offsets {
-                output.push(buffer[*index as usize]);
+                output.push(buffer[index as usize]);
             }
         } else {
             for index in offsets {
                 output.push(unsafe {
-                    unpack_single_primitive::<T>(packed_chunk, bit_width, *index as usize)?
+                    unpack_single_primitive::<T>(packed_chunk, bit_width, index as usize)?
                 });
             }
         }
     }
+
+    // TODO(wmanning): handle patches & validity
     Ok(output)
 }
 
