@@ -1,15 +1,18 @@
+use std::collections::HashSet;
+
 use fastlanez::TryBitPack;
 use itertools::Itertools;
+use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
-use vortex::compute::take::TakeFn;
+use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::Scalar;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::bitpacking::compress::{unpack, unpack_single};
 use crate::{match_integers_by_width, unpack_single_primitive, BitPackedArray};
@@ -53,8 +56,8 @@ impl TakeFn for BitPackedArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
         let indices = flatten_primitive(indices)?;
         let ptype = self.dtype().try_into()?;
-        let taken = match_integers_by_width!(ptype, |$P| {
-            PrimitiveArray::from(take_primitive::<$P>(self, &indices)?)
+        let taken = match_integers_by_width!(ptype, |$T| {
+            PrimitiveArray::from(take_primitive::<$T>(self, &indices)?)
         });
         Ok(taken.reinterpret_cast(ptype).into_array())
     }
@@ -106,7 +109,28 @@ fn take_primitive<T: NativePType + TryBitPack>(
         }
     }
 
-    // TODO(wmanning): handle patches & validity
+    if let Some(patches) = array.patches() {
+        if let Some(patches) = patches.maybe_sparse() {
+            let all_patch_indices: HashSet<usize> = HashSet::from_iter(patches.resolved_indices());
+            let (output_indices, patch_indices): (Vec<usize>, Vec<u64>) = match_each_integer_ptype!(indices.ptype(), |$P| {
+                indices.typed_data::<$P>()
+                    .iter()
+                    .map(|idx| *idx as u64)
+                    .enumerate()
+                    .filter(|(ti, pi)| all_patch_indices.contains(&(*pi as usize)))
+                    .unzip()
+            });
+            let patch_indices = PrimitiveArray::from(patch_indices);
+            let patch_values = flatten_primitive(&take(patches.values(), &patch_indices)?)?;
+            let patch_values = patch_values.typed_data::<T>();
+            output_indices
+                .iter()
+                .zip(patch_values)
+                .for_each(|(i, v)| output[*i] = *v)
+        } else {
+            vortex_bail!("Only sparse patches are currently supported!");
+        }
+    }
     Ok(output)
 }
 
