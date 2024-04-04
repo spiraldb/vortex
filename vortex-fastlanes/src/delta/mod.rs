@@ -93,6 +93,13 @@ impl DeltaArray {
 
 impl Array for DeltaArray {
     impl_array!();
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
+    }
 
     #[inline]
     fn len(&self) -> usize {

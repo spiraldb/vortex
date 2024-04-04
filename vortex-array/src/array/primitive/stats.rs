@@ -5,7 +5,7 @@ use arrow_buffer::buffer::BooleanBuffer;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::ArrayValidity;
+use crate::array::Array;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, PScalar};
