@@ -1,20 +1,20 @@
-use fastlanez::TryBitPack;
 use itertools::Itertools;
-use vortex::array::primitive::PrimitiveArray;
+
+use fastlanez::TryBitPack;
 use vortex::array::{Array, ArrayRef};
+use vortex::array::primitive::PrimitiveArray;
+use vortex::compute::ArrayCompute;
 use vortex::compute::cast::cast;
-use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
+use vortex::compute::flatten::{flatten_primitive, FlattenedArray, FlattenFn};
 use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::take::TakeFn;
-use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::Scalar;
 use vortex_error::{vortex_err, VortexResult};
 
+use crate::{BitPackedArray, match_integers_by_width, unpack_single_primitive};
 use crate::bitpacking::compress::{unpack, unpack_single};
-use crate::downcast::DowncastFastlanes;
-use crate::{match_integers_by_width, unpack_single_primitive, BitPackedArray};
 
 impl ArrayCompute for BitPackedArray {
     fn flatten(&self) -> Option<&dyn FlattenFn> {
@@ -47,6 +47,7 @@ impl ScalarAtFn for BitPackedArray {
                 return Ok(Scalar::from(0 as $P));
             })
         }
+        // TODO(wmanning): check patches/validity!
         unpack_single(self, index)
     }
 }
@@ -70,6 +71,7 @@ impl TakeFn for BitPackedArray {
         let taken = match_integers_by_width!(ptype, |$P| {
             PrimitiveArray::from(take_primitive::<$P>(self, &relative_indices, prim_indices.len())?)
         });
+        // TODO(wmanning): handle patches & validity
         // TODO(wmanning): this should be a reinterpret_cast
         cast(&taken, self.dtype())
     }
@@ -117,9 +119,9 @@ fn take_primitive<T: NativePType + TryBitPack>(
 mod test {
     use std::sync::Arc;
 
+    use vortex::array::Array;
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-    use vortex::array::Array;
     use vortex::compress::{CompressConfig, CompressCtx};
     use vortex::compute::take::take;
     use vortex::encoding::EncodingRef;

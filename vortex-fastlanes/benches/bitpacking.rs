@@ -2,7 +2,8 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fastlanez::TryBitPack;
 use rand::distributions::Uniform;
 use rand::{thread_rng, Rng};
-use vortex_fastlanes::{bitpack_primitive, unpack_primitive, unpack_single_primitive};
+use vortex::compress::EncodingCompression;
+use vortex_fastlanes::{bitpack_primitive, BitPackedEncoding, unpack_primitive, unpack_single_primitive};
 
 fn values(len: usize, bits: usize) -> Vec<u32> {
     let rng = thread_rng();
@@ -29,6 +30,9 @@ fn pack_unpack(c: &mut Criterion) {
     });
 
     let packed = bitpack_primitive(&values, bits);
+    let unpacked = unpack_primitive::<u32>(&packed, bits, values.len());
+    assert_eq!(unpacked, values);
+
     c.bench_function("unpack_1M", |b| {
         b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, values.len())));
     });
@@ -57,5 +61,14 @@ fn pack_unpack(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, pack_unpack);
+fn take(c: &mut Criterion) {
+    let values = values(1_000_000, 8);
+    let packed = BitPackedEncoding{}.compress(values.into(), None, );
+    
+    c.bench_function("take_10", |b| {
+        b.iter(|| black_box();
+    });
+}
+
+criterion_group!(benches, pack_unpack, take);
 criterion_main!(benches);
