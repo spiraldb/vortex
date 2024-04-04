@@ -7,7 +7,9 @@ use std::sync::{Arc, RwLock};
 
 use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
+use itertools::Itertools;
 use linkme::distributed_slice;
+use num_traits::AsPrimitive;
 pub use view::*;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
@@ -155,9 +157,48 @@ impl PrimitiveArray {
         self.buffer().typed_data()
     }
 
+    pub fn patch<P: AsPrimitive<usize>, T: NativePType>(
+        mut self,
+        positions: &[P],
+        values: &[T],
+    ) -> VortexResult<Self> {
+        if self.ptype() != T::PTYPE {
+            vortex_bail!(MismatchedTypes: self.dtype, T::PTYPE)
+        }
+
+        let mut own_values = self
+            .buffer
+            .into_vec::<T>()
+            .unwrap_or_else(|b| Vec::from(b.typed_data::<T>()));
+        // TODO(robert): Also patch validity
+        for (idx, value) in positions.iter().zip_eq(values.iter()) {
+            own_values[(*idx).as_()] = *value;
+        }
+        self.buffer = Buffer::from_vec::<T>(own_values);
+        Ok(self)
+    }
+
     pub(crate) fn as_trait<T: NativePType>(&self) -> &dyn PrimitiveTrait<T> {
         assert_eq!(self.ptype, T::PTYPE);
         self
+    }
+
+    pub fn reinterpret_cast(&self, ptype: PType) -> Self {
+        if self.ptype() == ptype {
+            return self.clone();
+        }
+
+        assert_eq!(
+            self.ptype().byte_width(),
+            ptype.byte_width(),
+            "can't reinterpret cast between integers of two different widths"
+        );
+
+        PrimitiveArray::new(
+            ptype,
+            self.buffer().clone(),
+            self.validity().to_owned_view(),
+        )
     }
 }
 

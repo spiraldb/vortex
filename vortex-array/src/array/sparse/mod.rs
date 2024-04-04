@@ -5,6 +5,7 @@ use linkme::distributed_slice;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
+use crate::array::constant::ConstantArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::cast::cast;
@@ -14,6 +15,7 @@ use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::PType;
+use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::validity::ArrayValidity;
@@ -32,22 +34,29 @@ pub struct SparseArray {
     indices_offset: usize,
     len: usize,
     stats: Arc<RwLock<StatsSet>>,
+    fill_value: Scalar,
 }
 
 impl SparseArray {
-    pub fn new(indices: ArrayRef, values: ArrayRef, len: usize) -> Self {
-        Self::try_new(indices, values, len).unwrap()
+    pub fn new(indices: ArrayRef, values: ArrayRef, len: usize, fill_value: Scalar) -> Self {
+        Self::try_new(indices, values, len, fill_value).unwrap()
     }
 
-    pub fn try_new(indices: ArrayRef, values: ArrayRef, len: usize) -> VortexResult<Self> {
-        Self::new_with_offset(indices, values, len, 0)
+    pub fn try_new(
+        indices: ArrayRef,
+        values: ArrayRef,
+        len: usize,
+        fill_value: Scalar,
+    ) -> VortexResult<Self> {
+        Self::try_new_with_offset(indices, values, len, 0, fill_value)
     }
 
-    pub(crate) fn new_with_offset(
+    pub(crate) fn try_new_with_offset(
         indices: ArrayRef,
         values: ArrayRef,
         len: usize,
         indices_offset: usize,
+        fill_value: Scalar,
     ) -> VortexResult<Self> {
         if !matches!(indices.dtype(), &DType::IDX) {
             vortex_bail!("Cannot use {} as indices", indices.dtype());
@@ -59,6 +68,7 @@ impl SparseArray {
             indices_offset,
             len,
             stats: Arc::new(RwLock::new(StatsSet::new())),
+            fill_value,
         })
     }
 
@@ -75,6 +85,11 @@ impl SparseArray {
     #[inline]
     pub fn indices(&self) -> &ArrayRef {
         &self.indices
+    }
+
+    #[inline]
+    fn fill_value(&self) -> &Scalar {
+        &self.fill_value
     }
 
     /// Return indices as a vector of usize with the indices_offset applied.
@@ -124,6 +139,7 @@ impl Array for SparseArray {
             values: self.values.slice(index_start_index, index_end_index)?,
             len: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
+            fill_value: self.fill_value.clone(),
         }
         .into_array())
     }
@@ -159,7 +175,15 @@ impl StatsCompute for SparseArray {}
 
 impl ArrayValidity for SparseArray {
     fn logical_validity(&self) -> Validity {
-        todo!()
+        let validity = SparseArray::try_new_with_offset(
+            self.indices.clone(),
+            ConstantArray::new(true, self.len()).into_array(),
+            self.len(),
+            self.indices_offset,
+            false.into(),
+        )
+        .unwrap();
+        Validity::Array(validity.into_array())
     }
 
     fn is_valid(&self, _index: usize) -> bool {
@@ -203,19 +227,31 @@ impl Encoding for SparseEncoding {
 mod test {
     use itertools::Itertools;
     use vortex_error::VortexError;
+    use vortex_schema::Nullability::Nullable;
+    use vortex_schema::Signedness::Signed;
+    use vortex_schema::{DType, IntWidth};
 
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
     use crate::array::IntoArray;
     use crate::compute::flatten::flatten_primitive;
     use crate::compute::scalar_at::scalar_at;
+    use crate::scalar::Scalar;
 
-    fn sparse_array() -> SparseArray {
+    fn nullable_fill() -> Scalar {
+        Scalar::null(&DType::Int(IntWidth::_32, Signed, Nullable))
+    }
+    fn non_nullable_fill() -> Scalar {
+        Scalar::from(42i32)
+    }
+
+    fn sparse_array(fill_value: Scalar) -> SparseArray {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
         SparseArray::new(
             vec![2u64, 5, 8].into_array(),
             vec![100i32, 200, 300].into_array(),
             10,
+            fill_value,
         )
     }
 
@@ -230,7 +266,7 @@ mod test {
     #[test]
     pub fn iter() {
         assert_sparse_array(
-            &sparse_array(),
+            &sparse_array(nullable_fill()),
             &[
                 None,
                 None,
@@ -248,15 +284,27 @@ mod test {
 
     #[test]
     pub fn iter_sliced() {
+        let p_fill_val = Some(non_nullable_fill().try_into().unwrap());
         assert_sparse_array(
-            sparse_array().slice(2, 7).unwrap().as_ref(),
+            sparse_array(non_nullable_fill())
+                .slice(2, 7)
+                .unwrap()
+                .as_ref(),
+            &[Some(100), p_fill_val, p_fill_val, Some(200), p_fill_val],
+        );
+    }
+
+    #[test]
+    pub fn iter_sliced_nullable() {
+        assert_sparse_array(
+            sparse_array(nullable_fill()).slice(2, 7).unwrap().as_ref(),
             &[Some(100), None, None, Some(200), None],
         );
     }
 
     #[test]
     pub fn iter_sliced_twice() {
-        let sliced_once = sparse_array().slice(1, 8).unwrap();
+        let sliced_once = sparse_array(nullable_fill()).slice(1, 8).unwrap();
         assert_sparse_array(
             sliced_once.as_ref(),
             &[None, Some(100), None, None, Some(200), None, None],
@@ -270,10 +318,10 @@ mod test {
     #[test]
     pub fn test_scalar_at() {
         assert_eq!(
-            usize::try_from(scalar_at(&sparse_array(), 2).unwrap()).unwrap(),
+            usize::try_from(scalar_at(&sparse_array(nullable_fill()), 2).unwrap()).unwrap(),
             100
         );
-        let error = scalar_at(&sparse_array(), 10).err().unwrap();
+        let error = scalar_at(&sparse_array(nullable_fill()), 10).err().unwrap();
         let VortexError::OutOfBounds(i, start, stop, _) = error else {
             unreachable!()
         };
@@ -284,7 +332,7 @@ mod test {
 
     #[test]
     pub fn scalar_at_sliced() {
-        let sliced = sparse_array().slice(2, 7).unwrap();
+        let sliced = sparse_array(nullable_fill()).slice(2, 7).unwrap();
         assert_eq!(
             usize::try_from(scalar_at(sliced.as_ref(), 0).unwrap()).unwrap(),
             100
@@ -300,7 +348,7 @@ mod test {
 
     #[test]
     pub fn scalar_at_sliced_twice() {
-        let sliced_once = sparse_array().slice(1, 8).unwrap();
+        let sliced_once = sparse_array(nullable_fill()).slice(1, 8).unwrap();
         assert_eq!(
             usize::try_from(scalar_at(sliced_once.as_ref(), 1).unwrap()).unwrap(),
             100

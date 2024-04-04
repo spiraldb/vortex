@@ -21,6 +21,7 @@ mod compress;
 mod compute;
 mod serde;
 
+/// NB: All non-null values in the patches array are considered patches
 #[derive(Debug, Clone)]
 pub struct BitPackedArray {
     encoded: ArrayRef,

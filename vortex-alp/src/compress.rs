@@ -1,12 +1,12 @@
 use itertools::Itertools;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::sparse::SparseArray;
+use vortex::array::sparse::{SparseArray, SparseEncoding};
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
-use vortex::compute::patch::patch;
 use vortex::ptype::{NativePType, PType};
+use vortex::scalar::Scalar;
 use vortex::validity::OwnedValidity;
 use vortex::view::ToOwnedView;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -101,6 +101,7 @@ where
                 PrimitiveArray::from(exc_pos).into_array(),
                 PrimitiveArray::from(exc).into_array(),
                 len,
+                Scalar::null(&values.dtype().as_nullable()),
             )
             .into_array()
         }),
@@ -126,10 +127,22 @@ pub fn decompress(array: &ALPArray) -> VortexResult<PrimitiveArray> {
     })?;
 
     if let Some(patches) = array.patches() {
-        // TODO(#121): right now, applying patches forces an extraneous copy of the array data
-        flatten_primitive(&patch(&decoded, patches)?)
+        patch_decoded(decoded, patches)
     } else {
         Ok(decoded)
+    }
+}
+
+fn patch_decoded(array: PrimitiveArray, patches: &dyn Array) -> VortexResult<PrimitiveArray> {
+    match patches.encoding().id() {
+        SparseEncoding::ID => {
+            match_each_alp_float_ptype!(array.ptype(), |$T| {
+                array.patch(
+                    &patches.as_sparse().resolved_indices(),
+                    flatten_primitive(patches.as_sparse().values())?.typed_data::<$T>())?
+            })
+        }
+        _ => panic!("can't patch alp array with {}", patches),
     }
 }
 

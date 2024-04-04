@@ -2,7 +2,6 @@ use std::sync::{Arc, RwLock};
 
 use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
-use vortex::compute::scalar_at::scalar_at;
 use vortex::compute::search_sorted::SearchSortedSide;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
@@ -29,16 +28,21 @@ pub struct REEArray {
 }
 
 impl REEArray {
-    pub fn new(ends: ArrayRef, values: ArrayRef, validity: Option<Validity>) -> Self {
-        Self::try_new(ends, values, validity).unwrap()
+    pub fn new(
+        ends: ArrayRef,
+        values: ArrayRef,
+        validity: Option<Validity>,
+        length: usize,
+    ) -> Self {
+        Self::try_new(ends, values, validity, length).unwrap()
     }
 
     pub fn try_new(
         ends: ArrayRef,
         values: ArrayRef,
         validity: Option<Validity>,
+        length: usize,
     ) -> VortexResult<Self> {
-        let length: usize = scalar_at(ends.as_ref(), ends.len() - 1)?.try_into()?;
         if let Some(v) = &validity {
             assert_eq!(v.len(), length);
         }
@@ -51,6 +55,7 @@ impl REEArray {
             vortex_bail!("Ends array must be strictly sorted",);
         }
 
+        // TODO(ngates): https://github.com/fulcrum-so/spiral/issues/873
         Ok(Self {
             ends,
             values,
@@ -77,6 +82,7 @@ impl REEArray {
                     ends.into_array(),
                     values.into_array(),
                     p.validity().to_owned_view(),
+                    p.len(),
                 )
                 .into_array())
             }
@@ -221,6 +227,7 @@ mod test {
             vec![2u32, 5, 10].into_array(),
             vec![1i32, 2, 3].into_array(),
             None,
+            10,
         );
         assert_eq!(arr.len(), 10);
         assert_eq!(
@@ -243,6 +250,7 @@ mod test {
             vec![2u32, 5, 10].into_array(),
             vec![1i32, 2, 3].into_array(),
             None,
+            10,
         )
         .slice(3, 8)
         .unwrap();
@@ -264,6 +272,7 @@ mod test {
             vec![2u32, 5, 10].into_array(),
             vec![1i32, 2, 3].into_array(),
             None,
+            10,
         );
         assert_eq!(
             flatten_primitive(&arr).unwrap().typed_data::<i32>(),

@@ -3,7 +3,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::as_contiguous::as_contiguous;
 use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
-use vortex::compute::scalar_at::ScalarAtFn;
+use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
@@ -39,13 +39,14 @@ impl ScalarAtFn for BitPackedArray {
         if index >= self.len() {
             return Err(vortex_err!(OutOfBounds:index, 0, self.len()));
         }
-        if self.bit_width() == 0 {
-            let ptype = self.dtype().try_into()?;
-            match_each_integer_ptype!(&ptype, |$P| {
-                return Ok(Scalar::from(0 as $P));
-            })
+
+        if let Some(patches) = self.patches() {
+            // NB: All non-null values are considered patches
+            if self.bit_width == 0 || patches.is_valid(index) {
+                return scalar_at(patches, index)?.cast(self.dtype());
+            }
         }
-        unpack_single(self, index)
+        unpack_single(self, index)?.cast(self.dtype())
     }
 }
 
@@ -83,13 +84,17 @@ impl TakeFn for BitPackedArray {
 mod test {
     use std::sync::Arc;
 
+    use itertools::Itertools;
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
     use vortex::array::Array;
-    use vortex::compress::{CompressConfig, CompressCtx};
+    use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+    use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::take::take;
     use vortex::encoding::EncodingRef;
+    use vortex::scalar::Scalar;
 
+    use crate::downcast::DowncastFastlanes;
     use crate::BitPackedEncoding;
 
     #[test]
@@ -104,5 +109,26 @@ mod test {
         assert_eq!(result.encoding().id(), PrimitiveEncoding::ID);
         let res_bytes = result.as_primitive().typed_data::<u8>();
         assert_eq!(res_bytes, &[0, 62, 31, 33, 9, 18]);
+    }
+
+    #[test]
+    fn test_scalar_at() {
+        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
+        let ctx = CompressCtx::new(Arc::new(cfg));
+
+        let values = (0u32..257).collect_vec();
+        let uncompressed = PrimitiveArray::from(values.clone()).into_array();
+        let packed = BitPackedEncoding
+            .compress(&uncompressed, None, ctx)
+            .unwrap();
+        let packed = packed.as_bitpacked();
+        assert!(packed.patches().is_some());
+
+        let patches = packed.patches().unwrap().as_sparse();
+        assert_eq!(patches.resolved_indices(), vec![256]);
+
+        values.iter().enumerate().for_each(|(i, v)| {
+            assert_eq!(scalar_at(packed, i).unwrap(), Scalar::from(*v));
+        });
     }
 }
