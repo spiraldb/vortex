@@ -65,7 +65,7 @@ pub fn roaring_encode(primitive_array: &PrimitiveArray) -> RoaringIntArray {
         PType::U16 => roaring_encode_primitive::<u16>(primitive_array.buffer().typed_data()),
         PType::U32 => roaring_encode_primitive::<u32>(primitive_array.buffer().typed_data()),
         PType::U64 => roaring_encode_primitive::<u64>(primitive_array.buffer().typed_data()),
-        _ => panic!("Unsupported ptype"),
+        _ => panic!("Unsupported ptype {}", primitive_array.ptype()),
     }
 }
 

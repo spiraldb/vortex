@@ -104,11 +104,11 @@ fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> ArrayRef {
     // TODO(ngates): we should implement this using a vortex cast to centralize this hack.
     use PType::*;
     let bytes = match parray.ptype() {
-        I8 | U8 => bitpack_primitive(parray.buffer().typed_data::<u8>(), bit_width),
-        I16 | U16 => bitpack_primitive(parray.buffer().typed_data::<u16>(), bit_width),
-        I32 | U32 => bitpack_primitive(parray.buffer().typed_data::<u32>(), bit_width),
-        I64 | U64 => bitpack_primitive(parray.buffer().typed_data::<u64>(), bit_width),
-        _ => panic!("Unsupported ptype {:?}", parray.ptype()),
+        I8 | U8 => bitpack_primitive(parray.typed_data::<u8>(), bit_width),
+        I16 | U16 => bitpack_primitive(parray.typed_data::<u16>(), bit_width),
+        I32 | U32 => bitpack_primitive(parray.typed_data::<u32>(), bit_width),
+        I64 | U64 => bitpack_primitive(parray.typed_data::<u64>(), bit_width),
+        _ => panic!("Unsupported ptype {}", parray.ptype()),
     };
     PrimitiveArray::from(bytes).into_array()
 }
@@ -184,7 +184,7 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
             unpack_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, length),
             array.validity(),
         ),
-        _ => panic!("Unsupported ptype {:?}", ptype),
+        _ => panic!("Unsupported ptype {}", ptype),
     };
 
     // Cast to signed if necessary
@@ -278,7 +278,7 @@ pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResul
                 unpack_single_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, index)
                     .map(|v| v.into())
             }
-            _ => vortex_bail!("Unsupported ptype {:?}", ptype),
+            _ => vortex_bail!("Unsupported ptype {}", ptype),
         }?
     };
 
