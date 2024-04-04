@@ -4,6 +4,7 @@ use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::{Array, ArrayRef};
 use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use crate::scalar::{NullScalar, Scalar};
 
 impl EncodingCompression for SparseEncoding {
     fn cost(&self) -> u8 {
@@ -32,6 +33,7 @@ impl EncodingCompression for SparseEncoding {
             ctx.named("values")
                 .compress(sparse_array.values(), sparse_like.map(|sa| sa.values()))?,
             sparse_array.len(),
+            Scalar::Null(NullScalar::new()),
         )
         .into_array())
     }

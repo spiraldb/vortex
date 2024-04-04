@@ -7,6 +7,7 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::patch::patch;
 use vortex::ptype::{NativePType, PType};
+use vortex::scalar::Scalar;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::alp::ALPFloat;
@@ -99,6 +100,7 @@ where
                 PrimitiveArray::from(exc_pos).into_array(),
                 PrimitiveArray::from(exc).into_array(),
                 len,
+                Scalar::null(values.dtype()),
             )
             .into_array()
         }),

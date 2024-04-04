@@ -30,6 +30,16 @@ impl ArrayCompute for SparseArray {
 
 impl AsContiguousFn for SparseArray {
     fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
+        let fill_types = arrays
+            .iter()
+            .map(|a| a.as_sparse().clone().fill_value)
+            .dedup()
+            .collect_vec();
+        assert_eq!(
+            1,
+            fill_types.len(),
+            "Cannot concatenate SparseArrays with differing fill values"
+        );
         Ok(SparseArray::new(
             as_contiguous(
                 &arrays
@@ -46,11 +56,13 @@ impl AsContiguousFn for SparseArray {
                     .collect_vec(),
             )?,
             arrays.iter().map(|a| a.len()).sum(),
+            fill_types.first().unwrap().clone(),
         )
         .into_array())
     }
 }
 
+#[allow(unreachable_code)]
 impl FlattenFn for SparseArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
         // Resolve our indices into a vector of usize applying the offset
@@ -58,11 +70,16 @@ impl FlattenFn for SparseArray {
 
         let mut validity = BooleanBufferBuilder::new(self.len());
         validity.append_n(self.len(), false);
-
         let values = flatten(self.values())?;
+        let null_fill = self.fill_value.is_null();
         if let FlattenedArray::Primitive(parray) = values {
             match_each_native_ptype!(parray.ptype(), |$P| {
-                let mut values = vec![$P::default(); self.len()];
+                let mut values = if null_fill {
+                    vec![$P::default(); self.len()]
+                } else {
+                    let p_fill_value: $P = self.fill_value.clone().try_into()?;
+                    vec![p_fill_value; self.len()]
+                };
                 let mut offset = 0;
 
                 for v in parray.typed_data::<$P>() {
@@ -73,11 +90,15 @@ impl FlattenFn for SparseArray {
                 }
 
                 let validity = validity.finish();
-
-                Ok(FlattenedArray::Primitive(PrimitiveArray::from_nullable(
+                if null_fill {
+                    Ok(FlattenedArray::Primitive(PrimitiveArray::from_nullable(
                     values,
                     Some(validity.into()),
-                )))
+                    )))
+                } else {
+                    Ok(FlattenedArray::Primitive(PrimitiveArray::from(values)))
+                }
+
             })
         } else {
             Err(vortex_err!(

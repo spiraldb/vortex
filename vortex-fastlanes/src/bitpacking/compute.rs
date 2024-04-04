@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::as_contiguous::as_contiguous;
@@ -45,7 +46,17 @@ impl ScalarAtFn for BitPackedArray {
                 return Ok(Scalar::from(0 as $P));
             })
         }
-        unpack_single(self, index)
+
+        match self.patches.clone() {
+            None => unpack_single(self, index),
+            Some(patch) => {
+                if patch.is_valid(index) {
+                    ScalarAtFn::scalar_at(patch.as_sparse(), index)
+                } else {
+                    unpack_single(self, index)
+                }
+            }
+        }
     }
 }
 

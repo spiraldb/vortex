@@ -6,6 +6,7 @@ use vortex_schema::DType;
 
 use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::{Array, ArrayRef};
+use crate::scalar::{NullScalar, Scalar};
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 
 impl ArraySerde for SparseArray {
@@ -34,9 +35,15 @@ impl EncodingSerde for SparseEncoding {
         let offset = ctx.read_usize()?;
         let indices = ctx.with_schema(&DType::IDX).read()?;
         let values = ctx.read()?;
-        Ok(SparseArray::new_with_offset(indices, values, len, offset)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?
-            .into_array())
+        Ok(SparseArray::new_with_offset(
+            indices,
+            values,
+            len,
+            offset,
+            Scalar::Null(NullScalar::new()),
+        )
+        .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?
+        .into_array())
     }
 }
 
@@ -47,6 +54,7 @@ mod test {
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
     use crate::array::IntoArray;
+    use crate::scalar::{NullScalar, Scalar};
     use crate::serde::test::roundtrip_array;
 
     #[test]
@@ -55,6 +63,7 @@ mod test {
             vec![7u64, 37, 71, 97].into_array(),
             PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]).into_array(),
             100,
+            Scalar::Null(NullScalar::new()),
         );
 
         let read_arr = roundtrip_array(&arr).unwrap();
