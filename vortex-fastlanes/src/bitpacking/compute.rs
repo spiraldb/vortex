@@ -60,7 +60,6 @@ impl TakeFn for BitPackedArray {
             prim_indices
                 .typed_data::<$P>()
                 .iter()
-                .sorted()
                 .group_by(|idx| (**idx / 1024) as usize)
                 .into_iter()
                 .map(|(k, g)| (k, g.map(|idx| (*idx % 1024) as u16).collect()))
@@ -81,18 +80,30 @@ fn take_primitive<T: NativePType + TryBitPack>(
     relative_indices: &[(usize, Vec<u16>)],
     size_hint: usize,
 ) -> VortexResult<Vec<T>> {
-    let mut output = Vec::with_capacity(size_hint);
-    for (chunk, offsets) in relative_indices {
-        let sliced = array.slice(chunk * 1024, (chunk + 1) * 1024).unwrap();
-        let sliced = sliced.as_bitpacked();
-        let packed = flatten_primitive(sliced.encoded()).unwrap();
-        let packed = packed.typed_data::<u8>();
+    let bit_width = array.bit_width();
+    let packed = flatten_primitive(array.encoded())?;
+    let packed = packed.typed_data::<u8>();
 
-        // TODO(wmanning): if offsets.len() over threshold, unpack the whole thing
-        for index in offsets {
-            output.push(unsafe {
-                unpack_single_primitive::<T>(packed, sliced.bit_width(), *index as usize).unwrap();
-            });
+    let mut output = Vec::with_capacity(size_hint);
+    let mut buffer: Vec<T> = Vec::new();
+    for (chunk, offsets) in relative_indices {
+        let packed_chunk = &packed[chunk * 128 * bit_width..][..128 * bit_width];
+        // assuming the buffer is already allocated (which will happen at most once)
+        // then unpacking all 1024 elements takes ~8.8x as long as unpacking a single element
+        // see https://github.com/fulcrum-so/vortex/pull/190#issue-2223752833
+        if offsets.len() > 8 {
+            buffer.clear();
+            TryBitPack::try_unpack_into(packed_chunk, bit_width, &mut buffer)
+                .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))?;
+            for index in offsets {
+                output.push(buffer[*index as usize]);
+            }
+        } else {
+            for index in offsets {
+                output.push(unsafe {
+                    unpack_single_primitive::<T>(packed_chunk, bit_width, *index as usize)?
+                });
+            }
         }
     }
     Ok(output)
