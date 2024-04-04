@@ -6,10 +6,9 @@ use crate::compute::search_sorted::{SearchSortedFn, SearchSortedSide};
 use crate::ptype::NativePType;
 use crate::scalar::Scalar;
 
-// TODO(ngates): implement TryFrom<&Scalar>?
-impl<T: NativePType + TryFrom<Scalar>> SearchSortedFn for &dyn PrimitiveTrait<T> {
+impl<T: NativePType> SearchSortedFn for &dyn PrimitiveTrait<T> {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<usize> {
-        let pvalue: T = value.clone().try_into()?;
+        let pvalue: T = value.try_into()?;
         Ok(self.typed_data().search_sorted(&pvalue, side))
     }
 }
