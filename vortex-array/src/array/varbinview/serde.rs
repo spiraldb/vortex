@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
-use crate::array::{Array, ArrayRef, OwnedArray};
+use crate::array::{ArrayRef, OwnedArray};
 use crate::serde::{ArraySerde, EncodingSerde, ReadCtx, WriteCtx};
 use crate::validity::OwnedValidity;
 
@@ -41,7 +41,7 @@ mod test {
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray};
-    use crate::array::{Array, OwnedArray};
+    use crate::array::OwnedArray;
     use crate::serde::test::roundtrip_array;
 
     fn binary_array() -> VarBinViewArray {

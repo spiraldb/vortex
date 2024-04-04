@@ -7,7 +7,7 @@ use crate::array::sparse::SparseArray;
 use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
-use crate::array::{Array, ArrayRef, OwnedArray};
+use crate::array::{ArrayRef, OwnedArray};
 
 mod private {
     pub trait Sealed {}

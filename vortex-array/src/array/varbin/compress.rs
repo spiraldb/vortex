@@ -5,7 +5,6 @@ use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::{Array, ArrayRef, OwnedArray};
 use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use crate::validity::OwnedValidity;
-use crate::view::AsView;
 
 impl EncodingCompression for VarBinEncoding {
     fn cost(&self) -> u8 {
@@ -15,7 +14,7 @@ impl EncodingCompression for VarBinEncoding {
     fn can_compress(
         &self,
         array: &dyn OwnedArray,
-        config: &CompressConfig,
+        _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         (array.encoding().id() == Self::ID).then_some(self)
     }

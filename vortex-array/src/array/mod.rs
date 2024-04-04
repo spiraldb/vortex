@@ -136,7 +136,6 @@ pub use impl_array;
 
 use crate::encoding::EncodingRef;
 use crate::validity::ArrayValidity;
-use crate::view::{AsView, ToOwnedView};
 use crate::ArrayWalker;
 
 impl Array for ArrayRef {

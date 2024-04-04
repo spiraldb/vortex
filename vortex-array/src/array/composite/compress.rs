@@ -2,7 +2,7 @@ use vortex_error::VortexResult;
 
 use crate::array::composite::{CompositeArray, CompositeEncoding};
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::{Array, ArrayRef, OwnedArray};
+use crate::array::{ArrayRef, OwnedArray};
 use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
 
 impl EncodingCompression for CompositeEncoding {
@@ -13,7 +13,7 @@ impl EncodingCompression for CompositeEncoding {
     fn can_compress(
         &self,
         array: &dyn OwnedArray,
-        config: &CompressConfig,
+        _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         (array.encoding().id() == Self::ID).then_some(self)
     }
