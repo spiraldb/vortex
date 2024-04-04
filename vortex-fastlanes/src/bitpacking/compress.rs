@@ -1,7 +1,7 @@
 use arrayref::array_ref;
 use fastlanez::TryBitPack;
 use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::primitive::{patch_owned, PrimitiveArray};
+use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::array::IntoArray;
 use vortex::array::{Array, ArrayRef};
@@ -193,7 +193,7 @@ pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     }
 
     if let Some(patches) = array.patches() {
-        patch_owned(unpacked, patches)
+        unpacked.patch(patches)
     } else {
         Ok(unpacked)
     }

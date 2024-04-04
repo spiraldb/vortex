@@ -7,20 +7,20 @@ use std::sync::{Arc, RwLock};
 
 use allocator_api2::alloc::Allocator;
 use arrow_buffer::buffer::{Buffer, ScalarBuffer};
+use itertools::Itertools;
 use linkme::distributed_slice;
-
-pub use compute::patch_owned;
 pub use view::*;
-pub use view::*;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, Nullability};
 
-use crate::{ArrayWalker, impl_array};
 use crate::accessor::ArrayAccessor;
-use crate::array::{Array, ArrayRef, check_slice_bounds};
-use crate::array::IntoArray;
+use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::compute::PrimitiveTrait;
+use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::validity::{Validity, ValidityView};
+use crate::array::IntoArray;
+use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::compute::flatten::flatten_primitive;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -28,6 +28,7 @@ use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
+use crate::{impl_array, ArrayWalker};
 
 mod compute;
 mod serde;
@@ -152,9 +153,40 @@ impl PrimitiveArray {
         self.buffer().typed_data()
     }
 
+    pub fn patch(self, patch: &dyn Array) -> VortexResult<Self> {
+        match patch.encoding().id() {
+            SparseEncoding::ID => {
+                match_each_native_ptype!(self.ptype(), |$T| {self.patch_with_sparse::<$T>(patch.as_sparse())})
+            }
+            _ => Err(vortex_err!(NotImplemented: "patch", self.encoding().id().name())),
+        }
+    }
+
+    fn patch_with_sparse<T: NativePType>(mut self, patch: &SparseArray) -> VortexResult<Self> {
+        let patch_indices = patch.resolved_indices();
+        let patch_values = flatten_primitive(patch.values())?;
+        let ptype = self.ptype();
+        if ptype != patch_values.ptype() {
+            vortex_bail!(MismatchedTypes: self.dtype, patch_values.dtype)
+        }
+
+        let mut values = self.buffer.into_vec::<T>()
+            .map_err(|_| vortex_err!(ComputeError: "attempted to patch owned primitive array with unowned buffer"))?;
+        // TODO(robert): Also patch validity
+        for (idx, value) in patch_indices.iter().zip_eq(patch_values.typed_data::<T>()) {
+            values[*idx] = *value;
+        }
+        self.buffer = Buffer::from_vec::<T>(values);
+        Ok(self)
+    }
+
     pub(crate) fn as_trait<T: NativePType>(&self) -> &dyn PrimitiveTrait<T> {
         assert_eq!(self.ptype, T::PTYPE);
         self
+    }
+
+    pub fn into_children(self) -> (Buffer, Option<Validity>) {
+        (self.buffer, self.validity)
     }
 }
 
@@ -342,8 +374,8 @@ impl ArrayDisplay for PrimitiveArray {
 mod test {
     use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-    use crate::array::Array;
     use crate::array::primitive::PrimitiveArray;
+    use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
     use crate::ptype::PType;
 
