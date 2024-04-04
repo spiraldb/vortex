@@ -37,10 +37,11 @@ impl ChunkedArray {
                 vortex_bail!(MismatchedTypes: dtype, chunk.dtype());
             }
         }
-        let chunk_ends = chunks
-            .iter()
-            .scan(0u64, |acc, c| {
-                *acc += c.len() as u64;
+        let chunk_ends = [0u64]
+            .into_iter()
+            .chain(chunks.iter().map(|c| c.len() as u64))
+            .scan(0, |acc, c| {
+                *acc += c;
                 Some(*acc)
             })
             .collect_vec();
@@ -67,15 +68,9 @@ impl ChunkedArray {
         let index_chunk = self
             .chunk_ends
             .binary_search(&(index as u64))
-            // If the result of binary_search is Ok it means we have exact match, since these are chunk ends EXCLUSIVE we have to add one to move to the next one
-            .map(|o| o + 1)
-            .unwrap_or_else(|o| o);
-        let index_in_chunk = index
-            - if index_chunk == 0 {
-                0
-            } else {
-                self.chunk_ends[index_chunk - 1]
-            } as usize;
+            // Since chunk ends start with 0 whenever value falls in between two ends it's in the chunk that starts the END
+            .unwrap_or_else(|o| o - 1);
+        let index_in_chunk = index - self.chunk_ends[index_chunk] as usize;
         (index_chunk, index_in_chunk)
     }
 }
@@ -218,9 +213,10 @@ mod test {
     use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
     use crate::array::chunked::ChunkedArray;
+    use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::IntoArray;
     use crate::array::{Array, ArrayRef};
-    use crate::compute::flatten::{flatten, flatten_primitive, FlattenedArray};
+    use crate::compute::flatten::flatten_primitive;
     use crate::ptype::NativePType;
 
     fn chunked_array() -> ChunkedArray {
@@ -239,11 +235,8 @@ mod test {
     }
 
     fn assert_equal_slices<T: NativePType>(arr: ArrayRef, slice: &[T]) {
-        let FlattenedArray::Chunked(chunked) = flatten(&arr).unwrap() else {
-            unreachable!()
-        };
         let mut values = Vec::with_capacity(arr.len());
-        chunked
+        arr.as_chunked()
             .chunks()
             .iter()
             .map(|a| flatten_primitive(a.as_ref()).unwrap())
