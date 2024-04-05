@@ -1,23 +1,23 @@
 [workspace]
 members = [
-    #"bench-vortex",
+    "bench-vortex",
     "fastlanez",
     "fastlanez-sys",
-    #"pyvortex",
+    "pyvortex",
     "vortex-alloc",
-    #"vortex-alp",
+    "vortex-alp",
     "vortex-array",
     "vortex-array2",
-    #"vortex-datetime",
-    #"vortex-dict",
+    "vortex-datetime",
+    "vortex-dict",
     "vortex-error",
-    #"vortex-fastlanes",
+    "vortex-fastlanes",
     "vortex-flatbuffers",
     "vortex-ipc",
-    #"vortex-ree",
-    #"vortex-roaring",
+    "vortex-ree",
+    "vortex-roaring",
     "vortex-schema",
-    #"vortex-zigzag",
+    "vortex-zigzag",
 ]
 resolver = "2"
 
