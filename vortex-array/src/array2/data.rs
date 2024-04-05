@@ -65,7 +65,7 @@ impl ArrayData {
 
 impl ToArray for ArrayData {
     fn to_array(&self) -> Array {
-        Array::DataRef(&self)
+        Array::DataRef(self)
     }
 }
 
