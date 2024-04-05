@@ -979,7 +979,7 @@ dependencies = [
  "log",
  "parquet 50.0.0",
  "parquet 51.0.0",
- "reqwest 0.12.2",
+ "reqwest 0.12.3",
  "simplelog",
  "tokio",
  "vortex-alp",
@@ -2170,9 +2170,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "h2"
-version = "0.3.25"
+version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fbd2820c5e49886948654ab546d0688ff24530286bdcf8fca3cefb16d4618eb"
+checksum = "81fe527a889e1532da5c525686d96d4c2e74cdd345badf8dfef9f6b39dd5f5e8"
 dependencies = [
  "bytes",
  "fnv",
@@ -2189,9 +2189,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51ee2dd2e4f378392eeff5d51618cd9a63166a2513846bbc55f21cfacd9199d4"
+checksum = "816ec7294445779408f36fe57bc5b7fc1cf59664059096c65f905c1c61f58069"
 dependencies = [
  "bytes",
  "fnv",
@@ -2365,7 +2365,7 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "h2 0.3.25",
+ "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
  "httparse",
@@ -2388,7 +2388,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-util",
- "h2 0.4.3",
+ "h2 0.4.4",
  "http 1.1.0",
  "http-body 1.0.0",
  "httparse",
@@ -2576,9 +2576,9 @@ dependencies = [
 
 [[package]]
 name = "lance"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89669e7ace91c716c253208f5d6c53c405d6da2ebd6c8798f205a773b99635e7"
+checksum = "4295762ec291eeab46223533d12828ccbc460fdf22814e18c80dbbf47d1d30c0"
 dependencies = [
  "arrow 50.0.0",
  "arrow-arith 50.0.0",
@@ -2634,9 +2634,9 @@ dependencies = [
 
 [[package]]
 name = "lance-arrow"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6b5e663bd15a2ea3dd2f998db34d7843526b210b730791d55746baaeafb3e4e"
+checksum = "2d50ac53bb56a03372d7a768c6ebfb858053221ec5096c71f2694fc074c2d6f0"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-buffer 50.0.0",
@@ -2653,9 +2653,9 @@ dependencies = [
 
 [[package]]
 name = "lance-core"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2aa28b21beef26fdfc09cf13436306fdf6ed4545972e3268be26974578ef8cb"
+checksum = "0e36a15ecf978faa2ab7b7f6b4a250cff54e385f56bd8c161cd8a23f78165435"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-buffer 50.0.0",
@@ -2688,9 +2688,9 @@ dependencies = [
 
 [[package]]
 name = "lance-datafusion"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80afb083dda662157b95adfbd35009d8804c4d4d77b7f62c69cff99eb36b7d15"
+checksum = "831405562122e06b342b841eb138e92786508fdf9e3e6124446fe05a83ea0bfe"
 dependencies = [
  "arrow 50.0.0",
  "arrow-array 50.0.0",
@@ -2711,9 +2711,9 @@ dependencies = [
 
 [[package]]
 name = "lance-datagen"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e462c472fed261cad4e7b3bfff77516d6a368c2848d4ea5a834964d6d4a0d18"
+checksum = "724b88bca6dbea4a5b52898775489129f29cee6c07a6c6e0f9867d145b36a855"
 dependencies = [
  "arrow 50.0.0",
  "arrow-array 50.0.0",
@@ -2727,9 +2727,9 @@ dependencies = [
 
 [[package]]
 name = "lance-file"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cf410862c083785165d615349155474fa91ce3fbcb0da9a41235bf22f6edc75"
+checksum = "3943a8ec121fdd4c907102fccb334d453e7c2e5b269af8f4f87ea6949b76edf6"
 dependencies = [
  "arrow-arith 50.0.0",
  "arrow-array 50.0.0",
@@ -2756,9 +2756,9 @@ dependencies = [
 
 [[package]]
 name = "lance-index"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcf64473aae15d2ed1ed6f11887ab9a06667d91e9131020141321f34ee0d860e"
+checksum = "1277c48fb2b7ccbb9c67ca6f4d67607949a31876f8862eaea1320535e397078e"
 dependencies = [
  "arrow 50.0.0",
  "arrow-array 50.0.0",
@@ -2802,9 +2802,9 @@ dependencies = [
 
 [[package]]
 name = "lance-io"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f45be6af4e101c838bcdd29f5a0ab40500bbba675d055d9a4e311fd725544fec"
+checksum = "fc527575e311dd162257abbe99d50baa7f58122b4a33c43c71784d12e9b465c1"
 dependencies = [
  "arrow 50.0.0",
  "arrow-arith 50.0.0",
@@ -2840,9 +2840,9 @@ dependencies = [
 
 [[package]]
 name = "lance-linalg"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c839f75209a94ead48be4bca7fc6e5ac1d6b974410c56cbad89e067fbcb58984"
+checksum = "ae368482bc41d2bf7606d0353ecf91543961cebed227850b9fb2d2c801164dc9"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-ord 50.0.0",
@@ -2863,9 +2863,9 @@ dependencies = [
 
 [[package]]
 name = "lance-table"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99d7e5691cec82369133ac1f83a0c7ec9d88cfc279052368c67bfbe0f4ad4592"
+checksum = "1fbc4567414b5250125bd3f38b2bb2cdaa53301b451002db7ec40c55877eb959"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-buffer 50.0.0",
@@ -3898,12 +3898,12 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.12.3"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efb6c9a1dd1def8e2124d17e83a20af56f1570d6c2d2bd9e266ccb768df3840e"
+checksum = "19de2de2a00075bf566bee3bd4db014b11587e84184d3f7a791bc17f1a8e9e48"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.58",
@@ -4203,7 +4203,7 @@ dependencies = [
  "encoding_rs",
  "futures-core",
  "futures-util",
- "h2 0.3.25",
+ "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
  "hyper 0.14.28",
@@ -4232,22 +4232,22 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
- "winreg",
+ "winreg 0.50.0",
 ]
 
 [[package]]
 name = "reqwest"
-version = "0.12.2"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d66674f2b6fb864665eea7a3c1ac4e3dfacd2fda83cf6f935a612e01b0e3338"
+checksum = "3e6cc1e89e689536eb5aeede61520e874df5a4707df811cd5da4aa5fbb2aae19"
 dependencies = [
- "base64 0.21.7",
+ "base64 0.22.0",
  "bytes",
  "encoding_rs",
  "futures-channel",
  "futures-core",
  "futures-util",
- "h2 0.4.3",
+ "h2 0.4.4",
  "http 1.1.0",
  "http-body 1.0.0",
  "http-body-util",
@@ -4262,7 +4262,7 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
- "rustls-pemfile 1.0.4",
+ "rustls-pemfile 2.1.1",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -4275,7 +4275,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "winreg",
+ "winreg 0.52.0",
 ]
 
 [[package]]
@@ -5875,6 +5875,16 @@ name = "winreg"
 version = "0.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "524e57b2c537c0f9b1e69f1965311ec12182b4122e45035b1508cd24d2adadb1"
+dependencies = [
+ "cfg-if",
+ "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "winreg"
+version = "0.52.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
 dependencies = [
  "cfg-if",
  "windows-sys 0.48.0",
