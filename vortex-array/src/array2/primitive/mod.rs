@@ -4,7 +4,6 @@ use arrow_buffer::Buffer;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array2::ArrayCompute;
 use crate::array2::ArrayView;
 use crate::array2::TypedArrayView;
 use crate::array2::{ArrayData, TypedArrayData};
@@ -83,5 +82,15 @@ impl FromArrayView for PrimitiveView<'_> {
 impl FromArrayData for PrimitiveData {
     fn try_from(data: &ArrayData) -> VortexResult<Self> {
         todo!()
+    }
+}
+
+impl ArrayTrait for &dyn PrimitiveArray {
+    fn dtype(&self) -> &DType {
+        todo!()
+    }
+
+    fn len(&self) -> usize {
+        self.buffer().len() / self.ptype().byte_width()
     }
 }

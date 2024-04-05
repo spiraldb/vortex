@@ -17,10 +17,8 @@ pub use encoding::*;
 pub use implementation::*;
 pub use metadata::*;
 pub use view::*;
-use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array2::ArrayCompute;
 use crate::array2::ArrayData;
 use crate::array2::ArrayEncoding;
 use crate::array2::ArrayView;
@@ -33,21 +31,13 @@ pub enum Array<'v> {
     View(ArrayView<'v>),
 }
 
-impl Array<'_> {
-    pub fn dtype(&self) -> &DType {
-        match self {
-            Array::Data(d) => d.dtype(),
-            Array::DataRef(d) => d.dtype(),
-            Array::View(v) => v.dtype(),
-        }
-    }
+pub trait ArrayTrait: ArrayCompute {
+    fn dtype(&self) -> &DType;
+    fn len(&self) -> usize;
 }
 
-impl WithCompute for Array<'_> {
-    fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
-        &self,
-        f: F,
-    ) -> VortexResult<R> {
+impl WithArray for Array<'_> {
+    fn with_array<R, F: Fn(&dyn ArrayTrait) -> R>(&self, f: F) -> R {
         match self {
             Array::Data(d) => d.encoding().with_data(d, f),
             Array::DataRef(d) => d.encoding().with_data(d, f),

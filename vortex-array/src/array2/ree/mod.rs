@@ -3,7 +3,6 @@ mod compute;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
-use crate::array2::ArrayCompute;
 use crate::array2::ArrayView;
 use crate::array2::TypedArrayView;
 use crate::array2::{Array, ArrayEncoding, ArrayMetadata, FromArrayMetadata};
@@ -87,6 +86,16 @@ impl FromArrayView for REEView<'_> {
 
 impl FromArrayData for REEData {
     fn try_from(data: &ArrayData) -> VortexResult<Self> {
+        todo!()
+    }
+}
+
+impl ArrayTrait for &dyn REEArray {
+    fn dtype(&self) -> &DType {
+        todo!()
+    }
+
+    fn len(&self) -> usize {
         todo!()
     }
 }

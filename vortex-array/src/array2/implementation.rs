@@ -41,7 +41,7 @@ macro_rules! impl_encoding {
         use paste::paste;
 
         paste! {
-            use $crate::array2::{ArrayDef, FromArrayData, FromArrayView};
+            use $crate::array2::{ArrayDef, FromArrayData, FromArrayView, ArrayTrait};
             use $crate::encoding::EncodingId;
             use std::any::Any;
             use std::sync::Arc;
@@ -69,7 +69,7 @@ macro_rules! impl_encoding {
                 fn with_view_mut<'v>(
                     &self,
                     view: &'v ArrayView<'v>,
-                    f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+                    f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
                 ) -> VortexResult<()> {
                     // Convert ArrayView -> PrimitiveArray, then call compute.
                     let typed_view = <[<$Name View>] as FromArrayView>::try_from(view)?;
@@ -79,7 +79,7 @@ macro_rules! impl_encoding {
                 fn with_data_mut(
                     &self,
                     data: &ArrayData,
-                    f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+                    f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
                 ) -> VortexResult<()> {
                     let data = <[<$Name Data>] as FromArrayData>::try_from(data)?;
                     f(&data.as_array())

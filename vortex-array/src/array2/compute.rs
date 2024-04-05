@@ -1,12 +1,11 @@
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::array2::primitive::PrimitiveData;
-use crate::array2::Array;
+use crate::array2::{Array, ArrayTrait};
 use crate::scalar::Scalar;
 
-pub trait WithCompute {
-    fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(&self, f: F)
-        -> VortexResult<R>;
+pub trait WithArray {
+    fn with_array<R, F: Fn(&dyn ArrayTrait) -> R>(&self, f: F) -> R;
 }
 
 pub trait ArrayCompute {
@@ -23,8 +22,8 @@ pub trait ScalarAtFn {
 }
 
 pub fn scalar_at(array: &Array, index: usize) -> VortexResult<Scalar> {
-    array.with_compute(|c| {
-        c.scalar_at()
+    array.with_array(|a| {
+        a.scalar_at()
             .ok_or_else(|| vortex_err!("Not implemented: scalar_at"))?
             .scalar_at(index)
     })
@@ -41,8 +40,8 @@ pub enum FlattenedArray {
 }
 
 pub fn flatten(array: &Array) -> VortexResult<FlattenedArray> {
-    array.with_compute(|c| {
-        c.flatten()
+    array.with_array(|a| {
+        a.flatten()
             .ok_or_else(|| vortex_err!("Not implemented: flatten"))?
             .flatten()
     })
