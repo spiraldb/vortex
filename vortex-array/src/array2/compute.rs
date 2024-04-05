@@ -22,6 +22,14 @@ pub trait ScalarAtFn {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar>;
 }
 
+pub fn scalar_at(array: &Array, index: usize) -> VortexResult<Scalar> {
+    array.with_compute(|c| {
+        c.scalar_at()
+            .ok_or_else(|| vortex_err!("Not implemented: scalar_at"))?
+            .scalar_at(index)
+    })
+}
+
 pub trait FlattenFn {
     fn flatten(&self) -> VortexResult<FlattenedArray>;
 }

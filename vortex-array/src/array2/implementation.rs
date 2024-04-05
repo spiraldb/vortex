@@ -1,9 +1,9 @@
 use vortex_error::VortexResult;
 
-use crate::array2::ArrayData;
 use crate::array2::ArrayEncoding;
 use crate::array2::ArrayMetadata;
 use crate::array2::ArrayView;
+use crate::array2::{Array, ArrayData};
 use crate::encoding::EncodingId;
 
 /// Trait the defines the set of types relating to an array.
@@ -27,9 +27,12 @@ pub trait FromArrayView: Sized {
     fn try_from(view: &ArrayView) -> VortexResult<Self>;
 }
 
-/// Trait to enable conversion into an owned ArrayData.
-pub trait ToArrayData {
-    fn to_data(&self) -> ArrayData;
+pub trait ToArray {
+    fn to_array(&self) -> Array;
+}
+
+pub trait IntoArray {
+    fn into_array(self) -> Array<'static>;
 }
 
 #[macro_export]

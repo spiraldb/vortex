@@ -4,9 +4,8 @@ use arrow_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::array2::ArrayData;
 use crate::array2::SerdeContext;
-use crate::array2::{ArrayDef, ArrayMetadata, EncodingRef, ParseArrayMetadata, ToArrayData};
+use crate::array2::{ArrayDef, EncodingRef, ParseArrayMetadata};
 use crate::flatbuffers::array as fb;
 
 #[derive(Clone)]
@@ -165,26 +164,5 @@ where
             view: view.clone(),
             metadata,
         })
-    }
-}
-
-pub trait ArrayChildren {
-    fn child_array_data(&self) -> Vec<ArrayData>;
-}
-
-impl<'v, D: ArrayDef> ToArrayData for TypedArrayView<'v, D>
-where
-    Self: ArrayChildren,
-{
-    fn to_data(&self) -> ArrayData {
-        // TODO(ngates): how do we get the child types? I guess we could walk?
-
-        ArrayData::new(
-            self.view().encoding(),
-            self.view().dtype().clone(),
-            self.metadata().to_arc(),
-            self.view().buffers().to_vec().into(),
-            self.child_array_data().into(),
-        )
     }
 }

@@ -19,10 +19,10 @@ pub use metadata::*;
 pub use view::*;
 use vortex_error::VortexResult;
 
+use crate::array2::ArrayCompute;
 use crate::array2::ArrayData;
 use crate::array2::ArrayEncoding;
 use crate::array2::ArrayView;
-use crate::array2::{ArrayCompute, WithCompute};
 
 /// An array enum, similar to Cow.
 #[derive(Debug, Clone)]
@@ -49,18 +49,15 @@ impl WithCompute for Array<'_> {
 mod test {
     use vortex_error::VortexResult;
 
+    use crate::array2::compute::*;
+    use crate::array2::primitive::PrimitiveData;
+    use crate::array2::ToArray;
+
     #[test]
     fn test_primitive() -> VortexResult<()> {
-        // let array = PrimitiveData::from_vec(vec![1i32, 2, 3, 4, 5]);
-        // let scalar: i32 = array
-        //     .as_ref()
-        //     .scalar_at()
-        //     .unwrap()
-        //     .scalar_at(3)?
-        //     .try_into()?;
-        // assert_eq!(scalar, 4);
-        // let parray: &dyn PrimitiveArray = &array;
-        // assert!(parray.patch().is_none());
+        let array = PrimitiveData::from_vec(vec![1i32, 2, 3, 4, 5]);
+        let scalar: i32 = scalar_at(&array.to_array(), 3)?.try_into()?;
+        assert_eq!(scalar, 4);
         Ok(())
     }
 }

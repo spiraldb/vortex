@@ -5,7 +5,7 @@ use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::array2::ArrayView;
-use crate::array2::{ArrayChildren, TypedArrayView};
+use crate::array2::TypedArrayView;
 use crate::array2::{ArrayCompute, ScalarAtFn};
 use crate::array2::{ArrayData, TypedArrayData};
 use crate::array2::{ArrayEncoding, ArrayMetadata, ParseArrayMetadata};
@@ -80,12 +80,12 @@ impl PrimitiveArray for PrimitiveView<'_> {
             .expect("PrimitiveView must have a single buffer")
     }
 }
-
-impl ArrayChildren for PrimitiveView<'_> {
-    fn child_array_data(&self) -> Vec<ArrayData> {
-        todo!()
-    }
-}
+//
+// impl ArrayChildren for PrimitiveView<'_> {
+//     fn child_array_data(&self) -> Vec<ArrayData> {
+//         todo!()
+//     }
+// }
 
 impl ParseArrayMetadata for PrimitiveMetadata {
     fn try_from(_metadata: Option<&[u8]>) -> VortexResult<Self> {
