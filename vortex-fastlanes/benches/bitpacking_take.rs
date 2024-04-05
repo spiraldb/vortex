@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
-use rand::{Rng, thread_rng};
 use rand::distributions::Uniform;
-
+use rand::{thread_rng, Rng};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};

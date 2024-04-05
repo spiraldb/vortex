@@ -161,12 +161,13 @@ fn bitpack_patches(
 pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
-    let encoded = flatten_primitive(cast(array.encoded(), U8.into())?.as_ref())?;
+    let offset = array.offset();
+    let encoded = flatten_primitive(&cast(array.encoded(), U8.into())?)?;
     let ptype: PType = array.dtype().try_into()?;
 
     let mut unpacked = match_integers_by_width!(ptype, |$P| {
         PrimitiveArray::from_nullable(
-            unpack_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, length),
+            unpack_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, offset, length),
             array.validity().to_owned_view(),
         )
     });
@@ -199,6 +200,7 @@ fn patch_unpacked(array: PrimitiveArray, patches: &dyn Array) -> VortexResult<Pr
 pub fn unpack_primitive<T: NativePType + TryBitPack>(
     packed: &[u8],
     bit_width: usize,
+    offset: usize,
     length: usize,
 ) -> Vec<T> {
     if bit_width == 0 {
@@ -206,7 +208,8 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
     }
 
     // How many fastlanes vectors we will process.
-    let num_chunks = (length + 1023) / 1024;
+    // Packed array might not start at 0 when the array is sliced. Offset is guaranteed to be < 1024.
+    let num_chunks = (offset + length + 1023) / 1024;
     let bytes_per_chunk = 128 * bit_width;
     assert_eq!(
         packed.len(),
@@ -217,9 +220,19 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
     );
 
     // Allocate a result vector.
-    let mut output = Vec::with_capacity(num_chunks * 1024);
+    let mut output = Vec::with_capacity(num_chunks * 1024 - offset);
+    // Handle first chunk if offset is non 0. We have to decode the chunk and skip first offset elements
+    let first_full_chunk = if offset != 0 {
+        let chunk: &[u8] = &packed[0..bytes_per_chunk];
+        TryBitPack::try_unpack_into(chunk, bit_width, &mut output).unwrap();
+        output.drain(0..offset);
+        1
+    } else {
+        0
+    };
+
     // Loop over all the chunks.
-    (0..num_chunks).for_each(|i| {
+    (first_full_chunk..num_chunks).for_each(|i| {
         let chunk: &[u8] = &packed[i * bytes_per_chunk..][0..bytes_per_chunk];
         TryBitPack::try_unpack_into(chunk, bit_width, &mut output).unwrap();
     });
@@ -233,6 +246,14 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
     if output.len() < 1024 {
         output.shrink_to_fit();
     }
+
+    assert_eq!(
+        output.len(),
+        length,
+        "Expected unpacked array to be of length {} but got {}",
+        length,
+        output.len()
+    );
     output
 }
 
@@ -240,10 +261,11 @@ pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResul
     let bit_width = array.bit_width();
     let encoded = flatten_primitive(cast(array.encoded(), U8.into())?.as_ref())?;
     let ptype: PType = array.dtype().try_into()?;
+    let index_in_encoded = index + array.offset();
 
     let scalar: Scalar = match_integers_by_width!(ptype, |$P| {
         unsafe {
-            unpack_single_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, index).map(|v| v.into())
+            unpack_single_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, index_in_encoded).map(|v| v.into())
         }
     })?;
 

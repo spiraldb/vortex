@@ -3,16 +3,15 @@ use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
 use log::{debug, info, warn};
-
 use vortex_error::VortexResult;
 
-use crate::array::{Array, ArrayKind, ArrayRef};
 use crate::array::chunked::{ChunkedArray, ChunkedEncoding};
 use crate::array::composite::CompositeEncoding;
 use crate::array::constant::ConstantArray;
 use crate::array::sparse::SparseEncoding;
 use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::varbin::VarBinEncoding;
+use crate::array::{Array, ArrayKind, ArrayRef};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
 use crate::encoding::{Encoding, EncodingRef, ENCODINGS};

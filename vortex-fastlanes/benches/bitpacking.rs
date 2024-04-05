@@ -1,8 +1,7 @@
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
-use rand::{Rng, thread_rng};
-use rand::distributions::Uniform;
-
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fastlanez::TryBitPack;
+use rand::distributions::Uniform;
+use rand::{thread_rng, Rng};
 use vortex_fastlanes::{bitpack_primitive, unpack_primitive, unpack_single_primitive};
 
 fn values(len: usize, bits: usize) -> Vec<u32> {
@@ -34,7 +33,11 @@ fn pack_unpack(c: &mut Criterion) {
     assert_eq!(unpacked, values);
 
     c.bench_function("unpack_1M", |b| {
-        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, values.len())));
+        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 0, values.len())));
+    });
+
+    c.bench_function("unpack_1M_offset", |b| {
+        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 768, values.len())));
     });
 
     c.bench_function("unpack_1M_singles", |b| {
@@ -44,7 +47,11 @@ fn pack_unpack(c: &mut Criterion) {
     // 1024 elements pack into `128 * bits` bytes
     let packed_1024 = &packed[0..128 * bits];
     c.bench_function("unpack_1024_alloc", |b| {
-        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, values.len())));
+        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 0, values.len())));
+    });
+
+    c.bench_function("unpack_1024_alloc_offset", |b| {
+        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 768, values.len())));
     });
 
     let mut output: Vec<u32> = Vec::with_capacity(1024);
@@ -52,6 +59,16 @@ fn pack_unpack(c: &mut Criterion) {
         b.iter(|| {
             output.clear();
             TryBitPack::try_unpack_into(packed_1024, bits, &mut output).unwrap();
+            black_box(output[0])
+        })
+    });
+
+    let mut output: Vec<u32> = Vec::with_capacity(1024);
+    c.bench_function("unpack_1024_noalloc_offset", |b| {
+        b.iter(|| {
+            output.clear();
+            TryBitPack::try_unpack_into(packed_1024, bits, &mut output).unwrap();
+            output.drain(0..768);
             black_box(output[0])
         })
     });
