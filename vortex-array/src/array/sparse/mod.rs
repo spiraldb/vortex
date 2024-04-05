@@ -1,6 +1,5 @@
 use std::sync::{Arc, RwLock};
 
-use itertools::Itertools;
 use linkme::distributed_slice;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
@@ -8,20 +7,18 @@ use vortex_schema::DType;
 use crate::array::constant::ConstantArray;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
-use crate::compute::cast::cast;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::ptype::PType;
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
-use crate::{impl_array, ArrayWalker};
+use crate::{impl_array, match_each_integer_ptype, ArrayWalker};
 
 mod compress;
 mod compute;
@@ -112,12 +109,14 @@ impl SparseArray {
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        flatten_primitive(cast(self.indices(), PType::U64.into()).unwrap().as_ref())
-            .unwrap()
-            .typed_data::<u64>()
-            .iter()
-            .map(|v| (*v as usize) - self.indices_offset)
-            .collect_vec()
+        let flat_indices = flatten_primitive(self.indices()).unwrap();
+        match_each_integer_ptype!(flat_indices.ptype(), |$P| {
+            flat_indices
+                .typed_data::<$P>()
+                .iter()
+                .map(|v| (*v as usize) - self.indices_offset)
+                .collect::<Vec<_>>()
+        })
     }
 }
 
