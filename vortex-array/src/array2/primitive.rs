@@ -3,8 +3,8 @@ use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::array2::data::{ArrayData, TypedArrayData};
-use crate::array2::view::TypedArrayView;
-use crate::array2::{Array, ArrayEncoding, ArrayMetadata, ToArrayData};
+use crate::array2::view::{ArrayChildren, TypedArrayView};
+use crate::array2::{Array, ArrayEncoding, ArrayMetadata};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::{NativePType, PType};
@@ -87,6 +87,12 @@ impl Array for PrimitiveData {
 
     fn len(&self) -> usize {
         self.buffer().len() / self.ptype().byte_width()
+    }
+}
+
+impl ArrayChildren for PrimitiveView<'_> {
+    fn child_array_data(&self) -> Vec<ArrayData> {
+        todo!()
     }
 }
 

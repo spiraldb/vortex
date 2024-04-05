@@ -53,7 +53,6 @@ pub trait ToArrayData {
 pub trait Array: ToArrayData {
     fn dtype(&self) -> &DType;
     fn len(&self) -> usize;
-    fn children_array_data(&self) -> Vec<ArrayData>;
 }
 
 /// Trait the defines the set of types relating to an array.
@@ -61,8 +60,6 @@ pub trait Array: ToArrayData {
 pub trait ArrayDef {
     const ID: EncodingId;
     type Array<'a>: ?Sized + 'a;
-    // TODO(ngates): explore inverting this trait relationship
-    // where &'a Self::Array<'a>: Array;
     type Metadata: ArrayMetadata;
     type Encoding: ArrayEncoding;
 }

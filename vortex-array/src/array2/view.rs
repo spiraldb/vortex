@@ -1,8 +1,7 @@
-use std::sync::Arc;
-
 use vortex_error::{vortex_bail, VortexError};
 
 use crate::array2::data::ArrayData;
+use crate::array2::primitive::PrimitiveEncoding;
 use crate::array2::{ArrayDef, ArrayMetadata, ToArrayData};
 use crate::serde::ArrayView;
 
@@ -43,17 +42,25 @@ where
     }
 }
 
-impl<'v, D: ArrayDef> ToArrayData for TypedArrayView<'v, D> {
+pub trait ArrayChildren {
+    fn child_array_data(&self) -> Vec<ArrayData>;
+}
+
+impl<'v, D: ArrayDef> ToArrayData for TypedArrayView<'v, D>
+where
+    Self: ArrayChildren,
+{
     fn to_array_data(&self) -> ArrayData {
         // TODO(ngates): how do we get the child types? I guess we could walk?
 
         ArrayData::new(
-            self.view().encoding(),
+            // FIXME(ngates): encoding ref.
+            &PrimitiveEncoding,
+            // self.view().encoding(),
             self.view().dtype().clone(),
             self.metadata().to_arc(),
             self.view().buffers().to_vec().into(),
-            self.as_array()
-            self.view().children().to_vec().into(),
+            self.child_array_data().into(),
         )
     }
 }
