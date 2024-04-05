@@ -4,10 +4,10 @@ use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::array2::validity::ArrayValidity;
-use crate::array2::TypedArrayView;
 use crate::array2::{Array, ArrayEncoding, ArrayMetadata, TryFromArrayMetadata};
 use crate::array2::{ArrayData, TypedArrayData};
 use crate::array2::{ArrayView, ToArrayData};
+use crate::array2::{IntoArray, TypedArrayView};
 use crate::impl_encoding;
 
 impl_encoding!("vortex.ree", REE);
@@ -63,11 +63,17 @@ impl REEArray for REEData {
 
 impl REEArray for REEView<'_> {
     fn run_ends(&self) -> Array {
-        Array::View(self.view().child(0, self.metadata().ends_dtype()).unwrap())
+        self.view()
+            .child(0, self.metadata().ends_dtype())
+            .unwrap()
+            .into_array()
     }
 
     fn values(&self) -> Array {
-        Array::View(self.view().child(1, self.view().dtype()).unwrap())
+        self.view()
+            .child(1, self.view().dtype())
+            .unwrap()
+            .into_array()
     }
 }
 

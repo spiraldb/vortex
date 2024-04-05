@@ -2,13 +2,13 @@ mod compute;
 
 use arrow_buffer::Buffer;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
+use vortex_schema::{DType, Nullability};
 
-use crate::array2::ArrayValidity;
-use crate::array2::TypedArrayView;
+use crate::array2::{scalar_at, Array, ArrayValidity, IntoArray, Validity};
 use crate::array2::{ArrayData, TypedArrayData};
 use crate::array2::{ArrayEncoding, ArrayMetadata, TryFromArrayMetadata};
 use crate::array2::{ArrayView, ToArrayData};
+use crate::array2::{ToArray, TypedArrayView};
 use crate::impl_encoding;
 use crate::ptype::{NativePType, PType};
 
@@ -26,6 +26,7 @@ pub trait PrimitiveArray {
     fn dtype(&self) -> &DType;
     fn ptype(&self) -> PType;
     fn buffer(&self) -> &Buffer;
+    fn validity(&self) -> Option<Array>;
 }
 
 impl PrimitiveData {
@@ -55,6 +56,13 @@ impl PrimitiveArray for PrimitiveData {
     fn buffer(&self) -> &Buffer {
         self.data().buffers().first().unwrap()
     }
+
+    fn validity(&self) -> Option<Array> {
+        match self.dtype().nullability() {
+            Nullability::NonNullable => None,
+            Nullability::Nullable => Some(self.data().children().first().unwrap().to_array()),
+        }
+    }
 }
 
 impl PrimitiveArray for PrimitiveView<'_> {
@@ -72,6 +80,15 @@ impl PrimitiveArray for PrimitiveView<'_> {
             .first()
             .expect("PrimitiveView must have a single buffer")
     }
+
+    fn validity(&self) -> Option<Array> {
+        match self.dtype().nullability() {
+            Nullability::NonNullable => None,
+            Nullability::Nullable => {
+                Some(self.view().child(0, &Validity::DTYPE).unwrap().into_array())
+            }
+        }
+    }
 }
 
 impl TryFromArrayMetadata for PrimitiveMetadata {
@@ -88,7 +105,8 @@ impl TryFromArrayView for PrimitiveView<'_> {
 
 impl TryFromArrayData for PrimitiveData {
     fn try_from_data(data: &ArrayData) -> VortexResult<Self> {
-        todo!()
+        // TODO(ngates): validate the array data.
+        Ok(Self::new_unchecked(data.clone()))
     }
 }
 
@@ -100,7 +118,11 @@ impl ArrayTrait for &dyn PrimitiveArray {
 
 impl ArrayValidity for &dyn PrimitiveArray {
     fn is_valid(&self, index: usize) -> bool {
-        todo!()
+        if let Some(v) = self.validity() {
+            scalar_at(&v, index).unwrap().try_into().unwrap()
+        } else {
+            true
+        }
     }
 }
 

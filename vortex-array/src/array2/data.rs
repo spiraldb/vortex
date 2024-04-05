@@ -84,6 +84,13 @@ impl<D: ArrayDef> TypedArrayData<D>
 where
     Self: for<'a> AsRef<D::Array<'a>>,
 {
+    pub fn new_unchecked(data: ArrayData) -> Self {
+        Self {
+            data,
+            phantom: PhantomData,
+        }
+    }
+
     pub fn data(&self) -> &ArrayData {
         &self.data
     }
