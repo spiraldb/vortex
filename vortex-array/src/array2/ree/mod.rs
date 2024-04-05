@@ -34,7 +34,7 @@ pub trait REEArray {
 
 impl REEData {
     pub fn new(ends: ArrayData, values: ArrayData, length: usize) -> Self {
-        ArrayData::new(
+        ArrayData::try_new(
             &REEEncoding,
             values.dtype().clone(),
             REEMetadata {
@@ -45,6 +45,7 @@ impl REEData {
             vec![].into(),
             vec![ends, values].into(),
         )
+        .unwrap()
         .as_typed()
     }
 }

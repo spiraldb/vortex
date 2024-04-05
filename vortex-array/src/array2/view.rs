@@ -4,8 +4,8 @@ use arrow_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::array2::SerdeContext;
-use crate::array2::{ArrayDef, EncodingRef, FromArrayMetadata};
+use crate::array2::{ArrayDef, EncodingRef};
+use crate::array2::{FromArrayMetadata, SerdeContext};
 use crate::flatbuffers::array as fb;
 
 #[derive(Clone)]
@@ -39,6 +39,7 @@ impl<'v> ArrayView<'v> {
         let encoding = ctx
             .find_encoding(array.encoding())
             .ok_or_else(|| vortex_err!(InvalidSerde: "Encoding ID out of bounds"))?;
+
         if buffers.len() != Self::cumulative_nbuffers(array) {
             vortex_bail!(InvalidSerde:
                 "Incorrect number of buffers {}, expected {}",
@@ -47,13 +48,19 @@ impl<'v> ArrayView<'v> {
             )
         }
 
-        Ok(Self {
+        let view = Self {
             encoding,
             dtype,
             array,
             buffers,
             ctx,
-        })
+        };
+
+        // Validate here that the metadata correctly parses, so that an encoding can infallibly
+        // implement Encoding::with_view().
+        encoding.with_view_mut(&view, &mut |_| Ok(()))?;
+
+        Ok(view)
     }
 
     pub fn encoding(&self) -> EncodingRef {
@@ -148,6 +155,7 @@ impl<'v, D: ArrayDef> TypedArrayView<'v, D> {
     }
 }
 
+/// Convert an ArrayView into a TypedArrayView.
 impl<'v, D: ArrayDef> TryFrom<&'v ArrayView<'v>> for TypedArrayView<'v, D>
 where
     D::Metadata: FromArrayMetadata,

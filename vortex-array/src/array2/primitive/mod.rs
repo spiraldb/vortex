@@ -29,13 +29,14 @@ pub trait PrimitiveArray {
 
 impl PrimitiveData {
     pub fn from_vec<T: NativePType>(values: Vec<T>) -> Self {
-        ArrayData::new(
+        ArrayData::try_new(
             &PrimitiveEncoding,
             DType::from(T::PTYPE),
             Arc::new(PrimitiveMetadata(T::PTYPE)),
             vec![Buffer::from_vec(values)].into(),
             vec![].into(),
         )
+        .unwrap()
         .as_typed()
     }
 }

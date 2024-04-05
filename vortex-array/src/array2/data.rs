@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use arrow_buffer::Buffer;
-use vortex_error::{vortex_bail, VortexError};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::array2::{Array, ArrayDef, ArrayMetadata, EncodingRef, IntoArray, ToArray};
@@ -18,20 +18,26 @@ pub struct ArrayData {
 }
 
 impl ArrayData {
-    pub fn new(
+    pub fn try_new(
         encoding: EncodingRef,
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
         buffers: Arc<[Buffer]>,
         children: Arc<[ArrayData]>,
-    ) -> Self {
-        Self {
+    ) -> VortexResult<Self> {
+        let data = Self {
             encoding,
             dtype,
             metadata,
             buffers,
             children,
-        }
+        };
+
+        // Validate here that the metadata correctly parses, so that an encoding can infallibly
+        // implement Encoding::with_data().
+        encoding.with_data_mut(&data, &mut |_| Ok(()))?;
+
+        Ok(data)
     }
 
     pub fn as_typed<D: ArrayDef>(&self) -> TypedArrayData<D> {

@@ -34,29 +34,37 @@ impl Debug for dyn ArrayEncoding + '_ {
 }
 
 impl dyn ArrayEncoding {
-    pub(crate) fn with_view<'v, R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
+    pub(crate) fn with_view<'v, R, F: Fn(&dyn ArrayCompute) -> R>(
         &self,
         view: &'v ArrayView<'v>,
         f: F,
-    ) -> VortexResult<R> {
+    ) -> R {
         let mut result = None;
+
+        // Unwrap the result. This is safe since we validate that encoding against the
+        // ArrayData during ArrayData::try_new.
         self.with_view_mut(view, &mut |compute| {
             result = Some(f(compute));
             Ok(())
-        })?;
+        })
+        .unwrap();
+
+        // Now we unwrap the optional, which we know to be populated in the closure.
         result.unwrap()
     }
 
-    pub(crate) fn with_data<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
-        &self,
-        data: &ArrayData,
-        f: F,
-    ) -> VortexResult<R> {
+    pub(crate) fn with_data<R, F: Fn(&dyn ArrayCompute) -> R>(&self, data: &ArrayData, f: F) -> R {
         let mut result = None;
+
+        // Unwrap the result. This is safe since we validate that encoding against the
+        // ArrayData during ArrayData::try_new.
         self.with_data_mut(data, &mut |compute| {
             result = Some(f(compute));
             Ok(())
-        })?;
+        })
+        .unwrap();
+
+        // Now we unwrap the optional, which we know to be populated in the closure.
         result.unwrap()
     }
 }
