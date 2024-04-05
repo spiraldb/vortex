@@ -2,7 +2,7 @@ use vortex_error::{vortex_bail, VortexError};
 
 use crate::array2::data::ArrayData;
 use crate::array2::primitive::PrimitiveEncoding;
-use crate::array2::{ArrayDef, ArrayMetadata, ToArrayData};
+use crate::array2::{ArrayDef, ArrayMetadata, ParseArrayMetadata, ToArrayData};
 use crate::serde::ArrayView;
 
 pub struct TypedArrayView<'v, D: ArrayDef> {
@@ -27,18 +27,22 @@ impl<'v, D: ArrayDef> TypedArrayView<'v, D> {
     }
 }
 
-impl<'v, D: ArrayDef> TryFrom<ArrayView<'v>> for TypedArrayView<'v, D>
+impl<'v, D: ArrayDef> TryFrom<&'v ArrayView<'v>> for TypedArrayView<'v, D>
 where
-    D::Metadata: TryFrom<Option<&'v [u8]>, Error = VortexError>,
+    D::Metadata: ParseArrayMetadata,
 {
     type Error = VortexError;
 
-    fn try_from(view: ArrayView<'v>) -> Result<Self, Self::Error> {
+    fn try_from(view: &'v ArrayView<'v>) -> Result<Self, Self::Error> {
         if view.encoding().id() != D::ID {
             vortex_bail!("Invalid encoding for array")
         }
-        let metadata = D::Metadata::try_from(view.metadata())?;
-        Ok(Self { view, metadata })
+        let metadata =
+            <<D as ArrayDef>::Metadata as ParseArrayMetadata>::try_from(view.metadata())?;
+        Ok(Self {
+            view: view.clone(),
+            metadata,
+        })
     }
 }
 
@@ -50,7 +54,7 @@ impl<'v, D: ArrayDef> ToArrayData for TypedArrayView<'v, D>
 where
     Self: ArrayChildren,
 {
-    fn to_array_data(&self) -> ArrayData {
+    fn to_data(&self) -> ArrayData {
         // TODO(ngates): how do we get the child types? I guess we could walk?
 
         ArrayData::new(

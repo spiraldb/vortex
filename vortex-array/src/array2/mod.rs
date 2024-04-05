@@ -1,13 +1,13 @@
 mod data;
 mod encoding;
 mod primitive;
+mod ree;
 mod view;
 
 use std::any::Any;
 use std::sync::Arc;
 
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::array2::data::ArrayData;
 use crate::compute::ArrayCompute;
@@ -19,17 +19,60 @@ use crate::serde::ArrayView;
 pub trait ArrayEncoding {
     fn id(&self) -> EncodingId;
 
-    fn with_view<'v>(
+    fn with_view_mut<'v>(
         &self,
-        view: ArrayView<'v>,
+        view: &'v ArrayView<'v>,
         f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()>;
 
-    fn with_data(
+    fn with_data_mut(
         &self,
-        data: ArrayData,
+        data: &ArrayData,
         f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()>;
+}
+
+/// Split out the generic functions into their own trait so that ArrayEncoding remains object-safe.
+pub trait WithArray {
+    fn with_view<'v, R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
+        &self,
+        view: &'v ArrayView<'v>,
+        f: F,
+    ) -> VortexResult<R>;
+
+    fn with_data<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
+        &self,
+        data: &ArrayData,
+        f: F,
+    ) -> VortexResult<R>;
+}
+
+impl<Encoding: ?Sized + ArrayEncoding> WithArray for Encoding {
+    fn with_view<'v, R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
+        &self,
+        view: &'v ArrayView<'v>,
+        f: F,
+    ) -> VortexResult<R> {
+        let mut result = None;
+        self.with_view_mut(view, &mut |compute| {
+            result = Some(f(compute));
+            Ok(())
+        })?;
+        result.unwrap()
+    }
+
+    fn with_data<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
+        &self,
+        data: &ArrayData,
+        f: F,
+    ) -> VortexResult<R> {
+        let mut result = None;
+        self.with_data_mut(data, &mut |compute| {
+            result = Some(f(compute));
+            Ok(())
+        })?;
+        result.unwrap()
+    }
 }
 
 pub type EncodingRef = &'static dyn ArrayEncoding;
@@ -42,17 +85,31 @@ pub trait ArrayMetadata: 'static + Send + Sync {
     fn as_any(&self) -> &dyn Any;
     fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
     fn to_arc(&self) -> Arc<dyn ArrayMetadata>;
+    fn into_arc(self) -> Arc<dyn ArrayMetadata>;
 }
 
+pub trait ParseArrayMetadata: Sized {
+    fn try_from(metadata: Option<&[u8]>) -> VortexResult<Self>;
+}
+
+pub trait FromArrayData: Sized {
+    fn try_from(data: ArrayData) -> VortexResult<Self>;
+}
+
+pub trait FromArrayView: Sized {
+    fn try_from(view: ArrayView) -> VortexResult<Self>;
+}
+
+/// Trait to enable conversion into an owned ArrayData.
 pub trait ToArrayData {
-    fn to_array_data(&self) -> ArrayData;
+    fn to_data(&self) -> ArrayData;
 }
 
-/// Trait capturing the behaviour of an array.
-#[allow(dead_code)]
-pub trait Array: ToArrayData {
-    fn dtype(&self) -> &DType;
-    fn len(&self) -> usize;
+/// An array enum, similar to Cow.
+pub enum Array<'v> {
+    Data(ArrayData),
+    DataRef(&'v ArrayData),
+    View(ArrayView<'v>),
 }
 
 /// Trait the defines the set of types relating to an array.

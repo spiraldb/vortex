@@ -29,9 +29,9 @@ macro_rules! impl_encoding {
                     [<$Name Def>]::ID
                 }
 
-                fn with_view<'v>(
+                fn with_view_mut<'v>(
                     &self,
-                    view: ArrayView<'v>,
+                    view: &'v ArrayView<'v>,
                     f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
                 ) -> VortexResult<()> {
                     // Convert ArrayView -> PrimitiveArray, then call compute.
@@ -39,9 +39,9 @@ macro_rules! impl_encoding {
                     f(&typed_view.as_array())
                 }
 
-                fn with_data(
+                fn with_data_mut(
                     &self,
-                    data: ArrayData,
+                    data: &ArrayData,
                     f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
                 ) -> VortexResult<()> {
                     let data = TypedArrayData::<[<$Name Def>]>::try_from(data)?;
@@ -61,6 +61,10 @@ macro_rules! impl_encoding {
 
                 fn to_arc(&self) -> Arc<dyn ArrayMetadata> {
                     Arc::new(self.clone())
+                }
+
+                fn into_arc(self) -> Arc<dyn ArrayMetadata> {
+                    Arc::new(self)
                 }
             }
 

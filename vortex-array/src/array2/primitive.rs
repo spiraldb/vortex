@@ -4,7 +4,7 @@ use vortex_schema::DType;
 
 use crate::array2::data::{ArrayData, TypedArrayData};
 use crate::array2::view::{ArrayChildren, TypedArrayView};
-use crate::array2::{Array, ArrayEncoding, ArrayMetadata};
+use crate::array2::{ArrayEncoding, ArrayMetadata, ParseArrayMetadata};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::{NativePType, PType};
@@ -59,7 +59,7 @@ impl PrimitiveArray for PrimitiveData {
     }
 
     fn buffer(&self) -> &Buffer {
-        self.as_data()
+        self.data()
             .buffers()
             .first()
             // This assertion is made by construction.
@@ -80,29 +80,15 @@ impl PrimitiveArray for PrimitiveView<'_> {
     }
 }
 
-impl Array for PrimitiveData {
-    fn dtype(&self) -> &DType {
-        self.as_data().dtype()
-    }
-
-    fn len(&self) -> usize {
-        self.buffer().len() / self.ptype().byte_width()
-    }
-}
-
 impl ArrayChildren for PrimitiveView<'_> {
     fn child_array_data(&self) -> Vec<ArrayData> {
         todo!()
     }
 }
 
-impl Array for PrimitiveView<'_> {
-    fn dtype(&self) -> &DType {
-        self.view().dtype()
-    }
-
-    fn len(&self) -> usize {
-        self.buffer().len() / self.ptype().byte_width()
+impl ParseArrayMetadata for PrimitiveMetadata {
+    fn try_from(_metadata: Option<&[u8]>) -> VortexResult<Self> {
+        todo!()
     }
 }
 

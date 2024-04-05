@@ -81,6 +81,12 @@ pub enum VortexError {
         #[backtrace]
         parquet::errors::ParquetError,
     ),
+    #[error(transparent)]
+    TryFromSliceError(
+        #[from]
+        #[backtrace]
+        std::array::TryFromSliceError,
+    ),
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;
