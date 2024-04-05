@@ -11,7 +11,6 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
-use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::ptype::NativePType;
@@ -162,7 +161,7 @@ fn take_map(
             .iter()
             .map(|pi| *pi as u64)
             .enumerate()
-            .filter_map(|(i, pi)| indices_map.get(&pi).copied().map(|phy_idx| (i as u64, phy_idx)))
+            .filter_map(|(i, pi)| indices_map.get(&pi).map(|phy_idx| (i as u64, phy_idx)))
             .unzip()
     });
     Ok((
@@ -175,31 +174,12 @@ fn take_search_sorted(
     array: &SparseArray,
     indices: PrimitiveArray,
 ) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
-    let adjusted_indices = match_each_integer_ptype!(indices.ptype(), |$P| {
-         indices.typed_data::<$P>()
-            .iter()
-            .map(|i| *i as usize + array.indices_offset())
-            .collect::<Vec<_>>()
-    });
-
-    // TODO(robert): Use binary search instead of search_sorted + take and index validation to avoid extra work
-    let physical_indices = PrimitiveArray::from(
-        adjusted_indices
-            .iter()
-            .map(|i| search_sorted(array.indices(), *i, SearchSortedSide::Left).map(|s| s as u64))
-            .collect::<VortexResult<Vec<_>>>()?,
-    );
-    let taken_indices = flatten_primitive(&take(array.indices(), &physical_indices)?)?;
-    let (positions, patch_indices): (Vec<u64>, Vec<u64>) = match_each_integer_ptype!(taken_indices.ptype(), |$P| {
-        taken_indices
+    let (positions, patch_indices): (Vec<u64>, Vec<u64>) = match_each_integer_ptype!(indices.ptype(), |$P| {
+        indices
             .typed_data::<$P>()
             .iter()
-            .copied()
             .enumerate()
-            .zip_eq(adjusted_indices)
-            .zip_eq(physical_indices.typed_data::<u64>())
-            .filter(|(((_, taken_idx), orig_idx), _)| *taken_idx as usize == *orig_idx)
-            .map(|(((i, _), _), physical_idx)| (i as u64, *physical_idx))
+            .filter_map(|(ti, pi)| array.find_index(*pi as usize).unwrap().map(|i| (ti as u64, i as u64)))
             .unzip()
     });
     Ok((
