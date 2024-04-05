@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
-use rand::{Rng, thread_rng};
 use rand::distributions::Uniform;
-
+use rand::{thread_rng, Rng};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
@@ -115,10 +114,23 @@ fn bench_patched_take(c: &mut Criterion) {
         b.iter(|| black_box(take(packed, &patch_indices).unwrap()));
     });
 
+    // There are currently 2 magic parameters of note:
+    // 1. the threshold at which sparse take will switch from search_sorted to map (currently 128)
+    // 2. the threshold at which bitpacked take will switch from bulk patching to per chunk patching (currently 64)
+    //
+    // There are thus 3 cases to consider:
+    // 1. N < 64 per chunk, covered by patched_take_10K_random
+    // 2. N > 128 per chunk, covered by patched_take_10K_contiguous_*
+    // 3. 64 < N < 128 per chunk, which is what we're trying to cover here (with 100 per chunk).
+    //
+    // As a result of the above, we get both search_sorted and per chunk patching, almost entirely on patches.
+    // I've iterated on both thresholds (1) and (2) using this collection of benchmarks, and those
+    // were roughly the best values that I found.
+    let per_chunk_count = 100;
     let adversarial_indices: PrimitiveArray = (0..(num_exceptions + 1024) / 1024)
         .cycle()
         .map(|chunk_idx| big_base2 - 1024 + chunk_idx * 1024)
-        .flat_map(|base_idx| (base_idx..(base_idx + 256)))
+        .flat_map(|base_idx| (base_idx..(base_idx + per_chunk_count)))
         .take(10000)
         .collect_vec()
         .into();

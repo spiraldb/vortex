@@ -1,18 +1,16 @@
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
-
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
-use crate::{ArrayWalker, impl_array, match_each_integer_ptype};
-use crate::array::{Array, ArrayRef, check_slice_bounds};
 use crate::array::constant::ConstantArray;
+use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
-use crate::compute::ArrayCompute;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
+use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
@@ -20,6 +18,7 @@ use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsCompute, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
+use crate::{impl_array, match_each_integer_ptype, ArrayWalker};
 
 mod compress;
 mod compute;
@@ -268,15 +267,14 @@ impl Encoding for SparseEncoding {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-
     use vortex_error::VortexError;
-    use vortex_schema::{DType, IntWidth};
     use vortex_schema::Nullability::Nullable;
     use vortex_schema::Signedness::Signed;
+    use vortex_schema::{DType, IntWidth};
 
+    use crate::array::sparse::SparseArray;
     use crate::array::Array;
     use crate::array::IntoArray;
-    use crate::array::sparse::SparseArray;
     use crate::compute::flatten::flatten_primitive;
     use crate::compute::scalar_at::scalar_at;
     use crate::scalar::Scalar;

@@ -1,24 +1,23 @@
 use std::cmp::min;
 
-use itertools::Itertools;
-
 use fastlanez::TryBitPack;
-use vortex::array::{Array, ArrayRef};
+use itertools::Itertools;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::compute::ArrayCompute;
-use vortex::compute::flatten::{flatten_primitive, FlattenedArray, FlattenFn};
+use vortex::array::{Array, ArrayRef};
+use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::take::{take, TakeFn};
+use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::Scalar;
 use vortex::validity::OwnedValidity;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::{BitPackedArray, match_integers_by_width, unpack_single_primitive};
 use crate::bitpacking::compress::{unpack, unpack_single};
+use crate::{match_integers_by_width, unpack_single_primitive, BitPackedArray};
 
 impl ArrayCompute for BitPackedArray {
     fn flatten(&self) -> Option<&dyn FlattenFn> {
@@ -96,8 +95,8 @@ fn take_primitive<T: NativePType + TryBitPack>(
 
     // if we have a small number of relatively large batches, we gain by slicing and then patching inside the loop
     // if we have a large number of relatively small batches, the overhead isn't worth it, and we're better off with a bulk patch
-    // TODO(wmanning): what's the right threshold here?
-    let prefer_bulk_patch = relative_indices.len() > indices.len() / 8;
+    // roughly, if we have an average of less than 64 elements per batch, we prefer bulk patching
+    let prefer_bulk_patch = relative_indices.len() * 64 > indices.len();
 
     // assuming the buffer is already allocated (which will happen at most once)
     // then unpacking all 1024 elements takes ~8.8x as long as unpacking a single element
@@ -176,20 +175,19 @@ mod test {
     use std::sync::Arc;
 
     use itertools::Itertools;
-    use rand::{Rng, thread_rng};
     use rand::distributions::Uniform;
-
-    use vortex::array::Array;
+    use rand::{thread_rng, Rng};
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
+    use vortex::array::Array;
     use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::take::take;
     use vortex::encoding::EncodingRef;
     use vortex::scalar::Scalar;
 
-    use crate::BitPackedEncoding;
     use crate::downcast::DowncastFastlanes;
+    use crate::BitPackedEncoding;
 
     #[test]
     fn take_indices() {

@@ -128,7 +128,7 @@ impl TakeFn for SparseArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
         let flat_indices = flatten_primitive(indices)?;
         // if we are taking a lot of values we should build a hashmap
-        let (positions, physical_take_indices) = if indices.len() > 512 {
+        let (positions, physical_take_indices) = if indices.len() > 128 {
             take_map(self, flat_indices)?
         } else {
             take_search_sorted(self, flat_indices)?
