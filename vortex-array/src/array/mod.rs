@@ -46,6 +46,7 @@ pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
     fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
+
     fn to_array(&self) -> ArrayRef;
     fn into_array(self) -> ArrayRef;
 
