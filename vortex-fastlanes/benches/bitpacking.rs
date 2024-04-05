@@ -30,7 +30,7 @@ fn pack_unpack(c: &mut Criterion) {
 
     let packed = bitpack_primitive(&values, bits);
     c.bench_function("unpack_1M", |b| {
-        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, values.len())));
+        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 0, values.len())));
     });
 
     c.bench_function("unpack_1M_singles", |b| {
@@ -40,7 +40,7 @@ fn pack_unpack(c: &mut Criterion) {
     // 1024 elements pack into `128 * bits` bytes
     let packed_1024 = &packed[0..128 * bits];
     c.bench_function("unpack_1024_alloc", |b| {
-        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, values.len())));
+        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 0, values.len())));
     });
 
     let mut output: Vec<u32> = Vec::with_capacity(1024);

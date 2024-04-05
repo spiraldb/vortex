@@ -165,24 +165,25 @@ fn bitpack_patches(
 pub fn unpack(array: &BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
-    let encoded = flatten_primitive(cast(array.encoded(), U8.into())?.as_ref())?;
+    let offset = array.offset();
+    let encoded = flatten_primitive(&cast(array.encoded(), U8.into())?)?;
     let ptype: PType = array.dtype().try_into()?;
 
     let mut unpacked = match ptype {
         I8 | U8 => PrimitiveArray::from_nullable(
-            unpack_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, length),
+            unpack_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, offset, length),
             array.validity().to_owned_view(),
         ),
         I16 | U16 => PrimitiveArray::from_nullable(
-            unpack_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, length),
+            unpack_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, offset, length),
             array.validity().to_owned_view(),
         ),
         I32 | U32 => PrimitiveArray::from_nullable(
-            unpack_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, length),
+            unpack_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, offset, length),
             array.validity().to_owned_view(),
         ),
         I64 | U64 => PrimitiveArray::from_nullable(
-            unpack_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, length),
+            unpack_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, offset, length),
             array.validity().to_owned_view(),
         ),
         _ => panic!("Unsupported ptype {}", ptype),
@@ -216,6 +217,7 @@ fn patch_unpacked(array: PrimitiveArray, patches: &dyn Array) -> VortexResult<Pr
 pub fn unpack_primitive<T: NativePType + TryBitPack>(
     packed: &[u8],
     bit_width: usize,
+    offset: usize,
     length: usize,
 ) -> Vec<T> {
     if bit_width == 0 {
@@ -234,9 +236,19 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
     );
 
     // Allocate a result vector.
-    let mut output = Vec::with_capacity(num_chunks * 1024);
+    let mut output = Vec::with_capacity(num_chunks * 1024 - offset);
+    // Handle first chunk if offset is non 0. We have to decode the chunk and skip first offset elements
+    let first_full_chunk = if offset != 0 {
+        let chunk: &[u8] = &packed[0..bytes_per_chunk];
+        TryBitPack::try_unpack_into(chunk, bit_width, &mut output).unwrap();
+        output.drain(0..offset);
+        1
+    } else {
+        0
+    };
+
     // Loop over all the chunks.
-    (0..num_chunks).for_each(|i| {
+    (first_full_chunk..num_chunks).for_each(|i| {
         let chunk: &[u8] = &packed[i * bytes_per_chunk..][0..bytes_per_chunk];
         TryBitPack::try_unpack_into(chunk, bit_width, &mut output).unwrap();
     });
@@ -257,23 +269,34 @@ pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResul
     let bit_width = array.bit_width();
     let encoded = flatten_primitive(cast(array.encoded(), U8.into())?.as_ref())?;
     let ptype: PType = array.dtype().try_into()?;
+    let index_in_encoded = index + array.offset();
 
     let scalar: Scalar = unsafe {
         match ptype {
-            I8 | U8 => unpack_single_primitive::<u8>(encoded.typed_data::<u8>(), bit_width, index)
-                .map(|v| v.into()),
-            I16 | U16 => {
-                unpack_single_primitive::<u16>(encoded.typed_data::<u8>(), bit_width, index)
-                    .map(|v| v.into())
-            }
-            I32 | U32 => {
-                unpack_single_primitive::<u32>(encoded.typed_data::<u8>(), bit_width, index)
-                    .map(|v| v.into())
-            }
-            I64 | U64 => {
-                unpack_single_primitive::<u64>(encoded.typed_data::<u8>(), bit_width, index)
-                    .map(|v| v.into())
-            }
+            I8 | U8 => unpack_single_primitive::<u8>(
+                encoded.typed_data::<u8>(),
+                bit_width,
+                index_in_encoded,
+            )
+            .map(|v| v.into()),
+            I16 | U16 => unpack_single_primitive::<u16>(
+                encoded.typed_data::<u8>(),
+                bit_width,
+                index_in_encoded,
+            )
+            .map(|v| v.into()),
+            I32 | U32 => unpack_single_primitive::<u32>(
+                encoded.typed_data::<u8>(),
+                bit_width,
+                index_in_encoded,
+            )
+            .map(|v| v.into()),
+            I64 | U64 => unpack_single_primitive::<u64>(
+                encoded.typed_data::<u8>(),
+                bit_width,
+                index_in_encoded,
+            )
+            .map(|v| v.into()),
             _ => vortex_bail!("Unsupported ptype {}", ptype),
         }?
     };
