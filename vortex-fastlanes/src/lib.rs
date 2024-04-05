@@ -4,7 +4,7 @@
 pub use bitpacking::*;
 pub use delta::*;
 pub use downcast::*;
-pub use linkme::distributed_slice;
+use linkme::distributed_slice;
 pub use r#for::*;
 use vortex::encoding::{EncodingRef, ENCODINGS};
 
