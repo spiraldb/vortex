@@ -5,8 +5,9 @@ use arrow_buffer::Buffer;
 use vortex_error::{vortex_bail, VortexError};
 use vortex_schema::DType;
 
-use crate::array2::{ArrayDef, ArrayMetadata, EncodingRef};
+use crate::array2::{ArrayDef, ArrayMetadata, EncodingRef, ToArrayData};
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct ArrayData {
     encoding: EncodingRef,
@@ -72,8 +73,12 @@ impl<D: ArrayDef> TypedArrayData<D>
 where
     Self: for<'a> AsRef<D::Array<'a>>,
 {
-    pub fn data(&self) -> &ArrayData {
+    pub fn as_data(&self) -> &ArrayData {
         &self.data
+    }
+
+    pub fn into_data(self) -> ArrayData {
+        self.data
     }
 
     pub fn metadata(&self) -> &D::Metadata {
@@ -94,6 +99,12 @@ where
 
     pub fn as_array(&self) -> &D::Array<'_> {
         self.as_ref()
+    }
+}
+
+impl<D: ArrayDef> ToArrayData for TypedArrayData<D> {
+    fn to_array_data(&self) -> ArrayData {
+        self.data.clone()
     }
 }
 
