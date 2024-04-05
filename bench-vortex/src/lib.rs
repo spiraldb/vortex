@@ -163,8 +163,6 @@ pub fn compress_medicare_data() -> ArrayRef {
     let mut uncompressed_size = 0;
     let chunks = csv_reader
         .into_iter()
-        //.skip(39)
-        //.take(1)
         .map(|batch_result| batch_result.unwrap())
         .map(|batch| batch.into_array())
         .map(|array| {

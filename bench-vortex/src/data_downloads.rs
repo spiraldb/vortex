@@ -17,7 +17,7 @@ use vortex::serde::WriteCtx;
 use vortex_error::VortexError;
 use vortex_schema::DType;
 
-use crate::reader::{compress_parquet_to_vortex, BATCH_SIZE};
+use crate::reader::BATCH_SIZE;
 use crate::{data_path, idempotent};
 
 pub fn download_data(fname: &str, data_url: &str) -> PathBuf {
@@ -45,12 +45,6 @@ pub fn parquet_to_lance(lance_fname: &Path, read: File) -> PathBuf {
         ))
         .unwrap();
     PathBuf::from(lance_fname)
-}
-
-pub fn parquet_to_vortex(output_fname: &Path, data_to_compress: PathBuf) -> PathBuf {
-    let mut write = File::create(output_fname).unwrap();
-    compress_parquet_to_vortex(&data_to_compress, &mut write).unwrap();
-    output_fname.to_path_buf()
 }
 
 pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> PathBuf {

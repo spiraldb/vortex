@@ -14,7 +14,7 @@ use vortex_schema::DType;
 
 use crate::data_downloads::{decompress_bz2, download_data};
 use crate::idempotent;
-use crate::reader::compress_csv_to_vortex;
+use crate::reader::{compress_csv_to_vortex, default_csv_format};
 
 #[allow(dead_code)]
 pub fn medicare_data_csv() -> PathBuf {
@@ -54,7 +54,6 @@ pub fn medicare_data_csv() -> PathBuf {
 //     .unwrap()
 // }
 
-#[allow(dead_code)]
 pub fn medicare_data_vortex_uncompressed() -> PathBuf {
     idempotent("taxi-uncompressed.vortex", |path| {
         let csv_file = File::open(medicare_data_csv()).unwrap();
@@ -84,11 +83,15 @@ pub fn medicare_data_vortex_uncompressed() -> PathBuf {
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub fn medicare_data_vortex() -> PathBuf {
     idempotent("taxi.vortex", |path| {
         let mut write = File::create(path).unwrap();
-        compress_csv_to_vortex(medicare_data_csv(), &mut write)
+        let delimiter = u8::try_from('|').unwrap();
+        compress_csv_to_vortex(
+            medicare_data_csv(),
+            default_csv_format().with_delimiter(delimiter),
+            &mut write,
+        )
     })
     .unwrap()
 }
