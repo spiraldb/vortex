@@ -72,6 +72,9 @@ thiserror = "1.0.58"
 uninit = "0.6.2"
 walkdir = "2.5.0"
 zigzag = "0.1.0"
+bzip2 = "0.4.4"
+csv = "1.3.0"
+arrow-csv = "51.0.0"
 
 [workspace.lints.rust]
 warnings = "deny"

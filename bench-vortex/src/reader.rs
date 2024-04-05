@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Write;
-use std::path::Path;
+use std::io::{BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use arrow::csv;
+use arrow::datatypes::SchemaRef;
 use arrow_array::types::Int64Type;
 use arrow_array::{
     ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray, RecordBatch,
@@ -15,6 +17,9 @@ use itertools::Itertools;
 use lance::Dataset;
 use lance_arrow_array::RecordBatch as LanceRecordBatch;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use parquet::arrow::ArrowWriter;
+use parquet::basic::Compression;
+use parquet::file::properties::WriterProperties;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
@@ -30,6 +35,7 @@ use vortex_schema::DType;
 use crate::compress_ctx;
 
 pub const BATCH_SIZE: usize = 65_536;
+const CSV_SCHEMA_SAMPLE_ROWS: usize = 100;
 
 pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
     let mut file = File::open(path)?;
@@ -64,6 +70,86 @@ pub fn compress_parquet_to_vortex<W: Write>(
     let mut write_ctx = WriteCtx::new(write);
     write_ctx.dtype(&dtype).unwrap();
     write_ctx.write(&chunked).unwrap();
+    Ok(())
+}
+
+pub fn compress_csv_to_vortex<W: Write>(csv_path: PathBuf, write: &mut W) -> VortexResult<()> {
+    let csv_file = File::open(csv_path.clone()).unwrap();
+
+    // Infer the schema of the CSV file
+    let delimiter = u8::try_from('|').unwrap();
+    let schema = arrow_csv::reader::infer_schema_from_files(
+        &[String::from(csv_path.to_str().unwrap())],
+        delimiter,
+        Some(CSV_SCHEMA_SAMPLE_ROWS),
+        false,
+    )
+    .unwrap();
+
+    let reader = BufReader::new(csv_file.try_clone().unwrap());
+    let csv_reader = csv::ReaderBuilder::new(SchemaRef::new(schema.clone()))
+        .with_batch_size(BATCH_SIZE)
+        .with_delimiter(delimiter)
+        .with_header(false)
+        .with_null_regex("null".parse().unwrap())
+        .build(reader)?;
+    let dtype = DType::from_arrow(SchemaRef::from(schema.clone()));
+    let ctx = compress_ctx();
+
+    let chunks = csv_reader
+        .map(|batch_result| batch_result.unwrap())
+        .map(|record_batch| {
+            let vortex_array = record_batch.into_array();
+            ctx.compress(&vortex_array, None).unwrap()
+        })
+        .collect_vec();
+    let chunked = ChunkedArray::new(chunks, dtype.clone());
+
+    let mut write_ctx = WriteCtx::new(write);
+    write_ctx.dtype(&dtype).unwrap();
+    write_ctx.write(&chunked).unwrap();
+    Ok(())
+}
+
+pub fn compress_csv_to_parquet<W: Write + Send + Sync>(
+    csv_path: PathBuf,
+    write: &mut W,
+) -> VortexResult<()> {
+    let csv_file = File::open(csv_path.clone()).unwrap();
+
+    // Infer the schema of the CSV file
+    let delimiter = u8::try_from('|').unwrap();
+    let schema = arrow_csv::reader::infer_schema_from_files(
+        &[String::from(csv_path.to_str().unwrap())],
+        delimiter,
+        Some(CSV_SCHEMA_SAMPLE_ROWS),
+        false,
+    )
+    .unwrap();
+
+    let reader = BufReader::new(csv_file.try_clone().unwrap());
+    let csv_reader = csv::ReaderBuilder::new(SchemaRef::new(schema.clone()))
+        .with_batch_size(BATCH_SIZE)
+        .with_delimiter(delimiter)
+        .with_header(false)
+        .with_null_regex("null".parse().unwrap())
+        .build(reader)?;
+
+    // WriterProperties can be used to set Parquet file options
+    let props = WriterProperties::builder()
+        .set_compression(Compression::SNAPPY)
+        .build();
+
+    let mut writer = ArrowWriter::try_new(write, SchemaRef::from(schema), Some(props)).unwrap();
+
+    // Write CSV data to Parquet
+    for maybe_batch in csv_reader {
+        let record_batch = maybe_batch?;
+        writer.write(&record_batch)?;
+    }
+
+    // Finalize the Parquet writer
+    writer.close()?;
     Ok(())
 }
 

@@ -7,8 +7,8 @@
 #   all-features: false
 #   with-sources: false
 
--e file:pyvortex
 -e file:.
+-e file:pyvortex
 babel==2.14.0
     # via mkdocs-material
 bracex==2.4
@@ -25,9 +25,9 @@ ghp-import==2.1.0
     # via mkdocs
 idna==3.6
     # via requests
-importlib-metadata==7.0.1
+importlib-metadata==7.1.0
     # via mike
-importlib-resources==6.1.2
+importlib-resources==6.4.0
     # via mike
 iniconfig==2.0.0
     # via pytest
@@ -35,14 +35,14 @@ jinja2==3.1.3
     # via mike
     # via mkdocs
     # via mkdocs-material
-markdown==3.5.2
+markdown==3.6
     # via mkdocs
     # via mkdocs-material
     # via pymdown-extensions
 markupsafe==2.1.5
     # via jinja2
     # via mkdocs
-maturin==1.4.0
+maturin==1.5.1
 mergedeep==1.3.4
     # via mkdocs
 mike==2.0.0
@@ -50,36 +50,37 @@ mkdocs==1.5.3
     # via mike
     # via mkdocs-include-markdown-plugin
     # via mkdocs-material
-mkdocs-include-markdown-plugin==6.0.4
-mkdocs-material==9.5.12
+mkdocs-include-markdown-plugin==6.0.5
+mkdocs-material==9.5.17
 mkdocs-material-extensions==1.3.1
     # via mkdocs-material
 numpy==1.26.4
     # via pyarrow
-packaging==23.2
+packaging==24.0
     # via mkdocs
     # via pytest
 paginate==0.5.6
     # via mkdocs-material
 pathspec==0.12.1
     # via mkdocs
+pip==24.0
 platformdirs==4.2.0
     # via mkdocs
 pluggy==1.4.0
     # via pytest
 py-cpuinfo==9.0.0
     # via pytest-benchmark
-pyarrow==15.0.0
+pyarrow==15.0.2
 pygments==2.17.2
     # via mkdocs-material
-pymdown-extensions==10.7
+pymdown-extensions==10.7.1
     # via mkdocs-material
-pyparsing==3.1.1
+pyparsing==3.1.2
     # via mike
-pytest==7.4.0
+pytest==8.1.1
     # via pytest-benchmark
 pytest-benchmark==4.0.0
-python-dateutil==2.9.0
+python-dateutil==2.9.0.post0
     # via ghp-import
 pyyaml==6.0.1
     # via mike
@@ -92,7 +93,7 @@ regex==2023.12.25
     # via mkdocs-material
 requests==2.31.0
     # via mkdocs-material
-ruff==0.2.2
+ruff==0.3.5
 six==1.16.0
     # via python-dateutil
 urllib3==2.2.1
@@ -103,6 +104,5 @@ watchdog==4.0.0
     # via mkdocs
 wcmatch==8.5.1
     # via mkdocs-include-markdown-plugin
-zipp==3.17.0
+zipp==3.18.1
     # via importlib-metadata
-pip==24.0
