@@ -48,6 +48,11 @@ pub trait WithArray {
 /// Collects together the behaviour of an array.
 pub trait ArrayTrait: ArrayCompute + ArrayValidity + ToArrayData {
     fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool {
+        // TODO(ngates): remove this default impl to encourage explicit implementation
+        self.len() == 0
+    }
 }
 
 impl ToArrayData for Array<'_> {
