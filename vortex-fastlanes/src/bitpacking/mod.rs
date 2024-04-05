@@ -1,10 +1,9 @@
-use std::cmp::min;
+use std::cmp::max;
 use std::sync::{Arc, RwLock};
 
 pub use compress::*;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{check_slice_bounds, Array, ArrayRef};
 use vortex::compress::EncodingCompression;
-use vortex::compute::flatten::flatten_primitive;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
@@ -27,6 +26,7 @@ pub struct BitPackedArray {
     encoded: ArrayRef,
     validity: Option<Validity>,
     patches: Option<ArrayRef>,
+    offset: usize,
     len: usize,
     bit_width: usize,
     dtype: DType,
@@ -44,6 +44,18 @@ impl BitPackedArray {
         bit_width: usize,
         dtype: DType,
         len: usize,
+    ) -> VortexResult<Self> {
+        Self::try_new_from_offset(encoded, validity, patches, bit_width, dtype, len, 0)
+    }
+
+    pub(crate) fn try_new_from_offset(
+        encoded: ArrayRef,
+        validity: Option<Validity>,
+        patches: Option<ArrayRef>,
+        bit_width: usize,
+        dtype: DType,
+        len: usize,
+        offset: usize,
     ) -> VortexResult<Self> {
         if encoded.dtype() != &Self::ENCODED_DTYPE {
             vortex_bail!(MismatchedTypes: Self::ENCODED_DTYPE, encoded.dtype());
@@ -71,8 +83,9 @@ impl BitPackedArray {
             encoded,
             validity,
             patches,
-            bit_width,
+            offset,
             len,
+            bit_width,
             dtype,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
@@ -91,6 +104,11 @@ impl BitPackedArray {
     #[inline]
     pub fn patches(&self) -> Option<&ArrayRef> {
         self.patches.as_ref()
+    }
+
+    #[inline]
+    pub fn offset(&self) -> usize {
+        self.offset
     }
 }
 
@@ -125,31 +143,21 @@ impl Array for BitPackedArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        if start % 1024 != 0 || stop % 1024 != 0 {
-            return flatten_primitive(self)?.slice(start, stop);
-        }
+        check_slice_bounds(self, start, stop)?;
+        let offset = start % 1024;
+        let block_start = max(0, start - offset);
+        let block_stop = ((stop + 1023) / 1024) * 1024;
 
-        if start > self.len() {
-            vortex_bail!(OutOfBounds: start, 0, self.len());
-        }
-        // If we are slicing more than one 1024 element chunk beyond end, we consider this out of bounds
-        if stop / 1024 > ((self.len() + 1023) / 1024) {
-            vortex_bail!(OutOfBounds: stop, 0, self.len());
-        }
-
-        let encoded_start = (start / 8) * self.bit_width;
-        let encoded_stop = (stop / 8) * self.bit_width;
-        Self::try_new(
+        let encoded_start = (block_start / 8) * self.bit_width;
+        let encoded_stop = (block_stop / 8) * self.bit_width;
+        Self::try_new_from_offset(
             self.encoded().slice(encoded_start, encoded_stop)?,
-            self.validity()
-                .map(|v| v.slice(start, min(stop, self.len())))
-                .transpose()?,
-            self.patches()
-                .map(|p| p.slice(start, min(stop, self.len())))
-                .transpose()?,
+            self.validity().map(|v| v.slice(start, stop)).transpose()?,
+            self.patches().map(|p| p.slice(start, stop)).transpose()?,
             self.bit_width(),
             self.dtype().clone(),
-            min(stop - start, self.len()),
+            stop - start,
+            offset,
         )
         .map(|a| a.into_array())
     }
@@ -185,6 +193,7 @@ impl OwnedValidity for BitPackedArray {
 
 impl ArrayDisplay for BitPackedArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
+        f.property("offset", self.offset)?;
         f.property("packed", format!("u{}", self.bit_width()))?;
         f.child("encoded", self.encoded())?;
         f.maybe_child("patches", self.patches())?;
@@ -216,5 +225,64 @@ impl Encoding for BitPackedEncoding {
 
     fn serde(&self) -> Option<&dyn EncodingSerde> {
         Some(self)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::Array;
+    use vortex::compress::{CompressConfig, CompressCtx};
+    use vortex::compute::scalar_at::scalar_at;
+    use vortex::encoding::EncodingRef;
+
+    use crate::BitPackedEncoding;
+
+    #[test]
+    fn slice_within_block() {
+        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
+        let ctx = CompressCtx::new(Arc::new(cfg));
+
+        let compressed = ctx
+            .compress(
+                &PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()),
+                None,
+            )
+            .unwrap()
+            .slice(768, 9999)
+            .unwrap();
+        assert_eq!(
+            scalar_at(&compressed, 0).unwrap(),
+            ((768 % 63) as u8).into()
+        );
+        assert_eq!(
+            scalar_at(&compressed, compressed.len() - 1).unwrap(),
+            ((9998 % 63) as u8).into()
+        );
+    }
+
+    #[test]
+    fn slice_block_boundary() {
+        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
+        let ctx = CompressCtx::new(Arc::new(cfg));
+
+        let compressed = ctx
+            .compress(
+                &PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()),
+                None,
+            )
+            .unwrap()
+            .slice(7168, 9216)
+            .unwrap();
+        assert_eq!(
+            scalar_at(&compressed, 0).unwrap(),
+            ((7168 % 63) as u8).into()
+        );
+        assert_eq!(
+            scalar_at(&compressed, compressed.len() - 1).unwrap(),
+            ((9215 % 63) as u8).into()
+        );
     }
 }

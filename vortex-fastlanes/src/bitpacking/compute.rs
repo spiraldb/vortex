@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
@@ -37,7 +39,7 @@ impl FlattenFn for BitPackedArray {
 impl ScalarAtFn for BitPackedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if index >= self.len() {
-            return Err(vortex_err!(OutOfBounds:index, 0, self.len()));
+            return Err(vortex_err!(OutOfBounds: index, 0, self.len()));
         }
         if let Some(patches) = self.patches() {
             // NB: All non-null values are considered patches
@@ -67,7 +69,7 @@ impl TakeFn for BitPackedArray {
         let taken = relative_indices
             .into_iter()
             .map(|(chunk, offsets)| {
-                let sliced = self.slice(chunk * 1024, (chunk + 1) * 1024)?;
+                let sliced = self.slice(chunk * 1024, min((chunk + 1) * 1024, self.len()))?;
 
                 take(
                     &unpack(sliced.as_bitpacked())?,
