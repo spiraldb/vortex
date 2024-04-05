@@ -114,6 +114,17 @@ fn bench_patched_take(c: &mut Criterion) {
     c.bench_function("patched_take_10K_contiguous_patches", |b| {
         b.iter(|| black_box(take(packed, &patch_indices).unwrap()));
     });
+
+    let adversarial_indices: PrimitiveArray = (0..(num_exceptions + 1024) / 1024)
+        .cycle()
+        .map(|chunk_idx| big_base2 - 1024 + chunk_idx * 1024)
+        .flat_map(|base_idx| (base_idx..(base_idx + 256)))
+        .take(10000)
+        .collect_vec()
+        .into();
+    c.bench_function("patched_take_10K_adversarial", |b| {
+        b.iter(|| black_box(take(packed, &adversarial_indices).unwrap()));
+    });
 }
 
 criterion_group!(benches, bench_take, bench_patched_take);
