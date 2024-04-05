@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, Criterion, criterion_group, criterion_main};
 use itertools::Itertools;
+use rand::{Rng, thread_rng};
 use rand::distributions::Uniform;
-use rand::{thread_rng, Rng};
+
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
@@ -96,8 +97,12 @@ fn bench_patched_take(c: &mut Criterion) {
         b.iter(|| black_box(take(packed, &random_indices).unwrap()));
     });
 
-    let not_patch_indices: PrimitiveArray = (0u32..10000).collect_vec().into();
-    c.bench_function("patched_take_10K_not_patches", |b| {
+    let not_patch_indices: PrimitiveArray = (0u32..num_exceptions)
+        .cycle()
+        .take(10000)
+        .collect_vec()
+        .into();
+    c.bench_function("patched_take_10K_contiguous_not_patches", |b| {
         b.iter(|| black_box(take(packed, &not_patch_indices).unwrap()));
     });
 
@@ -106,7 +111,7 @@ fn bench_patched_take(c: &mut Criterion) {
         .take(10000)
         .collect_vec()
         .into();
-    c.bench_function("patched_take_10K_patches", |b| {
+    c.bench_function("patched_take_10K_contiguous_patches", |b| {
         b.iter(|| black_box(take(packed, &patch_indices).unwrap()));
     });
 }
