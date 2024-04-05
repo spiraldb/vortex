@@ -19,13 +19,11 @@ pub use implementation::*;
 pub use metadata::*;
 pub use validity::*;
 pub use view::*;
-use vortex_schema::DType;
 
 use crate::array2::ArrayData;
 use crate::array2::ArrayEncoding;
 use crate::array2::ArrayView;
 
-// An array enum, similar to Cow.
 #[derive(Debug, Clone)]
 pub enum Array<'v> {
     Data(ArrayData),

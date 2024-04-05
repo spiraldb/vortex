@@ -2,7 +2,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::array2::TypedArrayView;
-use crate::array2::{Array, ArrayEncoding, ArrayMetadata, FromArrayMetadata};
+use crate::array2::{Array, ArrayEncoding, ArrayMetadata, TryFromArrayMetadata};
 use crate::array2::{ArrayCompute, IntoArray, ToArray};
 use crate::array2::{ArrayData, TypedArrayData};
 use crate::array2::{ArrayView, ToArrayData};
@@ -80,7 +80,7 @@ impl ValidityArray for ValidityView<'_> {
     }
 }
 
-impl FromArrayMetadata for ValidityMetadata {
+impl TryFromArrayMetadata for ValidityMetadata {
     fn try_from_metadata(metadata: Option<&[u8]>) -> VortexResult<Self> {
         let Some(bytes) = metadata else {
             vortex_bail!("Validity metadata is missing")
@@ -89,13 +89,13 @@ impl FromArrayMetadata for ValidityMetadata {
     }
 }
 
-impl FromArrayView for ValidityView<'_> {
+impl TryFromArrayView for ValidityView<'_> {
     fn try_from_view(view: &ArrayView) -> VortexResult<Self> {
         todo!()
     }
 }
 
-impl FromArrayData for ValidityData {
+impl TryFromArrayData for ValidityData {
     fn try_from_data(data: &ArrayData) -> VortexResult<Self> {
         todo!()
     }

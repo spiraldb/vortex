@@ -2,7 +2,7 @@ use vortex_error::VortexResult;
 
 use crate::array2::compute::ArrayCompute;
 use crate::array2::primitive::PrimitiveArray;
-use crate::array2::{ArrayTrait, ArrayValidity, ScalarAtFn};
+use crate::array2::{ArrayValidity, ScalarAtFn};
 use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
 

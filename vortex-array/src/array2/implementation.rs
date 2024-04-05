@@ -15,15 +15,15 @@ pub trait ArrayDef {
     type Encoding: ArrayEncoding;
 }
 
-pub trait FromArrayMetadata: Sized {
+pub trait TryFromArrayMetadata: Sized {
     fn try_from_metadata(metadata: Option<&[u8]>) -> VortexResult<Self>;
 }
 
-pub trait FromArrayData: Sized {
+pub trait TryFromArrayData: Sized {
     fn try_from_data(data: &ArrayData) -> VortexResult<Self>;
 }
 
-pub trait FromArrayView: Sized {
+pub trait TryFromArrayView: Sized {
     fn try_from_view(view: &ArrayView) -> VortexResult<Self>;
 }
 
@@ -33,7 +33,7 @@ macro_rules! impl_encoding {
         use paste::paste;
 
         paste! {
-            use $crate::array2::{ArrayDef, FromArrayData, FromArrayView, ArrayTrait};
+            use $crate::array2::{ArrayDef, TryFromArrayData, TryFromArrayView, ArrayTrait};
             use $crate::encoding::EncodingId;
             use std::any::Any;
             use std::sync::Arc;
@@ -64,7 +64,7 @@ macro_rules! impl_encoding {
                     f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
                 ) -> VortexResult<()> {
                     // Convert ArrayView -> PrimitiveArray, then call compute.
-                    let typed_view = <[<$Name View>] as FromArrayView>::try_from_view(view)?;
+                    let typed_view = <[<$Name View>] as TryFromArrayView>::try_from_view(view)?;
                     f(&typed_view.as_array())
                 }
 
@@ -73,7 +73,7 @@ macro_rules! impl_encoding {
                     data: &ArrayData,
                     f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
                 ) -> VortexResult<()> {
-                    let data = <[<$Name Data>] as FromArrayData>::try_from_data(data)?;
+                    let data = <[<$Name Data>] as TryFromArrayData>::try_from_data(data)?;
                     f(&data.as_array())
                 }
             }

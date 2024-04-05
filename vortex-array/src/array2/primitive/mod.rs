@@ -7,7 +7,7 @@ use vortex_schema::DType;
 use crate::array2::ArrayValidity;
 use crate::array2::TypedArrayView;
 use crate::array2::{ArrayData, TypedArrayData};
-use crate::array2::{ArrayEncoding, ArrayMetadata, FromArrayMetadata};
+use crate::array2::{ArrayEncoding, ArrayMetadata, TryFromArrayMetadata};
 use crate::array2::{ArrayView, ToArrayData};
 use crate::impl_encoding;
 use crate::ptype::{NativePType, PType};
@@ -45,7 +45,7 @@ impl PrimitiveData {
 
 impl PrimitiveArray for PrimitiveData {
     fn dtype(&self) -> &DType {
-        self.dtype()
+        self.data().dtype()
     }
 
     fn ptype(&self) -> PType {
@@ -59,7 +59,7 @@ impl PrimitiveArray for PrimitiveData {
 
 impl PrimitiveArray for PrimitiveView<'_> {
     fn dtype(&self) -> &DType {
-        self.dtype()
+        self.view().dtype()
     }
 
     fn ptype(&self) -> PType {
@@ -74,19 +74,19 @@ impl PrimitiveArray for PrimitiveView<'_> {
     }
 }
 
-impl FromArrayMetadata for PrimitiveMetadata {
+impl TryFromArrayMetadata for PrimitiveMetadata {
     fn try_from_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
         todo!()
     }
 }
 
-impl FromArrayView for PrimitiveView<'_> {
+impl TryFromArrayView for PrimitiveView<'_> {
     fn try_from_view(view: &ArrayView) -> VortexResult<Self> {
         todo!()
     }
 }
 
-impl FromArrayData for PrimitiveData {
+impl TryFromArrayData for PrimitiveData {
     fn try_from_data(data: &ArrayData) -> VortexResult<Self> {
         todo!()
     }

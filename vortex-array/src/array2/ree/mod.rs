@@ -1,11 +1,11 @@
 mod compute;
 
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::array2::validity::ArrayValidity;
 use crate::array2::TypedArrayView;
-use crate::array2::{Array, ArrayEncoding, ArrayMetadata, FromArrayMetadata};
+use crate::array2::{Array, ArrayEncoding, ArrayMetadata, TryFromArrayMetadata};
 use crate::array2::{ArrayData, TypedArrayData};
 use crate::array2::{ArrayView, ToArrayData};
 use crate::impl_encoding;
@@ -71,19 +71,19 @@ impl REEArray for REEView<'_> {
     }
 }
 
-impl FromArrayMetadata for REEMetadata {
+impl TryFromArrayMetadata for REEMetadata {
     fn try_from_metadata(metadata: Option<&[u8]>) -> VortexResult<Self> {
         todo!()
     }
 }
 
-impl FromArrayView for REEView<'_> {
+impl TryFromArrayView for REEView<'_> {
     fn try_from_view(view: &ArrayView) -> VortexResult<Self> {
         todo!()
     }
 }
 
-impl FromArrayData for REEData {
+impl TryFromArrayData for REEData {
     fn try_from_data(data: &ArrayData) -> VortexResult<Self> {
         todo!()
     }
