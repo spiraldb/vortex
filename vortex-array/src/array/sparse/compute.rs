@@ -190,23 +190,29 @@ fn take_search_sorted(
 
 #[cfg(test)]
 mod test {
+    use itertools::Itertools;
     use vortex_schema::{DType, FloatWidth, Nullability};
 
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
+    use crate::compute::as_contiguous::as_contiguous;
     use crate::compute::take::take;
     use crate::scalar::Scalar;
 
-    #[test]
-    fn sparse_take() {
-        let sparse = SparseArray::new(
+    fn sparse_array() -> SparseArray {
+        SparseArray::new(
             PrimitiveArray::from(vec![0u64, 37, 47, 99]).into_array(),
             PrimitiveArray::from(vec![1.23f64, 0.47, 9.99, 3.5]).into_array(),
             100,
             Scalar::null(&DType::Float(FloatWidth::_64, Nullability::Nullable)),
-        );
+        )
+    }
+
+    #[test]
+    fn sparse_take() {
+        let sparse = sparse_array();
         let taken = take(&sparse, &PrimitiveArray::from(vec![0, 47, 47, 0, 99])).unwrap();
         assert_eq!(
             taken
@@ -228,12 +234,7 @@ mod test {
 
     #[test]
     fn nonexistent_take() {
-        let sparse = SparseArray::new(
-            PrimitiveArray::from(vec![0u64, 37, 47, 99]).into_array(),
-            PrimitiveArray::from(vec![1.23f64, 0.47, 9.99, 3.5]).into_array(),
-            100,
-            Scalar::null(&DType::Float(FloatWidth::_64, Nullability::Nullable)),
-        );
+        let sparse = sparse_array();
         let taken = take(&sparse, &PrimitiveArray::from(vec![69])).unwrap();
         assert_eq!(
             taken
@@ -255,12 +256,7 @@ mod test {
 
     #[test]
     fn ordered_take() {
-        let sparse = SparseArray::new(
-            PrimitiveArray::from(vec![0u64, 37, 47, 99]).into_array(),
-            PrimitiveArray::from(vec![1.23f64, 0.47, 9.99, 3.5]).into_array(),
-            100,
-            Scalar::null(&DType::Float(FloatWidth::_64, Nullability::Nullable)),
-        );
+        let sparse = sparse_array();
         let taken = take(&sparse, &PrimitiveArray::from(vec![69, 37])).unwrap();
         assert_eq!(
             taken
@@ -279,5 +275,36 @@ mod test {
             [0.47f64]
         );
         assert_eq!(taken.len(), 2);
+    }
+
+    #[test]
+    fn take_slices_and_reassemble() {
+        let sparse = sparse_array();
+        let indices: PrimitiveArray = (0u64..10).collect_vec().into();
+        let slices = (0..10)
+            .map(|i| sparse.slice(i * 10, (i + 1) * 10).unwrap())
+            .collect_vec();
+
+        let taken = slices
+            .iter()
+            .map(|s| take(s, &indices).unwrap())
+            .collect_vec();
+        let reassembled = as_contiguous(&taken).unwrap();
+        assert_eq!(
+            reassembled
+                .as_sparse()
+                .indices()
+                .as_primitive()
+                .typed_data::<u64>(),
+            sparse.indices().as_primitive().typed_data()
+        );
+        assert_eq!(
+            reassembled
+                .as_sparse()
+                .values()
+                .as_primitive()
+                .typed_data::<f64>(),
+            sparse.values().as_primitive().typed_data()
+        );
     }
 }
