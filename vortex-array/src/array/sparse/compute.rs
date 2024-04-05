@@ -11,6 +11,7 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
+use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::ptype::NativePType;
@@ -129,9 +130,9 @@ impl TakeFn for SparseArray {
         let flat_indices = flatten_primitive(indices)?;
         // if we are taking a lot of values we should build a hashmap
         let (positions, physical_take_indices) = if indices.len() > 128 {
-            take_map(self, flat_indices)?
+            take_map(self, &flat_indices)?
         } else {
-            take_search_sorted(self, flat_indices)?
+            take_search_sorted(self, &flat_indices)?
         };
 
         let taken_values = take(self.values(), &physical_take_indices)?;
@@ -148,7 +149,7 @@ impl TakeFn for SparseArray {
 
 fn take_map(
     array: &SparseArray,
-    indices: PrimitiveArray,
+    indices: &PrimitiveArray,
 ) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
     let indices_map: HashMap<u64, u64> = array
         .resolved_indices()
@@ -172,16 +173,53 @@ fn take_map(
 
 fn take_search_sorted(
     array: &SparseArray,
-    indices: PrimitiveArray,
+    indices: &PrimitiveArray,
 ) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
-    let (positions, patch_indices): (Vec<u64>, Vec<u64>) = match_each_integer_ptype!(indices.ptype(), |$P| {
-        indices
+    // adjust the input indices (to take) by the internal index offset of the array
+    let adjusted_indices = match_each_integer_ptype!(indices.ptype(), |$P| {
+         indices.typed_data::<$P>()
+            .iter()
+            .map(|i| *i as usize + array.indices_offset())
+            .collect::<Vec<_>>()
+    });
+
+    // TODO(robert): Use binary search instead of search_sorted + take and index validation to avoid extra work
+    // search_sorted for the adjusted indices (need to validate that they are an exact match still)
+    let physical_indices = adjusted_indices
+        .iter()
+        .map(|i| search_sorted(array.indices(), *i, SearchSortedSide::Left).map(|s| s as u64))
+        .collect::<VortexResult<Vec<_>>>()?;
+
+    // filter out indices that are out of bounds, which will cause the take to fail
+    let (adjusted_indices, physical_indices): (Vec<usize>, Vec<u64>) = adjusted_indices
+        .iter()
+        .zip_eq(physical_indices)
+        .filter(|(_, phys_idx)| *phys_idx < array.indices().len() as u64)
+        .unzip();
+
+    let physical_indices = PrimitiveArray::from(physical_indices);
+    let taken_indices = flatten_primitive(&take(array.indices(), &physical_indices)?)?;
+    let exact_matches: Vec<bool> = match_each_integer_ptype!(taken_indices.ptype(), |$P| {
+        taken_indices
             .typed_data::<$P>()
             .iter()
-            .enumerate()
-            .filter_map(|(ti, pi)| array.find_index(*pi as usize).unwrap().map(|i| (ti as u64, i as u64)))
-            .unzip()
+            .zip_eq(adjusted_indices)
+            .map(|(taken_idx, adj_idx)| *taken_idx as usize == adj_idx)
+            .collect()
     });
+    let (positions, patch_indices): (Vec<u64>, Vec<u64>) = physical_indices
+        .typed_data::<u64>()
+        .iter()
+        .enumerate()
+        .filter_map(|(i, phy_idx)| {
+            // search_sorted != binary search, so we need to filter out indices that weren't found
+            if exact_matches[i] {
+                Some((i as u64, *phy_idx))
+            } else {
+                None
+            }
+        })
+        .unzip();
     Ok((
         PrimitiveArray::from(positions),
         PrimitiveArray::from(patch_indices),
@@ -195,6 +233,7 @@ mod test {
 
     use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
+    use crate::array::sparse::compute::take_map;
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
     use crate::compute::as_contiguous::as_contiguous;
@@ -313,5 +352,17 @@ mod test {
                 .typed_data::<f64>(),
             sparse.values().as_primitive().typed_data()
         );
+    }
+
+    #[test]
+    fn test_take_map() {
+        let sparse = sparse_array();
+        let indices = PrimitiveArray::from((0u64..100).collect_vec());
+        let (positions, patch_indices) = take_map(&sparse, &indices).unwrap();
+        assert_eq!(
+            positions.typed_data::<u64>(),
+            sparse.indices().as_primitive().typed_data()
+        );
+        assert_eq!(patch_indices.typed_data::<u64>(), [0u64, 1, 2, 3]);
     }
 }
