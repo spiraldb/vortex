@@ -33,3 +33,7 @@ simplelog = { workspace = true }
 [[bench]]
 name = "bitpacking"
 harness = false
+
+[[bench]]
+name = "bitpacking_take"
+harness = false
