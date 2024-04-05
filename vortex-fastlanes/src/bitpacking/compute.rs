@@ -1,22 +1,21 @@
-use std::cmp::min;
+use itertools::Itertools;
 
 use fastlanez::TryBitPack;
-use itertools::Itertools;
+use vortex::array::{Array, ArrayRef};
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
-use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
+use vortex::compute::ArrayCompute;
+use vortex::compute::flatten::{flatten_primitive, FlattenedArray, FlattenFn};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::take::{take, TakeFn};
-use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::Scalar;
 use vortex::validity::OwnedValidity;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
+use crate::{BitPackedArray, match_integers_by_width, unpack_single_primitive};
 use crate::bitpacking::compress::{unpack, unpack_single};
-use crate::{match_integers_by_width, unpack_single_primitive, BitPackedArray};
 
 impl ArrayCompute for BitPackedArray {
     fn flatten(&self) -> Option<&dyn FlattenFn> {
@@ -84,8 +83,6 @@ fn take_primitive<T: NativePType + TryBitPack>(
     let packed = flatten_primitive(array.encoded())?;
     let packed = packed.typed_data::<u8>();
 
-    let patches = array.patches().and_then(|p| p.maybe_sparse());
-
     // assuming the buffer is already allocated (which will happen at most once)
     // then unpacking all 1024 elements takes ~8.8x as long as unpacking a single element
     // see https://github.com/fulcrum-so/vortex/pull/190#issue-2223752833
@@ -101,44 +98,37 @@ fn take_primitive<T: NativePType + TryBitPack>(
             buffer.clear();
             TryBitPack::try_unpack_into(packed_chunk, bit_width, &mut buffer)
                 .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))?;
-            for index in &offsets {
-                output.push(buffer[*index as usize]);
+            for index in offsets {
+                output.push(buffer[index as usize]);
             }
         } else {
-            for index in &offsets {
+            for index in offsets {
                 output.push(unsafe {
-                    unpack_single_primitive::<T>(packed_chunk, bit_width, *index as usize)?
+                    unpack_single_primitive::<T>(packed_chunk, bit_width, index as usize)?
                 });
             }
-        }
-
-        if let Some(patches) = patches {
-            let patches_slice =
-                patches.slice(chunk * 1024, min((chunk + 1) * 1024, patches.len()))?;
-            let offsets = PrimitiveArray::from(offsets);
-
-            let taken_patches = patches_slice
-                .maybe_sparse()
-                .map(|slice| take(slice, &offsets))
-                .transpose()?
-                .ok_or(vortex_err!("Only sparse patches are currently supported!"))?;
-            let taken_patches = taken_patches
-                .maybe_sparse()
-                .ok_or(vortex_err!("Only sparse patches are currently supported!"))?;
-
-            let base_index = output.len() - offsets.len();
-            let output_patches = flatten_primitive(taken_patches.values())?;
-            taken_patches
-                .resolved_indices()
-                .iter()
-                .map(|idx| base_index + *idx)
-                .zip_eq(output_patches.typed_data::<T>())
-                .for_each(|(idx, val)| {
-                    output[idx] = *val;
-                });
         }
     }
 
+    if let Some(patches) = array.patches() {
+        let taken_patches = patches
+            .maybe_sparse()
+            .map(|patches| take(patches, indices))
+            .transpose()?
+            .ok_or(vortex_err!("Only sparse patches are currently supported!"))?;
+        let taken_patches = taken_patches
+            .maybe_sparse()
+            .ok_or(vortex_err!("Only sparse patches are currently supported!"))?;
+
+        let output_patches = flatten_primitive(taken_patches.values())?;
+        taken_patches
+            .resolved_indices()
+            .iter()
+            .zip_eq(output_patches.typed_data::<T>())
+            .for_each(|(idx, val)| {
+                output[*idx] = *val;
+            });
+    }
     Ok(output)
 }
 
@@ -147,19 +137,20 @@ mod test {
     use std::sync::Arc;
 
     use itertools::Itertools;
+    use rand::{Rng, thread_rng};
     use rand::distributions::Uniform;
-    use rand::{thread_rng, Rng};
+
+    use vortex::array::Array;
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-    use vortex::array::Array;
     use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::take::take;
     use vortex::encoding::EncodingRef;
     use vortex::scalar::Scalar;
 
-    use crate::downcast::DowncastFastlanes;
     use crate::BitPackedEncoding;
+    use crate::downcast::DowncastFastlanes;
 
     #[test]
     fn take_indices() {
