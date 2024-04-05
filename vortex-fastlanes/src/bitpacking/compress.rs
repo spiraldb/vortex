@@ -263,6 +263,14 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
     if output.len() < 1024 {
         output.shrink_to_fit();
     }
+
+    assert_eq!(
+        output.len(),
+        length,
+        "Expected unpacked array to be of length {} but got {}",
+        length,
+        output.len()
+    );
     output
 }
 
