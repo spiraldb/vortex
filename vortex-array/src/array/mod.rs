@@ -15,6 +15,7 @@ use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
+use crate::compute::ArrayCompute;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::ArraySerde;
 use crate::stats::Stats;
@@ -45,7 +46,6 @@ pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
     fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
-
     fn to_array(&self) -> ArrayRef;
     fn into_array(self) -> ArrayRef;
 
@@ -135,7 +135,6 @@ macro_rules! impl_array {
 
 pub use impl_array;
 
-use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::validity::ArrayValidity;
 use crate::ArrayWalker;
