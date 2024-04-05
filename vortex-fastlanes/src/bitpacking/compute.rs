@@ -4,6 +4,7 @@ use fastlanez::TryBitPack;
 use itertools::Itertools;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
@@ -84,20 +85,31 @@ fn take_primitive<T: NativePType + TryBitPack>(
     let packed = flatten_primitive(array.encoded())?;
     let packed = packed.typed_data::<u8>();
 
-    let patches = array.patches().and_then(|p| p.maybe_sparse());
+    let patches = array
+        .patches()
+        .map(|p| {
+            p.maybe_sparse()
+                .ok_or(vortex_err!("Only sparse patches are currently supported!"))
+        })
+        .transpose()?;
+
+    // if we have a small number of relatively large batches, we gain by slicing and then patching inside the loop
+    // if we have a large number of relatively small batches, the overhead isn't worth it, and we're better off with a bulk patch
+    // TODO(wmanning): what's the right threshold here?
+    let prefer_bulk_patch = relative_indices.len() > indices.len() / 32;
 
     // assuming the buffer is already allocated (which will happen at most once)
     // then unpacking all 1024 elements takes ~8.8x as long as unpacking a single element
     // see https://github.com/fulcrum-so/vortex/pull/190#issue-2223752833
     // however, the gap should be smaller with larger registers (e.g., AVX-512) vs the 128 bit
     // ones on M2 Macbook Air.
-    let bulk_threshold = 8;
+    let unpack_chunk_threshold = 8;
 
     let mut output = Vec::with_capacity(indices.len());
     let mut buffer: Vec<T> = Vec::new();
     for (chunk, offsets) in relative_indices {
         let packed_chunk = &packed[chunk * 128 * bit_width..][..128 * bit_width];
-        if offsets.len() > bulk_threshold {
+        if offsets.len() > unpack_chunk_threshold {
             buffer.clear();
             TryBitPack::try_unpack_into(packed_chunk, bit_width, &mut buffer)
                 .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))?;
@@ -112,34 +124,50 @@ fn take_primitive<T: NativePType + TryBitPack>(
             }
         }
 
+        if !prefer_bulk_patch {
+            if let Some(patches) = patches {
+                let patches_slice =
+                    patches.slice(chunk * 1024, min((chunk + 1) * 1024, patches.len()))?;
+                let patches_slice = patches_slice
+                    .maybe_sparse()
+                    .ok_or(vortex_err!("Only sparse patches are currently supported!"))?;
+                let offsets = PrimitiveArray::from(offsets);
+                do_patch_for_take_primitive(patches_slice, &offsets, &mut output)?;
+            }
+        }
+    }
+
+    if prefer_bulk_patch {
         if let Some(patches) = patches {
-            let patches_slice =
-                patches.slice(chunk * 1024, min((chunk + 1) * 1024, patches.len()))?;
-            let offsets = PrimitiveArray::from(offsets);
-
-            let taken_patches = patches_slice
-                .maybe_sparse()
-                .map(|slice| take(slice, &offsets))
-                .transpose()?
-                .ok_or(vortex_err!("Only sparse patches are currently supported!"))?;
-            let taken_patches = taken_patches
-                .maybe_sparse()
-                .ok_or(vortex_err!("Only sparse patches are currently supported!"))?;
-
-            let base_index = output.len() - offsets.len();
-            let output_patches = flatten_primitive(taken_patches.values())?;
-            taken_patches
-                .resolved_indices()
-                .iter()
-                .map(|idx| base_index + *idx)
-                .zip_eq(output_patches.typed_data::<T>())
-                .for_each(|(idx, val)| {
-                    output[idx] = *val;
-                });
+            do_patch_for_take_primitive(patches, indices, &mut output)?;
         }
     }
 
     Ok(output)
+}
+
+fn do_patch_for_take_primitive<T: NativePType + TryBitPack>(
+    patches: &SparseArray,
+    indices: &PrimitiveArray,
+    output: &mut [T],
+) -> VortexResult<()> {
+    let taken_patches = take(patches, indices)?;
+    let taken_patches = taken_patches
+        .maybe_sparse()
+        .ok_or(vortex_err!("Only sparse patches are currently supported!"))?;
+
+    let base_index = output.len() - indices.len();
+    let output_patches = flatten_primitive(taken_patches.values())?;
+    taken_patches
+        .resolved_indices()
+        .iter()
+        .map(|idx| base_index + *idx)
+        .zip_eq(output_patches.typed_data::<T>())
+        .for_each(|(idx, val)| {
+            output[idx] = *val;
+        });
+
+    Ok(())
 }
 
 #[cfg(test)]
