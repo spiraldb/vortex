@@ -1,16 +1,20 @@
 use std::io;
 use std::io::{Cursor, ErrorKind, Read, Write};
 
-use arrow_buffer::buffer::{Buffer, MutableBuffer};
+use arrow_buffer::buffer::Buffer;
 use arrow_buffer::BooleanBuffer;
 use flatbuffers::root;
 use itertools::Itertools;
+pub use view::*;
 use vortex_error::{vortex_err, VortexResult};
+use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 use vortex_schema::DTypeSerdeContext;
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
+use crate::array::bool::BoolArray;
 use crate::array::composite::COMPOSITE_EXTENSIONS;
 use crate::array::{Array, ArrayRef};
+use crate::compute::ArrayCompute;
 use crate::encoding::{find_encoding, EncodingId, ENCODINGS};
 use crate::ptype::PType;
 use crate::scalar::{Scalar, ScalarReader, ScalarWriter};
@@ -21,12 +25,6 @@ pub mod context;
 pub mod data;
 mod ptype;
 pub mod view;
-
-pub use view::*;
-use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
-
-use crate::array::bool::BoolArray;
-use crate::compute::ArrayCompute;
 
 pub trait ArraySerde {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()>;
@@ -187,9 +185,9 @@ impl<'a> ReadCtx<'a> {
     ) -> VortexResult<(usize, Buffer)> {
         let logical_len = self.read_usize()?;
         let buffer_len = byte_len(logical_len);
-        let mut buffer = MutableBuffer::from_len_zeroed(buffer_len);
-        self.r.read_exact(&mut buffer)?;
-        Ok((logical_len, buffer.into()))
+        let mut buf = Vec::with_capacity(buffer_len);
+        self.r.take(buffer_len as u64).read_to_end(&mut buf)?;
+        Ok((logical_len, Buffer::from_vec(buf)))
     }
 
     pub fn read_nbytes<const N: usize>(&mut self) -> VortexResult<[u8; N]> {
