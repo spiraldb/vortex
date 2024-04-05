@@ -1,20 +1,21 @@
+mod compute;
+
 use arrow_buffer::Buffer;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::array2::compute::{ArrayCompute, ScalarAtFn};
 use crate::array2::data::{ArrayData, TypedArrayData};
+use crate::array2::view::ArrayView;
 use crate::array2::view::{ArrayChildren, TypedArrayView};
 use crate::array2::{ArrayEncoding, ArrayMetadata, ParseArrayMetadata};
-use crate::compute::scalar_at::ScalarAtFn;
-use crate::compute::ArrayCompute;
 use crate::ptype::{NativePType, PType};
 use crate::scalar::Scalar;
-use crate::serde::ArrayView;
 use crate::{impl_encoding, match_each_native_ptype};
 
 impl_encoding!("vortex.primitive", Primitive);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrimitiveMetadata(PType);
 impl PrimitiveMetadata {
     pub fn ptype(&self) -> PType {
@@ -92,10 +93,14 @@ impl ParseArrayMetadata for PrimitiveMetadata {
     }
 }
 
-impl<'v> TryFrom<Option<&'v [u8]>> for PrimitiveMetadata {
-    type Error = VortexError;
+impl FromArrayView for PrimitiveView<'_> {
+    fn try_from(view: &ArrayView) -> VortexResult<Self> {
+        todo!()
+    }
+}
 
-    fn try_from(_value: Option<&'v [u8]>) -> Result<Self, Self::Error> {
+impl FromArrayData for PrimitiveData {
+    fn try_from(data: &ArrayData) -> VortexResult<Self> {
         todo!()
     }
 }

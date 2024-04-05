@@ -1,18 +1,20 @@
-use vortex_error::{vortex_bail, VortexError, VortexResult};
+mod compute;
+
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
+use crate::array2::compute::ArrayCompute;
+use crate::array2::compute::ScalarAtFn;
 use crate::array2::data::{ArrayData, TypedArrayData};
+use crate::array2::view::ArrayView;
 use crate::array2::view::TypedArrayView;
 use crate::array2::{Array, ArrayEncoding, ArrayMetadata, ParseArrayMetadata};
-use crate::compute::scalar_at::ScalarAtFn;
-use crate::compute::ArrayCompute;
 use crate::impl_encoding;
 use crate::scalar::Scalar;
-use crate::serde::ArrayView;
 
 impl_encoding!("vortex.ree", REE);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct REEMetadata {
     length: usize,
     ends_dtype: DType,
@@ -54,13 +56,6 @@ impl ParseArrayMetadata for REEMetadata {
         let Some(bytes) = metadata else {
             vortex_bail!("REE metadata is missing")
         };
-        todo!()
-    }
-}
-impl TryFrom<Option<&[u8]>> for REEMetadata {
-    type Error = VortexError;
-
-    fn try_from(value: Option<&[u8]>) -> Result<Self, Self::Error> {
         todo!()
     }
 }
@@ -108,5 +103,17 @@ impl REEArray for TypedArrayView<'_, REEDef> {
                 .child(1, self.view().dtype())
                 .expect("REEArray missing ends child"),
         )
+    }
+}
+
+impl FromArrayView for REEView<'_> {
+    fn try_from(view: &ArrayView) -> VortexResult<Self> {
+        todo!()
+    }
+}
+
+impl FromArrayData for REEData {
+    fn try_from(data: &ArrayData) -> VortexResult<Self> {
+        todo!()
     }
 }

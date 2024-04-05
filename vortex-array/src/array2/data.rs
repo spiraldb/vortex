@@ -8,7 +8,7 @@ use vortex_schema::DType;
 use crate::array2::{ArrayDef, ArrayMetadata, EncodingRef, ToArrayData};
 
 #[allow(dead_code)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ArrayData {
     encoding: EncodingRef,
     dtype: DType,

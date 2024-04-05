@@ -15,7 +15,6 @@ use crate::array::sparse::{SparseArray, SparseEncoding};
 use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
-use crate::compute::ArrayCompute;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::ArraySerde;
 use crate::stats::Stats;
@@ -136,6 +135,7 @@ macro_rules! impl_array {
 
 pub use impl_array;
 
+use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::validity::ArrayValidity;
 use crate::ArrayWalker;
