@@ -298,5 +298,6 @@ mod test {
                 .typed_data::<f64>(),
             [0.47f64]
         );
+        assert_eq!(taken.len(), 2);
     }
 }
