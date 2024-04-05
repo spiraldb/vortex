@@ -289,17 +289,24 @@ mod test {
             .iter()
             .map(|s| take(s, &indices).unwrap())
             .collect_vec();
-        let reassembled = as_contiguous(&taken).unwrap();
+        for i in [1, 2, 5, 6, 7, 8] {
+            assert_eq!(taken[i].as_sparse().indices().len(), 0);
+        }
+        for i in [0, 3, 4, 9] {
+            assert_eq!(taken[i].as_sparse().indices().len(), 1);
+        }
+
+        let contiguous = as_contiguous(&taken).unwrap();
         assert_eq!(
-            reassembled
+            contiguous
                 .as_sparse()
                 .indices()
                 .as_primitive()
                 .typed_data::<u64>(),
-            sparse.indices().as_primitive().typed_data()
+            [0u64, 7, 7, 9] // relative offsets
         );
         assert_eq!(
-            reassembled
+            contiguous
                 .as_sparse()
                 .values()
                 .as_primitive()
