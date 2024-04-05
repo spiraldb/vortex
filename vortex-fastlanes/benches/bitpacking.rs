@@ -33,6 +33,10 @@ fn pack_unpack(c: &mut Criterion) {
         b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 0, values.len())));
     });
 
+    c.bench_function("unpack_1M_offset", |b| {
+        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 768, values.len())));
+    });
+
     c.bench_function("unpack_1M_singles", |b| {
         b.iter(|| black_box(unpack_singles(&packed, 8, values.len())));
     });
@@ -43,11 +47,25 @@ fn pack_unpack(c: &mut Criterion) {
         b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 0, values.len())));
     });
 
+    c.bench_function("unpack_1024_alloc_offset", |b| {
+        b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 768, values.len())));
+    });
+
     let mut output: Vec<u32> = Vec::with_capacity(1024);
     c.bench_function("unpack_1024_noalloc", |b| {
         b.iter(|| {
             output.clear();
             TryBitPack::try_unpack_into(packed_1024, bits, &mut output).unwrap();
+            black_box(output[0])
+        })
+    });
+
+    let mut output: Vec<u32> = Vec::with_capacity(1024);
+    c.bench_function("unpack_1024_noalloc_offset", |b| {
+        b.iter(|| {
+            output.clear();
+            TryBitPack::try_unpack_into(packed_1024, bits, &mut output).unwrap();
+            output.drain(0..768);
             black_box(output[0])
         })
     });
