@@ -5,7 +5,6 @@ pub mod arrow;
 pub mod scalar;
 
 pub mod accessor;
-mod array2;
 pub mod compress;
 pub mod compute;
 pub mod datetime;
