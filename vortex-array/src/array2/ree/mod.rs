@@ -3,12 +3,12 @@ mod compute;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
-use crate::array2::compute::ArrayCompute;
-use crate::array2::compute::ScalarAtFn;
-use crate::array2::data::{ArrayData, TypedArrayData};
-use crate::array2::view::ArrayView;
-use crate::array2::view::TypedArrayView;
+use crate::array2::ArrayCompute;
+use crate::array2::ArrayView;
+use crate::array2::ScalarAtFn;
+use crate::array2::TypedArrayView;
 use crate::array2::{Array, ArrayEncoding, ArrayMetadata, ParseArrayMetadata};
+use crate::array2::{ArrayData, TypedArrayData};
 use crate::impl_encoding;
 use crate::scalar::Scalar;
 

@@ -4,9 +4,8 @@ use arrow_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::array2::context::SerdeContext;
-use crate::array2::data::ArrayData;
-use crate::array2::primitive::PrimitiveEncoding;
+use crate::array2::ArrayData;
+use crate::array2::SerdeContext;
 use crate::array2::{ArrayDef, ArrayMetadata, EncodingRef, ParseArrayMetadata, ToArrayData};
 use crate::flatbuffers::array as fb;
 
@@ -181,9 +180,7 @@ where
         // TODO(ngates): how do we get the child types? I guess we could walk?
 
         ArrayData::new(
-            // FIXME(ngates): encoding ref.
-            &PrimitiveEncoding,
-            // self.view().encoding(),
+            self.view().encoding(),
             self.view().dtype().clone(),
             self.metadata().to_arc(),
             self.view().buffers().to_vec().into(),

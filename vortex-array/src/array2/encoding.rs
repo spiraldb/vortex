@@ -1,84 +1,62 @@
-#[macro_export]
-macro_rules! impl_encoding {
-    ($id:literal, $Name:ident) => {
-        use paste::paste;
+use std::fmt::{Debug, Formatter};
 
-        paste! {
-            use $crate::array2::{ArrayDef, FromArrayData, FromArrayView};
-            use $crate::encoding::EncodingId;
-            use std::any::Any;
-            use std::sync::Arc;
-            use std::marker::{Send, Sync};
+use vortex_error::VortexResult;
 
-            /// The array definition trait
-            pub struct [<$Name Def>];
-            impl ArrayDef for [<$Name Def>] {
-                const ID: EncodingId = EncodingId::new($id);
-                type Array<'a> = dyn [<$Name Array>] + 'a;
-                type Metadata = [<$Name Metadata>];
-                type Encoding = [<$Name Encoding>];
-            }
+use crate::array2::ArrayCompute;
+use crate::array2::ArrayData;
+use crate::array2::ArrayView;
+use crate::encoding::EncodingId;
 
-            pub type [<$Name Data>] = TypedArrayData<[<$Name Def>]>;
-            pub type [<$Name View>]<'v> = TypedArrayView<'v, [<$Name Def>]>;
+pub type EncodingRef = &'static dyn ArrayEncoding;
 
-            /// The array encoding
-            pub struct [<$Name Encoding>];
-            impl ArrayEncoding for [<$Name Encoding>] {
-                fn id(&self) -> EncodingId {
-                    [<$Name Def>]::ID
-                }
+/// Dynamic trait representing an array type.
+#[allow(dead_code)]
+pub trait ArrayEncoding {
+    fn id(&self) -> EncodingId;
 
-                fn with_view_mut<'v>(
-                    &self,
-                    view: &'v ArrayView<'v>,
-                    f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-                ) -> VortexResult<()> {
-                    // Convert ArrayView -> PrimitiveArray, then call compute.
-                    let typed_view = <[<$Name View>] as FromArrayView>::try_from(view)?;
-                    f(&typed_view.as_array())
-                }
+    fn with_view_mut<'v>(
+        &self,
+        view: &'v ArrayView<'v>,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()>;
 
-                fn with_data_mut(
-                    &self,
-                    data: &ArrayData,
-                    f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-                ) -> VortexResult<()> {
-                    let data = <[<$Name Data>] as FromArrayData>::try_from(data)?;
-                    f(&data.as_array())
-                }
-            }
+    fn with_data_mut(
+        &self,
+        data: &ArrayData,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()>;
+}
 
-            /// Implement ArrayMetadata
-            impl ArrayMetadata for [<$Name Metadata>] {
-                fn as_any(&self) -> &dyn Any {
-                    self
-                }
+impl Debug for dyn ArrayEncoding + '_ {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.id(), f)
+    }
+}
 
-                fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
-                    self
-                }
+impl dyn ArrayEncoding {
+    pub(crate) fn with_view<'v, R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
+        &self,
+        view: &'v ArrayView<'v>,
+        f: F,
+    ) -> VortexResult<R> {
+        let mut result = None;
+        self.with_view_mut(view, &mut |compute| {
+            result = Some(f(compute));
+            Ok(())
+        })?;
+        result.unwrap()
+    }
 
-                fn to_arc(&self) -> Arc<dyn ArrayMetadata> {
-                    Arc::new(self.clone())
-                }
-
-                fn into_arc(self) -> Arc<dyn ArrayMetadata> {
-                    Arc::new(self)
-                }
-            }
-
-            /// Implement AsRef for both the data and view types
-            impl<'a> AsRef<dyn [<$Name Array>] + 'a> for [<$Name Data>] {
-                fn as_ref(&self) -> &(dyn [<$Name Array>] + 'a) {
-                    self
-                }
-            }
-            impl<'a> AsRef<dyn [<$Name Array>] + 'a> for [<$Name View>]<'a> {
-                fn as_ref(&self) -> &(dyn [<$Name Array>] + 'a) {
-                    self
-                }
-            }
-        }
-    };
+    pub(crate) fn with_data<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
+        &self,
+        data: &ArrayData,
+        f: F,
+    ) -> VortexResult<R> {
+        let mut result = None;
+        self.with_data_mut(data, &mut |compute| {
+            result = Some(f(compute));
+            Ok(())
+        })?;
+        result.unwrap()
+    }
 }

@@ -4,10 +4,10 @@ use arrow_buffer::Buffer;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array2::compute::{ArrayCompute, ScalarAtFn};
-use crate::array2::data::{ArrayData, TypedArrayData};
-use crate::array2::view::ArrayView;
-use crate::array2::view::{ArrayChildren, TypedArrayView};
+use crate::array2::ArrayView;
+use crate::array2::{ArrayChildren, TypedArrayView};
+use crate::array2::{ArrayCompute, ScalarAtFn};
+use crate::array2::{ArrayData, TypedArrayData};
 use crate::array2::{ArrayEncoding, ArrayMetadata, ParseArrayMetadata};
 use crate::ptype::{NativePType, PType};
 use crate::scalar::Scalar;

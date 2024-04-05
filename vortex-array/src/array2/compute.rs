@@ -1,8 +1,13 @@
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::array2::primitive::PrimitiveData;
-use crate::array2::{Array, WithCompute};
+use crate::array2::Array;
 use crate::scalar::Scalar;
+
+pub trait WithCompute {
+    fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(&self, f: F)
+        -> VortexResult<R>;
+}
 
 pub trait ArrayCompute {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
