@@ -83,8 +83,8 @@ impl TryFromArrayMetadata for REEMetadata {
     }
 }
 
-impl TryFromArrayView for REEView<'_> {
-    fn try_from_view(view: &ArrayView) -> VortexResult<Self> {
+impl<'v> TryFromArrayView<'v> for REEView<'v> {
+    fn try_from_view(view: &'v ArrayView<'v>) -> VortexResult<Self> {
         todo!()
     }
 }

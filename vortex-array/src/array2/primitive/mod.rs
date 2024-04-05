@@ -97,9 +97,13 @@ impl TryFromArrayMetadata for PrimitiveMetadata {
     }
 }
 
-impl TryFromArrayView for PrimitiveView<'_> {
-    fn try_from_view(view: &ArrayView) -> VortexResult<Self> {
-        todo!()
+impl<'v> TryFromArrayView<'v> for PrimitiveView<'v> {
+    fn try_from_view(view: &'v ArrayView<'v>) -> VortexResult<Self> {
+        // TODO(ngates): validate the view.
+        Ok(PrimitiveView::new_unchecked(
+            view.clone(),
+            PrimitiveMetadata::try_from_metadata(view.metadata())?,
+        ))
     }
 }
 

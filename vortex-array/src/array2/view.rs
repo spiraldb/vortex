@@ -151,6 +151,10 @@ pub struct TypedArrayView<'v, D: ArrayDef> {
 }
 
 impl<'v, D: ArrayDef> TypedArrayView<'v, D> {
+    pub fn new_unchecked(view: ArrayView<'v>, metadata: D::Metadata) -> Self {
+        Self { view, metadata }
+    }
+
     pub fn metadata(&self) -> &D::Metadata {
         &self.metadata
     }

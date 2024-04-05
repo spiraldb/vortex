@@ -23,8 +23,8 @@ pub trait TryFromArrayData: Sized {
     fn try_from_data(data: &ArrayData) -> VortexResult<Self>;
 }
 
-pub trait TryFromArrayView: Sized {
-    fn try_from_view(view: &ArrayView) -> VortexResult<Self>;
+pub trait TryFromArrayView<'v>: Sized + 'v {
+    fn try_from_view(view: &'v ArrayView<'v>) -> VortexResult<Self>;
 }
 
 #[macro_export]

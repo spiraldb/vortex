@@ -89,8 +89,8 @@ impl TryFromArrayMetadata for ValidityMetadata {
     }
 }
 
-impl TryFromArrayView for ValidityView<'_> {
-    fn try_from_view(view: &ArrayView) -> VortexResult<Self> {
+impl<'v> TryFromArrayView<'v> for ValidityView<'v> {
+    fn try_from_view(view: &'v ArrayView<'v>) -> VortexResult<Self> {
         todo!()
     }
 }
