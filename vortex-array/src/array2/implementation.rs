@@ -15,7 +15,7 @@ pub trait ArrayDef {
     type Encoding: ArrayEncoding;
 }
 
-pub trait ParseArrayMetadata: Sized {
+pub trait FromArrayMetadata: Sized {
     fn try_from(metadata: Option<&[u8]>) -> VortexResult<Self>;
 }
 

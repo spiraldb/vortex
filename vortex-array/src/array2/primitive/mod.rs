@@ -4,14 +4,13 @@ use arrow_buffer::Buffer;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::array2::ArrayCompute;
 use crate::array2::ArrayView;
 use crate::array2::TypedArrayView;
-use crate::array2::{ArrayCompute, ScalarAtFn};
 use crate::array2::{ArrayData, TypedArrayData};
-use crate::array2::{ArrayEncoding, ArrayMetadata, ParseArrayMetadata};
+use crate::array2::{ArrayEncoding, ArrayMetadata, FromArrayMetadata};
+use crate::impl_encoding;
 use crate::ptype::{NativePType, PType};
-use crate::scalar::Scalar;
-use crate::{impl_encoding, match_each_native_ptype};
 
 impl_encoding!("vortex.primitive", Primitive);
 
@@ -26,19 +25,6 @@ impl PrimitiveMetadata {
 pub trait PrimitiveArray {
     fn ptype(&self) -> PType;
     fn buffer(&self) -> &Buffer;
-}
-
-impl ArrayCompute for &dyn PrimitiveArray {
-    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        Some(self)
-    }
-}
-impl ScalarAtFn for &dyn PrimitiveArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        match_each_native_ptype!(self.ptype(), |$T| {
-            Ok(Scalar::from(self.buffer().typed_data::<$T>()[index]))
-        })
-    }
 }
 
 impl PrimitiveData {
@@ -80,14 +66,8 @@ impl PrimitiveArray for PrimitiveView<'_> {
             .expect("PrimitiveView must have a single buffer")
     }
 }
-//
-// impl ArrayChildren for PrimitiveView<'_> {
-//     fn child_array_data(&self) -> Vec<ArrayData> {
-//         todo!()
-//     }
-// }
 
-impl ParseArrayMetadata for PrimitiveMetadata {
+impl FromArrayMetadata for PrimitiveMetadata {
     fn try_from(_metadata: Option<&[u8]>) -> VortexResult<Self> {
         todo!()
     }

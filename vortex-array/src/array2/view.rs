@@ -5,7 +5,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::array2::SerdeContext;
-use crate::array2::{ArrayDef, EncodingRef, ParseArrayMetadata};
+use crate::array2::{ArrayDef, EncodingRef, FromArrayMetadata};
 use crate::flatbuffers::array as fb;
 
 #[derive(Clone)]
@@ -150,7 +150,7 @@ impl<'v, D: ArrayDef> TypedArrayView<'v, D> {
 
 impl<'v, D: ArrayDef> TryFrom<&'v ArrayView<'v>> for TypedArrayView<'v, D>
 where
-    D::Metadata: ParseArrayMetadata,
+    D::Metadata: FromArrayMetadata,
 {
     type Error = VortexError;
 
@@ -158,8 +158,7 @@ where
         if view.encoding().id() != D::ID {
             vortex_bail!("Invalid encoding for array")
         }
-        let metadata =
-            <<D as ArrayDef>::Metadata as ParseArrayMetadata>::try_from(view.metadata())?;
+        let metadata = <<D as ArrayDef>::Metadata as FromArrayMetadata>::try_from(view.metadata())?;
         Ok(Self {
             view: view.clone(),
             metadata,

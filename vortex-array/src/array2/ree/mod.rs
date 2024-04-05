@@ -5,12 +5,10 @@ use vortex_schema::DType;
 
 use crate::array2::ArrayCompute;
 use crate::array2::ArrayView;
-use crate::array2::ScalarAtFn;
 use crate::array2::TypedArrayView;
-use crate::array2::{Array, ArrayEncoding, ArrayMetadata, ParseArrayMetadata};
+use crate::array2::{Array, ArrayEncoding, ArrayMetadata, FromArrayMetadata};
 use crate::array2::{ArrayData, TypedArrayData};
 use crate::impl_encoding;
-use crate::scalar::Scalar;
 
 impl_encoding!("vortex.ree", REE);
 
@@ -51,58 +49,32 @@ impl REEData {
     }
 }
 
-impl ParseArrayMetadata for REEMetadata {
+impl REEArray for REEData {
+    fn run_ends(&self) -> Array {
+        Array::DataRef(self.data().children().first().unwrap())
+    }
+
+    fn values(&self) -> Array {
+        Array::DataRef(self.data().children().get(1).unwrap())
+    }
+}
+
+impl REEArray for REEView<'_> {
+    fn run_ends(&self) -> Array {
+        Array::View(self.view().child(0, self.metadata().ends_dtype()).unwrap())
+    }
+
+    fn values(&self) -> Array {
+        Array::View(self.view().child(1, self.view().dtype()).unwrap())
+    }
+}
+
+impl FromArrayMetadata for REEMetadata {
     fn try_from(metadata: Option<&[u8]>) -> VortexResult<Self> {
         let Some(bytes) = metadata else {
             vortex_bail!("REE metadata is missing")
         };
         todo!()
-    }
-}
-
-impl ArrayCompute for &dyn REEArray {
-    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        Some(self)
-    }
-}
-
-impl ScalarAtFn for &dyn REEArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        todo!()
-    }
-}
-
-impl REEArray for TypedArrayData<REEDef> {
-    fn run_ends(&self) -> Array {
-        Array::DataRef(
-            self.data()
-                .children()
-                .get(0)
-                // FIXME(ngates): where are these assertions made?
-                .expect("REEArray should have at least one child"),
-        )
-    }
-
-    fn values(&self) -> Array {
-        todo!()
-    }
-}
-
-impl REEArray for TypedArrayView<'_, REEDef> {
-    fn run_ends(&self) -> Array {
-        Array::View(
-            self.view()
-                .child(0, self.metadata().ends_dtype())
-                .expect("REEArray missing ends child"),
-        )
-    }
-
-    fn values(&self) -> Array {
-        Array::View(
-            self.view()
-                .child(1, self.view().dtype())
-                .expect("REEArray missing ends child"),
-        )
     }
 }
 
