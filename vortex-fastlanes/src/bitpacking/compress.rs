@@ -225,7 +225,8 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
     }
 
     // How many fastlanes vectors we will process.
-    let num_chunks = (length + 1023) / 1024;
+    // Packed array might not start at 0 when the array is sliced. Offset is guaranteed to be < 1024.
+    let num_chunks = (offset + length + 1023) / 1024;
     let bytes_per_chunk = 128 * bit_width;
     assert_eq!(
         packed.len(),
