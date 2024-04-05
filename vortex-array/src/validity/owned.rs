@@ -28,11 +28,11 @@ pub enum Validity {
 impl Validity {
     pub const DTYPE: DType = DType::Bool(Nullability::NonNullable);
 
-    pub fn array(array: ArrayRef) -> Self {
+    pub fn array(array: ArrayRef) -> VortexResult<Self> {
         if !matches!(array.dtype(), &Validity::DTYPE) {
-            panic!("Validity array must be of type bool");
+            vortex_bail!("Validity array must be of type bool");
         }
-        Self::Array(array)
+        Ok(Self::Array(array))
     }
 
     pub fn try_from_logical(

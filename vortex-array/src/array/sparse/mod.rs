@@ -96,6 +96,9 @@ impl SparseArray {
 
         // TODO(ngates): replace this with a binary search that tells us if we get an exact match.
         let idx = search_sorted(self.indices(), true_index, SearchSortedSide::Left)?;
+        if idx >= self.indices().len() {
+            return Ok(None);
+        }
 
         // If the value at this index is equal to the true index, then it exists in the
         // indices array.

@@ -219,7 +219,7 @@ impl CompressCtx {
                 ValidityView::Valid(_) | ValidityView::Invalid(_) => {
                     Ok(Some(validity.to_owned_view()))
                 }
-                ValidityView::Array(a) => Ok(Some(Validity::array(self.compress(a, None)?))),
+                ValidityView::Array(a) => Ok(Some(Validity::array(self.compress(a, None)?)?)),
             }
         } else {
             Ok(None)

@@ -228,6 +228,22 @@ impl Encoding for BitPackedEncoding {
     }
 }
 
+#[macro_export]
+macro_rules! match_integers_by_width {
+    ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
+        macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
+        use vortex::ptype::PType;
+        use vortex_error::vortex_bail;
+        match $self {
+            PType::I8 | PType::U8 => __with__! { u8 },
+            PType::I16 | PType::U16 => __with__! { u16 },
+            PType::I32 | PType::U32 => __with__! { u32 },
+            PType::I64 | PType::U64 => __with__! { u64 },
+            _ => vortex_bail!("Unsupported ptype {}", $self),
+        }
+    })
+}
+
 #[cfg(test)]
 mod test {
     use std::sync::Arc;

@@ -29,6 +29,9 @@ fn pack_unpack(c: &mut Criterion) {
     });
 
     let packed = bitpack_primitive(&values, bits);
+    let unpacked = unpack_primitive::<u32>(&packed, bits, 0, values.len());
+    assert_eq!(unpacked, values);
+
     c.bench_function("unpack_1M", |b| {
         b.iter(|| black_box(unpack_primitive::<u32>(&packed, bits, 0, values.len())));
     });

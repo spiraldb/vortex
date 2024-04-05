@@ -223,7 +223,7 @@ impl<'a> ReadCtx<'a> {
                 [1u8] => Ok(Some(Validity::Invalid(self.read_usize()?))),
                 [2u8] => Ok(Some(Validity::array(
                     self.with_schema(&Validity::DTYPE).read()?,
-                ))),
+                )?)),
                 _ => panic!("Invalid validity tag"),
             }
         } else {

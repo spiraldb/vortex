@@ -140,7 +140,7 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
         validity.push(false);
         validity.extend(vec![true; values.len() - 1]);
 
-        Some(Validity::array(BoolArray::from(validity).into_array()))
+        Some(Validity::array(BoolArray::from(validity).into_array()).unwrap())
     } else {
         None
     };
@@ -222,7 +222,7 @@ where
         validity.push(false);
         validity.extend(vec![true; offsets.len() - 2]);
 
-        Some(Validity::array(BoolArray::from(validity).into_array()))
+        Some(Validity::array(BoolArray::from(validity).into_array()).unwrap())
     } else {
         None
     };
