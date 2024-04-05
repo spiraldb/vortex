@@ -4,7 +4,7 @@ use arrow_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::array2::{ArrayDef, EncodingRef};
+use crate::array2::{Array, ArrayDef, EncodingRef, IntoArray, ToArray};
 use crate::array2::{FromArrayMetadata, SerdeContext};
 use crate::flatbuffers::array as fb;
 
@@ -133,6 +133,18 @@ impl<'v> ArrayView<'v> {
     }
 }
 
+impl ToArray for ArrayView<'_> {
+    fn to_array(&self) -> Array {
+        Array::View(self.clone())
+    }
+}
+
+impl<'v> IntoArray<'v> for ArrayView<'v> {
+    fn into_array(self) -> Array<'v> {
+        Array::View(self)
+    }
+}
+
 pub struct TypedArrayView<'v, D: ArrayDef> {
     view: ArrayView<'v>,
     metadata: D::Metadata,
@@ -155,21 +167,25 @@ impl<'v, D: ArrayDef> TypedArrayView<'v, D> {
     }
 }
 
+impl<D: ArrayDef> ToArray for TypedArrayView<'_, D> {
+    fn to_array(&self) -> Array {
+        Array::View(self.view().clone())
+    }
+}
+
 /// Convert an ArrayView into a TypedArrayView.
-impl<'v, D: ArrayDef> TryFrom<&'v ArrayView<'v>> for TypedArrayView<'v, D>
+impl<'v, D: ArrayDef> TryFrom<ArrayView<'v>> for TypedArrayView<'v, D>
 where
     D::Metadata: FromArrayMetadata,
 {
     type Error = VortexError;
 
-    fn try_from(view: &'v ArrayView<'v>) -> Result<Self, Self::Error> {
+    fn try_from(view: ArrayView<'v>) -> Result<Self, Self::Error> {
         if view.encoding().id() != D::ID {
             vortex_bail!("Invalid encoding for array")
         }
-        let metadata = <<D as ArrayDef>::Metadata as FromArrayMetadata>::try_from(view.metadata())?;
-        Ok(Self {
-            view: view.clone(),
-            metadata,
-        })
+        let metadata =
+            <<D as ArrayDef>::Metadata as FromArrayMetadata>::try_from_metadata(view.metadata())?;
+        Ok(Self { view, metadata })
     }
 }

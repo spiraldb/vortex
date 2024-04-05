@@ -6,6 +6,7 @@ mod implementation;
 mod metadata;
 mod primitive;
 mod ree;
+mod validity;
 mod view;
 
 use std::fmt::Debug;
@@ -16,6 +17,7 @@ pub use data::*;
 pub use encoding::*;
 pub use implementation::*;
 pub use metadata::*;
+pub use validity::*;
 pub use view::*;
 use vortex_schema::DType;
 
@@ -23,7 +25,7 @@ use crate::array2::ArrayData;
 use crate::array2::ArrayEncoding;
 use crate::array2::ArrayView;
 
-/// An array enum, similar to Cow.
+// An array enum, similar to Cow.
 #[derive(Debug, Clone)]
 pub enum Array<'v> {
     Data(ArrayData),
@@ -31,9 +33,31 @@ pub enum Array<'v> {
     View(ArrayView<'v>),
 }
 
-pub trait ArrayTrait: ArrayCompute {
-    fn dtype(&self) -> &DType;
+pub trait ToArray {
+    fn to_array(&self) -> Array;
+}
+
+pub trait IntoArray<'a> {
+    fn into_array(self) -> Array<'a>;
+}
+
+pub trait ToArrayData {
+    fn to_array_data(&self) -> ArrayData;
+}
+
+/// Collects together the behaviour of an array.
+pub trait ArrayTrait: ArrayCompute + ArrayValidity + ToArrayData {
     fn len(&self) -> usize;
+}
+
+impl ToArrayData for Array<'_> {
+    fn to_array_data(&self) -> ArrayData {
+        match self {
+            Array::Data(d) => d.encoding().with_data(d, |a| a.to_array_data()),
+            Array::DataRef(d) => d.encoding().with_data(d, |a| a.to_array_data()),
+            Array::View(v) => v.encoding().with_view(v, |a| a.to_array_data()),
+        }
+    }
 }
 
 impl WithArray for Array<'_> {

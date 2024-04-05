@@ -1,9 +1,9 @@
 use vortex_error::VortexResult;
 
+use crate::array2::ArrayData;
 use crate::array2::ArrayEncoding;
 use crate::array2::ArrayMetadata;
 use crate::array2::ArrayView;
-use crate::array2::{Array, ArrayData};
 use crate::encoding::EncodingId;
 
 /// Trait the defines the set of types relating to an array.
@@ -16,23 +16,15 @@ pub trait ArrayDef {
 }
 
 pub trait FromArrayMetadata: Sized {
-    fn try_from(metadata: Option<&[u8]>) -> VortexResult<Self>;
+    fn try_from_metadata(metadata: Option<&[u8]>) -> VortexResult<Self>;
 }
 
 pub trait FromArrayData: Sized {
-    fn try_from(data: &ArrayData) -> VortexResult<Self>;
+    fn try_from_data(data: &ArrayData) -> VortexResult<Self>;
 }
 
 pub trait FromArrayView: Sized {
-    fn try_from(view: &ArrayView) -> VortexResult<Self>;
-}
-
-pub trait ToArray {
-    fn to_array(&self) -> Array;
-}
-
-pub trait IntoArray {
-    fn into_array(self) -> Array<'static>;
+    fn try_from_view(view: &ArrayView) -> VortexResult<Self>;
 }
 
 #[macro_export]
@@ -72,7 +64,7 @@ macro_rules! impl_encoding {
                     f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
                 ) -> VortexResult<()> {
                     // Convert ArrayView -> PrimitiveArray, then call compute.
-                    let typed_view = <[<$Name View>] as FromArrayView>::try_from(view)?;
+                    let typed_view = <[<$Name View>] as FromArrayView>::try_from_view(view)?;
                     f(&typed_view.as_array())
                 }
 
@@ -81,7 +73,7 @@ macro_rules! impl_encoding {
                     data: &ArrayData,
                     f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
                 ) -> VortexResult<()> {
-                    let data = <[<$Name Data>] as FromArrayData>::try_from(data)?;
+                    let data = <[<$Name Data>] as FromArrayData>::try_from_data(data)?;
                     f(&data.as_array())
                 }
             }

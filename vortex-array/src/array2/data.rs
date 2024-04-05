@@ -39,13 +39,6 @@ impl ArrayData {
 
         Ok(data)
     }
-
-    pub fn as_typed<D: ArrayDef>(&self) -> TypedArrayData<D> {
-        TypedArrayData {
-            data: self.clone(),
-            phantom: PhantomData,
-        }
-    }
 }
 
 impl ArrayData {
@@ -67,6 +60,18 @@ impl ArrayData {
 
     pub fn children(&self) -> &[ArrayData] {
         &self.children
+    }
+}
+
+impl ToArray for ArrayData {
+    fn to_array(&self) -> Array {
+        Array::DataRef(&self)
+    }
+}
+
+impl IntoArray<'static> for ArrayData {
+    fn into_array(self) -> Array<'static> {
+        Array::Data(self)
     }
 }
 
@@ -114,21 +119,21 @@ impl<D: ArrayDef> ToArray for TypedArrayData<D> {
     }
 }
 
-impl<D: ArrayDef> IntoArray for TypedArrayData<D> {
+impl<D: ArrayDef> IntoArray<'static> for TypedArrayData<D> {
     fn into_array(self) -> Array<'static> {
         Array::Data(self.data)
     }
 }
 
-impl<D: ArrayDef> TryFrom<&ArrayData> for TypedArrayData<D> {
+impl<D: ArrayDef> TryFrom<ArrayData> for TypedArrayData<D> {
     type Error = VortexError;
 
-    fn try_from(data: &ArrayData) -> Result<Self, Self::Error> {
+    fn try_from(data: ArrayData) -> Result<Self, Self::Error> {
         if data.encoding().id() != D::ID {
             vortex_bail!("Invalid encoding for array")
         }
         Ok(Self {
-            data: data.clone(),
+            data,
             phantom: PhantomData,
         })
     }

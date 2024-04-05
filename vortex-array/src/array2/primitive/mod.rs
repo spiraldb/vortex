@@ -4,10 +4,11 @@ use arrow_buffer::Buffer;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array2::ArrayView;
+use crate::array2::ArrayValidity;
 use crate::array2::TypedArrayView;
 use crate::array2::{ArrayData, TypedArrayData};
 use crate::array2::{ArrayEncoding, ArrayMetadata, FromArrayMetadata};
+use crate::array2::{ArrayView, ToArrayData};
 use crate::impl_encoding;
 use crate::ptype::{NativePType, PType};
 
@@ -22,6 +23,7 @@ impl PrimitiveMetadata {
 }
 
 pub trait PrimitiveArray {
+    fn dtype(&self) -> &DType;
     fn ptype(&self) -> PType;
     fn buffer(&self) -> &Buffer;
 }
@@ -36,25 +38,30 @@ impl PrimitiveData {
             vec![].into(),
         )
         .unwrap()
-        .as_typed()
+        .try_into()
+        .unwrap()
     }
 }
 
 impl PrimitiveArray for PrimitiveData {
+    fn dtype(&self) -> &DType {
+        self.dtype()
+    }
+
     fn ptype(&self) -> PType {
         self.metadata().ptype()
     }
 
     fn buffer(&self) -> &Buffer {
-        self.data()
-            .buffers()
-            .first()
-            // This assertion is made by construction.
-            .expect("PrimitiveArray must have a single buffer")
+        self.data().buffers().first().unwrap()
     }
 }
 
 impl PrimitiveArray for PrimitiveView<'_> {
+    fn dtype(&self) -> &DType {
+        self.dtype()
+    }
+
     fn ptype(&self) -> PType {
         self.metadata().ptype()
     }
@@ -68,29 +75,37 @@ impl PrimitiveArray for PrimitiveView<'_> {
 }
 
 impl FromArrayMetadata for PrimitiveMetadata {
-    fn try_from(_metadata: Option<&[u8]>) -> VortexResult<Self> {
+    fn try_from_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
         todo!()
     }
 }
 
 impl FromArrayView for PrimitiveView<'_> {
-    fn try_from(view: &ArrayView) -> VortexResult<Self> {
+    fn try_from_view(view: &ArrayView) -> VortexResult<Self> {
         todo!()
     }
 }
 
 impl FromArrayData for PrimitiveData {
-    fn try_from(data: &ArrayData) -> VortexResult<Self> {
+    fn try_from_data(data: &ArrayData) -> VortexResult<Self> {
         todo!()
     }
 }
 
 impl ArrayTrait for &dyn PrimitiveArray {
-    fn dtype(&self) -> &DType {
-        todo!()
-    }
-
     fn len(&self) -> usize {
         self.buffer().len() / self.ptype().byte_width()
+    }
+}
+
+impl ArrayValidity for &dyn PrimitiveArray {
+    fn is_valid(&self, index: usize) -> bool {
+        todo!()
+    }
+}
+
+impl ToArrayData for &dyn PrimitiveArray {
+    fn to_array_data(&self) -> ArrayData {
+        todo!()
     }
 }

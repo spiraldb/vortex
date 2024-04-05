@@ -3,10 +3,11 @@ mod compute;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
-use crate::array2::ArrayView;
+use crate::array2::validity::ArrayValidity;
 use crate::array2::TypedArrayView;
 use crate::array2::{Array, ArrayEncoding, ArrayMetadata, FromArrayMetadata};
 use crate::array2::{ArrayData, TypedArrayData};
+use crate::array2::{ArrayView, ToArrayData};
 use crate::impl_encoding;
 
 impl_encoding!("vortex.ree", REE);
@@ -45,7 +46,8 @@ impl REEData {
             vec![ends, values].into(),
         )
         .unwrap()
-        .as_typed()
+        .try_into()
+        .unwrap()
     }
 }
 
@@ -70,32 +72,37 @@ impl REEArray for REEView<'_> {
 }
 
 impl FromArrayMetadata for REEMetadata {
-    fn try_from(metadata: Option<&[u8]>) -> VortexResult<Self> {
-        let Some(bytes) = metadata else {
-            vortex_bail!("REE metadata is missing")
-        };
+    fn try_from_metadata(metadata: Option<&[u8]>) -> VortexResult<Self> {
         todo!()
     }
 }
 
 impl FromArrayView for REEView<'_> {
-    fn try_from(view: &ArrayView) -> VortexResult<Self> {
+    fn try_from_view(view: &ArrayView) -> VortexResult<Self> {
         todo!()
     }
 }
 
 impl FromArrayData for REEData {
-    fn try_from(data: &ArrayData) -> VortexResult<Self> {
+    fn try_from_data(data: &ArrayData) -> VortexResult<Self> {
         todo!()
     }
 }
 
 impl ArrayTrait for &dyn REEArray {
-    fn dtype(&self) -> &DType {
+    fn len(&self) -> usize {
         todo!()
     }
+}
 
-    fn len(&self) -> usize {
+impl ArrayValidity for &dyn REEArray {
+    fn is_valid(&self, index: usize) -> bool {
+        todo!()
+    }
+}
+
+impl ToArrayData for &dyn REEArray {
+    fn to_array_data(&self) -> ArrayData {
         todo!()
     }
 }
