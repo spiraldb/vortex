@@ -230,6 +230,59 @@ impl Encoding for BitPackedEncoding {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
+    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::Array;
+    use vortex::compress::{CompressConfig, CompressCtx};
+    use vortex::compute::scalar_at::scalar_at;
+    use vortex::encoding::EncodingRef;
+
+    use crate::BitPackedEncoding;
+
     #[test]
-    fn slice() {}
+    fn slice_within_block() {
+        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
+        let ctx = CompressCtx::new(Arc::new(cfg));
+
+        let compressed = ctx
+            .compress(
+                &PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()),
+                None,
+            )
+            .unwrap()
+            .slice(768, 9999)
+            .unwrap();
+        assert_eq!(
+            scalar_at(&compressed, 0).unwrap(),
+            ((768 % 63) as u8).into()
+        );
+        assert_eq!(
+            scalar_at(&compressed, compressed.len() - 1).unwrap(),
+            ((9998 % 63) as u8).into()
+        );
+    }
+
+    #[test]
+    fn slice_block_boundary() {
+        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
+        let ctx = CompressCtx::new(Arc::new(cfg));
+
+        let compressed = ctx
+            .compress(
+                &PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()),
+                None,
+            )
+            .unwrap()
+            .slice(7168, 9216)
+            .unwrap();
+        assert_eq!(
+            scalar_at(&compressed, 0).unwrap(),
+            ((7168 % 63) as u8).into()
+        );
+        assert_eq!(
+            scalar_at(&compressed, compressed.len() - 1).unwrap(),
+            ((9215 % 63) as u8).into()
+        );
+    }
 }
