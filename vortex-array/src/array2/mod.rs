@@ -18,6 +18,7 @@ pub use implementation::*;
 pub use metadata::*;
 pub use view::*;
 use vortex_error::VortexResult;
+use vortex_schema::DType;
 
 use crate::array2::ArrayCompute;
 use crate::array2::ArrayData;
@@ -30,6 +31,16 @@ pub enum Array<'v> {
     Data(ArrayData),
     DataRef(&'v ArrayData),
     View(ArrayView<'v>),
+}
+
+impl Array<'_> {
+    pub fn dtype(&self) -> &DType {
+        match self {
+            Array::Data(d) => d.dtype(),
+            Array::DataRef(d) => d.dtype(),
+            Array::View(v) => v.dtype(),
+        }
+    }
 }
 
 impl WithCompute for Array<'_> {
