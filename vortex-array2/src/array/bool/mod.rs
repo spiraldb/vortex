@@ -33,6 +33,7 @@ impl BoolMetadata {
 // TODO(ngates): I think this could be a struct?
 pub trait BoolArray {
     fn buffer(&self) -> &Buffer;
+    #[allow(clippy::len_without_is_empty)]
     fn len(&self) -> usize;
     fn validity(&self) -> Option<Validity>;
 }
