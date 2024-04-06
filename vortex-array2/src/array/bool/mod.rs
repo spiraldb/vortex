@@ -1,16 +1,15 @@
 mod compute;
 
 use arrow_buffer::{BooleanBuffer, Buffer};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
 
+use crate::impl_encoding;
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, ValidityMetadata};
-use crate::{impl_encoding, IntoArray};
+use crate::ArrayMetadata;
 use crate::{ArrayData, TypedArrayData};
-use crate::{ArrayMetadata, TryFromArrayMetadata};
 use crate::{ArrayView, ToArrayData};
-use crate::{ToArray, TypedArrayView};
 
 impl_encoding!("vortex.bool", Bool);
 
@@ -31,12 +30,48 @@ impl BoolMetadata {
     }
 }
 
-// TODO(ngates): I think this could be a struct?
-#[allow(clippy::len_without_is_empty)]
-pub trait BoolArray {
-    fn buffer(&self) -> &Buffer;
-    fn len(&self) -> usize;
-    fn validity(&self) -> Option<Validity>;
+impl TryParseArrayMetadata for BoolMetadata {
+    fn try_parse_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
+        todo!()
+    }
+}
+
+pub struct BoolArray<'a> {
+    buffer: &'a Buffer,
+    validity: Option<Validity<'a>>,
+    metadata: BoolMetadata,
+}
+
+impl BoolArray<'_> {
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    pub fn validity(&self) -> Option<&Validity> {
+        self.validity.as_ref()
+    }
+
+    pub fn metadata(&self) -> &BoolMetadata {
+        &self.metadata
+    }
+
+    pub fn boolean_buffer(&self) -> BooleanBuffer {
+        BooleanBuffer::new(self.buffer.clone(), 0, self.metadata.len())
+    }
+}
+
+impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
+    fn try_from_parts(parts: &'v dyn ArrayParts<'v>, metadata: BoolMetadata) -> VortexResult<Self> {
+        Ok(BoolArray {
+            buffer: parts
+                .buffer(0)
+                .ok_or(vortex_err!("BoolArray requires a buffer"))?,
+            validity: metadata
+                .validity()
+                .to_validity(metadata.len(), parts.child(0, &Validity::DTYPE)),
+            metadata,
+        })
+    }
 }
 
 impl BoolData {
@@ -59,82 +94,31 @@ impl BoolData {
     }
 }
 
-impl BoolArray for BoolData {
-    fn buffer(&self) -> &Buffer {
-        self.data().buffers().first().unwrap()
-    }
-
+impl ArrayTrait for BoolArray<'_> {
     fn len(&self) -> usize {
-        self.metadata().len()
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        self.metadata().validity().to_validity(
-            self.metadata().len(),
-            self.data().child(0).map(|data| data.to_array()),
-        )
-    }
-}
-
-impl BoolArray for BoolView<'_> {
-    fn buffer(&self) -> &Buffer {
-        self.view()
-            .buffers()
-            .first()
-            .expect("BoolView must have a single buffer")
-    }
-
-    fn len(&self) -> usize {
-        self.metadata().len()
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        self.metadata().validity().to_validity(
-            self.metadata().len(),
-            self.view()
-                .child(0, &Validity::DTYPE)
-                .map(|a| a.into_array()),
-        )
-    }
-}
-
-impl TryFromArrayMetadata for BoolMetadata {
-    fn try_from_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
         todo!()
     }
 }
 
-impl<'v> TryFromArrayView<'v> for BoolView<'v> {
-    fn try_from_view(view: &'v ArrayView<'v>) -> VortexResult<Self> {
-        // TODO(ngates): validate the view.
-        Ok(BoolView::new_unchecked(
-            view.clone(),
-            BoolMetadata::try_from_metadata(view.metadata())?,
-        ))
-    }
-}
-
-impl TryFromArrayData for BoolData {
-    fn try_from_data(data: &ArrayData) -> VortexResult<Self> {
-        // TODO(ngates): validate the array data.
-        Ok(Self::from_data_unchecked(data.clone()))
-    }
-}
-
-impl ArrayTrait for &dyn BoolArray {
-    fn len(&self) -> usize {
-        (**self).len()
-    }
-}
-
-impl ArrayValidity for &dyn BoolArray {
+impl ArrayValidity for BoolArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
     }
 }
 
-impl ToArrayData for &dyn BoolArray {
+impl ToArrayData for BoolArray<'_> {
     fn to_array_data(&self) -> ArrayData {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::array::bool::BoolData;
+
+    #[test]
+    fn bool_array() {
+        let arr = BoolData::try_new(vec![true, false, true].into(), None).unwrap();
+        println!("Array {:?}", &arr);
     }
 }
