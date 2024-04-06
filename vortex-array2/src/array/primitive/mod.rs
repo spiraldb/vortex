@@ -29,11 +29,11 @@ impl PrimitiveMetadata {
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 pub trait PrimitiveArray {
     fn dtype(&self) -> &DType;
     fn ptype(&self) -> PType;
     fn buffer(&self) -> &Buffer;
-    #[allow(clippy::len_without_is_empty)]
     fn len(&self) -> usize {
         self.buffer().len() / self.ptype().byte_width()
     }
