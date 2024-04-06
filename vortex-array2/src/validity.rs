@@ -1,19 +1,12 @@
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
-use crate::array::validity::ValidityArray;
 use crate::compute::scalar_at;
 use crate::{Array, ArrayData, ToArrayData, WithArray};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
     // Maybe add to_bool_array() here?
-}
-
-impl ArrayValidity for &dyn ValidityArray {
-    fn is_valid(&self, _index: usize) -> bool {
-        todo!()
-    }
 }
 
 #[derive(Clone, Debug)]

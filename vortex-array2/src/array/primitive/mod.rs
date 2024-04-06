@@ -3,13 +3,10 @@ mod compute;
 use arrow_buffer::Buffer;
 use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
-use vortex_schema::{DType, Nullability};
+use vortex_schema::DType;
 
-use crate::array::validity::Validity;
-use crate::compute::scalar_at;
-use crate::impl_encoding;
-use crate::validity::ArrayValidity;
-use crate::{Array, IntoArray};
+use crate::validity::{ArrayValidity, Validity, ValidityMetadata};
+use crate::{impl_encoding, IntoArray};
 use crate::{ArrayData, TypedArrayData};
 use crate::{ArrayMetadata, TryFromArrayMetadata};
 use crate::{ArrayView, ToArrayData};
@@ -18,10 +15,17 @@ use crate::{ToArray, TypedArrayView};
 impl_encoding!("vortex.primitive", Primitive);
 
 #[derive(Clone, Debug)]
-pub struct PrimitiveMetadata(PType);
+pub struct PrimitiveMetadata {
+    ptype: PType,
+    validity: ValidityMetadata,
+}
+
 impl PrimitiveMetadata {
     pub fn ptype(&self) -> PType {
-        self.0
+        self.ptype
+    }
+    pub fn validity(&self) -> &ValidityMetadata {
+        &self.validity
     }
 }
 
@@ -29,7 +33,10 @@ pub trait PrimitiveArray {
     fn dtype(&self) -> &DType;
     fn ptype(&self) -> PType;
     fn buffer(&self) -> &Buffer;
-    fn validity(&self) -> Option<Array>;
+    fn len(&self) -> usize {
+        self.buffer().len() / self.ptype().byte_width()
+    }
+    fn validity(&self) -> Option<Validity>;
 }
 
 impl PrimitiveData {
@@ -37,7 +44,10 @@ impl PrimitiveData {
         ArrayData::try_new(
             &PrimitiveEncoding,
             DType::from(T::PTYPE),
-            Arc::new(PrimitiveMetadata(T::PTYPE)),
+            Arc::new(PrimitiveMetadata {
+                ptype: T::PTYPE,
+                validity: ValidityMetadata::NonNullable,
+            }),
             vec![Buffer::from_vec(values)].into(),
             vec![].into(),
         )
@@ -60,11 +70,10 @@ impl PrimitiveArray for PrimitiveData {
         self.data().buffers().first().unwrap()
     }
 
-    fn validity(&self) -> Option<Array> {
-        match self.dtype().nullability() {
-            Nullability::NonNullable => None,
-            Nullability::Nullable => Some(self.data().child(0).unwrap().to_array()),
-        }
+    fn validity(&self) -> Option<Validity> {
+        self.metadata()
+            .validity()
+            .to_validity(self.len(), self.data().child(0).map(|data| data.to_array()))
     }
 }
 
@@ -84,13 +93,13 @@ impl PrimitiveArray for PrimitiveView<'_> {
             .expect("PrimitiveView must have a single buffer")
     }
 
-    fn validity(&self) -> Option<Array> {
-        match self.dtype().nullability() {
-            Nullability::NonNullable => None,
-            Nullability::Nullable => {
-                Some(self.view().child(0, &Validity::DTYPE).unwrap().into_array())
-            }
-        }
+    fn validity(&self) -> Option<Validity> {
+        self.metadata().validity().to_validity(
+            self.len(),
+            self.view()
+                .child(0, &Validity::DTYPE)
+                .map(|view| view.into_array()),
+        )
     }
 }
 
@@ -119,17 +128,13 @@ impl TryFromArrayData for PrimitiveData {
 
 impl ArrayTrait for &dyn PrimitiveArray {
     fn len(&self) -> usize {
-        self.buffer().len() / self.ptype().byte_width()
+        (**self).len()
     }
 }
 
 impl ArrayValidity for &dyn PrimitiveArray {
     fn is_valid(&self, index: usize) -> bool {
-        if let Some(v) = self.validity() {
-            scalar_at(&v, index).unwrap().try_into().unwrap()
-        } else {
-            true
-        }
+        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
     }
 }
 
