@@ -1,12 +1,13 @@
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::array::validity::ValidityArray;
 use crate::compute::scalar_at;
-use crate::{Array, WithArray};
+use crate::{Array, ArrayData, ToArrayData, WithArray};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
+    // Maybe add to_bool_array() here?
 }
 
 impl ArrayValidity for &dyn ValidityArray {
@@ -17,17 +18,43 @@ impl ArrayValidity for &dyn ValidityArray {
 
 #[derive(Clone, Debug)]
 pub enum ValidityMetadata {
+    NonNullable,
     Valid,
     Invalid,
     Array,
 }
 
-impl<'v> From<&Validity<'v>> for ValidityMetadata {
-    fn from(value: &Validity<'v>) -> Self {
-        match value {
-            Validity::Valid(_) => ValidityMetadata::Valid,
-            Validity::Invalid(_) => ValidityMetadata::Invalid,
-            Validity::Array(_) => ValidityMetadata::Array,
+impl ValidityMetadata {
+    pub fn try_from_validity(validity: Option<&Validity>, dtype: &DType) -> VortexResult<Self> {
+        // We don't really need dtype for this conversion, but it's a good place to check
+        // that the nullability and validity are consistent.
+        match validity {
+            None => {
+                if dtype.nullability() != Nullability::NonNullable {
+                    vortex_bail!("DType must be NonNullable if validity is absent")
+                }
+                Ok(ValidityMetadata::NonNullable)
+            }
+            Some(v) => {
+                if dtype.nullability() != Nullability::Nullable {
+                    vortex_bail!("DType must be Nullable if validity is present")
+                }
+                Ok(match v {
+                    Validity::Valid(_) => ValidityMetadata::Valid,
+                    Validity::Invalid(_) => ValidityMetadata::Invalid,
+                    Validity::Array(_) => ValidityMetadata::Array,
+                })
+            }
+        }
+    }
+
+    pub fn to_validity<'v>(&self, len: usize, array: Option<Array<'v>>) -> Option<Validity<'v>> {
+        match self {
+            ValidityMetadata::NonNullable => None,
+            ValidityMetadata::Valid => Some(Validity::Valid(len)),
+            ValidityMetadata::Invalid => Some(Validity::Invalid(len)),
+            // TODO(ngates): should we return a result for this?
+            ValidityMetadata::Array => Some(Validity::Array(array.unwrap())),
         }
     }
 }
@@ -42,23 +69,9 @@ pub enum Validity<'v> {
 impl<'v> Validity<'v> {
     pub const DTYPE: DType = DType::Bool(Nullability::NonNullable);
 
-    pub fn try_from_validity_meta(
-        meta: &ValidityMetadata,
-        length: usize,
-        array: Option<Array<'v>>,
-    ) -> VortexResult<Validity<'v>> {
-        match meta {
-            ValidityMetadata::Valid => Ok(Validity::Valid(length)),
-            ValidityMetadata::Invalid => Ok(Validity::Invalid(length)),
-            ValidityMetadata::Array => array
-                .map(|v| Validity::Array(v))
-                .ok_or(vortex_err!("Expected validity array")),
-        }
-    }
-
-    pub fn into_array(self) -> Option<Array<'v>> {
+    pub fn into_array_data(self) -> Option<ArrayData> {
         match self {
-            Validity::Array(a) => Some(a),
+            Validity::Array(a) => Some(a.to_array_data()),
             _ => None,
         }
     }

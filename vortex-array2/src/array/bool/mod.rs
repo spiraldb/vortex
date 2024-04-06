@@ -16,14 +16,13 @@ impl_encoding!("vortex.bool", Bool);
 
 #[derive(Clone, Debug)]
 pub struct BoolMetadata {
-    // TODO(ngates): push option inside the metadata?
-    validity: Option<ValidityMetadata>,
+    validity: ValidityMetadata,
     length: usize,
 }
 
 impl BoolMetadata {
-    pub fn validity(&self) -> Option<&ValidityMetadata> {
-        self.validity.as_ref()
+    pub fn validity(&self) -> &ValidityMetadata {
+        &self.validity
     }
 
     pub fn len(&self) -> usize {
@@ -31,6 +30,7 @@ impl BoolMetadata {
     }
 }
 
+// TODO(ngates): I think this could be a struct?
 pub trait BoolArray {
     fn buffer(&self) -> &Buffer;
     fn len(&self) -> usize;
@@ -38,23 +38,22 @@ pub trait BoolArray {
 }
 
 impl BoolData {
-    pub fn try_new(buffer: BooleanBuffer, validity: Option<Validity>) -> Self {
+    pub fn try_new(buffer: BooleanBuffer, validity: Option<Validity>) -> VortexResult<Self> {
         if let Some(v) = &validity {
             assert_eq!(v.len(), buffer.len());
         }
-        Self::new_unchecked(
-            DType::Bool(validity.is_some().into()),
-            Arc::new(BoolMetadata {
-                validity: validity.as_ref().map(|v| ValidityMetadata::from(v)),
-                length: buffer.len(),
-            }),
+        let dtype = DType::Bool(validity.is_some().into());
+        let metadata = BoolMetadata {
+            validity: ValidityMetadata::try_from_validity(validity.as_ref(), &dtype)?,
+            length: buffer.len(),
+        };
+        let validity_array = validity.and_then(|v| v.into_array_data());
+        Ok(Self::new_unchecked(
+            dtype,
+            Arc::new(metadata),
             vec![buffer.into_inner()].into(),
-            // Hmmmm
-            vec![validity
-                .and_then(|v| v.into_array())
-                .map(|a| a.to_array_data())]
-            .into(),
-        )
+            vec![validity_array].into(),
+        ))
     }
 }
 
@@ -68,14 +67,10 @@ impl BoolArray for BoolData {
     }
 
     fn validity(&self) -> Option<Validity> {
-        self.metadata().validity().map(|v| {
-            Validity::try_from_validity_meta(
-                v,
-                self.metadata().len(),
-                self.data().child(0).map(|a| a.to_array()),
-            )
-            .unwrap()
-        })
+        self.metadata().validity().to_validity(
+            self.metadata().len(),
+            self.data().child(0).map(|data| data.to_array()),
+        )
     }
 }
 
@@ -92,16 +87,12 @@ impl BoolArray for BoolView<'_> {
     }
 
     fn validity(&self) -> Option<Validity> {
-        self.metadata().validity().map(|v| {
-            Validity::try_from_validity_meta(
-                v,
-                self.metadata().len(),
-                self.view()
-                    .child(0, &Validity::DTYPE)
-                    .map(|a| a.into_array()),
-            )
-            .unwrap()
-        })
+        self.metadata().validity().to_validity(
+            self.metadata().len(),
+            self.view()
+                .child(0, &Validity::DTYPE)
+                .map(|a| a.into_array()),
+        )
     }
 }
 
