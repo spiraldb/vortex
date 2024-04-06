@@ -5419,6 +5419,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-array2"
+version = "0.1.0"
+dependencies = [
+ "arrow-buffer 51.0.0",
+ "flatbuffers",
+ "half",
+ "paste",
+ "vortex-array",
+ "vortex-error",
+ "vortex-flatbuffers",
+ "vortex-schema",
+]
+
+[[package]]
 name = "vortex-datetime"
 version = "0.1.0"
 dependencies = [

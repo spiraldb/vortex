@@ -1,0 +1,24 @@
+[package]
+name = "vortex-array2"
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+include.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+arrow-buffer = { workspace = true }
+flatbuffers = { workspace = true }
+half = { workspace = true }
+paste = { workspace = true }
+vortex-array = { path = "../vortex-array" }
+vortex-error = { path = "../vortex-error" }
+vortex-flatbuffers = { path = "../vortex-flatbuffers" }
+vortex-schema = { path = "../vortex-schema" }
+
+[lints]
+workspace = true
