@@ -43,7 +43,7 @@ impl REEData {
             }
             .into_arc(),
             vec![].into(),
-            vec![ends, values].into(),
+            vec![Some(ends), Some(values)].into(),
         )
         .unwrap()
         .try_into()
@@ -53,11 +53,11 @@ impl REEData {
 
 impl REEArray for REEData {
     fn run_ends(&self) -> Array {
-        Array::DataRef(self.data().children().first().unwrap())
+        Array::DataRef(self.data().child(0).unwrap())
     }
 
     fn values(&self) -> Array {
-        Array::DataRef(self.data().children().get(1).unwrap())
+        Array::DataRef(self.data().child(1).unwrap())
     }
 }
 

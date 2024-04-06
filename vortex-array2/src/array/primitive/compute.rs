@@ -2,9 +2,9 @@ use vortex::match_each_native_ptype;
 use vortex::scalar::Scalar;
 use vortex_error::VortexResult;
 
+use crate::array::primitive::PrimitiveArray;
 use crate::compute::{ArrayCompute, ScalarAtFn};
-use crate::primitive::PrimitiveArray;
-use crate::ArrayValidity;
+use crate::validity::ArrayValidity;
 
 impl ArrayCompute for &dyn PrimitiveArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {

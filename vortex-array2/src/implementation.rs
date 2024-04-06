@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 
-use crate::encoding::ArrayEncoding;
 use crate::encoding::EncodingId;
+use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::ArrayData;
 use crate::ArrayMetadata;
 use crate::ArrayView;
@@ -10,6 +10,8 @@ use crate::ArrayView;
 /// Because it has associated types it can't be used as a trait object.
 pub trait ArrayDef {
     const ID: EncodingId;
+    const ENCODING: EncodingRef;
+
     type Array<'a>: ?Sized + 'a;
     type Metadata: ArrayMetadata;
     type Encoding: ArrayEncoding;
@@ -34,7 +36,7 @@ macro_rules! impl_encoding {
 
         paste! {
             use $crate::{ArrayDef, TryFromArrayData, TryFromArrayView, ArrayTrait};
-            use $crate::encoding::{ArrayEncoding, EncodingId};
+            use $crate::encoding::{ArrayEncoding, EncodingId, EncodingRef};
             use std::any::Any;
             use std::sync::Arc;
             use std::marker::{Send, Sync};
@@ -43,6 +45,7 @@ macro_rules! impl_encoding {
             pub struct [<$Name Def>];
             impl ArrayDef for [<$Name Def>] {
                 const ID: EncodingId = EncodingId::new($id);
+                const ENCODING: EncodingRef = &[<$Name Encoding>];
                 type Array<'a> = dyn [<$Name Array>] + 'a;
                 type Metadata = [<$Name Metadata>];
                 type Encoding = [<$Name Encoding>];

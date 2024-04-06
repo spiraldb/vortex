@@ -14,8 +14,8 @@ pub struct ArrayData {
     encoding: EncodingRef,
     dtype: DType,
     metadata: Arc<dyn ArrayMetadata>,
-    buffers: Arc<[Buffer]>,
-    children: Arc<[ArrayData]>,
+    buffers: Arc<[Buffer]>, // Should this just be an Option, not an Arc?
+    children: Arc<[Option<ArrayData>]>,
 }
 
 impl ArrayData {
@@ -24,7 +24,7 @@ impl ArrayData {
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
         buffers: Arc<[Buffer]>,
-        children: Arc<[ArrayData]>,
+        children: Arc<[Option<ArrayData>]>,
     ) -> VortexResult<Self> {
         let data = Self {
             encoding,
@@ -59,8 +59,8 @@ impl ArrayData {
         &self.buffers
     }
 
-    pub fn children(&self) -> &[ArrayData] {
-        &self.children
+    pub fn child(&self, index: usize) -> Option<&ArrayData> {
+        self.children.get(index).and_then(|c| c.as_ref())
     }
 }
 
@@ -85,7 +85,18 @@ impl<D: ArrayDef> TypedArrayData<D>
 where
     Self: for<'a> AsRef<D::Array<'a>>,
 {
-    pub fn new_unchecked(data: ArrayData) -> Self {
+    pub fn new_unchecked(
+        dtype: DType,
+        metadata: Arc<D::Metadata>,
+        buffers: Arc<[Buffer]>,
+        children: Arc<[Option<ArrayData>]>,
+    ) -> Self {
+        Self::from_data_unchecked(
+            ArrayData::try_new(D::ENCODING, dtype, metadata, buffers, children).unwrap(),
+        )
+    }
+
+    pub fn from_data_unchecked(data: ArrayData) -> Self {
         Self {
             data,
             phantom: PhantomData,

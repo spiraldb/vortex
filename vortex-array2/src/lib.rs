@@ -1,13 +1,12 @@
 #![allow(dead_code)]
 
+pub mod array;
 pub mod compute;
 mod context;
 mod data;
 pub mod encoding;
 mod implementation;
 mod metadata;
-mod primitive;
-mod ree;
 mod validity;
 mod view;
 
@@ -17,10 +16,10 @@ pub use context::*;
 pub use data::*;
 pub use implementation::*;
 pub use metadata::*;
-pub use validity::*;
 pub use view::*;
 
 use crate::compute::ArrayCompute;
+use crate::validity::ArrayValidity;
 
 #[derive(Debug, Clone)]
 pub enum Array<'v> {
@@ -79,8 +78,8 @@ impl WithArray for Array<'_> {
 mod test {
     use vortex_error::VortexResult;
 
+    use crate::array::primitive::PrimitiveData;
     use crate::compute::*;
-    use crate::primitive::PrimitiveData;
     use crate::ToArray;
 
     #[test]

@@ -5,9 +5,11 @@ use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
+use crate::array::validity::Validity;
 use crate::compute::scalar_at;
 use crate::impl_encoding;
-use crate::{Array, ArrayValidity, IntoArray, Validity};
+use crate::validity::ArrayValidity;
+use crate::{Array, IntoArray};
 use crate::{ArrayData, TypedArrayData};
 use crate::{ArrayMetadata, TryFromArrayMetadata};
 use crate::{ArrayView, ToArrayData};
@@ -61,7 +63,7 @@ impl PrimitiveArray for PrimitiveData {
     fn validity(&self) -> Option<Array> {
         match self.dtype().nullability() {
             Nullability::NonNullable => None,
-            Nullability::Nullable => Some(self.data().children().first().unwrap().to_array()),
+            Nullability::Nullable => Some(self.data().child(0).unwrap().to_array()),
         }
     }
 }
@@ -111,7 +113,7 @@ impl<'v> TryFromArrayView<'v> for PrimitiveView<'v> {
 impl TryFromArrayData for PrimitiveData {
     fn try_from_data(data: &ArrayData) -> VortexResult<Self> {
         // TODO(ngates): validate the array data.
-        Ok(Self::new_unchecked(data.clone()))
+        Ok(Self::from_data_unchecked(data.clone()))
     }
 }
 

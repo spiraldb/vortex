@@ -11,10 +11,6 @@ use crate::{IntoArray, ToArray};
 
 impl_encoding!("vortex.ree", Validity);
 
-pub trait ArrayValidity {
-    fn is_valid(&self, index: usize) -> bool;
-}
-
 #[derive(Clone, Debug)]
 pub enum ValidityMetadata {
     Valid(usize),
@@ -22,6 +18,8 @@ pub enum ValidityMetadata {
     Array,
 }
 
+/// TODO(ngates): I'm not sure validity actually has to be an array itself? I think it could just be
+///  something that's returned from ArrayValidity.
 pub enum Validity<'v> {
     Valid(usize),
     Invalid(usize),
@@ -41,7 +39,7 @@ impl ValidityData {
         let (meta, children) = match validity {
             Validity::Valid(l) => (ValidityMetadata::Valid(l), vec![]),
             Validity::Invalid(l) => (ValidityMetadata::Invalid(l), vec![]),
-            Validity::Array(a) => (ValidityMetadata::Array, vec![a.to_array_data()]),
+            Validity::Array(a) => (ValidityMetadata::Array, vec![Some(a.to_array_data())]),
         };
 
         ArrayData::try_new(
@@ -62,9 +60,7 @@ impl ValidityArray for ValidityData {
         match self.metadata() {
             ValidityMetadata::Valid(l) => Validity::Valid(*l),
             ValidityMetadata::Invalid(l) => Validity::Invalid(*l),
-            ValidityMetadata::Array => {
-                Validity::Array(self.data().children().first().unwrap().to_array())
-            }
+            ValidityMetadata::Array => Validity::Array(self.data().child(0).unwrap().to_array()),
         }
     }
 }
@@ -104,12 +100,6 @@ impl TryFromArrayData for ValidityData {
 
 impl ArrayTrait for &dyn ValidityArray {
     fn len(&self) -> usize {
-        todo!()
-    }
-}
-
-impl ArrayValidity for &dyn ValidityArray {
-    fn is_valid(&self, _index: usize) -> bool {
         todo!()
     }
 }

@@ -1,7 +1,8 @@
 use vortex::scalar::Scalar;
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::primitive::PrimitiveData;
+use crate::array::bool::BoolData;
+use crate::array::primitive::PrimitiveData;
 use crate::{Array, WithArray};
 
 pub trait ArrayCompute {
@@ -30,6 +31,7 @@ pub trait FlattenFn {
 }
 
 pub enum FlattenedArray {
+    Bool(BoolData),
     Primitive(PrimitiveData),
     // Just to introduce a second variant for now
     Other(String),
