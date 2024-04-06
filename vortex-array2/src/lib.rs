@@ -31,6 +31,16 @@ pub enum Array<'v> {
     View(ArrayView<'v>),
 }
 
+impl Array<'_> {
+    pub fn dtype(&self) -> &DType {
+        match self {
+            Array::Data(d) => d.dtype(),
+            Array::DataRef(d) => d.dtype(),
+            Array::View(v) => v.dtype(),
+        }
+    }
+}
+
 pub trait ToArray {
     fn to_array(&self) -> Array;
 }
@@ -54,7 +64,7 @@ pub trait ArrayParts<'a> {
 }
 
 pub trait TryFromArrayParts<'v, M: ArrayMetadata>: Sized + 'v {
-    fn try_from_parts(parts: &'v dyn ArrayParts<'v>, metadata: M) -> VortexResult<Self>;
+    fn try_from_parts(parts: &'v dyn ArrayParts<'v>, metadata: &'v M) -> VortexResult<Self>;
 }
 
 pub trait TryParseArrayMetadata: Sized + ArrayMetadata {

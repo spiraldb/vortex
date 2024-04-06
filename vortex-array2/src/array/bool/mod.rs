@@ -1,7 +1,7 @@
 mod compute;
 
 use arrow_buffer::{BooleanBuffer, Buffer};
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::impl_encoding;
@@ -29,7 +29,8 @@ pub struct BoolArray<'a> {
     dtype: &'a DType,
     buffer: &'a Buffer,
     validity: Option<Validity<'a>>,
-    metadata: BoolMetadata,
+    // TODO(ngates): unpack metadata?
+    metadata: &'a BoolMetadata,
     // TODO(ngates): we support statistics by reference to a dyn trait.
     //  This trait is implemented for ArrayView and ArrayData and is passed into here as part
     //  of ArrayParts.
@@ -46,7 +47,7 @@ impl BoolArray<'_> {
     }
 
     pub fn metadata(&self) -> &BoolMetadata {
-        &self.metadata
+        self.metadata
     }
 
     pub fn boolean_buffer(&self) -> BooleanBuffer {
@@ -55,7 +56,10 @@ impl BoolArray<'_> {
 }
 
 impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
-    fn try_from_parts(parts: &'v dyn ArrayParts<'v>, metadata: BoolMetadata) -> VortexResult<Self> {
+    fn try_from_parts(
+        parts: &'v dyn ArrayParts<'v>,
+        metadata: &'v BoolMetadata,
+    ) -> VortexResult<Self> {
         Ok(BoolArray {
             dtype: parts.dtype(),
             buffer: parts

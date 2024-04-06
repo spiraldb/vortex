@@ -22,6 +22,7 @@ macro_rules! impl_encoding {
         paste! {
             use $crate::{ArrayDef, ArrayParts, ArrayTrait, TryFromArrayParts, TryParseArrayMetadata};
             use $crate::encoding::{ArrayEncoding, EncodingId, EncodingRef};
+            use vortex_error::vortex_err;
             use std::any::Any;
             use std::fmt::Debug;
             use std::sync::Arc;
@@ -54,7 +55,7 @@ macro_rules! impl_encoding {
                 ) -> VortexResult<()> {
                     // Convert ArrayView -> PrimitiveArray, then call compute.
                     let metadata = [<$Name Metadata>]::try_parse_metadata(view.metadata())?;
-                    let array = [<$Name Array>]::try_from_parts(view as &dyn ArrayParts, metadata)?;
+                    let array = [<$Name Array>]::try_from_parts(view as &dyn ArrayParts, &metadata)?;
                     f(&array)
                 }
 
@@ -68,7 +69,7 @@ macro_rules! impl_encoding {
                         .downcast_ref::<[<$Name Metadata>]>()
                         .ok_or_else(|| vortex_err!("Failed to downcast metadata"))?
                         .clone();
-                    let array = [<$Name Array>]::try_from_parts(data as &dyn ArrayParts, metadata)?;
+                    let array = [<$Name Array>]::try_from_parts(data as &dyn ArrayParts, &metadata)?;
                     f(&array)
                 }
             }
