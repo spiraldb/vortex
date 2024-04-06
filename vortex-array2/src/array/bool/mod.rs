@@ -19,17 +19,6 @@ pub struct BoolMetadata {
     length: usize,
 }
 
-#[allow(clippy::len_without_is_empty)]
-impl BoolMetadata {
-    pub fn validity(&self) -> &ValidityMetadata {
-        &self.validity
-    }
-
-    pub fn len(&self) -> usize {
-        self.length
-    }
-}
-
 impl TryParseArrayMetadata for BoolMetadata {
     fn try_parse_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
         todo!()
@@ -41,6 +30,10 @@ pub struct BoolArray<'a> {
     buffer: &'a Buffer,
     validity: Option<Validity<'a>>,
     metadata: BoolMetadata,
+    // TODO(ngates): we support statistics by reference to a dyn trait.
+    //  This trait is implemented for ArrayView and ArrayData and is passed into here as part
+    //  of ArrayParts.
+    //  e.g. stats: &dyn Statistics,
 }
 
 impl BoolArray<'_> {
@@ -57,7 +50,7 @@ impl BoolArray<'_> {
     }
 
     pub fn boolean_buffer(&self) -> BooleanBuffer {
-        BooleanBuffer::new(self.buffer.clone(), 0, self.metadata.len())
+        BooleanBuffer::new(self.buffer.clone(), 0, self.metadata.length)
     }
 }
 
@@ -69,8 +62,8 @@ impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
                 .buffer(0)
                 .ok_or(vortex_err!("BoolArray requires a buffer"))?,
             validity: metadata
-                .validity()
-                .to_validity(metadata.len(), parts.child(0, &Validity::DTYPE)),
+                .validity
+                .to_validity(metadata.length, parts.child(0, &Validity::DTYPE)),
             metadata,
         })
     }
@@ -102,7 +95,7 @@ impl ArrayTrait for BoolArray<'_> {
     }
 
     fn len(&self) -> usize {
-        self.metadata().len()
+        self.metadata().length
     }
 }
 
