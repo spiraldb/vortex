@@ -147,6 +147,10 @@ impl<'v> IntoArray<'v> for ArrayView<'v> {
 }
 
 impl<'v> ArrayParts<'v> for ArrayView<'v> {
+    fn dtype(&'v self) -> &'v DType {
+        self.dtype
+    }
+
     fn buffer(&'v self, idx: usize) -> Option<&'v Buffer> {
         self.buffers().get(idx)
     }

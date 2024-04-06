@@ -48,6 +48,7 @@ pub trait WithArray {
 }
 
 pub trait ArrayParts<'a> {
+    fn dtype(&'a self) -> &'a DType;
     fn buffer(&'a self, idx: usize) -> Option<&'a Buffer>;
     fn child(&'a self, idx: usize, dtype: &'a DType) -> Option<Array<'a>>;
 }
@@ -62,6 +63,8 @@ pub trait TryParseArrayMetadata: Sized + ArrayMetadata {
 
 /// Collects together the behaviour of an array.
 pub trait ArrayTrait: ArrayCompute + ArrayValidity + ToArrayData {
+    fn dtype(&self) -> &DType;
+
     fn len(&self) -> usize;
 
     fn is_empty(&self) -> bool {

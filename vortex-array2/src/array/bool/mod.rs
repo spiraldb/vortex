@@ -37,6 +37,7 @@ impl TryParseArrayMetadata for BoolMetadata {
 }
 
 pub struct BoolArray<'a> {
+    dtype: &'a DType,
     buffer: &'a Buffer,
     validity: Option<Validity<'a>>,
     metadata: BoolMetadata,
@@ -44,7 +45,7 @@ pub struct BoolArray<'a> {
 
 impl BoolArray<'_> {
     pub fn buffer(&self) -> &Buffer {
-        &self.buffer
+        self.buffer
     }
 
     pub fn validity(&self) -> Option<&Validity> {
@@ -63,6 +64,7 @@ impl BoolArray<'_> {
 impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
     fn try_from_parts(parts: &'v dyn ArrayParts<'v>, metadata: BoolMetadata) -> VortexResult<Self> {
         Ok(BoolArray {
+            dtype: parts.dtype(),
             buffer: parts
                 .buffer(0)
                 .ok_or(vortex_err!("BoolArray requires a buffer"))?,
@@ -95,8 +97,12 @@ impl BoolData {
 }
 
 impl ArrayTrait for BoolArray<'_> {
+    fn dtype(&self) -> &DType {
+        self.dtype
+    }
+
     fn len(&self) -> usize {
-        todo!()
+        self.metadata().len()
     }
 }
 
@@ -115,10 +121,16 @@ impl ToArrayData for BoolArray<'_> {
 #[cfg(test)]
 mod tests {
     use crate::array::bool::BoolData;
+    use crate::compute::scalar_at;
+    use crate::IntoArray;
 
     #[test]
     fn bool_array() {
-        let arr = BoolData::try_new(vec![true, false, true].into(), None).unwrap();
-        println!("Array {:?}", &arr);
+        let arr = BoolData::try_new(vec![true, false, true].into(), None)
+            .unwrap()
+            .into_array();
+
+        let scalar: bool = scalar_at(&arr, 0).unwrap().try_into().unwrap();
+        assert_eq!(scalar, true);
     }
 }

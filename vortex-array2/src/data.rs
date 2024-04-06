@@ -153,6 +153,10 @@ impl<D: ArrayDef> TryFrom<ArrayData> for TypedArrayData<D> {
 }
 
 impl ArrayParts<'_> for ArrayData {
+    fn dtype(&'_ self) -> &'_ DType {
+        &self.dtype
+    }
+
     fn buffer(&self, idx: usize) -> Option<&Buffer> {
         self.buffers().get(idx)
     }
