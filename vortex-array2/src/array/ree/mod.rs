@@ -18,6 +18,7 @@ pub struct REEMetadata {
     ends_dtype: DType,
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl REEMetadata {
     pub fn len(&self) -> usize {
         self.length

@@ -20,6 +20,7 @@ pub struct BoolMetadata {
     length: usize,
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl BoolMetadata {
     pub fn validity(&self) -> &ValidityMetadata {
         &self.validity
