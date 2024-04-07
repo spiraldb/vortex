@@ -5,10 +5,9 @@ use vortex_schema::DType;
 
 use crate::impl_encoding;
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayMetadata, TryFromArrayMetadata};
+use crate::{Array, ArrayMetadata};
 use crate::{ArrayData, TypedArrayData};
 use crate::{ArrayView, ToArrayData};
-use crate::{IntoArray, TypedArrayView};
 
 impl_encoding!("vortex.ree", REE);
 
@@ -18,19 +17,16 @@ pub struct REEMetadata {
     ends_dtype: DType,
 }
 
-#[allow(clippy::len_without_is_empty)]
-impl REEMetadata {
-    pub fn len(&self) -> usize {
-        self.length
-    }
-    pub fn ends_dtype(&self) -> &DType {
-        &self.ends_dtype
+impl TryParseArrayMetadata for REEMetadata {
+    fn try_parse_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
+        todo!()
     }
 }
 
-pub trait REEArray {
-    fn run_ends(&self) -> Array;
-    fn values(&self) -> Array;
+pub struct REEArray<'a> {
+    dtype: &'a DType,
+    values: Array<'a>,
+    run_ends: Array<'a>,
 }
 
 impl REEData {
@@ -52,63 +48,40 @@ impl REEData {
     }
 }
 
-impl REEArray for REEData {
-    fn run_ends(&self) -> Array {
-        Array::DataRef(self.data().child(0).unwrap())
-    }
-
-    fn values(&self) -> Array {
-        Array::DataRef(self.data().child(1).unwrap())
-    }
-}
-
-impl REEArray for REEView<'_> {
-    fn run_ends(&self) -> Array {
-        self.view()
-            .child(0, self.metadata().ends_dtype())
-            .unwrap()
-            .into_array()
-    }
-
-    fn values(&self) -> Array {
-        self.view()
-            .child(1, self.view().dtype())
-            .unwrap()
-            .into_array()
+impl<'v> TryFromArrayParts<'v, REEMetadata> for REEArray<'v> {
+    fn try_from_parts(
+        parts: &'v dyn ArrayParts<'v>,
+        metadata: &'v REEMetadata,
+    ) -> VortexResult<Self> {
+        Ok(REEArray {
+            dtype: parts.dtype(),
+            values: parts
+                .child(0, parts.dtype())
+                .ok_or_else(|| vortex_err!("REEArray missing values"))?,
+            run_ends: parts
+                .child(1, &metadata.ends_dtype)
+                .ok_or_else(|| vortex_err!("REEArray missing run_ends"))?,
+        })
     }
 }
 
-impl TryFromArrayMetadata for REEMetadata {
-    fn try_from_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
-        todo!()
+impl ArrayTrait for REEArray<'_> {
+    fn dtype(&self) -> &DType {
+        self.values.dtype()
     }
-}
 
-impl<'v> TryFromArrayView<'v> for REEView<'v> {
-    fn try_from_view(_view: &'v ArrayView<'v>) -> VortexResult<Self> {
-        todo!()
-    }
-}
-
-impl TryFromArrayData for REEData {
-    fn try_from_data(_data: &ArrayData) -> VortexResult<Self> {
-        todo!()
-    }
-}
-
-impl ArrayTrait for &dyn REEArray {
     fn len(&self) -> usize {
         todo!()
     }
 }
 
-impl ArrayValidity for &dyn REEArray {
+impl ArrayValidity for REEArray<'_> {
     fn is_valid(&self, _index: usize) -> bool {
         todo!()
     }
 }
 
-impl ToArrayData for &dyn REEArray {
+impl ToArrayData for REEArray<'_> {
     fn to_array_data(&self) -> ArrayData {
         todo!()
     }

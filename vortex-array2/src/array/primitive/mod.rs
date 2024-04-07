@@ -5,12 +5,11 @@ use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::impl_encoding;
 use crate::validity::{ArrayValidity, Validity, ValidityMetadata};
-use crate::{impl_encoding, IntoArray};
+use crate::ArrayMetadata;
 use crate::{ArrayData, TypedArrayData};
-use crate::{ArrayMetadata, TryFromArrayMetadata};
 use crate::{ArrayView, ToArrayData};
-use crate::{ToArray, TypedArrayView};
 
 impl_encoding!("vortex.primitive", Primitive);
 
@@ -20,24 +19,49 @@ pub struct PrimitiveMetadata {
     validity: ValidityMetadata,
 }
 
-impl PrimitiveMetadata {
-    pub fn ptype(&self) -> PType {
-        self.ptype
-    }
-    pub fn validity(&self) -> &ValidityMetadata {
-        &self.validity
+impl TryParseArrayMetadata for PrimitiveMetadata {
+    fn try_parse_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
+        todo!()
     }
 }
 
-#[allow(clippy::len_without_is_empty)]
-pub trait PrimitiveArray {
-    fn dtype(&self) -> &DType;
-    fn ptype(&self) -> PType;
-    fn buffer(&self) -> &Buffer;
-    fn len(&self) -> usize {
-        self.buffer().len() / self.ptype().byte_width()
+pub struct PrimitiveArray<'a> {
+    ptype: PType,
+    dtype: &'a DType,
+    buffer: &'a Buffer,
+    validity: Option<Validity<'a>>,
+}
+
+impl PrimitiveArray<'_> {
+    pub fn buffer(&self) -> &Buffer {
+        self.buffer
     }
-    fn validity(&self) -> Option<Validity>;
+
+    pub fn validity(&self) -> Option<&Validity> {
+        self.validity.as_ref()
+    }
+
+    pub fn ptype(&self) -> PType {
+        self.ptype
+    }
+}
+
+impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
+    fn try_from_parts(
+        parts: &'a dyn ArrayParts<'a>,
+        metadata: &'a PrimitiveMetadata,
+    ) -> VortexResult<Self> {
+        let buffer = parts.buffer(0).unwrap();
+        let length = buffer.len() / metadata.ptype.byte_width();
+        Ok(PrimitiveArray {
+            ptype: metadata.ptype,
+            dtype: parts.dtype(),
+            buffer,
+            validity: metadata
+                .validity
+                .to_validity(length, parts.child(0, parts.dtype())),
+        })
+    }
 }
 
 impl PrimitiveData {
@@ -58,88 +82,23 @@ impl PrimitiveData {
     }
 }
 
-impl PrimitiveArray for PrimitiveData {
+impl ArrayTrait for PrimitiveArray<'_> {
     fn dtype(&self) -> &DType {
-        self.data().dtype()
+        self.dtype
     }
 
-    fn ptype(&self) -> PType {
-        self.metadata().ptype()
-    }
-
-    fn buffer(&self) -> &Buffer {
-        self.data().buffers().first().unwrap()
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        self.metadata()
-            .validity()
-            .to_validity(self.len(), self.data().child(0).map(|data| data.to_array()))
-    }
-}
-
-impl PrimitiveArray for PrimitiveView<'_> {
-    fn dtype(&self) -> &DType {
-        self.view().dtype()
-    }
-
-    fn ptype(&self) -> PType {
-        self.metadata().ptype()
-    }
-
-    fn buffer(&self) -> &Buffer {
-        self.view()
-            .buffers()
-            .first()
-            .expect("PrimitiveView must have a single buffer")
-    }
-
-    fn validity(&self) -> Option<Validity> {
-        self.metadata().validity().to_validity(
-            self.len(),
-            self.view()
-                .child(0, &Validity::DTYPE)
-                .map(|view| view.into_array()),
-        )
-    }
-}
-
-impl TryFromArrayMetadata for PrimitiveMetadata {
-    fn try_from_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
-        todo!()
-    }
-}
-
-impl<'v> TryFromArrayView<'v> for PrimitiveView<'v> {
-    fn try_from_view(view: &'v ArrayView<'v>) -> VortexResult<Self> {
-        // TODO(ngates): validate the view.
-        Ok(PrimitiveView::new_unchecked(
-            view.clone(),
-            PrimitiveMetadata::try_from_metadata(view.metadata())?,
-        ))
-    }
-}
-
-impl TryFromArrayData for PrimitiveData {
-    fn try_from_data(data: &ArrayData) -> VortexResult<Self> {
-        // TODO(ngates): validate the array data.
-        Ok(Self::from_data_unchecked(data.clone()))
-    }
-}
-
-impl ArrayTrait for &dyn PrimitiveArray {
     fn len(&self) -> usize {
-        (**self).len()
+        self.buffer().len() / self.ptype().byte_width()
     }
 }
 
-impl ArrayValidity for &dyn PrimitiveArray {
+impl ArrayValidity for PrimitiveArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
     }
 }
 
-impl ToArrayData for &dyn PrimitiveArray {
+impl ToArrayData for PrimitiveArray<'_> {
     fn to_array_data(&self) -> ArrayData {
         todo!()
     }
