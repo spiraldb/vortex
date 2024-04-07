@@ -128,6 +128,6 @@ mod tests {
             .into_array();
 
         let scalar: bool = scalar_at(&arr, 0).unwrap().try_into().unwrap();
-        assert_eq!(scalar, true);
+        assert!(scalar);
     }
 }
