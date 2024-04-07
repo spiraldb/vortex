@@ -6,7 +6,7 @@ use vortex_error::{vortex_bail, VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::encoding::EncodingRef;
-use crate::{Array, ArrayDef, ArrayMetadata, IntoArray, ToArray};
+use crate::{Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, ToArray};
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -14,8 +14,8 @@ pub struct ArrayData {
     encoding: EncodingRef,
     dtype: DType,
     metadata: Arc<dyn ArrayMetadata>,
-    buffers: Arc<[Buffer]>,
-    children: Arc<[ArrayData]>,
+    buffers: Arc<[Buffer]>, // Should this just be an Option, not an Arc?
+    children: Arc<[Option<ArrayData>]>,
 }
 
 impl ArrayData {
@@ -24,7 +24,7 @@ impl ArrayData {
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
         buffers: Arc<[Buffer]>,
-        children: Arc<[ArrayData]>,
+        children: Arc<[Option<ArrayData>]>,
     ) -> VortexResult<Self> {
         let data = Self {
             encoding,
@@ -36,7 +36,7 @@ impl ArrayData {
 
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
         // implement Encoding::with_data().
-        encoding.with_data_mut(&data, &mut |_| Ok(()))?;
+        // encoding.with_data_mut(&data, &mut |_| Ok(()))?;
 
         Ok(data)
     }
@@ -59,8 +59,8 @@ impl ArrayData {
         &self.buffers
     }
 
-    pub fn children(&self) -> &[ArrayData] {
-        &self.children
+    pub fn child(&self, index: usize) -> Option<&ArrayData> {
+        self.children.get(index).and_then(|c| c.as_ref())
     }
 }
 
@@ -76,16 +76,25 @@ impl IntoArray<'static> for ArrayData {
     }
 }
 
+#[derive(Debug)]
 pub struct TypedArrayData<D: ArrayDef> {
     data: ArrayData,
     phantom: PhantomData<D>,
 }
 
-impl<D: ArrayDef> TypedArrayData<D>
-where
-    Self: for<'a> AsRef<D::Array<'a>>,
-{
-    pub fn new_unchecked(data: ArrayData) -> Self {
+impl<D: ArrayDef> TypedArrayData<D> {
+    pub fn new_unchecked(
+        dtype: DType,
+        metadata: Arc<D::Metadata>,
+        buffers: Arc<[Buffer]>,
+        children: Arc<[Option<ArrayData>]>,
+    ) -> Self {
+        Self::from_data_unchecked(
+            ArrayData::try_new(D::ENCODING, dtype, metadata, buffers, children).unwrap(),
+        )
+    }
+
+    pub fn from_data_unchecked(data: ArrayData) -> Self {
         Self {
             data,
             phantom: PhantomData,
@@ -115,10 +124,6 @@ where
             .downcast::<D::Metadata>()
             .unwrap()
     }
-
-    pub fn as_array(&self) -> &D::Array<'_> {
-        self.as_ref()
-    }
 }
 
 impl<D: ArrayDef> ToArray for TypedArrayData<D> {
@@ -143,6 +148,25 @@ impl<D: ArrayDef> TryFrom<ArrayData> for TypedArrayData<D> {
         Ok(Self {
             data,
             phantom: PhantomData,
+        })
+    }
+}
+
+impl ArrayParts<'_> for ArrayData {
+    fn dtype(&'_ self) -> &'_ DType {
+        &self.dtype
+    }
+
+    fn buffer(&self, idx: usize) -> Option<&Buffer> {
+        self.buffers().get(idx)
+    }
+
+    fn child(&self, idx: usize, _dtype: &DType) -> Option<Array> {
+        self.child(idx).map(|a| {
+            let array = a.to_array();
+            // FIXME(ngates): can we ask an array its dtype?
+            // assert_eq!(array.dtype(), dtype);
+            array
         })
     }
 }

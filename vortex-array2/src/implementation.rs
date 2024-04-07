@@ -1,30 +1,17 @@
-use vortex_error::VortexResult;
-
-use crate::encoding::ArrayEncoding;
 use crate::encoding::EncodingId;
-use crate::ArrayData;
-use crate::ArrayMetadata;
-use crate::ArrayView;
+use crate::encoding::{ArrayEncoding, EncodingRef};
+use crate::ArrayTrait;
+use crate::{ArrayMetadata, TryFromArrayParts, TryParseArrayMetadata};
 
 /// Trait the defines the set of types relating to an array.
 /// Because it has associated types it can't be used as a trait object.
 pub trait ArrayDef {
     const ID: EncodingId;
-    type Array<'a>: ?Sized + 'a;
-    type Metadata: ArrayMetadata;
+    const ENCODING: EncodingRef;
+
+    type Array<'a>: ArrayTrait + TryFromArrayParts<'a, Self::Metadata> + 'a;
+    type Metadata: ArrayMetadata + TryParseArrayMetadata;
     type Encoding: ArrayEncoding;
-}
-
-pub trait TryFromArrayMetadata: Sized {
-    fn try_from_metadata(metadata: Option<&[u8]>) -> VortexResult<Self>;
-}
-
-pub trait TryFromArrayData: Sized {
-    fn try_from_data(data: &ArrayData) -> VortexResult<Self>;
-}
-
-pub trait TryFromArrayView<'v>: Sized + 'v {
-    fn try_from_view(view: &'v ArrayView<'v>) -> VortexResult<Self>;
 }
 
 #[macro_export]
@@ -33,23 +20,26 @@ macro_rules! impl_encoding {
         use paste::paste;
 
         paste! {
-            use $crate::{ArrayDef, TryFromArrayData, TryFromArrayView, ArrayTrait};
-            use $crate::encoding::{ArrayEncoding, EncodingId};
+            use $crate::{ArrayDef, ArrayParts, ArrayTrait, TryFromArrayParts, TryParseArrayMetadata};
+            use $crate::encoding::{ArrayEncoding, EncodingId, EncodingRef};
+            use vortex_error::vortex_err;
             use std::any::Any;
+            use std::fmt::Debug;
             use std::sync::Arc;
             use std::marker::{Send, Sync};
 
             /// The array definition trait
+            #[derive(Debug)]
             pub struct [<$Name Def>];
             impl ArrayDef for [<$Name Def>] {
                 const ID: EncodingId = EncodingId::new($id);
-                type Array<'a> = dyn [<$Name Array>] + 'a;
+                const ENCODING: EncodingRef = &[<$Name Encoding>];
+                type Array<'a> = [<$Name Array>]<'a>;
                 type Metadata = [<$Name Metadata>];
                 type Encoding = [<$Name Encoding>];
             }
 
             pub type [<$Name Data>] = TypedArrayData<[<$Name Def>]>;
-            pub type [<$Name View>]<'v> = TypedArrayView<'v, [<$Name Def>]>;
 
             /// The array encoding
             pub struct [<$Name Encoding>];
@@ -64,8 +54,9 @@ macro_rules! impl_encoding {
                     f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
                 ) -> VortexResult<()> {
                     // Convert ArrayView -> PrimitiveArray, then call compute.
-                    let typed_view = <[<$Name View>] as TryFromArrayView>::try_from_view(view)?;
-                    f(&typed_view.as_array())
+                    let metadata = [<$Name Metadata>]::try_parse_metadata(view.metadata())?;
+                    let array = [<$Name Array>]::try_from_parts(view as &dyn ArrayParts, &metadata)?;
+                    f(&array)
                 }
 
                 fn with_data_mut(
@@ -73,8 +64,13 @@ macro_rules! impl_encoding {
                     data: &ArrayData,
                     f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
                 ) -> VortexResult<()> {
-                    let data = <[<$Name Data>] as TryFromArrayData>::try_from_data(data)?;
-                    f(&data.as_array())
+                    let metadata = data.metadata()
+                        .as_any()
+                        .downcast_ref::<[<$Name Metadata>]>()
+                        .ok_or_else(|| vortex_err!("Failed to downcast metadata"))?
+                        .clone();
+                    let array = [<$Name Array>]::try_from_parts(data as &dyn ArrayParts, &metadata)?;
+                    f(&array)
                 }
             }
 
@@ -97,17 +93,17 @@ macro_rules! impl_encoding {
                 }
             }
 
-            /// Implement AsRef for both the data and view types
-            impl<'a> AsRef<dyn [<$Name Array>] + 'a> for [<$Name Data>] {
-                fn as_ref(&self) -> &(dyn [<$Name Array>] + 'a) {
-                    self
-                }
-            }
-            impl<'a> AsRef<dyn [<$Name Array>] + 'a> for [<$Name View>]<'a> {
-                fn as_ref(&self) -> &(dyn [<$Name Array>] + 'a) {
-                    self
-                }
-            }
+            // /// Implement AsRef for both the data and view types
+            // impl<'a> AsRef<[<$Name Array>]<'a>> for [<$Name Data>] {
+            //     fn as_ref(&self) -> &[<$Name Array>]<'a> {
+            //         self
+            //     }
+            // }
+            // impl<'a> AsRef<[<$Name Array>]<'a>> for [<$Name View>]<'a> {
+            //     fn as_ref(&self) -> &[<$Name Array>]<'a> {
+            //         self
+            //     }
+            // }
         }
     };
 }

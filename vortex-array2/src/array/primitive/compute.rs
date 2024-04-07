@@ -2,17 +2,18 @@ use vortex::match_each_native_ptype;
 use vortex::scalar::Scalar;
 use vortex_error::VortexResult;
 
+use crate::array::primitive::PrimitiveArray;
 use crate::compute::{ArrayCompute, ScalarAtFn};
-use crate::primitive::PrimitiveArray;
-use crate::ArrayValidity;
+use crate::validity::ArrayValidity;
+use crate::ArrayTrait;
 
-impl ArrayCompute for &dyn PrimitiveArray {
+impl ArrayCompute for PrimitiveArray<'_> {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
 }
 
-impl ScalarAtFn for &dyn PrimitiveArray {
+impl ScalarAtFn for PrimitiveArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
             match_each_native_ptype!(self.ptype(), |$T| {

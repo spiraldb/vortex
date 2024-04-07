@@ -2,12 +2,12 @@ use std::fmt::{Debug, Formatter};
 
 use arrow_buffer::Buffer;
 use vortex::flatbuffers::array as fb;
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::encoding::EncodingRef;
-use crate::{Array, ArrayDef, IntoArray, ToArray};
-use crate::{SerdeContext, TryFromArrayMetadata};
+use crate::{Array, IntoArray, ToArray};
+use crate::{ArrayParts, SerdeContext};
 
 #[derive(Clone)]
 pub struct ArrayView<'v> {
@@ -146,52 +146,16 @@ impl<'v> IntoArray<'v> for ArrayView<'v> {
     }
 }
 
-pub struct TypedArrayView<'v, D: ArrayDef> {
-    view: ArrayView<'v>,
-    metadata: D::Metadata,
-}
-
-impl<'v, D: ArrayDef> TypedArrayView<'v, D> {
-    pub fn new_unchecked(view: ArrayView<'v>, metadata: D::Metadata) -> Self {
-        Self { view, metadata }
+impl<'v> ArrayParts<'v> for ArrayView<'v> {
+    fn dtype(&'v self) -> &'v DType {
+        self.dtype
     }
 
-    pub fn metadata(&self) -> &D::Metadata {
-        &self.metadata
+    fn buffer(&'v self, idx: usize) -> Option<&'v Buffer> {
+        self.buffers().get(idx)
     }
 
-    pub fn view(&'v self) -> &'v ArrayView<'v> {
-        &self.view
-    }
-
-    pub fn as_array(&self) -> &D::Array<'v>
-    where
-        Self: AsRef<D::Array<'v>>,
-    {
-        self.as_ref()
-    }
-}
-
-impl<D: ArrayDef> ToArray for TypedArrayView<'_, D> {
-    fn to_array(&self) -> Array {
-        Array::View(self.view().clone())
-    }
-}
-
-/// Convert an ArrayView into a TypedArrayView.
-impl<'v, D: ArrayDef> TryFrom<ArrayView<'v>> for TypedArrayView<'v, D>
-where
-    D::Metadata: TryFromArrayMetadata,
-{
-    type Error = VortexError;
-
-    fn try_from(view: ArrayView<'v>) -> Result<Self, Self::Error> {
-        if view.encoding().id() != D::ID {
-            vortex_bail!("Invalid encoding for array")
-        }
-        let metadata = <<D as ArrayDef>::Metadata as TryFromArrayMetadata>::try_from_metadata(
-            view.metadata(),
-        )?;
-        Ok(Self { view, metadata })
+    fn child(&'v self, idx: usize, dtype: &'v DType) -> Option<Array<'v>> {
+        self.child(idx, dtype).map(|a| a.into_array())
     }
 }
