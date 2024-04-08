@@ -83,11 +83,14 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
         )
         .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
+        // Figure out how many columns we have and therefore how many buffers there?
         Ok(Some(StreamArrayChunkReader {
             read: &mut self.read,
             ctx: &self.ctx,
             dtype,
-            buffers: Vec::new(),
+            buffers: vec![],
+            vec_buffers: vec![],
+            columns: vec![],
         }))
     }
 }
@@ -98,6 +101,8 @@ pub struct StreamArrayChunkReader<'a, R: Read> {
     ctx: &'a SerdeContext,
     dtype: DType,
     buffers: Vec<Buffer>,
+    vec_buffers: Vec<Vec<u8>>,
+    columns: Vec<ArrayView<'a>>,
 }
 
 impl<'a, R: Read> StreamArrayChunkReader<'a, R> {
@@ -111,7 +116,7 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
     type Error = VortexError;
     type Item<'next> = ArrayView<'next> where Self: 'next;
 
-    fn next(&mut self) -> Result<Option<ArrayView<'a>>, Self::Error> {
+    fn next(&mut self) -> Result<Option<ArrayView<'_>>, Self::Error> {
         let mut fb_vec: Vec<u8> = Vec::new();
         let msg = self.read.read_message::<Message>(&mut fb_vec)?;
         if msg.is_none() {
@@ -132,9 +137,9 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
                 || vortex_err!(InvalidSerde: "Expected column offsets in IPC Chunk message"),
             )
             .unwrap();
+        let mut col_messages = Vec::new();
 
         let mut offset = 0;
-        let mut columns = vec![];
         for col_offset in col_offsets {
             // Seek to the start of the column
             if col_offset != offset {
@@ -151,6 +156,7 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
                 .header_as_chunk_column()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Expected IPC Chunk Column message"))
                 .unwrap();
+            col_messages.push(col_msg);
 
             let col_array = col_msg
                 .array()
@@ -174,15 +180,23 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
             // Consume any remaining padding after the final buffer.
             let to_kill = col_msg.buffer_size() - offset;
             io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
-
-            // Construct the array view
-            let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, &self.buffers)?;
-            // Validate it
-            view.to_array().with_array(|_| Ok::<(), VortexError>(()))?;
-            columns.push(view);
         }
 
-        println!("COLUMNS {:?}", columns);
+        for col_msg in col_messages {
+            // FIXME(ngates): push this into a second loop to avoid write-after-read
+            // Construct the array view
+            let view = ArrayView::try_new(
+                self.ctx,
+                &self.dtype,
+                col_msg.array().unwrap(),
+                &self.buffers,
+            )?;
+            // Validate it
+            view.to_array().with_array(|_| Ok::<(), VortexError>(()))?;
+            self.columns.push(view);
+        }
+
+        println!("COLUMNS {:?}", self.columns);
 
         Ok(None)
     }

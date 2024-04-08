@@ -75,10 +75,6 @@ impl<'v> ArrayView<'v> {
     pub fn metadata(&self) -> Option<&'v [u8]> {
         self.array.metadata().map(|m| m.bytes())
     }
-    //
-    // pub fn nchildren(&self) -> usize {
-    //     self.array.children().map(|c| c.len()).unwrap_or_default()
-    // }
 
     pub fn child(&self, idx: usize, dtype: &'v DType) -> Option<ArrayView<'v>> {
         let child = self.array_child(idx)?;
