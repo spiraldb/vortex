@@ -67,8 +67,6 @@ impl TakeFn for BitPackedArray {
                     taken_validity,
                 )
                 .into_array());
-            } else {
-                unreachable!("array can't be packed to 0 width and have no patches")
             }
         }
 
@@ -171,12 +169,12 @@ fn do_patch_for_take_primitive<T: NativePType + TryBitPack>(
         .ok_or_else(|| vortex_err!("Only sparse patches are currently supported!"))?;
 
     let base_index = output.len() - indices.len();
-    let output_patches = flatten_primitive(taken_patches.values())?;
+    let output_patches = flatten_primitive(taken_patches.values())?.reinterpret_cast(T::PTYPE);
     taken_patches
         .resolved_indices()
         .iter()
         .map(|idx| base_index + *idx)
-        .zip_eq(output_patches.buffer().typed_data::<T>())
+        .zip_eq(output_patches.typed_data::<T>())
         .for_each(|(idx, val)| {
             output[idx] = *val;
         });
