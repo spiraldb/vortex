@@ -1,7 +1,9 @@
 use std::fs::File;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use arrow_array::RecordBatchReader;
+use bzip2::read::BzDecoder;
 use itertools::Itertools;
 use lance::dataset::WriteParams;
 use lance::Dataset;
@@ -12,10 +14,11 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::array::IntoArray;
 use vortex::arrow::FromArrowType;
 use vortex::serde::WriteCtx;
+use vortex_error::VortexError;
 use vortex_schema::DType;
 
-use crate::idempotent;
-use crate::reader::{compress_parquet_to_vortex, BATCH_SIZE};
+use crate::reader::BATCH_SIZE;
+use crate::{data_path, idempotent};
 
 pub fn download_data(fname: &str, data_url: &str) -> PathBuf {
     idempotent(fname, |path| {
@@ -44,12 +47,6 @@ pub fn parquet_to_lance(lance_fname: &Path, read: File) -> PathBuf {
     PathBuf::from(lance_fname)
 }
 
-pub fn parquet_to_vortex(output_fname: &Path, data_to_compress: PathBuf) -> PathBuf {
-    let mut write = File::create(output_fname).unwrap();
-    compress_parquet_to_vortex(&data_to_compress, &mut write).unwrap();
-    output_fname.to_path_buf()
-}
-
 pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> PathBuf {
     idempotent(fname_out, |path| {
         let taxi_pq = File::open(downloaded_data).unwrap();
@@ -70,6 +67,21 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
         let mut write_ctx = WriteCtx::new(&mut write);
         write_ctx.dtype(&dtype)?;
         write_ctx.write(&chunked)
+    })
+    .unwrap()
+}
+
+pub fn decompress_bz2(input_path: &str, output_path: &str) -> PathBuf {
+    idempotent(output_path, |path| {
+        let input_file = File::open(data_path(input_path)).unwrap();
+        let mut decoder = BzDecoder::new(input_file);
+
+        let mut buffer = Vec::new();
+        decoder.read_to_end(&mut buffer).unwrap();
+
+        let mut output_file = File::create(path).unwrap();
+        output_file.write_all(&buffer).unwrap();
+        Ok::<PathBuf, VortexError>(data_path(output_path))
     })
     .unwrap()
 }

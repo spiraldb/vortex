@@ -37,9 +37,14 @@ parquet = { workspace = true, features = [] }
 reqwest = { workspace = true }
 simplelog = { workspace = true }
 tokio = "1.0.1"
+bzip2 = { workspace = true }
+csv = { workspace = true }
+arrow-csv = { workspace = true }
+arrow = {workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+
 
 [[bench]]
 name = "compress_benchmark"

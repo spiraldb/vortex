@@ -1,8 +1,11 @@
 use std::fs::{create_dir_all, File};
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use arrow::datatypes::SchemaRef;
 use arrow_array::RecordBatchReader;
+use arrow_csv::reader::Format;
 use itertools::Itertools;
 use log::{info, warn, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
@@ -24,9 +27,12 @@ use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
 
+use crate::medicare_data::medicare_data_csv;
+use crate::reader::BATCH_SIZE;
 use crate::taxi_data::taxi_data_parquet;
 
 mod data_downloads;
+pub mod medicare_data;
 pub mod reader;
 pub mod taxi_data;
 
@@ -92,7 +98,7 @@ pub fn compress_taxi_data() -> ArrayRef {
     let reader = builder
         .with_projection(_mask)
         //.with_projection(no_datetime_mask)
-        .with_batch_size(65_536)
+        .with_batch_size(BATCH_SIZE)
         // .with_batch_size(5_000_000)
         // .with_limit(100_000)
         .build()
@@ -100,11 +106,9 @@ pub fn compress_taxi_data() -> ArrayRef {
 
     let ctx = compress_ctx();
     let schema = reader.schema();
-    let mut uncompressed_size = 0;
+    let mut uncompressed_size: usize = 0;
     let chunks = reader
         .into_iter()
-        //.skip(39)
-        //.take(1)
         .map(|batch_result| batch_result.unwrap())
         .map(|batch| batch.into_array())
         .map(|array| {
@@ -113,6 +117,38 @@ pub fn compress_taxi_data() -> ArrayRef {
         })
         .collect_vec();
 
+    chunks_to_array(schema, uncompressed_size, chunks)
+}
+
+pub fn compress_medicare_data() -> ArrayRef {
+    let csv_file = File::open(medicare_data_csv()).unwrap();
+    let reader = BufReader::new(csv_file.try_clone().unwrap());
+
+    let (schema, _) = Format::default()
+        .with_delimiter(u8::try_from('|').unwrap())
+        .infer_schema(&mut csv_file.try_clone().unwrap(), None)
+        .unwrap();
+
+    let csv_reader = arrow::csv::ReaderBuilder::new(Arc::new(schema.clone()))
+        .with_batch_size(BATCH_SIZE * 10)
+        .build(reader)
+        .unwrap();
+
+    let ctx = compress_ctx();
+    let mut uncompressed_size: usize = 0;
+    let chunks = csv_reader
+        .into_iter()
+        .map(|batch_result| batch_result.unwrap())
+        .map(|batch| batch.into_array())
+        .map(|array| {
+            uncompressed_size += array.nbytes();
+            ctx.clone().compress(&array, None).unwrap()
+        })
+        .collect_vec();
+    chunks_to_array(SchemaRef::new(schema), uncompressed_size, chunks)
+}
+
+fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<ArrayRef>) -> ArrayRef {
     let dtype = DType::from_arrow(schema.clone());
     let compressed = ChunkedArray::new(chunks.clone(), dtype).into_array();
 
