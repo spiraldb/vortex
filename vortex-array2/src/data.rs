@@ -228,7 +228,7 @@ impl ArrayParts for ArrayData {
 }
 
 impl Statistics for ArrayData {
-    fn compute(&self, stat: &Stat) -> VortexResult<Option<Scalar>> {
+    fn compute(&self, stat: Stat) -> VortexResult<Option<Scalar>> {
         let mut locked = self.stats_set.write().unwrap();
         let stats = self
             .encoding()
@@ -236,11 +236,11 @@ impl Statistics for ArrayData {
         for (k, v) in &stats {
             locked.insert(*k, v.clone());
         }
-        Ok(stats.get(stat).cloned())
+        Ok(stats.get(&stat).cloned())
     }
 
-    fn get(&self, stat: &Stat) -> Option<Scalar> {
+    fn get(&self, stat: Stat) -> Option<Scalar> {
         let locked = self.stats_set.read().unwrap();
-        locked.get(stat).cloned()
+        locked.get(&stat).cloned()
     }
 }

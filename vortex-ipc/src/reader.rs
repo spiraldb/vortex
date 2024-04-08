@@ -2,7 +2,6 @@ use std::io;
 use std::io::{BufReader, Read};
 
 use arrow_buffer::Buffer;
-use flatbuffers::root;
 use nougat::gat;
 use vortex::array::composite::COMPOSITE_EXTENSIONS;
 use vortex_array2::{ArrayView, SerdeContext, ToArray, WithArray};
@@ -115,41 +114,20 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
     type Item<'next> = ArrayView<'next> where Self: 'next;
 
     fn next<'next>(&'next mut self) -> Result<Option<ArrayView<'next>>, Self::Error> {
-        // FIXME(ngates): remove this allocation.
-        let mut fb_vec: Vec<u8> = Vec::new();
-        let msg = self.read.read_message::<Message>(&mut fb_vec)?;
+        let msg = self
+            .read
+            .read_message::<Message>(&mut self.column_msg_buffer)?;
         if msg.is_none() {
             // End of the stream
             return Ok(None);
         }
         let msg = msg.unwrap();
 
-        let chunk = msg
+        let chunk_msg = msg
             .header_as_chunk()
             .ok_or_else(|| vortex_err!(InvalidSerde: "Expected IPC Chunk message"))
             .unwrap();
-
-        // Gather the forward-offsets for each column in the chunk.
-        let col_offsets = chunk
-            .column_offsets()
-            .ok_or_else(
-                || vortex_err!(InvalidSerde: "Expected column offsets in IPC Chunk message"),
-            )
-            .unwrap();
-        assert_eq!(col_offsets.len(), 1); // self.column_msg_buffers.len());
-
-        // First, we read all the column messages into their buffers.
-        // for (col_idx, _col_offset) in col_offsets.iter().enumerate() {
-        // TODO(ngates): skip any columns not in the projection.
-
-        read_into(self.read, &mut self.column_msg_buffer)?;
-        let col_msg = root::<Message>(&self.column_msg_buffer)
-            .unwrap()
-            .header_as_chunk_column()
-            .ok_or_else(|| vortex_err!(InvalidSerde: "Expected IPC Chunk Column message"))
-            .unwrap();
-
-        let col_array = col_msg
+        let col_array = chunk_msg
             .array()
             .ok_or_else(|| vortex_err!(InvalidSerde: "Chunk column missing Array"))
             .unwrap();
@@ -158,7 +136,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
         // TODO(ngates): read into a single buffer, then Arc::clone and slice
         self.buffers.clear();
         let mut offset = 0;
-        for buffer in col_msg.buffers().unwrap_or_default().iter() {
+        for buffer in chunk_msg.buffers().unwrap_or_default().iter() {
             let to_kill = buffer.offset() - offset;
             io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
 
@@ -170,9 +148,8 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
         }
 
         // Consume any remaining padding after the final buffer.
-        let to_kill = col_msg.buffer_size() - offset;
+        let to_kill = chunk_msg.buffer_size() - offset;
         io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
-        //  }
 
         let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, &self.buffers)?;
 

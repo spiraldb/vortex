@@ -19,11 +19,6 @@ table Schema {
     dtype: vortex.dtype.DType;
 }
 
-table Chunk {
-    // Indicates the forward offsets for each ChunkColumn message.
-    column_offsets: [uint64];
-}
-
 enum Compression: uint8 {
     None = 0,
 }
@@ -34,7 +29,7 @@ struct Buffer {
     compression: Compression;
 }
 
-table ChunkColumn {
+table Chunk {
     array: vortex.array.Array;
     buffers: [Buffer];
     buffer_size: uint64;
@@ -44,7 +39,6 @@ union MessageHeader {
   Context,
   Schema,
   Chunk,
-  ChunkColumn,
 }
 
 table Message {
