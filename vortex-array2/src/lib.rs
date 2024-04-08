@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+extern crate core;
+
 pub mod array;
 mod batch;
 pub mod compute;
@@ -16,9 +18,11 @@ mod visitor;
 use std::fmt::{Debug, Display, Formatter};
 
 use arrow_buffer::Buffer;
+pub use batch::*;
 pub use context::*;
 pub use data::*;
 pub use implementation::*;
+pub use linkme;
 pub use metadata::*;
 pub use view::*;
 use vortex_error::VortexResult;

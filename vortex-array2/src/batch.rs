@@ -3,6 +3,7 @@ use vortex_error::VortexResult;
 use crate::visitor::ArrayVisitor;
 use crate::{Array, ArrayData, ArrayTrait, ToArrayData, WithArray};
 
+/// TODO(ngates): do we want this to be references?
 #[derive(Debug)]
 pub struct ColumnBatch {
     columns: Vec<ArrayData>,
@@ -22,6 +23,10 @@ impl ColumnBatch {
 
     pub fn columns(&self) -> &[ArrayData] {
         self.columns.as_slice()
+    }
+
+    pub fn ncolumns(&self) -> usize {
+        self.columns.len()
     }
 }
 

@@ -5428,6 +5428,7 @@ dependencies = [
  "flexbuffers",
  "half",
  "humansize",
+ "linkme",
  "paste",
  "serde",
  "vortex-array",

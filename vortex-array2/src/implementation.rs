@@ -26,7 +26,7 @@ macro_rules! impl_encoding {
                 ArrayDef, ArrayParts, ArrayTrait, TryFromArrayParts,
                 TryDeserializeArrayMetadata,
             };
-            use $crate::encoding::{ArrayEncoding, EncodingId, EncodingRef};
+            use $crate::encoding::{ArrayEncoding, EncodingId, EncodingRef, VORTEX_ENCODINGS};
             use vortex_error::vortex_err;
             use std::any::Any;
             use std::fmt::Debug;
@@ -48,6 +48,9 @@ macro_rules! impl_encoding {
 
             /// The array encoding
             pub struct [<$Name Encoding>];
+            #[$crate::linkme::distributed_slice(VORTEX_ENCODINGS)]
+            #[allow(non_upper_case_globals)]
+            static [<ENCODINGS_ $Name>]: EncodingRef = &[<$Name Encoding>];
             impl ArrayEncoding for [<$Name Encoding>] {
                 fn id(&self) -> EncodingId {
                     [<$Name Def>]::ID

@@ -17,6 +17,7 @@ flatbuffers = { workspace = true }
 flexbuffers = { workspace = true }
 half = { workspace = true }
 humansize = { workspace = true }
+linkme = { workspace = true }
 paste = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 vortex-array = { path = "../vortex-array", features = ["serde"] }

@@ -50,6 +50,7 @@ impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
     fn try_from_parts(parts: &'v dyn ArrayParts, metadata: &'v BoolMetadata) -> VortexResult<Self> {
         Ok(BoolArray {
             dtype: parts.dtype(),
+            // FIXME(ngates): implement our own BooleanBuffer that doesn't take ownership of the bytes
             buffer: parts
                 .buffer(0)
                 .ok_or(vortex_err!("BoolArray requires a buffer"))?,

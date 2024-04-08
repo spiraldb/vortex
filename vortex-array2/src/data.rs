@@ -40,9 +40,7 @@ impl ArrayData {
 
         Ok(data)
     }
-}
 
-impl ArrayData {
     pub fn encoding(&self) -> EncodingRef {
         self.encoding
     }
@@ -61,6 +59,53 @@ impl ArrayData {
 
     pub fn child(&self, index: usize) -> Option<&ArrayData> {
         self.children.get(index).and_then(|c| c.as_ref())
+    }
+
+    pub fn children(&self) -> &[Option<ArrayData>] {
+        &self.children
+    }
+
+    pub fn depth_first_traversal(&self) -> ArrayDataIterator {
+        ArrayDataIterator { stack: vec![self] }
+    }
+
+    /// Return the buffer offsets and the total length of all buffers, assuming the given alignment.
+    /// This includes all child buffers.
+    pub fn all_buffer_offsets(&self, alignment: usize) -> Vec<u64> {
+        let mut offsets = Vec::with_capacity(self.buffers.len() + 1);
+        let mut offset = 0;
+
+        for col_data in self.depth_first_traversal() {
+            for buffer in col_data.buffers() {
+                offsets.push(offset as u64);
+
+                let buffer_size = buffer.len();
+                let aligned_size = (buffer_size + (alignment - 1)) & !(alignment - 1);
+                offset += aligned_size;
+            }
+        }
+        offsets.push(offset as u64);
+
+        offsets
+    }
+}
+
+/// A depth-first iterator over a ArrayData.
+pub struct ArrayDataIterator<'a> {
+    stack: Vec<&'a ArrayData>,
+}
+
+impl<'a> Iterator for ArrayDataIterator<'a> {
+    type Item = &'a ArrayData;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.stack.pop()?;
+        for child in next.children.as_ref() {
+            if let Some(c) = child {
+                self.stack.push(c);
+            }
+        }
+        Some(next)
     }
 }
 

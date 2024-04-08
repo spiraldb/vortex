@@ -1,16 +1,27 @@
 use std::fmt::{Debug, Formatter};
 
+use linkme::distributed_slice;
 pub use vortex::encoding::EncodingId;
 use vortex_error::VortexResult;
 
 use crate::ArrayView;
 use crate::{ArrayData, ArrayTrait};
 
+#[distributed_slice]
+pub static VORTEX_ENCODINGS: [EncodingRef] = [..];
+
 pub type EncodingRef = &'static dyn ArrayEncoding;
+
+pub fn find_encoding(id: &str) -> Option<EncodingRef> {
+    VORTEX_ENCODINGS
+        .iter()
+        .find(|&x| x.id().name() == id)
+        .cloned()
+}
 
 /// Dynamic trait representing an array type.
 #[allow(dead_code)]
-pub trait ArrayEncoding {
+pub trait ArrayEncoding: 'static + Sync + Send {
     fn id(&self) -> EncodingId;
 
     fn with_view_mut<'v>(
