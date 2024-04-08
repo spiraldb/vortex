@@ -10,7 +10,7 @@ use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
+use crate::stats::{ArrayStatistics, OwnedStats, Statistics, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
 use crate::{impl_array, ArrayWalker};
@@ -94,11 +94,6 @@ impl Array for ChunkedArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &ChunkedEncoding
     }
@@ -148,6 +143,18 @@ impl ArrayValidity for ChunkedArray {
 
     fn is_valid(&self, _index: usize) -> bool {
         todo!()
+    }
+}
+
+impl OwnedStats for ChunkedArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for ChunkedArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

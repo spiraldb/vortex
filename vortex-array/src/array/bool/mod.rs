@@ -11,7 +11,7 @@ use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stat, Stats, StatsSet};
+use crate::stats::{ArrayStatistics, OwnedStats, Statistics, StatsSet};
 use crate::validity::OwnedValidity;
 use crate::validity::{Validity, ValidityView};
 use crate::view::AsView;
@@ -89,11 +89,6 @@ impl Array for BoolArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &BoolEncoding
     }
@@ -130,9 +125,21 @@ impl OwnedValidity for BoolArray {
     }
 }
 
+impl OwnedStats for BoolArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for BoolArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
+    }
+}
+
 impl ArrayDisplay for BoolArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        let true_count = self.stats().get_or_compute_or(0usize, &Stat::TrueCount);
+        let true_count = self.statistics().compute_true_count().unwrap_or(0);
         let false_count = self.len() - true_count;
         f.property("n_true", true_count)?;
         f.property("n_false", false_count)?;

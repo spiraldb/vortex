@@ -13,7 +13,7 @@ use crate::flatbuffers::array as fb;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::context::SerdeContext;
 use crate::serde::EncodingSerde;
-use crate::stats::Stats;
+use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
 use crate::ArrayWalker;
@@ -176,11 +176,6 @@ impl<'a> Array for ArrayView<'a> {
         self.dtype
     }
 
-    fn stats(&self) -> Stats {
-        // TODO(ngates): implement a dynamic trait for stats?
-        todo!()
-    }
-
     fn encoding(&self) -> EncodingRef {
         self.encoding
     }
@@ -210,6 +205,12 @@ impl ArrayValidity for ArrayView<'_> {
     }
 
     fn is_valid(&self, _index: usize) -> bool {
+        todo!()
+    }
+}
+
+impl ArrayStatistics for ArrayView<'_> {
+    fn statistics(&self) -> &dyn Statistics {
         todo!()
     }
 }

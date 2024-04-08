@@ -9,6 +9,7 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::encoding::Encoding;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{match_each_native_ptype, NativePType};
+use vortex::stats::ArrayStatistics;
 use vortex::stats::Stat;
 use vortex::validity::OwnedValidity;
 use vortex::validity::Validity;
@@ -29,8 +30,9 @@ impl EncodingCompression for REEEncoding {
 
         let avg_run_length = array.len() as f32
             / array
-                .stats()
-                .get_or_compute_or::<usize>(array.len(), &Stat::RunCount) as f32;
+                .statistics()
+                .compute_run_count()
+                .unwrap_or(array.len()) as f32;
         if avg_run_length < config.ree_average_run_threshold {
             return None;
         }
@@ -70,18 +72,18 @@ pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
         let (ends, values) = ree_encode_primitive(array.typed_data::<$P>());
 
         let mut compressed_values = PrimitiveArray::from(values).into_nullable(array.dtype().nullability());
-        compressed_values.stats().set(Stat::IsConstant, false.into());
-        compressed_values.stats().set(Stat::RunCount, compressed_values.len().into());
-        compressed_values.stats().set_many(&array.stats(), vec![
-            &Stat::Min, &Stat::Max, &Stat::IsSorted, &Stat::IsStrictSorted,
+        compressed_values.statistics().set(Stat::IsConstant, false.into());
+        compressed_values.statistics().set(Stat::RunCount, compressed_values.len().into());
+        compressed_values.statistics().set_many(array.statistics(), &[
+            Stat::Min, Stat::Max, Stat::IsSorted, Stat::IsStrictSorted,
         ]);
 
         let compressed_ends = PrimitiveArray::from(ends);
-        compressed_ends.stats().set(Stat::IsSorted, true.into());
-        compressed_ends.stats().set(Stat::IsStrictSorted, true.into());
-        compressed_ends.stats().set(Stat::IsConstant, false.into());
-        compressed_ends.stats().set(Stat::Max, array.len().into());
-        compressed_ends.stats().set(Stat::RunCount, compressed_ends.len().into());
+        compressed_ends.statistics().set(Stat::IsSorted, true.into());
+        compressed_ends.statistics().set(Stat::IsStrictSorted, true.into());
+        compressed_ends.statistics().set(Stat::IsConstant, false.into());
+        compressed_ends.statistics().set(Stat::Max, array.len().into());
+        compressed_ends.statistics().set(Stat::RunCount, compressed_ends.len().into());
 
         assert_eq!(array.dtype(), compressed_values.dtype());
         (compressed_ends, compressed_values)

@@ -11,7 +11,7 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::AsBytes;
-use vortex::stats::Stat;
+use vortex::validity::Validity;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
@@ -34,8 +34,8 @@ impl EncodingCompression for DictEncoding {
         // No point dictionary coding if the array is unique.
         // We don't have a unique stat yet, but strict-sorted implies unique.
         if array
-            .stats()
-            .get_or_compute_as(&Stat::IsStrictSorted)
+            .statistics()
+            .compute_is_strict_sorted()
             .unwrap_or(false)
         {
             return None;

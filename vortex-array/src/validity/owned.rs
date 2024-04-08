@@ -14,7 +14,7 @@ use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, WriteCtx};
-use crate::stats::Stats;
+use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::{ArrayValidity, ValidityEncoding};
 use crate::view::AsView;
 use crate::ArrayWalker;
@@ -185,8 +185,13 @@ impl Array for Validity {
         &Validity::DTYPE
     }
 
+<<<<<<< HEAD
     fn stats(&self) -> Stats {
         todo!()
+=======
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(Arc::new(self.as_view().slice(start, stop)?))
+>>>>>>> 885692d4 (Redo stats to be a dyn Trait)
     }
 
     fn encoding(&self) -> EncodingRef {
@@ -225,6 +230,12 @@ impl ArrayValidity for Validity {
 
     fn is_valid(&self, _index: usize) -> bool {
         true
+    }
+}
+
+impl ArrayStatistics for Validity {
+    fn statistics(&self) -> &dyn Statistics {
+        todo!()
     }
 }
 

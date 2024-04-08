@@ -8,7 +8,7 @@ use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
+use vortex::stats::{ArrayStatistics, OwnedStats, Stat, Statistics, StatsCompute, StatsSet};
 use vortex::validity::Validity;
 use vortex::validity::{OwnedValidity, ValidityView};
 use vortex::view::{AsView, ToOwnedView};
@@ -53,7 +53,12 @@ impl REEArray {
             assert_eq!(v.len(), length);
         }
 
-        if !ends.stats().get_as(&Stat::IsStrictSorted).unwrap_or(true) {
+        if !ends
+            .statistics()
+            .get(Stat::IsStrictSorted)
+            .map(|s| bool::try_from(s).unwrap())
+            .unwrap_or(true)
+        {
             vortex_bail!("Ends array must be strictly sorted",);
         }
 
@@ -128,9 +133,28 @@ impl Array for REEArray {
         self.values.dtype()
     }
 
+<<<<<<< HEAD
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
+=======
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        check_slice_bounds(self, start, stop)?;
+        let slice_begin = self.find_physical_index(start)?;
+        let slice_end = self.find_physical_index(stop)?;
+        Ok(Self {
+            ends: self.ends.slice(slice_begin, slice_end + 1)?,
+            values: self.values.slice(slice_begin, slice_end + 1)?,
+            validity: self
+                .validity()
+                .map(|v| v.slice(slice_begin, slice_end + 1))
+                .transpose()?,
+            offset: start,
+            length: stop - start,
+            stats: Arc::new(RwLock::new(StatsSet::new())),
+        }
+        .into_array())
+>>>>>>> 885692d4 (Redo stats to be a dyn Trait)
     }
 
     #[inline]
@@ -160,7 +184,11 @@ impl OwnedValidity for REEArray {
     }
 }
 
-impl StatsCompute for REEArray {}
+impl StatsCompute for REEArray {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
+        Ok(StatsSet::new())
+    }
+}
 
 #[derive(Debug)]
 pub struct REEEncoding;
@@ -187,6 +215,18 @@ impl ArrayDisplay for REEArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.child("values", self.values())?;
         f.child("ends", self.ends())
+    }
+}
+
+impl OwnedStats for REEArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for REEArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

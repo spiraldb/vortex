@@ -5172,6 +5172,7 @@ dependencies = [
  "arrow-buffer 51.0.0",
  "arrow-schema 51.0.0",
  "criterion",
+ "enum-iterator",
  "flatbuffers",
  "flatc",
  "flexbuffers",

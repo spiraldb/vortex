@@ -6,7 +6,7 @@ use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stats, StatsCompute, StatsSet};
+use vortex::stats::{ArrayStatistics, OwnedStats, Stat, Statistics, StatsCompute, StatsSet};
 use vortex::validity::Validity;
 use vortex::validity::{OwnedValidity, ValidityView};
 use vortex::view::AsView;
@@ -102,10 +102,6 @@ impl Array for DateTimeArray {
         &self.dtype
     }
 
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
     fn encoding(&self) -> EncodingRef {
         &DateTimeEncoding
     }
@@ -131,7 +127,23 @@ impl OwnedValidity for DateTimeArray {
     }
 }
 
-impl StatsCompute for DateTimeArray {}
+impl OwnedStats for DateTimeArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for DateTimeArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
+    }
+}
+
+impl StatsCompute for DateTimeArray {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
+        Ok(StatsSet::new())
+    }
+}
 
 impl ArrayDisplay for DateTimeArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {

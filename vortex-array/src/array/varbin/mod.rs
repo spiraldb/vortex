@@ -21,7 +21,7 @@ use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
+use crate::stats::{ArrayStatistics, OwnedStats, Statistics, StatsSet};
 use crate::validity::OwnedValidity;
 use crate::validity::{Validity, ValidityView};
 use crate::view::AsView;
@@ -198,11 +198,6 @@ impl Array for VarBinArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &VarBinEncoding
     }
@@ -232,6 +227,18 @@ impl Array for VarBinArray {
 impl OwnedValidity for VarBinArray {
     fn validity(&self) -> Option<ValidityView> {
         self.validity.as_view()
+    }
+}
+
+impl OwnedStats for VarBinArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for VarBinArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

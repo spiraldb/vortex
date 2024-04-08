@@ -3,7 +3,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
-use vortex::stats::Stat;
+use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::{OwnedValidity, ValidityView};
 use vortex::view::ToOwnedView;
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
@@ -30,8 +30,9 @@ impl EncodingCompression for ZigZagEncoding {
         // Only compress if the array has negative values
         // TODO(ngates): also check that Stat::Max is less than half the max value of the type
         parray
-            .stats()
-            .get_or_compute_cast::<i64>(&Stat::Min)
+            .statistics()
+            .compute_as_cast::<i64>(Stat::Min)
+            .ok()
             .filter(|&min| min < 0)
             .map(|_| self as &dyn EncodingCompression)
     }

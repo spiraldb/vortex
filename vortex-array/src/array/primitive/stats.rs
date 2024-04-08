@@ -14,7 +14,7 @@ use crate::stats::{Stat, StatsCompute, StatsSet};
 use crate::validity::Validity;
 
 impl StatsCompute for PrimitiveArray {
-    fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {
+    fn compute(&self, stat: Stat) -> VortexResult<StatsSet> {
         match_each_native_ptype!(self.ptype(), |$P| {
             match self.logical_validity() {
                 Validity::Valid(_) => self.typed_data::<$P>().compute(stat),
@@ -28,7 +28,7 @@ impl StatsCompute for PrimitiveArray {
 }
 
 impl<T: NativePType> StatsCompute for &[T] {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
         if self.is_empty() {
             return Ok(StatsSet::default());
         }
@@ -61,7 +61,7 @@ fn all_null_stats<T: NativePType>() -> VortexResult<StatsSet> {
 struct NullableValues<'a, T: NativePType>(&'a [T], &'a BooleanBuffer);
 
 impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
         let values = self.0;
         if values.is_empty() {
             return Ok(StatsSet::default());
@@ -214,32 +214,19 @@ impl<T: NativePType> StatsAccumulator<T> {
 #[cfg(test)]
 mod test {
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::Array;
-    use crate::scalar::ListScalarVec;
-    use crate::stats::Stat;
+    use crate::stats::ArrayStatistics;
 
     #[test]
     fn stats() {
         let arr = PrimitiveArray::from(vec![1, 2, 3, 4, 5]);
-        let min: i32 = arr.stats().get_or_compute_as(&Stat::Min).unwrap();
-        let max: i32 = arr.stats().get_or_compute_as(&Stat::Max).unwrap();
-        let is_sorted: bool = arr.stats().get_or_compute_as(&Stat::IsSorted).unwrap();
-        let is_strict_sorted: bool = arr
-            .stats()
-            .get_or_compute_as(&Stat::IsStrictSorted)
-            .unwrap();
-        let is_constant: bool = arr.stats().get_or_compute_as(&Stat::IsConstant).unwrap();
-        let bit_width_freq: Vec<u64> = arr
-            .stats()
-            .get_or_compute_as::<ListScalarVec<u64>>(&Stat::BitWidthFreq)
-            .unwrap()
-            .0;
-        let trailing_zeros_freq: Vec<u64> = arr
-            .stats()
-            .get_or_compute_as::<ListScalarVec<u64>>(&Stat::TrailingZeroFreq)
-            .unwrap()
-            .0;
-        let run_count: u64 = arr.stats().get_or_compute_as(&Stat::RunCount).unwrap();
+        let min: i32 = arr.statistics().compute_min().unwrap();
+        let max: i32 = arr.statistics().compute_max().unwrap();
+        let is_sorted = arr.statistics().compute_is_sorted().unwrap();
+        let is_strict_sorted = arr.statistics().compute_is_strict_sorted().unwrap();
+        let is_constant = arr.statistics().compute_is_constant().unwrap();
+        let bit_width_freq = arr.statistics().compute_bit_width_freq().unwrap();
+        let trailing_zeros_freq = arr.statistics().compute_trailing_zero_freq().unwrap();
+        let run_count = arr.statistics().compute_run_count().unwrap();
         assert_eq!(min, 1);
         assert_eq!(max, 5);
         assert!(is_sorted);
@@ -248,8 +235,8 @@ mod test {
         assert_eq!(
             bit_width_freq,
             vec![
-                0u64, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0,
+                0usize, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0,
             ]
         );
         assert_eq!(
@@ -257,8 +244,8 @@ mod test {
             vec![
                 // 1, 3, 5 have 0 trailing zeros
                 // 2 has 1 trailing zero, 4 has 2 trailing zeros
-                3u64, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0,
+                3usize, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0,
             ]
         );
         assert_eq!(run_count, 5);
@@ -267,8 +254,8 @@ mod test {
     #[test]
     fn stats_u8() {
         let arr = PrimitiveArray::from(vec![1u8, 2, 3, 4, 5]);
-        let min: u8 = arr.stats().get_or_compute_as(&Stat::Min).unwrap();
-        let max: u8 = arr.stats().get_or_compute_as(&Stat::Max).unwrap();
+        let min: u8 = arr.statistics().compute_min().unwrap();
+        let max: u8 = arr.statistics().compute_max().unwrap();
         assert_eq!(min, 1);
         assert_eq!(max, 5);
     }
@@ -276,17 +263,17 @@ mod test {
     #[test]
     fn nullable_stats_u8() {
         let arr = PrimitiveArray::from_iter(vec![None, Some(1i32), None, Some(2)]);
-        let min: Option<i32> = arr.stats().get_or_compute_as(&Stat::Min);
-        let max: Option<i32> = arr.stats().get_or_compute_as(&Stat::Max);
-        assert_eq!(min, Some(1));
-        assert_eq!(max, Some(2));
+        let min: i32 = arr.statistics().compute_min().unwrap();
+        let max: i32 = arr.statistics().compute_max().unwrap();
+        assert_eq!(min, 1);
+        assert_eq!(max, 2);
     }
 
     #[test]
     fn all_null() {
         let arr = PrimitiveArray::from_iter(vec![Option::<i32>::None, None, None]);
-        let min: Option<i32> = arr.stats().get_or_compute_as(&Stat::Min);
-        let max: Option<i32> = arr.stats().get_or_compute_as(&Stat::Max);
+        let min: Option<i32> = arr.statistics().compute_min().ok();
+        let max: Option<i32> = arr.statistics().compute_max().ok();
         assert_eq!(min, None);
         assert_eq!(max, None);
     }

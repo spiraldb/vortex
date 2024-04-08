@@ -6,7 +6,6 @@ use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
-use vortex::stats::Stat;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 use vortex_schema::Nullability::NonNullable;
@@ -33,14 +32,15 @@ impl EncodingCompression for RoaringIntEncoding {
 
         // Only support sorted unique arrays
         if !array
-            .stats()
-            .get_or_compute_or(false, &Stat::IsStrictSorted)
+            .statistics()
+            .compute_is_strict_sorted()
+            .unwrap_or(false)
         {
             debug!("Skipping roaring int, not strict sorted");
             return None;
         }
 
-        if array.stats().get_or_compute_or(0usize, &Stat::Max) > u32::MAX as usize {
+        if array.statistics().compute_max().unwrap_or(0) > u32::MAX as usize {
             debug!("Skipping roaring int, max is larger than {}", u32::MAX);
             return None;
         }

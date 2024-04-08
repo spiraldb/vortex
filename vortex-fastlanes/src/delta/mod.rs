@@ -6,7 +6,7 @@ use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
+use vortex::stats::{ArrayStatistics, OwnedStats, Stat, Statistics, StatsCompute, StatsSet};
 use vortex::validity::Validity;
 use vortex::validity::{OwnedValidity, ValidityView};
 use vortex::view::AsView;
@@ -111,11 +111,6 @@ impl Array for DeltaArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &DeltaEncoding
     }
@@ -166,8 +161,20 @@ impl ArrayDisplay for DeltaArray {
 }
 
 impl StatsCompute for DeltaArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
         Ok(StatsSet::default())
+    }
+}
+
+impl OwnedStats for DeltaArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for DeltaArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

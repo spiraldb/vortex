@@ -11,8 +11,8 @@ use vortex::compute::flatten::flatten_primitive;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::PType::U8;
 use vortex::ptype::{NativePType, PType};
-use vortex::scalar::{ListScalarVec, Scalar};
-use vortex::stats::Stat;
+use vortex::scalar::Scalar;
+use vortex::stats::ArrayStatistics;
 use vortex::validity::OwnedValidity;
 use vortex::view::ToOwnedView;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -39,10 +39,7 @@ impl EncodingCompression for BitPackedEncoding {
         }
 
         let bytes_per_exception = bytes_per_exception(parray.ptype());
-        let bit_width_freq = parray
-            .stats()
-            .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)?
-            .0;
+        let bit_width_freq = parray.statistics().compute_bit_width_freq().ok()?;
         let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception);
 
         // Check that the bit width is less than the type's bit width
@@ -60,11 +57,7 @@ impl EncodingCompression for BitPackedEncoding {
         ctx: CompressCtx,
     ) -> VortexResult<ArrayRef> {
         let parray = array.as_primitive();
-        let bit_width_freq = parray
-            .stats()
-            .get_or_compute_as::<ListScalarVec<usize>>(&Stat::BitWidthFreq)
-            .unwrap()
-            .0;
+        let bit_width_freq = parray.statistics().compute_bit_width_freq()?;
 
         let like_bp = like.map(|l| l.as_bitpacked());
         let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception(parray.ptype()));

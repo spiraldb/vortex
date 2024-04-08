@@ -6,7 +6,7 @@ use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stats, StatsSet};
+use vortex::stats::{ArrayStatistics, OwnedStats, Statistics, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -71,11 +71,6 @@ impl Array for ZigZagArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &ZigZagEncoding
     }
@@ -115,6 +110,18 @@ impl ArrayValidity for ZigZagArray {
 impl ArrayDisplay for ZigZagArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.child("zigzag", self.encoded())
+    }
+}
+
+impl OwnedStats for ZigZagArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for ZigZagArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

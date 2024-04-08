@@ -17,7 +17,7 @@ use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
+use crate::stats::{ArrayStatistics, OwnedStats, Statistics, StatsSet};
 use crate::validity::OwnedValidity;
 use crate::validity::{Validity, ValidityView};
 use crate::view::AsView;
@@ -254,11 +254,6 @@ impl Array for VarBinViewArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &VarBinViewEncoding
     }
@@ -291,6 +286,18 @@ impl Array for VarBinViewArray {
 impl OwnedValidity for VarBinViewArray {
     fn validity(&self) -> Option<ValidityView> {
         self.validity.as_view()
+    }
+}
+
+impl OwnedStats for VarBinViewArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for VarBinViewArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

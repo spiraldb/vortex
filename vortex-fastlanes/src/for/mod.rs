@@ -7,7 +7,7 @@ use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::scalar::Scalar;
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
+use vortex::stats::{ArrayStatistics, OwnedStats, Stat, Statistics, StatsCompute, StatsSet};
 use vortex::validity::ArrayValidity;
 use vortex::validity::Validity;
 use vortex::{impl_array, ArrayWalker};
@@ -75,11 +75,6 @@ impl Array for FoRArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &FoREncoding
     }
@@ -124,8 +119,20 @@ impl ArrayDisplay for FoRArray {
 }
 
 impl StatsCompute for FoRArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
         Ok(StatsSet::default())
+    }
+}
+
+impl OwnedStats for FoRArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for FoRArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

@@ -8,8 +8,7 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
-use vortex::scalar::ListScalarVec;
-use vortex::stats::Stat;
+use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::OwnedValidity;
 use vortex::view::ToOwnedView;
 use vortex_error::{vortex_err, VortexResult};
@@ -37,7 +36,7 @@ impl EncodingCompression for FoREncoding {
 
         // Nothing for us to do if the min is already zero and tz == 0
         let shift = trailing_zeros(parray);
-        let min = parray.stats().get_or_compute_cast::<i64>(&Stat::Min)?;
+        let min = parray.statistics().compute_as_cast::<i64>(Stat::Min).ok()?;
         if min == 0 && shift == 0 {
             return None;
         }
@@ -54,8 +53,8 @@ impl EncodingCompression for FoREncoding {
         let parray = array.as_primitive();
         let shift = trailing_zeros(parray);
         let min = parray
-            .stats()
-            .get_or_compute(&Stat::Min)
+            .statistics()
+            .compute(Stat::Min)
             .ok_or_else(|| vortex_err!("Min stat not found"))?;
 
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
@@ -134,9 +133,8 @@ fn decompress_primitive<T: NativePType + WrappingAdd + PrimInt>(
 
 fn trailing_zeros(array: &dyn Array) -> u8 {
     let tz_freq = array
-        .stats()
-        .get_or_compute_as::<ListScalarVec<usize>>(&Stat::TrailingZeroFreq)
-        .map(|v| v.0)
+        .statistics()
+        .compute_trailing_zero_freq()
         .unwrap_or(vec![0]);
     tz_freq
         .iter()

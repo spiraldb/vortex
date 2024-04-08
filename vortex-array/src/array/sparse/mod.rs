@@ -14,7 +14,7 @@ use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsCompute, StatsSet};
+use crate::stats::{ArrayStatistics, OwnedStats, Stat, Statistics, StatsCompute, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
 use crate::{impl_array, match_each_integer_ptype, ArrayWalker};
@@ -131,11 +131,6 @@ impl Array for SparseArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &SparseEncoding
     }
@@ -162,7 +157,11 @@ impl Array for SparseArray {
     }
 }
 
-impl StatsCompute for SparseArray {}
+impl StatsCompute for SparseArray {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
+        Ok(StatsSet::new())
+    }
+}
 
 impl ArrayValidity for SparseArray {
     fn logical_validity(&self) -> Validity {
@@ -200,6 +199,18 @@ impl ArrayValidity for SparseArray {
             None => !self.fill_value().is_null(),
             Some(idx) => self.values().is_valid(idx),
         }
+    }
+}
+
+impl OwnedStats for SparseArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for SparseArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

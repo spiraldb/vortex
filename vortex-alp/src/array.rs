@@ -1,12 +1,12 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stats, StatsSet};
+use vortex::stats::{ArrayStatistics, OwnedStats, Statistics, StatsSet};
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -91,11 +91,6 @@ impl Array for ALPArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn with_compute_mut(
         &self,
         f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
@@ -137,6 +132,17 @@ impl ArrayValidity for ALPArray {
 
     fn is_valid(&self, index: usize) -> bool {
         self.encoded().is_valid(index)
+    }
+}
+impl OwnedStats for ALPArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for ALPArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

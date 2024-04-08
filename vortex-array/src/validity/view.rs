@@ -15,7 +15,7 @@ use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, ArrayView, WriteCtx};
-use crate::stats::{Stat, Stats};
+use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::owned::Validity;
 use crate::validity::{ArrayValidity, ValidityEncoding};
 use crate::view::{AsView, ToOwnedView};
@@ -70,8 +70,8 @@ impl ValidityView<'_> {
             Self::Valid(_) => true,
             Self::Invalid(_) => false,
             Self::Array(a) => a
-                .stats()
-                .get_or_compute_as::<usize>(&Stat::TrueCount)
+                .statistics()
+                .compute_true_count()
                 .map(|true_count| true_count == self.len())
                 .unwrap_or(false),
         }
@@ -82,8 +82,8 @@ impl ValidityView<'_> {
             Self::Valid(_) => false,
             Self::Invalid(_) => true,
             Self::Array(a) => a
-                .stats()
-                .get_or_compute_as::<usize>(&Stat::TrueCount)
+                .statistics()
+                .compute_true_count()
                 .map(|true_count| true_count == 0)
                 .unwrap_or(false),
         }
@@ -186,10 +186,6 @@ impl Array for ValidityView<'_> {
         &Validity::DTYPE
     }
 
-    fn stats(&self) -> Stats {
-        todo!()
-    }
-
     fn encoding(&self) -> EncodingRef {
         &ValidityEncoding
     }
@@ -215,6 +211,12 @@ impl Array for ValidityView<'_> {
 
     fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
         Ok(())
+    }
+}
+
+impl ArrayStatistics for ValidityView<'_> {
+    fn statistics(&self) -> &dyn Statistics {
+        todo!()
     }
 }
 

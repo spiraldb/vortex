@@ -12,7 +12,7 @@ use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, BytesSerde, EncodingSerde};
-use crate::stats::{Stats, StatsCompute, StatsSet};
+use crate::stats::{ArrayStatistics, OwnedStats, Stat, Statistics, StatsCompute, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
 use crate::{impl_array, ArrayWalker};
@@ -95,11 +95,6 @@ impl Array for CompositeArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &CompositeEncoding
     }
@@ -125,7 +120,11 @@ impl Array for CompositeArray {
     }
 }
 
-impl StatsCompute for CompositeArray {}
+impl StatsCompute for CompositeArray {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
+        Ok(StatsSet::new())
+    }
+}
 
 impl ArrayDisplay for CompositeArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
@@ -141,6 +140,18 @@ impl ArrayValidity for CompositeArray {
 
     fn is_valid(&self, index: usize) -> bool {
         self.underlying().is_valid(index)
+    }
+}
+
+impl OwnedStats for CompositeArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for CompositeArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

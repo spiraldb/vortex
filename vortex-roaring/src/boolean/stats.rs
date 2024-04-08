@@ -5,7 +5,7 @@ use vortex_error::VortexResult;
 use crate::boolean::RoaringBoolArray;
 
 impl StatsCompute for RoaringBoolArray {
-    fn compute(&self, stat: &Stat) -> VortexResult<StatsSet> {
+    fn compute(&self, stat: Stat) -> VortexResult<StatsSet> {
         let cardinality = self.bitmap().cardinality() as usize;
         if let Some(value) = match stat {
             Stat::IsConstant => Some((cardinality == self.len() || cardinality == 0).into()),
@@ -27,7 +27,7 @@ impl StatsCompute for RoaringBoolArray {
             Stat::NullCount => Some(0.into()),
             _ => None,
         } {
-            Ok(StatsSet::of(*stat, value))
+            Ok(StatsSet::of(stat, value))
         } else {
             Ok(StatsSet::default())
         }
@@ -38,6 +38,7 @@ impl StatsCompute for RoaringBoolArray {
 mod test {
     use vortex::array::bool::BoolArray;
     use vortex::array::Array;
+    use vortex::stats::ArrayStatistics;
     use vortex::stats::Stat::*;
     use vortex_error::VortexResult;
 
@@ -48,16 +49,13 @@ mod test {
         let bool: &dyn Array = &BoolArray::from(vec![true, true]);
         let array = RoaringBoolArray::encode(bool)?;
 
-        assert_eq!(
-            array.stats().get_or_compute_as::<bool>(&IsConstant),
-            Some(true)
-        );
-        assert_eq!(array.stats().get_or_compute_as::<bool>(&Min), Some(true));
-        assert_eq!(array.stats().get_or_compute_as::<bool>(&Max), Some(true));
+        assert!(array.statistics().compute_is_constant().unwrap());
+        assert!(array.statistics().compute_min::<bool>().unwrap());
+        assert!(array.statistics().compute_max::<bool>().unwrap());
         assert_eq!(
             array
-                .stats()
-                .get_or_compute_cast::<u32>(&TrueCount)
+                .statistics()
+                .compute_as_cast::<u32>(TrueCount)
                 .unwrap(),
             2
         );
@@ -70,16 +68,13 @@ mod test {
         let bool: &dyn Array = &BoolArray::from(vec![false, false]);
         let array = RoaringBoolArray::encode(bool)?;
 
-        assert_eq!(
-            array.stats().get_or_compute_as::<bool>(&IsConstant),
-            Some(true)
-        );
-        assert_eq!(array.stats().get_or_compute_as::<bool>(&Min), Some(false));
-        assert_eq!(array.stats().get_or_compute_as::<bool>(&Max), Some(false));
+        assert!(array.statistics().compute_is_constant().unwrap());
+        assert!(!array.statistics().compute_min::<bool>().unwrap());
+        assert!(!array.statistics().compute_max::<bool>().unwrap());
         assert_eq!(
             array
-                .stats()
-                .get_or_compute_cast::<u32>(&TrueCount)
+                .statistics()
+                .compute_as_cast::<u32>(TrueCount)
                 .unwrap(),
             0
         );
@@ -92,16 +87,13 @@ mod test {
         let bool: &dyn Array = &BoolArray::from(vec![false, true, true]);
         let array = RoaringBoolArray::encode(bool)?;
 
-        assert_eq!(
-            array.stats().get_or_compute_as::<bool>(&IsConstant),
-            Some(false)
-        );
-        assert_eq!(array.stats().get_or_compute_as::<bool>(&Min), Some(false));
-        assert_eq!(array.stats().get_or_compute_as::<bool>(&Max), Some(true));
+        assert!(!array.statistics().compute_is_constant().unwrap());
+        assert!(!array.statistics().compute_min::<bool>().unwrap());
+        assert!(array.statistics().compute_max::<bool>().unwrap());
         assert_eq!(
             array
-                .stats()
-                .get_or_compute_cast::<u32>(&TrueCount)
+                .statistics()
+                .compute_as_cast::<u32>(TrueCount)
                 .unwrap(),
             2
         );

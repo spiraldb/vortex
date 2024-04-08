@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array::varbin::{varbin_scalar, VarBinArray};
+use crate::array::varbin::VarBinArray;
 use crate::array::Array;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
@@ -106,7 +106,7 @@ mod test {
 
     use crate::array::varbin::VarBinArray;
     use crate::array::Array;
-    use crate::stats::Stat;
+    use crate::stats::ArrayStatistics;
 
     fn array(dtype: DType) -> VarBinArray {
         VarBinArray::from_vec(
@@ -119,58 +119,32 @@ mod test {
     fn utf8_stats() {
         let arr = array(DType::Utf8(Nullability::NonNullable));
         assert_eq!(
-            arr.stats().get_or_compute_as::<String>(&Stat::Min).unwrap(),
+            arr.statistics().compute_min::<String>().unwrap(),
             "hello world".to_owned()
         );
         assert_eq!(
-            arr.stats().get_or_compute_as::<String>(&Stat::Max).unwrap(),
+            arr.statistics().compute_max::<String>().unwrap(),
             "hello world this is a long string".to_owned()
         );
-        assert_eq!(
-            arr.stats()
-                .get_or_compute_as::<usize>(&Stat::RunCount)
-                .unwrap(),
-            2
-        );
-        assert!(!arr
-            .stats()
-            .get_or_compute_as::<bool>(&Stat::IsConstant)
-            .unwrap());
-        assert!(arr
-            .stats()
-            .get_or_compute_as::<bool>(&Stat::IsSorted)
-            .unwrap());
+        assert_eq!(arr.statistics().compute_run_count().unwrap(), 2);
+        assert!(!arr.statistics().compute_is_constant().unwrap());
+        assert!(arr.statistics().compute_is_sorted().unwrap());
     }
 
     #[test]
     fn binary_stats() {
         let arr = array(DType::Binary(Nullability::NonNullable));
         assert_eq!(
-            arr.stats()
-                .get_or_compute_as::<Vec<u8>>(&Stat::Min)
-                .unwrap(),
+            arr.statistics().compute_min::<Vec<u8>>().unwrap(),
             "hello world".as_bytes().to_vec()
         );
         assert_eq!(
-            arr.stats()
-                .get_or_compute_as::<Vec<u8>>(&Stat::Max)
-                .unwrap(),
+            arr.statistics().compute_max::<Vec<u8>>().unwrap(),
             "hello world this is a long string".as_bytes().to_vec()
         );
-        assert_eq!(
-            arr.stats()
-                .get_or_compute_as::<usize>(&Stat::RunCount)
-                .unwrap(),
-            2
-        );
-        assert!(!arr
-            .stats()
-            .get_or_compute_as::<bool>(&Stat::IsConstant)
-            .unwrap());
-        assert!(arr
-            .stats()
-            .get_or_compute_as::<bool>(&Stat::IsSorted)
-            .unwrap());
+        assert_eq!(arr.statistics().compute_run_count().unwrap(), 2);
+        assert!(!arr.statistics().compute_is_constant().unwrap());
+        assert!(arr.statistics().compute_is_sorted().unwrap());
     }
 
     #[test]
@@ -185,17 +159,11 @@ mod test {
             DType::Utf8(Nullability::Nullable),
         );
         assert_eq!(
-            array
-                .stats()
-                .get_or_compute_as::<String>(&Stat::Min)
-                .unwrap(),
+            array.statistics().compute_min::<String>().unwrap(),
             "hello world".to_owned()
         );
         assert_eq!(
-            array
-                .stats()
-                .get_or_compute_as::<String>(&Stat::Max)
-                .unwrap(),
+            array.statistics().compute_max::<String>().unwrap(),
             "hello world this is a long string".to_owned()
         );
     }
@@ -206,7 +174,7 @@ mod test {
             vec![Option::<&str>::None, None, None],
             DType::Utf8(Nullability::Nullable),
         );
-        assert!(array.stats().get_or_compute(&Stat::Min).is_none());
-        assert!(array.stats().get_or_compute(&Stat::Max).is_none());
+        assert!(array.statistics().compute_min().is_none());
+        assert!(array.statistics().compute_max().is_none());
     }
 }

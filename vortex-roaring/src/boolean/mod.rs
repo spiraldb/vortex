@@ -8,7 +8,7 @@ use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stats, StatsSet};
+use vortex::stats::{ArrayStatistics, OwnedStats, Statistics, StatsSet};
 use vortex::validity::ArrayValidity;
 use vortex::validity::Validity;
 use vortex::{impl_array, ArrayWalker};
@@ -66,10 +66,6 @@ impl Array for RoaringBoolArray {
         &DType::Bool(NonNullable)
     }
 
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &RoaringBoolEncoding
@@ -115,6 +111,18 @@ impl ArrayValidity for RoaringBoolArray {
 impl ArrayDisplay for RoaringBoolArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.property("bitmap", format!("{:?}", self.bitmap()))
+    }
+}
+
+impl OwnedStats for RoaringBoolArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for RoaringBoolArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

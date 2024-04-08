@@ -24,7 +24,7 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
 use crate::ptype::{match_each_native_ptype, NativePType, PType};
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
+use crate::stats::{ArrayStatistics, OwnedStats, Statistics, StatsSet};
 use crate::validity::{ArrayValidity, OwnedValidity};
 use crate::validity::{Validity, ValidityView};
 use crate::view::{AsView, ToOwnedView};
@@ -220,11 +220,6 @@ impl Array for PrimitiveArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &PrimitiveEncoding
     }
@@ -259,6 +254,18 @@ impl Array for PrimitiveArray {
 impl OwnedValidity for PrimitiveArray {
     fn validity(&self) -> Option<ValidityView> {
         self.validity.as_view()
+    }
+}
+
+impl OwnedStats for PrimitiveArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for PrimitiveArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

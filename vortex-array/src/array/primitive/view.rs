@@ -12,7 +12,7 @@ use crate::encoding::EncodingRef;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::ptype::{NativePType, PType};
 use crate::serde::ArrayView;
-use crate::stats::Stats;
+use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::OwnedValidity;
 use crate::validity::{Validity, ValidityView};
 use crate::view::ToOwnedView;
@@ -76,6 +76,12 @@ impl<'a> OwnedValidity for PrimitiveView<'a> {
     }
 }
 
+impl ArrayStatistics for PrimitiveView<'_> {
+    fn statistics(&self) -> &dyn Statistics {
+        todo!()
+    }
+}
+
 impl Array for PrimitiveView<'_> {
     fn as_any(&self) -> &dyn Any {
         todo!()
@@ -102,10 +108,6 @@ impl Array for PrimitiveView<'_> {
     }
 
     fn dtype(&self) -> &DType {
-        todo!()
-    }
-
-    fn stats(&self) -> Stats {
         todo!()
     }
 

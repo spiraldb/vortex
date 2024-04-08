@@ -19,7 +19,7 @@ use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::ArraySerde;
-use crate::stats::Stats;
+use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
 use crate::ArrayWalker;
@@ -45,7 +45,7 @@ pub type ArrayRef = Arc<dyn Array>;
 ///
 /// This differs from Apache Arrow where logical and physical are combined in
 /// the data type, e.g. LargeString, RunEndEncoded.
-pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
+pub trait Array: ArrayValidity + ArrayDisplay + ArrayStatistics + Debug + Send + Sync {
     /// Converts itself to a reference of [`Any`], which enables downcasting to concrete types.
     fn as_any(&self) -> &dyn Any;
     fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
@@ -62,11 +62,6 @@ pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
     fn nullability(&self) -> Nullability {
         self.dtype().nullability()
     }
-
-    /// Get statistics for the array
-    /// TODO(ngates): this is interesting. What type do we return from this?
-    /// Maybe we actually need to model stats more like compute?
-    fn stats(&self) -> Stats;
 
     /// Encoding kind of the array
     fn encoding(&self) -> EncodingRef;
@@ -165,10 +160,6 @@ impl Array for ArrayRef {
         self.as_ref().dtype()
     }
 
-    fn stats(&self) -> Stats {
-        self.as_ref().stats()
-    }
-
     fn encoding(&self) -> EncodingRef {
         self.as_ref().encoding()
     }
@@ -207,6 +198,12 @@ impl ArrayValidity for ArrayRef {
 impl ArrayDisplay for ArrayRef {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
         ArrayDisplay::fmt(self.as_ref(), fmt)
+    }
+}
+
+impl ArrayStatistics for ArrayRef {
+    fn statistics(&self) -> &dyn Statistics {
+        self.as_ref().statistics()
     }
 }
 

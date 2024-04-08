@@ -10,7 +10,7 @@ use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsCompute, StatsSet};
+use crate::stats::{ArrayStatistics, OwnedStats, Stat, Statistics, StatsCompute, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
 use crate::{impl_array, ArrayWalker};
@@ -82,11 +82,6 @@ impl Array for StructArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &StructEncoding
     }
@@ -115,7 +110,11 @@ impl Array for StructArray {
     }
 }
 
-impl StatsCompute for StructArray {}
+impl StatsCompute for StructArray {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
+        Ok(StatsSet::new())
+    }
+}
 
 impl ArrayValidity for StructArray {
     fn logical_validity(&self) -> Validity {
@@ -124,6 +123,18 @@ impl ArrayValidity for StructArray {
 
     fn is_valid(&self, _index: usize) -> bool {
         todo!()
+    }
+}
+
+impl OwnedStats for StructArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for StructArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

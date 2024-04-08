@@ -18,7 +18,6 @@ use crate::compute::slice::slice;
 use crate::encoding::{Encoding, EncodingRef, ENCODINGS};
 use crate::formatter::display_tree;
 use crate::sampling::stratified_slices;
-use crate::stats::Stat;
 use crate::validity::{Validity, ValidityView};
 use crate::view::ToOwnedView;
 
@@ -271,12 +270,7 @@ impl Default for CompressCtx {
 
 pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult<Option<ArrayRef>> {
     // First, we try constant compression and shortcut any sampling.
-    if !array.is_empty()
-        && array
-            .stats()
-            .get_or_compute_as::<bool>(&Stat::IsConstant)
-            .unwrap_or(false)
-    {
+    if !array.is_empty() && array.statistics().compute_is_constant().unwrap_or(false) {
         return Ok(Some(
             ConstantArray::new(scalar_at(array, 0)?, array.len()).into_array(),
         ));

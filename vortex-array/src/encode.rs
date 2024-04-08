@@ -34,7 +34,7 @@ use crate::array::{Array, ArrayRef};
 use crate::datetime::{LocalDateTime, LocalDateTimeArray};
 use crate::ptype::{NativePType, PType};
 use crate::scalar::NullScalar;
-use crate::stats::Stat;
+use crate::stats::{ArrayStatistics, Stat};
 use crate::validity::Validity;
 
 pub trait FromArrowArray<A> {
@@ -63,8 +63,8 @@ impl<O: OffsetSizeTrait> IntoArray for OffsetBuffer<O> {
     fn into_array(self) -> ArrayRef {
         let ptype = if O::IS_LARGE { PType::I64 } else { PType::I32 };
         let array = PrimitiveArray::new(ptype, self.into_inner().into_inner(), None).into_array();
-        array.stats().set(Stat::IsSorted, true.into());
-        array.stats().set(Stat::IsStrictSorted, true.into());
+        array.statistics().set(Stat::IsSorted, true.into());
+        array.statistics().set(Stat::IsStrictSorted, true.into());
         array
     }
 }
@@ -287,7 +287,7 @@ impl FromArrowArray<ArrowArrayRef> for ArrayRef {
             },
             _ => panic!(
                 "TODO(robert): Missing array encoding for dtype {}",
-                array.data_type().clone()
+                array.data_type()
             ),
         }
     }

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
@@ -10,7 +11,7 @@ use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::scalar::Scalar;
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stat, Stats, StatsSet};
+use crate::stats::{ArrayStatistics, OwnedStats, Stat, Statistics, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
 use crate::{impl_array, ArrayWalker};
@@ -32,16 +33,13 @@ impl ConstantArray {
         Scalar: From<S>,
     {
         let scalar: Scalar = scalar.into();
-        let stats = StatsSet::from(
-            [
-                (Stat::Max, scalar.clone()),
-                (Stat::Min, scalar.clone()),
-                (Stat::IsConstant, true.into()),
-                (Stat::IsSorted, true.into()),
-                (Stat::RunCount, 1.into()),
-            ]
-            .into(),
-        );
+        let stats = StatsSet::from(HashMap::from([
+            (Stat::Max, scalar.clone()),
+            (Stat::Min, scalar.clone()),
+            (Stat::IsConstant, true.into()),
+            (Stat::IsSorted, true.into()),
+            (Stat::RunCount, 1.into()),
+        ]));
         Self {
             scalar,
             length,
@@ -70,11 +68,6 @@ impl Array for ConstantArray {
     #[inline]
     fn dtype(&self) -> &DType {
         self.scalar.dtype()
-    }
-
-    #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
     }
 
     #[inline]
@@ -122,6 +115,18 @@ impl ArrayValidity for ConstantArray {
             true => !self.scalar().is_null(),
             false => true,
         }
+    }
+}
+
+impl OwnedStats for ConstantArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for ConstantArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

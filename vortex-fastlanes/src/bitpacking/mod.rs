@@ -7,7 +7,7 @@ use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
+use vortex::stats::{ArrayStatistics, OwnedStats, Stat, Statistics, StatsCompute, StatsSet};
 use vortex::validity::Validity;
 use vortex::validity::{OwnedValidity, ValidityView};
 use vortex::view::AsView;
@@ -137,11 +137,6 @@ impl Array for BitPackedArray {
     }
 
     #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &BitPackedEncoding
     }
@@ -181,8 +176,20 @@ impl ArrayDisplay for BitPackedArray {
 }
 
 impl StatsCompute for BitPackedArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
         Ok(StatsSet::default())
+    }
+}
+
+impl OwnedStats for BitPackedArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for BitPackedArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 

@@ -6,7 +6,7 @@ use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stats, StatsSet};
+use vortex::stats::{ArrayStatistics, OwnedStats, Statistics, StatsSet};
 use vortex::validity::ArrayValidity;
 use vortex::validity::Validity;
 use vortex::{impl_array, ArrayWalker};
@@ -62,10 +62,6 @@ impl Array for DictArray {
         self.values.dtype()
     }
 
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
     fn encoding(&self) -> EncodingRef {
         &DictEncoding
     }
@@ -106,6 +102,18 @@ impl ArrayDisplay for DictArray {
     fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
         f.child("values", self.values())?;
         f.child("codes", self.codes())
+    }
+}
+
+impl OwnedStats for DictArray {
+    fn stats_set(&self) -> &RwLock<StatsSet> {
+        &self.stats
+    }
+}
+
+impl ArrayStatistics for DictArray {
+    fn statistics(&self) -> &dyn Statistics {
+        self
     }
 }
 
