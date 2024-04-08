@@ -113,7 +113,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
     type Error = VortexError;
     type Item<'next> = ArrayView<'next> where Self: 'next;
 
-    fn next<'next>(&'next mut self) -> Result<Option<ArrayView<'next>>, Self::Error> {
+    fn next(&mut self) -> Result<Option<ArrayView<'_>>, Self::Error> {
         let msg = self
             .read
             .read_message::<Message>(&mut self.column_msg_buffer)?;
