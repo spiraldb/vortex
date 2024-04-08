@@ -124,10 +124,10 @@ pub fn compress_csv_to_vortex<W: Write>(
     Ok(())
 }
 
-pub fn compress_csv_to_parquet<W: Write + Send + Sync>(
+pub fn write_csv_as_parquet<W: Write + Send + Sync>(
     csv_path: PathBuf,
     format: Format,
-    write: &mut W,
+    write: W,
 ) -> VortexResult<()> {
     let csv_file = File::open(csv_path.clone()).unwrap();
 

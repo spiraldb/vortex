@@ -106,11 +106,9 @@ pub fn compress_taxi_data() -> ArrayRef {
 
     let ctx = compress_ctx();
     let schema = reader.schema();
-    let mut uncompressed_size = 0;
+    let mut uncompressed_size: usize = 0;
     let chunks = reader
         .into_iter()
-        //.skip(39)
-        //.take(1)
         .map(|batch_result| batch_result.unwrap())
         .map(|batch| batch.into_array())
         .map(|array| {
@@ -119,31 +117,9 @@ pub fn compress_taxi_data() -> ArrayRef {
         })
         .collect_vec();
 
-    let dtype = DType::from_arrow(schema.clone());
-    let compressed = ChunkedArray::new(chunks.clone(), dtype).into_array();
-
-    warn!("Compressed array {}", display_tree(compressed.as_ref()));
-
-    let mut field_bytes = vec![0; schema.fields().len()];
-    for chunk in chunks {
-        let str = chunk.as_struct();
-        for (i, field) in str.fields().iter().enumerate() {
-            field_bytes[i] += field.nbytes();
-        }
-    }
-    field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
-        println!("{},{}", schema.field(i).name(), nbytes);
-    });
-    println!(
-        "NBytes {}, Ratio {}",
-        compressed.nbytes(),
-        compressed.nbytes() as f32 / uncompressed_size as f32
-    );
-
-    compressed
+    chunks_to_array(schema, uncompressed_size, chunks)
 }
 
-//TODO(@jdcasale): refactor out repeated code
 pub fn compress_medicare_data() -> ArrayRef {
     let csv_file = File::open(medicare_data_csv()).unwrap();
     let reader = BufReader::new(csv_file.try_clone().unwrap());
@@ -158,9 +134,8 @@ pub fn compress_medicare_data() -> ArrayRef {
         .build(reader)
         .unwrap();
 
-    let dtype = DType::from_arrow(SchemaRef::new(schema.clone()));
     let ctx = compress_ctx();
-    let mut uncompressed_size = 0;
+    let mut uncompressed_size: usize = 0;
     let chunks = csv_reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
@@ -170,10 +145,14 @@ pub fn compress_medicare_data() -> ArrayRef {
             ctx.clone().compress(&array, None).unwrap()
         })
         .collect_vec();
+    chunks_to_array(SchemaRef::new(schema), uncompressed_size, chunks)
+}
 
+fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<ArrayRef>) -> ArrayRef {
+    let dtype = DType::from_arrow(schema.clone());
     let compressed = ChunkedArray::new(chunks.clone(), dtype).into_array();
 
-    println!("Compressed array {}", display_tree(compressed.as_ref()));
+    warn!("Compressed array {}", display_tree(compressed.as_ref()));
 
     let mut field_bytes = vec![0; schema.fields().len()];
     for chunk in chunks {

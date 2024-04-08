@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use bench_vortex::medicare_data::medicare_data_csv;
 use bench_vortex::reader::{
-    compress_csv_to_parquet, compress_csv_to_vortex, default_csv_format, open_vortex,
-    rewrite_parquet_as_vortex,
+    compress_csv_to_vortex, default_csv_format, open_vortex, rewrite_parquet_as_vortex,
+    write_csv_as_parquet,
 };
 use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::{data_path, setup_logger};
@@ -17,10 +17,9 @@ pub fn main() {
     setup_logger(LevelFilter::Debug);
     compress_taxi();
     compress_medicare();
-    compress_medicare_to_parquet()
+    write_medicare_as_parquet();
 }
 
-#[allow(dead_code)]
 fn compress_taxi() {
     let path: PathBuf = data_path("taxi_data.vortex");
     {
@@ -61,16 +60,10 @@ fn compress_medicare() {
     println!("Compression ratio: {}", vx_size as f32 / pq_size as f32);
 }
 
-fn compress_medicare_to_parquet() {
-    let path: PathBuf = data_path("medicare.parquet");
-    {
-        let mut write = File::create(path).unwrap();
-        let delimiter = u8::try_from('|').unwrap();
-        compress_csv_to_parquet(
-            medicare_data_csv(),
-            default_csv_format().with_delimiter(delimiter),
-            &mut write,
-        )
-        .unwrap();
-    }
+pub fn write_medicare_as_parquet() {
+    let path = data_path("medicare.parquet");
+    let delimiter = u8::try_from('|').unwrap();
+    let format = default_csv_format().with_delimiter(delimiter);
+    let file = File::create(path).unwrap();
+    write_csv_as_parquet(medicare_data_csv(), format, file).unwrap();
 }
