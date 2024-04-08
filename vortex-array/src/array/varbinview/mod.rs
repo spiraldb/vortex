@@ -141,7 +141,7 @@ impl VarBinViewArray<'_> {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, metadata, children.into(), HashMap::default())
+        Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
     }
 
     fn view_slice(&self) -> &[BinaryView] {

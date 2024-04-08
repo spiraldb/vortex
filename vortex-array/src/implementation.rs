@@ -50,15 +50,13 @@ macro_rules! impl_encoding {
                 EncodingRef,
                 VORTEX_ENCODINGS,
             };
-            use $crate::stats::Stat;
+            use $crate::stats::StatsSet;
             use std::any::Any;
-            use std::collections::HashMap;
             use std::fmt::Debug;
             use std::marker::{Send, Sync};
             use std::sync::Arc;
             use vortex_error::VortexError;
             use vortex_dtype::DType;
-            use vortex_scalar::Scalar;
 
             /// The array definition trait
             #[derive(Debug, Clone)]
@@ -89,7 +87,7 @@ macro_rules! impl_encoding {
                     dtype: DType,
                     metadata: [<$Name Metadata>],
                     children: Arc<[ArrayData]>,
-                    stats: HashMap<Stat, Scalar>,
+                    stats: StatsSet,
                 ) -> VortexResult<Self> {
                     Ok(Self { typed: TypedArray::try_from_parts(dtype, metadata, None, children, stats)? })
                 }
@@ -220,7 +218,7 @@ impl<'a, T: IntoArray<'a> + ArrayEncodingRef + ArrayStatistics + GetArrayMetadat
     fn into_array_data(self) -> ArrayData {
         let encoding = self.encoding();
         let metadata = self.metadata();
-        let stats = self.statistics().to_map();
+        let stats = self.statistics().to_set();
         let array = self.into_array();
         match array {
             Array::Data(d) => d,

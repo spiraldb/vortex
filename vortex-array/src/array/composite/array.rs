@@ -84,7 +84,7 @@ impl<'a> CompositeArray<'a> {
                 underlying_metadata: metadata,
             },
             vec![underlying.into_array_data()].into(),
-            HashMap::default(),
+            StatsSet::new(),
         )
         .unwrap()
     }

@@ -26,7 +26,7 @@ impl EncodingCompression for REEEncoding {
         let avg_run_length = array.len() as f32
             / array
                 .statistics()
-                .compute_as(Stat::RunCount)
+                .compute_run_count()
                 .unwrap_or(array.len()) as f32;
         if avg_run_length < config.ree_average_run_threshold {
             return None;

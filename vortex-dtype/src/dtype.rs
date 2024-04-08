@@ -47,7 +47,7 @@ pub type FieldNames = Vec<Arc<String>>;
 
 pub type Metadata = Vec<u8>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DType {
     Null,

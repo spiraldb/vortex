@@ -1,16 +1,18 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+
 use vortex_dtype::{Nullability, PType};
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_scalar::Scalar;
 
+use crate::{ArrayDType, ArrayFlatten, impl_encoding, IntoArrayData, OwnedArray, ToArrayData};
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
-use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
+use crate::validity::Validity::NonNullable;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
 
 mod compute;
 mod stats;
@@ -45,7 +47,7 @@ impl ChunkedArray<'_> {
         let mut children = vec![chunk_ends.into_array_data()];
         children.extend(chunks.iter().map(|a| a.to_array_data()));
 
-        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), HashMap::default())
+        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), StatsSet::new())
     }
 
     #[inline]
@@ -87,13 +89,13 @@ impl ChunkedArray<'_> {
 }
 
 impl<'a> ChunkedArray<'a> {
-    pub fn chunks(&'a self) -> impl Iterator<Item = Array<'a>> {
+    pub fn chunks(&'a self) -> impl Iterator<Item=Array<'a>> {
         (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
     }
 }
 
 impl FromIterator<OwnedArray> for OwnedChunkedArray {
-    fn from_iter<T: IntoIterator<Item = OwnedArray>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item=OwnedArray>>(iter: T) -> Self {
         let chunks: Vec<OwnedArray> = iter.into_iter().collect();
         let dtype = chunks
             .first()
@@ -105,8 +107,8 @@ impl FromIterator<OwnedArray> for OwnedChunkedArray {
 
 impl ArrayFlatten for ChunkedArray<'_> {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
+        where
+            Self: 'a,
     {
         Ok(Flattened::Chunked(self))
     }
@@ -158,10 +160,10 @@ mod test {
     use vortex_dtype::{DType, Nullability};
     use vortex_dtype::{NativePType, PType};
 
+    use crate::{Array, IntoArray, ToArray};
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
     use crate::compute::scalar_subtract::subtract_scalar;
     use crate::compute::slice::slice;
-    use crate::{Array, IntoArray, ToArray};
 
     fn chunked_array() -> OwnedChunkedArray {
         ChunkedArray::try_new(
@@ -172,7 +174,7 @@ mod test {
             ],
             DType::Primitive(PType::U64, Nullability::NonNullable),
         )
-        .unwrap()
+            .unwrap()
     }
 
     fn assert_equal_slices<T: NativePType>(arr: Array, slice: &[T]) {
