@@ -7,7 +7,6 @@ use crate::{REEArray, REEEncoding};
 
 impl ArraySerde for REEArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
-        ctx.write_usize(self.len())?;
         ctx.write_validity(self.validity())?;
         // TODO(robert): Stop writing this
         ctx.dtype(self.ends().dtype())?;
@@ -22,12 +21,11 @@ impl ArraySerde for REEArray {
 
 impl EncodingSerde for REEEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
-        let len = ctx.read_usize()?;
         let validity = ctx.read_validity()?;
         let ends_dtype = ctx.dtype()?;
         let ends = ctx.with_schema(&ends_dtype).read()?;
         let values = ctx.read()?;
-        Ok(REEArray::new(ends, values, validity, len).into_array())
+        Ok(REEArray::new(ends, values, validity).into_array())
     }
 }
 
@@ -58,22 +56,17 @@ mod test {
             vec![0u8, 9, 20, 32, 49].into_array(),
             vec![-7i64, -13, 17, 23].into_array(),
             None,
-            49,
         );
         let read_arr = roundtrip_array(&arr).unwrap();
         let read_ree = read_arr.as_ree();
 
         assert_eq!(
-            arr.ends().as_primitive().buffer().typed_data::<u8>(),
-            read_ree.ends().as_primitive().buffer().typed_data::<u8>()
+            arr.ends().as_primitive().typed_data::<u8>(),
+            read_ree.ends().as_primitive().typed_data::<u8>()
         );
         assert_eq!(
-            arr.values().as_primitive().buffer().typed_data::<i64>(),
-            read_ree
-                .values()
-                .as_primitive()
-                .buffer()
-                .typed_data::<i64>()
+            arr.values().as_primitive().typed_data::<i64>(),
+            read_ree.values().as_primitive().typed_data::<i64>()
         );
     }
 }
