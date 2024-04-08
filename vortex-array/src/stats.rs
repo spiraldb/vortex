@@ -10,7 +10,7 @@ use vortex_schema::DType;
 use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, Scalar};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Stat {
     BitWidthFreq,
     TrailingZeroFreq,

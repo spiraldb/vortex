@@ -6,6 +6,7 @@ use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::impl_encoding;
+use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -26,10 +27,7 @@ pub struct BoolArray<'a> {
     buffer: &'a Buffer,
     validity: Validity<'a>,
     length: usize,
-    // TODO(ngates): we support statistics by reference to a dyn trait.
-    //  This trait is implemented for ArrayView and ArrayData and is passed into here as part
-    //  of ArrayParts.
-    //  e.g. stats: &dyn Statistics,
+    statistics: &'a dyn Statistics,
 }
 
 impl BoolArray<'_> {
@@ -58,6 +56,7 @@ impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
                 .validity
                 .to_validity(parts.child(0, &Validity::DTYPE)),
             length: metadata.length,
+            statistics: parts.statistics(),
         })
     }
 }
@@ -107,6 +106,12 @@ impl AcceptArrayVisitor for BoolArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_buffer(self.buffer())?;
         visitor.visit_validity(self.validity())
+    }
+}
+
+impl ArrayStatistics for BoolArray<'_> {
+    fn statistics(&self) -> &dyn Statistics {
+        self.statistics
     }
 }
 

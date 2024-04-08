@@ -6,6 +6,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::encoding::EncodingRef;
+use crate::stats::{EmptyStatistics, Statistics};
 use crate::{Array, IntoArray, ToArray};
 use crate::{ArrayParts, SerdeContext};
 
@@ -168,5 +169,10 @@ impl ArrayParts for ArrayView<'_> {
 
     fn nchildren(&self) -> usize {
         self.array.children().map(|c| c.len()).unwrap_or_default()
+    }
+
+    fn statistics(&self) -> &dyn Statistics {
+        // TODO(ngates): serialize statistics into fb::Array
+        &EmptyStatistics
     }
 }

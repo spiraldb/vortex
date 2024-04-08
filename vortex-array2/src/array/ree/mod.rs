@@ -5,6 +5,7 @@ use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::impl_encoding;
+use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{Array, ArrayMetadata};
@@ -24,6 +25,7 @@ pub struct REEArray<'a> {
     values: Array<'a>,
     run_ends: Array<'a>,
     length: usize,
+    statistics: &'a dyn Statistics,
 }
 
 impl REEArray<'_> {
@@ -61,6 +63,7 @@ impl<'v> TryFromArrayParts<'v, REEMetadata> for REEArray<'v> {
                 .child(1, &metadata.ends_dtype)
                 .ok_or_else(|| vortex_err!("REEArray missing run_ends"))?,
             length: metadata.length,
+            statistics: parts.statistics(),
         })
     }
 }
@@ -91,5 +94,11 @@ impl AcceptArrayVisitor for REEArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("values", self.values())?;
         visitor.visit_child("run_ends", self.run_ends())
+    }
+}
+
+impl ArrayStatistics for REEArray<'_> {
+    fn statistics(&self) -> &dyn Statistics {
+        self.statistics
     }
 }

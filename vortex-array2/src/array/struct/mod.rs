@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FieldNames};
 
+use crate::stats::ArrayStatistics;
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ToArray, WithArray};
@@ -146,3 +147,5 @@ impl AcceptArrayVisitor for StructArray<'_> {
         Ok(())
     }
 }
+
+impl ArrayStatistics for StructArray<'_> {}

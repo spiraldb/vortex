@@ -1,11 +1,15 @@
+use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use arrow_buffer::Buffer;
+use vortex::scalar::Scalar;
+use vortex::stats::Stat;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::encoding::EncodingRef;
+use crate::stats::Statistics;
 use crate::{Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, ToArray};
 
 #[allow(dead_code)]
@@ -16,6 +20,7 @@ pub struct ArrayData {
     metadata: Arc<dyn ArrayMetadata>,
     buffers: Arc<[Buffer]>, // Should this just be an Option, not an Arc?
     children: Arc<[Option<ArrayData>]>,
+    stats_set: Arc<RwLock<HashMap<Stat, Scalar>>>,
 }
 
 impl ArrayData {
@@ -32,6 +37,7 @@ impl ArrayData {
             metadata,
             buffers,
             children,
+            stats_set: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
@@ -214,5 +220,27 @@ impl ArrayParts for ArrayData {
 
     fn nchildren(&self) -> usize {
         self.children.len()
+    }
+
+    fn statistics(&self) -> &dyn Statistics {
+        self
+    }
+}
+
+impl Statistics for ArrayData {
+    fn compute(&self, stat: &Stat) -> VortexResult<Option<Scalar>> {
+        let mut locked = self.stats_set.write().unwrap();
+        let stats = self
+            .encoding()
+            .with_data(self, |a| a.compute_statistics(stat))?;
+        for (k, v) in &stats {
+            locked.insert(*k, v.clone());
+        }
+        Ok(stats.get(stat).cloned())
+    }
+
+    fn get(&self, stat: &Stat) -> Option<Scalar> {
+        let locked = self.stats_set.read().unwrap();
+        locked.get(stat).cloned()
     }
 }
