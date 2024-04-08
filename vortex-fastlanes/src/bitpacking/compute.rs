@@ -2,6 +2,7 @@ use std::cmp::min;
 
 use fastlanez::TryBitPack;
 use itertools::Itertools;
+use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
@@ -59,15 +60,18 @@ impl TakeFn for BitPackedArray {
         let ptype = self.dtype().try_into()?;
         let taken_validity = self.validity().map(|v| v.take(indices)).transpose()?;
         if self.bit_width() == 0 {
-            if let Some(patches) = self.patches() {
+            return if let Some(patches) = self.patches() {
                 let primitive_patches = flatten_primitive(&take(patches, indices)?)?;
-                return Ok(PrimitiveArray::new(
-                    ptype,
-                    primitive_patches.buffer().clone(),
-                    taken_validity,
+                Ok(
+                    PrimitiveArray::new(ptype, primitive_patches.buffer().clone(), taken_validity)
+                        .into_array(),
                 )
-                .into_array());
-            }
+            } else {
+                Ok(
+                    ConstantArray::new(Scalar::null(&self.dtype().as_nullable()), indices.len())
+                        .into_array(),
+                )
+            };
         }
 
         let indices = flatten_primitive(indices)?;
