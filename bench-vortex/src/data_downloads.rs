@@ -73,7 +73,7 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
 
 pub fn decompress_bz2(input_path: &str, output_path: &str) -> PathBuf {
     idempotent(output_path, |path| {
-        let input_file = File::open(input_path).unwrap();
+        let input_file = File::open(data_path(input_path)).unwrap();
         let mut decoder = BzDecoder::new(input_file);
 
         let mut buffer = Vec::new();
