@@ -9,6 +9,8 @@ use crate::encoding::EncodingRef;
 use crate::{Array, IntoArray, ToArray};
 use crate::{ArrayParts, SerdeContext};
 
+/// FIXME(ngates): this format works for individual columns, but doesn't allow constructng a view
+///   over many columns.
 #[derive(Clone)]
 pub struct ArrayView<'v> {
     encoding: EncodingRef,

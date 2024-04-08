@@ -89,8 +89,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
             ctx: &self.ctx,
             dtype,
             buffers: vec![],
-            vec_buffers: vec![],
-            columns: vec![],
+            column_msg_buffer: vec![],
         }))
     }
 }
@@ -101,8 +100,7 @@ pub struct StreamArrayChunkReader<'a, R: Read> {
     ctx: &'a SerdeContext,
     dtype: DType,
     buffers: Vec<Buffer>,
-    vec_buffers: Vec<Vec<u8>>,
-    columns: Vec<ArrayView<'a>>,
+    column_msg_buffer: Vec<u8>,
 }
 
 impl<'a, R: Read> StreamArrayChunkReader<'a, R> {
@@ -112,11 +110,12 @@ impl<'a, R: Read> StreamArrayChunkReader<'a, R> {
 }
 
 #[gat]
-impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
+impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R> {
     type Error = VortexError;
     type Item<'next> = ArrayView<'next> where Self: 'next;
 
-    fn next(&mut self) -> Result<Option<ArrayView<'_>>, Self::Error> {
+    fn next<'next>(&'next mut self) -> Result<Option<ArrayView<'next>>, Self::Error> {
+        // FIXME(ngates): remove this allocation.
         let mut fb_vec: Vec<u8> = Vec::new();
         let msg = self.read.read_message::<Message>(&mut fb_vec)?;
         if msg.is_none() {
@@ -137,81 +136,62 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
                 || vortex_err!(InvalidSerde: "Expected column offsets in IPC Chunk message"),
             )
             .unwrap();
-        let mut col_messages = Vec::new();
+        assert_eq!(col_offsets.len(), 1); // self.column_msg_buffers.len());
 
+        // First, we read all the column messages into their buffers.
+        // for (col_idx, _col_offset) in col_offsets.iter().enumerate() {
+        // TODO(ngates): skip any columns not in the projection.
+
+        read_into(self.read, &mut self.column_msg_buffer)?;
+        let col_msg = root::<Message>(&self.column_msg_buffer)
+            .unwrap()
+            .header_as_chunk_column()
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Expected IPC Chunk Column message"))
+            .unwrap();
+
+        let col_array = col_msg
+            .array()
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Chunk column missing Array"))
+            .unwrap();
+
+        // Read all the column's buffers
+        // TODO(ngates): read into a single buffer, then Arc::clone and slice
+        self.buffers.clear();
         let mut offset = 0;
-        for col_offset in col_offsets {
-            // Seek to the start of the column
-            if col_offset != offset {
-                panic!("TODO")
-            }
-            let to_kill = col_offset - offset;
+        for buffer in col_msg.buffers().unwrap_or_default().iter() {
+            let to_kill = buffer.offset() - offset;
             io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
 
-            let next_buffer = Buffer::from(read_into(self.read).unwrap());
-            self.buffers.push(next_buffer);
-            let next_buffer = self.buffers.last().unwrap();
-            let col_msg = root::<Message>(next_buffer.as_slice())
-                .unwrap()
-                .header_as_chunk_column()
-                .ok_or_else(|| vortex_err!(InvalidSerde: "Expected IPC Chunk Column message"))
-                .unwrap();
-            col_messages.push(col_msg);
+            let mut bytes = vec![0u8; buffer.length() as usize];
+            self.read.read_exact(&mut bytes).unwrap();
+            self.buffers.push(Buffer::from(bytes));
 
-            let col_array = col_msg
-                .array()
-                .ok_or_else(|| vortex_err!(InvalidSerde: "Chunk column missing Array"))
-                .unwrap();
-
-            // Read all the column's buffers
-            // self.buffers.clear();
-            let mut offset = 0;
-            for buffer in col_msg.buffers().unwrap_or_default().iter() {
-                let to_kill = buffer.offset() - offset;
-                io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
-
-                let mut bytes = vec![0u8; buffer.length() as usize];
-                self.read.read_exact(&mut bytes).unwrap();
-                self.buffers.push(Buffer::from(bytes));
-
-                offset = buffer.offset() + buffer.length();
-            }
-
-            // Consume any remaining padding after the final buffer.
-            let to_kill = col_msg.buffer_size() - offset;
-            io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
+            offset = buffer.offset() + buffer.length();
         }
 
-        for col_msg in col_messages {
-            // FIXME(ngates): push this into a second loop to avoid write-after-read
-            // Construct the array view
-            let view = ArrayView::try_new(
-                self.ctx,
-                &self.dtype,
-                col_msg.array().unwrap(),
-                &self.buffers,
-            )?;
-            // Validate it
-            view.to_array().with_array(|_| Ok::<(), VortexError>(()))?;
-            self.columns.push(view);
-        }
+        // Consume any remaining padding after the final buffer.
+        let to_kill = col_msg.buffer_size() - offset;
+        io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
+        //  }
 
-        println!("COLUMNS {:?}", self.columns);
+        let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, &self.buffers)?;
 
-        Ok(None)
+        // Validate it
+        view.to_array().with_array(|_| Ok::<(), VortexError>(()))?;
+
+        Ok(Some(view))
     }
 }
 
 /// FIXME(ngates): this exists to detach the lifetimes of the object as read by read_flatbuffer.
 ///  We should be able to fix that.
-pub fn read_into<R: Read>(read: &mut R) -> VortexResult<Vec<u8>> {
+pub fn read_into<R: Read>(read: &mut R, buffer: &mut Vec<u8>) -> VortexResult<()> {
+    buffer.clear();
     let mut buffer_len: [u8; 4] = [0; 4];
     // FIXME(ngates): return optional for EOF?
     read.read_exact(&mut buffer_len)?;
     let buffer_len = u32::from_le_bytes(buffer_len) as usize;
+    read.take(buffer_len as u64).read_to_end(buffer)?;
 
-    let mut buffer = Vec::with_capacity(buffer_len);
-    read.take(buffer_len as u64).read_to_end(&mut buffer)?;
-
-    Ok(buffer)
+    Ok(())
 }
