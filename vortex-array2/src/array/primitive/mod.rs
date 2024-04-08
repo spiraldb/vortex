@@ -17,7 +17,6 @@ impl_encoding!("vortex.primitive", Primitive);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrimitiveMetadata {
-    ptype: PType,
     validity: ValidityMetadata,
 }
 
@@ -48,8 +47,9 @@ impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
         metadata: &'a PrimitiveMetadata,
     ) -> VortexResult<Self> {
         let buffer = parts.buffer(0).unwrap();
+        let ptype: PType = parts.dtype().try_into()?;
         Ok(PrimitiveArray {
-            ptype: metadata.ptype,
+            ptype,
             dtype: parts.dtype(),
             buffer,
             validity: metadata.validity.to_validity(parts.child(0, parts.dtype())),
@@ -62,7 +62,6 @@ impl PrimitiveData {
         Ok(Self::new_unchecked(
             DType::from(T::PTYPE).with_nullability(validity.nullability()),
             Arc::new(PrimitiveMetadata {
-                ptype: T::PTYPE,
                 validity: validity.to_metadata(buffer.len() / T::PTYPE.byte_width())?,
             }),
             vec![buffer.into_inner()].into(),
@@ -97,7 +96,6 @@ impl ToArrayData for PrimitiveArray<'_> {
             &PrimitiveEncoding,
             self.dtype().clone(),
             Arc::new(PrimitiveMetadata {
-                ptype: self.ptype,
                 validity: self.validity().to_metadata(self.len()).unwrap(),
             }),
             vec![self.buffer().clone()].into(),
