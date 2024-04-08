@@ -1,3 +1,4 @@
+
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -23,7 +24,7 @@ pub fn medicare_data_csv() -> PathBuf {
         fname,
         "http://www.cwi.nl/~boncz/PublicBIbenchmark/Medicare1/Medicare1_1.csv.bz2",
     );
-    decompress_bz2("Medicare1_1.csv.bz2", "Medicare1_1.csv")
+    decompress_bz2(fname, "Medicare1_1.csv")
 }
 
 pub fn medicare_data_lance() -> PathBuf {
