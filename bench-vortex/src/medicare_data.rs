@@ -35,7 +35,7 @@ pub fn medicare_data_lance() -> PathBuf {
 }
 
 pub fn medicare_data_vortex_uncompressed() -> PathBuf {
-    idempotent("taxi-uncompressed.vortex", |path| {
+    idempotent("medicare-uncompressed.vortex", |path| {
         let csv_file = File::open(medicare_data_csv()).unwrap();
         let reader = BufReader::new(csv_file.try_clone().unwrap());
 
@@ -64,7 +64,7 @@ pub fn medicare_data_vortex_uncompressed() -> PathBuf {
 }
 
 pub fn medicare_data_vortex() -> PathBuf {
-    idempotent("taxi.vortex", |path| {
+    idempotent("medicare.vortex", |path| {
         let mut write = File::create(path).unwrap();
         let delimiter = u8::try_from('|').unwrap();
         compress_csv_to_vortex(
