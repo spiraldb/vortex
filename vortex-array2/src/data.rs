@@ -152,8 +152,8 @@ impl<D: ArrayDef> TryFrom<ArrayData> for TypedArrayData<D> {
     }
 }
 
-impl ArrayParts<'_> for ArrayData {
-    fn dtype(&'_ self) -> &'_ DType {
+impl ArrayParts for ArrayData {
+    fn dtype(&self) -> &DType {
         &self.dtype
     }
 
@@ -162,11 +162,11 @@ impl ArrayParts<'_> for ArrayData {
     }
 
     fn child(&self, idx: usize, _dtype: &DType) -> Option<Array> {
-        self.child(idx).map(|a| {
-            let array = a.to_array();
-            // FIXME(ngates): can we ask an array its dtype?
-            // assert_eq!(array.dtype(), dtype);
-            array
-        })
+        // TODO(ngates): validate the DType
+        self.child(idx).map(move |a| a.to_array())
+    }
+
+    fn nchildren(&self) -> usize {
+        self.children.len()
     }
 }

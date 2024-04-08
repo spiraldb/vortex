@@ -5514,6 +5514,7 @@ dependencies = [
  "nougat",
  "streaming-iterator",
  "vortex-array",
+ "vortex-array2",
  "vortex-error",
  "vortex-flatbuffers",
  "vortex-schema",

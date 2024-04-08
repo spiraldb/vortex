@@ -4,6 +4,8 @@ use vortex::encoding::EncodingId;
 
 use crate::encoding::EncodingRef;
 
+/// TODO(ngates): I'm not too sure about this construct. Where it should live, or what scope it
+///  should have.
 #[derive(Debug)]
 pub struct SerdeContext {
     encodings: Arc<[EncodingRef]>,

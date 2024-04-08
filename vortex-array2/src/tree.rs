@@ -27,7 +27,7 @@ impl<'a, 'fmt: 'a> fmt::Display for TreeDisplayWrapper<'a> {
         let nbytes = array.with_array(|a| a.nbytes());
         let mut array_fmt = TreeFormatter::new(f, "".to_string(), nbytes);
         array_fmt
-            .visit_array("root", array)
+            .visit_child("root", array)
             .map_err(fmt::Error::custom)
     }
 }
@@ -41,7 +41,11 @@ pub struct TreeFormatter<'a, 'b: 'a> {
 /// TODO(ngates): I think we want to go back to the old explicit style. It gives arrays more
 ///  control over how their metadata etc is displayed.
 impl<'a, 'b: 'a> ArrayVisitor for TreeFormatter<'a, 'b> {
-    fn visit_array(&mut self, name: &str, array: &Array) -> VortexResult<()> {
+    fn visit_column(&mut self, name: &str, array: &Array) -> VortexResult<()> {
+        self.visit_child(name, array)
+    }
+
+    fn visit_child(&mut self, name: &str, array: &Array) -> VortexResult<()> {
         array.with_array(|a| {
             let nbytes = a.nbytes();
             writeln!(

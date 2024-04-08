@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 pub mod array;
+mod batch;
 pub mod compute;
 mod context;
 mod data;
@@ -73,14 +74,15 @@ pub trait WithArray {
     fn with_array<R, F: FnMut(&dyn ArrayTrait) -> R>(&self, f: F) -> R;
 }
 
-pub trait ArrayParts<'a> {
-    fn dtype(&'a self) -> &'a DType;
-    fn buffer(&'a self, idx: usize) -> Option<&'a Buffer>;
-    fn child(&'a self, idx: usize, dtype: &'a DType) -> Option<Array<'a>>;
+pub trait ArrayParts {
+    fn dtype(&self) -> &DType;
+    fn buffer(&self, idx: usize) -> Option<&Buffer>;
+    fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array>;
+    fn nchildren(&self) -> usize;
 }
 
 pub trait TryFromArrayParts<'v, M: ArrayMetadata>: Sized + 'v {
-    fn try_from_parts(parts: &'v dyn ArrayParts<'v>, metadata: &'v M) -> VortexResult<Self>;
+    fn try_from_parts(parts: &'v dyn ArrayParts, metadata: &'v M) -> VortexResult<Self>;
 }
 
 /// Collects together the behaviour of an array.
@@ -103,7 +105,11 @@ pub trait ArrayTrait: ArrayCompute + ArrayValidity + AcceptArrayVisitor + ToArra
 
 struct NBytesVisitor(usize);
 impl ArrayVisitor for NBytesVisitor {
-    fn visit_array(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
+    fn visit_column(&mut self, name: &str, array: &Array) -> VortexResult<()> {
+        self.visit_child(name, array)
+    }
+
+    fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
         self.0 += array.with_array(|a| a.nbytes());
         Ok(())
     }

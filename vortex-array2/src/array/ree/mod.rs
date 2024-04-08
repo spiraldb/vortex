@@ -55,10 +55,7 @@ impl REEData {
 }
 
 impl<'v> TryFromArrayParts<'v, REEMetadata> for REEArray<'v> {
-    fn try_from_parts(
-        parts: &'v dyn ArrayParts<'v>,
-        metadata: &'v REEMetadata,
-    ) -> VortexResult<Self> {
+    fn try_from_parts(parts: &'v dyn ArrayParts, metadata: &'v REEMetadata) -> VortexResult<Self> {
         Ok(REEArray {
             dtype: parts.dtype(),
             values: parts
@@ -96,7 +93,7 @@ impl ToArrayData for REEArray<'_> {
 
 impl AcceptArrayVisitor for REEArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_array("values", self.values())?;
-        visitor.visit_array("run_ends", self.run_ends())
+        visitor.visit_child("values", self.values())?;
+        visitor.visit_child("run_ends", self.run_ends())
     }
 }

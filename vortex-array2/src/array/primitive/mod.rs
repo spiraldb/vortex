@@ -44,7 +44,7 @@ impl PrimitiveArray<'_> {
 
 impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
     fn try_from_parts(
-        parts: &'a dyn ArrayParts<'a>,
+        parts: &'a dyn ArrayParts,
         metadata: &'a PrimitiveMetadata,
     ) -> VortexResult<Self> {
         let buffer = parts.buffer(0).unwrap();

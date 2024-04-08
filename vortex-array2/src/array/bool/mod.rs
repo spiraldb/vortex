@@ -52,10 +52,7 @@ impl BoolArray<'_> {
 }
 
 impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
-    fn try_from_parts(
-        parts: &'v dyn ArrayParts<'v>,
-        metadata: &'v BoolMetadata,
-    ) -> VortexResult<Self> {
+    fn try_from_parts(parts: &'v dyn ArrayParts, metadata: &'v BoolMetadata) -> VortexResult<Self> {
         Ok(BoolArray {
             dtype: parts.dtype(),
             buffer: parts

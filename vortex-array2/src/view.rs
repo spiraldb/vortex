@@ -22,7 +22,7 @@ impl<'a> Debug for ArrayView<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ArrayView")
             .field("encoding", &self.encoding)
-            .field("dtype", &self.dtype)
+            .field("dtype", self.dtype)
             // .field("array", &self.array)
             .field("buffers", &self.buffers)
             .field("ctx", &self.ctx)
@@ -75,10 +75,10 @@ impl<'v> ArrayView<'v> {
     pub fn metadata(&self) -> Option<&'v [u8]> {
         self.array.metadata().map(|m| m.bytes())
     }
-
-    pub fn nchildren(&self) -> usize {
-        self.array.children().map(|c| c.len()).unwrap_or_default()
-    }
+    //
+    // pub fn nchildren(&self) -> usize {
+    //     self.array.children().map(|c| c.len()).unwrap_or_default()
+    // }
 
     pub fn child(&self, idx: usize, dtype: &'v DType) -> Option<ArrayView<'v>> {
         let child = self.array_child(idx)?;
@@ -146,16 +146,20 @@ impl<'v> IntoArray<'v> for ArrayView<'v> {
     }
 }
 
-impl<'v> ArrayParts<'v> for ArrayView<'v> {
-    fn dtype(&'v self) -> &'v DType {
+impl ArrayParts for ArrayView<'_> {
+    fn dtype(&self) -> &DType {
         self.dtype
     }
 
-    fn buffer(&'v self, idx: usize) -> Option<&'v Buffer> {
+    fn buffer(&self, idx: usize) -> Option<&Buffer> {
         self.buffers().get(idx)
     }
 
-    fn child(&'v self, idx: usize, dtype: &'v DType) -> Option<Array<'v>> {
+    fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array> {
         self.child(idx, dtype).map(|a| a.into_array())
+    }
+
+    fn nchildren(&self) -> usize {
+        self.array.children().map(|c| c.len()).unwrap_or_default()
     }
 }
