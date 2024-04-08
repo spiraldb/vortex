@@ -2,6 +2,7 @@ use std::cmp::min;
 
 use fastlanez::TryBitPack;
 use itertools::Itertools;
+use vortex::array::constant::ConstantArray;
 use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
@@ -56,9 +57,24 @@ impl ScalarAtFn for BitPackedArray {
 
 impl TakeFn for BitPackedArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        let indices = flatten_primitive(indices)?;
         let ptype = self.dtype().try_into()?;
-        let taken_validity = self.validity().map(|v| v.take(&indices)).transpose()?;
+        let taken_validity = self.validity().map(|v| v.take(indices)).transpose()?;
+        if self.bit_width() == 0 {
+            return if let Some(patches) = self.patches() {
+                let primitive_patches = flatten_primitive(&take(patches, indices)?)?;
+                Ok(
+                    PrimitiveArray::new(ptype, primitive_patches.buffer().clone(), taken_validity)
+                        .into_array(),
+                )
+            } else {
+                Ok(
+                    ConstantArray::new(Scalar::null(&self.dtype().as_nullable()), indices.len())
+                        .into_array(),
+                )
+            };
+        }
+
+        let indices = flatten_primitive(indices)?;
         let taken = match_integers_by_width!(ptype, |$T| {
             PrimitiveArray::from_nullable(take_primitive::<$T>(self, &indices)?, taken_validity)
         });
@@ -89,7 +105,7 @@ fn take_primitive<T: NativePType + TryBitPack>(
         .patches()
         .map(|p| {
             p.maybe_sparse()
-                .ok_or(vortex_err!("Only sparse patches are currently supported!"))
+                .ok_or_else(|| vortex_err!("Only sparse patches are currently supported!"))
         })
         .transpose()?;
 
@@ -130,7 +146,7 @@ fn take_primitive<T: NativePType + TryBitPack>(
                     patches.slice(chunk * 1024, min((chunk + 1) * 1024, patches.len()))?;
                 let patches_slice = patches_slice
                     .maybe_sparse()
-                    .ok_or(vortex_err!("Only sparse patches are currently supported!"))?;
+                    .ok_or_else(|| vortex_err!("Only sparse patches are currently supported!"))?;
                 let offsets = PrimitiveArray::from(offsets);
                 do_patch_for_take_primitive(patches_slice, &offsets, &mut output)?;
             }
@@ -154,10 +170,10 @@ fn do_patch_for_take_primitive<T: NativePType + TryBitPack>(
     let taken_patches = take(patches, indices)?;
     let taken_patches = taken_patches
         .maybe_sparse()
-        .ok_or(vortex_err!("Only sparse patches are currently supported!"))?;
+        .ok_or_else(|| vortex_err!("Only sparse patches are currently supported!"))?;
 
     let base_index = output.len() - indices.len();
-    let output_patches = flatten_primitive(taken_patches.values())?;
+    let output_patches = flatten_primitive(taken_patches.values())?.reinterpret_cast(T::PTYPE);
     taken_patches
         .resolved_indices()
         .iter()
