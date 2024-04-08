@@ -30,7 +30,6 @@ pub fn medicare_data_csv() -> PathBuf {
     )
 }
 
-// TODO(@jdcasale): figure out how to read csv into lance
 pub fn medicare_data_lance() -> PathBuf {
     let taxi_data = File::open(medicare_data_parquet()).unwrap();
     idempotent("taxi.lance", |path| {
