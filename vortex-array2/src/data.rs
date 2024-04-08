@@ -100,6 +100,7 @@ impl<'a> Iterator for ArrayDataIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.stack.pop()?;
+        // FIXME(ngates): This is a bit of a hack. We should probably have a method on
         for child in next.children.as_ref() {
             if let Some(c) = child {
                 self.stack.push(c);

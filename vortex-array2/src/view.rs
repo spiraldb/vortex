@@ -9,8 +9,6 @@ use crate::encoding::EncodingRef;
 use crate::{Array, IntoArray, ToArray};
 use crate::{ArrayParts, SerdeContext};
 
-/// FIXME(ngates): this format works for individual columns, but doesn't allow constructng a view
-///   over many columns.
 #[derive(Clone)]
 pub struct ArrayView<'v> {
     encoding: EncodingRef,
@@ -18,6 +16,9 @@ pub struct ArrayView<'v> {
     array: fb::Array<'v>,
     buffers: &'v [Buffer],
     ctx: &'v SerdeContext,
+    // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
+    //  metadata, but only the buffers from the selected columns. Therefore we need to know
+    //  which fb:Array children to skip when calculating how to slice into buffers.
 }
 
 impl<'a> Debug for ArrayView<'a> {
