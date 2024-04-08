@@ -32,8 +32,9 @@ pub fn taxi_data_vortex_uncompressed() -> PathBuf {
 
 pub fn taxi_data_vortex() -> PathBuf {
     idempotent("taxi.vortex", |output_fname| {
-        let mut output_file = File::open(output_fname)?;
-        rewrite_parquet_as_vortex(taxi_data_parquet(), &mut output_file)
+        let mut output_file = File::create(output_fname)?;
+        rewrite_parquet_as_vortex(taxi_data_parquet(), &mut output_file)?;
+        Ok::<PathBuf, VortexError>(output_fname.to_path_buf())
     })
     .unwrap()
 }

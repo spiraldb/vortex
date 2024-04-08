@@ -50,13 +50,13 @@ pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
 pub fn rewrite_parquet_as_vortex<W: Write>(
     parquet_path: PathBuf,
     write: &mut W,
-) -> VortexResult<PathBuf> {
+) -> VortexResult<()> {
     let (dtype, chunked) = compress_parquet_to_vortex(parquet_path.as_path())?;
 
     let mut write_ctx = WriteCtx::new(write);
     write_ctx.dtype(&dtype).unwrap();
     write_ctx.write(&chunked).unwrap();
-    Ok(parquet_path)
+    Ok(())
 }
 
 fn compress_parquet_to_vortex(parquet_path: &Path) -> Result<(DType, ChunkedArray), VortexError> {
@@ -129,14 +129,15 @@ pub fn write_csv_as_parquet<W: Write + Send + Sync>(
     format: Format,
     write: W,
 ) -> VortexResult<()> {
-    let csv_file = File::open(csv_path.clone()).unwrap();
+    let file_handle_for_schema_inference = File::open(csv_path.clone()).unwrap();
 
     // Infer the schema of the CSV file
-    let schema_inference_reader = BufReader::new(csv_file.try_clone().unwrap());
+    let schema_inference_reader =
+        BufReader::new(file_handle_for_schema_inference.try_clone().unwrap());
     let (schema, _) = format.infer_schema(schema_inference_reader, Some(CSV_SCHEMA_SAMPLE_ROWS))?;
+    let file_handle_for_read = File::open(csv_path.clone()).unwrap();
 
-    let file_reader = BufReader::new(csv_file.try_clone().unwrap());
-
+    let file_reader = BufReader::new(file_handle_for_read.try_clone().unwrap());
     let csv_reader = csv::ReaderBuilder::new(SchemaRef::new(schema.clone()))
         .with_format(format)
         .with_batch_size(BATCH_SIZE)

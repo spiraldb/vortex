@@ -47,25 +47,6 @@ pub fn parquet_to_lance(lance_fname: &Path, read: File) -> PathBuf {
     PathBuf::from(lance_fname)
 }
 
-#[allow(dead_code)]
-pub fn csv_to_lance(lance_fname: &Path, read: File) -> PathBuf {
-    let write_params = WriteParams::default();
-    let reader = LanceParquetRecordBatchReaderBuilder::try_new(read)
-        .unwrap()
-        .build()
-        .unwrap();
-
-    Runtime::new()
-        .unwrap()
-        .block_on(Dataset::write(
-            reader,
-            lance_fname.to_str().unwrap(),
-            Some(write_params),
-        ))
-        .unwrap();
-    PathBuf::from(lance_fname)
-}
-
 pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> PathBuf {
     idempotent(fname_out, |path| {
         let taxi_pq = File::open(downloaded_data).unwrap();
