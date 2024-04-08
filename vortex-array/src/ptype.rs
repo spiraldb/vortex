@@ -11,6 +11,7 @@ use vortex_schema::{DType, FloatWidth, IntWidth};
 
 use crate::scalar::{PScalar, Scalar};
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub enum PType {
     U8,

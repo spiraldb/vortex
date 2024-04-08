@@ -4,6 +4,7 @@ pub use dtype::*;
 
 mod deserialize;
 mod dtype;
+mod serde;
 mod serialize;
 
 pub use deserialize::*;

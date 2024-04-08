@@ -1,7 +1,7 @@
 use crate::encoding::EncodingId;
 use crate::encoding::{ArrayEncoding, EncodingRef};
-use crate::ArrayTrait;
-use crate::{ArrayMetadata, TryFromArrayParts, TryParseArrayMetadata};
+use crate::{ArrayMetadata, TryFromArrayParts};
+use crate::{ArrayTrait, TryDeserializeArrayMetadata, TrySerializeArrayMetadata};
 
 /// Trait the defines the set of types relating to an array.
 /// Because it has associated types it can't be used as a trait object.
@@ -10,7 +10,9 @@ pub trait ArrayDef {
     const ENCODING: EncodingRef;
 
     type Array<'a>: ArrayTrait + TryFromArrayParts<'a, Self::Metadata> + 'a;
-    type Metadata: ArrayMetadata + TryParseArrayMetadata;
+    type Metadata: ArrayMetadata
+        + TrySerializeArrayMetadata
+        + for<'a> TryDeserializeArrayMetadata<'a>;
     type Encoding: ArrayEncoding;
 }
 
@@ -20,8 +22,11 @@ macro_rules! impl_encoding {
         use paste::paste;
 
         paste! {
-            use $crate::{ArrayDef, ArrayParts, ArrayTrait, TryFromArrayParts, TryParseArrayMetadata};
-            use $crate::encoding::{ArrayEncoding, EncodingId, EncodingRef};
+            use $crate::{
+                ArrayDef, ArrayParts, ArrayTrait, TryFromArrayParts,
+                TryDeserializeArrayMetadata,
+            };
+            use $crate::encoding::{ArrayEncoding, EncodingId, EncodingRef, VORTEX_ENCODINGS};
             use vortex_error::vortex_err;
             use std::any::Any;
             use std::fmt::Debug;
@@ -43,6 +48,9 @@ macro_rules! impl_encoding {
 
             /// The array encoding
             pub struct [<$Name Encoding>];
+            #[$crate::linkme::distributed_slice(VORTEX_ENCODINGS)]
+            #[allow(non_upper_case_globals)]
+            static [<ENCODINGS_ $Name>]: EncodingRef = &[<$Name Encoding>];
             impl ArrayEncoding for [<$Name Encoding>] {
                 fn id(&self) -> EncodingId {
                     [<$Name Def>]::ID
@@ -54,7 +62,7 @@ macro_rules! impl_encoding {
                     f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
                 ) -> VortexResult<()> {
                     // Convert ArrayView -> PrimitiveArray, then call compute.
-                    let metadata = [<$Name Metadata>]::try_parse_metadata(view.metadata())?;
+                    let metadata = [<$Name Metadata>]::try_deserialize_metadata(view.metadata())?;
                     let array = [<$Name Array>]::try_from_parts(view as &dyn ArrayParts, &metadata)?;
                     f(&array)
                 }
@@ -83,27 +91,7 @@ macro_rules! impl_encoding {
                 fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
                     self
                 }
-
-                fn to_arc(&self) -> Arc<dyn ArrayMetadata> {
-                    Arc::new(self.clone())
-                }
-
-                fn into_arc(self) -> Arc<dyn ArrayMetadata> {
-                    Arc::new(self)
-                }
             }
-
-            // /// Implement AsRef for both the data and view types
-            // impl<'a> AsRef<[<$Name Array>]<'a>> for [<$Name Data>] {
-            //     fn as_ref(&self) -> &[<$Name Array>]<'a> {
-            //         self
-            //     }
-            // }
-            // impl<'a> AsRef<[<$Name Array>]<'a>> for [<$Name View>]<'a> {
-            //     fn as_ref(&self) -> &[<$Name Array>]<'a> {
-            //         self
-            //     }
-            // }
         }
     };
 }

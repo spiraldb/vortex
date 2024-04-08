@@ -6,6 +6,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::encoding::EncodingRef;
+use crate::stats::{EmptyStatistics, Statistics};
 use crate::{Array, IntoArray, ToArray};
 use crate::{ArrayParts, SerdeContext};
 
@@ -16,13 +17,16 @@ pub struct ArrayView<'v> {
     array: fb::Array<'v>,
     buffers: &'v [Buffer],
     ctx: &'v SerdeContext,
+    // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
+    //  metadata, but only the buffers from the selected columns. Therefore we need to know
+    //  which fb:Array children to skip when calculating how to slice into buffers.
 }
 
 impl<'a> Debug for ArrayView<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ArrayView")
             .field("encoding", &self.encoding)
-            .field("dtype", &self.dtype)
+            .field("dtype", self.dtype)
             // .field("array", &self.array)
             .field("buffers", &self.buffers)
             .field("ctx", &self.ctx)
@@ -76,10 +80,6 @@ impl<'v> ArrayView<'v> {
         self.array.metadata().map(|m| m.bytes())
     }
 
-    pub fn nchildren(&self) -> usize {
-        self.array.children().map(|c| c.len()).unwrap_or_default()
-    }
-
     pub fn child(&self, idx: usize, dtype: &'v DType) -> Option<ArrayView<'v>> {
         let child = self.array_child(idx)?;
 
@@ -90,7 +90,12 @@ impl<'v> ArrayView<'v> {
             .children()?
             .iter()
             .take(idx)
-            .map(|child| Self::cumulative_nbuffers(child))
+            .map(|child| {
+                child
+                    .child()
+                    .map(|c| Self::cumulative_nbuffers(c))
+                    .unwrap_or_default()
+            })
             .sum();
         let buffer_count = Self::cumulative_nbuffers(child);
 
@@ -108,7 +113,7 @@ impl<'v> ArrayView<'v> {
     fn array_child(&self, idx: usize) -> Option<fb::Array<'v>> {
         let children = self.array.children()?;
         if idx < children.len() {
-            Some(children.get(idx))
+            children.get(idx).child()
         } else {
             None
         }
@@ -123,14 +128,17 @@ impl<'v> ArrayView<'v> {
     fn cumulative_nbuffers(array: fb::Array) -> usize {
         let mut nbuffers = array.nbuffers() as usize;
         for child in array.children().unwrap_or_default() {
-            nbuffers += Self::cumulative_nbuffers(child);
+            nbuffers += child
+                .child()
+                .map(|c| Self::cumulative_nbuffers(c))
+                .unwrap_or_default();
         }
         nbuffers
     }
 
     pub fn buffers(&self) -> &'v [Buffer] {
         // This is only true for the immediate current node?
-        &self.buffers[0..self.nbuffers()]
+        self.buffers[0..self.nbuffers()].as_ref()
     }
 }
 
@@ -146,16 +154,25 @@ impl<'v> IntoArray<'v> for ArrayView<'v> {
     }
 }
 
-impl<'v> ArrayParts<'v> for ArrayView<'v> {
-    fn dtype(&'v self) -> &'v DType {
+impl ArrayParts for ArrayView<'_> {
+    fn dtype(&self) -> &DType {
         self.dtype
     }
 
-    fn buffer(&'v self, idx: usize) -> Option<&'v Buffer> {
+    fn buffer(&self, idx: usize) -> Option<&Buffer> {
         self.buffers().get(idx)
     }
 
-    fn child(&'v self, idx: usize, dtype: &'v DType) -> Option<Array<'v>> {
+    fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array> {
         self.child(idx, dtype).map(|a| a.into_array())
+    }
+
+    fn nchildren(&self) -> usize {
+        self.array.children().map(|c| c.len()).unwrap_or_default()
+    }
+
+    fn statistics(&self) -> &dyn Statistics {
+        // TODO(ngates): serialize statistics into fb::Array
+        &EmptyStatistics
     }
 }

@@ -2,8 +2,10 @@ use std::sync::Arc;
 
 use vortex::encoding::EncodingId;
 
-use crate::encoding::EncodingRef;
+use crate::encoding::{EncodingRef, VORTEX_ENCODINGS};
 
+/// TODO(ngates): I'm not too sure about this construct. Where it should live, or what scope it
+///  should have.
 #[derive(Debug)]
 pub struct SerdeContext {
     encodings: Arc<[EncodingRef]>,
@@ -33,7 +35,7 @@ impl SerdeContext {
 impl Default for SerdeContext {
     fn default() -> Self {
         Self {
-            encodings: vec![].into(), // ENCODINGS.iter().cloned().collect_vec().into(),
+            encodings: VORTEX_ENCODINGS.iter().cloned().collect::<Vec<_>>().into(),
         }
     }
 }

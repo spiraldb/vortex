@@ -1,35 +1,32 @@
 mod compute;
 
-use arrow_buffer::Buffer;
+use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
+use serde::{Deserialize, Serialize};
 use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::impl_encoding;
+use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::{ArrayValidity, Validity, ValidityMetadata};
+use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
 use crate::{ArrayData, TypedArrayData};
 use crate::{ArrayView, ToArrayData};
 
 impl_encoding!("vortex.primitive", Primitive);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrimitiveMetadata {
-    ptype: PType,
     validity: ValidityMetadata,
-}
-
-impl TryParseArrayMetadata for PrimitiveMetadata {
-    fn try_parse_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
-        todo!()
-    }
 }
 
 pub struct PrimitiveArray<'a> {
     ptype: PType,
     dtype: &'a DType,
     buffer: &'a Buffer,
-    validity: Option<Validity<'a>>,
+    validity: Validity<'a>,
+    statistics: &'a dyn Statistics,
 }
 
 impl PrimitiveArray<'_> {
@@ -37,8 +34,8 @@ impl PrimitiveArray<'_> {
         self.buffer
     }
 
-    pub fn validity(&self) -> Option<&Validity> {
-        self.validity.as_ref()
+    pub fn validity(&self) -> &Validity {
+        &self.validity
     }
 
     pub fn ptype(&self) -> PType {
@@ -48,37 +45,35 @@ impl PrimitiveArray<'_> {
 
 impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
     fn try_from_parts(
-        parts: &'a dyn ArrayParts<'a>,
+        parts: &'a dyn ArrayParts,
         metadata: &'a PrimitiveMetadata,
     ) -> VortexResult<Self> {
         let buffer = parts.buffer(0).unwrap();
-        let length = buffer.len() / metadata.ptype.byte_width();
+        let ptype: PType = parts.dtype().try_into()?;
         Ok(PrimitiveArray {
-            ptype: metadata.ptype,
+            ptype,
             dtype: parts.dtype(),
             buffer,
-            validity: metadata
-                .validity
-                .to_validity(length, parts.child(0, parts.dtype())),
+            validity: metadata.validity.to_validity(parts.child(0, parts.dtype())),
+            statistics: parts.statistics(),
         })
     }
 }
 
 impl PrimitiveData {
-    pub fn from_vec<T: NativePType>(values: Vec<T>) -> Self {
-        ArrayData::try_new(
-            &PrimitiveEncoding,
-            DType::from(T::PTYPE),
+    fn try_new<T: NativePType>(buffer: ScalarBuffer<T>, validity: Validity) -> VortexResult<Self> {
+        Ok(Self::new_unchecked(
+            DType::from(T::PTYPE).with_nullability(validity.nullability()),
             Arc::new(PrimitiveMetadata {
-                ptype: T::PTYPE,
-                validity: ValidityMetadata::NonNullable,
+                validity: validity.to_metadata(buffer.len() / T::PTYPE.byte_width())?,
             }),
-            vec![Buffer::from_vec(values)].into(),
-            vec![].into(),
-        )
-        .unwrap()
-        .try_into()
-        .unwrap()
+            vec![buffer.into_inner()].into(),
+            vec![validity.into_array_data()].into(),
+        ))
+    }
+
+    pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>) -> Self {
+        Self::try_new(ScalarBuffer::from(values), Validity::NonNullable).unwrap()
     }
 }
 
@@ -94,12 +89,34 @@ impl ArrayTrait for PrimitiveArray<'_> {
 
 impl ArrayValidity for PrimitiveArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
-        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
+        self.validity().is_valid(index)
     }
 }
 
 impl ToArrayData for PrimitiveArray<'_> {
     fn to_array_data(&self) -> ArrayData {
-        todo!()
+        ArrayData::try_new(
+            &PrimitiveEncoding,
+            self.dtype().clone(),
+            Arc::new(PrimitiveMetadata {
+                validity: self.validity().to_metadata(self.len()).unwrap(),
+            }),
+            vec![self.buffer().clone()].into(),
+            vec![].into(),
+        )
+        .unwrap()
+    }
+}
+
+impl AcceptArrayVisitor for PrimitiveArray<'_> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_buffer(self.buffer())?;
+        visitor.visit_validity(self.validity())
+    }
+}
+
+impl ArrayStatistics for PrimitiveArray<'_> {
+    fn statistics(&self) -> &dyn Statistics {
+        self.statistics
     }
 }

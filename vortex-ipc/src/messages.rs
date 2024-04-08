@@ -1,9 +1,9 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex::encoding::find_encoding;
 use vortex::flatbuffers::array as fba;
-use vortex::serde::context::SerdeContext;
-use vortex::serde::data::ColumnData;
+use vortex::flatbuffers::array::{ArrayChild, ArrayChildArgs};
+use vortex_array2::encoding::find_encoding;
+use vortex_array2::{ArrayData, SerdeContext};
 use vortex_error::{vortex_err, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 use vortex_schema::DType;
@@ -16,14 +16,12 @@ pub(crate) enum IPCMessage<'a> {
     Context(IPCContext<'a>),
     Schema(IPCSchema<'a>),
     Chunk(IPCChunk<'a>),
-    ChunkColumn(IPCChunkColumn<'a>),
 }
 
 pub(crate) struct IPCContext<'a>(pub &'a SerdeContext);
 pub(crate) struct IPCSchema<'a>(pub &'a DType);
-pub(crate) struct IPCChunk<'a>(pub &'a [u64]);
-pub(crate) struct IPCChunkColumn<'a>(pub &'a SerdeContext, pub &'a ColumnData);
-pub(crate) struct IPCArray<'a>(pub &'a SerdeContext, pub &'a ColumnData);
+pub(crate) struct IPCChunk<'a>(pub &'a SerdeContext, pub &'a ArrayData);
+pub(crate) struct IPCArray<'a>(pub &'a SerdeContext, pub &'a ArrayData);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
 impl WriteFlatBuffer for IPCMessage<'_> {
@@ -37,7 +35,6 @@ impl WriteFlatBuffer for IPCMessage<'_> {
             Self::Context(f) => f.write_flatbuffer(fbb).as_union_value(),
             Self::Schema(f) => f.write_flatbuffer(fbb).as_union_value(),
             Self::Chunk(f) => f.write_flatbuffer(fbb).as_union_value(),
-            Self::ChunkColumn(f) => f.write_flatbuffer(fbb).as_union_value(),
         };
 
         let mut msg = fb::MessageBuilder::new(fbb);
@@ -46,7 +43,6 @@ impl WriteFlatBuffer for IPCMessage<'_> {
             Self::Context(_) => fb::MessageHeader::Context,
             Self::Schema(_) => fb::MessageHeader::Schema,
             Self::Chunk(_) => fb::MessageHeader::Chunk,
-            Self::ChunkColumn(_) => fb::MessageHeader::ChunkColumn,
         });
         msg.add_header(header);
         msg.finish()
@@ -122,23 +118,6 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
-        let offsets = fbb.create_vector_from_iter(self.0.iter().copied());
-        fb::Chunk::create(
-            fbb,
-            &fb::ChunkArgs {
-                column_offsets: Some(offsets),
-            },
-        )
-    }
-}
-
-impl<'a> WriteFlatBuffer for IPCChunkColumn<'a> {
-    type Target<'t> = fb::ChunkColumn<'t>;
-
-    fn write_flatbuffer<'fb>(
-        &self,
-        fbb: &mut FlatBufferBuilder<'fb>,
-    ) -> WIPOffset<Self::Target<'fb>> {
         let col_data = self.1;
         let array = Some(IPCArray(self.0, col_data).write_flatbuffer(fbb));
 
@@ -158,9 +137,9 @@ impl<'a> WriteFlatBuffer for IPCChunkColumn<'a> {
         }
         let buffers = Some(fbb.create_vector(&buffers));
 
-        fb::ChunkColumn::create(
+        fb::Chunk::create(
             fbb,
-            &fb::ChunkColumnArgs {
+            &fb::ChunkArgs {
                 array,
                 buffers,
                 buffer_size: offset as u64,
@@ -176,22 +155,34 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
+        let ctx = self.0;
         let column_data = self.1;
 
-        let encoding = self
-            .0
-            .encoding_idx(column_data.encoding())
+        let encoding = ctx
+            .encoding_idx(column_data.encoding().id())
             // TODO(ngates): return result from this writer?
             .unwrap_or_else(|| panic!("Encoding not found: {:?}", column_data.encoding()));
 
-        let metadata = column_data
-            .metadata()
-            .map(|m| fbb.create_vector(m.as_slice()));
+        let metadata = Some(
+            fbb.create_vector(
+                column_data
+                    .metadata()
+                    .try_serialize_metadata()
+                    // TODO(ngates): should we serialize externally to here?
+                    .unwrap()
+                    .as_ref(),
+            ),
+        );
 
         let children = column_data
             .children()
             .iter()
-            .map(|child| IPCArray(self.0, child).write_flatbuffer(fbb))
+            .map(|child| {
+                let child = child
+                    .as_ref()
+                    .map(|c| IPCArray(self.0, c).write_flatbuffer(fbb));
+                ArrayChild::create(fbb, &ArrayChildArgs { child })
+            })
             .collect_vec();
         let children = Some(fbb.create_vector(&children));
 

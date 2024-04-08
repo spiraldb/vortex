@@ -10,7 +10,7 @@ use vortex_schema::DType;
 use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, Scalar};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Stat {
     BitWidthFreq,
     TrailingZeroFreq,
@@ -146,7 +146,7 @@ impl StatsSet {
     }
 
     fn merge_scalar_stat(&mut self, other: &Self, stat: &Stat) {
-        match self.0.entry(stat.clone()) {
+        match self.0.entry(*stat) {
             Entry::Occupied(mut e) => {
                 if let Some(other_value) = other.get_as::<usize>(stat).unwrap() {
                     let self_value: usize = e.get().try_into().unwrap();
@@ -228,7 +228,7 @@ impl<'a> Stats<'a> {
     pub fn set_many(&self, other: &Stats, stats: Vec<&Stat>) {
         stats.into_iter().for_each(|stat| {
             if let Some(v) = other.get(stat) {
-                self.cache.write().unwrap().set(stat.clone(), v)
+                self.cache.write().unwrap().set(*stat, v)
             }
         });
     }

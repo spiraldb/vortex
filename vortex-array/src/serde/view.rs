@@ -101,7 +101,12 @@ impl<'a> ArrayView<'a> {
             .children()?
             .iter()
             .take(idx)
-            .map(|child| Self::cumulative_nbuffers(child))
+            .map(|child| {
+                child
+                    .child()
+                    .map(|c| Self::cumulative_nbuffers(c))
+                    .unwrap_or_default()
+            })
             .sum();
         let buffer_count = Self::cumulative_nbuffers(child);
 
@@ -119,7 +124,7 @@ impl<'a> ArrayView<'a> {
     fn array_child(&self, idx: usize) -> Option<fb::Array<'a>> {
         let children = self.array.children()?;
         if idx < children.len() {
-            Some(children.get(idx))
+            children.get(idx).child()
         } else {
             None
         }
@@ -134,7 +139,10 @@ impl<'a> ArrayView<'a> {
     fn cumulative_nbuffers(array: fb::Array) -> usize {
         let mut nbuffers = array.nbuffers() as usize;
         for child in array.children().unwrap_or_default() {
-            nbuffers += Self::cumulative_nbuffers(child);
+            nbuffers += child
+                .child()
+                .map(|c| Self::cumulative_nbuffers(c))
+                .unwrap_or_default();
         }
         nbuffers
     }

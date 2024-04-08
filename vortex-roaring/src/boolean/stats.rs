@@ -27,7 +27,7 @@ impl StatsCompute for RoaringBoolArray {
             Stat::NullCount => Some(0.into()),
             _ => None,
         } {
-            Ok(StatsSet::of(stat.clone(), value))
+            Ok(StatsSet::of(*stat, value))
         } else {
             Ok(StatsSet::default())
         }

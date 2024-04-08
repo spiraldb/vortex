@@ -20,6 +20,7 @@ arrow-schema = { workspace = true }
 flatbuffers = { workspace = true }
 itertools = { workspace = true }
 linkme = { workspace = true }
+serde = { workspace = true, optional = true }
 thiserror = { workspace = true }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }

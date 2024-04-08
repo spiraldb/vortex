@@ -2,11 +2,9 @@ use std::io;
 use std::io::{BufReader, Read};
 
 use arrow_buffer::Buffer;
-use flatbuffers::root;
 use nougat::gat;
 use vortex::array::composite::COMPOSITE_EXTENSIONS;
-use vortex::serde::context::SerdeContext;
-use vortex::serde::ArrayView;
+use vortex_array2::{ArrayView, SerdeContext, ToArray, WithArray};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferReader, ReadFlatBuffer};
 use vortex_schema::{DType, DTypeSerdeContext};
@@ -84,12 +82,13 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
         )
         .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
+        // Figure out how many columns we have and therefore how many buffers there?
         Ok(Some(StreamArrayChunkReader {
             read: &mut self.read,
             ctx: &self.ctx,
             dtype,
-            fb_buffer: Vec::new(),
-            buffers: Vec::new(),
+            buffers: vec![],
+            column_msg_buffer: vec![],
         }))
     }
 }
@@ -99,8 +98,8 @@ pub struct StreamArrayChunkReader<'a, R: Read> {
     read: &'a mut R,
     ctx: &'a SerdeContext,
     dtype: DType,
-    fb_buffer: Vec<u8>,
     buffers: Vec<Buffer>,
+    column_msg_buffer: Vec<u8>,
 }
 
 impl<'a, R: Read> StreamArrayChunkReader<'a, R> {
@@ -110,68 +109,52 @@ impl<'a, R: Read> StreamArrayChunkReader<'a, R> {
 }
 
 #[gat]
-impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
+impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R> {
     type Error = VortexError;
     type Item<'next> = ArrayView<'next> where Self: 'next;
 
     fn next(&mut self) -> Result<Option<ArrayView<'_>>, Self::Error> {
-        let mut fb_vec: Vec<u8> = Vec::new();
-        let msg = self.read.read_message::<Message>(&mut fb_vec)?;
+        let msg = self
+            .read
+            .read_message::<Message>(&mut self.column_msg_buffer)?;
         if msg.is_none() {
             // End of the stream
             return Ok(None);
         }
         let msg = msg.unwrap();
 
-        let chunk = msg
+        let chunk_msg = msg
             .header_as_chunk()
             .ok_or_else(|| vortex_err!(InvalidSerde: "Expected IPC Chunk message"))
             .unwrap();
-
-        let col_offsets = chunk
-            .column_offsets()
-            .ok_or_else(
-                || vortex_err!(InvalidSerde: "Expected column offsets in IPC Chunk message"),
-            )
-            .unwrap();
-        assert_eq!(col_offsets.len(), 1);
-
-        // TODO(ngates): read each column
-        read_into(self.read, &mut self.fb_buffer).unwrap();
-        let col_msg = root::<Message>(&self.fb_buffer)
-            .unwrap()
-            .header_as_chunk_column()
-            .ok_or_else(|| vortex_err!(InvalidSerde: "Expected IPC Chunk Column message"))
-            .unwrap();
-
-        let col_array = col_msg
+        let col_array = chunk_msg
             .array()
             .ok_or_else(|| vortex_err!(InvalidSerde: "Chunk column missing Array"))
             .unwrap();
 
         // Read all the column's buffers
+        // TODO(ngates): read into a single buffer, then Arc::clone and slice
         self.buffers.clear();
         let mut offset = 0;
-        for buffer in col_msg.buffers().unwrap_or_default().iter() {
+        for buffer in chunk_msg.buffers().unwrap_or_default().iter() {
             let to_kill = buffer.offset() - offset;
             io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
 
             let mut bytes = vec![0u8; buffer.length() as usize];
             self.read.read_exact(&mut bytes).unwrap();
-            self.buffers.push(Buffer::from_vec(bytes));
+            self.buffers.push(Buffer::from(bytes));
 
             offset = buffer.offset() + buffer.length();
         }
 
         // Consume any remaining padding after the final buffer.
-        let to_kill = col_msg.buffer_size() - offset;
+        let to_kill = chunk_msg.buffer_size() - offset;
         io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
 
         let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, &self.buffers)?;
 
-        // Validate the array once here so we can ignore metadata parsing errors from now on.
-        // TODO(ngates): should we convert to heap-allocated array if this is missing?
-        view.vtable().validate(&view)?;
+        // Validate it
+        view.to_array().with_array(|_| Ok::<(), VortexError>(()))?;
 
         Ok(Some(view))
     }
@@ -181,11 +164,9 @@ impl<'a, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'a, R> {
 ///  We should be able to fix that.
 pub fn read_into<R: Read>(read: &mut R, buffer: &mut Vec<u8>) -> VortexResult<()> {
     buffer.clear();
-
     let mut buffer_len: [u8; 4] = [0; 4];
     // FIXME(ngates): return optional for EOF?
     read.read_exact(&mut buffer_len)?;
-
     let buffer_len = u32::from_le_bytes(buffer_len) as usize;
     read.take(buffer_len as u64).read_to_end(buffer)?;
 
