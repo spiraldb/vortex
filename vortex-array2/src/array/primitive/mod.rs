@@ -59,8 +59,7 @@ impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
 
 impl PrimitiveData {
     fn try_new<T: NativePType>(buffer: ScalarBuffer<T>, validity: Validity) -> VortexResult<Self> {
-        ArrayData::try_new(
-            &PrimitiveEncoding,
+        Ok(Self::new_unchecked(
             DType::from(T::PTYPE).with_nullability(validity.nullability()),
             Arc::new(PrimitiveMetadata {
                 ptype: T::PTYPE,
@@ -68,9 +67,7 @@ impl PrimitiveData {
             }),
             vec![buffer.into_inner()].into(),
             vec![validity.into_array_data()].into(),
-        )
-        .unwrap()
-        .try_into()
+        ))
     }
 
     pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>) -> Self {
@@ -96,7 +93,17 @@ impl ArrayValidity for PrimitiveArray<'_> {
 
 impl ToArrayData for PrimitiveArray<'_> {
     fn to_array_data(&self) -> ArrayData {
-        todo!()
+        ArrayData::try_new(
+            &PrimitiveEncoding,
+            self.dtype().clone(),
+            Arc::new(PrimitiveMetadata {
+                ptype: self.ptype,
+                validity: self.validity().to_metadata(self.len()).unwrap(),
+            }),
+            vec![self.buffer().clone()].into(),
+            vec![].into(),
+        )
+        .unwrap()
     }
 }
 

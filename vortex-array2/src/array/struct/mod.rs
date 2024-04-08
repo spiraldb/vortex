@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FieldNames};
 
-use crate::impl_encoding;
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::{impl_encoding, ToArray, WithArray};
 use crate::{Array, ArrayMetadata};
 use crate::{ArrayData, TypedArrayData};
 use crate::{ArrayView, ToArrayData};
@@ -50,12 +50,36 @@ impl<'a> StructArray<'a> {
         fields.as_slice()
     }
 
-    pub fn ncolumns(&self) -> usize {
+    pub fn nfields(&self) -> usize {
         self.fields().len()
     }
 
     pub fn len(&self) -> usize {
         self.length
+    }
+}
+
+impl StructData {
+    pub fn try_new(names: FieldNames, fields: Vec<ArrayData>, length: usize) -> VortexResult<Self> {
+        if names.len() != fields.len() {
+            vortex_bail!("Got {} names and {} fields", names.len(), fields.len());
+        }
+
+        if fields
+            .iter()
+            .any(|a| a.to_array().with_array(|a| a.len()) != length)
+        {
+            vortex_bail!("Expected all struct fields to have length {}", length);
+        }
+
+        let field_dtypes: Vec<_> = fields.iter().map(|d| d.dtype()).cloned().collect();
+        let fields: Vec<_> = fields.iter().cloned().map(Some).collect();
+        Ok(Self::new_unchecked(
+            DType::Struct(names, field_dtypes),
+            Arc::new(StructMetadata { length }),
+            vec![].into(),
+            fields.into(),
+        ))
     }
 }
 
@@ -100,7 +124,20 @@ impl ArrayValidity for StructArray<'_> {
 
 impl ToArrayData for StructArray<'_> {
     fn to_array_data(&self) -> ArrayData {
-        todo!()
+        ArrayData::try_new(
+            &StructEncoding,
+            self.dtype().clone(),
+            Arc::new(StructMetadata {
+                length: self.length,
+            }),
+            vec![].into(),
+            (0..self.nfields())
+                .map(|idx| self.child(idx).unwrap())
+                .map(|a| Some(a.to_array_data()))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+        .unwrap()
     }
 }
 

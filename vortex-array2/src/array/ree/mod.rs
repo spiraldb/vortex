@@ -38,19 +38,15 @@ impl REEArray<'_> {
 
 impl REEData {
     pub fn try_new(ends: ArrayData, values: ArrayData, length: usize) -> VortexResult<Self> {
-        ArrayData::try_new(
-            &REEEncoding,
+        Ok(Self::new_unchecked(
             values.dtype().clone(),
-            REEMetadata {
+            Arc::new(REEMetadata {
                 length,
                 ends_dtype: ends.dtype().clone(),
-            }
-            .into_arc(),
+            }),
             vec![].into(),
             vec![Some(ends), Some(values)].into(),
-        )
-        .unwrap()
-        .try_into()
+        ))
     }
 }
 

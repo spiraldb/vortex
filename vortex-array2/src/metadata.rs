@@ -14,8 +14,6 @@ use vortex_error::{vortex_err, VortexResult};
 pub trait ArrayMetadata: 'static + Send + Sync + Debug {
     fn as_any(&self) -> &dyn Any;
     fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
-    fn to_arc(&self) -> Arc<dyn ArrayMetadata>;
-    fn into_arc(self) -> Arc<dyn ArrayMetadata>;
 }
 
 pub trait TrySerializeArrayMetadata {

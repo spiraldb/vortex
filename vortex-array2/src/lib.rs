@@ -123,8 +123,8 @@ impl ArrayVisitor for NBytesVisitor {
 impl ToArrayData for Array<'_> {
     fn to_array_data(&self) -> ArrayData {
         match self {
-            Array::Data(d) => d.encoding().with_data(d, |a| a.to_array_data()),
-            Array::DataRef(d) => d.encoding().with_data(d, |a| a.to_array_data()),
+            Array::Data(d) => d.clone(),
+            Array::DataRef(d) => (*d).clone(),
             Array::View(v) => v.encoding().with_view(v, |a| a.to_array_data()),
         }
     }

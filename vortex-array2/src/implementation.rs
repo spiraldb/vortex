@@ -88,14 +88,6 @@ macro_rules! impl_encoding {
                 fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
                     self
                 }
-
-                fn to_arc(&self) -> Arc<dyn ArrayMetadata> {
-                    Arc::new(self.clone())
-                }
-
-                fn into_arc(self) -> Arc<dyn ArrayMetadata> {
-                    Arc::new(self)
-                }
             }
         }
     };
