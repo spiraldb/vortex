@@ -1,6 +1,6 @@
 mod compute;
 
-use arrow_buffer::Buffer;
+use arrow_buffer::{Buffer, ScalarBuffer};
 use serde::{Deserialize, Serialize};
 use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
@@ -24,7 +24,7 @@ pub struct PrimitiveArray<'a> {
     ptype: PType,
     dtype: &'a DType,
     buffer: &'a Buffer,
-    validity: Option<Validity<'a>>,
+    validity: Validity<'a>,
 }
 
 impl PrimitiveArray<'_> {
@@ -32,8 +32,8 @@ impl PrimitiveArray<'_> {
         self.buffer
     }
 
-    pub fn validity(&self) -> Option<&Validity> {
-        self.validity.as_ref()
+    pub fn validity(&self) -> &Validity {
+        &self.validity
     }
 
     pub fn ptype(&self) -> PType {
@@ -47,33 +47,29 @@ impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
         metadata: &'a PrimitiveMetadata,
     ) -> VortexResult<Self> {
         let buffer = parts.buffer(0).unwrap();
-        let length = buffer.len() / metadata.ptype.byte_width();
         Ok(PrimitiveArray {
             ptype: metadata.ptype,
             dtype: parts.dtype(),
             buffer,
-            validity: metadata
-                .validity
-                .to_validity(length, parts.child(0, parts.dtype())),
+            validity: metadata.validity.to_validity(parts.child(0, parts.dtype())),
         })
     }
 }
 
 impl PrimitiveData {
-    pub fn from_vec<T: NativePType>(values: Vec<T>) -> Self {
+    fn try_new<T: NativePType>(buffer: ScalarBuffer<T>, validity: Validity) -> VortexResult<Self> {
         ArrayData::try_new(
             &PrimitiveEncoding,
-            DType::from(T::PTYPE),
+            DType::from(T::PTYPE).with_nullability(validity.nullability()),
             Arc::new(PrimitiveMetadata {
                 ptype: T::PTYPE,
-                validity: ValidityMetadata::NonNullable,
+                validity: validity.to_metadata(buffer.len() / T::PTYPE.byte_width())?,
             }),
-            vec![Buffer::from_vec(values)].into(),
-            vec![].into(),
+            vec![buffer.into_inner()].into(),
+            vec![validity.into_array_data()].into(),
         )
         .unwrap()
         .try_into()
-        .unwrap()
     }
 }
 
@@ -89,7 +85,7 @@ impl ArrayTrait for PrimitiveArray<'_> {
 
 impl ArrayValidity for PrimitiveArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
-        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
+        self.validity().is_valid(index)
     }
 }
 

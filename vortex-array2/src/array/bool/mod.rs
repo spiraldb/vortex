@@ -23,7 +23,7 @@ pub struct BoolMetadata {
 pub struct BoolArray<'a> {
     dtype: &'a DType,
     buffer: &'a Buffer,
-    validity: Option<Validity<'a>>,
+    validity: Validity<'a>,
     // TODO(ngates): unpack metadata?
     metadata: &'a BoolMetadata,
     // TODO(ngates): we support statistics by reference to a dyn trait.
@@ -37,8 +37,8 @@ impl BoolArray<'_> {
         self.buffer
     }
 
-    pub fn validity(&self) -> Option<&Validity> {
-        self.validity.as_ref()
+    pub fn validity(&self) -> &Validity {
+        &self.validity
     }
 
     pub fn metadata(&self) -> &BoolMetadata {
@@ -62,29 +62,28 @@ impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
                 .ok_or(vortex_err!("BoolArray requires a buffer"))?,
             validity: metadata
                 .validity
-                .to_validity(metadata.length, parts.child(0, &Validity::DTYPE)),
+                .to_validity(parts.child(0, &Validity::DTYPE)),
             metadata,
         })
     }
 }
 
 impl BoolData {
-    pub fn try_new(buffer: BooleanBuffer, validity: Option<Validity>) -> VortexResult<Self> {
-        if let Some(v) = &validity {
-            assert_eq!(v.len(), buffer.len());
-        }
-        let dtype = DType::Bool(validity.is_some().into());
-        let metadata = BoolMetadata {
-            validity: ValidityMetadata::try_from_validity(validity.as_ref(), &dtype)?,
-            length: buffer.len(),
-        };
-        let validity_array = validity.and_then(|v| v.into_array_data());
+    pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
         Ok(Self::new_unchecked(
-            dtype,
-            Arc::new(metadata),
+            DType::Bool(validity.nullability()),
+            Arc::new(BoolMetadata {
+                validity: validity.to_metadata(buffer.len())?,
+                length: buffer.len(),
+            }),
             vec![buffer.into_inner()].into(),
-            vec![validity_array].into(),
+            vec![validity.into_array_data()].into(),
         ))
+    }
+
+    pub fn from_vec(bools: Vec<bool>) -> Self {
+        let buffer = BooleanBuffer::from(bools);
+        Self::try_new(buffer, Validity::NonNullable).unwrap()
     }
 }
 
@@ -100,7 +99,7 @@ impl ArrayTrait for BoolArray<'_> {
 
 impl ArrayValidity for BoolArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
-        self.validity().map(|v| v.is_valid(index)).unwrap_or(true)
+        self.validity().is_valid(index)
     }
 }
 
@@ -118,10 +117,7 @@ mod tests {
 
     #[test]
     fn bool_array() {
-        let arr = BoolData::try_new(vec![true, false, true].into(), None)
-            .unwrap()
-            .into_array();
-
+        let arr = BoolData::from_vec(vec![true, false, true]).into_array();
         let scalar: bool = scalar_at(&arr, 0).unwrap().try_into().unwrap();
         assert!(scalar);
     }

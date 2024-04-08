@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
+use crate::array::bool::BoolData;
 use crate::compute::scalar_at;
-use crate::{Array, ArrayData, ToArrayData, WithArray};
+use crate::{Array, ArrayData, IntoArray, ToArrayData, WithArray};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -13,50 +14,28 @@ pub trait ArrayValidity {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ValidityMetadata {
     NonNullable,
-    Valid,
-    Invalid,
+    AllValid,
+    AllInvalid,
     Array,
 }
 
 impl ValidityMetadata {
-    pub fn try_from_validity(validity: Option<&Validity>, dtype: &DType) -> VortexResult<Self> {
-        // We don't really need dtype for this conversion, but it's a good place to check
-        // that the nullability and validity are consistent.
-        match validity {
-            None => {
-                if dtype.nullability() != Nullability::NonNullable {
-                    vortex_bail!("DType must be NonNullable if validity is absent")
-                }
-                Ok(ValidityMetadata::NonNullable)
-            }
-            Some(v) => {
-                if dtype.nullability() != Nullability::Nullable {
-                    vortex_bail!("DType must be Nullable if validity is present")
-                }
-                Ok(match v {
-                    Validity::Valid(_) => ValidityMetadata::Valid,
-                    Validity::Invalid(_) => ValidityMetadata::Invalid,
-                    Validity::Array(_) => ValidityMetadata::Array,
-                })
-            }
-        }
-    }
-
-    pub fn to_validity<'v>(&self, len: usize, array: Option<Array<'v>>) -> Option<Validity<'v>> {
+    pub fn to_validity<'v>(&self, array: Option<Array<'v>>) -> Validity<'v> {
         match self {
-            ValidityMetadata::NonNullable => None,
-            ValidityMetadata::Valid => Some(Validity::Valid(len)),
-            ValidityMetadata::Invalid => Some(Validity::Invalid(len)),
+            ValidityMetadata::NonNullable => Validity::NonNullable,
+            ValidityMetadata::AllValid => Validity::AllValid,
+            ValidityMetadata::AllInvalid => Validity::AllInvalid,
             // TODO(ngates): should we return a result for this?
-            ValidityMetadata::Array => Some(Validity::Array(array.unwrap())),
+            ValidityMetadata::Array => Validity::Array(array.unwrap()),
         }
     }
 }
 
 #[derive(Clone, Debug)]
 pub enum Validity<'v> {
-    Valid(usize),
-    Invalid(usize),
+    NonNullable,
+    AllValid,
+    AllInvalid,
     Array(Array<'v>),
 }
 
@@ -70,6 +49,26 @@ impl<'v> Validity<'v> {
         }
     }
 
+    pub fn to_metadata(&self, length: usize) -> VortexResult<ValidityMetadata> {
+        match self {
+            Validity::NonNullable => Ok(ValidityMetadata::NonNullable),
+            Validity::AllValid => Ok(ValidityMetadata::AllValid),
+            Validity::AllInvalid => Ok(ValidityMetadata::AllInvalid),
+            Validity::Array(a) => {
+                // We force the caller to validate the length here.
+                let validity_len = a.with_array(|a| a.len());
+                if validity_len != length {
+                    vortex_bail!(
+                        "Validity array length {} doesn't match array length {}",
+                        validity_len,
+                        length
+                    )
+                }
+                Ok(ValidityMetadata::Array)
+            }
+        }
+    }
+
     pub fn array(&self) -> Option<&Array> {
         match self {
             Validity::Array(a) => Some(a),
@@ -77,19 +76,31 @@ impl<'v> Validity<'v> {
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub fn nullability(&self) -> Nullability {
         match self {
-            Validity::Valid(l) => *l,
-            Validity::Invalid(l) => *l,
-            Validity::Array(a) => a.with_array(|a| a.len()),
+            Validity::NonNullable => Nullability::NonNullable,
+            _ => Nullability::Nullable,
         }
     }
 
     pub fn is_valid(&self, index: usize) -> bool {
         match self {
-            Validity::Valid(_) => true,
-            Validity::Invalid(_) => false,
+            Validity::NonNullable | Validity::AllValid => true,
+            Validity::AllInvalid => false,
             Validity::Array(a) => scalar_at(a, index).unwrap().try_into().unwrap(),
+        }
+    }
+}
+
+impl<'a, E> FromIterator<&'a Option<E>> for Validity<'static> {
+    fn from_iter<T: IntoIterator<Item = &'a Option<E>>>(iter: T) -> Self {
+        let bools: Vec<bool> = iter.into_iter().map(|option| option.is_some()).collect();
+        if bools.iter().all(|b| *b) {
+            Validity::AllValid
+        } else if !bools.iter().any(|b| *b) {
+            Validity::AllInvalid
+        } else {
+            Validity::Array(BoolData::from_vec(bools).into_array())
         }
     }
 }

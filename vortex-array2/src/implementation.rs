@@ -97,18 +97,6 @@ macro_rules! impl_encoding {
                     Arc::new(self)
                 }
             }
-
-            // /// Implement AsRef for both the data and view types
-            // impl<'a> AsRef<[<$Name Array>]<'a>> for [<$Name Data>] {
-            //     fn as_ref(&self) -> &[<$Name Array>]<'a> {
-            //         self
-            //     }
-            // }
-            // impl<'a> AsRef<[<$Name Array>]<'a>> for [<$Name View>]<'a> {
-            //     fn as_ref(&self) -> &[<$Name Array>]<'a> {
-            //         self
-            //     }
-            // }
         }
     };
 }
