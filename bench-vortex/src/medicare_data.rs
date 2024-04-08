@@ -28,7 +28,7 @@ pub fn medicare_data_csv() -> PathBuf {
 
 pub fn medicare_data_lance() -> PathBuf {
     let taxi_data = File::open(medicare_data_parquet()).unwrap();
-    idempotent("taxi.lance", |path| {
+    idempotent("medicare.lance", |path| {
         Ok::<PathBuf, VortexError>(parquet_to_lance(path, taxi_data))
     })
     .unwrap()
