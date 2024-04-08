@@ -36,7 +36,7 @@ use vortex_schema::DType;
 use crate::compress_ctx;
 
 pub const BATCH_SIZE: usize = 65_536;
-const CSV_SCHEMA_SAMPLE_ROWS: usize = 100;
+const CSV_SCHEMA_SAMPLE_ROWS: usize = 1_000_000;
 const DEFAULT_DELIMITER: u8 = b',';
 
 pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
@@ -129,6 +129,10 @@ pub fn write_csv_as_parquet<W: Write + Send + Sync>(
     format: Format,
     write: W,
 ) -> VortexResult<()> {
+    println!(
+        "Compressing {} to parquet",
+        csv_path.as_path().to_str().unwrap()
+    );
     let file_handle_for_schema_inference = File::open(csv_path.clone()).unwrap();
 
     // Infer the schema of the CSV file

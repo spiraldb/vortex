@@ -31,8 +31,9 @@ use crate::medicare_data::medicare_data_csv;
 use crate::reader::BATCH_SIZE;
 use crate::taxi_data::taxi_data_parquet;
 
-mod data_downloads;
+pub mod data_downloads;
 pub mod medicare_data;
+pub mod public_bi_data;
 pub mod reader;
 pub mod taxi_data;
 

@@ -23,7 +23,7 @@ use crate::{data_path, idempotent};
 pub fn download_data(fname: &str, data_url: &str) -> PathBuf {
     idempotent(fname, |path| {
         let mut file = File::create(path).unwrap();
-
+        println!("Downloading {} from {}", fname, data_url);
         reqwest::blocking::get(data_url).unwrap().copy_to(&mut file)
     })
     .unwrap()
@@ -73,6 +73,7 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
 
 pub fn decompress_bz2(input_path: &str, output_path: &str) -> PathBuf {
     idempotent(output_path, |path| {
+        println!("Decompressing bzip from {} to {}", input_path, output_path);
         let input_file = File::open(data_path(input_path)).unwrap();
         let mut decoder = BzDecoder::new(input_file);
 
@@ -84,4 +85,12 @@ pub fn decompress_bz2(input_path: &str, output_path: &str) -> PathBuf {
         Ok::<PathBuf, VortexError>(data_path(output_path))
     })
     .unwrap()
+}
+
+pub trait BenchmarkDataset {
+    fn uncompressed(&self);
+    fn write_as_parquet(&self);
+    fn write_as_vortex(&self);
+    fn list_files(&self) -> Vec<String>;
+    fn directory_location(&self) -> String;
 }
