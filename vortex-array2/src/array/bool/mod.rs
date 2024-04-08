@@ -1,6 +1,7 @@
 mod compute;
 
 use arrow_buffer::{BooleanBuffer, Buffer};
+use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
@@ -13,16 +14,10 @@ use crate::{ArrayView, ToArrayData};
 
 impl_encoding!("vortex.bool", Bool);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BoolMetadata {
     validity: ValidityMetadata,
     length: usize,
-}
-
-impl TryParseArrayMetadata for BoolMetadata {
-    fn try_parse_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
-        todo!()
-    }
 }
 
 pub struct BoolArray<'a> {

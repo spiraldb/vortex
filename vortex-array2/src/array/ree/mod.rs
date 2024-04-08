@@ -1,5 +1,6 @@
 mod compute;
 
+use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
@@ -11,16 +12,10 @@ use crate::{ArrayView, ToArrayData};
 
 impl_encoding!("vortex.ree", REE);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct REEMetadata {
     length: usize,
     ends_dtype: DType,
-}
-
-impl TryParseArrayMetadata for REEMetadata {
-    fn try_parse_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
-        todo!()
-    }
 }
 
 pub struct REEArray<'a> {
@@ -30,7 +25,7 @@ pub struct REEArray<'a> {
 }
 
 impl REEData {
-    pub fn new(ends: ArrayData, values: ArrayData, length: usize) -> Self {
+    pub fn try_new(ends: ArrayData, values: ArrayData, length: usize) -> VortexResult<Self> {
         ArrayData::try_new(
             &REEEncoding,
             values.dtype().clone(),
@@ -44,7 +39,6 @@ impl REEData {
         )
         .unwrap()
         .try_into()
-        .unwrap()
     }
 }
 

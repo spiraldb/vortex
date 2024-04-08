@@ -5410,6 +5410,7 @@ dependencies = [
  "num_enum 0.7.2",
  "paste",
  "rand",
+ "serde",
  "thiserror",
  "vortex-alloc",
  "vortex-error",
@@ -5424,8 +5425,10 @@ version = "0.1.0"
 dependencies = [
  "arrow-buffer 51.0.0",
  "flatbuffers",
+ "flexbuffers",
  "half",
  "paste",
+ "serde",
  "vortex-array",
  "vortex-error",
  "vortex-flatbuffers",
@@ -5467,6 +5470,7 @@ version = "0.1.0"
 dependencies = [
  "arrow-schema 51.0.0",
  "flatbuffers",
+ "flexbuffers",
  "parquet 51.0.0",
  "thiserror",
 ]
@@ -5553,6 +5557,7 @@ dependencies = [
  "flatc",
  "itertools 0.12.1",
  "linkme",
+ "serde",
  "thiserror",
  "vortex-error",
  "vortex-flatbuffers",

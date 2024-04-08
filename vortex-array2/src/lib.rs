@@ -67,10 +67,6 @@ pub trait TryFromArrayParts<'v, M: ArrayMetadata>: Sized + 'v {
     fn try_from_parts(parts: &'v dyn ArrayParts<'v>, metadata: &'v M) -> VortexResult<Self>;
 }
 
-pub trait TryParseArrayMetadata: Sized + ArrayMetadata {
-    fn try_parse_metadata(metadata: Option<&[u8]>) -> VortexResult<Self>;
-}
-
 /// Collects together the behaviour of an array.
 pub trait ArrayTrait: ArrayCompute + ArrayValidity + ToArrayData {
     fn dtype(&self) -> &DType;

@@ -1,6 +1,7 @@
 mod compute;
 
 use arrow_buffer::Buffer;
+use serde::{Deserialize, Serialize};
 use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
@@ -13,16 +14,10 @@ use crate::{ArrayView, ToArrayData};
 
 impl_encoding!("vortex.primitive", Primitive);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrimitiveMetadata {
     ptype: PType,
     validity: ValidityMetadata,
-}
-
-impl TryParseArrayMetadata for PrimitiveMetadata {
-    fn try_parse_metadata(_metadata: Option<&[u8]>) -> VortexResult<Self> {
-        todo!()
-    }
 }
 
 pub struct PrimitiveArray<'a> {

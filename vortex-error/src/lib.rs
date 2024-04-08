@@ -68,6 +68,27 @@ pub enum VortexError {
         #[backtrace]
         flatbuffers::InvalidFlatbuffer,
     ),
+    #[cfg(feature = "flexbuffers")]
+    #[error(transparent)]
+    FlexBuffersReaderError(
+        #[from]
+        #[backtrace]
+        flexbuffers::ReaderError,
+    ),
+    #[cfg(feature = "flexbuffers")]
+    #[error(transparent)]
+    FlexBuffersDeError(
+        #[from]
+        #[backtrace]
+        flexbuffers::DeserializationError,
+    ),
+    #[cfg(feature = "flexbuffers")]
+    #[error(transparent)]
+    FlexBuffersSerError(
+        #[from]
+        #[backtrace]
+        flexbuffers::SerializationError,
+    ),
     #[error(transparent)]
     IOError(
         #[from]

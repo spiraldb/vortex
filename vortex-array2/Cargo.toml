@@ -13,12 +13,14 @@ rust-version.workspace = true
 [dependencies]
 arrow-buffer = { workspace = true }
 flatbuffers = { workspace = true }
+flexbuffers = { workspace = true }
 half = { workspace = true }
 paste = { workspace = true }
-vortex-array = { path = "../vortex-array" }
-vortex-error = { path = "../vortex-error" }
+serde = { workspace = true, features = ["derive"] }
+vortex-array = { path = "../vortex-array", features = ["serde"] }
+vortex-error = { path = "../vortex-error", features = ["flexbuffers"] }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
-vortex-schema = { path = "../vortex-schema" }
+vortex-schema = { path = "../vortex-schema", features = ["serde"] }
 
 [lints]
 workspace = true

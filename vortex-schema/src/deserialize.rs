@@ -8,12 +8,14 @@ use crate::{CompositeID, DType};
 
 #[allow(dead_code)]
 pub struct DTypeSerdeContext {
-    composite_ids: Vec<CompositeID>,
+    composite_ids: Arc<[CompositeID]>,
 }
 
 impl DTypeSerdeContext {
     pub fn new(composite_ids: Vec<CompositeID>) -> Self {
-        Self { composite_ids }
+        Self {
+            composite_ids: composite_ids.into(),
+        }
     }
 
     pub fn find_composite_id(&self, id: &str) -> Option<CompositeID> {

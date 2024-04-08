@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
@@ -9,7 +10,7 @@ pub trait ArrayValidity {
     // Maybe add to_bool_array() here?
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ValidityMetadata {
     NonNullable,
     Valid,

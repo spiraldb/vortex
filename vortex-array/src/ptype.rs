@@ -5,12 +5,14 @@ use arrow_array::types::*;
 use arrow_buffer::ArrowNativeType;
 use half::f16;
 use num_traits::{Num, NumCast};
+use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::DType::*;
 use vortex_schema::{DType, FloatWidth, IntWidth};
 
 use crate::scalar::{PScalar, Scalar};
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub enum PType {
     U8,
