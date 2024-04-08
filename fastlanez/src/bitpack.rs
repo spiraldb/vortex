@@ -232,7 +232,7 @@ mod test {
         assert_eq!(output.len(), 1280);
 
         input.iter().enumerate().for_each(|(i, v)| {
-            let decoded = <u32 as TryBitPack>::try_unpack_single(&output, 10, i).unwrap();
+            let decoded = u32::try_unpack_single(&output, 10, i).unwrap();
             assert_eq!(decoded, *v);
         });
     }
