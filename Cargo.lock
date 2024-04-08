@@ -5427,6 +5427,7 @@ dependencies = [
  "flatbuffers",
  "flexbuffers",
  "half",
+ "humansize",
  "paste",
  "serde",
  "vortex-array",

@@ -90,6 +90,12 @@ pub enum VortexError {
         flexbuffers::SerializationError,
     ),
     #[error(transparent)]
+    FmtError(
+        #[from]
+        #[backtrace]
+        std::fmt::Error,
+    ),
+    #[error(transparent)]
     IOError(
         #[from]
         #[backtrace]

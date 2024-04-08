@@ -6,6 +6,7 @@ use vortex_schema::DType;
 
 use crate::impl_encoding;
 use crate::validity::ArrayValidity;
+use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{Array, ArrayMetadata};
 use crate::{ArrayData, TypedArrayData};
 use crate::{ArrayView, ToArrayData};
@@ -22,6 +23,17 @@ pub struct REEArray<'a> {
     dtype: &'a DType,
     values: Array<'a>,
     run_ends: Array<'a>,
+    length: usize,
+}
+
+impl REEArray<'_> {
+    pub fn values(&self) -> &Array {
+        &self.values
+    }
+
+    pub fn run_ends(&self) -> &Array {
+        &self.run_ends
+    }
 }
 
 impl REEData {
@@ -55,6 +67,7 @@ impl<'v> TryFromArrayParts<'v, REEMetadata> for REEArray<'v> {
             run_ends: parts
                 .child(1, &metadata.ends_dtype)
                 .ok_or_else(|| vortex_err!("REEArray missing run_ends"))?,
+            length: metadata.length,
         })
     }
 }
@@ -65,7 +78,7 @@ impl ArrayTrait for REEArray<'_> {
     }
 
     fn len(&self) -> usize {
-        todo!()
+        self.length
     }
 }
 
@@ -78,5 +91,12 @@ impl ArrayValidity for REEArray<'_> {
 impl ToArrayData for REEArray<'_> {
     fn to_array_data(&self) -> ArrayData {
         todo!()
+    }
+}
+
+impl AcceptArrayVisitor for REEArray<'_> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_array("values", self.values())?;
+        visitor.visit_array("run_ends", self.run_ends())
     }
 }

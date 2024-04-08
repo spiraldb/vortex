@@ -33,10 +33,10 @@ impl Debug for dyn ArrayEncoding + '_ {
 }
 
 impl dyn ArrayEncoding {
-    pub(crate) fn with_view<'v, R, F: Fn(&dyn ArrayTrait) -> R>(
+    pub(crate) fn with_view<'v, R, F: FnMut(&dyn ArrayTrait) -> R>(
         &self,
         view: &'v ArrayView<'v>,
-        f: F,
+        mut f: F,
     ) -> R {
         let mut result = None;
 
@@ -52,7 +52,11 @@ impl dyn ArrayEncoding {
         result.unwrap()
     }
 
-    pub(crate) fn with_data<R, F: Fn(&dyn ArrayTrait) -> R>(&self, data: &ArrayData, f: F) -> R {
+    pub(crate) fn with_data<R, F: FnMut(&dyn ArrayTrait) -> R>(
+        &self,
+        data: &ArrayData,
+        mut f: F,
+    ) -> R {
         let mut result = None;
 
         // Unwrap the result. This is safe since we validate that encoding against the
