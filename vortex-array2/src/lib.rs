@@ -56,6 +56,10 @@ impl Array<'_> {
     pub fn len(&self) -> usize {
         self.with_array(|a| a.len())
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.with_array(|a| a.is_empty())
+    }
 }
 
 pub trait ToArray {

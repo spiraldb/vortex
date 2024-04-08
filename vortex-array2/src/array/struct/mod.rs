@@ -53,10 +53,6 @@ impl<'a> StructArray<'a> {
     pub fn nfields(&self) -> usize {
         self.fields().len()
     }
-
-    pub fn len(&self) -> usize {
-        self.length
-    }
 }
 
 impl StructData {

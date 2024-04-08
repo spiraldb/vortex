@@ -1,14 +1,15 @@
 [package]
 name = "vortex-array2"
-version.workspace = true
-homepage.workspace = true
-repository.workspace = true
-authors.workspace = true
-license.workspace = true
-keywords.workspace = true
-include.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+version = { workspace = true }
+description = "Vortex in memory columnar data format"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 
 [dependencies]
 arrow-buffer = { workspace = true }

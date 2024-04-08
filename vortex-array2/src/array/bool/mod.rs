@@ -25,8 +25,7 @@ pub struct BoolArray<'a> {
     dtype: &'a DType,
     buffer: &'a Buffer,
     validity: Validity<'a>,
-    // TODO(ngates): unpack metadata?
-    metadata: &'a BoolMetadata,
+    length: usize,
     // TODO(ngates): we support statistics by reference to a dyn trait.
     //  This trait is implemented for ArrayView and ArrayData and is passed into here as part
     //  of ArrayParts.
@@ -42,12 +41,8 @@ impl BoolArray<'_> {
         &self.validity
     }
 
-    pub fn metadata(&self) -> &BoolMetadata {
-        self.metadata
-    }
-
     pub fn boolean_buffer(&self) -> BooleanBuffer {
-        BooleanBuffer::new(self.buffer.clone(), 0, self.metadata.length)
+        BooleanBuffer::new(self.buffer.clone(), 0, self.length)
     }
 }
 
@@ -61,7 +56,7 @@ impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
             validity: metadata
                 .validity
                 .to_validity(parts.child(0, &Validity::DTYPE)),
-            metadata,
+            length: metadata.length,
         })
     }
 }
@@ -91,7 +86,7 @@ impl ArrayTrait for BoolArray<'_> {
     }
 
     fn len(&self) -> usize {
-        self.metadata().length
+        self.length
     }
 }
 
