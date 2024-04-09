@@ -1,3 +1,5 @@
+mod stats;
+
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use serde::{Deserialize, Serialize};
 use vortex::ptype::{NativePType, PType};
@@ -6,7 +8,7 @@ use vortex_schema::DType;
 
 use crate::compute::ArrayCompute;
 use crate::impl_encoding;
-use crate::stats::{ArrayStatistics, Statistics};
+use crate::stats::Statistics;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
@@ -81,6 +83,12 @@ impl PrimitiveData {
     pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>, validity: Validity) -> Self {
         Self::try_new(ScalarBuffer::from(values), validity).unwrap()
     }
+
+    pub fn from_nullable_vec<T: NativePType + ArrowNativeType>(values: Vec<Option<T>>) -> Self {
+        let elems: Vec<_> = values.iter().map(|v| v.unwrap_or_default()).collect();
+        let validity = Validity::from(values.iter().map(|v| v.is_some()).collect::<Vec<_>>());
+        Self::from_vec(elems, validity)
+    }
 }
 
 impl<T: NativePType> From<Vec<T>> for PrimitiveData {
@@ -128,12 +136,6 @@ impl AcceptArrayVisitor for PrimitiveArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_buffer(self.buffer())?;
         visitor.visit_validity(self.validity())
-    }
-}
-
-impl ArrayStatistics for PrimitiveArray<'_> {
-    fn statistics(&self) -> &dyn Statistics {
-        self.statistics
     }
 }
 

@@ -13,7 +13,7 @@ impl TakeFn for BoolArray<'_> {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         let validity = self.validity().take(indices)?;
         let indices_data = flatten_primitive(indices)?;
-        let indices = indices_data.to_typed_array();
+        let indices = indices_data.as_typed_array();
         match_each_integer_ptype!(indices.ptype(), |$I| {
             Ok(BoolData::from_vec(
                 take_bool(&self.buffer(), indices.typed_data::<$I>()),
@@ -53,7 +53,7 @@ mod test {
         assert_eq!(
             res.buffer(),
             BoolData::from_iter(vec![Some(false), None, Some(false)])
-                .to_typed_array()
+                .as_typed_array()
                 .buffer()
         );
     }

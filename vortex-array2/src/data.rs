@@ -176,7 +176,7 @@ impl<D: ArrayDef> TypedArrayData<D> {
             .unwrap()
     }
 
-    pub fn to_typed_array(&self) -> D::Array<'_> {
+    pub fn as_typed_array<'a>(&'a self) -> D::Array<'a> {
         D::Array::try_from_parts(&self.data, self.metadata()).unwrap()
     }
 }
@@ -237,15 +237,16 @@ impl ArrayParts for ArrayData {
 }
 
 impl Statistics for ArrayData {
-    fn compute(&self, stat: Stat) -> VortexResult<Option<Scalar>> {
+    fn compute(&self, stat: Stat) -> Option<Scalar> {
         let mut locked = self.stats_set.write().unwrap();
         let stats = self
             .encoding()
-            .with_data(self, |a| a.compute_statistics(stat))?;
+            .with_data(self, |a| a.compute_statistics(stat))
+            .ok()?;
         for (k, v) in &stats {
             locked.insert(*k, v.clone());
         }
-        Ok(stats.get(&stat).cloned())
+        stats.get(&stat).cloned()
     }
 
     fn get(&self, stat: Stat) -> Option<Scalar> {

@@ -32,7 +32,7 @@ use vortex_schema::DType;
 
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
-use crate::stats::{ArrayStatistics, Statistics};
+use crate::stats::{ArrayStatistics, Statistics, StatisticsCompute};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
@@ -120,7 +120,12 @@ pub trait TryFromArrayParts<'v, M: ArrayMetadata>: Sized + 'v {
 
 /// Collects together the behaviour of an array.
 pub trait ArrayTrait:
-    ArrayCompute + ArrayValidity + AcceptArrayVisitor + ArrayStatistics + ToArrayData
+    ArrayCompute
+    + ArrayValidity
+    + AcceptArrayVisitor
+    + ArrayStatistics
+    + StatisticsCompute
+    + ToArrayData
 {
     fn dtype(&self) -> &DType;
 
