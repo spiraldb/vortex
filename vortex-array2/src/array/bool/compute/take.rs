@@ -32,7 +32,6 @@ mod test {
     use crate::array::bool::{BoolData, BoolDef};
     use crate::array::primitive::PrimitiveData;
     use crate::compute::take::take;
-    use crate::validity::Validity::NonNullable;
     use crate::IntoArray;
 
     #[test]
@@ -46,13 +45,10 @@ mod test {
         ])
         .into_array();
 
-        let res = take(
-            &reference,
-            &PrimitiveData::from_vec(vec![0, 3, 4], NonNullable).into_array(),
-        )
-        .unwrap()
-        .to_typed_array::<BoolDef>()
-        .unwrap();
+        let res = take(&reference, &PrimitiveData::from(vec![0, 3, 4]).into_array())
+            .unwrap()
+            .to_typed_array::<BoolDef>()
+            .unwrap();
 
         assert_eq!(
             res.buffer(),

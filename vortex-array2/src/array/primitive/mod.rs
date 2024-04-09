@@ -83,6 +83,12 @@ impl PrimitiveData {
     }
 }
 
+impl<T: NativePType> From<Vec<T>> for PrimitiveData {
+    fn from(values: Vec<T>) -> Self {
+        PrimitiveData::from_vec(values, Validity::NonNullable)
+    }
+}
+
 impl ArrayTrait for PrimitiveArray<'_> {
     fn dtype(&self) -> &DType {
         self.dtype

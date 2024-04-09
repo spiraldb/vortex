@@ -63,12 +63,11 @@ mod test {
     use crate::array::primitive::PrimitiveData;
     use crate::array::r#struct::StructData;
     use crate::batch::ColumnBatch;
-    use crate::validity::Validity::NonNullable;
     use crate::{IntoArray, IntoArrayData};
 
     #[test]
     fn batch_visitor() {
-        let col = PrimitiveData::from_vec(vec![0, 1, 2], NonNullable).into_array_data();
+        let col = PrimitiveData::from(vec![0, 1, 2]).into_array_data();
         let nested_struct = StructData::try_new(
             vec![Arc::new("x".into()), Arc::new("y".into())],
             vec![col.clone(), col.clone()],

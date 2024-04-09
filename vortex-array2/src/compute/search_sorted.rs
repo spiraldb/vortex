@@ -119,7 +119,7 @@ impl<S: IndexOrd<T> + Len + ?Sized, T> SearchSorted<T> for S {
 
 impl IndexOrd<Scalar> for &Array<'_> {
     fn index_cmp(&self, idx: usize, elem: &Scalar) -> Option<Ordering> {
-        let scalar_a = scalar_at(*self, idx).ok()?;
+        let scalar_a = scalar_at(self, idx).ok()?;
         scalar_a.partial_cmp(elem)
     }
 }
@@ -133,7 +133,7 @@ impl<T: PartialOrd> IndexOrd<T> for [T] {
 
 impl Len for &Array<'_> {
     fn len(&self) -> usize {
-        Array::len(*self)
+        Array::len(self)
     }
 }
 

@@ -13,7 +13,7 @@ mod implementation;
 mod metadata;
 mod stats;
 mod tree;
-mod validity;
+pub mod validity;
 mod view;
 mod visitor;
 

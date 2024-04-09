@@ -118,7 +118,7 @@ impl FillForwardFn for BoolArray<'_> {
                 last_value
             })
             .collect::<Vec<_>>();
-        Ok(BoolData::from_vec(filled, Validity::NonNullable).into_array())
+        Ok(BoolData::from(filled).into_array())
     }
 }
 
