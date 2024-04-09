@@ -54,6 +54,6 @@ impl TakeFn for ALPArray {
             self.exponents().clone(),
             self.patches().map(|p| take(p, indices)).transpose()?,
         )
-        .to_array_data())
+        .into_array())
     }
 }

@@ -77,7 +77,7 @@ impl EncodingCompression for ALPEncoding {
             })
             .transpose()?;
 
-        Ok(ALPArray::new(compressed_encoded, exponents, compressed_patches).to_array_data())
+        Ok(ALPArray::new(compressed_encoded, exponents, compressed_patches).into_array())
     }
 }
 
@@ -95,15 +95,15 @@ where
         exponents,
         PrimitiveArray::from(encoded)
             .into_nullable(values.nullability())
-            .to_array_data(),
+            .into_array(),
         (!exc.is_empty()).then(|| {
             SparseArray::new(
-                PrimitiveArray::from(exc_pos).to_array_data(),
-                PrimitiveArray::from(exc).to_array_data(),
+                PrimitiveArray::from(exc_pos).into_array(),
+                PrimitiveArray::from(exc).into_array(),
                 len,
                 Scalar::null(&values.dtype().as_nullable()),
             )
-            .to_array_data()
+            .into_array()
         }),
     )
 }
