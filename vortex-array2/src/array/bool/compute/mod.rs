@@ -2,21 +2,24 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef as ArrowArrayRef, BooleanArray as ArrowBoolArray};
 use arrow_buffer::buffer::BooleanBuffer;
+use itertools::Itertools;
 use vortex::scalar::{BoolScalar, Scalar};
 use vortex_error::VortexResult;
+use vortex_schema::Nullability;
 
 use crate::array::bool::{BoolArray, BoolData};
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::fill::FillForwardFn;
-use crate::compute::flatten::{FlattenFn, FlattenedData};
+use crate::compute::flatten::{flatten_bool, FlattenFn, FlattenedData};
 use crate::compute::scalar_at::ScalarAtFn;
+use crate::compute::search_sorted::Len;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
-use crate::{Array, ArrayTrait, ToArrayData, WithArray};
+use crate::{Array, ArrayTrait, IntoArray, ToArrayData, WithArray};
 
 mod take;
 
@@ -57,26 +60,21 @@ impl AsArrowArray for BoolArray<'_> {
 
 impl AsContiguousFn for BoolArray<'_> {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
-        let validity: Option<Validity> = if self.dtype().is_nullable() {
-            Some(Validity::from_iter(
-                arrays
-                    .iter()
-                    .map(|a| a.with_array(|a| a.logical_validity())),
-            ))
-        } else {
-            None
-        };
+        let validity = Validity::from_iter(
+            arrays
+                .iter()
+                .map(|a| a.with_array(|a| a.logical_validity())),
+        );
 
-        Ok(BoolData::try_new(
-            BooleanBuffer::from(
-                arrays
-                    .iter()
-                    .flat_map(|a| a.as_bool().buffer().iter())
-                    .collect::<Vec<bool>>(),
-            ),
-            validity,
-        )?
-        .to_array_data())
+        let mut bools = Vec::with_capacity(arrays.iter().map(|a| a.len()).sum());
+        for buffer in arrays
+            .iter()
+            .map(|a| flatten_bool(a).map(|bool_data| bool_data.as_ref().buffer()))
+        {
+            bools.extend(buffer?.iter().collect_vec())
+        }
+
+        Ok(BoolData::try_new(BooleanBuffer::from(bools), validity)?.into_array())
     }
 }
 
@@ -91,8 +89,8 @@ impl FlattenFn for BoolArray<'_> {
 impl ScalarAtFn for BoolArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         Ok(BoolScalar::try_new(
-            self.is_valid(index).then(|| self.buffer.value(index)),
-            self.nullability(),
+            self.is_valid(index).then(|| self.buffer().value(index)),
+            self.dtype().nullability(),
         )
         .unwrap()
         .into())
@@ -101,8 +99,8 @@ impl ScalarAtFn for BoolArray<'_> {
 
 impl FillForwardFn for BoolArray<'_> {
     fn fill_forward(&self) -> VortexResult<Array<'static>> {
-        if self.validity().is_none() {
-            return Ok(Arc::new(self.clone()));
+        if self.dtype().nullability() == Nullability::NonNullable {
+            return Ok(self.to_array_data().into_array());
         }
 
         let validity = self.validity().unwrap().to_bool_array();
