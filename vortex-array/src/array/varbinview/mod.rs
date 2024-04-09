@@ -183,7 +183,7 @@ impl VarBinViewArray {
     pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
         let mut builder = VarBinViewBuilder::with_capacity(vec.len());
         for v in vec {
-            builder.append_value(v)
+            builder.push_value(v)
         }
         builder.finish(dtype)
     }
@@ -195,7 +195,7 @@ impl VarBinViewArray {
         let iter = iter.into_iter();
         let mut builder = VarBinViewBuilder::with_capacity(iter.size_hint().0);
         for v in iter {
-            builder.append(v)
+            builder.push(v)
         }
         builder.finish(dtype)
     }

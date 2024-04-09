@@ -32,15 +32,15 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
     }
 
     #[inline]
-    pub fn append(&mut self, value: Option<T>) {
+    pub fn push(&mut self, value: Option<T>) {
         match value {
-            None => self.append_null(),
-            Some(v) => self.append_value(v),
+            None => self.push_null(),
+            Some(v) => self.push_value(v),
         }
     }
 
     #[inline]
-    pub fn append_value(&mut self, value: T) {
+    pub fn push_value(&mut self, value: T) {
         let vbytes = value.as_ref();
         if self.in_progress.len() + vbytes.len() > self.in_progress.capacity() {
             let done = mem::replace(
@@ -72,7 +72,7 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
     }
 
     #[inline]
-    pub fn append_null(&mut self) {
+    pub fn push_null(&mut self) {
         self.views.push(BinaryView {
             inlined: Inlined::new("".as_bytes()),
         });
