@@ -259,7 +259,7 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
 
 pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
     let bit_width = array.bit_width();
-    let encoded = flatten_primitive(cast(array.encoded(), U8.into())?.as_ref())?;
+    let encoded = flatten_primitive(&cast(array.encoded(), U8.into())?)?;
     let ptype: PType = array.dtype().try_into()?;
     let index_in_encoded = index + array.offset();
 
@@ -289,7 +289,7 @@ pub unsafe fn unpack_single_primitive<T: NativePType + TryBitPack>(
     let chunk_bytes = &packed[chunk_index * bytes_per_chunk..][0..bytes_per_chunk];
     let index_in_chunk = index_to_decode % 1024;
 
-    <T as TryBitPack>::try_unpack_single(chunk_bytes, bit_width, index_in_chunk)
+    T::try_unpack_single(chunk_bytes, bit_width, index_in_chunk)
         .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))
 }
 

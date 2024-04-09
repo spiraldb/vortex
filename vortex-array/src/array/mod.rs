@@ -91,6 +91,7 @@ pub trait WithArrayCompute {
 }
 
 impl WithArrayCompute for dyn Array + '_ {
+    #[inline]
     fn with_compute<R, F: Fn(&dyn ArrayCompute) -> VortexResult<R>>(
         &self,
         f: F,
