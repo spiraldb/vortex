@@ -221,14 +221,14 @@ impl VarBinViewArray {
         unsafe {
             if view.inlined.size > 12 {
                 let arrow_data_buffer = flatten_primitive(
-                    self.data
+                    &self
+                        .data
                         .get(view._ref.buffer_index as usize)
                         .unwrap()
                         .slice(
                             view._ref.offset as usize,
                             (view._ref.size + view._ref.offset) as usize,
-                        )?
-                        .as_ref(),
+                        )?,
                 )?;
                 // TODO(ngates): can we avoid returning a copy?
                 Ok(arrow_data_buffer.typed_data::<u8>().to_vec())
