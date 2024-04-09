@@ -3,11 +3,12 @@ use std::sync::Arc;
 use arrow_array::RecordBatch;
 
 use crate::array::r#struct::StructData;
-use crate::{ArrayData, ToArrayData};
+use crate::arrow::array::FromArrowArray;
+use crate::{ArrayData, IntoArrayData, ToArrayData};
 
 impl ToArrayData for RecordBatch {
     fn to_array_data(&self) -> ArrayData {
-        StructData::new(
+        StructData::try_new(
             self.schema()
                 .fields()
                 .iter()
@@ -22,6 +23,7 @@ impl ToArrayData for RecordBatch {
                 .collect(),
             self.num_rows(),
         )
-        .to_array_data()
+        .unwrap()
+        .into_array_data()
     }
 }

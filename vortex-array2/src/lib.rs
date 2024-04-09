@@ -36,12 +36,14 @@ use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Array<'v> {
     Data(ArrayData),
     DataRef(&'v ArrayData),
     View(ArrayView<'v>),
 }
+
+pub type OwnedArray = Array<'static>;
 
 impl Array<'_> {
     pub fn encoding(&self) -> EncodingRef {
@@ -66,6 +68,21 @@ impl Array<'_> {
 
     pub fn is_empty(&self) -> bool {
         self.with_array(|a| a.is_empty())
+    }
+
+    pub fn into_typed_data<D: ArrayDef>(self) -> Option<TypedArrayData<D>> {
+        TypedArrayData::<D>::try_from(self.into_array_data()).ok()
+    }
+
+    pub fn to_static(&self) -> Array<'static> {
+        Array::Data(self.to_array_data())
+    }
+}
+
+impl<'a> Array<'a> {
+    pub fn to_typed_array<D: ArrayDef>(&self) -> Option<D::Array<'a>> {
+        // D::Array::try_from_parts(self, &D::Metadata::default()).ok()
+        todo!()
     }
 }
 

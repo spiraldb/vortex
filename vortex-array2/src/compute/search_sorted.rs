@@ -5,7 +5,7 @@ use vortex::scalar::Scalar;
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::compute::scalar_at::scalar_at;
-use crate::Array;
+use crate::{Array, WithArray};
 
 #[derive(Debug, Copy, Clone)]
 pub enum SearchSortedSide {
@@ -23,12 +23,12 @@ pub fn search_sorted<T: Into<Scalar>>(
     side: SearchSortedSide,
 ) -> VortexResult<usize> {
     let scalar = target.into().cast(array.dtype())?;
-    array.with_compute(|c| {
-        if let Some(search_sorted) = c.search_sorted() {
+    array.with_array(|a| {
+        if let Some(search_sorted) = a.search_sorted() {
             return search_sorted.search_sorted(&scalar, side);
         }
 
-        if c.scalar_at().is_some() {
+        if a.scalar_at().is_some() {
             return Ok(SearchSorted::search_sorted(&array, &scalar, side));
         }
 

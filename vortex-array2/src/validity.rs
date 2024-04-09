@@ -34,7 +34,7 @@ impl ValidityMetadata {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Validity<'v> {
     NonNullable,
     AllValid,
@@ -114,8 +114,25 @@ impl<'v> Validity<'v> {
 
     pub fn to_static(&self) -> Validity<'static> {
         match self {
+            Validity::NonNullable => Validity::NonNullable,
+            Validity::AllValid => Validity::AllValid,
+            Validity::AllInvalid => Validity::AllInvalid,
             Validity::Array(a) => Validity::Array(a.to_array_data().into_array()),
-            _ => self.clone(),
+        }
+    }
+}
+
+impl PartialEq for Validity<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Validity::NonNullable, Validity::NonNullable) => true,
+            (Validity::AllValid, Validity::AllValid) => true,
+            (Validity::AllInvalid, Validity::AllInvalid) => true,
+            (Validity::Array(a), Validity::Array(b)) => {
+                flatten_bool(a).unwrap().to_typed_array().buffer()
+                    == flatten_bool(b).unwrap().to_typed_array().buffer()
+            }
+            _ => false,
         }
     }
 }
@@ -127,7 +144,7 @@ impl From<Vec<bool>> for Validity<'static> {
         } else if !bools.iter().any(|b| *b) {
             Validity::AllInvalid
         } else {
-            Validity::Array(BoolData::from_vec(bools, Validity::NonNullable).to_array_data())
+            Validity::Array(BoolData::from_vec(bools, Validity::NonNullable).into_array())
         }
     }
 }
@@ -139,13 +156,13 @@ impl From<BooleanBuffer> for Validity<'static> {
         } else if value.count_set_bits() == 0 {
             Validity::AllInvalid
         } else {
-            Validity::Array(BoolData::from(value).to_array())
+            Validity::Array(BoolData::from(value).into_array())
         }
     }
 }
 
 impl<'a> FromIterator<Validity<'a>> for Validity<'static> {
-    fn from_iter<T: IntoIterator<Item = Validity<'a>>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item = Validity<'a>>>(_iter: T) -> Self {
         todo!()
     }
 }
@@ -171,7 +188,7 @@ impl LogicalValidity {
             LogicalValidity::AllInvalid(l) => Ok(Some(NullBuffer::new_null(*l))),
             LogicalValidity::Array(a) => {
                 let bool_data = flatten_bool(&a.to_array())?;
-                Ok(Some(NullBuffer::new(bool_data.as_ref().buffer())))
+                Ok(Some(NullBuffer::new(bool_data.to_typed_array().buffer())))
             }
         }
     }

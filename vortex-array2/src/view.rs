@@ -164,7 +164,7 @@ impl ArrayParts for ArrayView<'_> {
     }
 
     fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array> {
-        self.child(idx, dtype).map(|a| a.to_array_data())
+        self.child(idx, dtype).map(|a| a.into_array())
     }
 
     fn nchildren(&self) -> usize {

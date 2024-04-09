@@ -57,11 +57,11 @@ impl AsArrowArray for BoolArray<'_> {
 }
 
 impl AsContiguousFn for BoolArray<'_> {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array<'static>> {
         let validity = if self.dtype().is_nullable() {
             Validity::from_iter(arrays.iter().map(|a| {
                 let bool_data = BoolData::try_from(a.to_array_data()).unwrap();
-                bool_data.as_ref().validity().to_static()
+                bool_data.to_typed_array().validity().to_static()
             }))
         } else {
             Validity::NonNullable
@@ -70,7 +70,7 @@ impl AsContiguousFn for BoolArray<'_> {
         let mut bools = Vec::with_capacity(arrays.iter().map(|a| a.len()).sum());
         for buffer in arrays
             .iter()
-            .map(|a| flatten_bool(a).map(|bool_data| bool_data.as_ref().buffer()))
+            .map(|a| flatten_bool(a).map(|bool_data| bool_data.to_typed_array().buffer()))
         {
             bools.extend(buffer?.iter().collect_vec())
         }
@@ -134,7 +134,7 @@ mod test {
         let filled =
             BoolData::try_from(compute::fill::fill_forward(&barr).unwrap().to_array_data())
                 .unwrap();
-        let filled_bool = filled.as_ref();
+        let filled_bool = filled.to_typed_array();
         assert_eq!(
             filled_bool.buffer().iter().collect::<Vec<bool>>(),
             vec![false, false, false, true, true]

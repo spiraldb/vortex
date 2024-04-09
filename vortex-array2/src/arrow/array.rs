@@ -27,9 +27,9 @@ use vortex_schema::DType;
 
 use crate::array::bool::BoolData;
 use crate::array::primitive::PrimitiveData;
-use crate::array::r#struct::{StructArray, StructData};
+use crate::array::r#struct::StructData;
 use crate::validity::Validity;
-use crate::{Array, ArrayData, ArrayParts, IntoArrayData, ToArrayData};
+use crate::{ArrayData, ArrayParts, IntoArrayData};
 
 pub trait FromArrowArray<A> {
     fn from_arrow(array: A, nullable: bool) -> Self;
@@ -96,7 +96,7 @@ where
         }
 
         match T::DATA_TYPE {
-            DataType::Timestamp(time_unit, tz) => {
+            DataType::Timestamp(_time_unit, _tz) => {
                 todo!("Port from vortex1")
             }
             DataType::Date32 => todo!(),
@@ -111,7 +111,7 @@ where
 }
 
 impl<T: ByteArrayType> FromArrowArray<&GenericByteArray<T>> for ArrayData {
-    fn from_arrow(value: &GenericByteArray<T>, nullable: bool) -> Self {
+    fn from_arrow(_value: &GenericByteArray<T>, nullable: bool) -> Self {
         let _dtype = match T::DATA_TYPE {
             DataType::Binary | DataType::LargeBinary => DType::Binary(nullable.into()),
             DataType::Utf8 | DataType::LargeUtf8 => DType::Utf8(nullable.into()),
@@ -122,7 +122,7 @@ impl<T: ByteArrayType> FromArrowArray<&GenericByteArray<T>> for ArrayData {
 }
 
 impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayData {
-    fn from_arrow(value: &GenericByteViewArray<T>, nullable: bool) -> Self {
+    fn from_arrow(_value: &GenericByteViewArray<T>, nullable: bool) -> Self {
         let _dtype = match T::DATA_TYPE {
             DataType::BinaryView => DType::Binary(nullable.into()),
             DataType::Utf8View => DType::Utf8(nullable.into()),
@@ -155,7 +155,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
                 .columns()
                 .iter()
                 .zip(value.fields())
-                .map(|(c, field)| Array::from_arrow(c.clone(), field.is_nullable()))
+                .map(|(c, field)| ArrayData::from_arrow(c.clone(), field.is_nullable()))
                 .collect(),
             value.len(),
         )
@@ -165,7 +165,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
 }
 
 impl FromArrowArray<&ArrowNullArray> for ArrayData {
-    fn from_arrow(value: &ArrowNullArray, nullable: bool) -> Self {
+    fn from_arrow(_value: &ArrowNullArray, nullable: bool) -> Self {
         assert!(nullable);
         todo!("PORT")
         // ConstantArray::new(NullScalar::new(), value.len()).to_array_data()

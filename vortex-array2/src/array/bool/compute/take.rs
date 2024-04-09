@@ -6,14 +6,14 @@ use vortex_error::VortexResult;
 use crate::array::bool::{BoolArray, BoolData};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;
-use crate::Array;
 use crate::IntoArray;
+use crate::{Array, OwnedArray};
 
 impl TakeFn for BoolArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<Array> {
+    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         let validity = self.validity().take(indices)?;
         let indices_data = flatten_primitive(indices)?;
-        let indices = indices_data.as_ref();
+        let indices = indices_data.to_typed_array();
         match_each_integer_ptype!(indices.ptype(), |$I| {
             Ok(BoolData::from_vec(
                 take_bool(&self.buffer(), indices.typed_data::<$I>()),
@@ -29,11 +29,11 @@ fn take_bool<I: AsPrimitive<usize>>(bools: &BooleanBuffer, indices: &[I]) -> Vec
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::BoolData;
+    use crate::array::bool::{BoolData, BoolDef};
     use crate::array::primitive::PrimitiveData;
     use crate::compute::take::take;
     use crate::validity::Validity::NonNullable;
-    use crate::{IntoArray, ToArrayData};
+    use crate::IntoArray;
 
     #[test]
     fn take_nullable() {
@@ -46,20 +46,18 @@ mod test {
         ])
         .into_array();
 
-        let res = BoolData::try_from(
-            take(
-                &reference,
-                &PrimitiveData::from_vec(vec![0, 3, 4], NonNullable).into_array(),
-            )
-            .unwrap()
-            .to_array_data(),
+        let res = take(
+            &reference,
+            &PrimitiveData::from_vec(vec![0, 3, 4], NonNullable).into_array(),
         )
+        .unwrap()
+        .to_typed_array::<BoolDef>()
         .unwrap();
 
         assert_eq!(
-            res.as_ref().buffer(),
+            res.buffer(),
             BoolData::from_iter(vec![Some(false), None, Some(false)])
-                .as_ref()
+                .to_typed_array()
                 .buffer()
         );
     }

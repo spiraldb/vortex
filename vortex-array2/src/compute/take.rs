@@ -2,22 +2,22 @@ use log::info;
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::compute::flatten::flatten;
-use crate::Array;
+use crate::{Array, IntoArray, OwnedArray, WithArray};
 
 pub trait TakeFn {
-    fn take(&self, indices: &Array) -> VortexResult<Array>;
+    fn take(&self, indices: &Array) -> VortexResult<OwnedArray>;
 }
 
-pub fn take(array: &Array, indices: &Array) -> VortexResult<Array<'static>> {
-    array.with_compute(|c| {
-        if let Some(take) = c.take() {
+pub fn take(array: &Array, indices: &Array) -> VortexResult<OwnedArray> {
+    array.with_array(|a| {
+        if let Some(take) = a.take() {
             return take.take(indices);
         }
 
         // Otherwise, flatten and try again.
         info!("TakeFn not implemented for {}, flattening", array);
-        flatten(array)?.to_array_data().with_compute(|c| {
-            c.take().map(|t| t.take(indices)).unwrap_or_else(|| {
+        flatten(array)?.into_array().with_array(|a| {
+            a.take().map(|t| t.take(indices)).unwrap_or_else(|| {
                 Err(vortex_err!(NotImplemented: "take", array.encoding().id().name()))
             })
         })

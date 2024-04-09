@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::impl_encoding;
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
+use crate::{impl_encoding, IntoArrayData};
 use crate::{ArrayData, TypedArrayData};
 use crate::{ArrayView, ToArrayData};
 
@@ -122,7 +122,9 @@ impl ArrayValidity for BoolArray<'_> {
 
 impl ToArrayData for BoolArray<'_> {
     fn to_array_data(&self) -> ArrayData {
-        todo!()
+        BoolData::try_new(self.buffer().clone(), self.validity().clone())
+            .unwrap()
+            .into_array_data()
     }
 }
 

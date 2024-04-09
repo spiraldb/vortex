@@ -1,10 +1,10 @@
 use itertools::Itertools;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::Array;
+use crate::{Array, WithArray};
 
 pub trait AsContiguousFn {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array>;
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array<'static>>;
 }
 
 pub fn as_contiguous(arrays: &[Array]) -> VortexResult<Array<'static>> {
@@ -18,8 +18,8 @@ pub fn as_contiguous(arrays: &[Array]) -> VortexResult<Array<'static>> {
     }
 
     let first = arrays.first().unwrap();
-    first.with_compute(|c| {
-        c.as_contiguous()
+    first.with_array(|a| {
+        a.as_contiguous()
             .map(|f| f.as_contiguous(arrays))
             .unwrap_or_else(|| {
                 Err(vortex_err!(

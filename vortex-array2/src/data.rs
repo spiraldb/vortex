@@ -11,7 +11,7 @@ use vortex_schema::DType;
 use crate::encoding::EncodingRef;
 use crate::stats::Statistics;
 use crate::{
-    Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, IntoArrayData, ToArray,
+    Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, IntoArrayData, OwnedArray, ToArray,
     TryFromArrayParts,
 };
 
@@ -71,6 +71,10 @@ impl ArrayData {
 
     pub fn children(&self) -> &[Option<ArrayData>] {
         &self.children
+    }
+
+    pub fn into_typed_data<D: ArrayDef>(self) -> Option<TypedArrayData<D>> {
+        TypedArrayData::<D>::try_from(self).ok()
     }
 
     pub fn depth_first_traversal(&self) -> ArrayDataIterator {
@@ -171,10 +175,8 @@ impl<D: ArrayDef> TypedArrayData<D> {
             .downcast::<D::Metadata>()
             .unwrap()
     }
-}
 
-impl<'a, D: ArrayDef> AsRef<D::Array<'a>> for TypedArrayData<D> {
-    fn as_ref(&self) -> &D::Array<'a> {
+    pub fn to_typed_array(&self) -> D::Array<'_> {
         D::Array::try_from_parts(&self.data, self.metadata()).unwrap()
     }
 }
@@ -186,7 +188,7 @@ impl<D: ArrayDef> ToArray for TypedArrayData<D> {
 }
 
 impl<D: ArrayDef> IntoArray<'static> for TypedArrayData<D> {
-    fn into_array(self) -> Array<'static> {
+    fn into_array(self) -> OwnedArray {
         Array::Data(self.data)
     }
 }
@@ -253,6 +255,6 @@ impl Statistics for ArrayData {
 
     fn set(&self, stat: Stat, value: Scalar) {
         let mut locked = self.stats_set.write().unwrap();
-        locked.insert(&stat, value);
+        locked.insert(stat, value);
     }
 }
