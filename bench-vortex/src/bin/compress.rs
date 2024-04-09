@@ -16,11 +16,11 @@ use vortex::formatter::display_tree;
 pub fn main() {
     setup_logger(LevelFilter::Error);
 
-    compress_pbi(PBIDataset::CMSprovider);
-    compress_pbi(PBIDataset::Medicare1);
+    // compress_pbi(PBIDataset::CMSprovider);
+    // compress_pbi(PBIDataset::Medicare1);
     compress_pbi(PBIDataset::SalariesFrance);
-    compress_pbi(PBIDataset::MLB);
-    compress_pbi(PBIDataset::Redfin1);
+    // compress_pbi(PBIDataset::MedPayment1);
+    // compress_pbi(PBIDataset::Redfin1);
     panic!("done");
     compress_taxi();
 }

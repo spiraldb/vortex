@@ -3,6 +3,7 @@ use std::fs::File;
 use std::hash::Hash;
 use std::os::unix::fs::MetadataExt;
 
+use enum_iterator::Sequence;
 use itertools::Itertools;
 use vortex::formatter::display_tree;
 
@@ -309,58 +310,6 @@ impl PBIDataset {
         url.split('/').last().unwrap().to_string()
     }
 
-    pub fn all_values() -> Vec<PBIDataset> {
-        vec![
-            AirlineSentiment,
-            Arade,
-            Bimbo,
-            CMSprovider,
-            CityMaxCapita,
-            CommonGovernment,
-            Corporations,
-            Eixo,
-            Euro2016,
-            Food,
-            Generico,
-            HashTags,
-            Hatred,
-            IGlocations1,
-            IGlocations2,
-            IUBLibrary,
-            MLB,
-            MedPayment1,
-            MedPayment2,
-            Medicare1,
-            Medicare2,
-            Medicare3,
-            Motos,
-            MulheresMil,
-            NYC,
-            PanCreactomy1,
-            PanCreactomy2,
-            Physicians,
-            Provider,
-            RealEstate1,
-            RealEstate2,
-            Redfin1,
-            Redfin2,
-            Redfin3,
-            Redfin4,
-            Rentabilidad,
-            Romance,
-            SalariesFrance,
-            TableroSistemaPenal,
-            Taxpayer,
-            Telco,
-            TrainsUK1,
-            TrainsUK2,
-            USCensus,
-            Uberlandia,
-            Wins,
-            YaleLanguages,
-        ]
-    }
-
     fn csv_files(&self) -> Vec<String> {
         let urls = URLS.get(self).unwrap();
         self.dataset_name();
@@ -419,7 +368,7 @@ impl PBIUrl {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Sequence)]
 pub enum PBIDataset {
     AirlineSentiment,
     Arade,
@@ -534,6 +483,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 },
             )
             .expect("Failed to compress to vortex");
+            println!("Compressed asdf: {:?}", compressed);
             let from_vortex = open_vortex(&compressed).unwrap();
             let vx_size = from_vortex.nbytes();
 

@@ -40,8 +40,9 @@ tokio = "1.0.1"
 bzip2 = { workspace = true }
 csv = { workspace = true }
 arrow-csv = { workspace = true }
-arrow = {workspace = true }
-lazy_static = {workspace = true }
+arrow = { workspace = true }
+lazy_static = { workspace = true }
+enum-iterator = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
