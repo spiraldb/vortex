@@ -7,8 +7,8 @@ use vortex_schema::DType;
 
 use crate::impl_encoding;
 use crate::stats::{ArrayStatistics, Statistics};
-use crate::validity::Validity;
 use crate::validity::{ArrayValidity, ValidityMetadata};
+use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
 use crate::{ArrayData, TypedArrayData};
@@ -109,8 +109,8 @@ impl ArrayValidity for BoolArray<'_> {
         self.validity().is_valid(index)
     }
 
-    fn logical_validity(&self) -> Validity {
-        self.validity.clone()
+    fn logical_validity(&self) -> LogicalValidity {
+        self.validity.to_logical(self.len())
     }
 }
 
@@ -122,7 +122,7 @@ impl ToArrayData for BoolArray<'_> {
 
 impl AcceptArrayVisitor for BoolArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_buffer(self.buffer())?;
+        visitor.visit_buffer(self.buffer().inner())?;
         visitor.visit_validity(self.validity())
     }
 }

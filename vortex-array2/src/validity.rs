@@ -1,15 +1,17 @@
+use arrow_buffer::{BooleanBuffer, NullBuffer};
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::BoolData;
+use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
-use crate::{Array, ArrayData, ToArrayData, WithArray};
+use crate::{Array, ArrayData, ToArray, ToArrayData, WithArray};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
-    fn logical_validity(&self) -> Validity;
+    fn logical_validity(&self) -> LogicalValidity;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -100,6 +102,15 @@ impl<'v> Validity<'v> {
             Validity::Array(a) => Ok(Validity::Array(take(a, indices)?)),
         }
     }
+
+    pub fn to_logical(&self, length: usize) -> LogicalValidity {
+        match self {
+            Validity::NonNullable => LogicalValidity::AllValid(length),
+            Validity::AllValid => LogicalValidity::AllValid(length),
+            Validity::AllInvalid => LogicalValidity::AllInvalid(length),
+            Validity::Array(a) => LogicalValidity::Array(a.to_array_data()),
+        }
+    }
 }
 
 impl From<Vec<bool>> for Validity<'static> {
@@ -124,5 +135,25 @@ impl<'a, E> FromIterator<&'a Option<E>> for Validity<'static> {
     fn from_iter<T: IntoIterator<Item = &'a Option<E>>>(iter: T) -> Self {
         let bools: Vec<bool> = iter.into_iter().map(|option| option.is_some()).collect();
         Validity::from(bools)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum LogicalValidity {
+    AllValid(usize),
+    AllInvalid(usize),
+    Array(ArrayData),
+}
+
+impl LogicalValidity {
+    pub fn to_null_buffer(&self) -> VortexResult<Option<NullBuffer>> {
+        match self {
+            LogicalValidity::AllValid(_) => Ok(None),
+            LogicalValidity::AllInvalid(l) => Ok(Some(NullBuffer::new_null(*l))),
+            LogicalValidity::Array(a) => {
+                let bool_data = flatten_bool(&a.to_array())?;
+                Ok(Some(NullBuffer::new(bool_data.as_ref().buffer())))
+            }
+        }
     }
 }

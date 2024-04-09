@@ -37,48 +37,59 @@ pub trait FromArrowArray<A> {
 
 impl IntoArrayData for Buffer {
     fn into_array_data(self) -> ArrayData {
-        PrimitiveData::new(PType::U8, self.to_owned(), None)
+        let length = self.len();
+        PrimitiveData::try_new(
+            ScalarBuffer::<u8>::new(self, 0, length),
+            Validity::NonNullable,
+        )
+        .unwrap()
+        .into_array_data()
     }
 }
 
 impl IntoArrayData for NullBuffer {
     fn into_array_data(self) -> ArrayData {
-        BoolData::new(self.into_inner(), None).to_array_data()
+        BoolData::try_new(self.into_inner(), Validity::NonNullable)
+            .unwrap()
+            .into_array_data()
     }
 }
 
 impl<T: ArrowNativeType + NativePType> IntoArrayData for ScalarBuffer<T> {
     fn into_array_data(self) -> ArrayData {
-        PrimitiveData::new(T::PTYPE, self.into_inner(), None).to_array_data()
+        let length = self.len();
+        PrimitiveData::try_new(
+            ScalarBuffer::<T>::new(self.into_inner(), 0, length),
+            Validity::NonNullable,
+        )
+        .unwrap()
+        .into_array_data()
     }
 }
 
-impl<O: OffsetSizeTrait> IntoArrayData for OffsetBuffer<O> {
+impl<O: NativePType + OffsetSizeTrait> IntoArrayData for OffsetBuffer<O> {
     fn into_array_data(self) -> ArrayData {
-        let ptype = if O::IS_LARGE { PType::I64 } else { PType::I32 };
         let length = self.len();
         let array = PrimitiveData::try_new(
             ScalarBuffer::<O>::new(self.into_inner().into_inner(), 0, length),
             Validity::NonNullable,
         )
         .unwrap()
-        .into_data();
-
+        .into_array_data();
         array.statistics().set(Stat::IsSorted, true.into());
         array.statistics().set(Stat::IsStrictSorted, true.into());
         array
     }
 }
 
-impl<T: ArrowPrimitiveType> FromArrowArray<&ArrowPrimitiveArray<T>> for ArrayData {
+impl<T: ArrowPrimitiveType> FromArrowArray<&ArrowPrimitiveArray<T>> for ArrayData
+where
+    <T as ArrowPrimitiveType>::Native: NativePType,
+{
     fn from_arrow(value: &ArrowPrimitiveArray<T>, nullable: bool) -> Self {
-        let ptype: PType = (&T::DATA_TYPE).try_into().unwrap();
-        let arr = PrimitiveData::new(
-            ptype,
-            value.values().inner().to_owned(),
-            nulls(value.nulls(), nullable, value.len()),
-        )
-        .to_array_data();
+        let arr = PrimitiveData::try_new(value.values().clone(), nulls(value.nulls(), nullable))
+            .unwrap()
+            .into_array_data();
 
         if T::DATA_TYPE.is_numeric() {
             return arr;
@@ -162,22 +173,20 @@ impl FromArrowArray<&ArrowNullArray> for ArrayData {
     }
 }
 
-fn nulls(nulls: Option<&NullBuffer>, nullable: bool, len: usize) -> Option<Validity> {
+fn nulls(nulls: Option<&NullBuffer>, nullable: bool) -> Validity {
     if nullable {
-        Some(
-            nulls
-                .map(|nulls| {
-                    if nulls.null_count() == nulls.len() {
-                        Validity::Invalid(len)
-                    } else {
-                        Validity::from(nulls.inner().clone())
-                    }
-                })
-                .unwrap_or_else(|| Validity::Valid(len)),
-        )
+        nulls
+            .map(|nulls| {
+                if nulls.null_count() == nulls.len() {
+                    Validity::AllInvalid
+                } else {
+                    Validity::from(nulls.inner().clone())
+                }
+            })
+            .unwrap_or_else(|| Validity::AllValid)
     } else {
         assert!(nulls.is_none());
-        None
+        Validity::NonNullable
     }
 }
 

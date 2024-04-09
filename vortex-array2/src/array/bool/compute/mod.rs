@@ -8,7 +8,6 @@ use vortex_error::VortexResult;
 use vortex_schema::Nullability;
 
 use crate::array::bool::{BoolArray, BoolData};
-use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::fill::FillForwardFn;
@@ -53,18 +52,21 @@ impl AsArrowArray for BoolArray<'_> {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         Ok(Arc::new(ArrowBoolArray::new(
             self.buffer().clone(),
-            as_nulls(self.logical_validity())?,
+            self.logical_validity().to_null_buffer()?,
         )))
     }
 }
 
 impl AsContiguousFn for BoolArray<'_> {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
-        let validity = Validity::from_iter(
-            arrays
-                .iter()
-                .map(|a| a.with_array(|a| a.logical_validity())),
-        );
+        let validity = if self.dtype().is_nullable() {
+            Validity::from_iter(arrays.iter().map(|a| {
+                let bool_data = BoolData::try_from(a.to_array_data()).unwrap();
+                bool_data.as_ref().validity().clone()
+            }))
+        } else {
+            Validity::NonNullable
+        };
 
         let mut bools = Vec::with_capacity(arrays.iter().map(|a| a.len()).sum());
         for buffer in arrays
@@ -103,12 +105,12 @@ impl FillForwardFn for BoolArray<'_> {
             return Ok(self.to_array_data().into_array());
         }
 
-        let validity = self.validity().unwrap().to_bool_array();
+        let validity = self.logical_validity().to_null_buffer()?.unwrap();
         let bools = self.buffer();
         let mut last_value = false;
         let filled = bools
             .iter()
-            .zip(validity.buffer().iter())
+            .zip(validity.inner().iter())
             .map(|(v, valid)| {
                 if valid {
                     last_value = v;
@@ -116,7 +118,7 @@ impl FillForwardFn for BoolArray<'_> {
                 last_value
             })
             .collect::<Vec<_>>();
-        Ok(BoolArray::from(filled).to_array_data())
+        Ok(BoolData::from_vec(filled, Validity::NonNullable).into_array())
     }
 }
 

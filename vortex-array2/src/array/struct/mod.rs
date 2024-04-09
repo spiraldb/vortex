@@ -4,7 +4,7 @@ use vortex_schema::{DType, FieldNames};
 
 use crate::compute::ArrayCompute;
 use crate::stats::ArrayStatistics;
-use crate::validity::{ArrayValidity, Validity};
+use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ToArray, WithArray};
 use crate::{Array, ArrayMetadata};
@@ -117,7 +117,7 @@ impl ArrayValidity for StructArray<'_> {
         todo!()
     }
 
-    fn logical_validity(&self) -> Validity {
+    fn logical_validity(&self) -> LogicalValidity {
         todo!()
     }
 }

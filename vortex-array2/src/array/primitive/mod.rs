@@ -7,7 +7,7 @@ use vortex_schema::DType;
 use crate::compute::ArrayCompute;
 use crate::impl_encoding;
 use crate::stats::{ArrayStatistics, Statistics};
-use crate::validity::{ArrayValidity, Validity, ValidityMetadata};
+use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
 use crate::{ArrayData, TypedArrayData};
@@ -64,7 +64,7 @@ impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
 }
 
 impl PrimitiveData {
-    pub fn try_new<T: NativePType>(
+    pub fn try_new<T: NativePType + ArrowNativeType>(
         buffer: ScalarBuffer<T>,
         validity: Validity,
     ) -> VortexResult<Self> {
@@ -98,8 +98,8 @@ impl ArrayValidity for PrimitiveArray<'_> {
         self.validity().is_valid(index)
     }
 
-    fn logical_validity(&self) -> Validity {
-        self.validity().clone()
+    fn logical_validity(&self) -> LogicalValidity {
+        self.validity().to_logical(self.len())
     }
 }
 
