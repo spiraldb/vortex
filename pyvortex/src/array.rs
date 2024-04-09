@@ -212,7 +212,7 @@ impl PyRoaringBoolArray {
     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
         RoaringBoolArray::encode(array.unwrap())
             .map_err(PyVortexError::map_err)
-            .and_then(|zarray| PyArray::wrap(array.py(), zarray.to_array_data()))
+            .and_then(|zarray| PyArray::wrap(array.py(), zarray.into_array()))
     }
 }
 
@@ -222,7 +222,7 @@ impl PyRoaringIntArray {
     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
         RoaringIntArray::encode(array.unwrap())
             .map_err(PyVortexError::map_err)
-            .and_then(|zarray| PyArray::wrap(array.py(), zarray.to_array_data()))
+            .and_then(|zarray| PyArray::wrap(array.py(), zarray.into_array()))
     }
 }
 

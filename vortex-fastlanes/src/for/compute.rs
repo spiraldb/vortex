@@ -37,7 +37,7 @@ impl TakeFn for FoRArray {
             self.reference.clone(),
             self.shift,
         )?
-        .to_array_data())
+        .into_array())
     }
 }
 

@@ -86,7 +86,7 @@ impl Array for FoRArray {
             shift: self.shift,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
-        .to_array_data())
+        .into_array())
     }
 
     #[inline]

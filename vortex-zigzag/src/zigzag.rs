@@ -42,7 +42,7 @@ impl ZigZagArray {
 
     pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => Ok(zigzag_encode(p)?.to_array_data()),
+            ArrayKind::Primitive(p) => Ok(zigzag_encode(p)?.into_array()),
             _ => Err(vortex_err!("ZigZag can only encoding primitive arrays")),
         }
     }
@@ -76,7 +76,7 @@ impl Array for ZigZagArray {
     }
 
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Self::try_new(self.encoded.slice(start, stop)?)?.to_array_data())
+        Ok(Self::try_new(self.encoded.slice(start, stop)?)?.into_array())
     }
 
     #[inline]

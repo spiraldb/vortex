@@ -238,7 +238,7 @@ impl Array for PrimitiveArray {
             dtype: self.dtype.clone(),
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
-        .to_array_data())
+        .into_array())
     }
 
     #[inline]
@@ -336,8 +336,8 @@ impl<T: NativePType> From<Vec<T>> for PrimitiveArray {
 }
 
 impl<T: NativePType> IntoArray for Vec<T> {
-    fn to_array_data(self) -> ArrayRef {
-        PrimitiveArray::from(self).to_array_data()
+    fn into_array(self) -> ArrayRef {
+        PrimitiveArray::from(self).into_array()
     }
 }
 

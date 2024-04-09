@@ -159,7 +159,7 @@ impl Array for BitPackedArray {
             stop - start,
             offset,
         )
-        .map(|a| a.to_array_data())
+        .map(|a| a.into_array())
     }
 
     #[inline]

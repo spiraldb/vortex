@@ -114,7 +114,7 @@ impl Array for DateTimeArray {
             self.validity().map(|v| v.slice(start, stop)).transpose()?,
             self.dtype.clone(),
         )
-        .to_array_data())
+        .into_array())
     }
 
     fn encoding(&self) -> EncodingRef {

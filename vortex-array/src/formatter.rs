@@ -121,13 +121,13 @@ mod test {
 
     #[test]
     fn display_primitive() {
-        let arr: ArrayRef = (0..100).collect::<Vec<i32>>().to_array_data();
+        let arr: ArrayRef = (0..100).collect::<Vec<i32>>().into_array();
         assert_eq!(format!("{}", arr), "vortex.primitive(int(32), len=100)");
     }
 
     #[test]
     fn tree_display_primitive() {
-        let arr: ArrayRef = (0..100).collect::<Vec<i32>>().to_array_data();
+        let arr: ArrayRef = (0..100).collect::<Vec<i32>>().into_array();
         assert_eq!(display_tree(&arr), "root: vortex.primitive(int(32), len=100) nbytes=400 B (100.00%)\n  values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]...\n  validity: None\n")
     }
 }

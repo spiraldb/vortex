@@ -25,7 +25,7 @@ impl EncodingSerde for REEEncoding {
         let ends_dtype = ctx.dtype()?;
         let ends = ctx.with_schema(&ends_dtype).read()?;
         let values = ctx.read()?;
-        Ok(REEArray::new(ends, values, validity).to_array_data())
+        Ok(REEArray::new(ends, values, validity).into_array())
     }
 }
 
@@ -53,8 +53,8 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = REEArray::new(
-            vec![0u8, 9, 20, 32, 49].to_array_data(),
-            vec![-7i64, -13, 17, 23].to_array_data(),
+            vec![0u8, 9, 20, 32, 49].into_array(),
+            vec![-7i64, -13, 17, 23].into_array(),
             None,
         );
         let read_arr = roundtrip_array(&arr).unwrap();

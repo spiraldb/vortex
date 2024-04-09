@@ -45,5 +45,5 @@ fn patch_with_sparse<T: NativePType>(
         // TODO(ngates): if patch values has null, we need to patch into the validity buffer
         array.validity().map(|v| v.to_owned_view()),
     )
-    .to_array_data())
+    .into_array())
 }

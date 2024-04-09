@@ -89,7 +89,7 @@ impl Array for RoaringBoolArray {
             length: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
-        .to_array_data())
+        .into_array())
     }
 
     #[inline]

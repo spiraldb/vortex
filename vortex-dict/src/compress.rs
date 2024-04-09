@@ -83,7 +83,7 @@ impl EncodingCompression for DictEncoding {
             _ => unreachable!("This array kind should have been filtered out"),
         };
 
-        Ok(DictArray::new(codes, dict).to_array_data())
+        Ok(DictArray::new(codes, dict).into_array())
     }
 }
 
@@ -140,7 +140,7 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
         validity.push(false);
         validity.extend(vec![true; values.len() - 1]);
 
-        Some(Validity::array(BoolArray::from(validity).to_array_data()).unwrap())
+        Some(Validity::array(BoolArray::from(validity).into_array()).unwrap())
     } else {
         None
     };
@@ -222,7 +222,7 @@ where
         validity.push(false);
         validity.extend(vec![true; offsets.len() - 2]);
 
-        Some(Validity::array(BoolArray::from(validity).to_array_data()).unwrap())
+        Some(Validity::array(BoolArray::from(validity).into_array()).unwrap())
     } else {
         None
     };
@@ -230,8 +230,8 @@ where
     (
         PrimitiveArray::from(codes),
         VarBinArray::new(
-            PrimitiveArray::from(offsets).to_array_data(),
-            PrimitiveArray::from(bytes).to_array_data(),
+            PrimitiveArray::from(offsets).into_array(),
+            PrimitiveArray::from(bytes).into_array(),
             dtype,
             values_validity,
         ),

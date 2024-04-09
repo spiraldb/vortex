@@ -35,7 +35,7 @@ impl EncodingSerde for PrimitiveEncoding {
         let ptype = ctx.ptype()?;
         let validity = ctx.read_validity()?;
         let (_, buf) = ctx.read_buffer(|len| len * ptype.byte_width())?;
-        Ok(PrimitiveArray::new(ptype, buf, validity).to_array_data())
+        Ok(PrimitiveArray::new(ptype, buf, validity).into_array())
     }
 }
 

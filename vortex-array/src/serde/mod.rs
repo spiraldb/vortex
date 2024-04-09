@@ -42,9 +42,9 @@ pub trait EncodingSerde {
         BoolArray::new(
             BooleanBuffer::new(view.buffers().first().unwrap().clone(), 0, view.len()),
             view.child(0, &Validity::DTYPE)
-                .map(|c| Validity::Array(c.to_array_data())),
+                .map(|c| Validity::Array(c.into_array())),
         )
-        .to_array_data()
+        .into_array()
     }
 
     // TODO(ngates): remove this ideally? It can error... Maybe store lengths in array views?

@@ -22,7 +22,7 @@ impl EncodingSerde for DictEncoding {
         let dict = ctx.read()?;
         let codes_dtype = ctx.dtype()?;
         let codes = ctx.with_schema(&codes_dtype).read()?;
-        Ok(DictArray::new(codes, dict).to_array_data())
+        Ok(DictArray::new(codes, dict).into_array())
     }
 }
 
@@ -49,8 +49,8 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = DictArray::new(
-            vec![0u8, 0, 1, 2, 3].to_array_data(),
-            vec![-7i64, -13, 17, 23].to_array_data(),
+            vec![0u8, 0, 1, 2, 3].into_array(),
+            vec![-7i64, -13, 17, 23].into_array(),
         );
         let read_arr = roundtrip_array(&arr).unwrap();
 

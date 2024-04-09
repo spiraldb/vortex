@@ -69,7 +69,7 @@ impl Array for DictArray {
     // TODO(robert): Add function to trim the dictionary
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
-        Ok(Self::new(self.codes().slice(start, stop)?, self.values.clone()).to_array_data())
+        Ok(Self::new(self.codes().slice(start, stop)?, self.values.clone()).into_array())
     }
 
     fn encoding(&self) -> EncodingRef {

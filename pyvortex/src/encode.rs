@@ -44,16 +44,16 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
             .map(|dt| DType::from_arrow(&Field::new("_", dt, false)))?;
         PyArray::wrap(
             obj.py(),
-            ChunkedArray::new(encoded_chunks, dtype).to_array_data(),
+            ChunkedArray::new(encoded_chunks, dtype).into_array(),
         )
     } else if obj.is_instance(table)? {
         let array_stream = ArrowArrayStreamReader::from_pyarrow(obj)?;
         let dtype = DType::from_arrow(array_stream.schema());
         let chunks = array_stream
             .into_iter()
-            .map(|b| b.map(|bb| bb.to_array_data()).map_err(map_arrow_err))
+            .map(|b| b.map(|bb| bb.into_array()).map_err(map_arrow_err))
             .collect::<PyResult<Vec<ArrayRef>>>()?;
-        PyArray::wrap(obj.py(), ChunkedArray::new(chunks, dtype).to_array_data())
+        PyArray::wrap(obj.py(), ChunkedArray::new(chunks, dtype).into_array())
     } else {
         Err(PyValueError::new_err("Cannot convert object to enc array"))
     }

@@ -27,7 +27,7 @@ impl EncodingSerde for FoREncoding {
         let child = ctx.read()?;
         Ok(FoRArray::try_new(child, reference, shift)
             .unwrap()
-            .to_array_data())
+            .into_array())
     }
 }
 
@@ -54,7 +54,7 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = FoRArray::try_new(
-            vec![-7i64, -13, 17, 23].to_array_data(),
+            vec![-7i64, -13, 17, 23].into_array(),
             <i64 as Into<Scalar>>::into(-7i64),
             2,
         )

@@ -80,9 +80,9 @@ impl AsContiguousFn for VarBinArray {
             );
         }
 
-        let offsets_array = PrimitiveArray::from(offsets).to_array_data();
+        let offsets_array = PrimitiveArray::from(offsets).into_array();
 
-        Ok(VarBinArray::new(offsets_array, bytes, self.dtype.clone(), validity).to_array_data())
+        Ok(VarBinArray::new(offsets_array, bytes, self.dtype.clone(), validity).into_array())
     }
 }
 
@@ -140,8 +140,8 @@ impl AsArrowArray for VarBinArray {
 
 impl FlattenFn for VarBinArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
-        let bytes = flatten(self.bytes())?.to_array_data();
-        let offsets = flatten(self.offsets())?.to_array_data();
+        let bytes = flatten(self.bytes())?.into_array();
+        let offsets = flatten(self.offsets())?.into_array();
         Ok(FlattenedArray::VarBin(VarBinArray::new(
             offsets,
             bytes,

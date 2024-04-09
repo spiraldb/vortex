@@ -18,7 +18,7 @@ impl ArraySerde for ZigZagArray {
 impl EncodingSerde for ZigZagEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let encoded = ctx.with_schema(&encoded_dtype(ctx.schema())).read()?;
-        Ok(ZigZagArray::new(encoded).to_array_data())
+        Ok(ZigZagArray::new(encoded).into_array())
     }
 }
 

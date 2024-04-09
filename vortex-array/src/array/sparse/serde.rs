@@ -42,7 +42,7 @@ impl EncodingSerde for SparseEncoding {
             // so everything that goes through this read path is nullable
             Scalar::null(&fill_type),
         )
-        .map(|a| a.to_array_data())
+        .map(|a| a.into_array())
     }
 }
 
@@ -59,8 +59,8 @@ mod test {
     #[test]
     fn roundtrip() {
         let arr = SparseArray::new(
-            vec![7u64, 37, 71, 97].to_array_data(),
-            PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]).to_array_data(),
+            vec![7u64, 37, 71, 97].into_array(),
+            PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]).into_array(),
             100,
             Scalar::Null(NullScalar::new()),
         );

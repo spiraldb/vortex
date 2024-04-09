@@ -235,11 +235,11 @@ impl CompressCtx {
                     .iter()
                     .map(|chunk| self.compress_array(chunk))
                     .collect();
-                Ok(ChunkedArray::new(compressed_chunks?, chunked.dtype().clone()).to_array_data())
+                Ok(ChunkedArray::new(compressed_chunks?, chunked.dtype().clone()).into_array())
             }
             ArrayKind::Constant(constant) => {
                 // Not much better we can do than constant!
-                Ok(constant.clone().to_array_data())
+                Ok(constant.clone().into_array())
             }
             ArrayKind::Struct(strct) => {
                 // For struct arrays, we compress each field individually
@@ -250,7 +250,7 @@ impl CompressCtx {
                     .collect();
                 Ok(
                     StructArray::new(strct.names().clone(), compressed_fields?, strct.len())
-                        .to_array_data(),
+                        .into_array(),
                 )
             }
             _ => {
@@ -277,7 +277,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
             .unwrap_or(false)
     {
         return Ok(Some(
-            ConstantArray::new(scalar_at(array, 0)?, array.len()).to_array_data(),
+            ConstantArray::new(scalar_at(array, 0)?, array.len()).into_array(),
         ));
     }
 

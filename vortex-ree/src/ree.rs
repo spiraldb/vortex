@@ -70,11 +70,11 @@ impl REEArray {
             ArrayKind::Primitive(p) => {
                 let (ends, values) = ree_encode(p);
                 Ok(REEArray::new(
-                    ends.to_array_data(),
-                    values.to_array_data(),
+                    ends.into_array(),
+                    values.into_array(),
                     p.validity().to_owned_view(),
                 )
-                .to_array_data())
+                .into_array())
             }
             _ => Err(vortex_err!("REE can only encode primitive arrays")),
         }
@@ -141,7 +141,7 @@ impl Array for REEArray {
             length: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
-        .to_array_data())
+        .into_array())
     }
 
     #[inline]
@@ -214,8 +214,8 @@ mod test {
     #[test]
     fn new() {
         let arr = REEArray::new(
-            vec![2u32, 5, 10].to_array_data(),
-            vec![1i32, 2, 3].to_array_data(),
+            vec![2u32, 5, 10].into_array(),
+            vec![1i32, 2, 3].into_array(),
             None,
         );
         assert_eq!(arr.len(), 10);
@@ -236,8 +236,8 @@ mod test {
     #[test]
     fn slice() {
         let arr = REEArray::new(
-            vec![2u32, 5, 10].to_array_data(),
-            vec![1i32, 2, 3].to_array_data(),
+            vec![2u32, 5, 10].into_array(),
+            vec![1i32, 2, 3].into_array(),
             None,
         )
         .slice(3, 8)
@@ -257,8 +257,8 @@ mod test {
     #[test]
     fn flatten() {
         let arr = REEArray::new(
-            vec![2u32, 5, 10].to_array_data(),
-            vec![1i32, 2, 3].to_array_data(),
+            vec![2u32, 5, 10].into_array(),
+            vec![1i32, 2, 3].into_array(),
             None,
         );
         assert_eq!(

@@ -38,7 +38,7 @@ impl<T: NativePType> AsContiguousFn for &dyn PrimitiveTrait<T> {
             ),
             validity,
         )
-        .to_array_data())
+        .into_array())
     }
 }
 

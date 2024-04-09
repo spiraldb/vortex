@@ -70,7 +70,7 @@ impl EncodingCompression for DeltaEncoding {
             .named("deltas")
             .compress(&deltas, like_delta.map(|d| d.deltas()))?;
 
-        Ok(DeltaArray::try_new(array.len(), bases, deltas, validity)?.to_array_data())
+        Ok(DeltaArray::try_new(array.len(), bases, deltas, validity)?.into_array())
     }
 }
 

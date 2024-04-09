@@ -81,7 +81,7 @@ impl From<NullBuffer> for Validity {
         } else if value.null_count() == value.len() {
             Self::Invalid(value.len())
         } else {
-            Self::Array(BoolArray::new(value.into_inner(), None).to_array_data())
+            Self::Array(BoolArray::new(value.into_inner(), None).into_array())
         }
     }
 }
@@ -93,7 +93,7 @@ impl From<BooleanBuffer> for Validity {
         } else if value.iter().all(|v| !v) {
             Self::Invalid(value.len())
         } else {
-            Self::Array(BoolArray::new(value, None).to_array_data())
+            Self::Array(BoolArray::new(value, None).into_array())
         }
     }
 }
@@ -105,7 +105,7 @@ impl From<Vec<bool>> for Validity {
         } else if value.iter().all(|v| !*v) {
             Self::Invalid(value.len())
         } else {
-            Self::Array(BoolArray::from(value).to_array_data())
+            Self::Array(BoolArray::from(value).into_array())
         }
     }
 }
@@ -146,7 +146,7 @@ impl FromIterator<Validity> for Validity {
         // Otherwise, map each to a bool array and concatenate them.
         let arrays = validities
             .iter()
-            .map(|v| v.to_bool_array().to_array_data())
+            .map(|v| v.to_bool_array().into_array())
             .collect_vec();
         Self::Array(as_contiguous(&arrays).unwrap())
     }
@@ -165,7 +165,7 @@ impl Array for Validity {
         todo!()
     }
 
-    fn to_array_data(self) -> ArrayRef {
+    fn into_array(self) -> ArrayRef {
         todo!()
     }
 

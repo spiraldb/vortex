@@ -21,7 +21,7 @@ mod test {
 
     #[test]
     fn test_searchsorted_primitive() {
-        let values = vec![1u16, 2, 3].to_array_data();
+        let values = vec![1u16, 2, 3].into_array();
 
         assert_eq!(
             search_sorted(&values, 0, SearchSortedSide::Left).unwrap(),

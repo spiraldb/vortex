@@ -13,11 +13,9 @@ pub fn add(lhs: &dyn Array, rhs: &dyn Array) -> VortexResult<ArrayRef> {
     }
 
     match (ArrayKind::from(lhs), ArrayKind::from(rhs)) {
-        (ArrayKind::Constant(lhs), ArrayKind::Constant(rhs)) => Ok(ConstantArray::new(
-            add_scalars(lhs.scalar(), rhs.scalar())?,
-            length,
-        )
-        .to_array_data()),
+        (ArrayKind::Constant(lhs), ArrayKind::Constant(rhs)) => {
+            Ok(ConstantArray::new(add_scalars(lhs.scalar(), rhs.scalar())?, length).into_array())
+        }
         (ArrayKind::Constant(lhs), _) => add_scalar(rhs, lhs.scalar()),
         (_, ArrayKind::Constant(rhs)) => add_scalar(lhs, rhs.scalar()),
         _ => todo!("Implement default addition"),
@@ -27,7 +25,7 @@ pub fn add(lhs: &dyn Array, rhs: &dyn Array) -> VortexResult<ArrayRef> {
 pub fn add_scalar(lhs: &dyn Array, rhs: &Scalar) -> VortexResult<ArrayRef> {
     match ArrayKind::from(lhs) {
         ArrayKind::Constant(lhs) => {
-            Ok(ConstantArray::new(add_scalars(lhs.scalar(), rhs)?, lhs.len()).to_array_data())
+            Ok(ConstantArray::new(add_scalars(lhs.scalar(), rhs)?, lhs.len()).into_array())
         }
         _ => todo!("Implement default addition"),
     }

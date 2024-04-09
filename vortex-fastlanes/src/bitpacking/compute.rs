@@ -64,12 +64,12 @@ impl TakeFn for BitPackedArray {
                 let primitive_patches = flatten_primitive(&take(patches, indices)?)?;
                 Ok(
                     PrimitiveArray::new(ptype, primitive_patches.buffer().clone(), taken_validity)
-                        .to_array_data(),
+                        .into_array(),
                 )
             } else {
                 Ok(
                     ConstantArray::new(Scalar::null(&self.dtype().as_nullable()), indices.len())
-                        .to_array_data(),
+                        .into_array(),
                 )
             };
         }
@@ -78,7 +78,7 @@ impl TakeFn for BitPackedArray {
         let taken = match_integers_by_width!(ptype, |$T| {
             PrimitiveArray::from_nullable(take_primitive::<$T>(self, &indices)?, taken_validity)
         });
-        Ok(taken.reinterpret_cast(ptype).to_array_data())
+        Ok(taken.reinterpret_cast(ptype).into_array())
     }
 }
 
@@ -272,7 +272,7 @@ mod test {
         let ctx = CompressCtx::new(Arc::new(cfg));
 
         let values = (0u32..257).collect_vec();
-        let uncompressed = PrimitiveArray::from(values.clone()).to_array_data();
+        let uncompressed = PrimitiveArray::from(values.clone()).into_array();
         let packed = BitPackedEncoding
             .compress(&uncompressed, None, ctx)
             .unwrap();

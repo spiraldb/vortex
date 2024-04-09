@@ -16,7 +16,7 @@ pub fn take(array: &dyn Array, indices: &dyn Array) -> VortexResult<ArrayRef> {
 
         // Otherwise, flatten and try again.
         info!("TakeFn not implemented for {}, flattening", array);
-        flatten(array)?.to_array_data().with_compute(|c| {
+        flatten(array)?.into_array().with_compute(|c| {
             c.take().map(|t| t.take(indices)).unwrap_or_else(|| {
                 Err(vortex_err!(NotImplemented: "take", array.encoding().id().name()))
             })

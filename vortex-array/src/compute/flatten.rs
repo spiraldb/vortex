@@ -25,15 +25,15 @@ pub enum FlattenedArray {
 }
 
 impl FlattenedArray {
-    pub fn to_array_data(self) -> ArrayRef {
+    pub fn into_array(self) -> ArrayRef {
         match self {
-            FlattenedArray::Bool(array) => array.to_array_data(),
-            FlattenedArray::Chunked(array) => array.to_array_data(),
-            FlattenedArray::Composite(array) => array.to_array_data(),
-            FlattenedArray::Primitive(array) => array.to_array_data(),
-            FlattenedArray::Struct(array) => array.to_array_data(),
-            FlattenedArray::VarBin(array) => array.to_array_data(),
-            FlattenedArray::VarBinView(array) => array.to_array_data(),
+            FlattenedArray::Bool(array) => array.into_array(),
+            FlattenedArray::Chunked(array) => array.into_array(),
+            FlattenedArray::Composite(array) => array.into_array(),
+            FlattenedArray::Primitive(array) => array.into_array(),
+            FlattenedArray::Struct(array) => array.into_array(),
+            FlattenedArray::VarBin(array) => array.into_array(),
+            FlattenedArray::VarBinView(array) => array.into_array(),
         }
     }
 }

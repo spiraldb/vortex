@@ -58,12 +58,7 @@ impl<O: NativePType + PrimInt> VarBinBuilder<O> {
             None
         };
 
-        VarBinArray::new(
-            offsets.to_array_data(),
-            data.to_array_data(),
-            dtype,
-            validity,
-        )
+        VarBinArray::new(offsets.into_array(), data.into_array(), dtype, validity)
     }
 }
 

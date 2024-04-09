@@ -72,7 +72,7 @@ impl EncodingCompression for BitPackedEncoding {
 
         if bit_width == parray.ptype().bit_width() {
             // Nothing we can do
-            return Ok(parray.clone().to_array_data());
+            return Ok(parray.clone().into_array());
         }
 
         let packed = bitpack(parray, bit_width)?;
@@ -97,7 +97,7 @@ impl EncodingCompression for BitPackedEncoding {
             parray.len(),
         )
         .unwrap()
-        .to_array_data())
+        .into_array())
     }
 }
 
@@ -107,7 +107,7 @@ fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<ArrayRef> 
     let bytes = match_integers_by_width!(parray.ptype(), |$P| {
         bitpack_primitive(parray.buffer().typed_data::<$P>(), bit_width)
     });
-    Ok(PrimitiveArray::from(bytes).to_array_data())
+    Ok(PrimitiveArray::from(bytes).into_array())
 }
 
 pub fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: usize) -> Vec<u8> {
@@ -154,7 +154,7 @@ fn bitpack_patches(
                 values.push(*v);
             }
         }
-        SparseArray::new(indices.to_array_data(), values.to_array_data(), parray.len(), Scalar::null(&parray.dtype().as_nullable())).to_array_data()
+        SparseArray::new(indices.into_array(), values.into_array(), parray.len(), Scalar::null(&parray.dtype().as_nullable())).into_array()
     })
 }
 
