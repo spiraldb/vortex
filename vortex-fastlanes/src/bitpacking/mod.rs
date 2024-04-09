@@ -86,7 +86,7 @@ impl BitPackedArray {
             len,
             bit_width,
             dtype,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(StatsSet::default())),
         })
     }
 

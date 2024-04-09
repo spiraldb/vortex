@@ -61,7 +61,7 @@ impl PrimitiveArray {
             ptype,
             dtype,
             validity,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(StatsSet::default())),
         })
     }
 

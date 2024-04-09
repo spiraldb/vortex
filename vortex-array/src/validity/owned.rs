@@ -185,15 +185,6 @@ impl Array for Validity {
         &Validity::DTYPE
     }
 
-<<<<<<< HEAD
-    fn stats(&self) -> Stats {
-        todo!()
-=======
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Arc::new(self.as_view().slice(start, stop)?))
->>>>>>> 885692d4 (Redo stats to be a dyn Trait)
-    }
-
     fn encoding(&self) -> EncodingRef {
         &ValidityEncoding
     }

@@ -55,8 +55,7 @@ impl REEArray {
 
         if !ends
             .statistics()
-            .get(Stat::IsStrictSorted)
-            .map(|s| bool::try_from(s).unwrap())
+            .get_as(Stat::IsStrictSorted)
             .unwrap_or(true)
         {
             vortex_bail!("Ends array must be strictly sorted",);
@@ -68,7 +67,7 @@ impl REEArray {
             validity,
             length,
             offset,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(StatsSet::default())),
         })
     }
 
@@ -133,30 +132,6 @@ impl Array for REEArray {
         self.values.dtype()
     }
 
-<<<<<<< HEAD
-    #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-=======
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-        let slice_begin = self.find_physical_index(start)?;
-        let slice_end = self.find_physical_index(stop)?;
-        Ok(Self {
-            ends: self.ends.slice(slice_begin, slice_end + 1)?,
-            values: self.values.slice(slice_begin, slice_end + 1)?,
-            validity: self
-                .validity()
-                .map(|v| v.slice(slice_begin, slice_end + 1))
-                .transpose()?,
-            offset: start,
-            length: stop - start,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
-        .into_array())
->>>>>>> 885692d4 (Redo stats to be a dyn Trait)
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &REEEncoding
@@ -186,7 +161,7 @@ impl OwnedValidity for REEArray {
 
 impl StatsCompute for REEArray {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::new())
+        Ok(StatsSet::default())
     }
 }
 

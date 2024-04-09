@@ -36,7 +36,7 @@ impl ZigZagArray {
         Ok(Self {
             encoded,
             dtype,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(StatsSet::default())),
         })
     }
 

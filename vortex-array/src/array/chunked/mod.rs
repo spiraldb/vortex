@@ -50,7 +50,7 @@ impl ChunkedArray {
             chunks,
             chunk_ends,
             dtype,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(StatsSet::default())),
         })
     }
 

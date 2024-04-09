@@ -38,7 +38,7 @@ impl StructArray {
             fields,
             dtype,
             len,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(StatsSet::default())),
         }
     }
 
@@ -112,7 +112,7 @@ impl Array for StructArray {
 
 impl StatsCompute for StructArray {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::new())
+        Ok(StatsSet::default())
     }
 }
 

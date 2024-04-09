@@ -114,6 +114,12 @@ impl dyn Statistics + '_ {
             .and_then(|v| U::try_from(v))
     }
 
+    pub fn get_as<U: TryFrom<Scalar, Error = VortexError>>(&self, stat: Stat) -> VortexResult<U> {
+        self.get(stat)
+            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
+            .and_then(|v| U::try_from(v))
+    }
+
     fn compute_as<U: TryFrom<Scalar, Error = VortexError>>(&self, stat: Stat) -> VortexResult<U> {
         self.compute(stat)
             .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
@@ -175,12 +181,6 @@ impl From<HashMap<Stat, Scalar>> for StatsSet {
 }
 
 impl StatsSet {
-    pub fn new() -> Self {
-        Self {
-            values: HashMap::new(),
-        }
-    }
-
     pub fn of(stat: Stat, value: Scalar) -> Self {
         StatsSet::from(HashMap::from([(stat, value)]))
     }

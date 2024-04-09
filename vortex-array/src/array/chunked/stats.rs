@@ -14,7 +14,7 @@ impl StatsCompute for ChunkedArray {
                 s.compute(stat);
                 s.get_all()
             })
-            .fold(StatsSet::new(), |mut acc, x| {
+            .fold(StatsSet::default(), |mut acc, x| {
                 acc.merge(&x);
                 acc
             }))

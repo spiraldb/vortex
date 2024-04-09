@@ -5,7 +5,7 @@ use crate::dict::DictArray;
 
 impl StatsCompute for DictArray {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        let mut stats = StatsSet::new();
+        let mut stats = StatsSet::default();
 
         if let Some(rc) = self.codes().statistics().compute(Stat::RunCount) {
             stats.set(Stat::RunCount, rc);

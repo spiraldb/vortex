@@ -39,7 +39,7 @@ impl BoolArray {
         }
         Ok(Self {
             buffer,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(StatsSet::default())),
             validity,
         })
     }

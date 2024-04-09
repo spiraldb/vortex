@@ -36,7 +36,7 @@ impl FoRArray {
             encoded: child,
             reference,
             shift,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(StatsSet::default())),
         })
     }
 

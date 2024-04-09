@@ -41,7 +41,7 @@ impl RoaringIntArray {
         Ok(Self {
             bitmap,
             ptype,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(StatsSet::default())),
         })
     }
 

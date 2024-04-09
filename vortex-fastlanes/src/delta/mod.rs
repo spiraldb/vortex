@@ -54,7 +54,7 @@ impl DeltaArray {
             bases,
             deltas,
             validity,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
+            stats: Arc::new(RwLock::new(StatsSet::default())),
         };
 
         let expected_bases_len = {
