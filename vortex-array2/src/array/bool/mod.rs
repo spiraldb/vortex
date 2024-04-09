@@ -77,6 +77,12 @@ impl BoolData {
     }
 }
 
+impl From<BooleanBuffer> for BoolData {
+    fn from(value: BooleanBuffer) -> Self {
+        BoolData::try_new(value, Validity::NonNullable).unwrap()
+    }
+}
+
 impl FromIterator<Option<bool>> for BoolData {
     fn from_iter<I: IntoIterator<Item = Option<bool>>>(iter: I) -> Self {
         let iter = iter.into_iter();
@@ -137,11 +143,12 @@ impl ArrayStatistics for BoolArray<'_> {
 mod tests {
     use crate::array::bool::BoolData;
     use crate::compute::scalar_at::scalar_at;
+    use crate::validity::Validity::NonNullable;
     use crate::IntoArray;
 
     #[test]
     fn bool_array() {
-        let arr = BoolData::from_vec(vec![true, false, true]).into_array();
+        let arr = BoolData::from_vec(vec![true, false, true], NonNullable).into_array();
         let scalar: bool = scalar_at(&arr, 0).unwrap().try_into().unwrap();
         assert!(scalar);
     }

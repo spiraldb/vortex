@@ -36,7 +36,7 @@ use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Array<'v> {
     Data(ArrayData),
     DataRef(&'v ArrayData),
@@ -138,12 +138,24 @@ impl ArrayVisitor for NBytesVisitor {
     }
 }
 
+// TODO(ngates): I think we can remove IntoArrayData, make everything take self, and then
+//  implement for reference?
 impl ToArrayData for Array<'_> {
     fn to_array_data(&self) -> ArrayData {
         match self {
             Array::Data(d) => d.clone(),
             Array::DataRef(d) => (*d).clone(),
             Array::View(v) => v.encoding().with_view(v, |a| a.to_array_data()),
+        }
+    }
+}
+
+impl IntoArrayData for Array<'_> {
+    fn into_array_data(self) -> ArrayData {
+        match self {
+            Array::Data(d) => d,
+            Array::DataRef(d) => d.clone(),
+            Array::View(v) => v.encoding().with_view(&v, |a| a.to_array_data()),
         }
     }
 }

@@ -33,7 +33,7 @@ mod test {
     use crate::array::primitive::PrimitiveData;
     use crate::compute::take::take;
     use crate::validity::Validity::NonNullable;
-    use crate::IntoArray;
+    use crate::{IntoArray, ToArrayData};
 
     #[test]
     fn take_nullable() {
@@ -52,7 +52,7 @@ mod test {
                 &PrimitiveData::from_vec(vec![0, 3, 4], NonNullable).into_array(),
             )
             .unwrap()
-            .into_array(),
+            .to_array_data(),
         )
         .unwrap();
 

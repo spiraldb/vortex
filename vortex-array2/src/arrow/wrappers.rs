@@ -1,10 +1,7 @@
-use arrow_buffer::{NullBuffer, OffsetBuffer, ScalarBuffer};
-use log::Log;
+use arrow_buffer::{OffsetBuffer, ScalarBuffer};
 use vortex::ptype::NativePType;
-use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::validity::{LogicalValidity, Validity};
 
 pub fn as_scalar_buffer<T: NativePType>(array: PrimitiveArray) -> ScalarBuffer<T> {
     assert_eq!(array.ptype(), T::PTYPE);

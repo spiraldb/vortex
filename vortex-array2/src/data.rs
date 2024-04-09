@@ -15,7 +15,6 @@ use crate::{
     TryFromArrayParts,
 };
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct ArrayData {
     encoding: EncodingRef,

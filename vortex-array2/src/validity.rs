@@ -7,7 +7,7 @@ use crate::array::bool::BoolData;
 use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
-use crate::{Array, ArrayData, ToArray, ToArrayData, WithArray};
+use crate::{Array, ArrayData, IntoArray, ToArray, ToArrayData, WithArray};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -34,7 +34,7 @@ impl ValidityMetadata {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Validity<'v> {
     NonNullable,
     AllValid,
@@ -111,6 +111,13 @@ impl<'v> Validity<'v> {
             Validity::Array(a) => LogicalValidity::Array(a.to_array_data()),
         }
     }
+
+    pub fn to_static(&self) -> Validity<'static> {
+        match self {
+            Validity::Array(a) => Validity::Array(a.to_array_data().into_array()),
+            _ => self.clone(),
+        }
+    }
 }
 
 impl From<Vec<bool>> for Validity<'static> {
@@ -121,6 +128,18 @@ impl From<Vec<bool>> for Validity<'static> {
             Validity::AllInvalid
         } else {
             Validity::Array(BoolData::from_vec(bools, Validity::NonNullable).to_array_data())
+        }
+    }
+}
+
+impl From<BooleanBuffer> for Validity<'static> {
+    fn from(value: BooleanBuffer) -> Self {
+        if value.count_set_bits() == value.len() {
+            Validity::AllValid
+        } else if value.count_set_bits() == 0 {
+            Validity::AllInvalid
+        } else {
+            Validity::Array(BoolData::from(value).to_array())
         }
     }
 }

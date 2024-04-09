@@ -21,13 +21,13 @@ use arrow_array::{BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit};
-use vortex::ptype::{NativePType, PType};
+use vortex::ptype::NativePType;
 use vortex::stats::Stat;
 use vortex_schema::DType;
 
 use crate::array::bool::BoolData;
 use crate::array::primitive::PrimitiveData;
-use crate::array::r#struct::StructArray;
+use crate::array::r#struct::{StructArray, StructData};
 use crate::validity::Validity;
 use crate::{Array, ArrayData, ArrayParts, IntoArrayData, ToArrayData};
 
@@ -134,11 +134,9 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayData {
 
 impl FromArrowArray<&ArrowBooleanArray> for ArrayData {
     fn from_arrow(value: &ArrowBooleanArray, nullable: bool) -> Self {
-        BoolData::new(
-            value.values().to_owned(),
-            nulls(value.nulls(), nullable, value.len()),
-        )
-        .to_array_data()
+        BoolData::try_new(value.values().clone(), nulls(value.nulls(), nullable))
+            .unwrap()
+            .into_array_data()
     }
 }
 
@@ -146,7 +144,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
     fn from_arrow(value: &ArrowStructArray, nullable: bool) -> Self {
         // TODO(ngates): how should we deal with Arrow "logical nulls"?
         assert!(!nullable);
-        StructArray::new(
+        StructData::try_new(
             value
                 .column_names()
                 .iter()
@@ -161,7 +159,8 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
                 .collect(),
             value.len(),
         )
-        .to_array_data()
+        .unwrap()
+        .into_array_data()
     }
 }
 

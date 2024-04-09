@@ -13,12 +13,11 @@ use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::fill::FillForwardFn;
 use crate::compute::flatten::{flatten_bool, FlattenFn, FlattenedData};
 use crate::compute::scalar_at::ScalarAtFn;
-use crate::compute::search_sorted::Len;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
-use crate::{Array, ArrayTrait, IntoArray, ToArrayData, WithArray};
+use crate::{Array, ArrayTrait, IntoArray, ToArrayData};
 
 mod take;
 
@@ -62,7 +61,7 @@ impl AsContiguousFn for BoolArray<'_> {
         let validity = if self.dtype().is_nullable() {
             Validity::from_iter(arrays.iter().map(|a| {
                 let bool_data = BoolData::try_from(a.to_array_data()).unwrap();
-                bool_data.as_ref().validity().clone()
+                bool_data.as_ref().validity().to_static()
             }))
         } else {
             Validity::NonNullable
@@ -124,18 +123,22 @@ impl FillForwardFn for BoolArray<'_> {
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::BoolArray;
-    use crate::compute;
+    use crate::array::bool::BoolData;
+    use crate::validity::Validity;
+    use crate::{compute, IntoArray, ToArrayData};
 
     #[test]
     fn fill_forward() {
-        let barr = BoolArray::from_iter(vec![None, Some(false), None, Some(true), None]);
-        let filled = compute::fill::fill_forward(&barr).unwrap();
-        let filled_bool = filled.as_bool();
+        let barr =
+            BoolData::from_iter(vec![None, Some(false), None, Some(true), None]).into_array();
+        let filled =
+            BoolData::try_from(compute::fill::fill_forward(&barr).unwrap().to_array_data())
+                .unwrap();
+        let filled_bool = filled.as_ref();
         assert_eq!(
             filled_bool.buffer().iter().collect::<Vec<bool>>(),
             vec![false, false, false, true, true]
         );
-        assert!(filled_bool.validity().is_none());
+        assert_eq!(*filled_bool.validity(), Validity::NonNullable);
     }
 }
