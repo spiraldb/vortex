@@ -2,8 +2,21 @@ use std::collections::HashMap;
 
 use vortex::ptype::NativePType;
 use vortex::scalar::Scalar;
-use vortex::stats::Stat;
 use vortex_error::VortexResult;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Stat {
+    BitWidthFreq,
+    TrailingZeroFreq,
+    IsConstant,
+    IsSorted,
+    IsStrictSorted,
+    Max,
+    Min,
+    RunCount,
+    TrueCount,
+    NullCount,
+}
 
 pub trait ArrayStatistics {
     fn statistics(&self) -> &dyn Statistics {

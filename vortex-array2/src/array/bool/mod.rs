@@ -1,11 +1,12 @@
 mod compute;
+mod stats;
 
 use arrow_buffer::{BooleanBuffer, Buffer};
 use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::stats::{ArrayStatistics, Statistics};
+use crate::stats::Statistics;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -138,12 +139,6 @@ impl AcceptArrayVisitor for BoolArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_buffer(self.buffer().inner())?;
         visitor.visit_validity(self.validity())
-    }
-}
-
-impl ArrayStatistics for BoolArray<'_> {
-    fn statistics(&self) -> &dyn Statistics {
-        self.statistics
     }
 }
 

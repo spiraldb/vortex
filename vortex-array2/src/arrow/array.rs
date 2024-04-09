@@ -22,12 +22,12 @@ use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit};
 use vortex::ptype::NativePType;
-use vortex::stats::Stat;
 use vortex_schema::DType;
 
 use crate::array::bool::BoolData;
 use crate::array::primitive::PrimitiveData;
 use crate::array::r#struct::StructData;
+use crate::stats::Stat;
 use crate::validity::Validity;
 use crate::{ArrayData, ArrayParts, IntoArrayData};
 

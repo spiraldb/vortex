@@ -4,11 +4,11 @@ use std::sync::{Arc, RwLock};
 
 use arrow_buffer::Buffer;
 use vortex::scalar::Scalar;
-use vortex::stats::Stat;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::encoding::EncodingRef;
+use crate::stats::Stat;
 use crate::stats::Statistics;
 use crate::{
     Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, IntoArrayData, OwnedArray, ToArray,
