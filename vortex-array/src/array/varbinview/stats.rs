@@ -1,8 +1,9 @@
+use vortex_error::VortexResult;
+
 use crate::array::varbin::VarBinAccumulator;
 use crate::array::varbinview::VarBinViewArray;
 use crate::array::Array;
 use crate::stats::{Stat, StatsCompute, StatsSet};
-use vortex_error::VortexResult;
 
 impl StatsCompute for VarBinViewArray {
     fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {

@@ -19,7 +19,6 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
-use crate::scalar::Scalar::Utf8;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
