@@ -1,5 +1,4 @@
 use std::fmt::{Debug, Formatter};
-use std::mem::ManuallyDrop;
 use std::sync::{Arc, RwLock};
 use std::{mem, slice};
 
@@ -9,7 +8,7 @@ use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveEncoding;
-use crate::array::IntoArray;
+use crate::array::varbinview::builder::VarBinViewBuilder;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::ArrayCompute;
@@ -24,6 +23,7 @@ use crate::view::AsView;
 use crate::{impl_array, ArrayWalker};
 
 mod accessor;
+mod builder;
 mod compute;
 mod serde;
 mod stats;
@@ -181,55 +181,11 @@ impl VarBinViewArray {
     }
 
     pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
-        let mut views: Vec<BinaryView> = Vec::with_capacity(vec.len());
-        let mut values: Vec<Vec<u8>> = Vec::new();
-        values.push(Vec::new());
-        let mut current_bytes = values.last_mut().unwrap();
-        let mut last_buf_idx = 0;
+        let mut builder = VarBinViewBuilder::with_capacity(vec.len());
         for v in vec {
-            let vbytes = v.as_ref();
-            if current_bytes.len() + vbytes.len() > u32::MAX as usize {
-                values.push(Vec::new());
-                last_buf_idx += 1;
-                current_bytes = values.last_mut().unwrap();
-            }
-
-            if vbytes.len() > BinaryView::MAX_INLINED_SIZE {
-                views.push(BinaryView {
-                    _ref: Ref::new(
-                        vbytes.len() as u32,
-                        vbytes[0..4].try_into().unwrap(),
-                        last_buf_idx,
-                        current_bytes.len() as u32,
-                    ),
-                });
-                current_bytes.extend_from_slice(vbytes);
-            } else {
-                views.push(BinaryView {
-                    inlined: Inlined::new(vbytes),
-                });
-            }
+            builder.append_value(v)
         }
-
-        let views_u8: Vec<u8> = unsafe {
-            let mut views_clone = ManuallyDrop::new(views);
-            Vec::from_raw_parts(
-                views_clone.as_mut_ptr() as _,
-                views_clone.len() * VIEW_SIZE,
-                views_clone.capacity() * VIEW_SIZE,
-            )
-        };
-
-        VarBinViewArray::try_new(
-            views_u8.into_array(),
-            values
-                .into_iter()
-                .map(|v| v.into_array())
-                .collect::<Vec<_>>(),
-            dtype,
-            None,
-        )
-        .unwrap()
+        builder.finish(dtype)
     }
 
     pub fn from_iter<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
@@ -237,69 +193,11 @@ impl VarBinViewArray {
         dtype: DType,
     ) -> Self {
         let iter = iter.into_iter();
-        let (lower, _) = iter.size_hint();
-        let mut validity: Vec<bool> = Vec::with_capacity(lower);
-        let mut views: Vec<BinaryView> = Vec::with_capacity(lower);
-        let mut values: Vec<Vec<u8>> = Vec::new();
-        values.push(Vec::new());
-        let mut current_bytes = values.last_mut().unwrap();
-        let mut last_buf_idx = 0;
+        let mut builder = VarBinViewBuilder::with_capacity(iter.size_hint().0);
         for v in iter {
-            if let Some(b) = v {
-                let vbytes = b.as_ref();
-                if current_bytes.len() + vbytes.len() > u32::MAX as usize {
-                    values.push(Vec::new());
-                    last_buf_idx += 1;
-                    current_bytes = values.last_mut().unwrap();
-                }
-
-                if vbytes.len() > BinaryView::MAX_INLINED_SIZE {
-                    views.push(BinaryView {
-                        _ref: Ref::new(
-                            vbytes.len() as u32,
-                            vbytes[0..4].try_into().unwrap(),
-                            last_buf_idx,
-                            current_bytes.len() as u32,
-                        ),
-                    });
-                    current_bytes.extend_from_slice(vbytes);
-                } else {
-                    views.push(BinaryView {
-                        inlined: Inlined::new(vbytes),
-                    });
-                }
-                validity.push(true)
-            } else {
-                views.push(BinaryView {
-                    inlined: Inlined::new("".as_bytes()),
-                });
-                validity.push(false);
-            }
+            builder.append(v)
         }
-
-        let views_u8: Vec<u8> = unsafe {
-            let mut views_clone = ManuallyDrop::new(views);
-            Vec::from_raw_parts(
-                views_clone.as_mut_ptr() as _,
-                views_clone.len() * VIEW_SIZE,
-                views_clone.capacity() * VIEW_SIZE,
-            )
-        };
-
-        VarBinViewArray::try_new(
-            views_u8.into_array(),
-            values
-                .into_iter()
-                .map(|v| v.into_array())
-                .collect::<Vec<_>>(),
-            if validity.is_empty() {
-                dtype
-            } else {
-                dtype.as_nullable()
-            },
-            (!validity.is_empty()).then(|| validity.into()),
-        )
-        .unwrap()
+        builder.finish(dtype)
     }
 
     pub fn iter_primitive(&self) -> VortexResult<ArrayIter<'_, VarBinViewArray, &[u8]>> {
