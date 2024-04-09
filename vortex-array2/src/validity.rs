@@ -167,7 +167,7 @@ impl<'a> FromIterator<Validity<'a>> for Validity<'static> {
     }
 }
 
-impl<'a> FromIterator<LogicalValidity> for Validity<'static> {
+impl FromIterator<LogicalValidity> for Validity<'static> {
     fn from_iter<T: IntoIterator<Item = LogicalValidity>>(_iter: T) -> Self {
         todo!()
     }

@@ -42,7 +42,7 @@ mod tests {
 
     use vortex_array2::array::primitive::PrimitiveData;
     use vortex_array2::array::r#struct::StructData;
-    use vortex_array2::WithArray;
+    use vortex_array2::{IntoArray, IntoArrayData, WithArray};
     use vortex_array2::{SerdeContext, ToArray, ToArrayData};
 
     use crate::iter::FallibleLendingIterator;
@@ -51,22 +51,21 @@ mod tests {
 
     #[test]
     fn test_write_flatbuffer() {
-        let col = PrimitiveData::from(vec![0, 1, 2]).into_data();
+        let col = PrimitiveData::from(vec![0, 1, 2]).into_array_data();
         let nested_struct = StructData::try_new(
             vec![Arc::new("x".into()), Arc::new("y".into())],
             vec![col.clone(), col.clone()],
             3,
         )
-        .unwrap()
-        .into_data();
+        .unwrap();
 
         let arr = StructData::try_new(
             vec![Arc::new("a".into()), Arc::new("b".into())],
-            vec![col.clone(), nested_struct],
+            vec![col.clone(), nested_struct.into_array_data()],
             3,
         )
         .unwrap()
-        .to_array_data();
+        .into_array();
 
         // let batch = ColumnBatch::from(&arr.to_array());
 
