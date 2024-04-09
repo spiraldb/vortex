@@ -91,14 +91,6 @@ impl Array for ALPArray {
     }
 
     #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    #[inline]
     fn encoding(&self) -> EncodingRef {
         &ALPEncoding
     }
@@ -106,6 +98,14 @@ impl Array for ALPArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.encoded().nbytes() + self.patches().map(|p| p.nbytes()).unwrap_or(0)
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
@@ -134,6 +134,7 @@ impl ArrayValidity for ALPArray {
         self.encoded().is_valid(index)
     }
 }
+
 impl OwnedStats for ALPArray {
     fn stats_set(&self) -> &RwLock<StatsSet> {
         &self.stats
