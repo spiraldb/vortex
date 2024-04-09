@@ -19,7 +19,8 @@ use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
-use crate::scalar::Scalar;
+use crate::scalar::Scalar::Utf8;
+use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::OwnedValidity;
@@ -362,9 +363,14 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
 
 pub fn varbin_scalar(value: Vec<u8>, dtype: &DType) -> Scalar {
     if matches!(dtype, DType::Utf8(_)) {
-        unsafe { String::from_utf8_unchecked(value) }.into()
+        let str = unsafe { String::from_utf8_unchecked(value) };
+        Utf8Scalar::try_new(Some(str), dtype.nullability())
+            .unwrap()
+            .into()
     } else {
-        value.into()
+        BinaryScalar::try_new(Some(value), dtype.nullability())
+            .unwrap()
+            .into()
     }
 }
 
