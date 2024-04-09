@@ -8,7 +8,6 @@ use vortex_schema::DType;
 
 use crate::compute::ArrayCompute;
 use crate::impl_encoding;
-use crate::stats::Statistics;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
@@ -27,7 +26,6 @@ pub struct PrimitiveArray<'a> {
     dtype: &'a DType,
     buffer: &'a Buffer,
     validity: Validity<'a>,
-    statistics: &'a dyn Statistics,
 }
 
 impl PrimitiveArray<'_> {
@@ -60,7 +58,6 @@ impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
             dtype: parts.dtype(),
             buffer,
             validity: metadata.validity.to_validity(parts.child(0, parts.dtype())),
-            statistics: parts.statistics(),
         })
     }
 }

@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::stats::Statistics;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -28,7 +27,6 @@ pub struct BoolArray<'a> {
     buffer: &'a Buffer,
     validity: Validity<'a>,
     length: usize,
-    statistics: &'a dyn Statistics,
 }
 
 impl BoolArray<'_> {
@@ -54,7 +52,6 @@ impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
                 .validity
                 .to_validity(parts.child(0, &Validity::DTYPE)),
             length: metadata.length,
-            statistics: parts.statistics(),
         })
     }
 }

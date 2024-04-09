@@ -27,9 +27,9 @@ use vortex_schema::DType;
 use crate::array::bool::BoolData;
 use crate::array::primitive::PrimitiveData;
 use crate::array::r#struct::StructData;
-use crate::stats::Stat;
+use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
-use crate::{ArrayData, ArrayParts, IntoArrayData};
+use crate::{ArrayData, IntoArrayData};
 
 pub trait FromArrowArray<A> {
     fn from_arrow(array: A, nullable: bool) -> Self;
@@ -76,8 +76,8 @@ impl<O: NativePType + OffsetSizeTrait> IntoArrayData for OffsetBuffer<O> {
         )
         .unwrap()
         .into_array_data();
-        array.statistics().set(Stat::IsSorted, true.into());
-        array.statistics().set(Stat::IsStrictSorted, true.into());
+        array.set(Stat::IsSorted, true.into());
+        array.set(Stat::IsStrictSorted, true.into());
         array
     }
 }

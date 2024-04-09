@@ -176,7 +176,7 @@ impl<D: ArrayDef> TypedArrayData<D> {
             .unwrap()
     }
 
-    pub fn as_typed_array<'a>(&'a self) -> D::Array<'a> {
+    pub fn as_typed_array(&self) -> D::Array<'_> {
         D::Array::try_from_parts(&self.data, self.metadata()).unwrap()
     }
 }
@@ -229,10 +229,6 @@ impl ArrayParts for ArrayData {
 
     fn nchildren(&self) -> usize {
         self.children.len()
-    }
-
-    fn statistics(&self) -> &dyn Statistics {
-        self
     }
 }
 

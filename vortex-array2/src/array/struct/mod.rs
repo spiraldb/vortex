@@ -3,7 +3,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FieldNames};
 
 use crate::compute::ArrayCompute;
-use crate::stats::{ArrayStatistics, StatisticsCompute};
+use crate::stats::ArrayStatistics;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ToArray, WithArray};
@@ -152,5 +152,4 @@ impl AcceptArrayVisitor for StructArray<'_> {
 }
 
 impl ArrayStatistics for StructArray<'_> {}
-impl StatisticsCompute for StructArray<'_> {}
 impl ArrayCompute for StructArray<'_> {}
