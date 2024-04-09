@@ -18,7 +18,7 @@ pub fn as_arrow(array: &dyn Array) -> VortexResult<ArrowArrayRef> {
         }
 
         // Otherwise, flatten and try again.
-        let array = flatten(array)?.into_array();
+        let array = flatten(array)?.to_array_data();
         c.as_arrow().map(|a| a.as_arrow()).unwrap_or_else(|| {
             Err(vortex_err!(NotImplemented: "as_arrow", array.encoding().id().name()))
         })

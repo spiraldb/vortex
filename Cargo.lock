@@ -5427,12 +5427,17 @@ dependencies = [
 name = "vortex-array2"
 version = "0.1.0"
 dependencies = [
+ "arrow-array 51.0.0",
  "arrow-buffer 51.0.0",
+ "arrow-schema 51.0.0",
  "flatbuffers",
  "flexbuffers",
  "half",
  "humansize",
+ "itertools 0.12.1",
  "linkme",
+ "log",
+ "num-traits",
  "paste",
  "serde",
  "vortex-array",

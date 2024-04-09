@@ -42,6 +42,6 @@ impl EncodingSerde for BitPackedEncoding {
             len,
             offset,
         )?
-        .into_array())
+        .to_array_data())
     }
 }

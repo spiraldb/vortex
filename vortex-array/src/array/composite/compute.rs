@@ -62,7 +62,7 @@ impl AsContiguousFn for CompositeArray {
             self.metadata().clone(),
             as_contiguous(&composites)?,
         )
-        .into_array())
+        .to_array_data())
     }
 }
 
@@ -88,6 +88,6 @@ impl TakeFn for CompositeArray {
             self.metadata().clone(),
             take(self.underlying(), indices)?,
         )
-        .into_array())
+        .to_array_data())
     }
 }

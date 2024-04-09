@@ -26,6 +26,6 @@ impl EncodingSerde for DeltaEncoding {
         let validity = ctx.read_validity()?;
         Ok(DeltaArray::try_new(len, bases, deltas, validity)
             .unwrap()
-            .into_array())
+            .to_array_data())
     }
 }

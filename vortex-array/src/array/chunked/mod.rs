@@ -110,7 +110,7 @@ impl Array for ChunkedArray {
                     vec![chunk.slice(offset_in_first_chunk, length_in_last_chunk)?],
                     self.dtype.clone(),
                 )
-                .into_array());
+                .to_array_data());
             }
         }
 
@@ -125,7 +125,7 @@ impl Array for ChunkedArray {
             *c = c.slice(0, length_in_last_chunk)?;
         }
 
-        Ok(ChunkedArray::new(chunks, self.dtype.clone()).into_array())
+        Ok(ChunkedArray::new(chunks, self.dtype.clone()).to_array_data())
     }
 
     #[inline]
@@ -224,9 +224,9 @@ mod test {
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::new(
             vec![
-                vec![1u64, 2, 3].into_array(),
-                vec![4u64, 5, 6].into_array(),
-                vec![7u64, 8, 9].into_array(),
+                vec![1u64, 2, 3].to_array_data(),
+                vec![4u64, 5, 6].to_array_data(),
+                vec![7u64, 8, 9].to_array_data(),
             ],
             DType::Int(
                 IntWidth::_64,

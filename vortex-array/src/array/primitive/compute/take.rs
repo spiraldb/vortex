@@ -17,7 +17,7 @@ impl<T: NativePType> TakeFn for &dyn PrimitiveTrait<T> {
             Ok(PrimitiveArray::from_nullable(
                 take_primitive(self.typed_data(), indices.typed_data::<$I>()),
                 validity,
-            ).into_array())
+            ).to_array_data())
         })
     }
 }

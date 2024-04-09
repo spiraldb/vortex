@@ -42,27 +42,27 @@ pub trait FromArrowArray<A> {
 }
 
 impl IntoArray for Buffer {
-    fn into_array(self) -> ArrayRef {
-        PrimitiveArray::new(PType::U8, self.to_owned(), None).into_array()
+    fn to_array_data(self) -> ArrayRef {
+        PrimitiveArray::new(PType::U8, self.to_owned(), None).to_array_data()
     }
 }
 
 impl IntoArray for NullBuffer {
-    fn into_array(self) -> ArrayRef {
-        BoolArray::new(self.into_inner(), None).into_array()
+    fn to_array_data(self) -> ArrayRef {
+        BoolArray::new(self.into_inner(), None).to_array_data()
     }
 }
 
 impl<T: ArrowNativeType + NativePType> IntoArray for ScalarBuffer<T> {
-    fn into_array(self) -> ArrayRef {
-        PrimitiveArray::new(T::PTYPE, self.into_inner(), None).into_array()
+    fn to_array_data(self) -> ArrayRef {
+        PrimitiveArray::new(T::PTYPE, self.into_inner(), None).to_array_data()
     }
 }
 
 impl<O: OffsetSizeTrait> IntoArray for OffsetBuffer<O> {
-    fn into_array(self) -> ArrayRef {
+    fn to_array_data(self) -> ArrayRef {
         let ptype = if O::IS_LARGE { PType::I64 } else { PType::I32 };
-        let array = PrimitiveArray::new(ptype, self.into_inner().into_inner(), None).into_array();
+        let array = PrimitiveArray::new(ptype, self.into_inner().into_inner(), None).to_array_data();
         array.stats().set(Stat::IsSorted, true.into());
         array.stats().set(Stat::IsStrictSorted, true.into());
         array
@@ -77,7 +77,7 @@ impl<T: ArrowPrimitiveType> FromArrowArray<&ArrowPrimitiveArray<T>> for ArrayRef
             value.values().inner().to_owned(),
             nulls(value.nulls(), nullable, value.len()),
         )
-        .into_array();
+        .to_array_data();
 
         if T::DATA_TYPE.is_numeric() {
             return arr;
@@ -89,7 +89,7 @@ impl<T: ArrowPrimitiveType> FromArrowArray<&ArrowPrimitiveArray<T>> for ArrayRef
                 // Therefore, we must treat it as a LocalDateTime and not an Instant.
                 None => LocalDateTimeArray::new(LocalDateTime::new((&time_unit).into()), arr)
                     .as_composite()
-                    .into_array(),
+                    .to_array_data(),
                 Some(_tz) => todo!(),
             },
             DataType::Date32 => todo!(),
@@ -111,12 +111,12 @@ impl<T: ByteArrayType> FromArrowArray<&GenericByteArray<T>> for ArrayRef {
             _ => panic!("Invalid data type for ByteArray"),
         };
         VarBinArray::new(
-            value.offsets().clone().into_array(),
-            value.values().clone().into_array(),
+            value.offsets().clone().to_array_data(),
+            value.values().clone().to_array_data(),
             dtype,
             nulls(value.nulls(), nullable, value.len()),
         )
-        .into_array()
+        .to_array_data()
     }
 }
 
@@ -129,16 +129,16 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayRef {
         };
 
         VarBinViewArray::new(
-            value.views().inner().clone().into_array(),
+            value.views().inner().clone().to_array_data(),
             value
                 .data_buffers()
                 .iter()
-                .map(|b| b.clone().into_array())
+                .map(|b| b.clone().to_array_data())
                 .collect::<Vec<_>>(),
             dtype,
             nulls(value.nulls(), nullable, value.len()),
         )
-        .into_array()
+        .to_array_data()
     }
 }
 
@@ -148,7 +148,7 @@ impl FromArrowArray<&ArrowBooleanArray> for ArrayRef {
             value.values().to_owned(),
             nulls(value.nulls(), nullable, value.len()),
         )
-        .into_array()
+        .to_array_data()
     }
 }
 
@@ -171,14 +171,14 @@ impl FromArrowArray<&ArrowStructArray> for ArrayRef {
                 .collect(),
             value.len(),
         )
-        .into_array()
+        .to_array_data()
     }
 }
 
 impl FromArrowArray<&ArrowNullArray> for ArrayRef {
     fn from_arrow(value: &ArrowNullArray, nullable: bool) -> Self {
         assert!(nullable);
-        ConstantArray::new(NullScalar::new(), value.len()).into_array()
+        ConstantArray::new(NullScalar::new(), value.len()).to_array_data()
     }
 }
 

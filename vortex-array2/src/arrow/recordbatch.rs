@@ -1,0 +1,28 @@
+use std::sync::Arc;
+
+use arrow_array::RecordBatch;
+use vortex::encode::FromArrowArray;
+
+use crate::array::r#struct::StructData;
+use crate::{ArrayData, ToArrayData};
+
+impl ToArrayData for RecordBatch {
+    fn to_array_data(&self) -> ArrayData {
+        StructData::new(
+            self.schema()
+                .fields()
+                .iter()
+                .map(|f| f.name())
+                .map(|s| s.to_owned())
+                .map(Arc::new)
+                .collect(),
+            self.columns()
+                .iter()
+                .zip(self.schema().fields())
+                .map(|(array, field)| ArrayRef::from_arrow(array.clone(), field.is_nullable()))
+                .collect(),
+            self.num_rows(),
+        )
+        .to_array_data()
+    }
+}

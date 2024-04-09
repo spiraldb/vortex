@@ -47,7 +47,7 @@ pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
     fn as_any(&self) -> &dyn Any;
     fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
     fn to_array(&self) -> ArrayRef;
-    fn into_array(self) -> ArrayRef;
+    fn to_array_data(self) -> ArrayRef;
 
     /// Get the length of the array
     fn len(&self) -> usize;
@@ -105,7 +105,7 @@ impl WithArrayCompute for dyn Array + '_ {
 }
 
 pub trait IntoArray {
-    fn into_array(self) -> ArrayRef;
+    fn to_array_data(self) -> ArrayRef;
 }
 
 #[macro_export]
@@ -123,11 +123,11 @@ macro_rules! impl_array {
 
         #[inline]
         fn to_array(&self) -> ArrayRef {
-            self.clone().into_array()
+            self.clone().to_array_data()
         }
 
         #[inline]
-        fn into_array(self) -> ArrayRef {
+        fn to_array_data(self) -> ArrayRef {
             std::sync::Arc::new(self)
         }
     };
@@ -152,7 +152,7 @@ impl Array for ArrayRef {
         self.as_ref().to_array()
     }
 
-    fn into_array(self) -> ArrayRef {
+    fn to_array_data(self) -> ArrayRef {
         self
     }
 

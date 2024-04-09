@@ -66,7 +66,7 @@ mod tests {
             3,
         )
         .unwrap()
-        .into_array();
+        .to_array_data();
 
         // let batch = ColumnBatch::from(&arr.to_array());
 

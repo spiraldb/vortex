@@ -34,6 +34,6 @@ impl EncodingCompression for VarBinEncoding {
             vb.dtype().clone(),
             ctx.compress_validity(vb.validity())?,
         )
-        .into_array())
+        .to_array_data())
     }
 }

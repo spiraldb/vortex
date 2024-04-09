@@ -149,7 +149,7 @@ impl ToArray for ArrayView<'_> {
 }
 
 impl<'v> IntoArray<'v> for ArrayView<'v> {
-    fn into_array(self) -> Array<'v> {
+    fn to_array_data(self) -> Array<'v> {
         Array::View(self)
     }
 }
@@ -164,7 +164,7 @@ impl ArrayParts for ArrayView<'_> {
     }
 
     fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array> {
-        self.child(idx, dtype).map(|a| a.into_array())
+        self.child(idx, dtype).map(|a| a.to_array_data())
     }
 
     fn nchildren(&self) -> usize {

@@ -41,7 +41,7 @@ impl EncodingSerde for ALPEncoding {
             },
             patches,
         )
-        .into_array())
+        .to_array_data())
     }
 }
 

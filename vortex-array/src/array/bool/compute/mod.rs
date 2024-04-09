@@ -76,7 +76,7 @@ impl AsContiguousFn for BoolArray {
             ),
             validity,
         )
-        .into_array())
+        .to_array_data())
     }
 }
 
@@ -116,7 +116,7 @@ impl FillForwardFn for BoolArray {
                 last_value
             })
             .collect::<Vec<_>>();
-        Ok(BoolArray::from(filled).into_array())
+        Ok(BoolArray::from(filled).to_array_data())
     }
 }
 

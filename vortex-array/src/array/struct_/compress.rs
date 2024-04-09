@@ -35,6 +35,6 @@ impl EncodingCompression for StructEncoding {
             })
             .try_collect()?;
 
-        Ok(StructArray::new(struct_array.names().clone(), fields, array.len()).into_array())
+        Ok(StructArray::new(struct_array.names().clone(), fields, array.len()).to_array_data())
     }
 }

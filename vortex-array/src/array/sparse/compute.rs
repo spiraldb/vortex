@@ -64,7 +64,7 @@ impl AsContiguousFn for SparseArray {
             arrays.iter().map(|a| a.len()).sum(),
             self.fill_value().clone(),
         )
-        .into_array())
+        .to_array_data())
     }
 }
 
@@ -138,12 +138,12 @@ impl TakeFn for SparseArray {
         let taken_values = take(self.values(), &physical_take_indices)?;
 
         Ok(SparseArray::new(
-            positions.into_array(),
+            positions.to_array_data(),
             taken_values,
             indices.len(),
             self.fill_value().clone(),
         )
-        .into_array())
+        .to_array_data())
     }
 }
 
@@ -242,8 +242,8 @@ mod test {
 
     fn sparse_array() -> SparseArray {
         SparseArray::new(
-            PrimitiveArray::from(vec![0u64, 37, 47, 99]).into_array(),
-            PrimitiveArray::from(vec![1.23f64, 0.47, 9.99, 3.5]).into_array(),
+            PrimitiveArray::from(vec![0u64, 37, 47, 99]).to_array_data(),
+            PrimitiveArray::from(vec![1.23f64, 0.47, 9.99, 3.5]).to_array_data(),
             100,
             Scalar::null(&DType::Float(FloatWidth::_64, Nullability::Nullable)),
         )

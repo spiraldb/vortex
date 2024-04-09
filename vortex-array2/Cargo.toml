@@ -12,12 +12,17 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
+arrow-schema = { workspace = true }
 flatbuffers = { workspace = true }
 flexbuffers = { workspace = true }
 half = { workspace = true }
 humansize = { workspace = true }
+itertools = { workspace = true }
 linkme = { workspace = true }
+log = { workspace = true }
+num-traits = { workspace = true }
 paste = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 vortex-array = { path = "../vortex-array", features = ["serde"] }

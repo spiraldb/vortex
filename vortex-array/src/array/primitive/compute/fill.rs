@@ -14,7 +14,9 @@ impl<T: NativePType> FillForwardFn for &dyn PrimitiveTrait<T> {
 
         let validity = self.validity().unwrap();
         if validity.all_valid() {
-            return Ok(PrimitiveArray::new(self.ptype(), self.buffer().clone(), None).into_array());
+            return Ok(
+                PrimitiveArray::new(self.ptype(), self.buffer().clone(), None).to_array_data(),
+            );
         }
 
         let mut last_value = T::zero();
@@ -29,7 +31,7 @@ impl<T: NativePType> FillForwardFn for &dyn PrimitiveTrait<T> {
                 last_value
             })
             .collect::<Vec<_>>();
-        Ok(filled.into_array())
+        Ok(filled.to_array_data())
     }
 }
 

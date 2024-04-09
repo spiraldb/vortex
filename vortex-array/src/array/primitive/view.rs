@@ -89,7 +89,7 @@ impl Array for PrimitiveView<'_> {
         todo!()
     }
 
-    fn into_array(self) -> ArrayRef {
+    fn to_array_data(self) -> ArrayRef {
         todo!()
     }
 

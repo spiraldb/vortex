@@ -105,7 +105,7 @@ impl Array for BoolArray {
                 .map(|v| v.slice(start, stop))
                 .transpose()?,
         }
-        .into_array())
+        .to_array_data())
     }
 
     #[inline]
@@ -182,7 +182,7 @@ impl From<Vec<bool>> for BoolArray {
 }
 
 impl IntoArray for Vec<bool> {
-    fn into_array(self) -> ArrayRef {
+    fn to_array_data(self) -> ArrayRef {
         Arc::new(BoolArray::from(self))
     }
 }

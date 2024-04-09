@@ -34,6 +34,6 @@ impl EncodingCompression for SparseEncoding {
             sparse_array.len(),
             sparse_array.fill_value().clone(),
         )
-        .into_array())
+        .to_array_data())
     }
 }

@@ -105,7 +105,7 @@ impl Array for CompositeArray {
             self.metadata.clone(),
             self.underlying.slice(start, stop)?,
         )
-        .into_array())
+        .to_array_data())
     }
 
     #[inline]

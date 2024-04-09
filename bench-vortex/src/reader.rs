@@ -72,7 +72,7 @@ fn compress_parquet_to_vortex(parquet_path: &Path) -> Result<(DType, ChunkedArra
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
-            let vortex_array = record_batch.into_array();
+            let vortex_array = record_batch.to_array_data();
             ctx.compress(&vortex_array, None).unwrap()
         })
         .collect_vec();
@@ -112,7 +112,7 @@ pub fn compress_csv_to_vortex<W: Write>(
     let chunks = csv_reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
-            let vortex_array = record_batch.into_array();
+            let vortex_array = record_batch.to_array_data();
             ctx.compress(&vortex_array, None).unwrap()
         })
         .collect_vec();
@@ -164,7 +164,7 @@ pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<ArrayRef> {
     let array = open_vortex(path)?;
     let taken = take(&array, &PrimitiveArray::from(indices.to_vec()))?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
-    flatten(&taken).map(|x| x.into_array())
+    flatten(&taken).map(|x| x.to_array_data())
 }
 
 pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {

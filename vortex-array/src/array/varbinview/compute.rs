@@ -50,11 +50,11 @@ impl ScalarAtFn for VarBinViewArray {
 
 impl FlattenFn for VarBinViewArray {
     fn flatten(&self) -> VortexResult<FlattenedArray> {
-        let views = flatten(self.views())?.into_array();
+        let views = flatten(self.views())?.to_array_data();
         let data = self
             .data()
             .iter()
-            .map(|d| flatten(d.as_ref()).unwrap().into_array())
+            .map(|d| flatten(d.as_ref()).unwrap().to_array_data())
             .collect::<Vec<_>>();
         Ok(FlattenedArray::VarBinView(VarBinViewArray::new(
             views,

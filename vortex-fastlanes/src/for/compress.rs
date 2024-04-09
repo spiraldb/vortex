@@ -60,9 +60,9 @@ impl EncodingCompression for FoREncoding {
 
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
             if shift == <$T>::PTYPE.bit_width() as u8 {
-                ConstantArray::new($T::default(), parray.len()).into_array()
+                ConstantArray::new($T::default(), parray.len()).to_array_data()
             } else {
-                compress_primitive::<$T>(parray, shift, $T::try_from(min.clone())?).into_array()
+                compress_primitive::<$T>(parray, shift, $T::try_from(min.clone())?).to_array_data()
             }
         });
 
@@ -70,7 +70,7 @@ impl EncodingCompression for FoREncoding {
             .named("for")
             .excluding(&FoREncoding)
             .compress(&child, like.map(|l| l.as_for().encoded()))?;
-        Ok(FoRArray::try_new(compressed_child, min, shift)?.into_array())
+        Ok(FoRArray::try_new(compressed_child, min, shift)?.to_array_data())
     }
 }
 

@@ -1,11 +1,10 @@
-mod compute;
-
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FieldNames};
 
+use crate::compute::ArrayCompute;
 use crate::stats::ArrayStatistics;
-use crate::validity::ArrayValidity;
+use crate::validity::{ArrayValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ToArray, WithArray};
 use crate::{Array, ArrayMetadata};
@@ -117,6 +116,10 @@ impl ArrayValidity for StructArray<'_> {
     fn is_valid(&self, _index: usize) -> bool {
         todo!()
     }
+
+    fn logical_validity(&self) -> Validity {
+        todo!()
+    }
 }
 
 impl ToArrayData for StructArray<'_> {
@@ -149,3 +152,4 @@ impl AcceptArrayVisitor for StructArray<'_> {
 }
 
 impl ArrayStatistics for StructArray<'_> {}
+impl ArrayCompute for StructArray<'_> {}

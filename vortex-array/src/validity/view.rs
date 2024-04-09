@@ -90,8 +90,8 @@ impl ValidityView<'_> {
 
     pub fn to_array(&self) -> ArrayRef {
         match self {
-            Self::Valid(len) => ConstantArray::new(true, *len).into_array(),
-            Self::Invalid(len) => ConstantArray::new(false, *len).into_array(),
+            Self::Valid(len) => ConstantArray::new(true, *len).to_array_data(),
+            Self::Invalid(len) => ConstantArray::new(false, *len).to_array_data(),
             Self::Array(a) => a.to_array(),
         }
     }
@@ -163,7 +163,7 @@ impl Array for ValidityView<'_> {
         todo!()
     }
 
-    fn into_array(self) -> ArrayRef {
+    fn to_array_data(self) -> ArrayRef {
         todo!()
     }
 

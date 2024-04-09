@@ -88,7 +88,7 @@ impl AsContiguousFn for StructArray {
                 .try_collect()?,
             self.len,
         )
-        .into_array())
+        .to_array_data())
     }
 }
 
@@ -98,7 +98,7 @@ impl FlattenFn for StructArray {
             self.names().clone(),
             self.fields()
                 .iter()
-                .map(|field| flatten(field.as_ref()).map(FlattenedArray::into_array))
+                .map(|field| flatten(field.as_ref()).map(FlattenedArray::to_array_data))
                 .try_collect()?,
             self.len,
         )))
@@ -128,6 +128,6 @@ impl TakeFn for StructArray {
                 .try_collect()?,
             indices.len(),
         )
-        .into_array())
+        .to_array_data())
     }
 }

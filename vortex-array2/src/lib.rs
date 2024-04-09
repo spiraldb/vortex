@@ -3,6 +3,7 @@
 extern crate core;
 
 pub mod array;
+mod arrow;
 mod batch;
 pub mod compute;
 mod context;
@@ -73,7 +74,7 @@ pub trait ToArray {
 }
 
 pub trait IntoArray<'a> {
-    fn into_array(self) -> Array<'a>;
+    fn to_array_data(self) -> Array<'a>;
 }
 
 pub trait ToArrayData {

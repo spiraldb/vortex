@@ -30,7 +30,7 @@ impl EncodingSerde for VarBinViewEncoding {
         for _ in 0..num_data {
             data_bufs.push(ctx.bytes().read()?);
         }
-        Ok(VarBinViewArray::new(views, data_bufs, ctx.schema().clone(), validity).into_array())
+        Ok(VarBinViewArray::new(views, data_bufs, ctx.schema().clone(), validity).to_array_data())
     }
 }
 
@@ -65,8 +65,8 @@ mod test {
         );
 
         VarBinViewArray::new(
-            view_arr.into_array(),
-            vec![values.into_array()],
+            view_arr.to_array_data(),
+            vec![values.to_array_data()],
             DType::Utf8(Nullability::NonNullable),
             None,
         )

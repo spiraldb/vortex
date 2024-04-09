@@ -84,5 +84,5 @@ fn compress_localdatetime(
         ctx.compress_validity(underlying.validity())?,
         LocalDateTimeExtension::dtype(underlying.validity().is_some().into()),
     )
-    .into_array())
+    .to_array_data())
 }

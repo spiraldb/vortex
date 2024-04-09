@@ -35,6 +35,6 @@ impl EncodingCompression for CompositeEncoding {
                 composite_like.map(|c| c.underlying()),
             )?,
         )
-        .into_array())
+        .to_array_data())
     }
 }

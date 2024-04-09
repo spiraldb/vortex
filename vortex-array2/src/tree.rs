@@ -107,27 +107,3 @@ impl<'a, 'b: 'a> TreeFormatter<'a, 'b> {
         res
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use std::fmt::Write;
-
-    use vortex_error::VortexResult;
-
-    use crate::array::primitive::PrimitiveData;
-    use crate::array::ree::REEData;
-    use crate::IntoArray;
-
-    #[test]
-    fn tree() -> VortexResult<()> {
-        let primitive = PrimitiveData::from_vec(vec![2i32, 3, 4, 5]);
-        let ree = REEData::try_new(primitive.data().clone(), primitive.data().clone(), 4)?;
-        let arr = ree.into_array();
-
-        let mut str = String::new();
-        write!(str, "{}", arr.tree_display())?;
-        println!("{}", str);
-        // assert_eq!(str.as_str(), "hello");
-        Ok(())
-    }
-}

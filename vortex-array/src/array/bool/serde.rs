@@ -25,7 +25,7 @@ impl EncodingSerde for BoolEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
         let validity = ctx.read_validity()?;
         let (logical_len, buf) = ctx.read_buffer(|len| (len + 7) / 8)?;
-        Ok(BoolArray::new(BooleanBuffer::new(buf, 0, logical_len), validity).into_array())
+        Ok(BoolArray::new(BooleanBuffer::new(buf, 0, logical_len), validity).to_array_data())
     }
 }
 

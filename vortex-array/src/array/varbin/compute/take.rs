@@ -31,7 +31,7 @@ impl TakeFn for VarBinArray {
                     data.typed_data::<u8>(),
                     indices.typed_data::<$I>(),
                     self.validity(),
-                ).into_array())
+                ).to_array_data())
             })
         })
     }

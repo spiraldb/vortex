@@ -17,7 +17,7 @@ impl TakeFn for BoolArray {
             Ok(BoolArray::from_nullable(
                 take_bool(self.buffer(), indices.typed_data::<$I>()),
                 validity,
-            ).into_array())
+            ).to_array_data())
         })
     }
 }

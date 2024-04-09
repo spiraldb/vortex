@@ -161,7 +161,7 @@ impl Array for SparseArray {
             stats: Arc::new(RwLock::new(StatsSet::new())),
             fill_value: self.fill_value.clone(),
         }
-        .into_array())
+        .to_array_data())
     }
 
     #[inline]
@@ -200,7 +200,7 @@ impl ArrayValidity for SparseArray {
             // of true, and patch values of false.
             SparseArray::try_new_with_offset(
                 self.indices.clone(),
-                ConstantArray::new(false, self.len()).into_array(),
+                ConstantArray::new(false, self.len()).to_array_data(),
                 self.len(),
                 self.indices_offset,
                 true.into(),
@@ -213,7 +213,7 @@ impl ArrayValidity for SparseArray {
                 self.values()
                     .logical_validity()
                     .to_bool_array()
-                    .into_array(),
+                    .to_array_data(),
                 self.len(),
                 self.indices_offset,
                 true.into(),
@@ -221,7 +221,7 @@ impl ArrayValidity for SparseArray {
         }
         .unwrap();
 
-        Validity::Array(validity.into_array())
+        Validity::Array(validity.to_array_data())
     }
 
     fn is_valid(&self, index: usize) -> bool {
@@ -289,8 +289,8 @@ mod test {
     fn sparse_array(fill_value: Scalar) -> SparseArray {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
         SparseArray::new(
-            vec![2u64, 5, 8].into_array(),
-            vec![100i32, 200, 300].into_array(),
+            vec![2u64, 5, 8].to_array_data(),
+            vec![100i32, 200, 300].to_array_data(),
             10,
             fill_value,
         )

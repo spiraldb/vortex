@@ -30,7 +30,7 @@ impl EncodingSerde for RoaringBoolEncoding {
                 .ok_or(io::Error::new(ErrorKind::InvalidData, "invalid bitmap"))?,
             len,
         )
-        .into_array())
+        .to_array_data())
     }
 }
 

@@ -7,7 +7,7 @@ use crate::array::{Array, ArrayRef, IntoArray};
 use crate::encode::FromArrowArray;
 
 impl IntoArray for &RecordBatch {
-    fn into_array(self) -> ArrayRef {
+    fn to_array_data(self) -> ArrayRef {
         StructArray::new(
             self.schema()
                 .fields()
@@ -23,6 +23,6 @@ impl IntoArray for &RecordBatch {
                 .collect(),
             self.num_rows(),
         )
-        .into_array()
+        .to_array_data()
     }
 }

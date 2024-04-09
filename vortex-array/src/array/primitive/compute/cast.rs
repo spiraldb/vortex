@@ -20,7 +20,7 @@ impl<T: NativePType> CastFn for &dyn PrimitiveTrait<T> {
                 Ok(PrimitiveArray::from_nullable(
                     cast::<T, $P>(self.typed_data())?,
                     Validity::try_from_logical(self.logical_validity(), self.nullability())?,
-                ).into_array())
+                ).to_array_data())
             })
         }
     }
@@ -48,14 +48,14 @@ mod test {
 
     #[test]
     fn cast_u32_u8() {
-        let arr = vec![0u32, 10, 200].into_array();
+        let arr = vec![0u32, 10, 200].to_array_data();
         let u8arr = compute::cast::cast(&arr, PType::U8.into()).unwrap();
         assert_eq!(u8arr.as_primitive().typed_data::<u8>(), vec![0u8, 10, 200]);
     }
 
     #[test]
     fn cast_u32_f32() {
-        let arr = vec![0u32, 10, 200].into_array();
+        let arr = vec![0u32, 10, 200].to_array_data();
         let u8arr = compute::cast::cast(&arr, PType::F32.into()).unwrap();
         assert_eq!(
             u8arr.as_primitive().typed_data::<f32>(),
@@ -65,7 +65,7 @@ mod test {
 
     #[test]
     fn cast_i32_u32() {
-        let arr = vec![-1i32].into_array();
+        let arr = vec![-1i32].to_array_data();
         let error = compute::cast::cast(&arr, PType::U32.into()).err().unwrap();
         let VortexError::ComputeError(s, _) = error else {
             unreachable!()

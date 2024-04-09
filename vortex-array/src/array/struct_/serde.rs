@@ -33,11 +33,11 @@ impl EncodingSerde for StructEncoding {
             fields
                 .iter()
                 .enumerate()
-                .map(|(i, field)| view.child(i, field).unwrap().into_array())
+                .map(|(i, field)| view.child(i, field).unwrap().to_array_data())
                 .collect_vec(),
             self.len(view),
         )
-        .into_array()
+        .to_array_data()
     }
 
     fn len(&self, view: &ArrayView) -> usize {
@@ -56,7 +56,7 @@ impl EncodingSerde for StructEncoding {
         let DType::Struct(names, _) = ctx.schema() else {
             vortex_bail!(MismatchedTypes: "any struct", ctx.schema());
         };
-        Ok(StructArray::new(names.clone(), fields, len).into_array())
+        Ok(StructArray::new(names.clone(), fields, len).to_array_data())
     }
 }
 
@@ -79,8 +79,8 @@ mod test {
                 Arc::new("nullable".to_string()),
             ],
             vec![
-                vec![7u8, 37, 71, 97].into_array(),
-                PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]).into_array(),
+                vec![7u8, 37, 71, 97].to_array_data(),
+                PrimitiveArray::from_iter(vec![Some(0), None, Some(2), Some(42)]).to_array_data(),
             ],
             4,
         );

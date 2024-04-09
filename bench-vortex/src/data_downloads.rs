@@ -59,7 +59,7 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
 
         let chunks = reader
             .map(|batch_result| batch_result.unwrap())
-            .map(|record_batch| record_batch.into_array())
+            .map(|record_batch| record_batch.to_array_data())
             .collect_vec();
         let chunked = ChunkedArray::new(chunks, dtype.clone());
 

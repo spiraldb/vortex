@@ -26,7 +26,7 @@ impl TakeFn for ChunkedArray {
 
             if chunk_idx != prev_chunk_idx {
                 // Start a new chunk
-                let indices_in_chunk_array = indices_in_chunk.clone().into_array();
+                let indices_in_chunk_array = indices_in_chunk.clone().to_array_data();
                 chunks.push(take(
                     &self.chunks()[prev_chunk_idx],
                     &indices_in_chunk_array,
@@ -39,14 +39,14 @@ impl TakeFn for ChunkedArray {
         }
 
         if !indices_in_chunk.is_empty() {
-            let indices_in_chunk_array = indices_in_chunk.into_array();
+            let indices_in_chunk_array = indices_in_chunk.to_array_data();
             chunks.push(take(
                 &self.chunks()[prev_chunk_idx],
                 &indices_in_chunk_array,
             )?);
         }
 
-        Ok(ChunkedArray::new(chunks, self.dtype().clone()).into_array())
+        Ok(ChunkedArray::new(chunks, self.dtype().clone()).to_array_data())
     }
 }
 
@@ -60,9 +60,9 @@ mod test {
 
     #[test]
     fn test_take() {
-        let a = vec![1i32, 2, 3].into_array();
+        let a = vec![1i32, 2, 3].to_array_data();
         let arr = ChunkedArray::new(vec![a.clone(), a.clone(), a.clone()], a.dtype().clone());
-        let indices = vec![0, 0, 6, 4].into_array();
+        let indices = vec![0, 0, 6, 4].to_array_data();
 
         let result = as_contiguous(take(&arr, &indices).unwrap().as_chunked().chunks()).unwrap();
         assert_eq!(result.as_primitive().typed_data::<i32>(), &[1, 1, 1, 2]);

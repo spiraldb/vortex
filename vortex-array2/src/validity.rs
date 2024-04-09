@@ -3,12 +3,13 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::BoolData;
-use crate::compute::scalar_at;
+use crate::compute::scalar_at::scalar_at;
+use crate::compute::take::take;
 use crate::{Array, ArrayData, IntoArray, ToArrayData, WithArray};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
-    // Maybe add to_bool_array() here?
+    fn logical_validity(&self) -> Validity;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -42,7 +43,7 @@ pub enum Validity<'v> {
 impl<'v> Validity<'v> {
     pub const DTYPE: DType = DType::Bool(Nullability::NonNullable);
 
-    pub fn into_array_data(self) -> Option<ArrayData> {
+    pub fn to_array_data_data(self) -> Option<ArrayData> {
         match self {
             Validity::Array(a) => Some(a.to_array_data()),
             _ => None,
@@ -90,17 +91,32 @@ impl<'v> Validity<'v> {
             Validity::Array(a) => scalar_at(a, index).unwrap().try_into().unwrap(),
         }
     }
+
+    pub fn take(&self, indices: &Array) -> VortexResult<Validity> {
+        match self {
+            Validity::NonNullable => Ok(Validity::NonNullable),
+            Validity::AllValid => Ok(Validity::AllValid),
+            Validity::AllInvalid => Ok(Validity::AllInvalid),
+            Validity::Array(a) => Ok(Validity::Array(take(a, indices)?)),
+        }
+    }
 }
 
-impl<'a, E> FromIterator<&'a Option<E>> for Validity<'static> {
-    fn from_iter<T: IntoIterator<Item = &'a Option<E>>>(iter: T) -> Self {
-        let bools: Vec<bool> = iter.into_iter().map(|option| option.is_some()).collect();
+impl From<Vec<bool>> for Validity<'static> {
+    fn from(bools: Vec<bool>) -> Self {
         if bools.iter().all(|b| *b) {
             Validity::AllValid
         } else if !bools.iter().any(|b| *b) {
             Validity::AllInvalid
         } else {
-            Validity::Array(BoolData::from_vec(bools).into_array())
+            Validity::Array(BoolData::from_vec(bools, Validity::NonNullable).to_array_data())
         }
+    }
+}
+
+impl<'a, E> FromIterator<&'a Option<E>> for Validity<'static> {
+    fn from_iter<T: IntoIterator<Item = &'a Option<E>>>(iter: T) -> Self {
+        let bools: Vec<bool> = iter.into_iter().map(|option| option.is_some()).collect();
+        Validity::from(bools)
     }
 }

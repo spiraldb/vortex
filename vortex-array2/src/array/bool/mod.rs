@@ -31,16 +31,13 @@ pub struct BoolArray<'a> {
 }
 
 impl BoolArray<'_> {
-    pub fn buffer(&self) -> &Buffer {
-        self.buffer
+    pub fn buffer(&self) -> BooleanBuffer {
+        // TODO(ngates): look into whether we should store this on BoolArray
+        BooleanBuffer::new(self.buffer.clone(), 0, self.length)
     }
 
     pub fn validity(&self) -> &Validity {
         &self.validity
-    }
-
-    pub fn boolean_buffer(&self) -> BooleanBuffer {
-        BooleanBuffer::new(self.buffer.clone(), 0, self.length)
     }
 }
 
@@ -70,13 +67,30 @@ impl BoolData {
                 length: buffer.len(),
             }),
             vec![buffer.into_inner()].into(),
-            vec![validity.into_array_data()].into(),
+            vec![validity.to_array_data_data()].into(),
         ))
     }
 
-    pub fn from_vec(bools: Vec<bool>) -> Self {
+    pub fn from_vec(bools: Vec<bool>, validity: Validity) -> Self {
         let buffer = BooleanBuffer::from(bools);
-        Self::try_new(buffer, Validity::NonNullable).unwrap()
+        Self::try_new(buffer, validity).unwrap()
+    }
+}
+
+impl FromIterator<Option<bool>> for BoolData {
+    fn from_iter<I: IntoIterator<Item = Option<bool>>>(iter: I) -> Self {
+        let iter = iter.into_iter();
+        let (lower, _) = iter.size_hint();
+
+        let mut validity: Vec<bool> = Vec::with_capacity(lower);
+        let values: Vec<bool> = iter
+            .map(|i| {
+                validity.push(i.is_some());
+                i.unwrap_or_default()
+            })
+            .collect::<Vec<_>>();
+
+        BoolData::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap()
     }
 }
 
@@ -93,6 +107,10 @@ impl ArrayTrait for BoolArray<'_> {
 impl ArrayValidity for BoolArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
+    }
+
+    fn logical_validity(&self) -> Validity {
+        self.validity.clone()
     }
 }
 
@@ -118,12 +136,12 @@ impl ArrayStatistics for BoolArray<'_> {
 #[cfg(test)]
 mod tests {
     use crate::array::bool::BoolData;
-    use crate::compute::scalar_at;
+    use crate::compute::scalar_at::scalar_at;
     use crate::IntoArray;
 
     #[test]
     fn bool_array() {
-        let arr = BoolData::from_vec(vec![true, false, true]).into_array();
+        let arr = BoolData::from_vec(vec![true, false, true]).to_array_data();
         let scalar: bool = scalar_at(&arr, 0).unwrap().try_into().unwrap();
         assert!(scalar);
     }

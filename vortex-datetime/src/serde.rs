@@ -37,6 +37,6 @@ impl EncodingSerde for DateTimeEncoding {
             ctx.read_validity()?,
             ctx.schema().clone(),
         )
-        .into_array())
+        .to_array_data())
     }
 }

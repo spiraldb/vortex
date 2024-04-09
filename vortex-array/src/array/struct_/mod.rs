@@ -101,7 +101,7 @@ impl Array for StructArray {
             len: stop - start,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
-        .into_array())
+        .to_array_data())
     }
 
     #[inline]

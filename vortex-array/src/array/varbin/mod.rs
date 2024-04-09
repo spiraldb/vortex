@@ -131,8 +131,8 @@ impl VarBinArray {
         }
 
         VarBinArray::new(
-            PrimitiveArray::from(offsets).into_array(),
-            PrimitiveArray::from(values).into_array(),
+            PrimitiveArray::from(offsets).to_array_data(),
+            PrimitiveArray::from(values).to_array_data(),
             dtype,
             None,
         )
@@ -160,8 +160,8 @@ impl VarBinArray {
             }
         }
 
-        let offsets_ref = PrimitiveArray::from(offsets).into_array();
-        let bytes_ref = PrimitiveArray::from(bytes).into_array();
+        let offsets_ref = PrimitiveArray::from(offsets).to_array_data();
+        let bytes_ref = PrimitiveArray::from(bytes).to_array_data();
         if validity.is_empty() {
             VarBinArray::new(offsets_ref, bytes_ref, dtype, None)
         } else {
@@ -229,7 +229,7 @@ impl Array for VarBinArray {
             self.dtype.clone(),
             self.validity().map(|v| v.slice(start, stop)).transpose()?,
         )
-        .into_array())
+        .to_array_data())
     }
 
     #[inline]
@@ -363,8 +363,8 @@ mod test {
         let offsets = PrimitiveArray::from(vec![0, 11, 44]);
 
         VarBinArray::new(
-            offsets.into_array(),
-            values.into_array(),
+            offsets.to_array_data(),
+            values.to_array_data(),
             DType::Utf8(Nullability::NonNullable),
             None,
         )

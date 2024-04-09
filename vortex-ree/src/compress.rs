@@ -61,7 +61,7 @@ impl EncodingCompression for REEEncoding {
             compressed_values,
             ctx.compress_validity(primitive_array.validity())?,
         )
-        .into_array())
+        .to_array_data())
     }
 }
 
@@ -194,8 +194,8 @@ mod test {
             Validity::from(validity)
         };
         let arr = REEArray::new(
-            vec![2u32, 5, 10].into_array(),
-            vec![1i32, 2, 3].into_array(),
+            vec![2u32, 5, 10].to_array_data(),
+            vec![1i32, 2, 3].to_array_data(),
             Some(validity),
         );
 

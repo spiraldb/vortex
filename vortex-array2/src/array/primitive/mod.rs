@@ -1,11 +1,10 @@
-mod compute;
-
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use serde::{Deserialize, Serialize};
 use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::compute::ArrayCompute;
 use crate::impl_encoding;
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::{ArrayValidity, Validity, ValidityMetadata};
@@ -41,6 +40,10 @@ impl PrimitiveArray<'_> {
     pub fn ptype(&self) -> PType {
         self.ptype
     }
+
+    pub fn typed_data<T: NativePType>(&self) -> &[T] {
+        self.buffer.typed_data::<T>()
+    }
 }
 
 impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
@@ -68,12 +71,12 @@ impl PrimitiveData {
                 validity: validity.to_metadata(buffer.len() / T::PTYPE.byte_width())?,
             }),
             vec![buffer.into_inner()].into(),
-            vec![validity.into_array_data()].into(),
+            vec![validity.to_array_data_data()].into(),
         ))
     }
 
-    pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>) -> Self {
-        Self::try_new(ScalarBuffer::from(values), Validity::NonNullable).unwrap()
+    pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>, validity: Validity) -> Self {
+        Self::try_new(ScalarBuffer::from(values), validity).unwrap()
     }
 }
 
@@ -90,6 +93,10 @@ impl ArrayTrait for PrimitiveArray<'_> {
 impl ArrayValidity for PrimitiveArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
+    }
+
+    fn logical_validity(&self) -> Validity {
+        self.validity().clone()
     }
 }
 
@@ -120,3 +127,5 @@ impl ArrayStatistics for PrimitiveArray<'_> {
         self.statistics
     }
 }
+
+impl ArrayCompute for PrimitiveArray<'_> {}

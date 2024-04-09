@@ -54,7 +54,7 @@ impl ALPArray {
 
     pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
         match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => Ok(alp_encode(p)?.into_array()),
+            ArrayKind::Primitive(p) => Ok(alp_encode(p)?.to_array_data()),
             _ => Err(vortex_err!("ALP can only encoding primitive arrays")),
         }
     }
@@ -101,7 +101,7 @@ impl Array for ALPArray {
             self.exponents().clone(),
             self.patches().map(|p| p.slice(start, stop)).transpose()?,
         )?
-        .into_array())
+        .to_array_data())
     }
 
     #[inline]

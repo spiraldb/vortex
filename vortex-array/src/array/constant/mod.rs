@@ -80,7 +80,7 @@ impl Array for ConstantArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         check_slice_bounds(self, start, stop)?;
 
-        Ok(ConstantArray::new(self.scalar.clone(), stop - start).into_array())
+        Ok(ConstantArray::new(self.scalar.clone(), stop - start).to_array_data())
     }
 
     #[inline]

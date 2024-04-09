@@ -22,6 +22,6 @@ impl TakeFn for DateTimeArray {
             self.validity().to_owned_view(),
             self.dtype().clone(),
         )
-        .into_array())
+        .to_array_data())
     }
 }

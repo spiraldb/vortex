@@ -166,8 +166,8 @@ impl<'a> Array for ArrayView<'a> {
         self.vtable().to_array(self)
     }
 
-    fn into_array(self) -> ArrayRef {
-        // Not much point adding VTable.into_array for ArrayView since everything is by-reference.
+    fn to_array_data(self) -> ArrayRef {
+        // Not much point adding VTable.to_array_data for ArrayView since everything is by-reference.
         self.vtable().to_array(&self)
     }
 

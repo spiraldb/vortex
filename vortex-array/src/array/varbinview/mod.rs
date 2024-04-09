@@ -219,7 +219,7 @@ impl Array for VarBinViewArray {
             validity: self.validity().map(|v| v.slice(start, stop)).transpose()?,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         }
-        .into_array())
+        .to_array_data())
     }
 
     #[inline]
@@ -316,8 +316,8 @@ mod test {
         );
 
         VarBinViewArray::new(
-            view_arr.into_array(),
-            vec![values.into_array()],
+            view_arr.to_array_data(),
+            vec![values.to_array_data()],
             DType::Utf8(Nullability::NonNullable),
             None,
         )

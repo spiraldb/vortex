@@ -10,7 +10,7 @@ use vortex_schema::DType;
 
 use crate::encoding::EncodingRef;
 use crate::stats::Statistics;
-use crate::{Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, ToArray};
+use crate::{Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, ToArray, TryFromArrayParts};
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -120,7 +120,7 @@ impl ToArray for ArrayData {
 }
 
 impl IntoArray<'static> for ArrayData {
-    fn into_array(self) -> Array<'static> {
+    fn to_array_data(self) -> Array<'static> {
         Array::Data(self)
     }
 }
@@ -175,6 +175,12 @@ impl<D: ArrayDef> TypedArrayData<D> {
     }
 }
 
+impl<'a, D: ArrayDef> AsRef<D::Array<'a>> for TypedArrayData<D> {
+    fn as_ref(&self) -> &D::Array<'a> {
+        D::Array::try_from_parts(&self.data, self.metadata()).unwrap()
+    }
+}
+
 impl<D: ArrayDef> ToArray for TypedArrayData<D> {
     fn to_array(&self) -> Array {
         Array::DataRef(&self.data)
@@ -182,7 +188,7 @@ impl<D: ArrayDef> ToArray for TypedArrayData<D> {
 }
 
 impl<D: ArrayDef> IntoArray<'static> for TypedArrayData<D> {
-    fn into_array(self) -> Array<'static> {
+    fn to_array_data(self) -> Array<'static> {
         Array::Data(self.data)
     }
 }

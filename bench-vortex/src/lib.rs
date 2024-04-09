@@ -110,7 +110,7 @@ pub fn compress_taxi_data() -> ArrayRef {
     let chunks = reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
-        .map(|batch| batch.into_array())
+        .map(|batch| batch.to_array_data())
         .map(|array| {
             uncompressed_size += array.nbytes();
             ctx.clone().compress(&array, None).unwrap()
@@ -139,7 +139,7 @@ pub fn compress_medicare_data() -> ArrayRef {
     let chunks = csv_reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
-        .map(|batch| batch.into_array())
+        .map(|batch| batch.to_array_data())
         .map(|array| {
             uncompressed_size += array.nbytes();
             ctx.clone().compress(&array, None).unwrap()
@@ -150,7 +150,7 @@ pub fn compress_medicare_data() -> ArrayRef {
 
 fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<ArrayRef>) -> ArrayRef {
     let dtype = DType::from_arrow(schema.clone());
-    let compressed = ChunkedArray::new(chunks.clone(), dtype).into_array();
+    let compressed = ChunkedArray::new(chunks.clone(), dtype).to_array_data();
 
     warn!("Compressed array {}", display_tree(compressed.as_ref()));
 

@@ -42,7 +42,7 @@ impl AsContiguousFn for ConstantArray {
                 chunks.first().unwrap().scalar().clone(),
                 chunks.iter().map(|c| c.len()).sum(),
             )
-            .into_array())
+            .to_array_data())
         } else {
             // TODO(ngates): we need to flatten the constant arrays and then concatenate them
             Err(vortex_err!(
@@ -88,6 +88,6 @@ impl ScalarAtFn for ConstantArray {
 
 impl TakeFn for ConstantArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        Ok(ConstantArray::new(self.scalar().clone(), indices.len()).into_array())
+        Ok(ConstantArray::new(self.scalar().clone(), indices.len()).to_array_data())
     }
 }
