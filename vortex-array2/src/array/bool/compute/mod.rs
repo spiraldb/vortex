@@ -17,7 +17,7 @@ use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::validity::ArrayValidity;
 use crate::validity::Validity;
-use crate::{Array, ArrayTrait, IntoArray, ToArrayData};
+use crate::{Array, ArrayTrait, IntoArray, ToArrayData, WithArray};
 
 mod take;
 
@@ -59,10 +59,11 @@ impl AsArrowArray for BoolArray<'_> {
 impl AsContiguousFn for BoolArray<'_> {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array<'static>> {
         let validity = if self.dtype().is_nullable() {
-            Validity::from_iter(arrays.iter().map(|a| {
-                let bool_data = BoolData::try_from(a.to_array_data()).unwrap();
-                bool_data.to_typed_array().validity().to_static()
-            }))
+            Validity::from_iter(
+                arrays
+                    .iter()
+                    .map(|a| a.with_array(|a| a.logical_validity())),
+            )
         } else {
             Validity::NonNullable
         };
@@ -81,9 +82,9 @@ impl AsContiguousFn for BoolArray<'_> {
 
 impl FlattenFn for BoolArray<'_> {
     fn flatten(&self) -> VortexResult<FlattenedData> {
-        Ok(FlattenedData::Bool(BoolData::try_from(
-            self.to_array_data(),
-        )?))
+        Ok(FlattenedData::Bool(
+            self.to_array_data().into_typed_data().unwrap(),
+        ))
     }
 }
 
@@ -123,18 +124,16 @@ impl FillForwardFn for BoolArray<'_> {
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::BoolData;
+    use crate::array::bool::{BoolData, BoolDef};
     use crate::validity::Validity;
-    use crate::{compute, IntoArray, ToArrayData};
+    use crate::{compute, IntoArray};
 
     #[test]
     fn fill_forward() {
         let barr =
             BoolData::from_iter(vec![None, Some(false), None, Some(true), None]).into_array();
-        let filled =
-            BoolData::try_from(compute::fill::fill_forward(&barr).unwrap().to_array_data())
-                .unwrap();
-        let filled_bool = filled.to_typed_array();
+        let filled = compute::fill::fill_forward(&barr).unwrap();
+        let filled_bool = filled.to_typed_array::<BoolDef>().unwrap();
         assert_eq!(
             filled_bool.buffer().iter().collect::<Vec<bool>>(),
             vec![false, false, false, true, true]

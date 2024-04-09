@@ -74,12 +74,11 @@ mod test {
             vec![col.clone(), col.clone()],
             3,
         )
-        .unwrap()
-        .into_array_data();
+        .unwrap();
 
         let arr = StructData::try_new(
             vec![Arc::new("a".into()), Arc::new("b".into())],
-            vec![col.clone(), nested_struct],
+            vec![col.clone(), nested_struct.into_array_data()],
             3,
         )
         .unwrap()
