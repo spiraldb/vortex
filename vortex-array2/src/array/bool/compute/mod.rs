@@ -3,7 +3,6 @@ use std::sync::Arc;
 use arrow_array::{ArrayRef as ArrowArrayRef, BooleanArray as ArrowBoolArray};
 use arrow_buffer::buffer::BooleanBuffer;
 use vortex::scalar::{BoolScalar, Scalar};
-use vortex::validity::ArrayValidity;
 use vortex_error::VortexResult;
 
 use crate::array::bool::{BoolArray, BoolData};
@@ -15,8 +14,9 @@ use crate::compute::flatten::{FlattenFn, FlattenedData};
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
+use crate::validity::ArrayValidity;
 use crate::validity::Validity;
-use crate::{Array, ArrayTrait, ToArrayData};
+use crate::{Array, ArrayTrait, ToArrayData, WithArray};
 
 mod take;
 
@@ -59,13 +59,15 @@ impl AsContiguousFn for BoolArray<'_> {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let validity: Option<Validity> = if self.dtype().is_nullable() {
             Some(Validity::from_iter(
-                arrays.iter().map(|a| a.logical_validity()),
+                arrays
+                    .iter()
+                    .map(|a| a.with_array(|a| a.logical_validity())),
             ))
         } else {
             None
         };
 
-        Ok(BoolArray::new(
+        Ok(BoolData::try_new(
             BooleanBuffer::from(
                 arrays
                     .iter()
@@ -73,7 +75,7 @@ impl AsContiguousFn for BoolArray<'_> {
                     .collect::<Vec<bool>>(),
             ),
             validity,
-        )
+        )?
         .to_array_data())
     }
 }

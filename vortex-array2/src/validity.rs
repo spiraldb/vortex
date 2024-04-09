@@ -114,6 +114,12 @@ impl From<Vec<bool>> for Validity<'static> {
     }
 }
 
+impl<'a> FromIterator<Validity<'a>> for Validity<'static> {
+    fn from_iter<T: IntoIterator<Item = Validity<'a>>>(iter: T) -> Self {
+        todo!()
+    }
+}
+
 impl<'a, E> FromIterator<&'a Option<E>> for Validity<'static> {
     fn from_iter<T: IntoIterator<Item = &'a Option<E>>>(iter: T) -> Self {
         let bools: Vec<bool> = iter.into_iter().map(|option| option.is_some()).collect();
