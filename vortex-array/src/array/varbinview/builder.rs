@@ -2,15 +2,17 @@ use std::marker::PhantomData;
 use std::mem;
 use std::mem::ManuallyDrop;
 
+use arrow_buffer::NullBufferBuilder;
 use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE};
 use crate::array::{Array, ArrayRef, IntoArray};
+use crate::validity::Validity;
 
 pub struct VarBinViewBuilder<T: AsRef<[u8]>> {
     views: Vec<BinaryView>,
-    validity: Vec<bool>,
+    nulls: NullBufferBuilder,
     completed: Vec<ArrayRef>,
     in_progress: Vec<u8>,
     block_size: u32,
@@ -21,7 +23,7 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             views: Vec::with_capacity(capacity),
-            validity: Vec::with_capacity(capacity),
+            nulls: NullBufferBuilder::new(capacity),
             completed: Vec::new(),
             in_progress: Vec::new(),
             block_size: 16 * 1024,
@@ -66,7 +68,7 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
                 inlined: Inlined::new(vbytes),
             });
         }
-        self.validity.push(true);
+        self.nulls.append_non_null();
     }
 
     #[inline]
@@ -74,7 +76,7 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
         self.views.push(BinaryView {
             inlined: Inlined::new("".as_bytes()),
         });
-        self.validity.push(false);
+        self.nulls.append_null();
     }
 
     pub fn finish(&mut self, dtype: DType) -> VarBinViewArray {
@@ -82,6 +84,18 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
         if !self.in_progress.is_empty() {
             completed.push(PrimitiveArray::from(mem::take(&mut self.in_progress)).into_array());
         }
+
+        let nulls = self.nulls.finish();
+        let validity = if dtype.is_nullable() {
+            Some(
+                nulls
+                    .map(Validity::from)
+                    .unwrap_or_else(|| Validity::Valid(self.views.len())),
+            )
+        } else {
+            assert!(nulls.is_none(), "dtype and validity mismatch");
+            None
+        };
 
         let views_u8: Vec<u8> = unsafe {
             let mut views_clone = ManuallyDrop::new(mem::take(&mut self.views));
@@ -92,16 +106,6 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
             )
         };
 
-        VarBinViewArray::try_new(
-            views_u8.into_array(),
-            completed,
-            if self.validity.is_empty() {
-                dtype
-            } else {
-                dtype.as_nullable()
-            },
-            (!self.validity.is_empty()).then(|| mem::take(&mut self.validity).into()),
-        )
-        .unwrap()
+        VarBinViewArray::try_new(views_u8.into_array(), completed, dtype, validity).unwrap()
     }
 }
