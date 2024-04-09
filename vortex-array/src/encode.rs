@@ -62,7 +62,8 @@ impl<T: ArrowNativeType + NativePType> IntoArray for ScalarBuffer<T> {
 impl<O: OffsetSizeTrait> IntoArray for OffsetBuffer<O> {
     fn to_array_data(self) -> ArrayRef {
         let ptype = if O::IS_LARGE { PType::I64 } else { PType::I32 };
-        let array = PrimitiveArray::new(ptype, self.into_inner().into_inner(), None).to_array_data();
+        let array =
+            PrimitiveArray::new(ptype, self.into_inner().into_inner(), None).to_array_data();
         array.stats().set(Stat::IsSorted, true.into());
         array.stats().set(Stat::IsStrictSorted, true.into());
         array
