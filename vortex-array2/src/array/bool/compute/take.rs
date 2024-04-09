@@ -18,7 +18,7 @@ impl TakeFn for BoolArray<'_> {
             Ok(BoolData::from_vec(
                 take_bool(&self.buffer(), indices.typed_data::<$I>()),
                 validity,
-            ).to_array_data())
+            ).into_array())
         })
     }
 }
@@ -33,7 +33,7 @@ mod test {
     use crate::array::primitive::PrimitiveData;
     use crate::compute::take::take;
     use crate::validity::Validity::NonNullable;
-    use crate::{IntoArray, ToArrayData};
+    use crate::IntoArray;
 
     #[test]
     fn take_nullable() {
@@ -44,15 +44,15 @@ mod test {
             None,
             Some(false),
         ])
-        .to_array_data();
+        .into_array();
 
         let res = BoolData::try_from(
             take(
                 &reference,
-                &PrimitiveData::from_vec(vec![0, 3, 4], NonNullable).to_array_data(),
+                &PrimitiveData::from_vec(vec![0, 3, 4], NonNullable).into_array(),
             )
             .unwrap()
-            .to_array_data(),
+            .into_array(),
         )
         .unwrap();
 

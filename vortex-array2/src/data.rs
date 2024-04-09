@@ -120,7 +120,7 @@ impl ToArray for ArrayData {
 }
 
 impl IntoArray<'static> for ArrayData {
-    fn to_array_data(self) -> Array<'static> {
+    fn into_array(self) -> Array<'static> {
         Array::Data(self)
     }
 }
@@ -188,7 +188,7 @@ impl<D: ArrayDef> ToArray for TypedArrayData<D> {
 }
 
 impl<D: ArrayDef> IntoArray<'static> for TypedArrayData<D> {
-    fn to_array_data(self) -> Array<'static> {
+    fn into_array(self) -> Array<'static> {
         Array::Data(self.data)
     }
 }
@@ -245,5 +245,10 @@ impl Statistics for ArrayData {
     fn get(&self, stat: Stat) -> Option<Scalar> {
         let locked = self.stats_set.read().unwrap();
         locked.get(&stat).cloned()
+    }
+
+    fn set(&self, stat: Stat, value: Scalar) {
+        let mut locked = self.stats_set.write().unwrap();
+        locked.insert(&stat, value);
     }
 }

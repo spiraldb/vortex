@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn bool_array() {
-        let arr = BoolData::from_vec(vec![true, false, true]).to_array_data();
+        let arr = BoolData::from_vec(vec![true, false, true]).into_array();
         let scalar: bool = scalar_at(&arr, 0).unwrap().try_into().unwrap();
         assert!(scalar);
     }

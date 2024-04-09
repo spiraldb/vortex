@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use arrow_array::RecordBatch;
-use vortex::encode::FromArrowArray;
 
 use crate::array::r#struct::StructData;
 use crate::{ArrayData, ToArrayData};
@@ -19,7 +18,7 @@ impl ToArrayData for RecordBatch {
             self.columns()
                 .iter()
                 .zip(self.schema().fields())
-                .map(|(array, field)| ArrayRef::from_arrow(array.clone(), field.is_nullable()))
+                .map(|(array, field)| ArrayData::from_arrow(array.clone(), field.is_nullable()))
                 .collect(),
             self.num_rows(),
         )

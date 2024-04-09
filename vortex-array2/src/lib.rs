@@ -74,11 +74,15 @@ pub trait ToArray {
 }
 
 pub trait IntoArray<'a> {
-    fn to_array_data(self) -> Array<'a>;
+    fn into_array(self) -> Array<'a>;
 }
 
 pub trait ToArrayData {
     fn to_array_data(&self) -> ArrayData;
+}
+
+pub trait IntoArrayData {
+    fn into_array_data(self) -> ArrayData;
 }
 
 pub trait WithArray {

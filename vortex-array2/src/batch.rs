@@ -82,7 +82,7 @@ mod test {
             3,
         )
         .unwrap()
-        .to_array_data();
+        .into_array();
 
         let batch = ColumnBatch::from(&arr);
         assert_eq!(batch.columns().len(), 3);

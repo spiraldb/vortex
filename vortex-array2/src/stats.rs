@@ -19,6 +19,7 @@ pub trait ArrayStatistics {
 pub trait Statistics {
     fn compute(&self, stat: Stat) -> VortexResult<Option<Scalar>>;
     fn get(&self, stat: Stat) -> Option<Scalar>;
+    fn set(&self, stat: Stat, value: Scalar);
 }
 
 impl dyn Statistics {
@@ -44,5 +45,9 @@ impl Statistics for EmptyStatistics {
 
     fn get(&self, _stat: Stat) -> Option<Scalar> {
         None
+    }
+
+    fn set(&self, _stat: Stat, _value: Scalar) {
+        // No-op
     }
 }

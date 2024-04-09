@@ -5,7 +5,7 @@ use vortex_schema::{DType, Nullability};
 use crate::array::bool::BoolData;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
-use crate::{Array, ArrayData, IntoArray, ToArrayData, WithArray};
+use crate::{Array, ArrayData, ToArrayData, WithArray};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;

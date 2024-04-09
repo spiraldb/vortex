@@ -3,7 +3,7 @@ use vortex_error::{vortex_err, VortexResult};
 use crate::array::bool::BoolData;
 use crate::array::primitive::PrimitiveData;
 use crate::array::r#struct::StructData;
-use crate::{Array, IntoArray};
+use crate::Array;
 
 pub trait FlattenFn {
     fn flatten(&self) -> VortexResult<FlattenedData>;

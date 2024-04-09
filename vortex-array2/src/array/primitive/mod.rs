@@ -64,7 +64,10 @@ impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
 }
 
 impl PrimitiveData {
-    fn try_new<T: NativePType>(buffer: ScalarBuffer<T>, validity: Validity) -> VortexResult<Self> {
+    pub fn try_new<T: NativePType>(
+        buffer: ScalarBuffer<T>,
+        validity: Validity,
+    ) -> VortexResult<Self> {
         Ok(Self::new_unchecked(
             DType::from(T::PTYPE).with_nullability(validity.nullability()),
             Arc::new(PrimitiveMetadata {
