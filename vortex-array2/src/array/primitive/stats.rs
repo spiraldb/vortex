@@ -10,12 +10,12 @@ use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::flatten::flatten_bool;
-use crate::stats::{ArrayStatistics, Stat};
+use crate::stats::{ArrayStatisticsCompute, Stat};
 use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
 use crate::IntoArray;
 
-impl ArrayStatistics for PrimitiveArray<'_> {
+impl ArrayStatisticsCompute for PrimitiveArray<'_> {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
         match_each_native_ptype!(self.ptype(), |$P| {
             match self.logical_validity() {
@@ -31,7 +31,7 @@ impl ArrayStatistics for PrimitiveArray<'_> {
     }
 }
 
-impl<T: NativePType> ArrayStatistics for &[T] {
+impl<T: NativePType> ArrayStatisticsCompute for &[T] {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
         if self.is_empty() {
             return Ok(HashMap::default());
@@ -64,7 +64,7 @@ fn all_null_stats<T: NativePType>() -> VortexResult<HashMap<Stat, Scalar>> {
 
 struct NullableValues<'a, T: NativePType>(&'a [T], &'a BooleanBuffer);
 
-impl<'a, T: NativePType> ArrayStatistics for NullableValues<'a, T> {
+impl<'a, T: NativePType> ArrayStatisticsCompute for NullableValues<'a, T> {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
         let values = self.0;
         if values.is_empty() {
@@ -220,26 +220,28 @@ mod test {
     use vortex::scalar::ListScalarVec;
 
     use crate::array::primitive::PrimitiveData;
-    use crate::stats::{Stat, TypedStatistics};
-    use crate::IntoArray;
+    use crate::stats::{ArrayStatistics, Stat};
 
     #[test]
     fn stats() {
-        let arr = PrimitiveData::from(vec![1, 2, 3, 4, 5]).into_array();
-        let min: i32 = arr.compute_as(Stat::Min).unwrap();
-        let max: i32 = arr.compute_as(Stat::Max).unwrap();
-        let is_sorted: bool = arr.compute_as(Stat::IsSorted).unwrap();
-        let is_strict_sorted: bool = arr.compute_as(Stat::IsStrictSorted).unwrap();
-        let is_constant: bool = arr.compute_as(Stat::IsConstant).unwrap();
+        let data = PrimitiveData::from(vec![1, 2, 3, 4, 5]);
+        let arr = data.as_typed_array();
+        let min: i32 = arr.statistics().compute_as(Stat::Min).unwrap();
+        let max: i32 = arr.statistics().compute_as(Stat::Max).unwrap();
+        let is_sorted: bool = arr.statistics().compute_as(Stat::IsSorted).unwrap();
+        let is_strict_sorted: bool = arr.statistics().compute_as(Stat::IsStrictSorted).unwrap();
+        let is_constant: bool = arr.statistics().compute_as(Stat::IsConstant).unwrap();
         let bit_width_freq: Vec<u64> = arr
+            .statistics()
             .compute_as::<ListScalarVec<u64>>(Stat::BitWidthFreq)
             .unwrap()
             .0;
         let trailing_zeros_freq: Vec<u64> = arr
+            .statistics()
             .compute_as::<ListScalarVec<u64>>(Stat::TrailingZeroFreq)
             .unwrap()
             .0;
-        let run_count: u64 = arr.compute_as(Stat::RunCount).unwrap();
+        let run_count: u64 = arr.statistics().compute_as(Stat::RunCount).unwrap();
         assert_eq!(min, 1);
         assert_eq!(max, 5);
         assert!(is_sorted);
@@ -266,29 +268,30 @@ mod test {
 
     #[test]
     fn stats_u8() {
-        let arr = PrimitiveData::from(vec![1u8, 2, 3, 4, 5]).into_array();
-        let min: u8 = arr.compute_as(Stat::Min).unwrap();
-        let max: u8 = arr.compute_as(Stat::Max).unwrap();
+        let data = PrimitiveData::from(vec![1u8, 2, 3, 4, 5]);
+        let arr = data.as_typed_array();
+        let min: u8 = arr.statistics().compute_as(Stat::Min).unwrap();
+        let max: u8 = arr.statistics().compute_as(Stat::Max).unwrap();
         assert_eq!(min, 1);
         assert_eq!(max, 5);
     }
 
     #[test]
     fn nullable_stats_u8() {
-        let arr =
-            PrimitiveData::from_nullable_vec(vec![None, Some(1i32), None, Some(2)]).into_array();
-        let min: Option<i32> = arr.compute_as(Stat::Min);
-        let max: Option<i32> = arr.compute_as(Stat::Max);
+        let data = PrimitiveData::from_nullable_vec(vec![None, Some(1i32), None, Some(2)]);
+        let arr = data.as_typed_array();
+        let min: Option<i32> = arr.statistics().compute_as(Stat::Min);
+        let max: Option<i32> = arr.statistics().compute_as(Stat::Max);
         assert_eq!(min, Some(1));
         assert_eq!(max, Some(2));
     }
 
     #[test]
     fn all_null() {
-        let arr =
-            PrimitiveData::from_nullable_vec(vec![Option::<i32>::None, None, None]).into_array();
-        let min: Option<i32> = arr.compute_as(Stat::Min);
-        let max: Option<i32> = arr.compute_as(Stat::Max);
+        let data = PrimitiveData::from_nullable_vec(vec![Option::<i32>::None, None, None]);
+        let arr = data.as_typed_array();
+        let min: Option<i32> = arr.statistics().compute_as(Stat::Min);
+        let max: Option<i32> = arr.statistics().compute_as(Stat::Max);
         assert_eq!(min, None);
         assert_eq!(max, None);
     }

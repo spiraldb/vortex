@@ -65,7 +65,7 @@ impl BoolData {
                 length: buffer.len(),
             }),
             vec![buffer.into_inner()].into(),
-            vec![validity.to_array_data_data()].into(),
+            vec![validity.to_array_data()].into(),
         ))
     }
 

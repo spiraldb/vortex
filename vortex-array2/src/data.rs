@@ -230,6 +230,10 @@ impl ArrayParts for ArrayData {
     fn nchildren(&self) -> usize {
         self.children.len()
     }
+
+    fn statistics<'a>(&'a self) -> &'a (dyn Statistics + 'a) {
+        self
+    }
 }
 
 impl Statistics for ArrayData {
@@ -253,5 +257,9 @@ impl Statistics for ArrayData {
     fn set(&self, stat: Stat, value: Scalar) {
         let mut locked = self.stats_set.write().unwrap();
         locked.insert(stat, value);
+    }
+
+    fn to_map(&self) -> HashMap<Stat, Scalar> {
+        self.stats_set.read().unwrap().clone()
     }
 }

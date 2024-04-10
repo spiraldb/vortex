@@ -45,7 +45,7 @@ pub enum Validity<'v> {
 impl<'v> Validity<'v> {
     pub const DTYPE: DType = DType::Bool(Nullability::NonNullable);
 
-    pub fn to_array_data_data(self) -> Option<ArrayData> {
+    pub fn to_array_data(self) -> Option<ArrayData> {
         match self {
             Validity::Array(a) => Some(a.to_array_data()),
             _ => None,

@@ -2,12 +2,11 @@ use std::fmt::{Debug, Formatter};
 
 use arrow_buffer::Buffer;
 use vortex::flatbuffers::array as fb;
-use vortex::scalar::Scalar;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::encoding::EncodingRef;
-use crate::stats::{Stat, Statistics};
+use crate::stats::{EmptyStatistics, Statistics};
 use crate::{Array, IntoArray, ToArray};
 use crate::{ArrayParts, SerdeContext};
 
@@ -171,17 +170,8 @@ impl ArrayParts for ArrayView<'_> {
     fn nchildren(&self) -> usize {
         self.array.children().map(|c| c.len()).unwrap_or_default()
     }
-}
 
-// TODO(ngates): serialize statistics into fb::Array
-impl Statistics for ArrayView<'_> {
-    fn compute(&self, _stat: Stat) -> Option<Scalar> {
-        None
+    fn statistics<'a>(&'a self) -> &'a (dyn Statistics + 'a) {
+        &EmptyStatistics
     }
-
-    fn get(&self, _stat: Stat) -> Option<Scalar> {
-        None
-    }
-
-    fn set(&self, _stat: Stat, _value: Scalar) {}
 }

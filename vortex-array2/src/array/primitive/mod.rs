@@ -8,6 +8,7 @@ use vortex_schema::DType;
 
 use crate::compute::ArrayCompute;
 use crate::impl_encoding;
+use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
@@ -26,6 +27,7 @@ pub struct PrimitiveArray<'a> {
     dtype: &'a DType,
     buffer: &'a Buffer,
     validity: Validity<'a>,
+    stats: &'a (dyn Statistics + 'a),
 }
 
 impl PrimitiveArray<'_> {
@@ -58,6 +60,7 @@ impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
             dtype: parts.dtype(),
             buffer,
             validity: metadata.validity.to_validity(parts.child(0, parts.dtype())),
+            stats: parts.statistics(),
         })
     }
 }
@@ -70,10 +73,10 @@ impl PrimitiveData {
         Ok(Self::new_unchecked(
             DType::from(T::PTYPE).with_nullability(validity.nullability()),
             Arc::new(PrimitiveMetadata {
-                validity: validity.to_metadata(buffer.len() / T::PTYPE.byte_width())?,
+                validity: validity.to_metadata(buffer.len())?,
             }),
             vec![buffer.into_inner()].into(),
-            vec![validity.to_array_data_data()].into(),
+            vec![validity.to_array_data()].into(),
         ))
     }
 
@@ -116,6 +119,7 @@ impl ArrayValidity for PrimitiveArray<'_> {
 
 impl ToArrayData for PrimitiveArray<'_> {
     fn to_array_data(&self) -> ArrayData {
+        // TODO(ngates): what do we do about statistics?
         ArrayData::try_new(
             &PrimitiveEncoding,
             self.dtype().clone(),
@@ -137,3 +141,9 @@ impl AcceptArrayVisitor for PrimitiveArray<'_> {
 }
 
 impl ArrayCompute for PrimitiveArray<'_> {}
+
+impl ArrayStatistics for PrimitiveArray<'_> {
+    fn statistics(&self) -> &(dyn Statistics + '_) {
+        self.stats
+    }
+}
