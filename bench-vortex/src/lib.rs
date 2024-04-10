@@ -44,9 +44,6 @@ pub fn idempotent<T, E, P: IdempotentPath + ?Sized>(
     f: impl FnOnce(&Path) -> Result<T, E>,
 ) -> Result<PathBuf, E> {
     let path = path.to_idempotent_path();
-    if !path.parent().unwrap().exists() {
-        create_dir_all(path.parent().unwrap()).unwrap();
-    }
     if !path.exists() {
         f(path.as_path())?;
     }
