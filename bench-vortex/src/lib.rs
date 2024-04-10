@@ -47,7 +47,7 @@ pub fn idempotent<T, E, P: IdempotentPath + ?Sized>(
     if !path.exists() {
         f(path.as_path())?;
     }
-    Ok(path.to_path_buf())
+    Ok(path)
 }
 
 pub trait IdempotentPath {
