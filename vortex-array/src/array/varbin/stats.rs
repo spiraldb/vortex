@@ -106,7 +106,7 @@ mod test {
 
     use crate::array::varbin::VarBinArray;
     use crate::array::Array;
-    use crate::stats::{ArrayStatistics, StatsAccessors};
+    use crate::stats::ArrayStatistics;
 
     fn array(dtype: DType) -> VarBinArray {
         VarBinArray::from_vec(

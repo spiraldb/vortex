@@ -38,8 +38,8 @@ impl StatsCompute for RoaringBoolArray {
 mod test {
     use vortex::array::bool::BoolArray;
     use vortex::array::Array;
+    use vortex::stats::ArrayStatistics;
     use vortex::stats::Stat::*;
-    use vortex::stats::{ArrayStatistics, StatsAccessors};
     use vortex_error::VortexResult;
 
     use crate::RoaringBoolArray;

@@ -58,7 +58,7 @@ impl ListScalar {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ListScalarVec<T>(pub Vec<T>);
 
 impl<T: Into<Scalar>> From<ListScalarVec<T>> for Scalar {

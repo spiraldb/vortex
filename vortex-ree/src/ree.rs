@@ -8,9 +8,7 @@ use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
 use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{
-    ArrayStatistics, OwnedStats, Stat, Statistics, StatsAccessors, StatsCompute, StatsSet,
-};
+use vortex::stats::{ArrayStatistics, OwnedStats, Stat, Statistics, StatsCompute, StatsSet};
 use vortex::validity::Validity;
 use vortex::validity::{OwnedValidity, ValidityView};
 use vortex::view::{AsView, ToOwnedView};
