@@ -3,6 +3,7 @@ use std::hash::Hash;
 use std::sync::RwLock;
 
 use enum_iterator::Sequence;
+pub use statsset::*;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
@@ -10,7 +11,6 @@ use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, Scalar};
 
 mod statsset;
-pub use statsset::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)]
 pub enum Stat {
@@ -181,49 +181,50 @@ impl<T: OwnedStats + StatsCompute> StatsAccessors for T {
         &self,
         stat: Stat,
     ) -> VortexResult<U> {
-        self.stats_set()
-            .read()
-            .unwrap()
-            .get(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(|v| U::try_from(v))
+        with_stat_value(self, stat, |s| U::try_from(s))
     }
 
     fn compute_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
     ) -> VortexResult<U> {
-        if let Some(s) = self.stats_set().read().unwrap().get(stat) {
-            return U::try_from(s);
-        }
-
-        self.stats_set()
-            .write()
-            .unwrap()
-            .extend(self.compute(stat).unwrap());
-        self.stats_set()
-            .read()
-            .unwrap()
-            .get(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(|v| U::try_from(v))
+        with_computed_stat_value(self, stat, |s| U::try_from(s))
     }
 
     fn compute_as_cast<U: NativePType>(&self, stat: Stat) -> VortexResult<U> {
-        if let Some(s) = self.stats_set().read().unwrap().get(stat) {
-            return U::try_from(s);
-        }
-
-        self.stats_set()
-            .write()
-            .unwrap()
-            .extend(self.compute(stat).unwrap());
-        self.stats_set()
-            .read()
-            .unwrap()
-            .get(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(|v| v.cast(&DType::from(U::PTYPE)))
-            .and_then(|v| U::try_from(v))
+        with_computed_stat_value(self, stat, |s| {
+            s.cast(&DType::from(U::PTYPE)).and_then(U::try_from)
+        })
     }
+}
+
+fn with_stat_value<S: OwnedStats, U>(
+    stats: &S,
+    stat: Stat,
+    f: impl Fn(&Scalar) -> VortexResult<U>,
+) -> VortexResult<U> {
+    stats
+        .stats_set()
+        .read()
+        .unwrap()
+        .get(stat)
+        .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
+        .and_then(f)
+}
+
+fn with_computed_stat_value<S: OwnedStats + StatsCompute, U>(
+    stats: &S,
+    stat: Stat,
+    f: impl Fn(&Scalar) -> VortexResult<U>,
+) -> VortexResult<U> {
+    if let Some(s) = stats.stats_set().read().unwrap().get(stat) {
+        return f(s);
+    }
+
+    stats
+        .stats_set()
+        .write()
+        .unwrap()
+        .extend(stats.compute(stat).unwrap());
+    with_stat_value(stats, stat, f)
 }
