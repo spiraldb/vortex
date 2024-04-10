@@ -39,8 +39,8 @@ pub mod taxi_data;
 
 /// Creates a file if it doesn't already exist.
 /// NB: Does NOT modify the given path to ensure that it resides in the data directory.
-pub fn idempotent<T, E, P: IdempotentPath>(
-    path: P,
+pub fn idempotent<T, E, P: IdempotentPath + ?Sized>(
+    path: &P,
     f: impl FnOnce(&Path) -> Result<T, E>,
 ) -> Result<PathBuf, E> {
     let path = path.to_idempotent_path();
@@ -57,7 +57,7 @@ pub trait IdempotentPath {
     fn to_idempotent_path(&self) -> PathBuf;
 }
 
-impl IdempotentPath for &str {
+impl IdempotentPath for str {
     fn to_idempotent_path(&self) -> PathBuf {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("data")
@@ -66,15 +66,6 @@ impl IdempotentPath for &str {
             create_dir_all(path.parent().unwrap()).unwrap();
         }
         path
-    }
-}
-
-impl IdempotentPath for &Path {
-    fn to_idempotent_path(&self) -> PathBuf {
-        if !self.parent().unwrap().exists() {
-            create_dir_all(self.parent().unwrap()).unwrap();
-        }
-        self.to_path_buf()
     }
 }
 

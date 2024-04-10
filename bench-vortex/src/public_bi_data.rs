@@ -422,7 +422,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 .strip_suffix(".csv")
                 .unwrap();
             let compressed = idempotent(
-                path_for_file_type(self, output_fname, "parquet"),
+                &path_for_file_type(self, output_fname, "parquet"),
                 |output_path| {
                     let mut write = File::create(output_path).unwrap();
                     let delimiter = u8::try_from('|').unwrap();
@@ -452,7 +452,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 .unwrap();
 
             let compressed = idempotent(
-                path_for_file_type(self, output_fname, "vortex"),
+                &path_for_file_type(self, output_fname, "vortex"),
                 |output_path| {
                     let mut write = File::create(output_path).unwrap();
                     let delimiter = u8::try_from('|').unwrap();

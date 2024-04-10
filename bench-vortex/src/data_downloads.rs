@@ -22,7 +22,7 @@ use crate::idempotent;
 use crate::reader::BATCH_SIZE;
 
 pub fn download_data(fname: PathBuf, data_url: &str) -> PathBuf {
-    idempotent(fname.clone(), |path| {
+    idempotent(&fname, |path| {
         info!("Downloading {} from {}", fname.to_str().unwrap(), data_url);
         let mut file = File::create(path).unwrap();
         reqwest::blocking::get(data_url).unwrap().copy_to(&mut file)
@@ -73,7 +73,7 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
 }
 
 pub fn decompress_bz2(input_path: PathBuf, output_path: PathBuf) -> PathBuf {
-    idempotent(output_path.clone(), |path| {
+    idempotent(&output_path, |path| {
         info!(
             "Decompressing bzip from {} to {}",
             input_path.to_str().unwrap(),
