@@ -66,15 +66,6 @@ impl IdempotentPath for str {
     }
 }
 
-impl IdempotentPath for Path {
-    fn to_idempotent_path(&self) -> PathBuf {
-        if !self.parent().unwrap().exists() {
-            create_dir_all(self.parent().unwrap()).unwrap();
-        }
-        self.to_path_buf()
-    }
-}
-
 impl IdempotentPath for PathBuf {
     fn to_idempotent_path(&self) -> PathBuf {
         if !self.parent().unwrap().exists() {
