@@ -18,11 +18,11 @@ use vortex::serde::WriteCtx;
 use vortex_error::VortexError;
 use vortex_schema::DType;
 
+use crate::idempotent;
 use crate::reader::BATCH_SIZE;
-use crate::{idempotent, idempotent2};
 
 pub fn download_data(fname: PathBuf, data_url: &str) -> PathBuf {
-    idempotent2(&fname, |path| {
+    idempotent(fname.clone(), |path| {
         info!("Downloading {} from {}", fname.to_str().unwrap(), data_url);
         let mut file = File::create(path).unwrap();
         reqwest::blocking::get(data_url).unwrap().copy_to(&mut file)
@@ -73,7 +73,7 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
 }
 
 pub fn decompress_bz2(input_path: PathBuf, output_path: PathBuf) -> PathBuf {
-    idempotent2(&output_path, |path| {
+    idempotent(output_path.clone(), |path| {
         info!(
             "Decompressing bzip from {} to {}",
             input_path.to_str().unwrap(),

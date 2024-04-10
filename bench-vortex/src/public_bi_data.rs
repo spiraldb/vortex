@@ -15,7 +15,7 @@ use crate::public_bi_data::PBIDataset::*;
 use crate::reader::{
     compress_csv_to_vortex, default_csv_format, open_vortex, write_csv_as_parquet,
 };
-use crate::{data_path, idempotent2};
+use crate::{idempotent, IdempotentPath};
 
 lazy_static::lazy_static! {
     // NB: we do not expect this to change, otherwise we'd crawl the site and populate it at runtime
@@ -291,7 +291,8 @@ impl PBIDataset {
     }
 
     fn get_csv_path(&self, url: &PBIUrl) -> PathBuf {
-        data_path("PBI")
+        "PBI"
+            .to_idempotent_path()
             .join(self.dataset_name())
             .join("csv")
             .join(url.file_name.strip_suffix(".bz2").unwrap())
@@ -307,7 +308,8 @@ impl PBIDataset {
     }
 
     fn get_bzip_path(&self, url: &PBIUrl) -> PathBuf {
-        data_path("PBI")
+        "PBI"
+            .to_idempotent_path()
             .join(self.dataset_name())
             .join("bzip2")
             .join(url.file_name)
@@ -419,8 +421,8 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 .unwrap()
                 .strip_suffix(".csv")
                 .unwrap();
-            let compressed = idempotent2(
-                path_for_file_type(self, output_fname, "parquet").as_path(),
+            let compressed = idempotent(
+                path_for_file_type(self, output_fname, "parquet"),
                 |output_path| {
                     let mut write = File::create(output_path).unwrap();
                     let delimiter = u8::try_from('|').unwrap();
@@ -449,8 +451,8 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 .strip_suffix(".csv")
                 .unwrap();
 
-            let compressed = idempotent2(
-                path_for_file_type(self, output_fname, "vortex").as_path(),
+            let compressed = idempotent(
+                path_for_file_type(self, output_fname, "vortex"),
                 |output_path| {
                     let mut write = File::create(output_path).unwrap();
                     let delimiter = u8::try_from('|').unwrap();
@@ -479,7 +481,9 @@ impl BenchmarkDataset for BenchmarkDatasets {
 
     fn directory_location(&self) -> PathBuf {
         match self {
-            BenchmarkDatasets::PBI(dataset) => data_path("PBI").join(dataset.dataset_name()),
+            BenchmarkDatasets::PBI(dataset) => {
+                "PBI".to_idempotent_path().join(dataset.dataset_name())
+            }
         }
     }
 }

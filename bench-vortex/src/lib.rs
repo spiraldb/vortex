@@ -37,40 +37,63 @@ pub mod public_bi_data;
 pub mod reader;
 pub mod taxi_data;
 
-/// Creates a file in the data directory if it doesn't already exist.
-/// NB: Takes a relative path (name) and creates a path in the data directory.
-pub fn idempotent<T, E>(name: &str, f: impl FnOnce(&Path) -> Result<T, E>) -> Result<PathBuf, E> {
-    let path = data_path(name);
-    if !path.exists() {
-        f(&path)?;
-    }
-    Ok(path.to_path_buf())
-}
-
 /// Creates a file if it doesn't already exist.
 /// NB: Does NOT modify the given path to ensure that it resides in the data directory.
-pub fn idempotent2<T, E>(path: &Path, f: impl FnOnce(&Path) -> Result<T, E>) -> Result<PathBuf, E> {
+pub fn idempotent<T, E, P: IdempotentPath>(
+    path: P,
+    f: impl FnOnce(&Path) -> Result<T, E>,
+) -> Result<PathBuf, E> {
+    let path = path.to_idempotent_path();
     if !path.parent().unwrap().exists() {
         create_dir_all(path.parent().unwrap()).unwrap();
     }
     if !path.exists() {
-        f(path)?;
+        f(path.as_path())?;
     }
     Ok(path.to_path_buf())
 }
 
 pub trait IdempotentPath {
-    fn to_path(&self) -> Path;
+    fn to_idempotent_path(&self) -> PathBuf;
 }
 
-pub fn data_path(name: &str) -> PathBuf {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("data")
-        .join(name);
-    if !path.parent().unwrap().exists() {
-        create_dir_all(path.parent().unwrap()).unwrap();
+impl IdempotentPath for &str {
+    fn to_idempotent_path(&self) -> PathBuf {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("data")
+            .join(self);
+        if !path.parent().unwrap().exists() {
+            create_dir_all(path.parent().unwrap()).unwrap();
+        }
+        path
     }
-    path
+}
+
+impl IdempotentPath for &Path {
+    fn to_idempotent_path(&self) -> PathBuf {
+        if !self.parent().unwrap().exists() {
+            create_dir_all(self.parent().unwrap()).unwrap();
+        }
+        self.to_path_buf()
+    }
+}
+
+impl IdempotentPath for Path {
+    fn to_idempotent_path(&self) -> PathBuf {
+        if !self.parent().unwrap().exists() {
+            create_dir_all(self.parent().unwrap()).unwrap();
+        }
+        self.to_path_buf()
+    }
+}
+
+impl IdempotentPath for PathBuf {
+    fn to_idempotent_path(&self) -> PathBuf {
+        if !self.parent().unwrap().exists() {
+            create_dir_all(self.parent().unwrap()).unwrap();
+        }
+        self.to_path_buf()
+    }
 }
 
 pub fn setup_logger(level: LevelFilter) {

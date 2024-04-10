@@ -7,7 +7,7 @@ use bench_vortex::public_bi_data::BenchmarkDatasets::PBI;
 use bench_vortex::public_bi_data::PBIDataset;
 use bench_vortex::reader::{open_vortex, rewrite_parquet_as_vortex};
 use bench_vortex::taxi_data::taxi_data_parquet;
-use bench_vortex::{data_path, setup_logger};
+use bench_vortex::{setup_logger, IdempotentPath};
 use log::{info, LevelFilter};
 use vortex::array::Array;
 use vortex::formatter::display_tree;
@@ -19,7 +19,7 @@ pub fn main() {
 }
 
 fn compress_taxi() {
-    let path: PathBuf = data_path("taxi_data.vortex");
+    let path: PathBuf = "taxi_data.vortex".to_idempotent_path();
     {
         let mut write = File::create(&path).unwrap();
         rewrite_parquet_as_vortex(taxi_data_parquet(), &mut write).unwrap();
