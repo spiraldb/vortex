@@ -14,16 +14,16 @@ use vortex_error::VortexError;
 use vortex_schema::DType;
 
 use crate::data_downloads::{decompress_bz2, download_data, parquet_to_lance};
-use crate::idempotent;
 use crate::reader::{compress_csv_to_vortex, default_csv_format, write_csv_as_parquet};
+use crate::{data_path, idempotent};
 
 pub fn medicare_data_csv() -> PathBuf {
     let fname = "Medicare1_1.csv.bz2";
     download_data(
-        fname,
+        data_path(fname),
         "http://www.cwi.nl/~boncz/PublicBIbenchmark/Medicare1/Medicare1_1.csv.bz2",
     );
-    decompress_bz2(fname, "Medicare1_1.csv")
+    decompress_bz2(data_path(fname), data_path("Medicare1_1.csv"))
 }
 
 pub fn medicare_data_lance() -> PathBuf {

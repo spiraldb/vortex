@@ -37,10 +37,24 @@ pub mod public_bi_data;
 pub mod reader;
 pub mod taxi_data;
 
+/// Creates a file in the data directory if it doesn't already exist.
+/// NB: Takes a relative path (name) and creates a path in the data directory.
 pub fn idempotent<T, E>(name: &str, f: impl FnOnce(&Path) -> Result<T, E>) -> Result<PathBuf, E> {
     let path = data_path(name);
     if !path.exists() {
         f(&path)?;
+    }
+    Ok(path.to_path_buf())
+}
+
+/// Creates a file if it doesn't already exist.
+/// NB: Does NOT modify the given path to ensure that it resides in the data directory.
+pub fn idempotent2<T, E>(path: &Path, f: impl FnOnce(&Path) -> Result<T, E>) -> Result<PathBuf, E> {
+    if !path.parent().unwrap().exists() {
+        create_dir_all(path.parent().unwrap()).unwrap();
+    }
+    if !path.exists() {
+        f(path)?;
     }
     Ok(path.to_path_buf())
 }

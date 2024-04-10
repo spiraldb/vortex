@@ -17,6 +17,7 @@ use arrow_select::take::take_record_batch;
 use itertools::Itertools;
 use lance::Dataset;
 use lance_arrow_array::RecordBatch as LanceRecordBatch;
+use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
@@ -36,7 +37,7 @@ use vortex_schema::DType;
 use crate::compress_ctx;
 
 pub const BATCH_SIZE: usize = 65_536;
-const CSV_SCHEMA_SAMPLE_ROWS: usize = 1_000_000;
+const CSV_SCHEMA_SAMPLE_ROWS: usize = 10_000_000;
 const DEFAULT_DELIMITER: u8 = b',';
 
 pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
@@ -129,7 +130,7 @@ pub fn write_csv_as_parquet<W: Write + Send + Sync>(
     format: Format,
     write: W,
 ) -> VortexResult<()> {
-    println!(
+    info!(
         "Compressing {} to parquet",
         csv_path.as_path().to_str().unwrap()
     );

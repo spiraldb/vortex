@@ -8,6 +8,7 @@ use itertools::Itertools;
 use lance::dataset::WriteParams;
 use lance::Dataset;
 use lance_parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder as LanceParquetRecordBatchReaderBuilder;
+use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
@@ -18,12 +19,12 @@ use vortex_error::VortexError;
 use vortex_schema::DType;
 
 use crate::reader::BATCH_SIZE;
-use crate::{data_path, idempotent};
+use crate::{idempotent, idempotent2};
 
-pub fn download_data(fname: &str, data_url: &str) -> PathBuf {
-    idempotent(fname, |path| {
+pub fn download_data(fname: PathBuf, data_url: &str) -> PathBuf {
+    idempotent2(&fname, |path| {
+        info!("Downloading {} from {}", fname.to_str().unwrap(), data_url);
         let mut file = File::create(path).unwrap();
-        println!("Downloading {} from {}", fname, data_url);
         reqwest::blocking::get(data_url).unwrap().copy_to(&mut file)
     })
     .unwrap()
@@ -71,10 +72,14 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
     .unwrap()
 }
 
-pub fn decompress_bz2(input_path: &str, output_path: &str) -> PathBuf {
-    idempotent(output_path, |path| {
-        println!("Decompressing bzip from {} to {}", input_path, output_path);
-        let input_file = File::open(data_path(input_path)).unwrap();
+pub fn decompress_bz2(input_path: PathBuf, output_path: PathBuf) -> PathBuf {
+    idempotent2(&output_path, |path| {
+        info!(
+            "Decompressing bzip from {} to {}",
+            input_path.to_str().unwrap(),
+            output_path.to_str().unwrap()
+        );
+        let input_file = File::open(input_path).unwrap();
         let mut decoder = BzDecoder::new(input_file);
 
         let mut buffer = Vec::new();
@@ -82,7 +87,7 @@ pub fn decompress_bz2(input_path: &str, output_path: &str) -> PathBuf {
 
         let mut output_file = File::create(path).unwrap();
         output_file.write_all(&buffer).unwrap();
-        Ok::<PathBuf, VortexError>(data_path(output_path))
+        Ok::<PathBuf, VortexError>(output_path.clone())
     })
     .unwrap()
 }
@@ -91,6 +96,6 @@ pub trait BenchmarkDataset {
     fn uncompressed(&self);
     fn write_as_parquet(&self);
     fn write_as_vortex(&self);
-    fn list_files(&self) -> Vec<String>;
-    fn directory_location(&self) -> String;
+    fn list_files(&self) -> Vec<PathBuf>;
+    fn directory_location(&self) -> PathBuf;
 }

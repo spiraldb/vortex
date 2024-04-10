@@ -14,11 +14,12 @@ use vortex::formatter::display_tree;
 
 #[allow(unreachable_code)]
 pub fn main() {
-    setup_logger(LevelFilter::Error);
+    setup_logger(LevelFilter::Info);
 
     // compress_pbi(PBIDataset::CMSprovider);
+    compress_pbi(PBIDataset::Bimbo);
     // compress_pbi(PBIDataset::Medicare1);
-    compress_pbi(PBIDataset::SalariesFrance);
+    // compress_pbi(PBIDataset::SalariesFrance);
     // compress_pbi(PBIDataset::MedPayment1);
     // compress_pbi(PBIDataset::Redfin1);
     panic!("done");

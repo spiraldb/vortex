@@ -2,9 +2,12 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hash;
 use std::os::unix::fs::MetadataExt;
+use std::path::PathBuf;
 
 use enum_iterator::Sequence;
 use itertools::Itertools;
+use log::info;
+use reqwest::Url;
 use vortex::formatter::display_tree;
 
 use crate::data_downloads::{decompress_bz2, download_data, BenchmarkDataset};
@@ -12,7 +15,7 @@ use crate::public_bi_data::PBIDataset::*;
 use crate::reader::{
     compress_csv_to_vortex, default_csv_format, open_vortex, write_csv_as_parquet,
 };
-use crate::{data_path, idempotent};
+use crate::{data_path, idempotent2};
 
 lazy_static::lazy_static! {
     // NB: we do not expect this to change, otherwise we'd crawl the site and populate it at runtime
@@ -285,18 +288,17 @@ impl PBIDataset {
         url.split('/').last().unwrap().to_string()
     }
 
-    fn csv_files(&self) -> Vec<String> {
+    fn csv_files(&self) -> Vec<PathBuf> {
         let urls = URLS.get(self).unwrap();
         self.dataset_name();
         urls.iter().map(|url| self.get_csv_path(url)).collect_vec()
     }
 
-    fn get_csv_path(&self, url: &PBIUrl) -> String {
-        format!(
-            "PBI/{}/csv/{}",
-            self.dataset_name(),
-            url.file_name.strip_suffix(".bz2").unwrap()
-        )
+    fn get_csv_path(&self, url: &PBIUrl) -> PathBuf {
+        data_path("PBI")
+            .join(self.dataset_name())
+            .join("csv")
+            .join(url.file_name.strip_suffix(".bz2").unwrap())
     }
 
     fn download_bzip(&self) {
@@ -304,20 +306,22 @@ impl PBIDataset {
         self.dataset_name();
         urls.iter().for_each(|url| {
             let fname = self.get_bzip_path(url);
-            download_data(fname.as_str(), url.to_url_string().as_str());
+            download_data(fname, url.to_url_string().as_str());
         });
     }
 
-    fn get_bzip_path(&self, url: &PBIUrl) -> String {
-        let fname = format!("PBI/{}/bzip2/{}", self.dataset_name(), url.file_name);
-        fname
+    fn get_bzip_path(&self, url: &PBIUrl) -> PathBuf {
+        data_path("PBI")
+            .join(self.dataset_name())
+            .join("bzip2")
+            .join(url.file_name.clone())
     }
 
     fn unzip(&self) {
         for url in URLS.get(self).unwrap() {
             let bzipped = self.get_bzip_path(url);
             let unzipped_csv = self.get_csv_path(url);
-            decompress_bz2(bzipped.as_str(), unzipped_csv.as_str());
+            decompress_bz2(bzipped, unzipped_csv);
         }
     }
 }
@@ -336,10 +340,12 @@ impl PBIUrl {
         }
     }
     fn to_url_string(&self) -> String {
-        format!(
+        let url_str = format!(
             "https://homepages.cwi.nl/~boncz/PublicBIbenchmark/{}/{}",
             self.dataset_name, self.file_name
-        )
+        );
+        // roundtrip through url to validate
+        Url::parse(url_str.as_str()).unwrap().to_string()
     }
 }
 
@@ -410,18 +416,19 @@ impl BenchmarkDataset for BenchmarkDatasets {
 
     fn write_as_parquet(&self) {
         for f in self.list_files() {
-            let output_fname = f.split('/').last().unwrap().strip_suffix(".csv").unwrap();
-            let compressed = idempotent(
-                format!(
-                    "{}/parquet/{}.parquet",
-                    self.directory_location(),
-                    output_fname
-                )
-                .as_str(),
+            let output_fname = f
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .strip_suffix(".csv")
+                .unwrap();
+            let compressed = idempotent2(
+                path_for_file_type(self, output_fname, "parquet").as_path(),
                 |output_path| {
                     let mut write = File::create(output_path).unwrap();
                     let delimiter = u8::try_from('|').unwrap();
-                    let csv_input = data_path(f.as_str());
+                    let csv_input = f;
                     write_csv_as_parquet(
                         csv_input,
                         default_csv_format().with_delimiter(delimiter),
@@ -437,19 +444,21 @@ impl BenchmarkDataset for BenchmarkDatasets {
 
     fn write_as_vortex(&self) {
         for f in self.list_files() {
-            println!("Compressing {} to vortex", f);
-            let output_fname = f.split('/').last().unwrap().strip_suffix(".csv").unwrap();
-            let compressed = idempotent(
-                format!(
-                    "{}/vortex/{}.vortex",
-                    self.directory_location(),
-                    output_fname
-                )
-                .as_str(),
+            info!("Compressing {} to vortex", f.to_str().unwrap());
+            let output_fname = f
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .strip_suffix(".csv")
+                .unwrap();
+
+            let compressed = idempotent2(
+                path_for_file_type(self, output_fname, "vortex").as_path(),
                 |output_path| {
                     let mut write = File::create(output_path).unwrap();
                     let delimiter = u8::try_from('|').unwrap();
-                    let csv_input = data_path(f.as_str());
+                    let csv_input = f;
                     compress_csv_to_vortex(
                         csv_input,
                         default_csv_format().with_delimiter(delimiter),
@@ -458,7 +467,6 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 },
             )
             .expect("Failed to compress to vortex");
-            println!("Compressed asdf: {:?}", compressed);
             let from_vortex = open_vortex(&compressed).unwrap();
             let vx_size = from_vortex.nbytes();
 
@@ -467,15 +475,26 @@ impl BenchmarkDataset for BenchmarkDatasets {
         }
     }
 
-    fn list_files(&self) -> Vec<String> {
+    fn list_files(&self) -> Vec<PathBuf> {
         match self {
             BenchmarkDatasets::PBI(dataset) => dataset.csv_files(),
         }
     }
 
-    fn directory_location(&self) -> String {
+    fn directory_location(&self) -> PathBuf {
         match self {
-            BenchmarkDatasets::PBI(dataset) => format!("PBI/{}", dataset.dataset_name()),
+            BenchmarkDatasets::PBI(dataset) => data_path("PBI").join(dataset.dataset_name()),
         }
     }
+}
+
+fn path_for_file_type(
+    dataset: &impl BenchmarkDataset,
+    output_fname: &str,
+    file_type: &str,
+) -> PathBuf {
+    dataset
+        .directory_location()
+        .join(file_type)
+        .join(format!("{}.{}", output_fname, file_type))
 }
