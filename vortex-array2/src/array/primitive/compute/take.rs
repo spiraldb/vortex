@@ -3,18 +3,20 @@ use vortex::ptype::NativePType;
 use vortex::{match_each_integer_ptype, match_each_native_ptype};
 use vortex_error::VortexResult;
 
-use crate::array::primitive::PrimitiveArray;
+use crate::array::primitive::{PrimitiveArray, PrimitiveData};
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;
+use crate::IntoArray;
 use crate::{Array, OwnedArray};
 
 impl TakeFn for PrimitiveArray<'_> {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
-        let validity = self.validity().map(|v| v.take(indices)).transpose()?;
-        let indices = flatten_primitive(indices)?;
+        let validity = self.validity().take(indices)?;
+        let indices_data = flatten_primitive(indices)?;
+        let indices = indices_data.as_typed_array();
         match_each_native_ptype!(self.ptype(), |$T| {
             match_each_integer_ptype!(indices.ptype(), |$I| {
-                Ok(PrimitiveArray::from_nullable(
+                Ok(PrimitiveData::from_vec(
                     take_primitive(self.typed_data::<$T>(), indices.typed_data::<$I>()),
                     validity,
                 ).into_array())

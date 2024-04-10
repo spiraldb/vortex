@@ -45,10 +45,8 @@ mod test {
         ])
         .into_array();
 
-        let res = take(&reference, &PrimitiveData::from(vec![0, 3, 4]).into_array())
-            .unwrap()
-            .to_typed_array::<BoolDef>()
-            .unwrap();
+        let binding = take(&reference, &PrimitiveData::from(vec![0, 3, 4]).into_array()).unwrap();
+        let res = binding.to_typed_array::<BoolDef>().unwrap();
 
         assert_eq!(
             res.buffer(),

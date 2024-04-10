@@ -1,4 +1,5 @@
 use arrow_buffer::ScalarBuffer;
+use vortex::match_each_native_ptype;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::{PrimitiveArray, PrimitiveData, PrimitiveDef};
@@ -18,16 +19,19 @@ impl AsContiguousFn for PrimitiveArray<'_> {
             Validity::NonNullable
         };
 
-        let buffer = ScalarBuffer::from_iter(arrays.iter().flat_map(|a| {
-            a.to_typed_array::<PrimitiveDef>()
+        match_each_native_ptype!(self.ptype(), |$T| {
+            let mut values: Vec<$T> = Vec::with_capacity(arrays.iter().map(|a| a.len()).sum());
+            for array in arrays {
+                values.extend(
+                    array
+                        .to_typed_array::<PrimitiveDef>()
+                        .unwrap()
+                        .typed_data::<$T>(),
+                )
+            }
+            Ok(PrimitiveData::try_new(ScalarBuffer::from(values), validity)
                 .unwrap()
-                .typed_data::<u16>()
-                .into_iter()
-                .copied()
-        }));
-
-        Ok(PrimitiveData::try_new(buffer, validity)
-            .unwrap()
-            .into_array())
+                .into_array())
+        })
     }
 }

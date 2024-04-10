@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 use linkme::distributed_slice;
@@ -22,6 +23,8 @@ pub fn find_encoding(id: &str) -> Option<EncodingRef> {
 /// Dynamic trait representing an array type.
 #[allow(dead_code)]
 pub trait ArrayEncoding: 'static + Sync + Send {
+    fn as_any(&self) -> &dyn Any;
+
     fn id(&self) -> EncodingId;
 
     fn with_view_mut<'v>(
@@ -34,6 +37,20 @@ pub trait ArrayEncoding: 'static + Sync + Send {
         &self,
         data: &ArrayData,
         f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
+    ) -> VortexResult<()>;
+}
+
+pub trait WithEncodedArray<'v, A: ArrayTrait> {
+    fn with_view_mut(
+        &'v self,
+        view: &'v ArrayView<'v>,
+        f: &mut dyn FnMut(&A) -> VortexResult<()>,
+    ) -> VortexResult<()>;
+
+    fn with_data_mut(
+        &self,
+        data: &ArrayData,
+        f: &mut dyn FnMut(&A) -> VortexResult<()>,
     ) -> VortexResult<()>;
 }
 
