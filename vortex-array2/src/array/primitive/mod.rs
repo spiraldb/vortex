@@ -12,7 +12,7 @@ use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayView;
-use crate::{impl_encoding, IntoArray, OwnedArray};
+use crate::{impl_encoding, IntoArray};
 use crate::{Array, ArrayMetadata};
 use crate::{ArrayData, TypedArrayData};
 
