@@ -16,6 +16,11 @@ pub fn as_contiguous(arrays: &[Array]) -> VortexResult<Array<'static>> {
             "Chunks have differing encodings",
         );
     }
+    if !arrays.iter().map(|chunk| chunk.dtype()).all_equal() {
+        vortex_bail!(ComputeError:
+            "Chunks have differing dtypes",
+        );
+    }
 
     let first = arrays.first().unwrap();
     first.with_array(|a| {

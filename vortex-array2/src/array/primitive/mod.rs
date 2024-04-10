@@ -1,3 +1,4 @@
+mod compute;
 mod stats;
 
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
@@ -7,13 +8,12 @@ use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::compute::ArrayCompute;
-use crate::impl_encoding;
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::ArrayMetadata;
 use crate::ArrayView;
+use crate::{impl_encoding, IntoArray, OwnedArray};
+use crate::{Array, ArrayMetadata};
 use crate::{ArrayData, TypedArrayData};
 
 impl_encoding!("vortex.primitive", Primitive);
@@ -42,6 +42,10 @@ impl PrimitiveArray<'_> {
 
     pub fn ptype(&self) -> PType {
         self.ptype
+    }
+
+    pub fn scalar_buffer<T: NativePType + ArrowNativeType>(&self) -> ScalarBuffer<T> {
+        ScalarBuffer::new(self.buffer.clone(), 0, self.len())
     }
 
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
@@ -98,6 +102,12 @@ impl<T: NativePType> From<Vec<T>> for PrimitiveData {
     }
 }
 
+impl<T: NativePType> IntoArray<'static> for Vec<T> {
+    fn into_array(self) -> Array<'static> {
+        PrimitiveData::from(self).into_array()
+    }
+}
+
 impl ArrayTrait for PrimitiveArray<'_> {
     fn dtype(&self) -> &DType {
         self.dtype
@@ -130,8 +140,6 @@ impl AcceptArrayVisitor for PrimitiveArray<'_> {
         visitor.visit_validity(self.validity())
     }
 }
-
-impl ArrayCompute for PrimitiveArray<'_> {}
 
 impl ArrayStatistics for PrimitiveArray<'_> {
     fn statistics(&self) -> &(dyn Statistics + '_) {
