@@ -11,6 +11,7 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::AsBytes;
+use vortex::stats::StatsAccessors;
 use vortex::validity::Validity;
 use vortex_error::VortexResult;
 use vortex_schema::DType;

@@ -1,173 +1,12 @@
-use std::collections::hash_map::Entry;
+use std::collections::hash_map::{Entry, IntoIter};
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::hash::Hash;
-use std::sync::RwLock;
 
-use enum_iterator::{all, Sequence};
+use enum_iterator::all;
 use itertools::Itertools;
-use vortex_error::{vortex_err, VortexError, VortexResult};
-use vortex_schema::DType;
+use vortex_error::VortexError;
 
-use crate::ptype::NativePType;
 use crate::scalar::{ListScalarVec, Scalar};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)]
-pub enum Stat {
-    BitWidthFreq,
-    TrailingZeroFreq,
-    IsConstant,
-    IsSorted,
-    IsStrictSorted,
-    Max,
-    Min,
-    RunCount,
-    TrueCount,
-    NullCount,
-}
-
-impl Display for Stat {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Stat::BitWidthFreq => write!(f, "bit_width_frequency"),
-            Stat::TrailingZeroFreq => write!(f, "trailing_zero_frequency"),
-            Stat::IsConstant => write!(f, "is_constant"),
-            Stat::IsSorted => write!(f, "is_sorted"),
-            Stat::IsStrictSorted => write!(f, "is_strict_sorted"),
-            Stat::Max => write!(f, "max"),
-            Stat::Min => write!(f, "min"),
-            Stat::RunCount => write!(f, "run_count"),
-            Stat::TrueCount => write!(f, "true_count"),
-            Stat::NullCount => write!(f, "null_count"),
-        }
-    }
-}
-
-pub trait ArrayStatistics {
-    fn statistics(&self) -> &dyn Statistics;
-}
-
-pub trait Statistics {
-    /// Returns the value of the statistic only if it's present
-    fn get(&self, stat: Stat) -> Option<Scalar>;
-
-    /// Get all existing statistics
-    fn get_all(&self) -> StatsSet;
-
-    fn set(&self, stat: Stat, value: Scalar);
-
-    fn set_many(&self, other: &dyn Statistics, stats: &[Stat]);
-
-    /// Computes the value of the stat if it's not present
-    fn compute(&self, stat: Stat) -> Option<Scalar>;
-}
-
-pub trait OwnedStats {
-    fn stats_set(&self) -> &RwLock<StatsSet>;
-}
-
-pub trait StatsCompute {
-    fn compute(&self, stat: Stat) -> VortexResult<StatsSet>;
-}
-
-impl<T: OwnedStats + StatsCompute> Statistics for T {
-    fn get(&self, stat: Stat) -> Option<Scalar> {
-        self.stats_set().read().unwrap().get(stat).cloned()
-    }
-
-    fn get_all(&self) -> StatsSet {
-        self.stats_set().read().unwrap().clone()
-    }
-
-    fn set(&self, stat: Stat, value: Scalar) {
-        self.stats_set().write().unwrap().set(stat, value);
-    }
-
-    fn set_many(&self, other: &dyn Statistics, stats: &[Stat]) {
-        self.stats_set().write().unwrap().values.extend(
-            stats
-                .iter()
-                .copied()
-                .filter_map(|stat| other.get(stat).map(|s| (stat, s))),
-        )
-    }
-
-    fn compute(&self, stat: Stat) -> Option<Scalar> {
-        if let Some(s) = self.get(stat) {
-            return Some(s);
-        }
-
-        self.stats_set()
-            .write()
-            .unwrap()
-            .values
-            .extend(self.compute(stat).unwrap().values);
-        self.get(stat)
-    }
-}
-
-impl dyn Statistics + '_ {
-    pub fn compute_as_cast<U: NativePType>(&self, stat: Stat) -> VortexResult<U> {
-        self.compute(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(|v| v.cast(&DType::from(U::PTYPE)))
-            .and_then(|v| U::try_from(v))
-    }
-
-    pub fn get_as<U: TryFrom<Scalar, Error = VortexError>>(&self, stat: Stat) -> VortexResult<U> {
-        self.get(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(|v| U::try_from(v))
-    }
-
-    fn compute_as<U: TryFrom<Scalar, Error = VortexError>>(&self, stat: Stat) -> VortexResult<U> {
-        self.compute(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(|v| U::try_from(v))
-    }
-
-    pub fn compute_min<U: TryFrom<Scalar, Error = VortexError>>(&self) -> VortexResult<U> {
-        self.compute_as(Stat::Min)
-    }
-
-    pub fn compute_max<U: TryFrom<Scalar, Error = VortexError>>(&self) -> VortexResult<U> {
-        self.compute_as(Stat::Max)
-    }
-
-    pub fn compute_is_strict_sorted(&self) -> VortexResult<bool> {
-        self.compute_as(Stat::IsStrictSorted)
-    }
-
-    pub fn compute_is_sorted(&self) -> VortexResult<bool> {
-        self.compute_as(Stat::IsSorted)
-    }
-
-    pub fn compute_is_constant(&self) -> VortexResult<bool> {
-        self.compute_as(Stat::IsConstant)
-    }
-
-    pub fn compute_true_count(&self) -> VortexResult<usize> {
-        self.compute_as(Stat::TrueCount)
-    }
-
-    pub fn compute_null_count(&self) -> VortexResult<usize> {
-        self.compute_as(Stat::NullCount)
-    }
-
-    pub fn compute_run_count(&self) -> VortexResult<usize> {
-        self.compute_as(Stat::RunCount)
-    }
-
-    pub fn compute_bit_width_freq(&self) -> VortexResult<Vec<usize>> {
-        self.compute_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)
-            .map(|s| s.0)
-    }
-
-    pub fn compute_trailing_zero_freq(&self) -> VortexResult<Vec<usize>> {
-        self.compute_as::<ListScalarVec<usize>>(Stat::TrailingZeroFreq)
-            .map(|s| s.0)
-    }
-}
+use crate::stats::Stat;
 
 #[derive(Debug, Clone, Default)]
 pub struct StatsSet {
@@ -350,5 +189,21 @@ impl StatsSet {
                 }
             }
         }
+    }
+}
+
+impl Extend<(Stat, Scalar)> for StatsSet {
+    #[inline]
+    fn extend<T: IntoIterator<Item = (Stat, Scalar)>>(&mut self, iter: T) {
+        self.values.extend(iter)
+    }
+}
+
+impl IntoIterator for StatsSet {
+    type Item = (Stat, Scalar);
+    type IntoIter = IntoIter<Stat, Scalar>;
+
+    fn into_iter(self) -> IntoIter<Stat, Scalar> {
+        self.values.into_iter()
     }
 }

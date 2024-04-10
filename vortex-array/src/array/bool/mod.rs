@@ -11,7 +11,7 @@ use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{ArrayStatistics, OwnedStats, Statistics, StatsSet};
+use crate::stats::{ArrayStatistics, OwnedStats, Statistics, StatsAccessors, StatsSet};
 use crate::validity::OwnedValidity;
 use crate::validity::{Validity, ValidityView};
 use crate::view::AsView;

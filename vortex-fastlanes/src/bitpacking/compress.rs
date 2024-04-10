@@ -12,7 +12,7 @@ use vortex::match_each_integer_ptype;
 use vortex::ptype::PType::U8;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::Scalar;
-use vortex::stats::ArrayStatistics;
+use vortex::stats::{ArrayStatistics, StatsAccessors};
 use vortex::validity::OwnedValidity;
 use vortex::view::ToOwnedView;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};

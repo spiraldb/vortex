@@ -8,7 +8,7 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::flatten::flatten_primitive;
 use vortex::match_each_integer_ptype;
 use vortex::ptype::{NativePType, PType};
-use vortex::stats::{ArrayStatistics, Stat};
+use vortex::stats::{ArrayStatistics, Stat, StatsAccessors};
 use vortex::validity::OwnedValidity;
 use vortex::view::ToOwnedView;
 use vortex_error::{vortex_err, VortexResult};

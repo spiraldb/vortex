@@ -3,7 +3,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
-use vortex::stats::{ArrayStatistics, Stat};
+use vortex::stats::{ArrayStatistics, Stat, StatsAccessors};
 use vortex::validity::{OwnedValidity, ValidityView};
 use vortex::view::ToOwnedView;
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};

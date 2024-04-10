@@ -214,7 +214,7 @@ impl<T: NativePType> StatsAccumulator<T> {
 #[cfg(test)]
 mod test {
     use crate::array::primitive::PrimitiveArray;
-    use crate::stats::ArrayStatistics;
+    use crate::stats::{ArrayStatistics, StatsAccessors};
 
     #[test]
     fn stats() {

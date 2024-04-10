@@ -18,6 +18,7 @@ use crate::compute::slice::slice;
 use crate::encoding::{Encoding, EncodingRef, ENCODINGS};
 use crate::formatter::display_tree;
 use crate::sampling::stratified_slices;
+use crate::stats::StatsAccessors;
 use crate::validity::{Validity, ValidityView};
 use crate::view::ToOwnedView;
 
