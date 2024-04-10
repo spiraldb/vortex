@@ -438,7 +438,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
             )
             .expect("Failed to compress to parquet");
             let pq_size = compressed.metadata().unwrap().size();
-            println!("Parquet size: {}", pq_size);
+            info!("Parquet size: {}", pq_size);
         }
     }
 
@@ -470,8 +470,8 @@ impl BenchmarkDataset for BenchmarkDatasets {
             let from_vortex = open_vortex(&compressed).unwrap();
             let vx_size = from_vortex.nbytes();
 
-            println!("Vortex size: {}", vx_size);
-            println!("{}\n\n", display_tree(from_vortex.as_ref()));
+            info!("Vortex size: {}", vx_size);
+            info!("{}\n\n", display_tree(from_vortex.as_ref()));
         }
     }
 

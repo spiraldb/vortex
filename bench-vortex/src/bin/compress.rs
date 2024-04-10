@@ -8,7 +8,7 @@ use bench_vortex::public_bi_data::PBIDataset;
 use bench_vortex::reader::{open_vortex, rewrite_parquet_as_vortex};
 use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::{data_path, setup_logger};
-use log::LevelFilter;
+use log::{info, LevelFilter};
 use vortex::array::Array;
 use vortex::formatter::display_tree;
 
@@ -30,9 +30,9 @@ fn compress_taxi() {
     let pq_size = taxi_data_parquet().metadata().unwrap().size();
     let vx_size = taxi_vortex.nbytes();
 
-    println!("{}\n\n", display_tree(taxi_vortex.as_ref()));
-    println!("Parquet size: {}, Vortex size: {}", pq_size, vx_size);
-    println!("Compression ratio: {}", vx_size as f32 / pq_size as f32);
+    info!("{}\n\n", display_tree(taxi_vortex.as_ref()));
+    info!("Parquet size: {}, Vortex size: {}", pq_size, vx_size);
+    info!("Compression ratio: {}", vx_size as f32 / pq_size as f32);
 }
 
 fn compress_pbi(which_pbi: PBIDataset) {
