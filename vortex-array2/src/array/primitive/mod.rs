@@ -12,8 +12,8 @@ use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
+use crate::ArrayView;
 use crate::{ArrayData, TypedArrayData};
-use crate::{ArrayView, ToArrayData};
 
 impl_encoding!("vortex.primitive", Primitive);
 
@@ -105,6 +105,12 @@ impl ArrayTrait for PrimitiveArray<'_> {
     fn len(&self) -> usize {
         self.buffer().len() / self.ptype().byte_width()
     }
+
+    fn metadata(&self) -> Arc<dyn ArrayMetadata> {
+        Arc::new(PrimitiveMetadata {
+            validity: self.validity().to_metadata(self.len()).unwrap(),
+        })
+    }
 }
 
 impl ArrayValidity for PrimitiveArray<'_> {
@@ -114,23 +120,6 @@ impl ArrayValidity for PrimitiveArray<'_> {
 
     fn logical_validity(&self) -> LogicalValidity {
         self.validity().to_logical(self.len())
-    }
-}
-
-impl ToArrayData for PrimitiveArray<'_> {
-    fn to_array_data(&self) -> ArrayData {
-        // TODO(ngates): what do we do about statistics?
-        ArrayData::try_new(
-            &PrimitiveEncoding,
-            self.dtype().clone(),
-            Arc::new(PrimitiveMetadata {
-                validity: self.validity().to_metadata(self.len()).unwrap(),
-            }),
-            vec![self.buffer().clone()].into(),
-            vec![].into(),
-            self.stats.to_map(),
-        )
-        .unwrap()
     }
 }
 

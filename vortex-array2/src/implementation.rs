@@ -23,7 +23,11 @@ macro_rules! impl_encoding {
 
         paste! {
             use $crate::{
-                ArrayDef, ArrayParts, ArrayTrait, TryFromArrayParts,
+                ArrayDef,
+                ArrayEncodingRef,
+                ArrayParts,
+                ArrayTrait,
+                TryFromArrayParts,
                 TryDeserializeArrayMetadata,
             };
             use $crate::encoding::{ArrayEncoding, EncodingId, EncodingRef, VORTEX_ENCODINGS};
@@ -90,6 +94,12 @@ macro_rules! impl_encoding {
 
                 fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
                     self
+                }
+            }
+
+            impl ArrayEncodingRef for [<$Name Array>]<'_> {
+                fn encoding(&self) -> EncodingRef {
+                    [<$Name Def>]::ENCODING
                 }
             }
         }

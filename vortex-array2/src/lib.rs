@@ -18,6 +18,7 @@ mod view;
 mod visitor;
 
 use std::fmt::{Debug, Display, Formatter};
+use std::sync::Arc;
 
 use arrow_buffer::Buffer;
 pub use batch::*;
@@ -32,7 +33,7 @@ use vortex_schema::DType;
 
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
-use crate::stats::{ArrayStatisticsCompute, Statistics};
+use crate::stats::{ArrayStatistics, ArrayStatisticsCompute, Statistics};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
@@ -118,9 +119,54 @@ pub trait TryFromArrayParts<'v, M: ArrayMetadata>: Sized + 'v {
     fn try_from_parts(parts: &'v dyn ArrayParts, metadata: &'v M) -> VortexResult<Self>;
 }
 
+impl<A> ToArrayData for A
+where
+    A: ArrayTrait,
+{
+    fn to_array_data(&self) -> ArrayData {
+        struct Visitor {
+            buffers: Vec<Buffer>,
+            children: Vec<ArrayData>,
+        }
+        impl ArrayVisitor for Visitor {
+            fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
+                self.children.push(array.to_array_data());
+                Ok(())
+            }
+
+            fn visit_buffer(&mut self, buffer: &Buffer) -> VortexResult<()> {
+                self.buffers.push(buffer.clone());
+                Ok(())
+            }
+        }
+        let mut visitor = Visitor {
+            buffers: vec![],
+            children: vec![],
+        };
+        self.accept(&mut visitor).unwrap();
+
+        ArrayData::try_new(
+            self.encoding(),
+            self.dtype().clone(),
+            self.metadata(),
+            visitor.buffers.into(),
+            vec![].into(), // FIXME(ngates): remove optional children
+            // visitor.children.into(),
+            self.statistics().to_map(),
+        )
+        .unwrap()
+    }
+}
+
 /// Collects together the behaviour of an array.
 pub trait ArrayTrait:
-    ArrayCompute + ArrayValidity + AcceptArrayVisitor + ArrayStatisticsCompute + ToArrayData
+    ArrayEncodingRef
+    + ArrayCompute
+    + ArrayValidity
+    + AcceptArrayVisitor
+    + ArrayStatistics
+    + ArrayStatisticsCompute
+    + ToArrayData
 {
     fn dtype(&self) -> &DType;
 
@@ -131,11 +177,17 @@ pub trait ArrayTrait:
         self.len() == 0
     }
 
+    fn metadata(&self) -> Arc<dyn ArrayMetadata>;
+
     fn nbytes(&self) -> usize {
         let mut visitor = NBytesVisitor(0);
         self.accept(&mut visitor).unwrap();
         visitor.0
     }
+}
+
+pub trait ArrayEncodingRef {
+    fn encoding(&self) -> EncodingRef;
 }
 
 struct NBytesVisitor(usize);

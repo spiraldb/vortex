@@ -1,17 +1,15 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FieldNames};
 
 use crate::compute::ArrayCompute;
-use crate::stats::ArrayStatisticsCompute;
+use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::ArrayView;
 use crate::{impl_encoding, ToArray, WithArray};
 use crate::{Array, ArrayMetadata};
 use crate::{ArrayData, TypedArrayData};
-use crate::{ArrayView, ToArrayData};
 
 impl_encoding!("vortex.struct", Struct);
 
@@ -112,6 +110,12 @@ impl ArrayTrait for StructArray<'_> {
     fn len(&self) -> usize {
         self.length
     }
+
+    fn metadata(&self) -> Arc<dyn ArrayMetadata> {
+        Arc::new(StructMetadata {
+            length: self.length,
+        })
+    }
 }
 
 impl ArrayValidity for StructArray<'_> {
@@ -121,26 +125,6 @@ impl ArrayValidity for StructArray<'_> {
 
     fn logical_validity(&self) -> LogicalValidity {
         todo!()
-    }
-}
-
-impl ToArrayData for StructArray<'_> {
-    fn to_array_data(&self) -> ArrayData {
-        ArrayData::try_new(
-            &StructEncoding,
-            self.dtype().clone(),
-            Arc::new(StructMetadata {
-                length: self.length,
-            }),
-            vec![].into(),
-            (0..self.nfields())
-                .map(|idx| self.child(idx).unwrap())
-                .map(|a| Some(a.to_array_data()))
-                .collect::<Vec<_>>()
-                .into(),
-            HashMap::default(),
-        )
-        .unwrap()
     }
 }
 
@@ -154,5 +138,6 @@ impl AcceptArrayVisitor for StructArray<'_> {
     }
 }
 
+impl ArrayStatistics for StructArray<'_> {}
 impl ArrayStatisticsCompute for StructArray<'_> {}
 impl ArrayCompute for StructArray<'_> {}

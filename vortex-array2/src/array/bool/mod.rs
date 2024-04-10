@@ -1,4 +1,5 @@
 mod compute;
+mod data;
 mod stats;
 
 use arrow_buffer::{BooleanBuffer, Buffer};
@@ -6,13 +7,14 @@ use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::impl_encoding;
+use crate::stats::Statistics;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
-use crate::{impl_encoding, IntoArrayData};
+use crate::ArrayView;
 use crate::{ArrayData, TypedArrayData};
-use crate::{ArrayView, ToArrayData};
 
 impl_encoding!("vortex.bool", Bool);
 
@@ -27,6 +29,7 @@ pub struct BoolArray<'a> {
     buffer: &'a Buffer,
     validity: Validity<'a>,
     length: usize,
+    stats: &'a (dyn Statistics + 'a),
 }
 
 impl BoolArray<'_> {
@@ -44,7 +47,6 @@ impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
     fn try_from_parts(parts: &'v dyn ArrayParts, metadata: &'v BoolMetadata) -> VortexResult<Self> {
         Ok(BoolArray {
             dtype: parts.dtype(),
-            // FIXME(ngates): implement our own BooleanBuffer that doesn't take ownership of the bytes
             buffer: parts
                 .buffer(0)
                 .ok_or(vortex_err!("BoolArray requires a buffer"))?,
@@ -52,55 +54,8 @@ impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
                 .validity
                 .to_validity(parts.child(0, &Validity::DTYPE)),
             length: metadata.length,
+            stats: parts.statistics(),
         })
-    }
-}
-
-impl BoolData {
-    pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
-        Ok(Self::new_unchecked(
-            DType::Bool(validity.nullability()),
-            Arc::new(BoolMetadata {
-                validity: validity.to_metadata(buffer.len())?,
-                length: buffer.len(),
-            }),
-            vec![buffer.into_inner()].into(),
-            vec![validity.to_array_data()].into(),
-        ))
-    }
-
-    pub fn from_vec(bools: Vec<bool>, validity: Validity) -> Self {
-        let buffer = BooleanBuffer::from(bools);
-        Self::try_new(buffer, validity).unwrap()
-    }
-}
-
-impl From<BooleanBuffer> for BoolData {
-    fn from(value: BooleanBuffer) -> Self {
-        BoolData::try_new(value, Validity::NonNullable).unwrap()
-    }
-}
-
-impl From<Vec<bool>> for BoolData {
-    fn from(value: Vec<bool>) -> Self {
-        BoolData::from_vec(value, Validity::NonNullable)
-    }
-}
-
-impl FromIterator<Option<bool>> for BoolData {
-    fn from_iter<I: IntoIterator<Item = Option<bool>>>(iter: I) -> Self {
-        let iter = iter.into_iter();
-        let (lower, _) = iter.size_hint();
-
-        let mut validity: Vec<bool> = Vec::with_capacity(lower);
-        let values: Vec<bool> = iter
-            .map(|i| {
-                validity.push(i.is_some());
-                i.unwrap_or_default()
-            })
-            .collect::<Vec<_>>();
-
-        BoolData::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap()
     }
 }
 
@@ -112,6 +67,13 @@ impl ArrayTrait for BoolArray<'_> {
     fn len(&self) -> usize {
         self.length
     }
+
+    fn metadata(&self) -> Arc<dyn ArrayMetadata> {
+        Arc::new(BoolMetadata {
+            validity: self.validity.to_metadata(self.length).unwrap(),
+            length: self.length,
+        })
+    }
 }
 
 impl ArrayValidity for BoolArray<'_> {
@@ -121,14 +83,6 @@ impl ArrayValidity for BoolArray<'_> {
 
     fn logical_validity(&self) -> LogicalValidity {
         self.validity.to_logical(self.len())
-    }
-}
-
-impl ToArrayData for BoolArray<'_> {
-    fn to_array_data(&self) -> ArrayData {
-        BoolData::try_new(self.buffer().clone(), self.validity().clone())
-            .unwrap()
-            .into_array_data()
     }
 }
 

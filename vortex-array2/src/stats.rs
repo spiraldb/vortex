@@ -18,7 +18,9 @@ pub enum Stat {
 }
 
 pub trait ArrayStatistics {
-    fn statistics(&self) -> &(dyn Statistics + '_);
+    fn statistics(&self) -> &(dyn Statistics + '_) {
+        &EmptyStatistics
+    }
 }
 
 pub trait ArrayStatisticsCompute {
