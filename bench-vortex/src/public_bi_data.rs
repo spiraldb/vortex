@@ -279,13 +279,9 @@ lazy_static::lazy_static! {
 }
 
 impl PBIDataset {
-    pub fn dataset_name(&self) -> String {
+    pub fn dataset_name(&self) -> &str {
         let url = URLS.get(self).unwrap();
-        url.first().unwrap().dataset_name.clone()
-    }
-
-    pub fn fname_from_url(url: String) -> String {
-        url.split('/').last().unwrap().to_string()
+        url.first().unwrap().dataset_name
     }
 
     fn csv_files(&self) -> Vec<PathBuf> {
@@ -314,7 +310,7 @@ impl PBIDataset {
         data_path("PBI")
             .join(self.dataset_name())
             .join("bzip2")
-            .join(url.file_name.clone())
+            .join(url.file_name)
     }
 
     fn unzip(&self) {
@@ -328,24 +324,24 @@ impl PBIDataset {
 
 #[derive(Debug)]
 struct PBIUrl {
-    dataset_name: String,
-    file_name: String,
+    dataset_name: &'static str,
+    file_name: &'static str,
 }
 
 impl PBIUrl {
-    fn new(dataset_name: &str, file_name: &str) -> Self {
+    fn new(dataset_name: &'static str, file_name: &'static str) -> Self {
         PBIUrl {
-            dataset_name: dataset_name.to_string(),
-            file_name: file_name.to_string(),
+            dataset_name,
+            file_name,
         }
     }
-    fn to_url_string(&self) -> String {
-        let url_str = format!(
-            "https://homepages.cwi.nl/~boncz/PublicBIbenchmark/{}/{}",
-            self.dataset_name, self.file_name
-        );
-        // roundtrip through url to validate
-        Url::parse(url_str.as_str()).unwrap().to_string()
+    fn to_url_string(&self) -> Url {
+        Url::parse("https://homepages.cwi.nl/~boncz/PublicBIbenchmark")
+            .unwrap()
+            .join(self.dataset_name)
+            .unwrap()
+            .join(self.file_name)
+            .unwrap()
     }
 }
 

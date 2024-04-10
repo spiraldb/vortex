@@ -59,6 +59,10 @@ pub fn idempotent2<T, E>(path: &Path, f: impl FnOnce(&Path) -> Result<T, E>) -> 
     Ok(path.to_path_buf())
 }
 
+pub trait IdempotentPath {
+    fn to_path(&self) -> Path;
+}
+
 pub fn data_path(name: &str) -> PathBuf {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("data")
