@@ -244,10 +244,7 @@ impl StatsSet {
     fn merge_is_constant(&mut self, other: &Self) {
         if let Some(is_constant) = self.get_as(Stat::IsConstant) {
             if let Some(other_is_constant) = other.get_as(Stat::IsConstant) {
-                if is_constant
-                    && other_is_constant
-                    && self.values.get(&Stat::Min) == other.get(Stat::Min)
-                {
+                if is_constant && other_is_constant && self.get(Stat::Min) == other.get(Stat::Min) {
                     return;
                 }
             }
