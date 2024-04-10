@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -10,59 +11,57 @@ use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for VarBinArray {
     fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+        let mut acc = VarBinAccumulator::default();
         self.iter_primitive()
             .map(|prim_iter| {
-                let mut acc = VarBinAccumulator::<&[u8]>::default();
                 for next_val in prim_iter {
-                    acc.nullable_next(next_val);
+                    acc.nullable_next(next_val.map(Cow::from));
                 }
-                Ok(acc.finish(self.dtype()))
             })
             .unwrap_or_else(|_| {
-                let mut acc = VarBinAccumulator::<Vec<u8>>::default();
                 for next_val in self.iter() {
-                    acc.nullable_next(next_val);
+                    acc.nullable_next(next_val.map(Cow::from));
                 }
-                Ok(acc.finish(self.dtype()))
-            })
+            });
+        Ok(acc.finish(self.dtype()))
     }
 }
 
-pub struct VarBinAccumulator<T> {
-    min: T,
-    max: T,
+pub struct VarBinAccumulator<'a> {
+    min: Cow<'a, [u8]>,
+    max: Cow<'a, [u8]>,
     is_constant: bool,
     is_sorted: bool,
     is_strict_sorted: bool,
-    last_value: T,
+    last_value: Cow<'a, [u8]>,
     null_count: usize,
     runs: usize,
 }
 
-impl Default for VarBinAccumulator<Vec<u8>> {
+impl Default for VarBinAccumulator<'_> {
     fn default() -> Self {
         Self {
-            min: vec![0xFF],
-            max: vec![0x00],
+            min: Cow::from(&[0xFF]),
+            max: Cow::from(&[0x00]),
             is_constant: true,
             is_sorted: true,
             is_strict_sorted: true,
-            last_value: vec![0x00],
+            last_value: Cow::from(&[0x00]),
             runs: 0,
             null_count: 0,
         }
     }
 }
 
-impl VarBinAccumulator<Vec<u8>> {
-    pub fn nullable_next(&mut self, val: Option<Vec<u8>>) {
+impl<'a> VarBinAccumulator<'a> {
+    pub fn nullable_next(&mut self, val: Option<Cow<'a, [u8]>>) {
         match val {
             None => self.null_count += 1,
             Some(v) => self.next(v),
         }
     }
 
-    pub fn next(&mut self, val: Vec<u8>) {
+    pub fn next(&mut self, val: Cow<'a, [u8]>) {
         if val < self.min {
             self.min.clone_from(&val);
         } else if val > self.max {
@@ -81,57 +80,11 @@ impl VarBinAccumulator<Vec<u8>> {
         self.last_value = val;
         self.runs += 1;
     }
-}
 
-impl<'a> Default for VarBinAccumulator<&'a [u8]> {
-    fn default() -> Self {
-        Self {
-            min: &[0xFF],
-            max: &[0x00],
-            is_constant: true,
-            is_sorted: true,
-            is_strict_sorted: true,
-            last_value: &[0x00],
-            runs: 0,
-            null_count: 0,
-        }
-    }
-}
-
-impl<'a> VarBinAccumulator<&'a [u8]> {
-    pub fn nullable_next(&mut self, val: Option<&'a [u8]>) {
-        match val {
-            None => self.null_count += 1,
-            Some(v) => self.next(v),
-        }
-    }
-
-    pub fn next(&mut self, val: &'a [u8]) {
-        if val < self.min {
-            self.min = val;
-        } else if val > self.max {
-            self.max = val;
-        }
-
-        match val.cmp(self.last_value) {
-            Ordering::Less => self.is_sorted = false,
-            Ordering::Equal => {
-                self.is_strict_sorted = false;
-                return;
-            }
-            Ordering::Greater => {}
-        }
-        self.is_constant = false;
-        self.last_value = val;
-        self.runs += 1;
-    }
-}
-
-impl<T: AsRef<[u8]>> VarBinAccumulator<T> {
     pub fn finish(&self, dtype: &DType) -> StatsSet {
         StatsSet::from(HashMap::from([
-            (Stat::Min, varbin_scalar(self.min.as_ref().to_vec(), dtype)),
-            (Stat::Max, varbin_scalar(self.max.as_ref().to_vec(), dtype)),
+            (Stat::Min, varbin_scalar(self.min.to_vec(), dtype)),
+            (Stat::Max, varbin_scalar(self.max.to_vec(), dtype)),
             (Stat::RunCount, self.runs.into()),
             (Stat::IsSorted, self.is_sorted.into()),
             (Stat::IsStrictSorted, self.is_strict_sorted.into()),
