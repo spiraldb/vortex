@@ -10,9 +10,10 @@ use vortex_schema::DType;
 use crate::encoding::EncodingRef;
 use crate::stats::Stat;
 use crate::stats::Statistics;
+use crate::visitor::ArrayVisitor;
 use crate::{
-    Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, IntoArrayData, OwnedArray, ToArray,
-    TryFromArrayParts,
+    Array, ArrayDef, ArrayMetadata, ArrayParts, ArrayTrait, IntoArray, IntoArrayData, OwnedArray,
+    ToArray, ToArrayData, TryFromArrayParts,
 };
 
 #[derive(Clone, Debug)]
@@ -20,8 +21,8 @@ pub struct ArrayData {
     encoding: EncodingRef,
     dtype: DType,
     metadata: Arc<dyn ArrayMetadata>,
-    buffers: Arc<[Buffer]>, // Should this just be an Option, not an Arc?
-    children: Arc<[Option<ArrayData>]>,
+    buffers: Arc<[Buffer]>, // Should this just be an Option, not an Arc? How many multi-buffer arrays are there?
+    children: Arc<[ArrayData]>,
     stats_map: Arc<RwLock<HashMap<Stat, Scalar>>>,
 }
 
@@ -31,7 +32,7 @@ impl ArrayData {
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
         buffers: Arc<[Buffer]>,
-        children: Arc<[Option<ArrayData>]>,
+        children: Arc<[ArrayData]>,
         statistics: HashMap<Stat, Scalar>,
     ) -> VortexResult<Self> {
         let data = Self {
@@ -66,10 +67,10 @@ impl ArrayData {
     }
 
     pub fn child(&self, index: usize) -> Option<&ArrayData> {
-        self.children.get(index).and_then(|c| c.as_ref())
+        self.children.get(index)
     }
 
-    pub fn children(&self) -> &[Option<ArrayData>] {
+    pub fn children(&self) -> &[ArrayData] {
         &self.children
     }
 
@@ -112,7 +113,7 @@ impl<'a> Iterator for ArrayDataIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.stack.pop()?;
-        for child in next.children.as_ref().iter().flatten() {
+        for child in next.children.as_ref().iter() {
             self.stack.push(child);
         }
         Some(next)
@@ -131,6 +132,44 @@ impl IntoArray<'static> for ArrayData {
     }
 }
 
+impl<A> ToArrayData for A
+where
+    A: ArrayTrait,
+{
+    fn to_array_data(&self) -> ArrayData {
+        struct Visitor {
+            buffers: Vec<Buffer>,
+            children: Vec<ArrayData>,
+        }
+        impl ArrayVisitor for Visitor {
+            fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
+                self.children.push(array.to_array_data());
+                Ok(())
+            }
+
+            fn visit_buffer(&mut self, buffer: &Buffer) -> VortexResult<()> {
+                self.buffers.push(buffer.clone());
+                Ok(())
+            }
+        }
+        let mut visitor = Visitor {
+            buffers: vec![],
+            children: vec![],
+        };
+        self.accept(&mut visitor).unwrap();
+
+        ArrayData::try_new(
+            self.encoding(),
+            self.dtype().clone(),
+            self.metadata(),
+            visitor.buffers.into(),
+            visitor.children.into(),
+            self.statistics().to_map(),
+        )
+        .unwrap()
+    }
+}
+
 #[derive(Debug)]
 pub struct TypedArrayData<D: ArrayDef> {
     data: ArrayData,
@@ -142,7 +181,7 @@ impl<D: ArrayDef> TypedArrayData<D> {
         dtype: DType,
         metadata: Arc<D::Metadata>,
         buffers: Arc<[Buffer]>,
-        children: Arc<[Option<ArrayData>]>,
+        children: Arc<[ArrayData]>,
     ) -> Self {
         Self::from_data_unchecked(
             ArrayData::try_new(

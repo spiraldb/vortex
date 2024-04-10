@@ -69,7 +69,6 @@ impl StructData {
         }
 
         let field_dtypes: Vec<_> = fields.iter().map(|d| d.dtype()).cloned().collect();
-        let fields: Vec<_> = fields.iter().cloned().map(Some).collect();
         Ok(Self::new_unchecked(
             DType::Struct(names, field_dtypes),
             Arc::new(StructMetadata { length }),

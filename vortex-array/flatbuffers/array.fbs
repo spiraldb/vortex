@@ -4,16 +4,11 @@ enum Version: uint8 {
   V0 = 0,
 }
 
-// TODO(ngates): figure out if flatbuffers supports optional elements in a vector.
-table ArrayChild {
-    child: Array;
-}
-
 table Array {
     version: Version = V0;
     encoding: uint16;
     metadata: [ubyte];
-    children: [ArrayChild];
+    children: [Array];
     nbuffers: uint16;
 }
 

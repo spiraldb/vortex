@@ -1,6 +1,7 @@
 mod stats;
 
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
@@ -76,7 +77,7 @@ impl PrimitiveData {
                 validity: validity.to_metadata(buffer.len())?,
             }),
             vec![buffer.into_inner()].into(),
-            vec![validity.to_array_data()].into(),
+            validity.to_array_data().into_iter().collect_vec().into(),
         ))
     }
 

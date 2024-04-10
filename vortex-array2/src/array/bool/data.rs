@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use arrow_buffer::BooleanBuffer;
+use itertools::Itertools;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
@@ -16,7 +17,7 @@ impl BoolData {
                 length: buffer.len(),
             }),
             vec![buffer.into_inner()].into(),
-            vec![validity.to_array_data()].into(),
+            validity.to_array_data().into_iter().collect_vec().into(),
         ))
     }
 

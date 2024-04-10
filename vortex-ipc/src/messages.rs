@@ -1,7 +1,6 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex::flatbuffers::array as fba;
-use vortex::flatbuffers::array::{ArrayChild, ArrayChildArgs};
 use vortex_array2::encoding::find_encoding;
 use vortex_array2::{ArrayData, SerdeContext};
 use vortex_error::{vortex_err, VortexError};
@@ -177,12 +176,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
         let children = column_data
             .children()
             .iter()
-            .map(|child| {
-                let child = child
-                    .as_ref()
-                    .map(|c| IPCArray(self.0, c).write_flatbuffer(fbb));
-                ArrayChild::create(fbb, &ArrayChildArgs { child })
-            })
+            .map(|child| IPCArray(self.0, child).write_flatbuffer(fbb))
             .collect_vec();
         let children = Some(fbb.create_vector(&children));
 
