@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FieldNames};
@@ -136,6 +138,7 @@ impl ToArrayData for StructArray<'_> {
                 .map(|a| Some(a.to_array_data()))
                 .collect::<Vec<_>>()
                 .into(),
+            HashMap::default(),
         )
         .unwrap()
     }

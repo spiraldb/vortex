@@ -22,7 +22,7 @@ pub struct ArrayData {
     metadata: Arc<dyn ArrayMetadata>,
     buffers: Arc<[Buffer]>, // Should this just be an Option, not an Arc?
     children: Arc<[Option<ArrayData>]>,
-    stats_set: Arc<RwLock<HashMap<Stat, Scalar>>>,
+    stats_map: Arc<RwLock<HashMap<Stat, Scalar>>>,
 }
 
 impl ArrayData {
@@ -32,6 +32,7 @@ impl ArrayData {
         metadata: Arc<dyn ArrayMetadata>,
         buffers: Arc<[Buffer]>,
         children: Arc<[Option<ArrayData>]>,
+        statistics: HashMap<Stat, Scalar>,
     ) -> VortexResult<Self> {
         let data = Self {
             encoding,
@@ -39,12 +40,11 @@ impl ArrayData {
             metadata,
             buffers,
             children,
-            stats_set: Arc::new(RwLock::new(HashMap::new())),
+            stats_map: Arc::new(RwLock::new(statistics)),
         };
 
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
-        // implement Encoding::with_data().
-        // encoding.with_data_mut(&data, &mut |_| Ok(()))?;
+        encoding.with_data_mut(&data, &mut |_| Ok(()))?;
 
         Ok(data)
     }
@@ -145,7 +145,15 @@ impl<D: ArrayDef> TypedArrayData<D> {
         children: Arc<[Option<ArrayData>]>,
     ) -> Self {
         Self::from_data_unchecked(
-            ArrayData::try_new(D::ENCODING, dtype, metadata, buffers, children).unwrap(),
+            ArrayData::try_new(
+                D::ENCODING,
+                dtype,
+                metadata,
+                buffers,
+                children,
+                HashMap::default(),
+            )
+            .unwrap(),
         )
     }
 
@@ -238,7 +246,7 @@ impl ArrayParts for ArrayData {
 
 impl Statistics for ArrayData {
     fn compute(&self, stat: Stat) -> Option<Scalar> {
-        let mut locked = self.stats_set.write().unwrap();
+        let mut locked = self.stats_map.write().unwrap();
         let stats = self
             .encoding()
             .with_data(self, |a| a.compute_statistics(stat))
@@ -250,16 +258,16 @@ impl Statistics for ArrayData {
     }
 
     fn get(&self, stat: Stat) -> Option<Scalar> {
-        let locked = self.stats_set.read().unwrap();
+        let locked = self.stats_map.read().unwrap();
         locked.get(&stat).cloned()
     }
 
     fn set(&self, stat: Stat, value: Scalar) {
-        let mut locked = self.stats_set.write().unwrap();
+        let mut locked = self.stats_map.write().unwrap();
         locked.insert(stat, value);
     }
 
     fn to_map(&self) -> HashMap<Stat, Scalar> {
-        self.stats_set.read().unwrap().clone()
+        self.stats_map.read().unwrap().clone()
     }
 }

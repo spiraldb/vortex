@@ -128,6 +128,7 @@ impl ToArrayData for PrimitiveArray<'_> {
             }),
             vec![self.buffer().clone()].into(),
             vec![].into(),
+            self.stats.to_map(),
         )
         .unwrap()
     }
