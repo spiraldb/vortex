@@ -11,7 +11,7 @@ use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
-use vortex::compute::slice::slice;
+use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
@@ -29,6 +29,10 @@ impl ArrayCompute for BitPackedArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
