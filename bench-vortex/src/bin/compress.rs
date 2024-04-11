@@ -14,8 +14,8 @@ use vortex::formatter::display_tree;
 
 pub fn main() {
     setup_logger(LevelFilter::Info);
-    compress_taxi();
     compress_pbi(PBIDataset::Medicare1);
+    compress_taxi();
 }
 
 fn compress_taxi() {
