@@ -7,8 +7,8 @@ use vortex_schema::DType;
 use crate::array::constant::ConstantArray;
 use crate::array::{Array, ArrayRef};
 use crate::compress::EncodingCompression;
-use crate::compute::binary_search::binary_search;
 use crate::compute::flatten::flatten_primitive;
+use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -91,7 +91,12 @@ impl SparseArray {
 
     /// Returns the position of a given index in the indices array if it exists.
     pub fn find_index(&self, index: usize) -> VortexResult<Option<usize>> {
-        binary_search(self.indices(), self.indices_offset + index).map(|r| r.ok())
+        search_sorted(
+            self.indices(),
+            self.indices_offset + index,
+            SearchSortedSide::Exact,
+        )
+        .map(|r| r.ok())
     }
 
     /// Return indices as a vector of usize with the indices_offset applied.

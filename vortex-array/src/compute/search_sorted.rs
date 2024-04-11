@@ -15,14 +15,18 @@ pub enum SearchSortedSide {
 }
 
 pub trait SearchSortedFn {
-    fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<usize>;
+    fn search_sorted(
+        &self,
+        value: &Scalar,
+        side: SearchSortedSide,
+    ) -> VortexResult<Result<usize, usize>>;
 }
 
 pub fn search_sorted<T: Into<Scalar>>(
     array: &dyn Array,
     target: T,
     side: SearchSortedSide,
-) -> VortexResult<usize> {
+) -> VortexResult<Result<usize, usize>> {
     let scalar = target.into().cast(array.dtype())?;
     array.with_compute(|c| {
         if let Some(search_sorted) = c.search_sorted() {
@@ -30,7 +34,7 @@ pub fn search_sorted<T: Into<Scalar>>(
         }
 
         if c.scalar_at().is_some() {
-            return Ok(SearchSorted::search_sorted(&array, &scalar, side).unwrap_or_else(|o| o));
+            return Ok(SearchSorted::search_sorted(&array, &scalar, side));
         }
 
         Err(vortex_err!(

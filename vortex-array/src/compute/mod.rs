@@ -9,12 +9,9 @@ use search_sorted::SearchSortedFn;
 use slice::SliceFn;
 use take::TakeFn;
 
-use crate::compute::binary_search::BinarySearchFn;
-
 pub mod add;
 pub mod as_arrow;
 pub mod as_contiguous;
-pub mod binary_search;
 pub mod cast;
 pub mod fill;
 pub mod flatten;
@@ -31,10 +28,6 @@ pub trait ArrayCompute {
     }
 
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
-        None
-    }
-
-    fn binary_search(&self) -> Option<&dyn BinarySearchFn> {
         None
     }
 
