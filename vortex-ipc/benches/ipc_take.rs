@@ -38,6 +38,7 @@ fn ipc_take(c: &mut Criterion) {
     });
 }
 
+#[allow(dead_code)]
 fn ipc_take_old(c: &mut Criterion) {
     // Try the old way of taking data.
     let arr = PrimitiveArray::from(vec![5; 3_000_000]);

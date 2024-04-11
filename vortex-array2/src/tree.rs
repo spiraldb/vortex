@@ -92,6 +92,7 @@ impl<'a, 'b: 'a> TreeFormatter<'a, 'b> {
         res
     }
 
+    #[allow(dead_code)]
     pub fn new_total_size<F>(&mut self, total: usize, new_total: F) -> fmt::Result
     where
         F: FnOnce(&mut TreeFormatter) -> fmt::Result,

@@ -10,7 +10,6 @@ use vortex_error::{vortex_err, VortexResult};
 /// Note that this allows us to restrict the ('static + Send + Sync) requirement to just the
 /// metadata trait, and not the entire array trait. We require 'static so that we can downcast
 /// use the Any trait.
-#[allow(dead_code)]
 pub trait ArrayMetadata: 'static + Send + Sync + Debug + TrySerializeArrayMetadata {
     fn as_any(&self) -> &dyn Any;
     fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
