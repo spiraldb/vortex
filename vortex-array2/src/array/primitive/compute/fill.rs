@@ -1,3 +1,4 @@
+use vortex::match_each_native_ptype;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
@@ -11,20 +12,21 @@ impl FillForwardFn for PrimitiveArray<'_> {
         let Some(nulls) = validity.to_null_buffer()? else {
             return Ok(self.to_array_data().into_array());
         };
-
-        let typed_data = self.typed_data::<u16>();
-        let mut last_value = u16::default();
-        let filled = typed_data
-            .iter()
-            .zip(nulls.into_iter())
-            .map(|(v, valid)| {
-                if valid {
-                    last_value = *v;
-                }
-                last_value
-            })
-            .collect::<Vec<_>>();
-        Ok(filled.into_array())
+        match_each_native_ptype!(self.ptype(), |$T| {
+            let typed_data = self.typed_data::<$T>();
+            let mut last_value = $T::default();
+            let filled = typed_data
+                .iter()
+                .zip(nulls.into_iter())
+                .map(|(v, valid)| {
+                    if valid {
+                        last_value = *v;
+                    }
+                    last_value
+                })
+                .collect::<Vec<_>>();
+            Ok(filled.into_array())
+        })
     }
 }
 
@@ -52,6 +54,7 @@ mod test {
         let arr =
             PrimitiveData::from_nullable_vec(vec![Option::<u8>::None, None, None, None, None])
                 .into_array();
+
         compute::fill::fill_forward(&arr)
             .unwrap()
             .with_typed_array::<PrimitiveDef, _, _>(|p| {

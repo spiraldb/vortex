@@ -73,6 +73,7 @@ macro_rules! impl_encoding {
                     [<$Name Def>]::ID
                 }
 
+                #[inline]
                 fn with_view_mut<'v>(
                     &self,
                     view: &'v ArrayView<'v>,
@@ -81,6 +82,7 @@ macro_rules! impl_encoding {
                     WithEncodedArray::with_view_mut(self, view, |a| f(a))
                 }
 
+                #[inline]
                 fn with_data_mut(
                     &self,
                     data: &ArrayData,

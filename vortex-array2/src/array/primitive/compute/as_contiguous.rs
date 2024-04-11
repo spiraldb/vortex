@@ -1,4 +1,4 @@
-use arrow_buffer::ScalarBuffer;
+use arrow_buffer::{MutableBuffer, ScalarBuffer};
 use vortex::match_each_native_ptype;
 use vortex_error::VortexResult;
 
@@ -19,14 +19,14 @@ impl AsContiguousFn for PrimitiveArray<'_> {
             Validity::NonNullable
         };
 
+        let mut buffer = MutableBuffer::with_capacity(
+            arrays.iter().map(|a| a.len()).sum::<usize>() * self.ptype().byte_width(),
+        );
+        for array in arrays {
+            array.with_typed_array::<PrimitiveDef, _, _>(|p| buffer.extend_from_slice(p.buffer()))
+        }
         match_each_native_ptype!(self.ptype(), |$T| {
-            let mut values: Vec<$T> = Vec::with_capacity(arrays.iter().map(|a| a.len()).sum());
-            for array in arrays {
-                array.with_typed_array::<PrimitiveDef, _, _>(|p| {
-                    values.extend(p.typed_data::<$T>())
-                })
-            }
-            Ok(PrimitiveData::try_new(ScalarBuffer::from(values), validity)
+            Ok(PrimitiveData::try_new(ScalarBuffer::<$T>::from(buffer), validity)
                 .unwrap()
                 .into_array())
         })

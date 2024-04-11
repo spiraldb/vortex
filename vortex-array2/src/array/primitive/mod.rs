@@ -90,7 +90,7 @@ impl PrimitiveData {
     }
 
     pub fn from_nullable_vec<T: NativePType + ArrowNativeType>(values: Vec<Option<T>>) -> Self {
-        let elems: Vec<_> = values.iter().map(|v| v.unwrap_or_default()).collect();
+        let elems: Vec<T> = values.iter().map(|v| v.unwrap_or_default()).collect();
         let validity = Validity::from(values.iter().map(|v| v.is_some()).collect::<Vec<_>>());
         Self::from_vec(elems, validity)
     }
