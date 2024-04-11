@@ -11,6 +11,7 @@ mod implementation;
 mod metadata;
 mod stats;
 mod tree;
+mod typed;
 pub mod validity;
 mod view;
 mod visitor;
@@ -23,6 +24,7 @@ pub use data::*;
 pub use implementation::*;
 pub use linkme;
 pub use metadata::*;
+pub use typed::*;
 pub use view::*;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
@@ -211,11 +213,11 @@ impl IntoArrayData for Array<'_> {
 }
 
 impl WithArray for Array<'_> {
-    fn with_array<R, F: FnMut(&dyn ArrayTrait) -> R>(&self, f: F) -> R {
+    fn with_array<R, F: FnMut(&dyn ArrayTrait) -> R>(&self, mut f: F) -> R {
         match self {
-            Array::Data(d) => d.encoding().with_data(d, f),
-            Array::DataRef(d) => d.encoding().with_data(d, f),
-            Array::View(v) => v.encoding().with_view(v, f),
+            Array::Data(d) => d.encoding().with_data(d, &mut f),
+            Array::DataRef(d) => d.encoding().with_data(d, &mut f),
+            Array::View(v) => v.encoding().with_view(v, &mut f),
         }
     }
 }

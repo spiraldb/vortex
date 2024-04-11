@@ -8,11 +8,14 @@ use scalar_at::ScalarAtFn;
 use search_sorted::SearchSortedFn;
 use take::TakeFn;
 
+use crate::compute::flatten2::Flatten2Fn;
+
 pub mod as_arrow;
 pub mod as_contiguous;
 pub mod cast;
 pub mod fill;
 pub mod flatten;
+pub mod flatten2;
 pub mod patch;
 pub mod scalar_at;
 pub mod search_sorted;
@@ -36,6 +39,10 @@ pub trait ArrayCompute {
     }
 
     fn flatten(&self) -> Option<&dyn FlattenFn> {
+        None
+    }
+
+    fn flatten2(&self) -> Option<&dyn Flatten2Fn> {
         None
     }
 

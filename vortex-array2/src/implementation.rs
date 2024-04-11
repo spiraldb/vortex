@@ -27,6 +27,7 @@ macro_rules! impl_encoding {
                 ArrayEncodingRef,
                 ArrayParts,
                 ArrayTrait,
+                TypedArray,
                 TryFromArrayParts,
             };
             use $crate::encoding::{
@@ -52,6 +53,8 @@ macro_rules! impl_encoding {
                 type Encoding = [<$Name Encoding>];
             }
 
+            pub type [<$Name Array2>]<'a> = TypedArray<'a, [<$Name Def>]>;
+            pub type [<Owned $Name Array2>] = TypedArray<'static, [<$Name Def>]>;
             pub type [<$Name Data>] = TypedArrayData<[<$Name Def>]>;
 
             /// The array encoding

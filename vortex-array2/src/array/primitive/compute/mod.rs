@@ -14,6 +14,7 @@ mod as_contiguous;
 mod cast;
 mod fill;
 mod flatten;
+mod flatten2;
 mod scalar_at;
 mod search_sorted;
 mod take;
