@@ -1,6 +1,8 @@
+use vortex_error::VortexError;
+
 use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::encoding::{EncodingId, WithEncodedArray};
-use crate::{ArrayMetadata, TryFromArrayParts};
+use crate::{Array, ArrayMetadata, TryFromArrayParts, WithTypedArray};
 use crate::{ArrayTrait, TryDeserializeArrayMetadata, TrySerializeArrayMetadata};
 
 /// Trait the defines the set of types relating to an array.
@@ -11,9 +13,11 @@ pub trait ArrayDef {
 
     type Array<'a>: ArrayTrait + TryFromArrayParts<'a, Self::Metadata> + 'a;
     type Metadata: ArrayMetadata
+        + Clone
         + TrySerializeArrayMetadata
         + for<'a> TryDeserializeArrayMetadata<'a>;
-    type Encoding: ArrayEncoding + WithEncodedArray<D = Self>;
+    type Encoding: ArrayEncoding + WithEncodedArray<D = Self> + WithTypedArray<D = Self>;
+    type TypedArray<'a>: ArrayTrait + TryFrom<Array<'a>, Error = VortexError>;
 }
 
 #[macro_export]
@@ -23,12 +27,15 @@ macro_rules! impl_encoding {
 
         paste! {
             use $crate::{
+                Array,
                 ArrayDef,
                 ArrayEncodingRef,
                 ArrayParts,
                 ArrayTrait,
+                Flattened,
                 TypedArray,
                 TryFromArrayParts,
+                WithTypedArray,
             };
             use $crate::encoding::{
                 ArrayEncoding,
@@ -51,6 +58,7 @@ macro_rules! impl_encoding {
                 type Array<'a> = [<$Name Array>]<'a>;
                 type Metadata = [<$Name Metadata>];
                 type Encoding = [<$Name Encoding>];
+                type TypedArray<'a> = [<$Name Array2>]<'a>;
             }
 
             pub type [<$Name Array2>]<'a> = TypedArray<'a, [<$Name Def>]>;
@@ -66,6 +74,9 @@ macro_rules! impl_encoding {
             impl WithEncodedArray for [<$Name Encoding>] {
                 type D = [<$Name Def>];
             }
+            impl WithTypedArray for [<$Name Encoding>] {
+                type D = [<$Name Def>];
+            }
 
             impl ArrayEncoding for [<$Name Encoding>] {
                 fn as_any(&self) -> &dyn Any {
@@ -74,6 +85,19 @@ macro_rules! impl_encoding {
 
                 fn id(&self) -> EncodingId {
                     [<$Name Def>]::ID
+                }
+
+                fn flatten<'a>(&self, array: Array<'a>) -> VortexResult<Flattened<'a>> {
+                    <Self as WithEncodedArray>::flatten(array)
+                }
+
+                #[inline]
+                fn with_dyn<'a>(
+                    &self,
+                    array: &'a Array<'a>,
+                    f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
+                ) -> VortexResult<()> {
+                    <Self as WithEncodedArray>::with_dyn(array, f)
                 }
 
                 #[inline]

@@ -5,7 +5,10 @@ use linkme::distributed_slice;
 pub use vortex::encoding::EncodingId;
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::{ArrayData, ArrayParts, ArrayTrait, TryDeserializeArrayMetadata, TryFromArrayParts};
+use crate::flatten::{ArrayFlatten, Flattened};
+use crate::{
+    Array, ArrayData, ArrayParts, ArrayTrait, TryDeserializeArrayMetadata, TryFromArrayParts,
+};
 use crate::{ArrayDef, ArrayView};
 
 #[distributed_slice]
@@ -26,6 +29,16 @@ pub trait ArrayEncoding: 'static + Sync + Send {
 
     fn id(&self) -> EncodingId;
 
+    /// Flatten the given array.
+    fn flatten<'a>(&self, array: Array<'a>) -> VortexResult<Flattened<'a>>;
+
+    /// Unwrap the provided array into an implementation of ArrayTrait
+    fn with_dyn<'a>(
+        &self,
+        array: &'a Array<'a>,
+        f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
+    ) -> VortexResult<()>;
+
     fn with_view_mut<'v>(
         &self,
         view: &'v ArrayView<'v>,
@@ -39,8 +52,28 @@ pub trait ArrayEncoding: 'static + Sync + Send {
     ) -> VortexResult<()>;
 }
 
+/// FIXME(ngates): rename to ArrayEncodingExtension
 pub trait WithEncodedArray {
     type D: ArrayDef;
+
+    fn flatten<'a>(array: Array<'a>) -> VortexResult<Flattened<'a>>
+    where
+        <Self as WithEncodedArray>::D: 'a,
+    {
+        let typed = <<Self::D as ArrayDef>::TypedArray<'a> as TryFrom<Array>>::try_from(array)?;
+        ArrayFlatten::flatten(typed)
+    }
+
+    fn with_dyn<'a, R, F>(array: &'a Array<'a>, mut f: F) -> R
+    where
+        F: for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> R,
+        <Self as WithEncodedArray>::D: 'a,
+    {
+        let typed =
+            <<Self::D as ArrayDef>::TypedArray<'a> as TryFrom<Array>>::try_from(array.clone())
+                .unwrap();
+        f(&typed)
+    }
 
     fn with_view_mut<R, F: for<'a> FnMut(&<Self::D as ArrayDef>::Array<'a>) -> R>(
         &self,

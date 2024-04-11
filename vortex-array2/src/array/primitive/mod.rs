@@ -1,3 +1,4 @@
+mod array2;
 mod compute;
 mod stats;
 
@@ -14,8 +15,8 @@ use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayView;
 use crate::{impl_encoding, IntoArray};
-use crate::{Array, ArrayMetadata};
 use crate::{ArrayData, TypedArrayData};
+use crate::{ArrayFlatten, ArrayMetadata};
 
 impl_encoding!("vortex.primitive", Primitive);
 
@@ -32,6 +33,24 @@ pub struct PrimitiveArray<'a> {
     validity: Validity<'a>,
     stats: &'a (dyn Statistics + 'a),
 }
+//
+// impl PrimitiveArray2<'_> {
+//     pub fn buffer(&self) -> &Buffer {
+//         self.buffer
+//     }
+//
+//     pub fn validity(&self) -> &Validity {
+//         &self.validity
+//     }
+//
+//     pub fn ptype(&self) -> PType {
+//         self.ptype
+//     }
+//
+//     pub fn typed_data<T: NativePType>(&self) -> &[T] {
+//         self.buffer.typed_data::<T>()
+//     }
+// }
 
 impl PrimitiveArray<'_> {
     pub fn buffer(&self) -> &Buffer {
@@ -106,6 +125,23 @@ impl<T: NativePType> IntoArray<'static> for Vec<T> {
     }
 }
 
+impl ArrayFlatten for PrimitiveArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        todo!()
+    }
+}
+
+impl ArrayFlatten for PrimitiveArray2<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        todo!()
+    }
+}
 impl ArrayTrait for PrimitiveArray<'_> {
     fn dtype(&self) -> &DType {
         self.dtype

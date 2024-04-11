@@ -1,3 +1,5 @@
+mod array2;
+
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FieldNames};
@@ -8,8 +10,8 @@ use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayView;
 use crate::{impl_encoding, ToArray, WithArray};
-use crate::{Array, ArrayMetadata};
 use crate::{ArrayData, TypedArrayData};
+use crate::{ArrayFlatten, ArrayMetadata};
 
 impl_encoding!("vortex.struct", Struct);
 
@@ -98,6 +100,15 @@ impl<'v> TryFromArrayParts<'v, StructMetadata> for StructArray<'v> {
             parts,
             length: metadata.length,
         })
+    }
+}
+
+impl ArrayFlatten for StructArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        todo!()
     }
 }
 

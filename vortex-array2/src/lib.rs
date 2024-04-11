@@ -7,6 +7,7 @@ pub mod compute;
 mod context;
 mod data;
 pub mod encoding;
+mod flatten;
 mod implementation;
 mod metadata;
 mod stats;
@@ -21,6 +22,7 @@ use std::sync::Arc;
 
 pub use context::*;
 pub use data::*;
+pub use flatten::*;
 pub use implementation::*;
 pub use linkme;
 pub use metadata::*;
@@ -149,6 +151,7 @@ pub trait TryFromArrayParts<'v, M: ArrayMetadata>: Sized + 'v {
 pub trait ArrayTrait:
     ArrayEncodingRef
     + ArrayCompute
+    + ArrayFlatten
     + ArrayValidity
     + AcceptArrayVisitor
     + ArrayStatistics
@@ -209,6 +212,25 @@ impl IntoArrayData for Array<'_> {
             Array::DataRef(d) => d.clone(),
             Array::View(v) => v.encoding().with_view(&v, |a| a.to_array_data()),
         }
+    }
+}
+
+impl<'a> Array<'a> {
+    pub fn with_dyn<R, F>(&'a self, mut f: F) -> R
+    where
+        F: FnMut(&dyn ArrayTrait) -> R,
+    {
+        let mut result = None;
+
+        self.encoding()
+            .with_dyn(self, &mut |array| {
+                result = Some(f(array));
+                Ok(())
+            })
+            .unwrap();
+
+        // Now we unwrap the optional, which we know to be populated by the closure.
+        result.unwrap()
     }
 }
 

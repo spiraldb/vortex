@@ -1,3 +1,4 @@
+mod array2;
 mod compute;
 mod data;
 mod stats;
@@ -8,13 +9,13 @@ use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::buffer::Buffer;
-use crate::impl_encoding;
 use crate::stats::Statistics;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
 use crate::ArrayView;
+use crate::{impl_encoding, ArrayFlatten};
 use crate::{ArrayData, TypedArrayData};
 
 impl_encoding!("vortex.bool", Bool);
@@ -74,6 +75,24 @@ impl ArrayTrait for BoolArray<'_> {
             validity: self.validity.to_metadata(self.length).unwrap(),
             length: self.length,
         })
+    }
+}
+
+impl ArrayFlatten for BoolArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        todo!()
+    }
+}
+
+impl ArrayFlatten for BoolArray2<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        Ok(Flattened::Bool(self))
     }
 }
 

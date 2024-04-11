@@ -2,7 +2,6 @@ use crate::array::bool::BoolArray;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::fill::FillForwardFn;
-use crate::compute::flatten::FlattenFn;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
@@ -24,10 +23,6 @@ impl ArrayCompute for BoolArray<'_> {
     }
 
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
-        Some(self)
-    }
-
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 
