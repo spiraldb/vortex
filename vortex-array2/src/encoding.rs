@@ -40,18 +40,14 @@ pub trait ArrayEncoding: 'static + Sync + Send {
     ) -> VortexResult<()>;
 }
 
-pub trait WithEncodedArray<'v, A: ArrayTrait> {
-    fn with_view_mut(
-        &'v self,
-        view: &'v ArrayView<'v>,
-        f: &mut dyn FnMut(&A) -> VortexResult<()>,
-    ) -> VortexResult<()>;
+pub trait WithEncodedArray {
+    type Array<'a>: ArrayTrait + 'a;
 
-    fn with_data_mut(
+    fn with_view_mut<R, F: for<'a> FnMut(&'a Self::Array<'a>) -> VortexResult<R>>(
         &self,
-        data: &ArrayData,
-        f: &mut dyn FnMut(&A) -> VortexResult<()>,
-    ) -> VortexResult<()>;
+        view: &ArrayView,
+        f: F,
+    ) -> VortexResult<R>;
 }
 
 impl Debug for dyn ArrayEncoding + '_ {
