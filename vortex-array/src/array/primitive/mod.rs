@@ -17,7 +17,7 @@ use vortex_schema::{DType, Nullability};
 use crate::accessor::ArrayAccessor;
 use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::IntoArray;
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -54,7 +54,6 @@ impl PrimitiveArray {
             if v.len() != buffer.len() / ptype.byte_width() {
                 vortex_bail!("Validity length does not match buffer length");
             }
-            assert_eq!(v.len(), buffer.len() / ptype.byte_width());
         }
         let dtype = DType::from(ptype).with_nullability(validity.is_some().into());
         Ok(Self {
@@ -109,11 +108,11 @@ impl PrimitiveArray {
     }
 
     pub fn into_nullable(self, nullability: Nullability) -> Self {
-        let dtype = Array::dtype(&self).with_nullability(nullability);
+        let dtype = self.dtype().with_nullability(nullability);
         if self.validity().is_some() && nullability == Nullability::NonNullable {
             panic!("Cannot convert nullable array to non-nullable array")
         }
-        let len = Array::len(&self);
+        let len = self.len();
         let validity = if nullability == Nullability::Nullable {
             Some(
                 self.validity()
@@ -223,22 +222,6 @@ impl Array for PrimitiveArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-
-        let byte_start = start * self.ptype.byte_width();
-        let byte_length = (stop - start) * self.ptype.byte_width();
-
-        Ok(Self {
-            buffer: self.buffer.slice_with_length(byte_start, byte_length),
-            ptype: self.ptype,
-            validity: self.validity().map(|v| v.slice(start, stop)).transpose()?,
-            dtype: self.dtype.clone(),
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
-        .into_array())
     }
 
     #[inline]
@@ -383,6 +366,7 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
+    use crate::compute::slice::slice;
     use crate::ptype::PType;
 
     #[test]
@@ -402,10 +386,8 @@ mod test {
     }
 
     #[test]
-    fn slice() {
-        let arr = PrimitiveArray::from(vec![1, 2, 3, 4, 5])
-            .slice(1, 4)
-            .unwrap();
+    fn slice_array() {
+        let arr = slice(&PrimitiveArray::from(vec![1, 2, 3, 4, 5]), 1, 4).unwrap();
         assert_eq!(arr.len(), 3);
         assert_eq!(scalar_at(&arr, 0).unwrap(), 2.into());
         assert_eq!(scalar_at(&arr, 1).unwrap(), 3.into());

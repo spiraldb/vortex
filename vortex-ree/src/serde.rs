@@ -7,6 +7,8 @@ use crate::{REEArray, REEEncoding};
 
 impl ArraySerde for REEArray {
     fn write(&self, ctx: &mut WriteCtx) -> VortexResult<()> {
+        ctx.write_usize(self.len())?;
+        ctx.write_usize(self.offset())?;
         ctx.write_validity(self.validity())?;
         // TODO(robert): Stop writing this
         ctx.dtype(self.ends().dtype())?;
@@ -21,17 +23,18 @@ impl ArraySerde for REEArray {
 
 impl EncodingSerde for REEEncoding {
     fn read(&self, ctx: &mut ReadCtx) -> VortexResult<ArrayRef> {
+        let length = ctx.read_usize()?;
+        let offset = ctx.read_usize()?;
         let validity = ctx.read_validity()?;
         let ends_dtype = ctx.dtype()?;
         let ends = ctx.with_schema(&ends_dtype).read()?;
         let values = ctx.read()?;
-        Ok(REEArray::new(ends, values, validity).into_array())
+        Ok(REEArray::with_offset_and_size(ends, values, validity, length, offset)?.into_array())
     }
 }
 
 #[cfg(test)]
 mod test {
-
     use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::IntoArray;
     use vortex::array::{Array, ArrayRef};

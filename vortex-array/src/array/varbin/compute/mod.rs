@@ -17,6 +17,7 @@ use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::cast::cast;
 use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
+use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
@@ -24,6 +25,7 @@ use crate::scalar::Scalar;
 use crate::validity::{ArrayValidity, OwnedValidity, Validity};
 use crate::view::ToOwnedView;
 
+mod slice;
 mod take;
 
 impl ArrayCompute for VarBinArray {
@@ -40,6 +42,10 @@ impl ArrayCompute for VarBinArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 

@@ -10,6 +10,7 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
+use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::match_each_native_ptype;
@@ -26,6 +27,10 @@ impl ArrayCompute for ConstantArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
@@ -89,5 +94,11 @@ impl ScalarAtFn for ConstantArray {
 impl TakeFn for ConstantArray {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
         Ok(ConstantArray::new(self.scalar().clone(), indices.len()).into_array())
+    }
+}
+
+impl SliceFn for ConstantArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(ConstantArray::new(self.scalar.clone(), stop - start).into_array())
     }
 }

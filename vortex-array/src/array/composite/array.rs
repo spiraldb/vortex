@@ -99,18 +99,13 @@ impl Array for CompositeArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Self::new(
-            self.id(),
-            self.metadata.clone(),
-            self.underlying.slice(start, stop)?,
-        )
-        .into_array())
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &CompositeEncoding
+    }
+
+    fn nbytes(&self) -> usize {
+        self.underlying.nbytes()
     }
 
     #[inline]
@@ -119,10 +114,6 @@ impl Array for CompositeArray {
         f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()> {
         f(self)
-    }
-
-    fn nbytes(&self) -> usize {
-        self.underlying.nbytes()
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

@@ -7,12 +7,13 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::varbin::varbin_scalar;
-use crate::array::varbinview::VarBinViewArray;
-use crate::array::Array;
+use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
+use crate::array::{Array, ArrayRef};
 use crate::arrow::wrappers::as_nulls;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
+use crate::compute::slice::{slice, SliceFn};
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::Scalar;
@@ -29,6 +30,10 @@ impl ArrayCompute for VarBinViewArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 }
@@ -97,5 +102,17 @@ impl AsArrowArray for VarBinViewArray {
             )),
             _ => vortex_bail!(MismatchedTypes: "utf8 or binary", self.dtype()),
         })
+    }
+}
+
+impl SliceFn for VarBinViewArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(VarBinViewArray::new(
+            slice(self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?,
+            self.data().to_vec(),
+            self.dtype().clone(),
+            self.validity().map(|v| v.slice(start, stop)).transpose()?,
+        )
+        .into_array())
     }
 }

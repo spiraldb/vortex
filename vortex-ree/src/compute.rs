@@ -2,6 +2,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::flatten::{flatten, flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
+use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
@@ -19,6 +20,10 @@ impl ArrayCompute for REEArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
@@ -70,6 +75,23 @@ impl TakeFn for REEArray {
                 .collect::<VortexResult<Vec<_>>>()?
         });
         take(self.values(), &PrimitiveArray::from(physical_indices))
+    }
+}
+
+impl SliceFn for REEArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        let slice_begin = self.find_physical_index(start)?;
+        let slice_end = self.find_physical_index(stop)?;
+        Ok(REEArray::with_offset_and_size(
+            slice(self.ends(), slice_begin, slice_end + 1)?,
+            slice(self.values(), slice_begin, slice_end + 1)?,
+            self.validity()
+                .map(|v| v.slice(slice_begin, slice_end + 1))
+                .transpose()?,
+            stop - start,
+            start,
+        )?
+        .into_array())
     }
 }
 

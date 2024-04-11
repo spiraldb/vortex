@@ -9,6 +9,7 @@ use crate::array::constant::ConstantArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::take;
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
@@ -123,7 +124,7 @@ impl ValidityView<'_> {
         Ok(match self {
             Self::Valid(_) => Validity::Valid(stop - start),
             Self::Invalid(_) => Validity::Invalid(stop - start),
-            Self::Array(a) => Validity::Array(Array::slice(*a, start, stop)?),
+            Self::Array(a) => Validity::Array(slice(*a, start, stop)?),
         })
     }
 
@@ -189,10 +190,6 @@ impl Array for ValidityView<'_> {
         todo!()
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Arc::new(self.slice(start, stop)?))
-    }
-
     fn encoding(&self) -> EncodingRef {
         &ValidityEncoding
     }
@@ -242,7 +239,11 @@ impl ArrayDisplay for ValidityView<'_> {
     }
 }
 
-impl ArrayCompute for ValidityView<'_> {}
+impl ArrayCompute for ValidityView<'_> {
+    fn slice(&self) -> Option<&dyn SliceFn> {
+        Some(self)
+    }
+}
 
 impl ArraySerde for ValidityView<'_> {
     fn write(&self, _ctx: &mut WriteCtx) -> VortexResult<()> {
@@ -252,5 +253,11 @@ impl ArraySerde for ValidityView<'_> {
     fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
         // TODO: Implement this
         Ok(None)
+    }
+}
+
+impl SliceFn for ValidityView<'_> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(Arc::new(self.slice(start, stop)?))
     }
 }

@@ -1,5 +1,6 @@
-use vortex::array::Array;
+use vortex::array::{Array, ArrayRef};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
+use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::ArrayCompute;
 use vortex::scalar::{PScalar, Scalar};
 use vortex_error::{vortex_err, VortexResult};
@@ -9,6 +10,10 @@ use crate::ZigZagArray;
 
 impl ArrayCompute for ZigZagArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 }
@@ -29,5 +34,11 @@ impl ScalarAtFn for ZigZagArray {
             },
             _ => Err(vortex_err!(MismatchedTypes: "primitive scalar", self.dtype())),
         }
+    }
+}
+
+impl SliceFn for ZigZagArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(ZigZagArray::try_new(slice(self.encoded(), start, stop)?)?.into_array())
     }
 }

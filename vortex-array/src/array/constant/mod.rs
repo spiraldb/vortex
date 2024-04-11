@@ -4,7 +4,7 @@ use linkme::distributed_slice;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -77,15 +77,13 @@ impl Array for ConstantArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-
-        Ok(ConstantArray::new(self.scalar.clone(), stop - start).into_array())
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &ConstantEncoding
+    }
+
+    fn nbytes(&self) -> usize {
+        self.scalar.nbytes()
     }
 
     #[inline]
@@ -94,10 +92,6 @@ impl Array for ConstantArray {
         f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()> {
         f(self)
-    }
-
-    fn nbytes(&self) -> usize {
-        self.scalar.nbytes()
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

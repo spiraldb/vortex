@@ -8,10 +8,11 @@ use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::varbin::builder::VarBinBuilder;
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::slice::slice;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -108,7 +109,7 @@ impl VarBinArray {
     pub fn sliced_bytes(&self) -> VortexResult<ArrayRef> {
         let first_offset: usize = scalar_at(self.offsets(), 0)?.try_into()?;
         let last_offset: usize = scalar_at(self.offsets(), self.offsets().len() - 1)?.try_into()?;
-        self.bytes().slice(first_offset, last_offset)
+        slice(self.bytes(), first_offset, last_offset)
     }
 
     pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
@@ -171,7 +172,7 @@ impl VarBinArray {
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         let start = self.offset_at(index);
         let end = self.offset_at(index + 1);
-        let sliced = self.bytes().slice(start, end)?;
+        let sliced = slice(self.bytes(), start, end)?;
         Ok(flatten_primitive(sliced.as_ref())?.buffer().to_vec())
     }
 }
@@ -199,18 +200,6 @@ impl Array for VarBinArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-
-        Ok(VarBinArray::new(
-            self.offsets.slice(start, stop + 1)?,
-            self.bytes.clone(),
-            self.dtype.clone(),
-            self.validity().map(|v| v.slice(start, stop)).transpose()?,
-        )
-        .into_array())
     }
 
     #[inline]
@@ -347,6 +336,7 @@ mod test {
     use crate::array::varbin::VarBinArray;
     use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
+    use crate::compute::slice::slice;
 
     fn binary_array() -> VarBinArray {
         let values = PrimitiveArray::from(
@@ -376,8 +366,8 @@ mod test {
     }
 
     #[test]
-    pub fn slice() {
-        let binary_arr = binary_array().slice(1, 2).unwrap();
+    pub fn slice_array() {
+        let binary_arr = slice(&binary_array(), 1, 2).unwrap();
         assert_eq!(
             scalar_at(&binary_arr, 0).unwrap(),
             "hello world this is a long string".into()

@@ -1,8 +1,10 @@
 use arrow_buffer::{BooleanBuffer, Buffer};
+use croaring::Bitmap;
 use vortex::array::bool::BoolArray;
-use vortex::array::Array;
+use vortex::array::{Array, ArrayRef};
 use vortex::compute::flatten::{FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::ScalarAtFn;
+use vortex::compute::slice::SliceFn;
 use vortex::compute::ArrayCompute;
 use vortex::scalar::{AsBytes, Scalar};
 use vortex::validity::Validity;
@@ -17,6 +19,10 @@ impl ArrayCompute for RoaringBoolArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 }
@@ -49,5 +55,14 @@ impl ScalarAtFn for RoaringBoolArray {
         } else {
             Ok(false.into())
         }
+    }
+}
+
+impl SliceFn for RoaringBoolArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        let slice_bitmap = Bitmap::from_range(start as u32..stop as u32);
+        let bitmap = self.bitmap.and(&slice_bitmap).add_offset(-(start as i64));
+
+        Ok(RoaringBoolArray::new(bitmap, stop - start).into_array())
     }
 }

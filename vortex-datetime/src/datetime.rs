@@ -106,17 +106,6 @@ impl Array for DateTimeArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Self::new(
-            self.days.slice(start, stop)?,
-            self.seconds.slice(start, stop)?,
-            self.subsecond.slice(start, stop)?,
-            self.validity().map(|v| v.slice(start, stop)).transpose()?,
-            self.dtype.clone(),
-        )
-        .into_array())
-    }
-
     fn encoding(&self) -> EncodingRef {
         &DateTimeEncoding
     }

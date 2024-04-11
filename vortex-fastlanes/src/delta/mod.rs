@@ -96,14 +96,6 @@ impl DeltaArray {
 impl Array for DeltaArray {
     impl_array!();
     #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    #[inline]
     fn len(&self) -> usize {
         self.len
     }
@@ -123,10 +115,6 @@ impl Array for DeltaArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {
-        unimplemented!("DeltaArray::slice")
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &DeltaEncoding
@@ -137,6 +125,14 @@ impl Array for DeltaArray {
         self.bases().nbytes()
             + self.deltas().nbytes()
             + self.validity().map(|v| v.nbytes()).unwrap_or(0)
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

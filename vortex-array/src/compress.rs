@@ -14,6 +14,7 @@ use crate::array::varbin::VarBinEncoding;
 use crate::array::{Array, ArrayKind, ArrayRef};
 use crate::compute;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::slice::slice;
 use crate::encoding::{Encoding, EncodingRef, ENCODINGS};
 use crate::formatter::display_tree;
 use crate::sampling::stratified_slices;
@@ -342,7 +343,7 @@ pub fn sampled_compression(array: &dyn Array, ctx: &CompressCtx) -> VortexResult
             ctx.options.sample_count,
         )
         .into_iter()
-        .map(|(start, stop)| array.slice(start, stop).unwrap())
+        .map(|(start, stop)| slice(array, start, stop).unwrap())
         .collect::<Vec<_>>(),
     )?;
 

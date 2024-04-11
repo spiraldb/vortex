@@ -9,6 +9,7 @@ use vortex_schema::{DType, Nullability};
 use crate::array::bool::BoolArray;
 use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::as_contiguous;
+use crate::compute::slice::SliceFn;
 use crate::compute::ArrayCompute;
 use crate::encoding::EncodingRef;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -188,10 +189,6 @@ impl Array for Validity {
         todo!()
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Arc::new(self.as_view().slice(start, stop)?))
-    }
-
     fn encoding(&self) -> EncodingRef {
         &ValidityEncoding
     }
@@ -237,7 +234,11 @@ impl ArrayDisplay for Validity {
     }
 }
 
-impl ArrayCompute for Validity {}
+impl ArrayCompute for Validity {
+    fn slice(&self) -> Option<&dyn SliceFn> {
+        Some(self)
+    }
+}
 
 impl ArraySerde for Validity {
     fn write(&self, _ctx: &mut WriteCtx) -> VortexResult<()> {
@@ -246,5 +247,11 @@ impl ArraySerde for Validity {
 
     fn metadata(&self) -> VortexResult<Option<Vec<u8>>> {
         self.as_view().serde().unwrap().metadata()
+    }
+}
+
+impl SliceFn for Validity {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(Arc::new(self.as_view().slice(start, stop)?))
     }
 }

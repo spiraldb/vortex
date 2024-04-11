@@ -16,10 +16,13 @@ use crate::array::struct_::{StructArray, StructEncoding};
 use crate::array::varbin::{VarBinArray, VarBinEncoding};
 use crate::array::varbinview::{VarBinViewArray, VarBinViewEncoding};
 use crate::compute::ArrayCompute;
+use crate::encoding::EncodingRef;
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::serde::ArraySerde;
 use crate::stats::Stats;
+use crate::validity::ArrayValidity;
 use crate::validity::Validity;
+use crate::ArrayWalker;
 
 pub mod bool;
 pub mod chunked;
@@ -65,8 +68,6 @@ pub trait Array: ArrayValidity + ArrayDisplay + Debug + Send + Sync {
     /// Maybe we actually need to model stats more like compute?
     fn stats(&self) -> Stats;
 
-    /// Limit array to start..stop range
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef>;
     /// Encoding kind of the array
     fn encoding(&self) -> EncodingRef;
     /// Approximate size in bytes of the array. Only takes into account variable size portion of the array
@@ -133,12 +134,7 @@ macro_rules! impl_array {
         }
     };
 }
-
 pub use impl_array;
-
-use crate::encoding::EncodingRef;
-use crate::validity::ArrayValidity;
-use crate::ArrayWalker;
 
 impl Array for ArrayRef {
     fn as_any(&self) -> &dyn Any {
@@ -171,10 +167,6 @@ impl Array for ArrayRef {
 
     fn stats(&self) -> Stats {
         self.as_ref().stats()
-    }
-
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        self.as_ref().slice(start, stop)
     }
 
     fn encoding(&self) -> EncodingRef {
@@ -216,16 +208,6 @@ impl ArrayDisplay for ArrayRef {
     fn fmt(&self, fmt: &'_ mut ArrayFormatter) -> std::fmt::Result {
         ArrayDisplay::fmt(self.as_ref(), fmt)
     }
-}
-
-pub fn check_slice_bounds(array: &dyn Array, start: usize, stop: usize) -> VortexResult<()> {
-    if start > array.len() {
-        vortex_bail!(OutOfBounds: start, 0, array.len());
-    }
-    if stop > array.len() {
-        vortex_bail!(OutOfBounds: stop, 0, array.len());
-    }
-    Ok(())
 }
 
 pub fn check_validity_buffer(validity: Option<&ArrayRef>, expected_len: usize) -> VortexResult<()> {

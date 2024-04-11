@@ -12,11 +12,14 @@ use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
+use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::ptype::NativePType;
 use crate::scalar::Scalar;
 use crate::{match_each_integer_ptype, match_each_native_ptype};
+
+mod slice;
 
 impl ArrayCompute for SparseArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
@@ -28,6 +31,10 @@ impl ArrayCompute for SparseArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
@@ -237,6 +244,7 @@ mod test {
     use crate::array::sparse::SparseArray;
     use crate::array::Array;
     use crate::compute::as_contiguous::as_contiguous;
+    use crate::compute::slice::slice;
     use crate::compute::take::take;
     use crate::scalar::Scalar;
 
@@ -321,7 +329,7 @@ mod test {
         let sparse = sparse_array();
         let indices: PrimitiveArray = (0u64..10).collect_vec().into();
         let slices = (0..10)
-            .map(|i| sparse.slice(i * 10, (i + 1) * 10).unwrap())
+            .map(|i| slice(&sparse, i * 10, (i + 1) * 10).unwrap())
             .collect_vec();
 
         let taken = slices

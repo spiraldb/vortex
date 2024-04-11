@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::scalar_at::scalar_at;
 use vortex::compute::search_sorted::SearchSortedSide;
@@ -39,6 +39,16 @@ impl REEArray {
         validity: Option<Validity>,
     ) -> VortexResult<Self> {
         let length: usize = scalar_at(&ends, ends.len() - 1)?.try_into()?;
+        Self::with_offset_and_size(ends, values, validity, length, 0)
+    }
+
+    pub(crate) fn with_offset_and_size(
+        ends: ArrayRef,
+        values: ArrayRef,
+        validity: Option<Validity>,
+        length: usize,
+        offset: usize,
+    ) -> VortexResult<Self> {
         if let Some(v) = &validity {
             assert_eq!(v.len(), length);
         }
@@ -52,7 +62,7 @@ impl REEArray {
             values,
             validity,
             length,
-            offset: 0,
+            offset,
             stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
@@ -126,24 +136,6 @@ impl Array for REEArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-        let slice_begin = self.find_physical_index(start)?;
-        let slice_end = self.find_physical_index(stop)?;
-        Ok(Self {
-            ends: self.ends.slice(slice_begin, slice_end + 1)?,
-            values: self.values.slice(slice_begin, slice_end + 1)?,
-            validity: self
-                .validity()
-                .map(|v| v.slice(slice_begin, slice_end + 1))
-                .transpose()?,
-            offset: start,
-            length: stop - start,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
-        .into_array())
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &REEEncoding
@@ -207,6 +199,7 @@ mod test {
     use vortex::array::IntoArray;
     use vortex::compute::flatten::flatten_primitive;
     use vortex::compute::scalar_at::scalar_at;
+    use vortex::compute::slice::slice;
     use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
     use crate::REEArray;
@@ -234,13 +227,16 @@ mod test {
     }
 
     #[test]
-    fn slice() {
-        let arr = REEArray::new(
-            vec![2u32, 5, 10].into_array(),
-            vec![1i32, 2, 3].into_array(),
-            None,
+    fn slice_array() {
+        let arr = slice(
+            &REEArray::new(
+                vec![2u32, 5, 10].into_array(),
+                vec![1i32, 2, 3].into_array(),
+                None,
+            ),
+            3,
+            8,
         )
-        .slice(3, 8)
         .unwrap();
         assert_eq!(
             arr.dtype(),
