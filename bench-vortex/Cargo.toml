@@ -17,6 +17,7 @@ workspace = true
 [dependencies]
 arrow-array = { workspace = true }
 arrow-select = { workspace = true }
+enum-iterator = { workspace = true }
 vortex-alp = { path = "../vortex-alp" }
 vortex-array = { path = "../vortex-array" }
 vortex-array2 = { path = "../vortex-array2" }
@@ -33,6 +34,7 @@ itertools = { workspace = true }
 lance = { version = "0.10.5", features = [] }
 lance-arrow-array = { package = "arrow-array", version = "50.0" }
 lance-parquet = { package = "parquet", version = "50.0", features = [] }
+lazy_static = { workspace = true }
 log = { workspace = true }
 parquet = { workspace = true, features = [] }
 reqwest = { workspace = true }
