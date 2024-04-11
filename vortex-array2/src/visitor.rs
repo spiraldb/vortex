@@ -10,11 +10,6 @@ pub trait AcceptArrayVisitor {
 
 // TODO(ngates): maybe we make this more like the inverse of TryFromParts?
 pub trait ArrayVisitor {
-    /// Visit a child column of this array.
-    fn visit_column(&mut self, _name: &str, _array: &Array) -> VortexResult<()> {
-        Ok(())
-    }
-
     /// Visit a child of this array.
     fn visit_child(&mut self, _name: &str, _array: &Array) -> VortexResult<()> {
         Ok(())

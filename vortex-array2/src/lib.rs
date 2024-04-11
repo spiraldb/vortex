@@ -4,7 +4,6 @@ extern crate core;
 
 pub mod array;
 mod arrow;
-mod batch;
 pub mod compute;
 mod context;
 mod data;
@@ -21,7 +20,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
 use arrow_buffer::Buffer;
-pub use batch::*;
 pub use context::*;
 pub use data::*;
 pub use implementation::*;
@@ -163,10 +161,6 @@ pub trait ArrayEncodingRef {
 
 struct NBytesVisitor(usize);
 impl ArrayVisitor for NBytesVisitor {
-    fn visit_column(&mut self, name: &str, array: &Array) -> VortexResult<()> {
-        self.visit_child(name, array)
-    }
-
     fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
         self.0 += array.with_array(|a| a.nbytes());
         Ok(())

@@ -41,10 +41,6 @@ pub struct TreeFormatter<'a, 'b: 'a> {
 /// TODO(ngates): I think we want to go back to the old explicit style. It gives arrays more
 ///  control over how their metadata etc is displayed.
 impl<'a, 'b: 'a> ArrayVisitor for TreeFormatter<'a, 'b> {
-    fn visit_column(&mut self, name: &str, array: &Array) -> VortexResult<()> {
-        self.visit_child(name, array)
-    }
-
     fn visit_child(&mut self, name: &str, array: &Array) -> VortexResult<()> {
         array.with_array(|a| {
             let nbytes = a.nbytes();
