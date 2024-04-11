@@ -43,7 +43,7 @@ pub trait ArrayEncoding: 'static + Sync + Send {
 pub trait WithEncodedArray {
     type Array<'a>: ArrayTrait + 'a;
 
-    fn with_view_mut<R, F: for<'a> FnMut(&'a Self::Array<'a>) -> VortexResult<R>>(
+    fn with_view_mut<R, F: for<'a> FnMut(&Self::Array<'a>) -> VortexResult<R>>(
         &self,
         view: &ArrayView,
         f: F,

@@ -144,7 +144,7 @@ macro_rules! impl_encoding {
 impl WithEncodedArray for BoolEncoding {
     type Array<'a> = BoolArray<'a>;
 
-    fn with_view_mut<R, F: for<'a> FnMut(&'a Self::Array<'a>) -> VortexResult<R>>(
+    fn with_view_mut<R, F: for<'a> FnMut(&Self::Array<'a>) -> VortexResult<R>>(
         &self,
         view: &ArrayView,
         mut f: F,
