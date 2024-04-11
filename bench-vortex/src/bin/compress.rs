@@ -14,8 +14,8 @@ use vortex::formatter::display_tree;
 
 pub fn main() {
     setup_logger(LevelFilter::Info);
-    compress_pbi(PBIDataset::Medicare1);
     compress_taxi();
+    compress_pbi(PBIDataset::Medicare1);
 }
 
 fn compress_taxi() {
@@ -37,7 +37,8 @@ fn compress_taxi() {
 
 fn compress_pbi(which_pbi: PBIDataset) {
     let dataset = PBI(which_pbi);
-    dataset.uncompressed();
+    dataset.as_uncompressed();
     dataset.write_as_vortex();
     dataset.write_as_parquet();
+    dataset.write_as_lance();
 }

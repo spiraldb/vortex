@@ -1,21 +1,31 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hash;
+use std::io::BufReader;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use arrow::datatypes::SchemaRef;
+use bytesize::ByteSize;
 use enum_iterator::Sequence;
+use fs_extra::dir::get_size;
 use itertools::Itertools;
 use log::info;
 use reqwest::Url;
+use vortex::array::{ArrayRef, IntoArray};
 use vortex::formatter::display_tree;
+use vortex_error::VortexResult;
 
-use crate::data_downloads::{decompress_bz2, download_data, BenchmarkDataset};
+use crate::data_downloads::{
+    decompress_bz2, download_data, parquet_to_lance, BenchmarkDataset, FileType,
+};
 use crate::public_bi_data::PBIDataset::*;
 use crate::reader::{
-    compress_csv_to_vortex, default_csv_format, open_vortex, write_csv_as_parquet,
+    default_csv_format, open_vortex, write_csv_as_parquet, write_csv_to_vortex, BATCH_SIZE,
+    CSV_SCHEMA_SAMPLE_ROWS,
 };
-use crate::{idempotent, IdempotentPath};
+use crate::{chunks_to_array, compress_ctx, idempotent, IdempotentPath};
 
 lazy_static::lazy_static! {
     // NB: we do not expect this to change, otherwise we'd crawl the site and populate it at runtime
@@ -284,18 +294,27 @@ impl PBIDataset {
         url.first().unwrap().dataset_name
     }
 
-    fn csv_files(&self) -> Vec<PathBuf> {
+    fn list_files(&self, file_type: FileType) -> Vec<PathBuf> {
         let urls = URLS.get(self).unwrap();
-        self.dataset_name();
-        urls.iter().map(|url| self.get_csv_path(url)).collect_vec()
+        urls.iter()
+            .map(|url| self.get_file_path(url, file_type))
+            .collect_vec()
     }
 
-    fn get_csv_path(&self, url: &PBIUrl) -> PathBuf {
+    fn get_file_path(&self, url: &PBIUrl, file_type: FileType) -> PathBuf {
+        let extension = match file_type {
+            FileType::Csv => "csv",
+            FileType::Parquet => "parquet",
+            FileType::Vortex => "vortex",
+            FileType::Lance => "lance",
+        };
+
         "PBI"
             .to_idempotent_path()
             .join(self.dataset_name())
-            .join("csv")
-            .join(url.file_name.strip_suffix(".bz2").unwrap())
+            .join(extension)
+            .join(url.file_name.strip_suffix(".csv.bz2").unwrap())
+            .with_extension(extension)
     }
 
     fn download_bzip(&self) {
@@ -318,7 +337,7 @@ impl PBIDataset {
     fn unzip(&self) {
         for url in URLS.get(self).unwrap() {
             let bzipped = self.get_bzip_path(url);
-            let unzipped_csv = self.get_csv_path(url);
+            let unzipped_csv = self.get_file_path(url, FileType::Csv);
             decompress_bz2(bzipped, unzipped_csv);
         }
     }
@@ -403,7 +422,7 @@ pub enum BenchmarkDatasets {
 }
 
 impl BenchmarkDataset for BenchmarkDatasets {
-    fn uncompressed(&self) {
+    fn as_uncompressed(&self) {
         match self {
             BenchmarkDatasets::PBI(dataset) => {
                 dataset.download_bzip();
@@ -413,7 +432,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
     }
 
     fn write_as_parquet(&self) {
-        for f in self.list_files() {
+        for f in self.list_files(FileType::Csv) {
             let output_fname = f
                 .file_name()
                 .unwrap()
@@ -436,13 +455,23 @@ impl BenchmarkDataset for BenchmarkDatasets {
             )
             .expect("Failed to compress to parquet");
             let pq_size = compressed.metadata().unwrap().size();
-            info!("Parquet size: {}", pq_size);
+            info!("Parquet size: {}, {}B", ByteSize(pq_size), pq_size);
         }
     }
 
+    /// Compresses the CSV files to Vortex format. Does NOT write any data to disk.
+    /// Used for benchmarking.
+    fn compress_to_vortex(&self) -> VortexResult<()> {
+        for csv_input in self.list_files(FileType::Csv) {
+            info!("Compressing {} to vortex", csv_input.to_str().unwrap());
+            compress_csv_to_vortex(csv_input);
+        }
+        Ok(())
+    }
+
     fn write_as_vortex(&self) {
-        for f in self.list_files() {
-            info!("Compressing {} to vortex", f.to_str().unwrap());
+        for f in self.list_files(FileType::Csv) {
+            info!("Compressing and writing {} to vortex", f.to_str().unwrap());
             let output_fname = f
                 .file_name()
                 .unwrap()
@@ -457,7 +486,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
                     let mut write = File::create(output_path).unwrap();
                     let delimiter = u8::try_from('|').unwrap();
                     let csv_input = f;
-                    compress_csv_to_vortex(
+                    write_csv_to_vortex(
                         csv_input,
                         default_csv_format().with_delimiter(delimiter),
                         &mut write,
@@ -468,14 +497,45 @@ impl BenchmarkDataset for BenchmarkDatasets {
             let from_vortex = open_vortex(&compressed).unwrap();
             let vx_size = from_vortex.nbytes();
 
-            info!("Vortex size: {}", vx_size);
+            info!("Vortex size: {}, {}B", ByteSize(vx_size as u64), vx_size);
             info!("{}\n\n", display_tree(from_vortex.as_ref()));
         }
     }
 
-    fn list_files(&self) -> Vec<PathBuf> {
+    fn write_as_lance(&self) {
+        for f in self.list_files(FileType::Csv) {
+            info!("Compressing {} to lance", f.to_str().unwrap());
+            let output_fname = f
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .strip_suffix(".csv")
+                .unwrap();
+            let compressed = idempotent(
+                &path_for_file_type(self, output_fname, "lance"),
+                |output_path| {
+                    parquet_to_lance(
+                        output_path,
+                        path_for_file_type(self, output_fname, "parquet").as_path(),
+                    )
+                },
+            )
+            .expect("Failed to compress to lance");
+
+            let lance_dir_bytes_exact = get_size(compressed).unwrap();
+            let lance_dir_size = ByteSize(lance_dir_bytes_exact);
+
+            info!(
+                "Lance directory aggregate size: {}, {}B",
+                lance_dir_size, lance_dir_bytes_exact
+            );
+        }
+    }
+
+    fn list_files(&self, types: FileType) -> Vec<PathBuf> {
         match self {
-            BenchmarkDatasets::PBI(dataset) => dataset.csv_files(),
+            BenchmarkDatasets::PBI(dataset) => dataset.list_files(types),
         }
     }
 
@@ -497,4 +557,38 @@ fn path_for_file_type(
         .directory_location()
         .join(file_type)
         .join(format!("{}.{}", output_fname, file_type))
+}
+
+fn compress_csv_to_vortex(csv_path: PathBuf) -> ArrayRef {
+    let csv_file = File::open(csv_path.clone()).unwrap();
+
+    let format = default_csv_format().with_delimiter(u8::try_from('|').unwrap());
+    let (schema, _) = format
+        .infer_schema(
+            &mut csv_file.try_clone().unwrap(),
+            Some(CSV_SCHEMA_SAMPLE_ROWS),
+        )
+        .unwrap();
+
+    let csv_file2 = File::open(csv_path.clone()).unwrap();
+    let reader = BufReader::new(csv_file2.try_clone().unwrap());
+
+    let csv_reader = arrow::csv::ReaderBuilder::new(Arc::new(schema.clone()))
+        .with_format(format)
+        .with_batch_size(BATCH_SIZE)
+        .build(reader)
+        .unwrap();
+
+    let ctx = compress_ctx();
+    let mut uncompressed_size: usize = 0;
+    let chunks = csv_reader
+        .into_iter()
+        .map(|batch_result| batch_result.unwrap())
+        .map(|batch| batch.into_array())
+        .map(|array| {
+            uncompressed_size += array.nbytes();
+            ctx.clone().compress(&array, None).unwrap()
+        })
+        .collect_vec();
+    chunks_to_array(SchemaRef::new(schema), uncompressed_size, chunks)
 }

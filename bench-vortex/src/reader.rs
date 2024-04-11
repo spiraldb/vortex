@@ -37,7 +37,7 @@ use vortex_schema::DType;
 use crate::compress_ctx;
 
 pub const BATCH_SIZE: usize = 65_536;
-const CSV_SCHEMA_SAMPLE_ROWS: usize = 10_000_000;
+pub const CSV_SCHEMA_SAMPLE_ROWS: usize = 10_000_000;
 const DEFAULT_DELIMITER: u8 = b',';
 
 pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
@@ -88,7 +88,7 @@ pub fn default_csv_format() -> Format {
         .with_null_regex("null".parse().unwrap())
 }
 
-pub fn compress_csv_to_vortex<W: Write>(
+pub fn write_csv_to_vortex<W: Write>(
     csv_path: PathBuf,
     format: Format,
     write: &mut W,
