@@ -4,11 +4,11 @@ use std::path::PathBuf;
 use vortex_error::VortexError;
 
 use crate::data_downloads::{data_vortex_uncompressed, download_data, parquet_to_lance};
-use crate::idempotent;
 use crate::reader::rewrite_parquet_as_vortex;
+use crate::{idempotent, IdempotentPath};
 
 fn download_taxi_data() -> PathBuf {
-    let taxi_parquet_fpath = "yellow-tripdata-2023-11.parquet";
+    let taxi_parquet_fpath = "yellow-tripdata-2023-11.parquet".to_idempotent_path();
     let taxi_data_url =
         "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-11.parquet";
     download_data(taxi_parquet_fpath, taxi_data_url)

@@ -31,27 +31,48 @@ use crate::medicare_data::medicare_data_csv;
 use crate::reader::BATCH_SIZE;
 use crate::taxi_data::taxi_data_parquet;
 
-mod data_downloads;
+pub mod data_downloads;
 pub mod medicare_data;
+pub mod public_bi_data;
 pub mod reader;
 pub mod taxi_data;
 
-pub fn idempotent<T, E>(name: &str, f: impl FnOnce(&Path) -> Result<T, E>) -> Result<PathBuf, E> {
-    let path = data_path(name);
+/// Creates a file if it doesn't already exist.
+/// NB: Does NOT modify the given path to ensure that it resides in the data directory.
+pub fn idempotent<T, E, P: IdempotentPath + ?Sized>(
+    path: &P,
+    f: impl FnOnce(&Path) -> Result<T, E>,
+) -> Result<PathBuf, E> {
+    let path = path.to_idempotent_path();
     if !path.exists() {
-        f(&path)?;
+        f(path.as_path())?;
     }
-    Ok(path.to_path_buf())
+    Ok(path)
 }
 
-pub fn data_path(name: &str) -> PathBuf {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("data")
-        .join(name);
-    if !path.parent().unwrap().exists() {
-        create_dir_all(path.parent().unwrap()).unwrap();
+pub trait IdempotentPath {
+    fn to_idempotent_path(&self) -> PathBuf;
+}
+
+impl IdempotentPath for str {
+    fn to_idempotent_path(&self) -> PathBuf {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("data")
+            .join(self);
+        if !path.parent().unwrap().exists() {
+            create_dir_all(path.parent().unwrap()).unwrap();
+        }
+        path
     }
-    path
+}
+
+impl IdempotentPath for PathBuf {
+    fn to_idempotent_path(&self) -> PathBuf {
+        if !self.parent().unwrap().exists() {
+            create_dir_all(self.parent().unwrap()).unwrap();
+        }
+        self.to_path_buf()
+    }
 }
 
 pub fn setup_logger(level: LevelFilter) {
