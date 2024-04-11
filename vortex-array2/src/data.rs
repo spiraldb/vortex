@@ -157,7 +157,6 @@ where
             children: vec![],
         };
         self.accept(&mut visitor).unwrap();
-
         ArrayData::try_new(
             self.encoding(),
             self.dtype().clone(),

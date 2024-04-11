@@ -28,5 +28,14 @@ vortex-schema = { path = "../vortex-schema" }
 flatc = { workspace = true }
 walkdir = { workspace = true }
 
+[dev-dependencies]
+criterion = { workspace = true }
+rand = { workspace = true }
+simplelog = { workspace = true }
+
 [lints]
-# workspace = false
+workspace = true
+
+[[bench]]
+name = "ipc_take"
+harness = false

@@ -19,6 +19,7 @@ arrow-array = { workspace = true }
 arrow-select = { workspace = true }
 vortex-alp = { path = "../vortex-alp" }
 vortex-array = { path = "../vortex-array" }
+vortex-array2 = { path = "../vortex-array2" }
 vortex-datetime = { path = "../vortex-datetime" }
 vortex-dict = { path = "../vortex-dict" }
 vortex-error = { path = "../vortex-error", features = ["parquet"] }
@@ -40,7 +41,7 @@ tokio = "1.0.1"
 bzip2 = { workspace = true }
 csv = { workspace = true }
 arrow-csv = { workspace = true }
-arrow = {workspace = true }
+arrow = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
