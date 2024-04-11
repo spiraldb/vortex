@@ -79,20 +79,15 @@ impl Array<'_> {
         Array::Data(self.to_array_data())
     }
 
-    pub fn to_typed_array<D: ArrayDef>(&self) -> Option<D::Array<'_>> {
-        todo!()
-    }
-
-    pub fn with_typed_array<D: ArrayDef, R, F: for<'a> FnMut(&D::Array<'a>) -> VortexResult<R>>(
+    pub fn with_typed_array<D: ArrayDef, R, F: for<'a> FnMut(&D::Array<'a>) -> R>(
         &self,
         f: F,
-    ) -> VortexResult<R> {
+    ) -> R {
         let encoding = self
             .encoding()
             .as_any()
             .downcast_ref::<D::Encoding>()
             .unwrap();
-
         match self {
             Array::Data(d) => WithEncodedArray::with_data_mut(encoding, d, f),
             Array::DataRef(d) => WithEncodedArray::with_data_mut(encoding, *d, f),

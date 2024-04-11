@@ -45,14 +45,15 @@ mod test {
         ])
         .into_array();
 
-        let binding = take(&reference, &PrimitiveData::from(vec![0, 3, 4]).into_array()).unwrap();
-        let res = binding.to_typed_array::<BoolDef>().unwrap();
-
-        assert_eq!(
-            res.buffer(),
-            BoolData::from_iter(vec![Some(false), None, Some(false)])
-                .as_typed_array()
-                .buffer()
-        );
+        take(&reference, &PrimitiveData::from(vec![0, 3, 4]).into_array())
+            .unwrap()
+            .with_typed_array::<BoolDef, _, _>(|b| {
+                assert_eq!(
+                    b.buffer(),
+                    BoolData::from_iter(vec![Some(false), None, Some(false)])
+                        .as_typed_array()
+                        .buffer()
+                );
+            })
     }
 }

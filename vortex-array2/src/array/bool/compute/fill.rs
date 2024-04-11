@@ -39,12 +39,14 @@ mod test {
     fn fill_forward() {
         let barr =
             BoolData::from_iter(vec![None, Some(false), None, Some(true), None]).into_array();
-        let filled = compute::fill::fill_forward(&barr).unwrap();
-        let filled_bool = filled.to_typed_array::<BoolDef>().unwrap();
-        assert_eq!(
-            filled_bool.buffer().iter().collect::<Vec<bool>>(),
-            vec![false, false, false, true, true]
-        );
-        assert_eq!(*filled_bool.validity(), Validity::NonNullable);
+        compute::fill::fill_forward(&barr)
+            .unwrap()
+            .with_typed_array::<BoolDef, _, _>(|filled_bool| {
+                assert_eq!(
+                    filled_bool.buffer().iter().collect::<Vec<bool>>(),
+                    vec![false, false, false, true, true]
+                );
+                assert_eq!(*filled_bool.validity(), Validity::NonNullable);
+            })
     }
 }

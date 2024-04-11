@@ -39,10 +39,12 @@ mod test {
     fn leading_none() {
         let arr = PrimitiveData::from_nullable_vec(vec![None, Some(8u8), None, Some(10), None])
             .into_array();
-        let filled = compute::fill::fill_forward(&arr).unwrap();
-        let filled_primitive = filled.to_typed_array::<PrimitiveDef>().unwrap();
-        assert_eq!(filled_primitive.typed_data::<u8>(), vec![0, 8, 8, 10, 10]);
-        assert!(filled_primitive.logical_validity().is_all_valid());
+        compute::fill::fill_forward(&arr)
+            .unwrap()
+            .with_typed_array::<PrimitiveDef, _, _>(|p| {
+                assert_eq!(p.typed_data::<u8>(), vec![0, 8, 8, 10, 10]);
+                assert!(p.logical_validity().is_all_valid());
+            })
     }
 
     #[test]
@@ -50,10 +52,12 @@ mod test {
         let arr =
             PrimitiveData::from_nullable_vec(vec![Option::<u8>::None, None, None, None, None])
                 .into_array();
-        let filled = compute::fill::fill_forward(&arr).unwrap();
-        let filled_primitive = filled.to_typed_array::<PrimitiveDef>().unwrap();
-        assert_eq!(filled_primitive.typed_data::<u8>(), vec![0, 0, 0, 0, 0]);
-        assert!(filled_primitive.logical_validity().is_all_valid());
+        compute::fill::fill_forward(&arr)
+            .unwrap()
+            .with_typed_array::<PrimitiveDef, _, _>(|p| {
+                assert_eq!(p.typed_data::<u8>(), vec![0, 0, 0, 0, 0]);
+                assert!(p.logical_validity().is_all_valid());
+            })
     }
 
     #[test]
@@ -63,9 +67,11 @@ mod test {
             Validity::Array(BoolData::from(vec![true, true, true, true, true]).into_array()),
         )
         .into_array();
-        let filled = compute::fill::fill_forward(&arr).unwrap();
-        let filled_primitive = filled.to_typed_array::<PrimitiveDef>().unwrap();
-        assert_eq!(filled_primitive.typed_data::<u8>(), vec![8, 10, 12, 14, 16]);
-        assert!(filled_primitive.logical_validity().is_all_valid());
+        compute::fill::fill_forward(&arr)
+            .unwrap()
+            .with_typed_array::<PrimitiveDef, _, _>(|p| {
+                assert_eq!(p.typed_data::<u8>(), vec![8, 10, 12, 14, 16]);
+                assert!(p.logical_validity().is_all_valid());
+            })
     }
 }

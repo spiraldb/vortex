@@ -42,29 +42,36 @@ pub trait ArrayEncoding: 'static + Sync + Send {
 pub trait WithEncodedArray {
     type D: ArrayDef;
 
-    fn with_view_mut<R, F: for<'a> FnMut(&<Self::D as ArrayDef>::Array<'a>) -> VortexResult<R>>(
+    fn with_view_mut<R, F: for<'a> FnMut(&<Self::D as ArrayDef>::Array<'a>) -> R>(
         &self,
         view: &ArrayView,
         mut f: F,
-    ) -> VortexResult<R> {
-        let metadata = <Self::D as ArrayDef>::Metadata::try_deserialize_metadata(view.metadata())?;
+    ) -> R {
+        let metadata = <Self::D as ArrayDef>::Metadata::try_deserialize_metadata(view.metadata())
+            .map_err(|e| vortex_err!("Failed to deserialize metadata: {}", e))
+            .unwrap();
         let array =
-            <Self::D as ArrayDef>::Array::try_from_parts(view as &dyn ArrayParts, &metadata)?;
+            <Self::D as ArrayDef>::Array::try_from_parts(view as &dyn ArrayParts, &metadata)
+                .map_err(|e| vortex_err!("Failed to create array from parts: {}", e))
+                .unwrap();
         f(&array)
     }
 
-    fn with_data_mut<R, F: for<'a> FnMut(&<Self::D as ArrayDef>::Array<'a>) -> VortexResult<R>>(
+    fn with_data_mut<R, F: for<'a> FnMut(&<Self::D as ArrayDef>::Array<'a>) -> R>(
         &self,
         data: &ArrayData,
         mut f: F,
-    ) -> VortexResult<R> {
+    ) -> R {
         let metadata = data
             .metadata()
             .as_any()
             .downcast_ref::<<Self::D as ArrayDef>::Metadata>()
-            .ok_or_else(|| vortex_err!("Failed to downcast metadata"))?;
+            .ok_or_else(|| vortex_err!("Failed to downcast metadata"))
+            .unwrap();
         let array =
-            <Self::D as ArrayDef>::Array::try_from_parts(data as &dyn ArrayParts, &metadata)?;
+            <Self::D as ArrayDef>::Array::try_from_parts(data as &dyn ArrayParts, &metadata)
+                .map_err(|e| vortex_err!("Failed to create array from parts: {}", e))
+                .unwrap();
         f(&array)
     }
 }

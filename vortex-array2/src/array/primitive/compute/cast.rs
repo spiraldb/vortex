@@ -50,14 +50,11 @@ mod test {
     #[test]
     fn cast_u32_u8() {
         let arr = vec![0u32, 10, 200].into_array();
-        let u8arr = compute::cast::cast(&arr, PType::U8.into()).unwrap();
-        assert_eq!(
-            u8arr
-                .to_typed_array::<PrimitiveDef>()
-                .unwrap()
-                .typed_data::<u8>(),
-            vec![0u8, 10, 200]
-        );
+        compute::cast::cast(&arr, PType::U8.into())
+            .unwrap()
+            .with_typed_array::<PrimitiveDef, _, _>(|p| {
+                assert_eq!(p.typed_data::<u8>(), vec![0u8, 10, 200]);
+            })
     }
 
     #[test]

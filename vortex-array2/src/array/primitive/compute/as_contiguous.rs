@@ -22,12 +22,9 @@ impl AsContiguousFn for PrimitiveArray<'_> {
         match_each_native_ptype!(self.ptype(), |$T| {
             let mut values: Vec<$T> = Vec::with_capacity(arrays.iter().map(|a| a.len()).sum());
             for array in arrays {
-                values.extend(
-                    array
-                        .to_typed_array::<PrimitiveDef>()
-                        .unwrap()
-                        .typed_data::<$T>(),
-                )
+                array.with_typed_array::<PrimitiveDef, _, _>(|p| {
+                    values.extend(p.typed_data::<$T>())
+                })
             }
             Ok(PrimitiveData::try_new(ScalarBuffer::from(values), validity)
                 .unwrap()
