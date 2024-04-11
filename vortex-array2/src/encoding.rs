@@ -48,6 +48,12 @@ pub trait WithEncodedArray {
         view: &ArrayView,
         f: F,
     ) -> VortexResult<R>;
+
+    fn with_data_mut<R, F: for<'a> FnMut(&Self::Array<'a>) -> VortexResult<R>>(
+        &self,
+        data: &ArrayData,
+        f: F,
+    ) -> VortexResult<R>;
 }
 
 impl Debug for dyn ArrayEncoding + '_ {

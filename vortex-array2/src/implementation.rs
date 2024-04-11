@@ -1,10 +1,10 @@
 use vortex::array::bool::BoolEncoding;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::bool::{BoolArray, BoolMetadata};
 use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::encoding::{EncodingId, WithEncodedArray};
-use crate::{ArrayMetadata, ArrayParts, ArrayView, TryFromArrayParts};
+use crate::{ArrayData, ArrayMetadata, ArrayParts, ArrayView, TryFromArrayParts};
 use crate::{ArrayTrait, TryDeserializeArrayMetadata, TrySerializeArrayMetadata};
 
 /// Trait the defines the set of types relating to an array.
@@ -151,6 +151,21 @@ impl WithEncodedArray for BoolEncoding {
     ) -> VortexResult<R> {
         let metadata = BoolMetadata::try_deserialize_metadata(view.metadata())?;
         let array = BoolArray::try_from_parts(view as &dyn ArrayParts, &metadata)?;
+        f(&array)
+    }
+
+    fn with_data_mut<R, F: for<'a> FnMut(&Self::Array<'a>) -> VortexResult<R>>(
+        &self,
+        data: &ArrayData,
+        mut f: F,
+    ) -> VortexResult<R> {
+        let metadata = data
+            .metadata()
+            .as_any()
+            .downcast_ref::<BoolMetadata>()
+            .ok_or_else(|| vortex_err!("Failed to downcast metadata"))?
+            .clone();
+        let array = BoolArray::try_from_parts(data as &dyn ArrayParts, &metadata)?;
         f(&array)
     }
 }
