@@ -18,8 +18,7 @@ use crate::data_downloads::{
 };
 use crate::public_bi_data::PBIDataset::*;
 use crate::reader::{
-    compress_csv_to_vortex, default_csv_format, open_vortex, write_csv_as_parquet,
-    write_csv_to_vortex,
+    compress_csv_to_vortex, open_vortex, pbi_csv_format, write_csv_as_parquet, write_csv_to_vortex,
 };
 use crate::{idempotent, IdempotentPath};
 
@@ -440,13 +439,8 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 &path_for_file_type(self, output_fname, "parquet"),
                 |output_path| {
                     let mut write = File::create(output_path).unwrap();
-                    let delimiter = u8::try_from('|').unwrap();
                     let csv_input = f;
-                    write_csv_as_parquet(
-                        csv_input,
-                        default_csv_format().with_delimiter(delimiter),
-                        &mut write,
-                    )
+                    write_csv_as_parquet(csv_input, pbi_csv_format(), &mut write)
                 },
             )
             .expect("Failed to compress to parquet");
@@ -466,11 +460,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
             .into_iter()
             .map(|csv_input| {
                 info!("Compressing {} to vortex", csv_input.to_str().unwrap());
-                compress_csv_to_vortex(
-                    csv_input,
-                    default_csv_format().with_delimiter(u8::try_from('|').unwrap()),
-                )
-                .1
+                compress_csv_to_vortex(csv_input, pbi_csv_format()).1
             })
             .collect_vec()
     }
@@ -490,13 +480,8 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 &path_for_file_type(self, output_fname, "vortex"),
                 |output_path| {
                     let mut write = File::create(output_path).unwrap();
-                    let delimiter = u8::try_from('|').unwrap();
                     let csv_input = f;
-                    write_csv_to_vortex(
-                        csv_input,
-                        default_csv_format().with_delimiter(delimiter),
-                        &mut write,
-                    )
+                    write_csv_to_vortex(csv_input, pbi_csv_format(), &mut write)
                 },
             )
             .expect("Failed to compress to vortex");

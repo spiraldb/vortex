@@ -38,7 +38,6 @@ use crate::{chunks_to_array, compress_ctx};
 
 pub const BATCH_SIZE: usize = 65_536;
 pub const CSV_SCHEMA_SAMPLE_ROWS: usize = 10_000_000;
-const DEFAULT_DELIMITER: u8 = b',';
 
 pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
     let mut file = File::open(path)?;
@@ -81,9 +80,9 @@ fn compress_parquet_to_vortex(parquet_path: &Path) -> Result<(DType, ChunkedArra
     Ok((dtype, chunked))
 }
 
-pub fn default_csv_format() -> Format {
+pub fn pbi_csv_format() -> Format {
     Format::default()
-        .with_delimiter(DEFAULT_DELIMITER)
+        .with_delimiter(b'|')
         .with_header(false)
         .with_null_regex("null".parse().unwrap())
 }
