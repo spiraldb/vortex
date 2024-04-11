@@ -14,10 +14,10 @@ use vortex_ipc::writer::StreamWriter;
 fn ipc_take(c: &mut Criterion) {
     let indices = PrimitiveData::from(vec![10, 11, 12, 13, 100_000, 2_999_999]).into_array();
     let data = PrimitiveData::from(vec![5; 3_000_000]).into_array();
-
-    c.bench_function("take_data", |b| {
-        b.iter(|| black_box(take(&data, &indices).unwrap()));
-    });
+    //
+    // c.bench_function("take_data", |b| {
+    //     b.iter(|| black_box(take(&data, &indices).unwrap()));
+    // });
 
     // Try running take over an ArrayView.
     let mut buffer = vec![];
@@ -33,10 +33,12 @@ fn ipc_take(c: &mut Criterion) {
             let mut reader = StreamReader::try_new(&mut cursor).unwrap();
             let mut array_reader = reader.next().unwrap().unwrap();
             let array_view = array_reader.next().unwrap().unwrap().into_array();
-            black_box(take(&array_view, &indices).unwrap())
+            black_box(take(&array_view, &indices))
         });
     });
+}
 
+fn ipc_take_old(c: &mut Criterion) {
     // Try the old way of taking data.
     let arr = PrimitiveArray::from(vec![5; 3_000_000]);
     let indices = PrimitiveArray::from(vec![10, 11, 12, 13, 100_000, 2_999_999]);
