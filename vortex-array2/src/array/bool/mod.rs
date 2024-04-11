@@ -4,7 +4,7 @@ mod stats;
 
 use arrow_buffer::{BooleanBuffer, Buffer};
 use serde::{Deserialize, Serialize};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
 
 use crate::impl_encoding;

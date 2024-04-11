@@ -32,7 +32,7 @@ use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::compute::ArrayCompute;
-use crate::encoding::EncodingRef;
+use crate::encoding::{EncodingRef, WithEncodedArray};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute, Statistics};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -82,31 +82,24 @@ impl Array<'_> {
     pub fn to_typed_array<D: ArrayDef>(&self) -> Option<D::Array<'_>> {
         todo!()
     }
+
+    pub fn with_typed_array<D: ArrayDef, R, F: for<'a> FnMut(&D::Array<'a>) -> VortexResult<R>>(
+        &self,
+        f: F,
+    ) -> VortexResult<R> {
+        let encoding = self
+            .encoding()
+            .as_any()
+            .downcast_ref::<D::Encoding>()
+            .unwrap();
+
+        match self {
+            Array::Data(d) => WithEncodedArray::with_data_mut(encoding, d, f),
+            Array::DataRef(d) => WithEncodedArray::with_data_mut(encoding, *d, f),
+            Array::View(v) => WithEncodedArray::with_view_mut(encoding, v, f),
+        }
+    }
 }
-//
-// impl<'a> Array<'a> {
-//     pub fn with_typed_array<D: ArrayDef, R, F: FnMut(&D::Array<'a>) -> R>(&self, mut f: F) -> R {
-//         let encoding = self
-//             .encoding()
-//             .as_any()
-//             .downcast_ref::<D::Encoding>()
-//             .unwrap();
-//
-//         let mut result = None;
-//         match self {
-//             Array::Data(d) => {
-//                 WithEncodedArray::<'a, D::Array<'a>>::with_data_mut(encoding, d, &mut |array| {
-//                     result = Some(f(array));
-//                     Ok(())
-//                 })
-//                 .unwrap()
-//             }
-//             Array::DataRef(_) => todo!(),
-//             Array::View(_) => todo!(),
-//         }
-//         result.unwrap()
-//     }
-// }
 
 pub trait ToArray {
     fn to_array(&self) -> Array;

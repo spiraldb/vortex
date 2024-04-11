@@ -3,10 +3,10 @@ use std::fmt::{Debug, Formatter};
 
 use linkme::distributed_slice;
 pub use vortex::encoding::EncodingId;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
-use crate::ArrayView;
-use crate::{ArrayData, ArrayTrait};
+use crate::{ArrayData, ArrayParts, ArrayTrait, TryDeserializeArrayMetadata, TryFromArrayParts};
+use crate::{ArrayDef, ArrayView};
 
 #[distributed_slice]
 pub static VORTEX_ENCODINGS: [EncodingRef] = [..];
@@ -20,8 +20,7 @@ pub fn find_encoding(id: &str) -> Option<EncodingRef> {
         .cloned()
 }
 
-/// Dynamic trait representing an array type.
-#[allow(dead_code)]
+/// Object-safe encoding trait for an array.
 pub trait ArrayEncoding: 'static + Sync + Send {
     fn as_any(&self) -> &dyn Any;
 
@@ -41,19 +40,33 @@ pub trait ArrayEncoding: 'static + Sync + Send {
 }
 
 pub trait WithEncodedArray {
-    type Array<'a>: ArrayTrait + 'a;
+    type D: ArrayDef;
 
-    fn with_view_mut<R, F: for<'a> FnMut(&Self::Array<'a>) -> VortexResult<R>>(
+    fn with_view_mut<R, F: for<'a> FnMut(&<Self::D as ArrayDef>::Array<'a>) -> VortexResult<R>>(
         &self,
         view: &ArrayView,
-        f: F,
-    ) -> VortexResult<R>;
+        mut f: F,
+    ) -> VortexResult<R> {
+        let metadata = <Self::D as ArrayDef>::Metadata::try_deserialize_metadata(view.metadata())?;
+        let array =
+            <Self::D as ArrayDef>::Array::try_from_parts(view as &dyn ArrayParts, &metadata)?;
+        f(&array)
+    }
 
-    fn with_data_mut<R, F: for<'a> FnMut(&Self::Array<'a>) -> VortexResult<R>>(
+    fn with_data_mut<R, F: for<'a> FnMut(&<Self::D as ArrayDef>::Array<'a>) -> VortexResult<R>>(
         &self,
         data: &ArrayData,
-        f: F,
-    ) -> VortexResult<R>;
+        mut f: F,
+    ) -> VortexResult<R> {
+        let metadata = data
+            .metadata()
+            .as_any()
+            .downcast_ref::<<Self::D as ArrayDef>::Metadata>()
+            .ok_or_else(|| vortex_err!("Failed to downcast metadata"))?;
+        let array =
+            <Self::D as ArrayDef>::Array::try_from_parts(data as &dyn ArrayParts, &metadata)?;
+        f(&array)
+    }
 }
 
 impl Debug for dyn ArrayEncoding + '_ {
