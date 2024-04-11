@@ -94,8 +94,8 @@ impl ToStatic for Array<'_> {
 
     fn to_static(&self) -> Self::Static {
         match self {
-            Array::Data(d) => d.to_array(),
-            Array::DataRef(d) => d.to_array(),
+            Array::Data(d) => Array::Data(d.clone()),
+            Array::DataRef(d) => Array::Data((*d).clone()),
             Array::View(v) => v
                 .encoding()
                 .with_view(v, |a| a.to_array_data())
