@@ -72,10 +72,6 @@ impl Array<'_> {
         TypedArrayData::<D>::try_from(self.into_array_data()).ok()
     }
 
-    pub fn to_static(&self) -> Array<'static> {
-        Array::Data(self.to_array_data())
-    }
-
     pub fn with_typed_array<D: ArrayDef, R, F: for<'a> FnMut(&D::Array<'a>) -> R>(
         &self,
         f: F,
@@ -89,6 +85,21 @@ impl Array<'_> {
             Array::Data(d) => WithEncodedArray::with_data_mut(encoding, d, f),
             Array::DataRef(d) => WithEncodedArray::with_data_mut(encoding, d, f),
             Array::View(v) => WithEncodedArray::with_view_mut(encoding, v, f),
+        }
+    }
+}
+
+impl ToStatic for Array<'_> {
+    type Static = OwnedArray;
+
+    fn to_static(&self) -> Self::Static {
+        match self {
+            Array::Data(d) => d.to_array(),
+            Array::DataRef(d) => d.to_array(),
+            Array::View(v) => v
+                .encoding()
+                .with_view(v, |a| a.to_array_data())
+                .into_array(),
         }
     }
 }
