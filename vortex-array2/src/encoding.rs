@@ -68,10 +68,9 @@ pub trait WithEncodedArray {
             .downcast_ref::<<Self::D as ArrayDef>::Metadata>()
             .ok_or_else(|| vortex_err!("Failed to downcast metadata"))
             .unwrap();
-        let array =
-            <Self::D as ArrayDef>::Array::try_from_parts(data as &dyn ArrayParts, &metadata)
-                .map_err(|e| vortex_err!("Failed to create array from parts: {}", e))
-                .unwrap();
+        let array = <Self::D as ArrayDef>::Array::try_from_parts(data as &dyn ArrayParts, metadata)
+            .map_err(|e| vortex_err!("Failed to create array from parts: {}", e))
+            .unwrap();
         f(&array)
     }
 }

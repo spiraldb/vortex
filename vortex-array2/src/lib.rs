@@ -90,7 +90,7 @@ impl Array<'_> {
             .unwrap();
         match self {
             Array::Data(d) => WithEncodedArray::with_data_mut(encoding, d, f),
-            Array::DataRef(d) => WithEncodedArray::with_data_mut(encoding, *d, f),
+            Array::DataRef(d) => WithEncodedArray::with_data_mut(encoding, d, f),
             Array::View(v) => WithEncodedArray::with_view_mut(encoding, v, f),
         }
     }

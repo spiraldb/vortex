@@ -200,9 +200,6 @@ impl LogicalValidity {
     }
 
     pub fn is_all_valid(&self) -> bool {
-        match self {
-            LogicalValidity::AllValid(_) => true,
-            _ => false,
-        }
+        matches!(self, LogicalValidity::AllValid(_))
     }
 }
