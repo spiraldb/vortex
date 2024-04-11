@@ -44,7 +44,7 @@ arrow = { workspace = true }
 lazy_static = { workspace = true }
 enum-iterator = { workspace = true }
 fs_extra = { workspace = true }
-bytesize = { workspace = true }
+humansize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

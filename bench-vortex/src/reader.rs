@@ -34,7 +34,7 @@ use vortex::serde::{ReadCtx, WriteCtx};
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::compress_ctx;
+use crate::{chunks_to_array, compress_ctx};
 
 pub const BATCH_SIZE: usize = 65_536;
 pub const CSV_SCHEMA_SAMPLE_ROWS: usize = 10_000_000;
@@ -88,36 +88,47 @@ pub fn default_csv_format() -> Format {
         .with_null_regex("null".parse().unwrap())
 }
 
+pub fn compress_csv_to_vortex(csv_path: PathBuf, format: Format) -> (DType, ArrayRef) {
+    let csv_file = File::open(csv_path.clone()).unwrap();
+    let (schema, _) = format
+        .infer_schema(
+            &mut csv_file.try_clone().unwrap(),
+            Some(CSV_SCHEMA_SAMPLE_ROWS),
+        )
+        .unwrap();
+
+    let csv_file2 = File::open(csv_path.clone()).unwrap();
+    let reader = BufReader::new(csv_file2.try_clone().unwrap());
+
+    let csv_reader = arrow::csv::ReaderBuilder::new(Arc::new(schema.clone()))
+        .with_format(format)
+        .with_batch_size(BATCH_SIZE)
+        .build(reader)
+        .unwrap();
+
+    let ctx = compress_ctx();
+    let mut uncompressed_size: usize = 0;
+    let chunks = csv_reader
+        .into_iter()
+        .map(|batch_result| batch_result.unwrap())
+        .map(|batch| batch.into_array())
+        .map(|array| {
+            uncompressed_size += array.nbytes();
+            ctx.clone().compress(&array, None).unwrap()
+        })
+        .collect_vec();
+    (
+        DType::from_arrow(SchemaRef::new(schema.clone())),
+        chunks_to_array(SchemaRef::new(schema), uncompressed_size, chunks),
+    )
+}
+
 pub fn write_csv_to_vortex<W: Write>(
     csv_path: PathBuf,
     format: Format,
     write: &mut W,
 ) -> VortexResult<()> {
-    let csv_file_for_schema = File::open(csv_path.clone()).unwrap();
-
-    // Infer the schema of the CSV file
-    let (schema, _) = format.infer_schema(
-        csv_file_for_schema.try_clone().unwrap(),
-        Some(CSV_SCHEMA_SAMPLE_ROWS),
-    )?;
-    let csv_file_for_read = File::open(csv_path.clone()).unwrap();
-    let file_reader = BufReader::new(csv_file_for_read.try_clone().unwrap());
-
-    let csv_reader = csv::ReaderBuilder::new(SchemaRef::new(schema.clone()))
-        .with_format(format.clone())
-        .with_batch_size(BATCH_SIZE)
-        .build(file_reader)?;
-    let dtype = DType::from_arrow(SchemaRef::from(schema.clone()));
-    let ctx = compress_ctx();
-
-    let chunks = csv_reader
-        .map(|batch_result| batch_result.unwrap())
-        .map(|record_batch| {
-            let vortex_array = record_batch.into_array();
-            ctx.compress(&vortex_array, None).unwrap()
-        })
-        .collect_vec();
-    let chunked = ChunkedArray::new(chunks, dtype.clone());
+    let (dtype, chunked) = compress_csv_to_vortex(csv_path, format);
 
     let mut write_ctx = WriteCtx::new(write);
     write_ctx.dtype(&dtype).unwrap();

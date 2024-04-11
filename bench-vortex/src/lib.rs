@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use arrow::datatypes::SchemaRef;
 use arrow_array::RecordBatchReader;
+use humansize::DECIMAL;
 use itertools::Itertools;
 use log::{info, warn, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
@@ -154,7 +155,8 @@ fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<Arra
         println!("{},{}", schema.field(i).name(), nbytes);
     });
     println!(
-        "NBytes {}, Ratio {}",
+        "{}, Bytes: {}, Ratio {}",
+        humansize::format_size(compressed.nbytes(), DECIMAL),
         compressed.nbytes(),
         compressed.nbytes() as f32 / uncompressed_size as f32
     );

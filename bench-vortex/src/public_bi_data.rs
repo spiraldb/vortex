@@ -1,19 +1,16 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hash;
-use std::io::BufReader;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use arrow::datatypes::SchemaRef;
-use bytesize::ByteSize;
 use enum_iterator::Sequence;
 use fs_extra::dir::get_size;
+use humansize::{format_size, DECIMAL};
 use itertools::Itertools;
 use log::info;
 use reqwest::Url;
-use vortex::array::{ArrayRef, IntoArray};
+use vortex::array::ArrayRef;
 use vortex::formatter::display_tree;
 
 use crate::data_downloads::{
@@ -21,10 +18,10 @@ use crate::data_downloads::{
 };
 use crate::public_bi_data::PBIDataset::*;
 use crate::reader::{
-    default_csv_format, open_vortex, write_csv_as_parquet, write_csv_to_vortex, BATCH_SIZE,
-    CSV_SCHEMA_SAMPLE_ROWS,
+    compress_csv_to_vortex, default_csv_format, open_vortex, write_csv_as_parquet,
+    write_csv_to_vortex,
 };
-use crate::{chunks_to_array, compress_ctx, idempotent, IdempotentPath};
+use crate::{idempotent, IdempotentPath};
 
 lazy_static::lazy_static! {
     // NB: we do not expect this to change, otherwise we'd crawl the site and populate it at runtime
@@ -454,7 +451,11 @@ impl BenchmarkDataset for BenchmarkDatasets {
             )
             .expect("Failed to compress to parquet");
             let pq_size = compressed.metadata().unwrap().size();
-            info!("Parquet size: {}, {}B", ByteSize(pq_size), pq_size);
+            info!(
+                "Parquet size: {}, {}B",
+                format_size(pq_size, DECIMAL),
+                pq_size
+            );
         }
     }
 
@@ -465,7 +466,11 @@ impl BenchmarkDataset for BenchmarkDatasets {
             .into_iter()
             .map(|csv_input| {
                 info!("Compressing {} to vortex", csv_input.to_str().unwrap());
-                compress_csv_to_vortex(csv_input)
+                compress_csv_to_vortex(
+                    csv_input,
+                    default_csv_format().with_delimiter(u8::try_from('|').unwrap()),
+                )
+                .1
             })
             .collect_vec()
     }
@@ -498,7 +503,11 @@ impl BenchmarkDataset for BenchmarkDatasets {
             let from_vortex = open_vortex(&compressed).unwrap();
             let vx_size = from_vortex.nbytes();
 
-            info!("Vortex size: {}, {}B", ByteSize(vx_size as u64), vx_size);
+            info!(
+                "Vortex size: {}, {}B",
+                format_size(vx_size as u64, DECIMAL),
+                vx_size
+            );
             info!("{}\n\n", display_tree(from_vortex.as_ref()));
         }
     }
@@ -525,7 +534,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
             .expect("Failed to compress to lance");
 
             let lance_dir_bytes_exact = get_size(compressed).unwrap();
-            let lance_dir_size = ByteSize(lance_dir_bytes_exact);
+            let lance_dir_size = humansize::format_size(lance_dir_bytes_exact, DECIMAL);
 
             info!(
                 "Lance directory aggregate size: {}, {}B",
@@ -558,38 +567,4 @@ fn path_for_file_type(
         .directory_location()
         .join(file_type)
         .join(format!("{}.{}", output_fname, file_type))
-}
-
-fn compress_csv_to_vortex(csv_path: PathBuf) -> ArrayRef {
-    let csv_file = File::open(csv_path.clone()).unwrap();
-
-    let format = default_csv_format().with_delimiter(u8::try_from('|').unwrap());
-    let (schema, _) = format
-        .infer_schema(
-            &mut csv_file.try_clone().unwrap(),
-            Some(CSV_SCHEMA_SAMPLE_ROWS),
-        )
-        .unwrap();
-
-    let csv_file2 = File::open(csv_path.clone()).unwrap();
-    let reader = BufReader::new(csv_file2.try_clone().unwrap());
-
-    let csv_reader = arrow::csv::ReaderBuilder::new(Arc::new(schema.clone()))
-        .with_format(format)
-        .with_batch_size(BATCH_SIZE)
-        .build(reader)
-        .unwrap();
-
-    let ctx = compress_ctx();
-    let mut uncompressed_size: usize = 0;
-    let chunks = csv_reader
-        .into_iter()
-        .map(|batch_result| batch_result.unwrap())
-        .map(|batch| batch.into_array())
-        .map(|array| {
-            uncompressed_size += array.nbytes();
-            ctx.clone().compress(&array, None).unwrap()
-        })
-        .collect_vec();
-    chunks_to_array(SchemaRef::new(schema), uncompressed_size, chunks)
 }
