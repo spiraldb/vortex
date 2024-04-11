@@ -460,11 +460,14 @@ impl BenchmarkDataset for BenchmarkDatasets {
 
     /// Compresses the CSV files to Vortex format. Does NOT write any data to disk.
     /// Used for benchmarking.
-    fn compress_to_vortex(&self) {
-        for csv_input in self.list_files(FileType::Csv) {
-            info!("Compressing {} to vortex", csv_input.to_str().unwrap());
-            compress_csv_to_vortex(csv_input);
-        }
+    fn compress_to_vortex(&self) -> Vec<ArrayRef> {
+        self.list_files(FileType::Csv)
+            .into_iter()
+            .map(|csv_input| {
+                info!("Compressing {} to vortex", csv_input.to_str().unwrap());
+                compress_csv_to_vortex(csv_input)
+            })
+            .collect_vec()
     }
 
     fn write_as_vortex(&self) {

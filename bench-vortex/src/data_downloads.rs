@@ -12,7 +12,7 @@ use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::IntoArray;
+use vortex::array::{ArrayRef, IntoArray};
 use vortex::arrow::FromArrowType;
 use vortex::serde::WriteCtx;
 use vortex_error::{VortexError, VortexResult};
@@ -95,7 +95,7 @@ pub fn decompress_bz2(input_path: PathBuf, output_path: PathBuf) -> PathBuf {
 
 pub trait BenchmarkDataset {
     fn as_uncompressed(&self);
-    fn compress_to_vortex(&self);
+    fn compress_to_vortex(&self) -> Vec<ArrayRef>;
     fn write_as_parquet(&self);
     fn write_as_vortex(&self);
     fn write_as_lance(&self);
