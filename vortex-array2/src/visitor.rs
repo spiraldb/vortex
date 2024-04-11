@@ -1,6 +1,6 @@
-use arrow_buffer::Buffer;
 use vortex_error::VortexResult;
 
+use crate::buffer::Buffer;
 use crate::validity::Validity;
 use crate::Array;
 

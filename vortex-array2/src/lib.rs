@@ -2,6 +2,7 @@ extern crate core;
 
 pub mod array;
 mod arrow;
+pub mod buffer;
 pub mod compute;
 mod context;
 mod data;
@@ -17,7 +18,6 @@ mod visitor;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
-use arrow_buffer::Buffer;
 pub use context::*;
 pub use data::*;
 pub use implementation::*;
@@ -27,6 +27,7 @@ pub use view::*;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
 use crate::encoding::{EncodingRef, WithEncodedArray};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute, Statistics};
@@ -110,6 +111,12 @@ pub trait IntoArrayData {
 
 pub trait WithArray {
     fn with_array<R, F: FnMut(&dyn ArrayTrait) -> R>(&self, f: F) -> R;
+}
+
+pub trait ToStatic {
+    type Static;
+
+    fn to_static(&self) -> Self::Static;
 }
 
 pub trait ArrayParts {

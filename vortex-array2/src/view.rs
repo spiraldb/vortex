@@ -1,10 +1,10 @@
 use std::fmt::{Debug, Formatter};
 
-use arrow_buffer::Buffer;
 use vortex::flatbuffers::array as fb;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
+use crate::buffer::Buffer;
 use crate::encoding::EncodingRef;
 use crate::stats::{EmptyStatistics, Statistics};
 use crate::{Array, IntoArray, ToArray};
@@ -15,7 +15,7 @@ pub struct ArrayView<'v> {
     encoding: EncodingRef,
     dtype: &'v DType,
     array: fb::Array<'v>,
-    buffers: &'v [Buffer],
+    buffers: &'v [Buffer<'v>],
     ctx: &'v SerdeContext,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know

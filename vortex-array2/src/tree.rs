@@ -1,10 +1,10 @@
 use std::fmt;
 
-use arrow_buffer::Buffer;
 use humansize::{format_size, DECIMAL};
 use serde::ser::Error;
 use vortex_error::{VortexError, VortexResult};
 
+use crate::buffer::Buffer;
 use crate::visitor::ArrayVisitor;
 use crate::{Array, WithArray};
 

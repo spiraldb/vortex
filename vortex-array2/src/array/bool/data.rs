@@ -6,6 +6,7 @@ use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::array::bool::{BoolData, BoolMetadata};
+use crate::buffer::Buffer;
 use crate::validity::Validity;
 
 impl BoolData {
@@ -16,7 +17,7 @@ impl BoolData {
                 validity: validity.to_metadata(buffer.len())?,
                 length: buffer.len(),
             }),
-            vec![buffer.into_inner()].into(),
+            vec![Buffer::Owned(buffer.into_inner())].into(),
             validity.to_array_data().into_iter().collect_vec().into(),
         ))
     }

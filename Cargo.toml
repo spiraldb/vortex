@@ -49,6 +49,7 @@ bindgen = "0.69.4"
 criterion = { version = "0.5.1", features = ["html_reports"] }
 croaring = "1.0.1"
 divan = "0.1.14"
+enum_dispatch = "0.3.13"
 enum-iterator = "2.0.0"
 flatbuffers = "23.5.26"
 flexbuffers = "2.0.0"

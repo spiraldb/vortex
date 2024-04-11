@@ -1,9 +1,9 @@
 use std::io;
 use std::io::{BufReader, Read};
 
-use arrow_buffer::Buffer;
 use nougat::gat;
 use vortex::array::composite::COMPOSITE_EXTENSIONS;
+use vortex_array2::buffer::Buffer;
 use vortex_array2::{ArrayView, SerdeContext, ToArray, WithArray};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferReader, ReadFlatBuffer};
@@ -98,7 +98,7 @@ pub struct StreamArrayChunkReader<'a, R: Read> {
     read: &'a mut R,
     ctx: &'a SerdeContext,
     dtype: DType,
-    buffers: Vec<Buffer>,
+    buffers: Vec<Buffer<'a>>,
     column_msg_buffer: Vec<u8>,
 }
 
@@ -142,7 +142,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
 
             let mut bytes = vec![0u8; buffer.length() as usize];
             self.read.read_exact(&mut bytes).unwrap();
-            self.buffers.push(Buffer::from(bytes));
+            self.buffers.push(Buffer::Owned(bytes.into()));
 
             offset = buffer.offset() + buffer.length();
         }
@@ -151,7 +151,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
         let to_kill = chunk_msg.buffer_size() - offset;
         io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
 
-        let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, &self.buffers)?;
+        let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
 
         // Validate it
         view.to_array().with_array(|_| Ok::<(), VortexError>(()))?;

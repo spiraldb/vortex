@@ -35,7 +35,7 @@ fn as_arrow_array_primitive<T: ArrowPrimitiveType>(
     array: &PrimitiveArray,
 ) -> VortexResult<ArrowPrimitiveArray<T>> {
     Ok(ArrowPrimitiveArray::new(
-        ScalarBuffer::<T::Native>::new(array.buffer().clone(), 0, array.len()),
+        ScalarBuffer::<T::Native>::new(array.buffer().clone().into(), 0, array.len()),
         array.logical_validity().to_null_buffer()?,
     ))
 }

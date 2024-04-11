@@ -2,11 +2,12 @@ mod compute;
 mod data;
 mod stats;
 
-use arrow_buffer::{BooleanBuffer, Buffer};
+use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
 
+use crate::buffer::Buffer;
 use crate::impl_encoding;
 use crate::stats::Statistics;
 use crate::validity::{ArrayValidity, ValidityMetadata};
@@ -26,7 +27,7 @@ pub struct BoolMetadata {
 
 pub struct BoolArray<'a> {
     dtype: &'a DType,
-    buffer: &'a Buffer,
+    buffer: &'a Buffer<'a>,
     validity: Validity<'a>,
     length: usize,
     stats: &'a (dyn Statistics + 'a),
@@ -35,7 +36,7 @@ pub struct BoolArray<'a> {
 impl BoolArray<'_> {
     pub fn buffer(&self) -> BooleanBuffer {
         // TODO(ngates): look into whether we should store this on BoolArray
-        BooleanBuffer::new(self.buffer.clone(), 0, self.length)
+        BooleanBuffer::new(self.buffer.clone().into(), 0, self.length)
     }
 
     pub fn validity(&self) -> &Validity {
@@ -88,7 +89,7 @@ impl ArrayValidity for BoolArray<'_> {
 
 impl AcceptArrayVisitor for BoolArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_buffer(self.buffer().inner())?;
+        visitor.visit_buffer(self.buffer)?;
         visitor.visit_validity(self.validity())
     }
 }

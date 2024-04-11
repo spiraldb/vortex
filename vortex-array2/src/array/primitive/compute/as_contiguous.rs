@@ -23,7 +23,9 @@ impl AsContiguousFn for PrimitiveArray<'_> {
             arrays.iter().map(|a| a.len()).sum::<usize>() * self.ptype().byte_width(),
         );
         for array in arrays {
-            array.with_typed_array::<PrimitiveDef, _, _>(|p| buffer.extend_from_slice(p.buffer()))
+            array.with_typed_array::<PrimitiveDef, _, _>(|p| {
+                buffer.extend_from_slice(p.buffer().as_slice())
+            })
         }
         match_each_native_ptype!(self.ptype(), |$T| {
             Ok(PrimitiveData::try_new(ScalarBuffer::<$T>::from(buffer), validity)

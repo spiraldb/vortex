@@ -2,18 +2,18 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
-use arrow_buffer::Buffer;
 use vortex::scalar::Scalar;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 use vortex_schema::DType;
 
+use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::EncodingRef;
 use crate::stats::Stat;
 use crate::stats::Statistics;
 use crate::visitor::ArrayVisitor;
 use crate::{
     Array, ArrayDef, ArrayMetadata, ArrayParts, ArrayTrait, IntoArray, IntoArrayData, OwnedArray,
-    ToArray, ToArrayData, TryFromArrayParts,
+    ToArray, ToArrayData, ToStatic, TryFromArrayParts,
 };
 
 #[derive(Clone, Debug)]
@@ -21,7 +21,7 @@ pub struct ArrayData {
     encoding: EncodingRef,
     dtype: DType,
     metadata: Arc<dyn ArrayMetadata>,
-    buffers: Arc<[Buffer]>, // Should this just be an Option, not an Arc? How many multi-buffer arrays are there?
+    buffers: Arc<[OwnedBuffer]>, // Should this just be an Option, not an Arc? How many multi-buffer arrays are there?
     children: Arc<[ArrayData]>,
     stats_map: Arc<RwLock<HashMap<Stat, Scalar>>>,
 }
@@ -31,7 +31,7 @@ impl ArrayData {
         encoding: EncodingRef,
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
-        buffers: Arc<[Buffer]>,
+        buffers: Arc<[OwnedBuffer]>,
         children: Arc<[ArrayData]>,
         statistics: HashMap<Stat, Scalar>,
     ) -> VortexResult<Self> {
@@ -138,7 +138,7 @@ where
 {
     fn to_array_data(&self) -> ArrayData {
         struct Visitor {
-            buffers: Vec<Buffer>,
+            buffers: Vec<OwnedBuffer>,
             children: Vec<ArrayData>,
         }
         impl ArrayVisitor for Visitor {
@@ -148,7 +148,7 @@ where
             }
 
             fn visit_buffer(&mut self, buffer: &Buffer) -> VortexResult<()> {
-                self.buffers.push(buffer.clone());
+                self.buffers.push(buffer.to_static());
                 Ok(())
             }
         }
@@ -179,7 +179,7 @@ impl<D: ArrayDef> TypedArrayData<D> {
     pub fn new_unchecked(
         dtype: DType,
         metadata: Arc<D::Metadata>,
-        buffers: Arc<[Buffer]>,
+        buffers: Arc<[OwnedBuffer]>,
         children: Arc<[ArrayData]>,
     ) -> Self {
         Self::from_data_unchecked(

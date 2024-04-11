@@ -1,13 +1,14 @@
 mod compute;
 mod stats;
 
-use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
+use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::buffer::Buffer;
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -26,7 +27,8 @@ pub struct PrimitiveMetadata {
 pub struct PrimitiveArray<'a> {
     ptype: PType,
     dtype: &'a DType,
-    buffer: &'a Buffer,
+    // TODO(ngates): reference or clone?
+    buffer: &'a Buffer<'a>,
     validity: Validity<'a>,
     stats: &'a (dyn Statistics + 'a),
 }
@@ -42,10 +44,6 @@ impl PrimitiveArray<'_> {
 
     pub fn ptype(&self) -> PType {
         self.ptype
-    }
-
-    pub fn scalar_buffer<T: NativePType + ArrowNativeType>(&self) -> ScalarBuffer<T> {
-        ScalarBuffer::new(self.buffer.clone(), 0, self.len())
     }
 
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
@@ -80,7 +78,7 @@ impl PrimitiveData {
             Arc::new(PrimitiveMetadata {
                 validity: validity.to_metadata(buffer.len())?,
             }),
-            vec![buffer.into_inner()].into(),
+            vec![Buffer::Owned(buffer.into_inner())].into(),
             validity.to_array_data().into_iter().collect_vec().into(),
         ))
     }
