@@ -11,6 +11,7 @@ use crate::scalar::Scalar;
 pub enum SearchSortedSide {
     Left,
     Right,
+    Exact,
 }
 
 pub trait SearchSortedFn {
@@ -29,7 +30,7 @@ pub fn search_sorted<T: Into<Scalar>>(
         }
 
         if c.scalar_at().is_some() {
-            return Ok(SearchSorted::search_sorted(&array, &scalar, side));
+            return Ok(SearchSorted::search_sorted(&array, &scalar, side).unwrap_or_else(|o| o));
         }
 
         Err(vortex_err!(
@@ -65,7 +66,7 @@ pub trait Len {
 }
 
 pub trait SearchSorted<T> {
-    fn search_sorted(&self, value: &T, side: SearchSortedSide) -> usize
+    fn search_sorted(&self, value: &T, side: SearchSortedSide) -> Result<usize, usize>
     where
         Self: IndexOrd<T>,
     {
@@ -84,15 +85,18 @@ pub trait SearchSorted<T> {
                     Greater
                 }
             }),
+            SearchSortedSide::Exact => {
+                self.search_sorted_by(|idx| self.index_cmp(idx, value).unwrap_or(Greater))
+            }
         }
     }
 
-    fn search_sorted_by<F: FnMut(usize) -> Ordering>(&self, f: F) -> usize;
+    fn search_sorted_by<F: FnMut(usize) -> Ordering>(&self, f: F) -> Result<usize, usize>;
 }
 
 impl<S: IndexOrd<T> + Len + ?Sized, T> SearchSorted<T> for S {
     // Code adapted from Rust standard library slice::binary_search_by
-    fn search_sorted_by<F: FnMut(usize) -> Ordering>(&self, mut f: F) -> usize {
+    fn search_sorted_by<F: FnMut(usize) -> Ordering>(&self, mut f: F) -> Result<usize, usize> {
         // INVARIANTS:
         // - 0 <= left <= left + size = right <= self.len()
         // - f returns Less for everything in self[..left]
@@ -107,13 +111,13 @@ impl<S: IndexOrd<T> + Len + ?Sized, T> SearchSorted<T> for S {
             left = if cmp == Less { mid + 1 } else { left };
             right = if cmp == Greater { mid } else { right };
             if cmp == Equal {
-                return mid;
+                return Ok(mid);
             }
 
             size = right - left;
         }
 
-        left
+        Err(left)
     }
 }
 

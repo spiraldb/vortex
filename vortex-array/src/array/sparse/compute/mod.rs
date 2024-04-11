@@ -11,7 +11,6 @@ use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
-use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
@@ -182,51 +181,21 @@ fn take_search_sorted(
     array: &SparseArray,
     indices: &PrimitiveArray,
 ) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
-    // adjust the input indices (to take) by the internal index offset of the array
-    let adjusted_indices = match_each_integer_ptype!(indices.ptype(), |$P| {
-         indices.typed_data::<$P>()
-            .iter()
-            .map(|i| *i as usize + array.indices_offset())
-            .collect::<Vec<_>>()
-    });
-
-    // TODO(robert): Use binary search instead of search_sorted + take and index validation to avoid extra work
-    // search_sorted for the adjusted indices (need to validate that they are an exact match still)
-    let physical_indices = adjusted_indices
-        .iter()
-        .map(|i| search_sorted(array.indices(), *i, SearchSortedSide::Left).map(|s| s as u64))
-        .collect::<VortexResult<Vec<_>>>()?;
-
-    // filter out indices that are out of bounds, which will cause the take to fail
-    let (adjusted_indices, physical_indices): (Vec<usize>, Vec<u64>) = adjusted_indices
-        .iter()
-        .zip_eq(physical_indices)
-        .filter(|(_, phys_idx)| *phys_idx < array.indices().len() as u64)
-        .unzip();
-
-    let physical_indices = PrimitiveArray::from(physical_indices);
-    let taken_indices = flatten_primitive(&take(array.indices(), &physical_indices)?)?;
-    let exact_matches: Vec<bool> = match_each_integer_ptype!(taken_indices.ptype(), |$P| {
-        taken_indices
+    let resolved = match_each_integer_ptype!(indices.ptype(), |$P| {
+        indices
             .typed_data::<$P>()
             .iter()
-            .zip_eq(adjusted_indices)
-            .map(|(taken_idx, adj_idx)| *taken_idx as usize == adj_idx)
-            .collect()
+            .enumerate()
+            .map(|(pos, i)| {
+                array
+                    .find_index(*i as usize)
+                    .map(|r| r.map(|ii| (pos as u64, ii as u64)))
+            })
+            .filter_map_ok(|r| r)
+            .collect::<VortexResult<Vec<_>>>()?
     });
-    let (positions, patch_indices): (Vec<u64>, Vec<u64>) = physical_indices
-        .typed_data::<u64>()
-        .iter()
-        .enumerate()
-        .filter_map(|(i, phy_idx)| {
-            // search_sorted != binary search, so we need to filter out indices that weren't found
-            if exact_matches[i] {
-                Some((i as u64, *phy_idx))
-            } else {
-                None
-            }
-        })
-        .unzip();
+
+    let (positions, patch_indices): (Vec<u64>, Vec<u64>) = resolved.into_iter().unzip();
     Ok((
         PrimitiveArray::from(positions),
         PrimitiveArray::from(patch_indices),

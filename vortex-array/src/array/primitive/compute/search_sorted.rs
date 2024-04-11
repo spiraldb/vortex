@@ -9,7 +9,10 @@ use crate::scalar::Scalar;
 impl<T: NativePType> SearchSortedFn for &dyn PrimitiveTrait<T> {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<usize> {
         let pvalue: T = value.try_into()?;
-        Ok(self.typed_data().search_sorted(&pvalue, side))
+        Ok(self
+            .typed_data()
+            .search_sorted(&pvalue, side)
+            .unwrap_or_else(|o| o))
     }
 }
 
