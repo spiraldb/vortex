@@ -9,7 +9,11 @@ use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for VarBinViewArray {
     fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
-        let mut acc = VarBinAccumulator::default();
+        if self.is_empty() {
+            return Ok(StatsSet::new());
+        }
+
+        let mut acc = VarBinAccumulator::new();
         self.iter_primitive()
             .map(|prim_iter| {
                 for next_val in prim_iter {
@@ -21,6 +25,6 @@ impl StatsCompute for VarBinViewArray {
                     acc.nullable_next(next_val.map(Cow::from));
                 }
             });
-        Ok(acc.finish(self.dtype()))
+        Ok(acc.finish(self.len(), self.dtype()))
     }
 }
