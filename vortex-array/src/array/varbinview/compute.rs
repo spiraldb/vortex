@@ -107,12 +107,12 @@ impl AsArrowArray for VarBinViewArray {
 
 impl SliceFn for VarBinViewArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(VarBinViewArray::new(
+        Ok(VarBinViewArray::try_new(
             slice(self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?,
             self.data().to_vec(),
             self.dtype().clone(),
             self.validity().map(|v| v.slice(start, stop)).transpose()?,
-        )
+        )?
         .into_array())
     }
 }
