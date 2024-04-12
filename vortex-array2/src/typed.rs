@@ -155,6 +155,6 @@ impl<D: ArrayDef> IntoArrayData for TypedArray<'_, D> {
 
 impl<D: ArrayDef> ToArrayData for TypedArray<'_, D> {
     fn to_array_data(&self) -> ArrayData {
-        self.array().to_array_data()
+        self.clone().into_array_data()
     }
 }
