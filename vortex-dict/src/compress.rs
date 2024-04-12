@@ -4,7 +4,6 @@ use ahash::RandomState;
 use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
 use num_traits::AsPrimitive;
-use vortex::array::bool::BoolArray;
 use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
 use vortex::array::varbin::{VarBinArray, VarBinEncoding};
 use vortex::array::{Array, ArrayKind, ArrayRef};
@@ -13,7 +12,6 @@ use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::AsBytes;
 use vortex::stats::Stat;
-use vortex::validity::Validity;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
@@ -140,7 +138,7 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
         validity.push(false);
         validity.extend(vec![true; values.len() - 1]);
 
-        Some(Validity::array(BoolArray::from(validity).into_array()).unwrap())
+        Some(validity.into())
     } else {
         None
     };
@@ -222,7 +220,7 @@ where
         validity.push(false);
         validity.extend(vec![true; offsets.len() - 2]);
 
-        Some(Validity::array(BoolArray::from(validity).into_array()).unwrap())
+        Some(validity.into())
     } else {
         None
     };
@@ -323,6 +321,7 @@ mod test {
             codes.buffer().typed_data::<u64>(),
             &[1, 0, 2, 1, 0, 3, 2, 0]
         );
+        assert_eq!(String::from_utf8(values.bytes_at(0).unwrap()).unwrap(), "");
         assert_eq!(
             values
                 .iter_primitive()

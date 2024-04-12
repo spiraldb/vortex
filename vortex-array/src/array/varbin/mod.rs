@@ -1,12 +1,13 @@
 use std::sync::{Arc, RwLock};
 
 use linkme::distributed_slice;
-use num_traits::{FromPrimitive, Unsigned};
+use num_traits::AsPrimitive;
+pub use stats::VarBinAccumulator;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::primitive::PrimitiveArray;
+use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::{check_slice_bounds, Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
@@ -15,7 +16,9 @@ use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
 use crate::iterator::ArrayIter;
+use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
+use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 use crate::serde::{ArraySerde, EncodingSerde};
 use crate::stats::{Stats, StatsSet};
 use crate::validity::OwnedValidity;
@@ -24,7 +27,7 @@ use crate::view::AsView;
 use crate::{impl_array, ArrayWalker};
 
 mod accessor;
-mod builder;
+pub mod builder;
 mod compress;
 mod compute;
 mod serde;
@@ -119,23 +122,14 @@ impl VarBinArray {
 
     fn from_vec_sized<K, T>(vec: Vec<T>, dtype: DType) -> Self
     where
-        K: NativePType + FromPrimitive + Unsigned,
+        K: NativePType,
         T: AsRef<[u8]>,
     {
-        let mut offsets: Vec<K> = Vec::with_capacity(vec.len() + 1);
-        let mut values: Vec<u8> = Vec::new();
-        offsets.push(K::zero());
+        let mut builder = VarBinBuilder::<K>::with_capacity(vec.len());
         for v in vec {
-            values.extend_from_slice(v.as_ref());
-            offsets.push(<K as FromPrimitive>::from_usize(values.len()).unwrap());
+            builder.push_value(v.as_ref());
         }
-
-        VarBinArray::new(
-            PrimitiveArray::from(offsets).into_array(),
-            PrimitiveArray::from(values).into_array(),
-            dtype,
-            None,
-        )
+        builder.finish(dtype)
     }
 
     pub fn from_iter<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
@@ -143,35 +137,11 @@ impl VarBinArray {
         dtype: DType,
     ) -> Self {
         let iter = iter.into_iter();
-        let (lower, _) = iter.size_hint();
-
-        let mut validity: Vec<bool> = Vec::with_capacity(lower);
-        let mut offsets: Vec<u64> = Vec::with_capacity(lower + 1);
-        offsets.push(0);
-        let mut bytes: Vec<u8> = Vec::new();
-        for i in iter {
-            if let Some(v) = i {
-                validity.push(true);
-                bytes.extend_from_slice(v.as_ref());
-                offsets.push(bytes.len() as u64);
-            } else {
-                validity.push(false);
-                offsets.push(bytes.len() as u64);
-            }
+        let mut builder = VarBinBuilder::<u64>::with_capacity(iter.size_hint().0);
+        for v in iter {
+            builder.push(v.as_ref().map(|o| o.as_ref()));
         }
-
-        let offsets_ref = PrimitiveArray::from(offsets).into_array();
-        let bytes_ref = PrimitiveArray::from(bytes).into_array();
-        if validity.is_empty() {
-            VarBinArray::new(offsets_ref, bytes_ref, dtype, None)
-        } else {
-            VarBinArray::new(
-                offsets_ref,
-                bytes_ref,
-                dtype.as_nullable(),
-                Some(validity.into()),
-            )
-        }
+        builder.finish(dtype)
     }
 
     pub fn iter_primitive(&self) -> VortexResult<VarBinIter<&[u8]>> {
@@ -185,13 +155,24 @@ impl VarBinArray {
         ArrayIter::new(self)
     }
 
+    pub(self) fn offset_at(&self, index: usize) -> usize {
+        if let Some(parray) = self.offsets().maybe_primitive() {
+            match_each_native_ptype!(parray.ptype(), |$P| {
+                parray.typed_data::<$P>()[index].as_()
+            })
+        } else {
+            scalar_at(self.offsets(), index)
+                .unwrap()
+                .try_into()
+                .unwrap()
+        }
+    }
+
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
-        let start = scalar_at(self.offsets(), index)?.try_into()?;
-        let end = scalar_at(self.offsets(), index + 1)?.try_into()?;
+        let start = self.offset_at(index);
+        let end = self.offset_at(index + 1);
         let sliced = self.bytes().slice(start, end)?;
-        Ok(flatten_primitive(sliced.as_ref())?
-            .typed_data::<u8>()
-            .to_vec())
+        Ok(flatten_primitive(sliced.as_ref())?.buffer().to_vec())
     }
 }
 
@@ -323,25 +304,38 @@ impl From<Vec<&str>> for VarBinArray {
 
 impl<'a> FromIterator<Option<&'a [u8]>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a [u8]>>>(iter: T) -> Self {
-        VarBinArray::from_iter(iter, DType::Binary(Nullability::NonNullable))
+        VarBinArray::from_iter(iter, DType::Binary(Nullability::Nullable))
     }
 }
 
 impl FromIterator<Option<Vec<u8>>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<Vec<u8>>>>(iter: T) -> Self {
-        VarBinArray::from_iter(iter, DType::Binary(Nullability::NonNullable))
+        VarBinArray::from_iter(iter, DType::Binary(Nullability::Nullable))
     }
 }
 
 impl FromIterator<Option<String>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<String>>>(iter: T) -> Self {
-        VarBinArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
+        VarBinArray::from_iter(iter, DType::Utf8(Nullability::Nullable))
     }
 }
 
 impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a str>>>(iter: T) -> Self {
-        VarBinArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
+        VarBinArray::from_iter(iter, DType::Utf8(Nullability::Nullable))
+    }
+}
+
+pub fn varbin_scalar(value: Vec<u8>, dtype: &DType) -> Scalar {
+    if matches!(dtype, DType::Utf8(_)) {
+        let str = unsafe { String::from_utf8_unchecked(value) };
+        Utf8Scalar::try_new(Some(str), dtype.nullability())
+            .unwrap()
+            .into()
+    } else {
+        BinaryScalar::try_new(Some(value), dtype.nullability())
+            .unwrap()
+            .into()
     }
 }
 

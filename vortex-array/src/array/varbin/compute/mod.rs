@@ -9,7 +9,7 @@ use vortex_schema::DType;
 
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbin::VarBinArray;
+use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::array::{Array, ArrayRef};
 use crate::arrow::wrappers::{as_nulls, as_offset_buffer};
 use crate::compute::as_arrow::AsArrowArray;
@@ -20,9 +20,8 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::ptype::PType;
-use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
-use crate::validity::Validity;
-use crate::validity::{ArrayValidity, OwnedValidity};
+use crate::scalar::Scalar;
+use crate::validity::{ArrayValidity, OwnedValidity, Validity};
 use crate::view::ToOwnedView;
 
 mod take;
@@ -154,18 +153,10 @@ impl FlattenFn for VarBinArray {
 impl ScalarAtFn for VarBinArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
-            self.bytes_at(index).map(|bytes| {
-                if matches!(self.dtype, DType::Utf8(_)) {
-                    unsafe { String::from_utf8_unchecked(bytes) }.into()
-                } else {
-                    bytes.into()
-                }
-            })
-            // FIXME(ngates): there's something weird about this.
-        } else if matches!(self.dtype, DType::Utf8(_)) {
-            Ok(Utf8Scalar::none().into())
+            self.bytes_at(index)
+                .map(|bytes| varbin_scalar(bytes, self.dtype()))
         } else {
-            Ok(BinaryScalar::none().into())
+            Ok(Scalar::null(self.dtype()))
         }
     }
 }

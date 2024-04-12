@@ -33,6 +33,12 @@ impl From<Vec<u8>> for Scalar {
     }
 }
 
+impl From<&[u8]> for Scalar {
+    fn from(value: &[u8]) -> Self {
+        BinaryScalar::some(value.to_vec()).into()
+    }
+}
+
 impl TryFrom<Scalar> for Vec<u8> {
     type Error = VortexError;
 
@@ -40,8 +46,7 @@ impl TryFrom<Scalar> for Vec<u8> {
         let Scalar::Binary(b) = value else {
             vortex_bail!(MismatchedTypes: "binary", value.dtype());
         };
-        b.value()
-            .cloned()
+        b.into_value()
             .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
     }
 }

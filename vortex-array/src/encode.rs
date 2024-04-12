@@ -128,7 +128,7 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayRef {
             _ => panic!("Invalid data type for ByteViewArray"),
         };
 
-        VarBinViewArray::new(
+        VarBinViewArray::try_new(
             value.views().inner().clone().into_array(),
             value
                 .data_buffers()
@@ -138,6 +138,7 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayRef {
             dtype,
             nulls(value.nulls(), nullable, value.len()),
         )
+        .unwrap()
         .into_array()
     }
 }

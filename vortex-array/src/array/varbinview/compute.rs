@@ -6,6 +6,7 @@ use itertools::Itertools;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
+use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::VarBinViewArray;
 use crate::array::Array;
 use crate::arrow::wrappers::as_nulls;
@@ -35,13 +36,8 @@ impl ArrayCompute for VarBinViewArray {
 impl ScalarAtFn for VarBinViewArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
-            self.bytes_at(index).map(|bytes| {
-                if matches!(self.dtype, DType::Utf8(_)) {
-                    unsafe { String::from_utf8_unchecked(bytes) }.into()
-                } else {
-                    bytes.into()
-                }
-            })
+            self.bytes_at(index)
+                .map(|bytes| varbin_scalar(bytes, self.dtype()))
         } else {
             Ok(Scalar::null(self.dtype()))
         }
@@ -56,12 +52,12 @@ impl FlattenFn for VarBinViewArray {
             .iter()
             .map(|d| flatten(d.as_ref()).unwrap().into_array())
             .collect::<Vec<_>>();
-        Ok(FlattenedArray::VarBinView(VarBinViewArray::new(
+        Ok(FlattenedArray::VarBinView(VarBinViewArray::try_new(
             views,
             data,
             self.dtype.clone(),
             self.validity().to_owned_view(),
-        )))
+        )?))
     }
 }
 

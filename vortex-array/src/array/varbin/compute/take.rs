@@ -1,4 +1,3 @@
-use num_traits::PrimInt;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
@@ -37,7 +36,7 @@ impl TakeFn for VarBinArray {
     }
 }
 
-fn take<I: NativePType + PrimInt, O: NativePType + PrimInt>(
+fn take<I: NativePType, O: NativePType>(
     dtype: DType,
     offsets: &[O],
     data: &[u8],
@@ -58,7 +57,7 @@ fn take<I: NativePType + PrimInt, O: NativePType + PrimInt>(
     builder.finish(dtype)
 }
 
-fn take_nullable<I: NativePType + PrimInt, O: NativePType + PrimInt>(
+fn take_nullable<I: NativePType, O: NativePType>(
     dtype: DType,
     offsets: &[O],
     data: &[u8],
