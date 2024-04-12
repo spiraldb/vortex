@@ -1,10 +1,10 @@
 use std::fmt::{Debug, Formatter};
 
-use arrow_buffer::Buffer;
 use vortex::flatbuffers::array as fb;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
+use crate::buffer::Buffer;
 use crate::encoding::EncodingRef;
 use crate::stats::{EmptyStatistics, Statistics};
 use crate::{Array, IntoArray, ToArray};
@@ -15,7 +15,7 @@ pub struct ArrayView<'v> {
     encoding: EncodingRef,
     dtype: &'v DType,
     array: fb::Array<'v>,
-    buffers: &'v [Buffer],
+    buffers: &'v [Buffer<'v>],
     ctx: &'v SerdeContext,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
@@ -63,7 +63,8 @@ impl<'v> ArrayView<'v> {
 
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
         // implement Encoding::with_view().
-        encoding.with_view_mut(&view, &mut |_| Ok(()))?;
+        // FIXME(ngates): validate the metadata
+        view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;
 
         Ok(view)
     }
@@ -80,7 +81,8 @@ impl<'v> ArrayView<'v> {
         self.array.metadata().map(|m| m.bytes())
     }
 
-    pub fn child(&self, idx: usize, dtype: &'v DType) -> Option<ArrayView<'v>> {
+    // TODO(ngates): should we separate self and DType lifetimes? Should DType be cloned?
+    pub fn child(&'v self, idx: usize, dtype: &'v DType) -> Option<ArrayView<'v>> {
         let child = self.array_child(idx)?;
 
         // Figure out how many buffers to skip...
@@ -90,12 +92,7 @@ impl<'v> ArrayView<'v> {
             .children()?
             .iter()
             .take(idx)
-            .map(|child| {
-                child
-                    .child()
-                    .map(|c| Self::cumulative_nbuffers(c))
-                    .unwrap_or_default()
-            })
+            .map(|child| Self::cumulative_nbuffers(child))
             .sum();
         let buffer_count = Self::cumulative_nbuffers(child);
 
@@ -113,7 +110,7 @@ impl<'v> ArrayView<'v> {
     fn array_child(&self, idx: usize) -> Option<fb::Array<'v>> {
         let children = self.array.children()?;
         if idx < children.len() {
-            children.get(idx).child()
+            Some(children.get(idx))
         } else {
             None
         }
@@ -128,10 +125,7 @@ impl<'v> ArrayView<'v> {
     fn cumulative_nbuffers(array: fb::Array) -> usize {
         let mut nbuffers = array.nbuffers() as usize;
         for child in array.children().unwrap_or_default() {
-            nbuffers += child
-                .child()
-                .map(|c| Self::cumulative_nbuffers(c))
-                .unwrap_or_default();
+            nbuffers += Self::cumulative_nbuffers(child)
         }
         nbuffers
     }
@@ -171,8 +165,7 @@ impl ArrayParts for ArrayView<'_> {
         self.array.children().map(|c| c.len()).unwrap_or_default()
     }
 
-    fn statistics(&self) -> &dyn Statistics {
-        // TODO(ngates): serialize statistics into fb::Array
+    fn statistics<'a>(&'a self) -> &'a (dyn Statistics + 'a) {
         &EmptyStatistics
     }
 }

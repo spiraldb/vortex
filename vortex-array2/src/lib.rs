@@ -1,37 +1,40 @@
-#![allow(dead_code)]
-
 extern crate core;
 
 pub mod array;
-mod batch;
+mod arrow;
+pub mod buffer;
 pub mod compute;
 mod context;
 mod data;
 pub mod encoding;
+mod flatten;
 mod implementation;
 mod metadata;
 mod stats;
 mod tree;
-mod validity;
+mod typed;
+pub mod validity;
 mod view;
 mod visitor;
 
 use std::fmt::{Debug, Display, Formatter};
+use std::sync::Arc;
 
-use arrow_buffer::Buffer;
-pub use batch::*;
 pub use context::*;
 pub use data::*;
+pub use flatten::*;
 pub use implementation::*;
 pub use linkme;
 pub use metadata::*;
+pub use typed::*;
 pub use view::*;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
-use crate::encoding::EncodingRef;
-use crate::stats::{ArrayStatistics, Statistics};
+use crate::encoding::{ArrayEncodingRef, EncodingRef};
+use crate::stats::{ArrayStatistics, ArrayStatisticsCompute, Statistics};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
@@ -41,6 +44,8 @@ pub enum Array<'v> {
     DataRef(&'v ArrayData),
     View(ArrayView<'v>),
 }
+
+pub type OwnedArray = Array<'static>;
 
 impl Array<'_> {
     pub fn encoding(&self) -> EncodingRef {
@@ -60,11 +65,35 @@ impl Array<'_> {
     }
 
     pub fn len(&self) -> usize {
-        self.with_array(|a| a.len())
+        self.with_dyn(|a| a.len())
     }
 
     pub fn is_empty(&self) -> bool {
-        self.with_array(|a| a.is_empty())
+        self.with_dyn(|a| a.is_empty())
+    }
+
+    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array<'a>> {
+        match self {
+            Array::Data(d) => d.child(idx, dtype).map(Array::DataRef),
+            Array::DataRef(d) => d.child(idx, dtype).map(Array::DataRef),
+            Array::View(v) => v.child(idx, dtype).map(Array::View),
+        }
+    }
+
+    pub fn buffer(&self, idx: usize) -> Option<&Buffer> {
+        match self {
+            Array::Data(d) => d.buffer(idx),
+            Array::DataRef(d) => d.buffer(idx),
+            Array::View(v) => v.buffer(idx),
+        }
+    }
+}
+
+impl ToStatic for Array<'_> {
+    type Static = OwnedArray;
+
+    fn to_static(&self) -> Self::Static {
+        Array::Data(self.to_array_data())
     }
 }
 
@@ -80,8 +109,14 @@ pub trait ToArrayData {
     fn to_array_data(&self) -> ArrayData;
 }
 
-pub trait WithArray {
-    fn with_array<R, F: FnMut(&dyn ArrayTrait) -> R>(&self, f: F) -> R;
+pub trait IntoArrayData {
+    fn into_array_data(self) -> ArrayData;
+}
+
+pub trait ToStatic {
+    type Static;
+
+    fn to_static(&self) -> Self::Static;
 }
 
 pub trait ArrayParts {
@@ -89,16 +124,24 @@ pub trait ArrayParts {
     fn buffer(&self, idx: usize) -> Option<&Buffer>;
     fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array>;
     fn nchildren(&self) -> usize;
-    fn statistics(&self) -> &dyn Statistics;
+    fn statistics<'a>(&'a self) -> &'a (dyn Statistics + 'a);
 }
 
+// TODO(ngates): I think we should separate the parts and metadata lifetimes.
 pub trait TryFromArrayParts<'v, M: ArrayMetadata>: Sized + 'v {
     fn try_from_parts(parts: &'v dyn ArrayParts, metadata: &'v M) -> VortexResult<Self>;
 }
 
 /// Collects together the behaviour of an array.
 pub trait ArrayTrait:
-    ArrayCompute + ArrayValidity + AcceptArrayVisitor + ArrayStatistics + ToArrayData
+    ArrayEncodingRef
+    + ArrayCompute
+    + ArrayFlatten
+    + ArrayValidity
+    + AcceptArrayVisitor
+    + ArrayStatistics
+    + ArrayStatisticsCompute
+    + ToArrayData
 {
     fn dtype(&self) -> &DType;
 
@@ -109,6 +152,8 @@ pub trait ArrayTrait:
         self.len() == 0
     }
 
+    fn metadata(&self) -> Arc<dyn ArrayMetadata>;
+
     fn nbytes(&self) -> usize {
         let mut visitor = NBytesVisitor(0);
         self.accept(&mut visitor).unwrap();
@@ -118,12 +163,8 @@ pub trait ArrayTrait:
 
 struct NBytesVisitor(usize);
 impl ArrayVisitor for NBytesVisitor {
-    fn visit_column(&mut self, name: &str, array: &Array) -> VortexResult<()> {
-        self.visit_child(name, array)
-    }
-
     fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
-        self.0 += array.with_array(|a| a.nbytes());
+        self.0 += array.with_dyn(|a| a.nbytes());
         Ok(())
     }
 
@@ -133,23 +174,22 @@ impl ArrayVisitor for NBytesVisitor {
     }
 }
 
-impl ToArrayData for Array<'_> {
-    fn to_array_data(&self) -> ArrayData {
-        match self {
-            Array::Data(d) => d.clone(),
-            Array::DataRef(d) => (*d).clone(),
-            Array::View(v) => v.encoding().with_view(v, |a| a.to_array_data()),
-        }
-    }
-}
+impl<'a> Array<'a> {
+    pub fn with_dyn<R, F>(&'a self, mut f: F) -> R
+    where
+        F: FnMut(&dyn ArrayTrait) -> R,
+    {
+        let mut result = None;
 
-impl WithArray for Array<'_> {
-    fn with_array<R, F: FnMut(&dyn ArrayTrait) -> R>(&self, f: F) -> R {
-        match self {
-            Array::Data(d) => d.encoding().with_data(d, f),
-            Array::DataRef(d) => d.encoding().with_data(d, f),
-            Array::View(v) => v.encoding().with_view(v, f),
-        }
+        self.encoding()
+            .with_dyn(self, &mut |array| {
+                result = Some(f(array));
+                Ok(())
+            })
+            .unwrap();
+
+        // Now we unwrap the optional, which we know to be populated by the closure.
+        result.unwrap()
     }
 }
 
@@ -168,5 +208,21 @@ impl Display for Array<'_> {
             self.dtype(),
             self.len()
         )
+    }
+}
+
+impl IntoArrayData for Array<'_> {
+    fn into_array_data(self) -> ArrayData {
+        match self {
+            Array::Data(d) => d,
+            Array::DataRef(d) => d.clone(),
+            Array::View(_) => self.with_dyn(|a| a.to_array_data()),
+        }
+    }
+}
+
+impl ToArrayData for Array<'_> {
+    fn to_array_data(&self) -> ArrayData {
+        self.clone().into_array_data()
     }
 }

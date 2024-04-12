@@ -40,10 +40,10 @@ mod tests {
     use std::io::{Cursor, Write};
     use std::sync::Arc;
 
-    use vortex_array2::array::primitive::PrimitiveData;
-    use vortex_array2::array::r#struct::StructData;
-    use vortex_array2::{IntoArray, WithArray};
-    use vortex_array2::{SerdeContext, ToArray, ToArrayData};
+    use vortex_array2::array::primitive::PrimitiveArray;
+    use vortex_array2::array::r#struct::StructArray;
+    use vortex_array2::{IntoArray, IntoArrayData};
+    use vortex_array2::{SerdeContext, ToArray};
 
     use crate::iter::FallibleLendingIterator;
     use crate::reader::StreamReader;
@@ -51,18 +51,17 @@ mod tests {
 
     #[test]
     fn test_write_flatbuffer() {
-        let col = PrimitiveData::from_vec(vec![0, 1, 2]).into_data();
-        let nested_struct = StructData::try_new(
+        let col = PrimitiveArray::from(vec![0, 1, 2]).into_array_data();
+        let nested_struct = StructArray::try_new(
             vec![Arc::new("x".into()), Arc::new("y".into())],
             vec![col.clone(), col.clone()],
             3,
         )
-        .unwrap()
-        .into_data();
+        .unwrap();
 
-        let arr = StructData::try_new(
+        let arr = StructArray::try_new(
             vec![Arc::new("a".into()), Arc::new("b".into())],
-            vec![col.clone(), nested_struct],
+            vec![col.clone(), nested_struct.into_array_data()],
             3,
         )
         .unwrap()
@@ -73,7 +72,7 @@ mod tests {
         let mut cursor = Cursor::new(Vec::new());
         let ctx = SerdeContext::default();
         let mut writer = StreamWriter::try_new_unbuffered(&mut cursor, ctx).unwrap();
-        arr.with_array(|a| writer.write(a)).unwrap();
+        arr.with_dyn(|a| writer.write(a)).unwrap();
         cursor.flush().unwrap();
         cursor.set_position(0);
 
@@ -86,7 +85,7 @@ mod tests {
             // Read some number of chunks from the stream.
             while let Some(chunk) = array_reader.next().unwrap() {
                 println!("VIEW: {:?}", &chunk);
-                let _data = chunk.to_array().to_array_data();
+                let _data = chunk.to_array().into_array_data();
                 // let taken = take(&chunk, &PrimitiveArray::from(vec![0, 3, 0, 1])).unwrap();
                 // let taken = taken.as_primitive().typed_data::<i32>();
                 // println!("Taken: {:?}", &taken);

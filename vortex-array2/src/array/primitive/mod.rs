@@ -1,18 +1,20 @@
 mod compute;
+mod stats;
 
-use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
+use std::collections::HashMap;
+
+use arrow_buffer::{ArrowNativeType, ScalarBuffer};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex::ptype::{NativePType, PType};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::impl_encoding;
-use crate::stats::{ArrayStatistics, Statistics};
-use crate::validity::{ArrayValidity, Validity, ValidityMetadata};
+use crate::buffer::Buffer;
+use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::ArrayMetadata;
-use crate::{ArrayData, TypedArrayData};
-use crate::{ArrayView, ToArrayData};
+use crate::{impl_encoding, IntoArray};
+use crate::{ArrayFlatten, ArrayMetadata};
 
 impl_encoding!("vortex.primitive", Primitive);
 
@@ -21,69 +23,86 @@ pub struct PrimitiveMetadata {
     validity: ValidityMetadata,
 }
 
-pub struct PrimitiveArray<'a> {
-    ptype: PType,
-    dtype: &'a DType,
-    buffer: &'a Buffer,
-    validity: Validity<'a>,
-    statistics: &'a dyn Statistics,
-}
-
 impl PrimitiveArray<'_> {
     pub fn buffer(&self) -> &Buffer {
-        self.buffer
+        self.array().buffer(0).expect("missing buffer")
     }
 
-    pub fn validity(&self) -> &Validity {
-        &self.validity
+    pub fn validity(&self) -> Validity {
+        self.metadata()
+            .validity
+            .to_validity(self.array().child(0, &Validity::DTYPE))
     }
 
     pub fn ptype(&self) -> PType {
-        self.ptype
+        // TODO(ngates): we can't really cache this anywhere?
+        self.dtype().try_into().unwrap()
+    }
+
+    pub fn typed_data<T: NativePType>(&self) -> &[T] {
+        self.buffer().typed_data::<T>()
     }
 }
 
-impl<'a> TryFromArrayParts<'a, PrimitiveMetadata> for PrimitiveArray<'a> {
-    fn try_from_parts(
-        parts: &'a dyn ArrayParts,
-        metadata: &'a PrimitiveMetadata,
+impl PrimitiveArray<'_> {
+    pub fn try_new<T: NativePType + ArrowNativeType>(
+        buffer: ScalarBuffer<T>,
+        validity: Validity,
     ) -> VortexResult<Self> {
-        let buffer = parts.buffer(0).unwrap();
-        let ptype: PType = parts.dtype().try_into()?;
-        Ok(PrimitiveArray {
-            ptype,
-            dtype: parts.dtype(),
-            buffer,
-            validity: metadata.validity.to_validity(parts.child(0, parts.dtype())),
-            statistics: parts.statistics(),
-        })
+        Self::try_from_parts(
+            DType::from(T::PTYPE).with_nullability(validity.nullability()),
+            PrimitiveMetadata {
+                validity: validity.to_metadata(buffer.len())?,
+            },
+            vec![Buffer::Owned(buffer.into_inner())].into(),
+            validity.to_array_data().into_iter().collect_vec().into(),
+            HashMap::default(),
+        )
+    }
+
+    pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>, validity: Validity) -> Self {
+        Self::try_new(ScalarBuffer::from(values), validity).unwrap()
+    }
+
+    pub fn from_nullable_vec<T: NativePType + ArrowNativeType>(values: Vec<Option<T>>) -> Self {
+        let elems: Vec<T> = values.iter().map(|v| v.unwrap_or_default()).collect();
+        let validity = Validity::from(values.iter().map(|v| v.is_some()).collect::<Vec<_>>());
+        Self::from_vec(elems, validity)
     }
 }
 
-impl PrimitiveData {
-    fn try_new<T: NativePType>(buffer: ScalarBuffer<T>, validity: Validity) -> VortexResult<Self> {
-        Ok(Self::new_unchecked(
-            DType::from(T::PTYPE).with_nullability(validity.nullability()),
-            Arc::new(PrimitiveMetadata {
-                validity: validity.to_metadata(buffer.len() / T::PTYPE.byte_width())?,
-            }),
-            vec![buffer.into_inner()].into(),
-            vec![validity.into_array_data()].into(),
-        ))
+impl<T: NativePType> From<Vec<T>> for PrimitiveArray<'_> {
+    fn from(values: Vec<T>) -> Self {
+        PrimitiveArray::from_vec(values, Validity::NonNullable)
     }
+}
 
-    pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>) -> Self {
-        Self::try_new(ScalarBuffer::from(values), Validity::NonNullable).unwrap()
+impl<T: NativePType> IntoArray<'static> for Vec<T> {
+    fn into_array(self) -> Array<'static> {
+        PrimitiveArray::from(self).into_array()
+    }
+}
+
+impl ArrayFlatten for PrimitiveArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        Ok(Flattened::Primitive(self))
     }
 }
 
 impl ArrayTrait for PrimitiveArray<'_> {
     fn dtype(&self) -> &DType {
-        self.dtype
+        self.array().dtype()
     }
 
     fn len(&self) -> usize {
         self.buffer().len() / self.ptype().byte_width()
+    }
+
+    fn metadata(&self) -> Arc<dyn ArrayMetadata> {
+        Arc::new(self.metadata().clone())
     }
 }
 
@@ -91,32 +110,15 @@ impl ArrayValidity for PrimitiveArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
-}
 
-impl ToArrayData for PrimitiveArray<'_> {
-    fn to_array_data(&self) -> ArrayData {
-        ArrayData::try_new(
-            &PrimitiveEncoding,
-            self.dtype().clone(),
-            Arc::new(PrimitiveMetadata {
-                validity: self.validity().to_metadata(self.len()).unwrap(),
-            }),
-            vec![self.buffer().clone()].into(),
-            vec![].into(),
-        )
-        .unwrap()
+    fn logical_validity(&self) -> LogicalValidity {
+        self.validity().to_logical(self.len())
     }
 }
 
 impl AcceptArrayVisitor for PrimitiveArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_buffer(self.buffer())?;
-        visitor.visit_validity(self.validity())
-    }
-}
-
-impl ArrayStatistics for PrimitiveArray<'_> {
-    fn statistics(&self) -> &dyn Statistics {
-        self.statistics
+        visitor.visit_validity(&self.validity())
     }
 }

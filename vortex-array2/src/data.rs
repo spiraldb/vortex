@@ -1,26 +1,24 @@
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
-use arrow_buffer::Buffer;
 use vortex::scalar::Scalar;
-use vortex::stats::Stat;
-use vortex_error::{vortex_bail, VortexError, VortexResult};
+use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::EncodingRef;
+use crate::stats::Stat;
 use crate::stats::Statistics;
-use crate::{Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, ToArray};
+use crate::{Array, ArrayMetadata, ArrayParts, IntoArray, ToArray};
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct ArrayData {
     encoding: EncodingRef,
     dtype: DType,
     metadata: Arc<dyn ArrayMetadata>,
-    buffers: Arc<[Buffer]>, // Should this just be an Option, not an Arc?
-    children: Arc<[Option<ArrayData>]>,
-    stats_set: Arc<RwLock<HashMap<Stat, Scalar>>>,
+    buffers: Arc<[OwnedBuffer]>, // Should this just be an Option, not an Arc? How many multi-buffer arrays are there?
+    children: Arc<[ArrayData]>,
+    stats_map: Arc<RwLock<HashMap<Stat, Scalar>>>,
 }
 
 impl ArrayData {
@@ -28,8 +26,9 @@ impl ArrayData {
         encoding: EncodingRef,
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
-        buffers: Arc<[Buffer]>,
-        children: Arc<[Option<ArrayData>]>,
+        buffers: Arc<[OwnedBuffer]>,
+        children: Arc<[ArrayData]>,
+        statistics: HashMap<Stat, Scalar>,
     ) -> VortexResult<Self> {
         let data = Self {
             encoding,
@@ -37,12 +36,13 @@ impl ArrayData {
             metadata,
             buffers,
             children,
-            stats_set: Arc::new(RwLock::new(HashMap::new())),
+            stats_map: Arc::new(RwLock::new(statistics)),
         };
 
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
-        // implement Encoding::with_data().
-        // encoding.with_data_mut(&data, &mut |_| Ok(()))?;
+        let array = data.to_array();
+        // FIXME(ngates): run some validation function
+        encoding.with_dyn(&array, &mut |_| Ok(()))?;
 
         Ok(data)
     }
@@ -63,11 +63,17 @@ impl ArrayData {
         &self.buffers
     }
 
-    pub fn child(&self, index: usize) -> Option<&ArrayData> {
-        self.children.get(index).and_then(|c| c.as_ref())
+    pub fn child(&self, index: usize, dtype: &DType) -> Option<&ArrayData> {
+        match self.children.get(index) {
+            None => None,
+            Some(child) => {
+                assert_eq!(child.dtype(), dtype);
+                Some(child)
+            }
+        }
     }
 
-    pub fn children(&self) -> &[Option<ArrayData>] {
+    pub fn children(&self) -> &[ArrayData] {
         &self.children
     }
 
@@ -106,7 +112,7 @@ impl<'a> Iterator for ArrayDataIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.stack.pop()?;
-        for child in next.children.as_ref().iter().flatten() {
+        for child in next.children.as_ref().iter() {
             self.stack.push(child);
         }
         Some(next)
@@ -125,82 +131,6 @@ impl IntoArray<'static> for ArrayData {
     }
 }
 
-#[derive(Debug)]
-pub struct TypedArrayData<D: ArrayDef> {
-    data: ArrayData,
-    phantom: PhantomData<D>,
-}
-
-impl<D: ArrayDef> TypedArrayData<D> {
-    pub fn new_unchecked(
-        dtype: DType,
-        metadata: Arc<D::Metadata>,
-        buffers: Arc<[Buffer]>,
-        children: Arc<[Option<ArrayData>]>,
-    ) -> Self {
-        Self::from_data_unchecked(
-            ArrayData::try_new(D::ENCODING, dtype, metadata, buffers, children).unwrap(),
-        )
-    }
-
-    pub fn from_data_unchecked(data: ArrayData) -> Self {
-        Self {
-            data,
-            phantom: PhantomData,
-        }
-    }
-
-    pub fn data(&self) -> &ArrayData {
-        &self.data
-    }
-
-    pub fn into_data(self) -> ArrayData {
-        self.data
-    }
-
-    pub fn metadata(&self) -> &D::Metadata {
-        self.data
-            .metadata()
-            .as_any()
-            .downcast_ref::<D::Metadata>()
-            .unwrap()
-    }
-
-    pub fn into_metadata(self) -> Arc<D::Metadata> {
-        self.data
-            .metadata
-            .as_any_arc()
-            .downcast::<D::Metadata>()
-            .unwrap()
-    }
-}
-
-impl<D: ArrayDef> ToArray for TypedArrayData<D> {
-    fn to_array(&self) -> Array {
-        Array::DataRef(&self.data)
-    }
-}
-
-impl<D: ArrayDef> IntoArray<'static> for TypedArrayData<D> {
-    fn into_array(self) -> Array<'static> {
-        Array::Data(self.data)
-    }
-}
-
-impl<D: ArrayDef> TryFrom<ArrayData> for TypedArrayData<D> {
-    type Error = VortexError;
-
-    fn try_from(data: ArrayData) -> Result<Self, Self::Error> {
-        if data.encoding().id() != D::ID {
-            vortex_bail!("Invalid encoding for array")
-        }
-        Ok(Self {
-            data,
-            phantom: PhantomData,
-        })
-    }
-}
-
 impl ArrayParts for ArrayData {
     fn dtype(&self) -> &DType {
         &self.dtype
@@ -210,34 +140,43 @@ impl ArrayParts for ArrayData {
         self.buffers().get(idx)
     }
 
-    fn child(&self, idx: usize, _dtype: &DType) -> Option<Array> {
-        // TODO(ngates): validate the DType
-        self.child(idx).map(move |a| a.to_array())
+    fn child(&self, idx: usize, dtype: &DType) -> Option<Array> {
+        self.child(idx, dtype).map(move |a| a.to_array())
     }
 
     fn nchildren(&self) -> usize {
         self.children.len()
     }
 
-    fn statistics(&self) -> &dyn Statistics {
+    fn statistics<'a>(&'a self) -> &'a (dyn Statistics + 'a) {
         self
     }
 }
 
 impl Statistics for ArrayData {
-    fn compute(&self, stat: Stat) -> VortexResult<Option<Scalar>> {
-        let mut locked = self.stats_set.write().unwrap();
+    fn compute(&self, stat: Stat) -> Option<Scalar> {
+        let mut locked = self.stats_map.write().unwrap();
         let stats = self
-            .encoding()
-            .with_data(self, |a| a.compute_statistics(stat))?;
+            .to_array()
+            .with_dyn(|a| a.compute_statistics(stat))
+            .ok()?;
         for (k, v) in &stats {
             locked.insert(*k, v.clone());
         }
-        Ok(stats.get(&stat).cloned())
+        stats.get(&stat).cloned()
     }
 
     fn get(&self, stat: Stat) -> Option<Scalar> {
-        let locked = self.stats_set.read().unwrap();
+        let locked = self.stats_map.read().unwrap();
         locked.get(&stat).cloned()
+    }
+
+    fn set(&self, stat: Stat, value: Scalar) {
+        let mut locked = self.stats_map.write().unwrap();
+        locked.insert(stat, value);
+    }
+
+    fn to_map(&self) -> HashMap<Stat, Scalar> {
+        self.stats_map.read().unwrap().clone()
     }
 }

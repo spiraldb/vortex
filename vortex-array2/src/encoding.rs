@@ -1,11 +1,13 @@
+use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 use linkme::distributed_slice;
 pub use vortex::encoding::EncodingId;
 use vortex_error::VortexResult;
 
-use crate::ArrayView;
-use crate::{ArrayData, ArrayTrait};
+use crate::flatten::{ArrayFlatten, Flattened};
+use crate::ArrayDef;
+use crate::{Array, ArrayTrait};
 
 #[distributed_slice]
 pub static VORTEX_ENCODINGS: [EncodingRef] = [..];
@@ -19,22 +21,44 @@ pub fn find_encoding(id: &str) -> Option<EncodingRef> {
         .cloned()
 }
 
-/// Dynamic trait representing an array type.
-#[allow(dead_code)]
+/// Object-safe encoding trait for an array.
 pub trait ArrayEncoding: 'static + Sync + Send {
+    fn as_any(&self) -> &dyn Any;
+
     fn id(&self) -> EncodingId;
 
-    fn with_view_mut<'v>(
-        &self,
-        view: &'v ArrayView<'v>,
-        f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
-    ) -> VortexResult<()>;
+    /// Flatten the given array.
+    fn flatten<'a>(&self, array: Array<'a>) -> VortexResult<Flattened<'a>>;
 
-    fn with_data_mut(
+    /// Unwrap the provided array into an implementation of ArrayTrait
+    fn with_dyn<'a>(
         &self,
-        data: &ArrayData,
-        f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
+        array: &'a Array<'a>,
+        f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
     ) -> VortexResult<()>;
+}
+
+/// Non-object-safe extensions to the ArrayEncoding trait.
+pub trait ArrayEncodingExt {
+    type D: ArrayDef;
+
+    fn flatten<'a>(array: Array<'a>) -> VortexResult<Flattened<'a>>
+    where
+        <Self as ArrayEncodingExt>::D: 'a,
+    {
+        let typed = <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array)?;
+        ArrayFlatten::flatten(typed)
+    }
+
+    fn with_dyn<'a, R, F>(array: &'a Array<'a>, mut f: F) -> R
+    where
+        F: for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> R,
+        <Self as ArrayEncodingExt>::D: 'a,
+    {
+        let typed =
+            <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array.clone()).unwrap();
+        f(&typed)
+    }
 }
 
 impl Debug for dyn ArrayEncoding + '_ {
@@ -43,42 +67,6 @@ impl Debug for dyn ArrayEncoding + '_ {
     }
 }
 
-impl dyn ArrayEncoding {
-    pub(crate) fn with_view<'v, R, F: FnMut(&dyn ArrayTrait) -> R>(
-        &self,
-        view: &'v ArrayView<'v>,
-        mut f: F,
-    ) -> R {
-        let mut result = None;
-
-        // Unwrap the result. This is safe since we validate that encoding against the
-        // ArrayData during ArrayData::try_new.
-        self.with_view_mut(view, &mut |array| {
-            result = Some(f(array));
-            Ok(())
-        })
-        .unwrap();
-
-        // Now we unwrap the optional, which we know to be populated in the closure.
-        result.unwrap()
-    }
-
-    pub(crate) fn with_data<R, F: FnMut(&dyn ArrayTrait) -> R>(
-        &self,
-        data: &ArrayData,
-        mut f: F,
-    ) -> R {
-        let mut result = None;
-
-        // Unwrap the result. This is safe since we validate that encoding against the
-        // ArrayData during ArrayData::try_new.
-        self.with_data_mut(data, &mut |array| {
-            result = Some(f(array));
-            Ok(())
-        })
-        .unwrap();
-
-        // Now we unwrap the optional, which we know to be populated in the closure.
-        result.unwrap()
-    }
+pub trait ArrayEncodingRef {
+    fn encoding(&self) -> EncodingRef;
 }

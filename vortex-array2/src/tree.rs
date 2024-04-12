@@ -1,12 +1,12 @@
 use std::fmt;
 
-use arrow_buffer::Buffer;
 use humansize::{format_size, DECIMAL};
 use serde::ser::Error;
 use vortex_error::{VortexError, VortexResult};
 
+use crate::buffer::Buffer;
 use crate::visitor::ArrayVisitor;
-use crate::{Array, WithArray};
+use crate::Array;
 
 impl Array<'_> {
     pub fn tree_display(&self) -> TreeDisplayWrapper {
@@ -24,7 +24,7 @@ impl<'a> TreeDisplayWrapper<'a> {
 impl<'a, 'fmt: 'a> fmt::Display for TreeDisplayWrapper<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let array = self.0;
-        let nbytes = array.with_array(|a| a.nbytes());
+        let nbytes = array.with_dyn(|a| a.nbytes());
         let mut array_fmt = TreeFormatter::new(f, "".to_string(), nbytes);
         array_fmt
             .visit_child("root", array)
@@ -41,12 +41,8 @@ pub struct TreeFormatter<'a, 'b: 'a> {
 /// TODO(ngates): I think we want to go back to the old explicit style. It gives arrays more
 ///  control over how their metadata etc is displayed.
 impl<'a, 'b: 'a> ArrayVisitor for TreeFormatter<'a, 'b> {
-    fn visit_column(&mut self, name: &str, array: &Array) -> VortexResult<()> {
-        self.visit_child(name, array)
-    }
-
     fn visit_child(&mut self, name: &str, array: &Array) -> VortexResult<()> {
-        array.with_array(|a| {
+        array.with_dyn(|a| {
             let nbytes = a.nbytes();
             writeln!(
                 self.fmt,
@@ -96,6 +92,7 @@ impl<'a, 'b: 'a> TreeFormatter<'a, 'b> {
         res
     }
 
+    #[allow(dead_code)]
     pub fn new_total_size<F>(&mut self, total: usize, new_total: F) -> fmt::Result
     where
         F: FnOnce(&mut TreeFormatter) -> fmt::Result,
@@ -105,29 +102,5 @@ impl<'a, 'b: 'a> TreeFormatter<'a, 'b> {
         let res = new_total(self);
         self.total_size = original_total;
         res
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::fmt::Write;
-
-    use vortex_error::VortexResult;
-
-    use crate::array::primitive::PrimitiveData;
-    use crate::array::ree::REEData;
-    use crate::IntoArray;
-
-    #[test]
-    fn tree() -> VortexResult<()> {
-        let primitive = PrimitiveData::from_vec(vec![2i32, 3, 4, 5]);
-        let ree = REEData::try_new(primitive.data().clone(), primitive.data().clone(), 4)?;
-        let arr = ree.into_array();
-
-        let mut str = String::new();
-        write!(str, "{}", arr.tree_display())?;
-        println!("{}", str);
-        // assert_eq!(str.as_str(), "hello");
-        Ok(())
     }
 }

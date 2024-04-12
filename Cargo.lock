@@ -974,6 +974,7 @@ dependencies = [
  "tokio",
  "vortex-alp",
  "vortex-array",
+ "vortex-array2",
  "vortex-datetime",
  "vortex-dict",
  "vortex-error",
@@ -5197,12 +5198,17 @@ dependencies = [
 name = "vortex-array2"
 version = "0.1.0"
 dependencies = [
+ "arrow-array 51.0.0",
  "arrow-buffer 51.0.0",
+ "arrow-schema 51.0.0",
  "flatbuffers",
  "flexbuffers",
  "half",
  "humansize",
+ "itertools 0.12.1",
  "linkme",
+ "log",
+ "num-traits",
  "paste",
  "serde",
  "vortex-array",
@@ -5282,11 +5288,14 @@ name = "vortex-ipc"
 version = "0.1.0"
 dependencies = [
  "arrow-buffer 51.0.0",
+ "criterion",
  "flatbuffers",
  "flatc",
  "itertools 0.12.1",
  "lending-iterator",
  "nougat",
+ "rand",
+ "simplelog",
  "streaming-iterator",
  "vortex-array",
  "vortex-array2",

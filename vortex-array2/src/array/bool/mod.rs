@@ -1,18 +1,20 @@
 mod compute;
+mod stats;
 
-use arrow_buffer::{BooleanBuffer, Buffer};
+use std::collections::HashMap;
+
+use arrow_buffer::BooleanBuffer;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::impl_encoding;
-use crate::stats::{ArrayStatistics, Statistics};
-use crate::validity::Validity;
+use crate::buffer::Buffer;
 use crate::validity::{ArrayValidity, ValidityMetadata};
+use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
-use crate::{ArrayData, TypedArrayData};
-use crate::{ArrayView, ToArrayData};
+use crate::{impl_encoding, ArrayFlatten};
 
 impl_encoding!("vortex.bool", Bool);
 
@@ -22,71 +24,93 @@ pub struct BoolMetadata {
     length: usize,
 }
 
-pub struct BoolArray<'a> {
-    dtype: &'a DType,
-    buffer: &'a Buffer,
-    validity: Validity<'a>,
-    length: usize,
-    statistics: &'a dyn Statistics,
-}
-
 impl BoolArray<'_> {
     pub fn buffer(&self) -> &Buffer {
-        self.buffer
-    }
-
-    pub fn validity(&self) -> &Validity {
-        &self.validity
+        self.array().buffer(0).expect("missing buffer")
     }
 
     pub fn boolean_buffer(&self) -> BooleanBuffer {
-        BooleanBuffer::new(self.buffer.clone(), 0, self.length)
+        BooleanBuffer::new(BoolArray::buffer(self).clone().into(), 0, self.len())
+    }
+
+    pub fn validity(&self) -> Validity {
+        self.metadata()
+            .validity
+            .to_validity(self.array().child(0, &Validity::DTYPE))
     }
 }
 
-impl<'v> TryFromArrayParts<'v, BoolMetadata> for BoolArray<'v> {
-    fn try_from_parts(parts: &'v dyn ArrayParts, metadata: &'v BoolMetadata) -> VortexResult<Self> {
-        Ok(BoolArray {
-            dtype: parts.dtype(),
-            // FIXME(ngates): implement our own BooleanBuffer that doesn't take ownership of the bytes
-            buffer: parts
-                .buffer(0)
-                .ok_or(vortex_err!("BoolArray requires a buffer"))?,
-            validity: metadata
-                .validity
-                .to_validity(parts.child(0, &Validity::DTYPE)),
-            length: metadata.length,
-            statistics: parts.statistics(),
-        })
-    }
-}
-
-impl BoolData {
+impl BoolArray<'_> {
     pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
-        Ok(Self::new_unchecked(
+        Self::try_from_parts(
             DType::Bool(validity.nullability()),
-            Arc::new(BoolMetadata {
+            BoolMetadata {
                 validity: validity.to_metadata(buffer.len())?,
                 length: buffer.len(),
-            }),
-            vec![buffer.into_inner()].into(),
-            vec![validity.into_array_data()].into(),
-        ))
+            },
+            vec![Buffer::Owned(buffer.into_inner())].into(),
+            validity.to_array_data().into_iter().collect_vec().into(),
+            HashMap::default(),
+        )
     }
 
-    pub fn from_vec(bools: Vec<bool>) -> Self {
+    pub fn from_vec(bools: Vec<bool>, validity: Validity) -> Self {
         let buffer = BooleanBuffer::from(bools);
-        Self::try_new(buffer, Validity::NonNullable).unwrap()
+        Self::try_new(buffer, validity).unwrap()
+    }
+}
+
+impl From<BooleanBuffer> for OwnedBoolArray {
+    fn from(value: BooleanBuffer) -> Self {
+        BoolArray::try_new(value, Validity::NonNullable).unwrap()
+    }
+}
+
+impl From<Vec<bool>> for OwnedBoolArray {
+    fn from(value: Vec<bool>) -> Self {
+        BoolArray::from_vec(value, Validity::NonNullable)
+    }
+}
+
+impl FromIterator<Option<bool>> for OwnedBoolArray {
+    fn from_iter<I: IntoIterator<Item = Option<bool>>>(iter: I) -> Self {
+        let iter = iter.into_iter();
+        let (lower, _) = iter.size_hint();
+
+        let mut validity: Vec<bool> = Vec::with_capacity(lower);
+        let values: Vec<bool> = iter
+            .map(|i| {
+                validity.push(i.is_some());
+                i.unwrap_or_default()
+            })
+            .collect::<Vec<_>>();
+
+        BoolArray::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap()
     }
 }
 
 impl ArrayTrait for BoolArray<'_> {
     fn dtype(&self) -> &DType {
-        self.dtype
+        // FIXME(ngates): move this
+        self.array().dtype()
     }
 
     fn len(&self) -> usize {
-        self.length
+        self.metadata().length
+    }
+
+    fn metadata(&self) -> Arc<dyn ArrayMetadata> {
+        // FIXME(ngates): move this
+        Arc::new(self.metadata().clone())
+    }
+}
+
+impl ArrayFlatten for BoolArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        Ok(Flattened::Bool(self))
     }
 }
 
@@ -94,36 +118,28 @@ impl ArrayValidity for BoolArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
-}
 
-impl ToArrayData for BoolArray<'_> {
-    fn to_array_data(&self) -> ArrayData {
-        todo!()
+    fn logical_validity(&self) -> LogicalValidity {
+        self.validity().to_logical(self.len())
     }
 }
 
 impl AcceptArrayVisitor for BoolArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_buffer(self.buffer())?;
-        visitor.visit_validity(self.validity())
-    }
-}
-
-impl ArrayStatistics for BoolArray<'_> {
-    fn statistics(&self) -> &dyn Statistics {
-        self.statistics
+        visitor.visit_validity(&self.validity())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::array::bool::BoolData;
-    use crate::compute::scalar_at;
+    use crate::array::bool::BoolArray;
+    use crate::compute::scalar_at::scalar_at;
     use crate::IntoArray;
 
     #[test]
     fn bool_array() {
-        let arr = BoolData::from_vec(vec![true, false, true]).into_array();
+        let arr = BoolArray::from(vec![true, false, true]).into_array();
         let scalar: bool = scalar_at(&arr, 0).unwrap().try_into().unwrap();
         assert!(scalar);
     }

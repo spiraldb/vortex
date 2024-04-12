@@ -1,6 +1,8 @@
-use crate::encoding::EncodingId;
+use vortex_error::VortexError;
+
 use crate::encoding::{ArrayEncoding, EncodingRef};
-use crate::{ArrayMetadata, TryFromArrayParts};
+use crate::encoding::{ArrayEncodingExt, EncodingId};
+use crate::{Array, ArrayMetadata};
 use crate::{ArrayTrait, TryDeserializeArrayMetadata, TrySerializeArrayMetadata};
 
 /// Trait the defines the set of types relating to an array.
@@ -9,11 +11,12 @@ pub trait ArrayDef {
     const ID: EncodingId;
     const ENCODING: EncodingRef;
 
-    type Array<'a>: ArrayTrait + TryFromArrayParts<'a, Self::Metadata> + 'a;
+    type Array<'a>: ArrayTrait + TryFrom<Array<'a>, Error = VortexError> + 'a;
     type Metadata: ArrayMetadata
+        + Clone
         + TrySerializeArrayMetadata
         + for<'a> TryDeserializeArrayMetadata<'a>;
-    type Encoding: ArrayEncoding;
+    type Encoding: ArrayEncoding + ArrayEncodingExt<D = Self>;
 }
 
 #[macro_export]
@@ -23,11 +26,19 @@ macro_rules! impl_encoding {
 
         paste! {
             use $crate::{
-                ArrayDef, ArrayParts, ArrayTrait, TryFromArrayParts,
-                TryDeserializeArrayMetadata,
+                Array,
+                ArrayDef,
+                ArrayTrait,
+                Flattened,
+                TypedArray,
             };
-            use $crate::encoding::{ArrayEncoding, EncodingId, EncodingRef, VORTEX_ENCODINGS};
-            use vortex_error::vortex_err;
+            use $crate::encoding::{
+                ArrayEncoding,
+                ArrayEncodingExt,
+                EncodingId,
+                EncodingRef,
+                VORTEX_ENCODINGS,
+            };
             use std::any::Any;
             use std::fmt::Debug;
             use std::sync::Arc;
@@ -35,8 +46,8 @@ macro_rules! impl_encoding {
 
             /// The array definition trait
             #[derive(Debug)]
-            pub struct [<$Name Def>];
-            impl ArrayDef for [<$Name Def>] {
+            pub struct $Name;
+            impl ArrayDef for $Name {
                 const ID: EncodingId = EncodingId::new($id);
                 const ENCODING: EncodingRef = &[<$Name Encoding>];
                 type Array<'a> = [<$Name Array>]<'a>;
@@ -44,7 +55,8 @@ macro_rules! impl_encoding {
                 type Encoding = [<$Name Encoding>];
             }
 
-            pub type [<$Name Data>] = TypedArrayData<[<$Name Def>]>;
+            pub type [<$Name Array>]<'a> = TypedArray<'a, $Name>;
+            pub type [<Owned $Name Array>] = TypedArray<'static, $Name>;
 
             /// The array encoding
             pub struct [<$Name Encoding>];
@@ -52,34 +64,29 @@ macro_rules! impl_encoding {
             #[allow(non_upper_case_globals)]
             static [<ENCODINGS_ $Name>]: EncodingRef = &[<$Name Encoding>];
             impl ArrayEncoding for [<$Name Encoding>] {
+                fn as_any(&self) -> &dyn Any {
+                    self
+                }
+
                 fn id(&self) -> EncodingId {
-                    [<$Name Def>]::ID
+                    $Name::ID
                 }
 
-                fn with_view_mut<'v>(
-                    &self,
-                    view: &'v ArrayView<'v>,
-                    f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
-                ) -> VortexResult<()> {
-                    // Convert ArrayView -> PrimitiveArray, then call compute.
-                    let metadata = [<$Name Metadata>]::try_deserialize_metadata(view.metadata())?;
-                    let array = [<$Name Array>]::try_from_parts(view as &dyn ArrayParts, &metadata)?;
-                    f(&array)
+                fn flatten<'a>(&self, array: Array<'a>) -> VortexResult<Flattened<'a>> {
+                    <Self as ArrayEncodingExt>::flatten(array)
                 }
 
-                fn with_data_mut(
+                #[inline]
+                fn with_dyn<'a>(
                     &self,
-                    data: &ArrayData,
-                    f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
+                    array: &'a Array<'a>,
+                    f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
                 ) -> VortexResult<()> {
-                    let metadata = data.metadata()
-                        .as_any()
-                        .downcast_ref::<[<$Name Metadata>]>()
-                        .ok_or_else(|| vortex_err!("Failed to downcast metadata"))?
-                        .clone();
-                    let array = [<$Name Array>]::try_from_parts(data as &dyn ArrayParts, &metadata)?;
-                    f(&array)
+                    <Self as ArrayEncodingExt>::with_dyn(array, f)
                 }
+            }
+            impl ArrayEncodingExt for [<$Name Encoding>] {
+                type D = $Name;
             }
 
             /// Implement ArrayMetadata
