@@ -1,6 +1,7 @@
 use std::io;
 use std::io::{BufReader, Read};
 
+use arrow_buffer::MutableBuffer;
 use nougat::gat;
 use vortex::array::composite::COMPOSITE_EXTENSIONS;
 use vortex_array2::buffer::Buffer;
@@ -140,8 +141,8 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
             let to_kill = buffer.offset() - offset;
             io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
 
-            let mut bytes = vec![0u8; buffer.length() as usize];
-            self.read.read_exact(&mut bytes).unwrap();
+            let mut bytes = MutableBuffer::from_len_zeroed(buffer.length() as usize);
+            self.read.read_exact(bytes.as_slice_mut()).unwrap();
             self.buffers.push(Buffer::Owned(bytes.into()));
 
             offset = buffer.offset() + buffer.length();
