@@ -2,6 +2,7 @@ use std::io;
 use std::sync::Arc;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
@@ -207,5 +208,23 @@ impl From<&Scalar> for ScalarTag {
             Scalar::Utf8(_) => ScalarTag::Utf8,
             Scalar::Composite(_) => ScalarTag::Composite,
         }
+    }
+}
+
+impl Serialize for Scalar {
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        todo!()
+    }
+}
+
+impl<'de> Deserialize<'de> for Scalar {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        todo!()
     }
 }
