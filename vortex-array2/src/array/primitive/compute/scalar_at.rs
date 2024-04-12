@@ -6,7 +6,6 @@ use vortex_error::VortexResult;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::validity::ArrayValidity;
-use crate::ArrayTrait;
 
 impl ScalarAtFn for PrimitiveArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {

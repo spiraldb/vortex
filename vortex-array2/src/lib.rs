@@ -18,7 +18,6 @@ mod view;
 mod visitor;
 
 use std::fmt::{Debug, Display, Formatter};
-use std::sync::Arc;
 
 pub use context::*;
 pub use data::*;
@@ -136,6 +135,7 @@ pub trait TryFromArrayParts<'v, M: ArrayMetadata>: Sized + 'v {
 pub trait ArrayTrait:
     ArrayEncodingRef
     + ArrayCompute
+    + ArrayDType
     + ArrayFlatten
     + ArrayValidity
     + AcceptArrayVisitor
@@ -143,8 +143,6 @@ pub trait ArrayTrait:
     + ArrayStatisticsCompute
     + ToArrayData
 {
-    fn dtype(&self) -> &DType;
-
     fn len(&self) -> usize;
 
     fn is_empty(&self) -> bool {
@@ -152,13 +150,15 @@ pub trait ArrayTrait:
         self.len() == 0
     }
 
-    fn metadata(&self) -> Arc<dyn ArrayMetadata>;
-
     fn nbytes(&self) -> usize {
         let mut visitor = NBytesVisitor(0);
         self.accept(&mut visitor).unwrap();
         visitor.0
     }
+}
+
+pub trait ArrayDType {
+    fn dtype(&self) -> &DType;
 }
 
 struct NBytesVisitor(usize);

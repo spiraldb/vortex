@@ -10,7 +10,6 @@ use vortex_error::VortexResult;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::validity::ArrayValidity;
-use crate::ArrayTrait;
 
 impl AsArrowArray for PrimitiveArray<'_> {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {

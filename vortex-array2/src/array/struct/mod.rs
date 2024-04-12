@@ -9,8 +9,8 @@ use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayData;
+use crate::ArrayFlatten;
 use crate::{impl_encoding, ToArray};
-use crate::{ArrayFlatten, ArrayMetadata};
 
 impl_encoding!("vortex.struct", Struct);
 
@@ -81,16 +81,8 @@ impl ArrayFlatten for StructArray<'_> {
 }
 
 impl ArrayTrait for StructArray<'_> {
-    fn dtype(&self) -> &DType {
-        self.array().dtype()
-    }
-
     fn len(&self) -> usize {
         self.metadata().length
-    }
-
-    fn metadata(&self) -> Arc<dyn ArrayMetadata> {
-        Arc::new(self.metadata().clone())
     }
 }
 

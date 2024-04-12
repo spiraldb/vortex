@@ -13,7 +13,6 @@ use crate::buffer::Buffer;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::ArrayMetadata;
 use crate::{impl_encoding, ArrayFlatten};
 
 impl_encoding!("vortex.bool", Bool);
@@ -90,18 +89,8 @@ impl FromIterator<Option<bool>> for OwnedBoolArray {
 }
 
 impl ArrayTrait for BoolArray<'_> {
-    fn dtype(&self) -> &DType {
-        // FIXME(ngates): move this
-        self.array().dtype()
-    }
-
     fn len(&self) -> usize {
         self.metadata().length
-    }
-
-    fn metadata(&self) -> Arc<dyn ArrayMetadata> {
-        // FIXME(ngates): move this
-        Arc::new(self.metadata().clone())
     }
 }
 

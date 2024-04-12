@@ -13,8 +13,8 @@ use vortex_schema::DType;
 use crate::buffer::Buffer;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::ArrayFlatten;
 use crate::{impl_encoding, IntoArray};
-use crate::{ArrayFlatten, ArrayMetadata};
 
 impl_encoding!("vortex.primitive", Primitive);
 
@@ -93,16 +93,8 @@ impl ArrayFlatten for PrimitiveArray<'_> {
 }
 
 impl ArrayTrait for PrimitiveArray<'_> {
-    fn dtype(&self) -> &DType {
-        self.array().dtype()
-    }
-
     fn len(&self) -> usize {
         self.buffer().len() / self.ptype().byte_width()
-    }
-
-    fn metadata(&self) -> Arc<dyn ArrayMetadata> {
-        Arc::new(self.metadata().clone())
     }
 }
 

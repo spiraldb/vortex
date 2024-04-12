@@ -5,7 +5,6 @@ use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::stats::{ArrayStatisticsCompute, Stat};
-use crate::ArrayTrait;
 
 impl ArrayStatisticsCompute for BoolArray<'_> {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {

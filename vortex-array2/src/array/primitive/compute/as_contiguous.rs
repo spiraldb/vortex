@@ -5,7 +5,7 @@ use vortex_error::VortexResult;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::validity::Validity;
-use crate::{Array, ArrayTrait, IntoArray, OwnedArray};
+use crate::{Array, IntoArray, OwnedArray};
 
 impl AsContiguousFn for PrimitiveArray<'_> {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {

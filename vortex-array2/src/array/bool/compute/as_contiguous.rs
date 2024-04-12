@@ -4,7 +4,7 @@ use vortex_error::VortexResult;
 use crate::array::bool::BoolArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::validity::Validity;
-use crate::{Array, ArrayTrait, IntoArray};
+use crate::{Array, IntoArray};
 
 impl AsContiguousFn for BoolArray<'_> {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array<'static>> {

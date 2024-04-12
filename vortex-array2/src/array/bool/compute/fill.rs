@@ -4,7 +4,7 @@ use vortex_schema::Nullability;
 use crate::array::bool::BoolArray;
 use crate::compute::fill::FillForwardFn;
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayTrait, IntoArray, ToArrayData};
+use crate::{Array, IntoArray, ToArrayData};
 
 impl FillForwardFn for BoolArray<'_> {
     fn fill_forward(&self) -> VortexResult<Array<'static>> {
