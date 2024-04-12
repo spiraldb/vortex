@@ -218,13 +218,12 @@ impl<T: NativePType> StatsAccumulator<T> {
 mod test {
     use vortex::scalar::ListScalarVec;
 
-    use crate::array::primitive::PrimitiveData;
+    use crate::array::primitive::PrimitiveArray;
     use crate::stats::{ArrayStatistics, Stat};
 
     #[test]
     fn stats() {
-        let data = PrimitiveData::from(vec![1, 2, 3, 4, 5]);
-        let arr = data.as_typed_array();
+        let arr = PrimitiveArray::from(vec![1, 2, 3, 4, 5]);
         let min: i32 = arr.statistics().compute_as(Stat::Min).unwrap();
         let max: i32 = arr.statistics().compute_as(Stat::Max).unwrap();
         let is_sorted: bool = arr.statistics().compute_as(Stat::IsSorted).unwrap();
@@ -267,8 +266,7 @@ mod test {
 
     #[test]
     fn stats_u8() {
-        let data = PrimitiveData::from(vec![1u8, 2, 3, 4, 5]);
-        let arr = data.as_typed_array();
+        let arr = PrimitiveArray::from(vec![1u8, 2, 3, 4, 5]);
         let min: u8 = arr.statistics().compute_as(Stat::Min).unwrap();
         let max: u8 = arr.statistics().compute_as(Stat::Max).unwrap();
         assert_eq!(min, 1);
@@ -277,8 +275,7 @@ mod test {
 
     #[test]
     fn nullable_stats_u8() {
-        let data = PrimitiveData::from_nullable_vec(vec![None, Some(1i32), None, Some(2)]);
-        let arr = data.as_typed_array();
+        let arr = PrimitiveArray::from_nullable_vec(vec![None, Some(1i32), None, Some(2)]);
         let min: Option<i32> = arr.statistics().compute_as(Stat::Min);
         let max: Option<i32> = arr.statistics().compute_as(Stat::Max);
         assert_eq!(min, Some(1));
@@ -287,8 +284,7 @@ mod test {
 
     #[test]
     fn all_null() {
-        let data = PrimitiveData::from_nullable_vec(vec![Option::<i32>::None, None, None]);
-        let arr = data.as_typed_array();
+        let arr = PrimitiveArray::from_nullable_vec(vec![Option::<i32>::None, None, None]);
         let min: Option<i32> = arr.statistics().compute_as(Stat::Min);
         let max: Option<i32> = arr.statistics().compute_as(Stat::Max);
         assert_eq!(min, None);

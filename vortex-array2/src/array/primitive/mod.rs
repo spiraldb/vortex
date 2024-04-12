@@ -1,6 +1,8 @@
 mod compute;
 mod stats;
 
+use std::collections::HashMap;
+
 use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -70,19 +72,20 @@ impl PrimitiveArray<'_> {
     }
 }
 
-impl PrimitiveData {
+impl PrimitiveArray<'_> {
     pub fn try_new<T: NativePType + ArrowNativeType>(
         buffer: ScalarBuffer<T>,
         validity: Validity,
     ) -> VortexResult<Self> {
-        Ok(Self::new_unchecked(
+        Self::try_from_parts(
             DType::from(T::PTYPE).with_nullability(validity.nullability()),
-            Arc::new(PrimitiveMetadata {
+            PrimitiveMetadata {
                 validity: validity.to_metadata(buffer.len())?,
-            }),
+            },
             vec![Buffer::Owned(buffer.into_inner())].into(),
             validity.to_array_data().into_iter().collect_vec().into(),
-        ))
+            HashMap::default(),
+        )
     }
 
     pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>, validity: Validity) -> Self {
@@ -96,15 +99,15 @@ impl PrimitiveData {
     }
 }
 
-impl<T: NativePType> From<Vec<T>> for PrimitiveData {
+impl<T: NativePType> From<Vec<T>> for PrimitiveArray<'_> {
     fn from(values: Vec<T>) -> Self {
-        PrimitiveData::from_vec(values, Validity::NonNullable)
+        PrimitiveArray::from_vec(values, Validity::NonNullable)
     }
 }
 
 impl<T: NativePType> IntoArray<'static> for Vec<T> {
     fn into_array(self) -> Array<'static> {
-        PrimitiveData::from(self).into_array()
+        PrimitiveArray::from(self).into_array()
     }
 }
 

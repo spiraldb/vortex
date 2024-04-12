@@ -25,7 +25,7 @@ use vortex::ptype::NativePType;
 use vortex_schema::DType;
 
 use crate::array::bool::BoolArray;
-use crate::array::primitive::PrimitiveData;
+use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructData;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
@@ -38,7 +38,7 @@ pub trait FromArrowArray<A> {
 impl IntoArrayData for Buffer {
     fn into_array_data(self) -> ArrayData {
         let length = self.len();
-        PrimitiveData::try_new(
+        PrimitiveArray::try_new(
             ScalarBuffer::<u8>::new(self, 0, length),
             Validity::NonNullable,
         )
@@ -58,7 +58,7 @@ impl IntoArrayData for NullBuffer {
 impl<T: ArrowNativeType + NativePType> IntoArrayData for ScalarBuffer<T> {
     fn into_array_data(self) -> ArrayData {
         let length = self.len();
-        PrimitiveData::try_new(
+        PrimitiveArray::try_new(
             ScalarBuffer::<T>::new(self.into_inner(), 0, length),
             Validity::NonNullable,
         )
@@ -70,7 +70,7 @@ impl<T: ArrowNativeType + NativePType> IntoArrayData for ScalarBuffer<T> {
 impl<O: NativePType + OffsetSizeTrait> IntoArrayData for OffsetBuffer<O> {
     fn into_array_data(self) -> ArrayData {
         let length = self.len();
-        let array = PrimitiveData::try_new(
+        let array = PrimitiveArray::try_new(
             ScalarBuffer::<O>::new(self.into_inner().into_inner(), 0, length),
             Validity::NonNullable,
         )
@@ -87,7 +87,7 @@ where
     <T as ArrowPrimitiveType>::Native: NativePType,
 {
     fn from_arrow(value: &ArrowPrimitiveArray<T>, nullable: bool) -> Self {
-        let arr = PrimitiveData::try_new(value.values().clone(), nulls(value.nulls(), nullable))
+        let arr = PrimitiveArray::try_new(value.values().clone(), nulls(value.nulls(), nullable))
             .unwrap()
             .into_array_data();
 

@@ -33,13 +33,13 @@ impl FillForwardFn for PrimitiveArray<'_> {
 #[cfg(test)]
 mod test {
     use crate::array::bool::BoolArray;
-    use crate::array::primitive::{PrimitiveArray, PrimitiveData};
+    use crate::array::primitive::PrimitiveArray;
     use crate::validity::{ArrayValidity, Validity};
     use crate::{compute, IntoArray};
 
     #[test]
     fn leading_none() {
-        let arr = PrimitiveData::from_nullable_vec(vec![None, Some(8u8), None, Some(10), None])
+        let arr = PrimitiveArray::from_nullable_vec(vec![None, Some(8u8), None, Some(10), None])
             .into_array();
         let p = PrimitiveArray::try_from(compute::fill::fill_forward(&arr).unwrap()).unwrap();
         assert_eq!(p.typed_data::<u8>(), vec![0, 8, 8, 10, 10]);
@@ -49,7 +49,7 @@ mod test {
     #[test]
     fn all_none() {
         let arr =
-            PrimitiveData::from_nullable_vec(vec![Option::<u8>::None, None, None, None, None])
+            PrimitiveArray::from_nullable_vec(vec![Option::<u8>::None, None, None, None, None])
                 .into_array();
 
         let p = PrimitiveArray::try_from(compute::fill::fill_forward(&arr).unwrap()).unwrap();
@@ -59,7 +59,7 @@ mod test {
 
     #[test]
     fn nullable_non_null() {
-        let arr = PrimitiveData::from_vec(
+        let arr = PrimitiveArray::from_vec(
             vec![8u8, 10u8, 12u8, 14u8, 16u8],
             Validity::Array(BoolArray::from(vec![true, true, true, true, true]).into_array()),
         )

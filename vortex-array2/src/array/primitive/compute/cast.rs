@@ -3,7 +3,7 @@ use vortex::ptype::{NativePType, PType};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::primitive::{PrimitiveArray, PrimitiveData};
+use crate::array::primitive::PrimitiveArray;
 use crate::compute::cast::CastFn;
 use crate::{IntoArray, OwnedArray, ToArrayData};
 
@@ -16,7 +16,7 @@ impl CastFn for PrimitiveArray<'_> {
         }
 
         match_each_native_ptype!(ptype, |$T| {
-            Ok(PrimitiveData::from_vec(
+            Ok(PrimitiveArray::from_vec(
                 cast::<$T>(self)?,
                 self.validity().clone(),
             ).into_array())

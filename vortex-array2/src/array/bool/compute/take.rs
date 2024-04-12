@@ -28,7 +28,7 @@ fn take_bool<I: AsPrimitive<usize>>(bools: &BooleanBuffer, indices: &[I]) -> Vec
 #[cfg(test)]
 mod test {
     use crate::array::bool::BoolArray;
-    use crate::array::primitive::PrimitiveData;
+    use crate::array::primitive::PrimitiveArray;
     use crate::compute::take::take;
     use crate::IntoArray;
 
@@ -44,7 +44,11 @@ mod test {
         .into_array();
 
         let b = BoolArray::try_from(
-            take(&reference, &PrimitiveData::from(vec![0, 3, 4]).into_array()).unwrap(),
+            take(
+                &reference,
+                &PrimitiveArray::from(vec![0, 3, 4]).into_array(),
+            )
+            .unwrap(),
         )
         .unwrap();
         assert_eq!(

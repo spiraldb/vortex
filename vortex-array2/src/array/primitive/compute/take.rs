@@ -3,7 +3,7 @@ use vortex::ptype::NativePType;
 use vortex::{match_each_integer_ptype, match_each_native_ptype};
 use vortex_error::VortexResult;
 
-use crate::array::primitive::{PrimitiveArray, PrimitiveData};
+use crate::array::primitive::PrimitiveArray;
 use crate::compute::take::TakeFn;
 use crate::IntoArray;
 use crate::{Array, OwnedArray};
@@ -14,7 +14,7 @@ impl TakeFn for PrimitiveArray<'_> {
         let indices = indices.clone().flatten_primitive()?;
         match_each_native_ptype!(self.ptype(), |$T| {
             match_each_integer_ptype!(indices.ptype(), |$I| {
-                Ok(PrimitiveData::from_vec(
+                Ok(PrimitiveArray::from_vec(
                     take_primitive(self.typed_data::<$T>(), indices.typed_data::<$I>()),
                     validity.take(indices.array())?,
                 ).into_array())

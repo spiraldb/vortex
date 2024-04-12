@@ -2,7 +2,7 @@ use arrow_buffer::{MutableBuffer, ScalarBuffer};
 use vortex::match_each_native_ptype;
 use vortex_error::VortexResult;
 
-use crate::array::primitive::{PrimitiveArray, PrimitiveData};
+use crate::array::primitive::PrimitiveArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::validity::Validity;
 use crate::{Array, ArrayTrait, IntoArray, OwnedArray};
@@ -22,7 +22,7 @@ impl AsContiguousFn for PrimitiveArray<'_> {
             buffer.extend_from_slice(PrimitiveArray::try_from(array).unwrap().buffer().as_slice())
         }
         match_each_native_ptype!(self.ptype(), |$T| {
-            Ok(PrimitiveData::try_new(ScalarBuffer::<$T>::from(buffer), validity)
+            Ok(PrimitiveArray::try_new(ScalarBuffer::<$T>::from(buffer), validity)
                 .unwrap()
                 .into_array())
         })
