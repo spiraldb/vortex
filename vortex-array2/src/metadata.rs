@@ -20,6 +20,7 @@ pub trait TrySerializeArrayMetadata {
 }
 
 pub trait TryDeserializeArrayMetadata<'m>: Sized {
+    // FIXME(ngates): we could push buffer/child validation into here.
     fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self>;
 }
 

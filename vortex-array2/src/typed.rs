@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use vortex::array::primitive::PrimitiveEncoding;
 use vortex::scalar::Scalar;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::primitive::PrimitiveDef;
 use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
 use crate::stats::{ArrayStatistics, Stat};
@@ -91,22 +89,6 @@ impl<'a, D: ArrayDef> TryFrom<&'a Array<'a>> for TypedArray<'a, D> {
     fn try_from(value: &'a Array<'a>) -> Result<Self, Self::Error> {
         value.clone().try_into()
     }
-}
-
-pub trait WithTypedArray {
-    type D: ArrayDef;
-
-    fn with_typed_array<'a, R, F>(array: &'a Array<'a>, mut f: F) -> R
-    where
-        F: FnMut(&TypedArray<'a, Self::D>) -> R,
-    {
-        let typed = TryFrom::<&Array>::try_from(array).unwrap();
-        f(&typed)
-    }
-}
-
-impl WithTypedArray for PrimitiveEncoding {
-    type D = PrimitiveDef;
 }
 
 impl<D: ArrayDef> ArrayEncodingRef for TypedArray<'_, D> {

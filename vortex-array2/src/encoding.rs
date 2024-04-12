@@ -38,13 +38,13 @@ pub trait ArrayEncoding: 'static + Sync + Send {
     ) -> VortexResult<()>;
 }
 
-/// FIXME(ngates): rename to ArrayEncodingExtension
-pub trait WithEncodedArray {
+/// Non-object-safe extensions to the ArrayEncoding trait.
+pub trait ArrayEncodingExt {
     type D: ArrayDef;
 
     fn flatten<'a>(array: Array<'a>) -> VortexResult<Flattened<'a>>
     where
-        <Self as WithEncodedArray>::D: 'a,
+        <Self as ArrayEncodingExt>::D: 'a,
     {
         let typed = <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array)?;
         ArrayFlatten::flatten(typed)
@@ -53,7 +53,7 @@ pub trait WithEncodedArray {
     fn with_dyn<'a, R, F>(array: &'a Array<'a>, mut f: F) -> R
     where
         F: for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> R,
-        <Self as WithEncodedArray>::D: 'a,
+        <Self as ArrayEncodingExt>::D: 'a,
     {
         let typed =
             <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array.clone()).unwrap();
@@ -66,6 +66,7 @@ impl Debug for dyn ArrayEncoding + '_ {
         Debug::fmt(&self.id(), f)
     }
 }
+
 pub trait ArrayEncodingRef {
     fn encoding(&self) -> EncodingRef;
 }
