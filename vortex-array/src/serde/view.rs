@@ -181,10 +181,6 @@ impl<'a> Array for ArrayView<'a> {
         todo!()
     }
 
-    fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {
-        todo!()
-    }
-
     fn encoding(&self) -> EncodingRef {
         self.encoding
     }

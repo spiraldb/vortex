@@ -1,6 +1,7 @@
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::flatten::{FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
+use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
@@ -16,6 +17,10 @@ impl ArrayCompute for FoRArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
@@ -58,6 +63,17 @@ impl ScalarAtFn for FoRArray {
             },
             _ => unreachable!("Reference and encoded values had different dtypes"),
         }
+    }
+}
+
+impl SliceFn for FoRArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(FoRArray::try_new(
+            slice(self.encoded(), start, stop)?,
+            self.reference().clone(),
+            self.shift(),
+        )?
+        .into_array())
     }
 }
 

@@ -109,10 +109,6 @@ impl Array for PrimitiveView<'_> {
         todo!()
     }
 
-    fn slice(&self, _start: usize, _stop: usize) -> VortexResult<ArrayRef> {
-        todo!()
-    }
-
     fn encoding(&self) -> EncodingRef {
         todo!()
     }

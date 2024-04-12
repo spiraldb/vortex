@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{check_slice_bounds, Array, ArrayRef};
+use vortex::array::{Array, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
@@ -64,12 +64,6 @@ impl Array for DictArray {
 
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    // TODO(robert): Add function to trim the dictionary
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-        Ok(Self::new(self.codes().slice(start, stop)?, self.values.clone()).into_array())
     }
 
     fn encoding(&self) -> EncodingRef {

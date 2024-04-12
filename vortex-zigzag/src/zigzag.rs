@@ -75,10 +75,6 @@ impl Array for ZigZagArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Self::try_new(self.encoded.slice(start, stop)?)?.into_array())
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &ZigZagEncoding

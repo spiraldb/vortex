@@ -9,6 +9,7 @@ use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
+use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::scalar::Scalar;
@@ -27,6 +28,10 @@ impl ArrayCompute for CompositeArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
@@ -87,6 +92,17 @@ impl TakeFn for CompositeArray {
             self.id(),
             self.metadata().clone(),
             take(self.underlying(), indices)?,
+        )
+        .into_array())
+    }
+}
+
+impl SliceFn for CompositeArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(CompositeArray::new(
+            self.id(),
+            self.metadata().clone(),
+            slice(self.underlying(), start, stop)?,
         )
         .into_array())
     }

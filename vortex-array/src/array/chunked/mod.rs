@@ -5,7 +5,7 @@ use linkme::distributed_slice;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{Array, ArrayRef};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -98,39 +98,13 @@ impl Array for ChunkedArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-
-        let (offset_chunk, offset_in_first_chunk) = self.find_chunk_idx(start);
-        let (length_chunk, length_in_last_chunk) = self.find_chunk_idx(stop);
-
-        if length_chunk == offset_chunk {
-            if let Some(chunk) = self.chunks.get(offset_chunk) {
-                return Ok(ChunkedArray::new(
-                    vec![chunk.slice(offset_in_first_chunk, length_in_last_chunk)?],
-                    self.dtype.clone(),
-                )
-                .into_array());
-            }
-        }
-
-        let mut chunks = self.chunks.clone()[offset_chunk..length_chunk + 1].to_vec();
-        if let Some(c) = chunks.first_mut() {
-            *c = c.slice(offset_in_first_chunk, c.len())?;
-        }
-
-        if length_in_last_chunk == 0 {
-            chunks.pop();
-        } else if let Some(c) = chunks.last_mut() {
-            *c = c.slice(0, length_in_last_chunk)?;
-        }
-
-        Ok(ChunkedArray::new(chunks, self.dtype.clone()).into_array())
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &ChunkedEncoding
+    }
+
+    fn nbytes(&self) -> usize {
+        self.chunks().iter().map(|arr| arr.nbytes()).sum()
     }
 
     #[inline]
@@ -139,10 +113,6 @@ impl Array for ChunkedArray {
         f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()> {
         f(self)
-    }
-
-    fn nbytes(&self) -> usize {
-        self.chunks().iter().map(|arr| arr.nbytes()).sum()
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {
@@ -219,6 +189,7 @@ mod test {
     use crate::array::IntoArray;
     use crate::array::{Array, ArrayRef};
     use crate::compute::flatten::flatten_primitive;
+    use crate::compute::slice::slice;
     use crate::ptype::NativePType;
 
     fn chunked_array() -> ChunkedArray {
@@ -248,26 +219,29 @@ mod test {
 
     #[test]
     pub fn slice_middle() {
-        assert_equal_slices(chunked_array().slice(2, 5).unwrap(), &[3u64, 4, 5])
+        assert_equal_slices(slice(&chunked_array(), 2, 5).unwrap(), &[3u64, 4, 5])
     }
 
     #[test]
     pub fn slice_begin() {
-        assert_equal_slices(chunked_array().slice(1, 3).unwrap(), &[2u64, 3]);
+        assert_equal_slices(slice(&chunked_array(), 1, 3).unwrap(), &[2u64, 3]);
     }
 
     #[test]
     pub fn slice_aligned() {
-        assert_equal_slices(chunked_array().slice(3, 6).unwrap(), &[4u64, 5, 6]);
+        assert_equal_slices(slice(&chunked_array(), 3, 6).unwrap(), &[4u64, 5, 6]);
     }
 
     #[test]
     pub fn slice_many_aligned() {
-        assert_equal_slices(chunked_array().slice(0, 6).unwrap(), &[1u64, 2, 3, 4, 5, 6]);
+        assert_equal_slices(
+            slice(&chunked_array(), 0, 6).unwrap(),
+            &[1u64, 2, 3, 4, 5, 6],
+        );
     }
 
     #[test]
     pub fn slice_end() {
-        assert_equal_slices(chunked_array().slice(7, 8).unwrap(), &[8u64]);
+        assert_equal_slices(slice(&chunked_array(), 7, 8).unwrap(), &[8u64]);
     }
 }

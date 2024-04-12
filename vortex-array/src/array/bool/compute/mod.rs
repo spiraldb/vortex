@@ -13,12 +13,14 @@ use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::fill::FillForwardFn;
 use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
+use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::scalar::{BoolScalar, Scalar};
 use crate::validity::ArrayValidity;
 use crate::validity::OwnedValidity;
 use crate::validity::Validity;
+use crate::view::AsView;
 
 mod take;
 
@@ -40,6 +42,10 @@ impl ArrayCompute for BoolArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
@@ -117,6 +123,19 @@ impl FillForwardFn for BoolArray {
             })
             .collect::<Vec<_>>();
         Ok(BoolArray::from(filled).into_array())
+    }
+}
+
+impl SliceFn for BoolArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
+        Ok(BoolArray::new(
+            self.buffer.slice(start, stop - start),
+            self.validity
+                .as_view()
+                .map(|v| v.slice(start, stop))
+                .transpose()?,
+        )
+        .into_array())
     }
 }
 

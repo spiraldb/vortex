@@ -5,7 +5,7 @@ use linkme::distributed_slice;
 use vortex_error::VortexResult;
 use vortex_schema::{DType, Nullability};
 
-use super::{check_slice_bounds, Array, ArrayRef};
+use super::{Array, ArrayRef};
 use crate::array::IntoArray;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -91,21 +91,6 @@ impl Array for BoolArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-
-        Ok(Self {
-            buffer: self.buffer.slice(start, stop - start),
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-            validity: self
-                .validity
-                .as_view()
-                .map(|v| v.slice(start, stop))
-                .transpose()?,
-        }
-        .into_array())
     }
 
     #[inline]
@@ -213,12 +198,11 @@ mod test {
     use crate::array::bool::BoolArray;
     use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
+    use crate::compute::slice::slice;
 
     #[test]
-    fn slice() {
-        let arr = BoolArray::from(vec![true, true, false, false, true])
-            .slice(1, 4)
-            .unwrap();
+    fn slice_array() {
+        let arr = slice(&BoolArray::from(vec![true, true, false, false, true]), 1, 4).unwrap();
         assert_eq!(arr.len(), 3);
         assert_eq!(scalar_at(&arr, 0).unwrap(), true.into());
         assert_eq!(scalar_at(&arr, 1).unwrap(), false.into());

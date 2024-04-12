@@ -5,7 +5,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::DType;
 
 use crate::array::constant::ConstantArray;
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
@@ -146,24 +146,6 @@ impl Array for SparseArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-
-        // Find the index of the first patch index that is greater than or equal to the offset of this array
-        let index_start_index = search_sorted(self.indices(), start, SearchSortedSide::Left)?;
-        let index_end_index = search_sorted(self.indices(), stop, SearchSortedSide::Left)?;
-
-        Ok(SparseArray {
-            indices_offset: self.indices_offset + start,
-            indices: self.indices.slice(index_start_index, index_end_index)?,
-            values: self.values.slice(index_start_index, index_end_index)?,
-            len: stop - start,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-            fill_value: self.fill_value.clone(),
-        }
-        .into_array())
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &SparseEncoding
@@ -277,6 +259,7 @@ mod test {
     use crate::array::IntoArray;
     use crate::compute::flatten::flatten_primitive;
     use crate::compute::scalar_at::scalar_at;
+    use crate::compute::slice::slice;
     use crate::scalar::Scalar;
 
     fn nullable_fill() -> Scalar {
@@ -327,10 +310,7 @@ mod test {
     pub fn iter_sliced() {
         let p_fill_val = Some(non_nullable_fill().try_into().unwrap());
         assert_sparse_array(
-            sparse_array(non_nullable_fill())
-                .slice(2, 7)
-                .unwrap()
-                .as_ref(),
+            &slice(&sparse_array(non_nullable_fill()), 2, 7).unwrap(),
             &[Some(100), p_fill_val, p_fill_val, Some(200), p_fill_val],
         );
     }
@@ -338,20 +318,20 @@ mod test {
     #[test]
     pub fn iter_sliced_nullable() {
         assert_sparse_array(
-            sparse_array(nullable_fill()).slice(2, 7).unwrap().as_ref(),
+            &slice(&sparse_array(nullable_fill()), 2, 7).unwrap(),
             &[Some(100), None, None, Some(200), None],
         );
     }
 
     #[test]
     pub fn iter_sliced_twice() {
-        let sliced_once = sparse_array(nullable_fill()).slice(1, 8).unwrap();
+        let sliced_once = slice(&sparse_array(nullable_fill()), 1, 8).unwrap();
         assert_sparse_array(
-            sliced_once.as_ref(),
+            &sliced_once,
             &[None, Some(100), None, None, Some(200), None, None],
         );
         assert_sparse_array(
-            sliced_once.slice(1, 6).unwrap().as_ref(),
+            &slice(&sliced_once, 1, 6).unwrap(),
             &[Some(100), None, None, Some(200), None],
         );
     }
@@ -381,12 +361,12 @@ mod test {
 
     #[test]
     pub fn scalar_at_sliced() {
-        let sliced = sparse_array(nullable_fill()).slice(2, 7).unwrap();
+        let sliced = slice(&sparse_array(nullable_fill()), 2, 7).unwrap();
         assert_eq!(
-            usize::try_from(scalar_at(sliced.as_ref(), 0).unwrap()).unwrap(),
+            usize::try_from(scalar_at(&sliced, 0).unwrap()).unwrap(),
             100
         );
-        let error = scalar_at(sliced.as_ref(), 5).err().unwrap();
+        let error = scalar_at(&sliced, 5).err().unwrap();
         let VortexError::OutOfBounds(i, start, stop, _) = error else {
             unreachable!()
         };
@@ -397,12 +377,12 @@ mod test {
 
     #[test]
     pub fn scalar_at_sliced_twice() {
-        let sliced_once = sparse_array(nullable_fill()).slice(1, 8).unwrap();
+        let sliced_once = slice(&sparse_array(nullable_fill()), 1, 8).unwrap();
         assert_eq!(
-            usize::try_from(scalar_at(sliced_once.as_ref(), 1).unwrap()).unwrap(),
+            usize::try_from(scalar_at(&sliced_once, 1).unwrap()).unwrap(),
             100
         );
-        let error = scalar_at(sliced_once.as_ref(), 7).err().unwrap();
+        let error = scalar_at(&sliced_once, 7).err().unwrap();
         let VortexError::OutOfBounds(i, start, stop, _) = error else {
             unreachable!()
         };
@@ -410,12 +390,12 @@ mod test {
         assert_eq!(start, 0);
         assert_eq!(stop, 7);
 
-        let sliced_twice = sliced_once.slice(1, 6).unwrap();
+        let sliced_twice = slice(&sliced_once, 1, 6).unwrap();
         assert_eq!(
-            usize::try_from(scalar_at(sliced_twice.as_ref(), 3).unwrap()).unwrap(),
+            usize::try_from(scalar_at(&sliced_twice, 3).unwrap()).unwrap(),
             200
         );
-        let error2 = scalar_at(sliced_twice.as_ref(), 5).err().unwrap();
+        let error2 = scalar_at(&sliced_twice, 5).err().unwrap();
         let VortexError::OutOfBounds(i, start, stop, _) = error2 else {
             unreachable!()
         };

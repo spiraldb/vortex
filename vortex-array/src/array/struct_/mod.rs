@@ -1,11 +1,10 @@
 use std::sync::{Arc, RwLock};
 
-use itertools::Itertools;
 use linkme::distributed_slice;
 use vortex_error::VortexResult;
 use vortex_schema::{DType, FieldNames};
 
-use super::{check_slice_bounds, Array, ArrayRef};
+use super::{Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -87,26 +86,13 @@ impl Array for StructArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-
-        let fields = self
-            .fields
-            .iter()
-            .map(|field| field.slice(start, stop))
-            .try_collect()?;
-        Ok(Self {
-            fields,
-            dtype: self.dtype.clone(),
-            len: stop - start,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
-        .into_array())
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &StructEncoding
+    }
+
+    fn nbytes(&self) -> usize {
+        self.fields.iter().map(|arr| arr.nbytes()).sum()
     }
 
     #[inline]
@@ -115,10 +101,6 @@ impl Array for StructArray {
         f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
     ) -> VortexResult<()> {
         f(self)
-    }
-
-    fn nbytes(&self) -> usize {
-        self.fields.iter().map(|arr| arr.nbytes()).sum()
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

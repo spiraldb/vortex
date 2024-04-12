@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use compress::roaring_encode;
 use croaring::{Bitmap, Native};
-use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
@@ -64,14 +64,6 @@ impl RoaringIntArray {
 impl Array for RoaringIntArray {
     impl_array!();
     #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    #[inline]
     fn len(&self) -> usize {
         self.bitmap.cardinality() as usize
     }
@@ -90,11 +82,6 @@ impl Array for RoaringIntArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-        todo!()
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &RoaringIntEncoding
@@ -103,6 +90,14 @@ impl Array for RoaringIntArray {
     #[inline]
     fn nbytes(&self) -> usize {
         self.bitmap.get_serialized_size_in_bytes::<Native>()
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

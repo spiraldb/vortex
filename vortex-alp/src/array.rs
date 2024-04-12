@@ -95,15 +95,6 @@ impl Array for ALPArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Self::try_new(
-            self.encoded().slice(start, stop)?,
-            self.exponents().clone(),
-            self.patches().map(|p| p.slice(start, stop)).transpose()?,
-        )?
-        .into_array())
-    }
-
     #[inline]
     fn with_compute_mut(
         &self,

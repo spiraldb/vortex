@@ -79,16 +79,6 @@ impl Array for FoRArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(Self {
-            encoded: self.encoded.slice(start, stop)?,
-            reference: self.reference.clone(),
-            shift: self.shift,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
-        .into_array())
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &FoREncoding

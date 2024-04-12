@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use compress::roaring_encode;
 use croaring::{Bitmap, Native};
-use vortex::array::{check_slice_bounds, Array, ArrayKind, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
@@ -52,14 +52,6 @@ impl RoaringBoolArray {
 impl Array for RoaringBoolArray {
     impl_array!();
     #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    #[inline]
     fn len(&self) -> usize {
         self.length
     }
@@ -78,20 +70,6 @@ impl Array for RoaringBoolArray {
         Stats::new(&self.stats, self)
     }
 
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-
-        let slice_bitmap = Bitmap::from_range(start as u32..stop as u32);
-        let bitmap = self.bitmap.and(&slice_bitmap).add_offset(-(start as i64));
-
-        Ok(Self {
-            bitmap,
-            length: stop - start,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
-        .into_array())
-    }
-
     #[inline]
     fn encoding(&self) -> EncodingRef {
         &RoaringBoolEncoding
@@ -101,6 +79,14 @@ impl Array for RoaringBoolArray {
     fn nbytes(&self) -> usize {
         // TODO(ngates): do we want Native serializer? Or portable? Or frozen?
         self.bitmap.get_serialized_size_in_bytes::<Native>()
+    }
+
+    #[inline]
+    fn with_compute_mut(
+        &self,
+        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
+    ) -> VortexResult<()> {
+        f(self)
     }
 
     fn serde(&self) -> Option<&dyn ArraySerde> {

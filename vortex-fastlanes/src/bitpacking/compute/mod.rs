@@ -1,3 +1,5 @@
+mod slice;
+
 use std::cmp::min;
 
 use fastlanez::TryBitPack;
@@ -9,6 +11,7 @@ use vortex::array::sparse::SparseArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
+use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::match_each_integer_ptype;
@@ -26,6 +29,10 @@ impl ArrayCompute for BitPackedArray {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
@@ -142,8 +149,11 @@ fn take_primitive<T: NativePType + TryBitPack>(
 
         if !prefer_bulk_patch {
             if let Some(patches) = patches {
-                let patches_slice =
-                    patches.slice(chunk * 1024, min((chunk + 1) * 1024, patches.len()))?;
+                let patches_slice = slice(
+                    patches,
+                    chunk * 1024,
+                    min((chunk + 1) * 1024, patches.len()),
+                )?;
                 let patches_slice = patches_slice
                     .maybe_sparse()
                     .ok_or_else(|| vortex_err!("Only sparse patches are currently supported!"))?;

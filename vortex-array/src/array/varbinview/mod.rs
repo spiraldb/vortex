@@ -9,8 +9,9 @@ use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 use crate::array::downcast::DowncastArrayBuiltin;
 use crate::array::primitive::PrimitiveEncoding;
 use crate::array::varbinview::builder::VarBinViewBuilder;
-use crate::array::{check_slice_bounds, Array, ArrayRef};
+use crate::array::{Array, ArrayRef};
 use crate::compute::flatten::flatten_primitive;
+use crate::compute::slice::slice;
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
 use crate::formatter::{ArrayDisplay, ArrayFormatter};
@@ -220,16 +221,11 @@ impl VarBinViewArray {
         let view = self.view_at(index);
         unsafe {
             if view.inlined.size > 12 {
-                let arrow_data_buffer = flatten_primitive(
-                    &self
-                        .data
-                        .get(view._ref.buffer_index as usize)
-                        .unwrap()
-                        .slice(
-                            view._ref.offset as usize,
-                            (view._ref.size + view._ref.offset) as usize,
-                        )?,
-                )?;
+                let arrow_data_buffer = flatten_primitive(&slice(
+                    self.data.get(view._ref.buffer_index as usize).unwrap(),
+                    view._ref.offset as usize,
+                    (view._ref.size + view._ref.offset) as usize,
+                )?)?;
                 // TODO(ngates): can we avoid returning a copy?
                 Ok(arrow_data_buffer.typed_data::<u8>().to_vec())
             } else {
@@ -260,19 +256,6 @@ impl Array for VarBinViewArray {
     #[inline]
     fn stats(&self) -> Stats {
         Stats::new(&self.stats, self)
-    }
-
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        check_slice_bounds(self, start, stop)?;
-
-        Ok(Self {
-            views: self.views.slice(start * VIEW_SIZE, stop * VIEW_SIZE)?,
-            data: self.data.clone(),
-            dtype: self.dtype.clone(),
-            validity: self.validity().map(|v| v.slice(start, stop)).transpose()?,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
-        .into_array())
     }
 
     #[inline]
@@ -397,6 +380,7 @@ mod test {
     use crate::array::Array;
     use crate::compute::as_arrow::as_arrow;
     use crate::compute::scalar_at::scalar_at;
+    use crate::compute::slice::slice;
     use crate::scalar::Scalar;
 
     #[test]
@@ -415,11 +399,13 @@ mod test {
     }
 
     #[test]
-    pub fn slice() {
-        let binary_arr =
-            VarBinViewArray::from(vec!["hello world", "hello world this is a long string"])
-                .slice(1, 2)
-                .unwrap();
+    pub fn slice_array() {
+        let binary_arr = slice(
+            &VarBinViewArray::from(vec!["hello world", "hello world this is a long string"]),
+            1,
+            2,
+        )
+        .unwrap();
         assert_eq!(
             scalar_at(&binary_arr, 0).unwrap(),
             Scalar::from("hello world this is a long string")
