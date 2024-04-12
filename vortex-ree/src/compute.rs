@@ -45,7 +45,7 @@ impl FlattenFn for REEArray {
             )
             .map(FlattenedArray::Primitive)
         } else {
-            Err(vortex_err!("Cannot yet flatten non-primitive REE array",))
+            Err(vortex_err!("Cannot yet flatten non-primitive REE array"))
         }
     }
 }

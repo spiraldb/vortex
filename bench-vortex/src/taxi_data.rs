@@ -20,8 +20,7 @@ pub fn taxi_data_parquet() -> PathBuf {
 
 pub fn taxi_data_lance() -> PathBuf {
     idempotent("taxi_lance", |output_fname| {
-        let taxi_data = File::open(taxi_data_parquet()).unwrap();
-        Ok::<PathBuf, VortexError>(parquet_to_lance(output_fname, taxi_data))
+        parquet_to_lance(output_fname, taxi_data_parquet().as_path())
     })
     .unwrap()
 }

@@ -12,10 +12,10 @@ use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::IntoArray;
+use vortex::array::{ArrayRef, IntoArray};
 use vortex::arrow::FromArrowType;
 use vortex::serde::WriteCtx;
-use vortex_error::VortexError;
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::idempotent;
@@ -30,8 +30,9 @@ pub fn download_data(fname: PathBuf, data_url: &str) -> PathBuf {
     .unwrap()
 }
 
-pub fn parquet_to_lance(lance_fname: &Path, read: File) -> PathBuf {
+pub fn parquet_to_lance(lance_fname: &Path, parquet_file: &Path) -> VortexResult<PathBuf> {
     let write_params = WriteParams::default();
+    let read = File::open(parquet_file).unwrap();
     let reader = LanceParquetRecordBatchReaderBuilder::try_new(read)
         .unwrap()
         .build()
@@ -45,7 +46,7 @@ pub fn parquet_to_lance(lance_fname: &Path, read: File) -> PathBuf {
             Some(write_params),
         ))
         .unwrap();
-    PathBuf::from(lance_fname)
+    Ok(PathBuf::from(lance_fname))
 }
 
 pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> PathBuf {
@@ -93,9 +94,19 @@ pub fn decompress_bz2(input_path: PathBuf, output_path: PathBuf) -> PathBuf {
 }
 
 pub trait BenchmarkDataset {
-    fn uncompressed(&self);
+    fn as_uncompressed(&self);
+    fn compress_to_vortex(&self) -> Vec<ArrayRef>;
     fn write_as_parquet(&self);
     fn write_as_vortex(&self);
-    fn list_files(&self) -> Vec<PathBuf>;
+    fn write_as_lance(&self);
+    fn list_files(&self, file_type: FileType) -> Vec<PathBuf>;
     fn directory_location(&self) -> PathBuf;
+}
+
+#[derive(Clone, Copy)]
+pub enum FileType {
+    Csv,
+    Parquet,
+    Vortex,
+    Lance,
 }
