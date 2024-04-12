@@ -22,33 +22,6 @@ impl_encoding!("vortex.primitive", Primitive);
 pub struct PrimitiveMetadata {
     validity: ValidityMetadata,
 }
-//
-// pub struct PrimitiveArray<'a> {
-//     ptype: PType,
-//     dtype: &'a DType,
-//     // TODO(ngates): reference or clone?
-//     buffer: &'a Buffer<'a>,
-//     validity: Validity<'a>,
-//     stats: &'a (dyn Statistics + 'a),
-// }
-//
-// impl PrimitiveArray<'_> {
-//     pub fn buffer(&self) -> &Buffer {
-//         self.buffer
-//     }
-//
-//     pub fn validity(&self) -> &Validity {
-//         &self.validity
-//     }
-//
-//     pub fn ptype(&self) -> PType {
-//         self.ptype
-//     }
-//
-//     pub fn typed_data<T: NativePType>(&self) -> &[T] {
-//         self.buffer.typed_data::<T>()
-//     }
-// }
 
 impl PrimitiveArray<'_> {
     pub fn buffer(&self) -> &Buffer {
