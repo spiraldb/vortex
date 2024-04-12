@@ -20,7 +20,7 @@ pub enum SearchResult {
 }
 
 impl SearchResult {
-    pub fn to_option(self) -> Option<usize> {
+    pub fn to_found(self) -> Option<usize> {
         match self {
             SearchResult::Found(i) => Some(i),
             SearchResult::NotFound(_) => None,
