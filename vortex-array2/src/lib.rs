@@ -193,12 +193,6 @@ impl<'a> Array<'a> {
     }
 }
 
-impl ToArrayData for Array<'_> {
-    fn to_array_data(&self) -> ArrayData {
-        todo!()
-    }
-}
-
 impl Display for Array<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let prefix = match self {
@@ -214,5 +208,21 @@ impl Display for Array<'_> {
             self.dtype(),
             self.len()
         )
+    }
+}
+
+impl IntoArrayData for Array<'_> {
+    fn into_array_data(self) -> ArrayData {
+        match self {
+            Array::Data(d) => d,
+            Array::DataRef(d) => d.clone(),
+            Array::View(_) => self.with_dyn(|a| a.to_array_data()),
+        }
+    }
+}
+
+impl ToArrayData for Array<'_> {
+    fn to_array_data(&self) -> ArrayData {
+        self.clone().into_array_data()
     }
 }

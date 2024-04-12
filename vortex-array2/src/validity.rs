@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
-use crate::array::bool::BoolData;
-use crate::compute::flatten::flatten_bool;
+use crate::array::bool::BoolArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
 use crate::{Array, ArrayData, IntoArray, ToArray, ToArrayData};
@@ -130,8 +129,8 @@ impl PartialEq for Validity<'_> {
             (Validity::AllValid, Validity::AllValid) => true,
             (Validity::AllInvalid, Validity::AllInvalid) => true,
             (Validity::Array(a), Validity::Array(b)) => {
-                flatten_bool(a).unwrap().as_typed_array().boolean_buffer()
-                    == flatten_bool(b).unwrap().as_typed_array().boolean_buffer()
+                a.clone().flatten_bool().unwrap().boolean_buffer()
+                    == b.clone().flatten_bool().unwrap().boolean_buffer()
             }
             _ => false,
         }
@@ -145,7 +144,7 @@ impl From<Vec<bool>> for Validity<'static> {
         } else if !bools.iter().any(|b| *b) {
             Validity::AllInvalid
         } else {
-            Validity::Array(BoolData::from_vec(bools, Validity::NonNullable).into_array())
+            Validity::Array(BoolArray::from_vec(bools, Validity::NonNullable).into_array())
         }
     }
 }
@@ -157,7 +156,7 @@ impl From<BooleanBuffer> for Validity<'static> {
         } else if value.count_set_bits() == 0 {
             Validity::AllInvalid
         } else {
-            Validity::Array(BoolData::from(value).into_array())
+            Validity::Array(BoolArray::from(value).into_array())
         }
     }
 }
@@ -193,12 +192,9 @@ impl LogicalValidity {
         match self {
             LogicalValidity::AllValid(_) => Ok(None),
             LogicalValidity::AllInvalid(l) => Ok(Some(NullBuffer::new_null(*l))),
-            LogicalValidity::Array(a) => {
-                let bool_data = flatten_bool(&a.to_array())?;
-                Ok(Some(NullBuffer::new(
-                    bool_data.as_typed_array().boolean_buffer(),
-                )))
-            }
+            LogicalValidity::Array(a) => Ok(Some(NullBuffer::new(
+                a.to_array().flatten_bool()?.boolean_buffer(),
+            ))),
         }
     }
 

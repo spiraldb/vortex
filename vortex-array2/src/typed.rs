@@ -1,14 +1,20 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use vortex::array::primitive::PrimitiveEncoding;
+use vortex::scalar::Scalar;
 use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveDef;
 use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
-use crate::stats::ArrayStatistics;
+use crate::stats::{ArrayStatistics, Stat};
 use crate::visitor::ArrayVisitor;
-use crate::{Array, ArrayData, ArrayDef, ToArrayData, ToStatic, TryDeserializeArrayMetadata};
+use crate::{
+    Array, ArrayData, ArrayDef, IntoArray, IntoArrayData, ToArrayData, ToStatic,
+    TryDeserializeArrayMetadata,
+};
 
 #[derive(Debug)]
 pub struct TypedArray<'a, D: ArrayDef> {
@@ -17,6 +23,24 @@ pub struct TypedArray<'a, D: ArrayDef> {
 }
 
 impl<D: ArrayDef> TypedArray<'_, D> {
+    pub fn try_from_parts(
+        dtype: DType,
+        metadata: D::Metadata,
+        buffers: Arc<[OwnedBuffer]>,
+        children: Arc<[ArrayData]>,
+        stats: HashMap<Stat, Scalar>,
+    ) -> VortexResult<Self> {
+        let array = Array::Data(ArrayData::try_new(
+            D::ENCODING,
+            dtype,
+            Arc::new(metadata.clone()),
+            buffers,
+            children,
+            stats,
+        )?);
+        Ok(Self { array, metadata })
+    }
+
     pub fn array(&self) -> &Array {
         &self.array
     }
@@ -91,11 +115,17 @@ impl<D: ArrayDef> ArrayEncodingRef for TypedArray<'_, D> {
     }
 }
 
-impl<D: ArrayDef> ToArrayData for TypedArray<'_, D> {
-    fn to_array_data(&self) -> ArrayData {
-        match self.array() {
-            Array::Data(d) => d.clone(),
-            Array::DataRef(d) => (*d).clone(),
+impl<'a, D: ArrayDef> IntoArray<'a> for TypedArray<'a, D> {
+    fn into_array(self) -> Array<'a> {
+        self.array
+    }
+}
+
+impl<D: ArrayDef> IntoArrayData for TypedArray<'_, D> {
+    fn into_array_data(self) -> ArrayData {
+        match self.array {
+            Array::Data(d) => d,
+            Array::DataRef(d) => d.clone(),
             Array::View(_) => {
                 struct Visitor {
                     buffers: Vec<OwnedBuffer>,
@@ -128,5 +158,11 @@ impl<D: ArrayDef> ToArrayData for TypedArray<'_, D> {
                 .unwrap()
             }
         }
+    }
+}
+
+impl<D: ArrayDef> ToArrayData for TypedArray<'_, D> {
+    fn to_array_data(&self) -> ArrayData {
+        self.array().to_array_data()
     }
 }

@@ -1,7 +1,7 @@
 use arrow_buffer::BooleanBuffer;
 use vortex_error::VortexResult;
 
-use crate::array::bool::{BoolArray, BoolData};
+use crate::array::bool::BoolArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::validity::Validity;
 use crate::{Array, ArrayTrait, IntoArray};
@@ -22,6 +22,6 @@ impl AsContiguousFn for BoolArray<'_> {
             bools.extend(buffer.iter())
         }
 
-        Ok(BoolData::try_new(BooleanBuffer::from(bools), validity)?.into_array())
+        Ok(BoolArray::try_new(BooleanBuffer::from(bools), validity)?.into_array())
     }
 }

@@ -92,13 +92,13 @@ impl AcceptArrayVisitor for BoolArray<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::array::bool::BoolData;
+    use crate::array::bool::BoolArray;
     use crate::compute::scalar_at::scalar_at;
     use crate::IntoArray;
 
     #[test]
     fn bool_array() {
-        let arr = BoolData::from(vec![true, false, true]).into_array();
+        let arr = BoolArray::from(vec![true, false, true]).into_array();
         let scalar: bool = scalar_at(&arr, 0).unwrap().try_into().unwrap();
         assert!(scalar);
     }

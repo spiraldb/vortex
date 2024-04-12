@@ -2,7 +2,6 @@ use as_arrow::AsArrowArray;
 use as_contiguous::AsContiguousFn;
 use cast::CastFn;
 use fill::FillForwardFn;
-use flatten::*;
 use patch::PatchFn;
 use scalar_at::ScalarAtFn;
 use search_sorted::SearchSortedFn;
@@ -12,7 +11,6 @@ pub mod as_arrow;
 pub mod as_contiguous;
 pub mod cast;
 pub mod fill;
-pub mod flatten;
 pub mod patch;
 pub mod scalar_at;
 pub mod search_sorted;
@@ -32,10 +30,6 @@ pub trait ArrayCompute {
     }
 
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
-        None
-    }
-
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
         None
     }
 

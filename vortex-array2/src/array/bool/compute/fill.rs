@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 use vortex_schema::Nullability;
 
-use crate::array::bool::{BoolArray, BoolData};
+use crate::array::bool::BoolArray;
 use crate::compute::fill::FillForwardFn;
 use crate::validity::ArrayValidity;
 use crate::{Array, ArrayTrait, IntoArray, ToArrayData};
@@ -25,20 +25,20 @@ impl FillForwardFn for BoolArray<'_> {
                 last_value
             })
             .collect::<Vec<_>>();
-        Ok(BoolData::from(filled).into_array())
+        Ok(BoolArray::from(filled).into_array())
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::{BoolArray, BoolData};
+    use crate::array::bool::BoolArray;
     use crate::validity::Validity;
     use crate::{compute, IntoArray};
 
     #[test]
     fn fill_forward() {
         let barr =
-            BoolData::from_iter(vec![None, Some(false), None, Some(true), None]).into_array();
+            BoolArray::from_iter(vec![None, Some(false), None, Some(true), None]).into_array();
         let filled_bool = BoolArray::try_from(compute::fill::fill_forward(&barr).unwrap()).unwrap();
         assert_eq!(
             filled_bool.boolean_buffer().iter().collect::<Vec<bool>>(),

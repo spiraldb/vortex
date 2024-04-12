@@ -24,7 +24,7 @@ use arrow_schema::{DataType, TimeUnit};
 use vortex::ptype::NativePType;
 use vortex_schema::DType;
 
-use crate::array::bool::BoolData;
+use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveData;
 use crate::array::r#struct::StructData;
 use crate::stats::{Stat, Statistics};
@@ -49,7 +49,7 @@ impl IntoArrayData for Buffer {
 
 impl IntoArrayData for NullBuffer {
     fn into_array_data(self) -> ArrayData {
-        BoolData::try_new(self.into_inner(), Validity::NonNullable)
+        BoolArray::try_new(self.into_inner(), Validity::NonNullable)
             .unwrap()
             .into_array_data()
     }
@@ -134,7 +134,7 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayData {
 
 impl FromArrowArray<&ArrowBooleanArray> for ArrayData {
     fn from_arrow(value: &ArrowBooleanArray, nullable: bool) -> Self {
-        BoolData::try_new(value.values().clone(), nulls(value.nulls(), nullable))
+        BoolArray::try_new(value.values().clone(), nulls(value.nulls(), nullable))
             .unwrap()
             .into_array_data()
     }

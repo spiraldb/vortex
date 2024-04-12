@@ -1,25 +1,26 @@
-use std::sync::Arc;
+use std::collections::HashMap;
 
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array::bool::{BoolData, BoolMetadata};
+use crate::array::bool::{BoolArray, BoolMetadata, OwnedBoolArray};
 use crate::buffer::Buffer;
 use crate::validity::Validity;
 
-impl BoolData {
+impl BoolArray<'_> {
     pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
-        Ok(Self::new_unchecked(
+        Self::try_from_parts(
             DType::Bool(validity.nullability()),
-            Arc::new(BoolMetadata {
+            BoolMetadata {
                 validity: validity.to_metadata(buffer.len())?,
                 length: buffer.len(),
-            }),
+            },
             vec![Buffer::Owned(buffer.into_inner())].into(),
             validity.to_array_data().into_iter().collect_vec().into(),
-        ))
+            HashMap::default(),
+        )
     }
 
     pub fn from_vec(bools: Vec<bool>, validity: Validity) -> Self {
@@ -28,19 +29,19 @@ impl BoolData {
     }
 }
 
-impl From<BooleanBuffer> for BoolData {
+impl From<BooleanBuffer> for OwnedBoolArray {
     fn from(value: BooleanBuffer) -> Self {
-        BoolData::try_new(value, Validity::NonNullable).unwrap()
+        BoolArray::try_new(value, Validity::NonNullable).unwrap()
     }
 }
 
-impl From<Vec<bool>> for BoolData {
+impl From<Vec<bool>> for OwnedBoolArray {
     fn from(value: Vec<bool>) -> Self {
-        BoolData::from_vec(value, Validity::NonNullable)
+        BoolArray::from_vec(value, Validity::NonNullable)
     }
 }
 
-impl FromIterator<Option<bool>> for BoolData {
+impl FromIterator<Option<bool>> for OwnedBoolArray {
     fn from_iter<I: IntoIterator<Item = Option<bool>>>(iter: I) -> Self {
         let iter = iter.into_iter();
         let (lower, _) = iter.size_hint();
@@ -53,6 +54,6 @@ impl FromIterator<Option<bool>> for BoolData {
             })
             .collect::<Vec<_>>();
 
-        BoolData::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap()
+        BoolArray::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap()
     }
 }

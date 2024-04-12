@@ -9,7 +9,6 @@ use vortex::scalar::{ListScalarVec, PScalar};
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::flatten::flatten_bool;
 use crate::stats::{ArrayStatisticsCompute, Stat};
 use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
@@ -23,7 +22,7 @@ impl ArrayStatisticsCompute for PrimitiveArray<'_> {
                 LogicalValidity::AllInvalid(_) => all_null_stats::<$P>(),
                 LogicalValidity::Array(a) => NullableValues(
                     self.typed_data::<$P>(),
-                    &flatten_bool(&a.into_array())?.as_typed_array().boolean_buffer(),
+                    &a.into_array().flatten_bool()?.boolean_buffer(),
                 )
                 .compute_statistics(stat),
             }

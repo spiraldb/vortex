@@ -113,7 +113,7 @@ impl ArrayFlatten for PrimitiveArray<'_> {
     where
         Self: 'a,
     {
-        todo!()
+        Ok(Flattened::Primitive(self))
     }
 }
 

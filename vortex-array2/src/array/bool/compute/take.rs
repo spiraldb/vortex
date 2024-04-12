@@ -3,8 +3,7 @@ use num_traits::AsPrimitive;
 use vortex::match_each_integer_ptype;
 use vortex_error::VortexResult;
 
-use crate::array::bool::{BoolArray, BoolData};
-use crate::compute::flatten::flatten_primitive;
+use crate::array::bool::BoolArray;
 use crate::compute::take::TakeFn;
 use crate::IntoArray;
 use crate::{Array, OwnedArray};
@@ -12,10 +11,9 @@ use crate::{Array, OwnedArray};
 impl TakeFn for BoolArray<'_> {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         let validity = self.validity();
-        let indices_data = flatten_primitive(indices)?;
-        let indices = indices_data.as_typed_array();
+        let indices = indices.clone().flatten_primitive()?;
         match_each_integer_ptype!(indices.ptype(), |$I| {
-            Ok(BoolData::from_vec(
+            Ok(BoolArray::from_vec(
                 take_bool(&self.boolean_buffer(), indices.typed_data::<$I>()),
                 validity.take(indices.array())?,
             ).into_array())
@@ -29,14 +27,14 @@ fn take_bool<I: AsPrimitive<usize>>(bools: &BooleanBuffer, indices: &[I]) -> Vec
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::{BoolArray, BoolData};
+    use crate::array::bool::BoolArray;
     use crate::array::primitive::PrimitiveData;
     use crate::compute::take::take;
     use crate::IntoArray;
 
     #[test]
     fn take_nullable() {
-        let reference = BoolData::from_iter(vec![
+        let reference = BoolArray::from_iter(vec![
             Some(false),
             Some(true),
             Some(false),
@@ -51,9 +49,7 @@ mod test {
         .unwrap();
         assert_eq!(
             b.boolean_buffer(),
-            BoolData::from_iter(vec![Some(false), None, Some(false)])
-                .as_typed_array()
-                .boolean_buffer()
+            BoolArray::from_iter(vec![Some(false), None, Some(false)]).boolean_buffer()
         );
     }
 }

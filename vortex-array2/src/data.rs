@@ -190,11 +190,6 @@ impl<D: ArrayDef> TypedArrayData<D> {
             .downcast::<D::Metadata>()
             .unwrap()
     }
-
-    pub fn as_typed_array(&self) -> D::Array<'_> {
-        todo!()
-        // D::Array::try_from_parts(&self.data, self.metadata()).unwrap()
-    }
 }
 
 impl<D: ArrayDef> ToArray for TypedArrayData<D> {
