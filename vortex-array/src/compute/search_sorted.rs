@@ -134,23 +134,18 @@ impl<S: IndexOrd<T> + Len + ?Sized, T> SearchSorted<T> for S {
         side: SearchSortedSide,
     ) -> SearchResult {
         match search_sorted_side_idx(find, 0, self.len()) {
-            SearchResult::Found(found) => match side {
-                SearchSortedSide::Left => match search_sorted_side_idx(side_find, 0, found) {
+            SearchResult::Found(found) => {
+                let idx_search = match side {
+                    SearchSortedSide::Left => search_sorted_side_idx(side_find, 0, found),
+                    SearchSortedSide::Right => search_sorted_side_idx(side_find, found, self.len()),
+                };
+                match idx_search {
                     SearchResult::NotFound(i) => SearchResult::Found(i),
                     _ => unreachable!(
                         "searching amongst equal values should never return Found result"
                     ),
-                },
-                // Right side search returns index one past the result we want, subtract here
-                SearchSortedSide::Right => {
-                    match search_sorted_side_idx(side_find, found, self.len()) {
-                        SearchResult::NotFound(i) => SearchResult::Found(i - 1),
-                        _ => unreachable!(
-                            "searching amongst equal values should never return Found result"
-                        ),
-                    }
                 }
-            },
+            }
             s => s,
         }
     }
@@ -227,8 +222,8 @@ mod test {
     fn right_side_equal() {
         let arr = [0, 1, 2, 2, 2, 2, 3, 4, 5, 6, 7, 8, 9];
         let res = arr.search_sorted(&2, SearchSortedSide::Right);
-        assert_eq!(arr[res.to_index()], 2);
-        assert_eq!(res, SearchResult::Found(5));
+        assert_eq!(arr[res.to_index() - 1], 2);
+        assert_eq!(res, SearchResult::Found(6));
     }
 
     #[test]
@@ -243,8 +238,8 @@ mod test {
     fn right_side_equal_beginning() {
         let arr = [0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let res = arr.search_sorted(&0, SearchSortedSide::Right);
-        assert_eq!(arr[res.to_index()], 0);
-        assert_eq!(res, SearchResult::Found(3));
+        assert_eq!(arr[res.to_index() - 1], 0);
+        assert_eq!(res, SearchResult::Found(4));
     }
 
     #[test]
@@ -259,7 +254,7 @@ mod test {
     fn right_side_equal_end() {
         let arr = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9];
         let res = arr.search_sorted(&9, SearchSortedSide::Right);
-        // assert_eq!(arr[res.to_index()], 9);
-        assert_eq!(res, SearchResult::Found(12));
+        assert_eq!(arr[res.to_index() - 1], 9);
+        assert_eq!(res, SearchResult::Found(13));
     }
 }

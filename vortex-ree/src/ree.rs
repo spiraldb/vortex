@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::scalar_at::scalar_at;
-use vortex::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
+use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
@@ -68,10 +68,8 @@ impl REEArray {
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
-        search_sorted(self.ends(), index + self.offset, SearchSortedSide::Right).map(|r| match r {
-            SearchResult::Found(i) => i + 1,
-            SearchResult::NotFound(i) => i,
-        })
+        search_sorted(self.ends(), index + self.offset, SearchSortedSide::Right)
+            .map(|s| s.to_index())
     }
 
     pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {

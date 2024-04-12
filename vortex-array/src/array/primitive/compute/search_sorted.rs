@@ -39,7 +39,7 @@ mod test {
             search_sorted(&values, 1, SearchSortedSide::Right)
                 .unwrap()
                 .to_index(),
-            0
+            1
         );
         assert_eq!(
             search_sorted(&values, 4, SearchSortedSide::Left)
