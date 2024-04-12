@@ -147,46 +147,46 @@ impl<T: OwnedStats + StatsCompute> Statistics for T {
 }
 
 impl dyn Statistics + '_ {
-    pub fn get_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError> + Default>(
+    pub fn get_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
     ) -> VortexResult<U> {
-        let mut res: U = U::default();
+        let mut res: Option<U> = None;
         self.with_stat_value(stat, &mut |s| {
-            res = U::try_from(s)?;
+            res = Some(U::try_from(s)?);
             Ok(())
         })?;
-        Ok(res)
+        Ok(res.expect("Result should have been populated by previous call"))
     }
 
-    pub fn compute_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError> + Default>(
+    pub fn compute_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
     ) -> VortexResult<U> {
-        let mut res: U = U::default();
+        let mut res: Option<U> = None;
         self.with_computed_stat_value(stat, &mut |s| {
-            res = U::try_from(s)?;
+            res = Some(U::try_from(s)?);
             Ok(())
         })?;
-        Ok(res)
+        Ok(res.expect("Result should have been populated by previous call"))
     }
 
     pub fn compute_as_cast<U: NativePType>(&self, stat: Stat) -> VortexResult<U> {
-        let mut res: U = U::default();
+        let mut res: Option<U> = None;
         self.with_computed_stat_value(stat, &mut |s| {
-            res = U::try_from(s.cast(&DType::from(U::PTYPE))?)?;
+            res = Some(U::try_from(s.cast(&DType::from(U::PTYPE))?)?);
             Ok(())
         })?;
-        Ok(res)
+        Ok(res.expect("Result should have been populated by previous call"))
     }
 
-    pub fn compute_min<U: for<'a> TryFrom<&'a Scalar, Error = VortexError> + Default>(
+    pub fn compute_min<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
     ) -> VortexResult<U> {
         self.compute_as(Stat::Min)
     }
 
-    pub fn compute_max<U: for<'a> TryFrom<&'a Scalar, Error = VortexError> + Default>(
+    pub fn compute_max<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
     ) -> VortexResult<U> {
         self.compute_as(Stat::Max)
