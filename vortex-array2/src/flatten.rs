@@ -25,11 +25,11 @@ impl<'a> Array<'a> {
     }
 
     pub fn flatten_bool(self) -> VortexResult<BoolArray<'a>> {
-        Ok(BoolArray::try_from(self.flatten()?.into_array())?)
+        BoolArray::try_from(self.flatten()?.into_array())
     }
 
     pub fn flatten_primitive(self) -> VortexResult<PrimitiveArray<'a>> {
-        Ok(PrimitiveArray::try_from(self.flatten()?.into_array())?)
+        PrimitiveArray::try_from(self.flatten()?.into_array())
     }
 }
 
