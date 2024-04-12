@@ -103,6 +103,7 @@ impl<'v> Validity<'v> {
         }
     }
 
+    // TODO(ngates): into_logical
     pub fn to_logical(&self, length: usize) -> LogicalValidity {
         match self {
             Validity::NonNullable => LogicalValidity::AllValid(length),
@@ -129,8 +130,8 @@ impl PartialEq for Validity<'_> {
             (Validity::AllValid, Validity::AllValid) => true,
             (Validity::AllInvalid, Validity::AllInvalid) => true,
             (Validity::Array(a), Validity::Array(b)) => {
-                flatten_bool(a).unwrap().as_typed_array().buffer()
-                    == flatten_bool(b).unwrap().as_typed_array().buffer()
+                flatten_bool(a).unwrap().as_typed_array().boolean_buffer()
+                    == flatten_bool(b).unwrap().as_typed_array().boolean_buffer()
             }
             _ => false,
         }
@@ -194,7 +195,9 @@ impl LogicalValidity {
             LogicalValidity::AllInvalid(l) => Ok(Some(NullBuffer::new_null(*l))),
             LogicalValidity::Array(a) => {
                 let bool_data = flatten_bool(&a.to_array())?;
-                Ok(Some(NullBuffer::new(bool_data.as_typed_array().buffer())))
+                Ok(Some(NullBuffer::new(
+                    bool_data.as_typed_array().boolean_buffer(),
+                )))
             }
         }
     }

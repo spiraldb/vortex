@@ -2,7 +2,7 @@ use vortex_error::VortexError;
 
 use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::encoding::{EncodingId, WithEncodedArray};
-use crate::{Array, ArrayMetadata, TryFromArrayParts, WithTypedArray};
+use crate::{Array, ArrayMetadata, WithTypedArray};
 use crate::{ArrayTrait, TryDeserializeArrayMetadata, TrySerializeArrayMetadata};
 
 /// Trait the defines the set of types relating to an array.
@@ -11,13 +11,12 @@ pub trait ArrayDef {
     const ID: EncodingId;
     const ENCODING: EncodingRef;
 
-    type Array<'a>: ArrayTrait + TryFromArrayParts<'a, Self::Metadata> + 'a;
+    type Array<'a>: ArrayTrait + TryFrom<Array<'a>, Error = VortexError> + 'a;
     type Metadata: ArrayMetadata
         + Clone
         + TrySerializeArrayMetadata
         + for<'a> TryDeserializeArrayMetadata<'a>;
     type Encoding: ArrayEncoding + WithEncodedArray<D = Self> + WithTypedArray<D = Self>;
-    type TypedArray<'a>: ArrayTrait + TryFrom<Array<'a>, Error = VortexError>;
 }
 
 #[macro_export]
@@ -29,12 +28,9 @@ macro_rules! impl_encoding {
             use $crate::{
                 Array,
                 ArrayDef,
-                ArrayEncodingRef,
-                ArrayParts,
                 ArrayTrait,
                 Flattened,
                 TypedArray,
-                TryFromArrayParts,
                 WithTypedArray,
             };
             use $crate::encoding::{
@@ -58,11 +54,10 @@ macro_rules! impl_encoding {
                 type Array<'a> = [<$Name Array>]<'a>;
                 type Metadata = [<$Name Metadata>];
                 type Encoding = [<$Name Encoding>];
-                type TypedArray<'a> = [<$Name Array2>]<'a>;
             }
 
-            pub type [<$Name Array2>]<'a> = TypedArray<'a, [<$Name Def>]>;
-            pub type [<Owned $Name Array2>] = TypedArray<'static, [<$Name Def>]>;
+            pub type [<$Name Array>]<'a> = TypedArray<'a, [<$Name Def>]>;
+            pub type [<Owned $Name Array>] = TypedArray<'static, [<$Name Def>]>;
             pub type [<$Name Data>] = TypedArrayData<[<$Name Def>]>;
 
             /// The array encoding
@@ -99,24 +94,6 @@ macro_rules! impl_encoding {
                 ) -> VortexResult<()> {
                     <Self as WithEncodedArray>::with_dyn(array, f)
                 }
-
-                #[inline]
-                fn with_view_mut<'v>(
-                    &self,
-                    view: &'v ArrayView<'v>,
-                    f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
-                ) -> VortexResult<()> {
-                    WithEncodedArray::with_view_mut(self, view, |a| f(a))
-                }
-
-                #[inline]
-                fn with_data_mut(
-                    &self,
-                    data: &ArrayData,
-                    f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
-                ) -> VortexResult<()> {
-                    WithEncodedArray::with_data_mut(self, data, |a| f(a))
-                }
             }
 
             /// Implement ArrayMetadata
@@ -127,12 +104,6 @@ macro_rules! impl_encoding {
 
                 fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
                     self
-                }
-            }
-
-            impl ArrayEncodingRef for [<$Name Array>]<'_> {
-                fn encoding(&self) -> EncodingRef {
-                    [<$Name Def>]::ENCODING
                 }
             }
         }

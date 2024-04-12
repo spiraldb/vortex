@@ -33,7 +33,7 @@ impl FillForwardFn for PrimitiveArray<'_> {
 #[cfg(test)]
 mod test {
     use crate::array::bool::BoolData;
-    use crate::array::primitive::{PrimitiveData, PrimitiveDef};
+    use crate::array::primitive::{PrimitiveArray, PrimitiveData};
     use crate::validity::{ArrayValidity, Validity};
     use crate::{compute, IntoArray};
 
@@ -41,12 +41,9 @@ mod test {
     fn leading_none() {
         let arr = PrimitiveData::from_nullable_vec(vec![None, Some(8u8), None, Some(10), None])
             .into_array();
-        compute::fill::fill_forward(&arr)
-            .unwrap()
-            .with_typed_array::<PrimitiveDef, _, _>(|p| {
-                assert_eq!(p.typed_data::<u8>(), vec![0, 8, 8, 10, 10]);
-                assert!(p.logical_validity().is_all_valid());
-            })
+        let p = PrimitiveArray::try_from(compute::fill::fill_forward(&arr).unwrap()).unwrap();
+        assert_eq!(p.typed_data::<u8>(), vec![0, 8, 8, 10, 10]);
+        assert!(p.logical_validity().is_all_valid());
     }
 
     #[test]
@@ -55,12 +52,9 @@ mod test {
             PrimitiveData::from_nullable_vec(vec![Option::<u8>::None, None, None, None, None])
                 .into_array();
 
-        compute::fill::fill_forward(&arr)
-            .unwrap()
-            .with_typed_array::<PrimitiveDef, _, _>(|p| {
-                assert_eq!(p.typed_data::<u8>(), vec![0, 0, 0, 0, 0]);
-                assert!(p.logical_validity().is_all_valid());
-            })
+        let p = PrimitiveArray::try_from(compute::fill::fill_forward(&arr).unwrap()).unwrap();
+        assert_eq!(p.typed_data::<u8>(), vec![0, 0, 0, 0, 0]);
+        assert!(p.logical_validity().is_all_valid());
     }
 
     #[test]
@@ -70,11 +64,8 @@ mod test {
             Validity::Array(BoolData::from(vec![true, true, true, true, true]).into_array()),
         )
         .into_array();
-        compute::fill::fill_forward(&arr)
-            .unwrap()
-            .with_typed_array::<PrimitiveDef, _, _>(|p| {
-                assert_eq!(p.typed_data::<u8>(), vec![8, 10, 12, 14, 16]);
-                assert!(p.logical_validity().is_all_valid());
-            })
+        let p = PrimitiveArray::try_from(compute::fill::fill_forward(&arr).unwrap()).unwrap();
+        assert_eq!(p.typed_data::<u8>(), vec![8, 10, 12, 14, 16]);
+        assert!(p.logical_validity().is_all_valid());
     }
 }

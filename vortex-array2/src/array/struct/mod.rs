@@ -1,14 +1,11 @@
-mod array2;
-
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FieldNames};
 
 use crate::compute::ArrayCompute;
-use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
+use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::ArrayView;
 use crate::{impl_encoding, ToArray, WithArray};
 use crate::{ArrayData, TypedArrayData};
 use crate::{ArrayFlatten, ArrayMetadata};
@@ -20,22 +17,13 @@ pub struct StructMetadata {
     length: usize,
 }
 
-#[derive(Clone)]
-pub struct StructArray<'a> {
-    dtype: &'a DType,
-    // Note(ngates): for arrays with variable-length children, we don't want to
-    // allocate a Vec<Array>, so instead we defer child access by storing a reference to the parts.
-    parts: &'a dyn ArrayParts,
-    length: usize,
-}
-
-impl<'a> StructArray<'a> {
-    pub fn child(&'a self, idx: usize) -> Option<Array<'a>> {
+impl StructArray<'_> {
+    pub fn child(&self, idx: usize) -> Option<Array> {
         let DType::Struct(_, fields) = self.dtype() else {
             unreachable!()
         };
         let dtype = fields.get(idx)?;
-        self.parts.child(idx, dtype)
+        self.array().child(idx, dtype)
     }
 
     pub fn names(&self) -> &FieldNames {
@@ -80,29 +68,6 @@ impl StructData {
     }
 }
 
-impl<'v> TryFromArrayParts<'v, StructMetadata> for StructArray<'v> {
-    fn try_from_parts(
-        parts: &'v dyn ArrayParts,
-        metadata: &'v StructMetadata,
-    ) -> VortexResult<Self> {
-        let DType::Struct(_names, dtypes) = parts.dtype() else {
-            unreachable!()
-        };
-        if parts.nchildren() != dtypes.len() {
-            vortex_bail!(
-                "Expected {} children, found {}",
-                dtypes.len(),
-                parts.nchildren()
-            );
-        }
-        Ok(StructArray {
-            dtype: parts.dtype(),
-            parts,
-            length: metadata.length,
-        })
-    }
-}
-
 impl ArrayFlatten for StructArray<'_> {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
@@ -114,17 +79,15 @@ impl ArrayFlatten for StructArray<'_> {
 
 impl ArrayTrait for StructArray<'_> {
     fn dtype(&self) -> &DType {
-        self.dtype
+        self.array().dtype()
     }
 
     fn len(&self) -> usize {
-        self.length
+        self.metadata().length
     }
 
     fn metadata(&self) -> Arc<dyn ArrayMetadata> {
-        Arc::new(StructMetadata {
-            length: self.length,
-        })
+        Arc::new(self.metadata().clone())
     }
 }
 
@@ -148,6 +111,5 @@ impl AcceptArrayVisitor for StructArray<'_> {
     }
 }
 
-impl ArrayStatistics for StructArray<'_> {}
 impl ArrayStatisticsCompute for StructArray<'_> {}
 impl ArrayCompute for StructArray<'_> {}

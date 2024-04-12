@@ -1,13 +1,13 @@
 use std::fmt::{Debug, Formatter};
 
 use vortex::flatbuffers::array as fb;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::buffer::Buffer;
 use crate::encoding::EncodingRef;
 use crate::stats::{EmptyStatistics, Statistics};
-use crate::{Array, IntoArray, ToArray};
+use crate::{Array, ArrayTrait, IntoArray, ToArray};
 use crate::{ArrayParts, SerdeContext};
 
 #[derive(Clone)]
@@ -63,7 +63,8 @@ impl<'v> ArrayView<'v> {
 
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
         // implement Encoding::with_view().
-        encoding.with_view_mut(&view, &mut |_| Ok(()))?;
+        // FIXME(ngates): validate the metadata
+        view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;
 
         Ok(view)
     }
@@ -80,6 +81,7 @@ impl<'v> ArrayView<'v> {
         self.array.metadata().map(|m| m.bytes())
     }
 
+    // FIXME(ngates): detach from DType I think?
     pub fn child(&self, idx: usize, dtype: &'v DType) -> Option<ArrayView<'v>> {
         let child = self.array_child(idx)?;
 

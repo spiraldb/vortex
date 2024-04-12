@@ -1,10 +1,8 @@
 use arrow_buffer::BooleanBuffer;
-use itertools::Itertools;
 use vortex_error::VortexResult;
 
 use crate::array::bool::{BoolArray, BoolData};
 use crate::compute::as_contiguous::AsContiguousFn;
-use crate::compute::flatten::flatten_bool;
 use crate::validity::Validity;
 use crate::{Array, ArrayTrait, IntoArray, WithArray};
 
@@ -23,9 +21,9 @@ impl AsContiguousFn for BoolArray<'_> {
         let mut bools = Vec::with_capacity(arrays.iter().map(|a| a.len()).sum());
         for buffer in arrays
             .iter()
-            .map(|a| flatten_bool(a).map(|bool_data| bool_data.as_typed_array().buffer()))
+            .map(|a| BoolArray::try_from(a.clone()).unwrap().boolean_buffer())
         {
-            bools.extend(buffer?.iter().collect_vec())
+            bools.extend(buffer.iter())
         }
 
         Ok(BoolData::try_new(BooleanBuffer::from(bools), validity)?.into_array())

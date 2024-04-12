@@ -9,7 +9,8 @@ use crate::ArrayTrait;
 impl ScalarAtFn for BoolArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         Ok(BoolScalar::try_new(
-            self.is_valid(index).then(|| self.buffer().value(index)),
+            self.is_valid(index)
+                .then(|| self.boolean_buffer().value(index)),
             self.dtype().nullability(),
         )
         .unwrap()

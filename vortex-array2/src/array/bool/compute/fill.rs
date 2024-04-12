@@ -13,7 +13,7 @@ impl FillForwardFn for BoolArray<'_> {
         }
 
         let validity = self.logical_validity().to_null_buffer()?.unwrap();
-        let bools = self.buffer();
+        let bools = self.boolean_buffer();
         let mut last_value = false;
         let filled = bools
             .iter()
@@ -31,7 +31,9 @@ impl FillForwardFn for BoolArray<'_> {
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::{BoolData, BoolDef};
+    use vortex::validity::OwnedValidity;
+
+    use crate::array::bool::{BoolArray, BoolData};
     use crate::validity::Validity;
     use crate::{compute, IntoArray};
 
@@ -39,14 +41,11 @@ mod test {
     fn fill_forward() {
         let barr =
             BoolData::from_iter(vec![None, Some(false), None, Some(true), None]).into_array();
-        compute::fill::fill_forward(&barr)
-            .unwrap()
-            .with_typed_array::<BoolDef, _, _>(|filled_bool| {
-                assert_eq!(
-                    filled_bool.buffer().iter().collect::<Vec<bool>>(),
-                    vec![false, false, false, true, true]
-                );
-                assert_eq!(*filled_bool.validity(), Validity::NonNullable);
-            })
+        let filled_bool = BoolArray::try_from(compute::fill::fill_forward(&barr).unwrap()).unwrap();
+        assert_eq!(
+            filled_bool.boolean_buffer().iter().collect::<Vec<bool>>(),
+            vec![false, false, false, true, true]
+        );
+        assert_eq!(filled_bool.validity(), Validity::NonNullable);
     }
 }

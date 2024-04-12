@@ -10,7 +10,7 @@ use crate::validity::ArrayValidity;
 impl AsArrowArray for BoolArray<'_> {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         Ok(Arc::new(ArrowBoolArray::new(
-            self.buffer().clone(),
+            self.boolean_buffer().clone(),
             self.logical_validity().to_null_buffer()?,
         )))
     }

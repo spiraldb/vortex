@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use vortex::scalar::Scalar;
 use vortex_error::VortexResult;
 
+use crate::{Array, ArrayDef, ArrayParts, TypedArray};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Stat {
     BitWidthFreq,
@@ -20,6 +22,17 @@ pub enum Stat {
 pub trait ArrayStatistics {
     fn statistics(&self) -> &(dyn Statistics + '_) {
         &EmptyStatistics
+    }
+}
+
+// TODO(ngates): do we want this here?
+impl<D: ArrayDef> ArrayStatistics for TypedArray<'_, D> {
+    fn statistics(&self) -> &(dyn Statistics + '_) {
+        match self.array() {
+            Array::Data(d) => d.statistics(),
+            Array::DataRef(d) => d.statistics(),
+            Array::View(v) => v.statistics(),
+        }
     }
 }
 

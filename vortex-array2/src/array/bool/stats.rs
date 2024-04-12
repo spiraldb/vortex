@@ -4,14 +4,8 @@ use vortex::scalar::Scalar;
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
-use crate::stats::{ArrayStatistics, ArrayStatisticsCompute, Stat, Statistics};
+use crate::stats::{ArrayStatisticsCompute, Stat};
 use crate::ArrayTrait;
-
-impl ArrayStatistics for BoolArray<'_> {
-    fn statistics(&self) -> &(dyn Statistics + '_) {
-        self.stats
-    }
-}
 
 impl ArrayStatisticsCompute for BoolArray<'_> {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
@@ -22,10 +16,10 @@ impl ArrayStatisticsCompute for BoolArray<'_> {
             ]));
         }
 
-        let mut prev_bit = self.buffer().value(0);
+        let mut prev_bit = self.boolean_buffer().value(0);
         let mut true_count: usize = if prev_bit { 1 } else { 0 };
         let mut run_count: usize = 0;
-        for bit in self.buffer().iter().skip(1) {
+        for bit in self.boolean_buffer().iter().skip(1) {
             if bit {
                 true_count += 1
             }

@@ -16,7 +16,7 @@ impl TakeFn for BoolArray<'_> {
         let indices = indices_data.as_typed_array();
         match_each_integer_ptype!(indices.ptype(), |$I| {
             Ok(BoolData::from_vec(
-                take_bool(&self.buffer(), indices.typed_data::<$I>()),
+                take_bool(&self.boolean_buffer(), indices.typed_data::<$I>()),
                 validity,
             ).into_array())
         })
@@ -29,7 +29,7 @@ fn take_bool<I: AsPrimitive<usize>>(bools: &BooleanBuffer, indices: &[I]) -> Vec
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::{BoolData, BoolDef};
+    use crate::array::bool::{BoolArray, BoolData};
     use crate::array::primitive::PrimitiveData;
     use crate::compute::take::take;
     use crate::IntoArray;
@@ -45,15 +45,15 @@ mod test {
         ])
         .into_array();
 
-        take(&reference, &PrimitiveData::from(vec![0, 3, 4]).into_array())
-            .unwrap()
-            .with_typed_array::<BoolDef, _, _>(|b| {
-                assert_eq!(
-                    b.buffer(),
-                    BoolData::from_iter(vec![Some(false), None, Some(false)])
-                        .as_typed_array()
-                        .buffer()
-                );
-            })
+        let b = BoolArray::try_from(
+            take(&reference, &PrimitiveData::from(vec![0, 3, 4]).into_array()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            b.boolean_buffer(),
+            BoolData::from_iter(vec![Some(false), None, Some(false)])
+                .as_typed_array()
+                .boolean_buffer()
+        );
     }
 }

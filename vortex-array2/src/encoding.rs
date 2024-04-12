@@ -3,13 +3,11 @@ use std::fmt::{Debug, Formatter};
 
 use linkme::distributed_slice;
 pub use vortex::encoding::EncodingId;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::VortexResult;
 
 use crate::flatten::{ArrayFlatten, Flattened};
-use crate::{
-    Array, ArrayData, ArrayParts, ArrayTrait, TryDeserializeArrayMetadata, TryFromArrayParts,
-};
-use crate::{ArrayDef, ArrayView};
+use crate::ArrayDef;
+use crate::{Array, ArrayTrait};
 
 #[distributed_slice]
 pub static VORTEX_ENCODINGS: [EncodingRef] = [..];
@@ -38,18 +36,6 @@ pub trait ArrayEncoding: 'static + Sync + Send {
         array: &'a Array<'a>,
         f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
     ) -> VortexResult<()>;
-
-    fn with_view_mut<'v>(
-        &self,
-        view: &'v ArrayView<'v>,
-        f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
-    ) -> VortexResult<()>;
-
-    fn with_data_mut(
-        &self,
-        data: &ArrayData,
-        f: &mut dyn FnMut(&dyn ArrayTrait) -> VortexResult<()>,
-    ) -> VortexResult<()>;
 }
 
 /// FIXME(ngates): rename to ArrayEncodingExtension
@@ -60,7 +46,7 @@ pub trait WithEncodedArray {
     where
         <Self as WithEncodedArray>::D: 'a,
     {
-        let typed = <<Self::D as ArrayDef>::TypedArray<'a> as TryFrom<Array>>::try_from(array)?;
+        let typed = <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array)?;
         ArrayFlatten::flatten(typed)
     }
 
@@ -70,41 +56,8 @@ pub trait WithEncodedArray {
         <Self as WithEncodedArray>::D: 'a,
     {
         let typed =
-            <<Self::D as ArrayDef>::TypedArray<'a> as TryFrom<Array>>::try_from(array.clone())
-                .unwrap();
+            <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array.clone()).unwrap();
         f(&typed)
-    }
-
-    fn with_view_mut<R, F: for<'a> FnMut(&<Self::D as ArrayDef>::Array<'a>) -> R>(
-        &self,
-        view: &ArrayView,
-        mut f: F,
-    ) -> R {
-        let metadata = <Self::D as ArrayDef>::Metadata::try_deserialize_metadata(view.metadata())
-            .map_err(|e| vortex_err!("Failed to deserialize metadata: {}", e))
-            .unwrap();
-        let array =
-            <Self::D as ArrayDef>::Array::try_from_parts(view as &dyn ArrayParts, &metadata)
-                .map_err(|e| vortex_err!("Failed to create array from parts: {}", e))
-                .unwrap();
-        f(&array)
-    }
-
-    fn with_data_mut<R, F: for<'a> FnMut(&<Self::D as ArrayDef>::Array<'a>) -> R>(
-        &self,
-        data: &ArrayData,
-        mut f: F,
-    ) -> R {
-        let metadata = data
-            .metadata()
-            .as_any()
-            .downcast_ref::<<Self::D as ArrayDef>::Metadata>()
-            .ok_or_else(|| vortex_err!("Failed to downcast metadata"))
-            .unwrap();
-        let array = <Self::D as ArrayDef>::Array::try_from_parts(data as &dyn ArrayParts, metadata)
-            .map_err(|e| vortex_err!("Failed to create array from parts: {}", e))
-            .unwrap();
-        f(&array)
     }
 }
 
@@ -113,43 +66,6 @@ impl Debug for dyn ArrayEncoding + '_ {
         Debug::fmt(&self.id(), f)
     }
 }
-
-impl dyn ArrayEncoding {
-    pub(crate) fn with_view<'v, R, F: FnMut(&dyn ArrayTrait) -> R>(
-        &self,
-        view: &'v ArrayView<'v>,
-        mut f: F,
-    ) -> R {
-        let mut result = None;
-
-        // Unwrap the result. This is safe since we validate that encoding against the
-        // ArrayData during ArrayData::try_new.
-        self.with_view_mut(view, &mut |array| {
-            result = Some(f(array));
-            Ok(())
-        })
-        .unwrap();
-
-        // Now we unwrap the optional, which we know to be populated in the closure.
-        result.unwrap()
-    }
-
-    pub(crate) fn with_data<R, F: FnMut(&dyn ArrayTrait) -> R>(
-        &self,
-        data: &ArrayData,
-        mut f: F,
-    ) -> R {
-        let mut result = None;
-
-        // Unwrap the result. This is safe since we validate that encoding against the
-        // ArrayData during ArrayData::try_new.
-        self.with_data_mut(data, &mut |array| {
-            result = Some(f(array));
-            Ok(())
-        })
-        .unwrap();
-
-        // Now we unwrap the optional, which we know to be populated in the closure.
-        result.unwrap()
-    }
+pub trait ArrayEncodingRef {
+    fn encoding(&self) -> EncodingRef;
 }

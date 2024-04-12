@@ -23,7 +23,7 @@ impl ArrayStatisticsCompute for PrimitiveArray<'_> {
                 LogicalValidity::AllInvalid(_) => all_null_stats::<$P>(),
                 LogicalValidity::Array(a) => NullableValues(
                     self.typed_data::<$P>(),
-                    &flatten_bool(&a.into_array())?.as_typed_array().buffer(),
+                    &flatten_bool(&a.into_array())?.as_typed_array().boolean_buffer(),
                 )
                 .compute_statistics(stat),
             }

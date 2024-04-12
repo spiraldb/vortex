@@ -33,7 +33,7 @@ use vortex_schema::DType;
 
 use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
-use crate::encoding::{EncodingRef, WithEncodedArray};
+use crate::encoding::{ArrayEncodingRef, EncodingRef, WithEncodedArray};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute, Statistics};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -76,19 +76,19 @@ impl Array<'_> {
         TypedArrayData::<D>::try_from(self.into_array_data()).ok()
     }
 
-    pub fn with_typed_array<D: ArrayDef, R, F: for<'a> FnMut(&D::Array<'a>) -> R>(
-        &self,
-        f: F,
-    ) -> R {
-        let encoding = self
-            .encoding()
-            .as_any()
-            .downcast_ref::<D::Encoding>()
-            .unwrap();
+    pub fn child(&self, idx: usize, dtype: &DType) -> Option<Array> {
         match self {
-            Array::Data(d) => WithEncodedArray::with_data_mut(encoding, d, f),
-            Array::DataRef(d) => WithEncodedArray::with_data_mut(encoding, d, f),
-            Array::View(v) => WithEncodedArray::with_view_mut(encoding, v, f),
+            Array::Data(d) => d.child(idx, dtype).map(Array::DataRef),
+            Array::DataRef(d) => d.child(idx, dtype).map(Array::DataRef),
+            Array::View(v) => v.child(idx, dtype).map(Array::View),
+        }
+    }
+
+    pub fn buffer(&self, idx: usize) -> Option<&Buffer> {
+        match self {
+            Array::Data(d) => d.buffer(idx),
+            Array::DataRef(d) => d.buffer(idx),
+            Array::View(v) => v.buffer(idx),
         }
     }
 }
@@ -97,14 +97,7 @@ impl ToStatic for Array<'_> {
     type Static = OwnedArray;
 
     fn to_static(&self) -> Self::Static {
-        match self {
-            Array::Data(d) => Array::Data(d.clone()),
-            Array::DataRef(d) => Array::Data((*d).clone()),
-            Array::View(v) => v
-                .encoding()
-                .with_view(v, |a| a.to_array_data())
-                .into_array(),
-        }
+        Array::Data(self.to_array_data())
     }
 }
 
@@ -176,10 +169,6 @@ pub trait ArrayTrait:
     }
 }
 
-pub trait ArrayEncodingRef {
-    fn encoding(&self) -> EncodingRef;
-}
-
 struct NBytesVisitor(usize);
 impl ArrayVisitor for NBytesVisitor {
     fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
@@ -190,28 +179,6 @@ impl ArrayVisitor for NBytesVisitor {
     fn visit_buffer(&mut self, buffer: &Buffer) -> VortexResult<()> {
         self.0 += buffer.len();
         Ok(())
-    }
-}
-
-// TODO(ngates): I think we can remove IntoArrayData, make everything take self, and then
-//  implement for reference?
-impl ToArrayData for Array<'_> {
-    fn to_array_data(&self) -> ArrayData {
-        match self {
-            Array::Data(d) => d.clone(),
-            Array::DataRef(d) => (*d).clone(),
-            Array::View(v) => v.encoding().with_view(v, |a| a.to_array_data()),
-        }
-    }
-}
-
-impl IntoArrayData for Array<'_> {
-    fn into_array_data(self) -> ArrayData {
-        match self {
-            Array::Data(d) => d,
-            Array::DataRef(d) => d.clone(),
-            Array::View(v) => v.encoding().with_view(&v, |a| a.to_array_data()),
-        }
     }
 }
 

@@ -11,7 +11,7 @@ impl CastFn for PrimitiveArray<'_> {
     fn cast(&self, dtype: &DType) -> VortexResult<OwnedArray> {
         // TODO(ngates): check validity
         let ptype = PType::try_from(dtype)?;
-        if ptype == self.ptype {
+        if ptype == self.ptype() {
             return Ok(self.to_array_data().into_array());
         }
 
@@ -44,17 +44,15 @@ mod test {
     use vortex::ptype::PType;
     use vortex_error::VortexError;
 
-    use crate::array::primitive::PrimitiveDef;
+    use crate::array::primitive::{PrimitiveArray, PrimitiveDef};
     use crate::{compute, IntoArray};
 
     #[test]
     fn cast_u32_u8() {
         let arr = vec![0u32, 10, 200].into_array();
-        compute::cast::cast(&arr, PType::U8.into())
-            .unwrap()
-            .with_typed_array::<PrimitiveDef, _, _>(|p| {
-                assert_eq!(p.typed_data::<u8>(), vec![0u8, 10, 200]);
-            })
+        let p =
+            PrimitiveArray::try_from(compute::cast::cast(&arr, PType::U8.into()).unwrap()).unwrap();
+        assert_eq!(p.typed_data::<u8>(), vec![0u8, 10, 200]);
     }
 
     #[test]

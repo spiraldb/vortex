@@ -10,10 +10,9 @@ use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::EncodingRef;
 use crate::stats::Stat;
 use crate::stats::Statistics;
-use crate::visitor::ArrayVisitor;
 use crate::{
     Array, ArrayDef, ArrayMetadata, ArrayParts, ArrayTrait, IntoArray, IntoArrayData, OwnedArray,
-    ToArray, ToArrayData, ToStatic, TryFromArrayParts,
+    ToArray,
 };
 
 #[derive(Clone, Debug)]
@@ -45,7 +44,9 @@ impl ArrayData {
         };
 
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
-        encoding.with_data_mut(&data, &mut |_| Ok(()))?;
+        let array = data.to_array();
+        // FIXME(ngates): run some validation function
+        encoding.with_dyn(&array, &mut |_| Ok(()))?;
 
         Ok(data)
     }
@@ -66,8 +67,14 @@ impl ArrayData {
         &self.buffers
     }
 
-    pub fn child(&self, index: usize) -> Option<&ArrayData> {
-        self.children.get(index)
+    pub fn child(&self, index: usize, dtype: &DType) -> Option<&ArrayData> {
+        match self.children.get(index) {
+            None => None,
+            Some(child) => {
+                assert_eq!(child.dtype(), dtype);
+                Some(child)
+            }
+        }
     }
 
     pub fn children(&self) -> &[ArrayData] {
@@ -132,43 +139,6 @@ impl IntoArray<'static> for ArrayData {
     }
 }
 
-impl<A> ToArrayData for A
-where
-    A: ArrayTrait,
-{
-    fn to_array_data(&self) -> ArrayData {
-        struct Visitor {
-            buffers: Vec<OwnedBuffer>,
-            children: Vec<ArrayData>,
-        }
-        impl ArrayVisitor for Visitor {
-            fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
-                self.children.push(array.to_array_data());
-                Ok(())
-            }
-
-            fn visit_buffer(&mut self, buffer: &Buffer) -> VortexResult<()> {
-                self.buffers.push(buffer.to_static());
-                Ok(())
-            }
-        }
-        let mut visitor = Visitor {
-            buffers: vec![],
-            children: vec![],
-        };
-        self.accept(&mut visitor).unwrap();
-        ArrayData::try_new(
-            self.encoding(),
-            self.dtype().clone(),
-            self.metadata(),
-            visitor.buffers.into(),
-            visitor.children.into(),
-            self.statistics().to_map(),
-        )
-        .unwrap()
-    }
-}
-
 #[derive(Debug)]
 pub struct TypedArrayData<D: ArrayDef> {
     data: ArrayData,
@@ -223,7 +193,8 @@ impl<D: ArrayDef> TypedArrayData<D> {
     }
 
     pub fn as_typed_array(&self) -> D::Array<'_> {
-        D::Array::try_from_parts(&self.data, self.metadata()).unwrap()
+        todo!()
+        // D::Array::try_from_parts(&self.data, self.metadata()).unwrap()
     }
 }
 
@@ -268,9 +239,8 @@ impl ArrayParts for ArrayData {
         self.buffers().get(idx)
     }
 
-    fn child(&self, idx: usize, _dtype: &DType) -> Option<Array> {
-        // TODO(ngates): validate the DType
-        self.child(idx).map(move |a| a.to_array())
+    fn child(&self, idx: usize, dtype: &DType) -> Option<Array> {
+        self.child(idx, dtype).map(move |a| a.to_array())
     }
 
     fn nchildren(&self) -> usize {
@@ -286,8 +256,8 @@ impl Statistics for ArrayData {
     fn compute(&self, stat: Stat) -> Option<Scalar> {
         let mut locked = self.stats_map.write().unwrap();
         let stats = self
-            .encoding()
-            .with_data(self, |a| a.compute_statistics(stat))
+            .to_array()
+            .with_dyn(|a| a.compute_statistics(stat))
             .ok()?;
         for (k, v) in &stats {
             locked.insert(*k, v.clone());
