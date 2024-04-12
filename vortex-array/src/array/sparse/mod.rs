@@ -94,9 +94,9 @@ impl SparseArray {
         search_sorted(
             self.indices(),
             self.indices_offset + index,
-            SearchSortedSide::Exact,
+            SearchSortedSide::Left,
         )
-        .map(|r| r.ok())
+        .map(|r| r.to_option())
     }
 
     /// Return indices as a vector of usize with the indices_offset applied.

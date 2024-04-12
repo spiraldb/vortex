@@ -1,17 +1,13 @@
 use vortex_error::VortexResult;
 
 use crate::array::primitive::compute::PrimitiveTrait;
-use crate::compute::search_sorted::SearchSorted;
+use crate::compute::search_sorted::{SearchResult, SearchSorted};
 use crate::compute::search_sorted::{SearchSortedFn, SearchSortedSide};
 use crate::ptype::NativePType;
 use crate::scalar::Scalar;
 
 impl<T: NativePType> SearchSortedFn for &dyn PrimitiveTrait<T> {
-    fn search_sorted(
-        &self,
-        value: &Scalar,
-        side: SearchSortedSide,
-    ) -> VortexResult<Result<usize, usize>> {
+    fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
         let pvalue: T = value.try_into()?;
         Ok(self.typed_data().search_sorted(&pvalue, side))
     }
@@ -30,25 +26,25 @@ mod test {
         assert_eq!(
             search_sorted(&values, 0, SearchSortedSide::Left)
                 .unwrap()
-                .unwrap_or_else(|o| o),
+                .to_index(),
             0
         );
         assert_eq!(
             search_sorted(&values, 1, SearchSortedSide::Left)
                 .unwrap()
-                .unwrap_or_else(|o| o),
+                .to_index(),
             0
         );
         assert_eq!(
             search_sorted(&values, 1, SearchSortedSide::Right)
                 .unwrap()
-                .unwrap_or_else(|o| o),
-            1
+                .to_index(),
+            0
         );
         assert_eq!(
             search_sorted(&values, 4, SearchSortedSide::Left)
                 .unwrap()
-                .unwrap_or_else(|o| o),
+                .to_index(),
             3
         );
     }
