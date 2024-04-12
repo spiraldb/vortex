@@ -47,6 +47,10 @@ impl<D: ArrayDef> TypedArray<'_, D> {
         self.array.with_dyn(|a| a.len())
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.array.with_dyn(|a| a.is_empty())
+    }
+
     pub fn dtype(&self) -> &DType {
         self.array.dtype()
     }

@@ -8,7 +8,7 @@ use crate::stats::{ArrayStatisticsCompute, Stat};
 
 impl ArrayStatisticsCompute for BoolArray<'_> {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
-        if self.len() == 0 {
+        if self.is_empty() {
             return Ok(HashMap::from([
                 (Stat::TrueCount, 0.into()),
                 (Stat::RunCount, 0.into()),
