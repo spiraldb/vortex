@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use vortex::scalar::Scalar;
 use vortex_error::VortexResult;
 
-use crate::{Array, ArrayDef, ArrayParts, TypedArray};
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Stat {
     BitWidthFreq,
