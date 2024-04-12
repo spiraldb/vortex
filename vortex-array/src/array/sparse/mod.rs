@@ -8,7 +8,6 @@ use crate::array::constant::ConstantArray;
 use crate::array::{Array, ArrayRef};
 use crate::compress::EncodingCompression;
 use crate::compute::flatten::flatten_primitive;
-use crate::compute::scalar_at::scalar_at;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::ArrayCompute;
 use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
@@ -92,22 +91,12 @@ impl SparseArray {
 
     /// Returns the position of a given index in the indices array if it exists.
     pub fn find_index(&self, index: usize) -> VortexResult<Option<usize>> {
-        let true_index = self.indices_offset + index;
-
-        // TODO(ngates): replace this with a binary search that tells us if we get an exact match.
-        let idx = search_sorted(self.indices(), true_index, SearchSortedSide::Left)?;
-        if idx >= self.indices().len() {
-            return Ok(None);
-        }
-
-        // If the value at this index is equal to the true index, then it exists in the
-        // indices array.
-        let patch_index: usize = scalar_at(self.indices(), idx)?.try_into()?;
-        if true_index == patch_index {
-            Ok(Some(idx))
-        } else {
-            Ok(None)
-        }
+        search_sorted(
+            self.indices(),
+            self.indices_offset + index,
+            SearchSortedSide::Left,
+        )
+        .map(|r| r.to_found())
     }
 
     /// Return indices as a vector of usize with the indices_offset applied.

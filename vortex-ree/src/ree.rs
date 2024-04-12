@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::scalar_at::scalar_at;
-use vortex::compute::search_sorted::SearchSortedSide;
+use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
 use vortex::formatter::{ArrayDisplay, ArrayFormatter};
@@ -12,7 +12,7 @@ use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
 use vortex::validity::Validity;
 use vortex::validity::{OwnedValidity, ValidityView};
 use vortex::view::{AsView, ToOwnedView};
-use vortex::{compute, impl_array, ArrayWalker};
+use vortex::{impl_array, ArrayWalker};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::DType;
 
@@ -68,11 +68,8 @@ impl REEArray {
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
-        compute::search_sorted::search_sorted(
-            self.ends(),
-            index + self.offset,
-            SearchSortedSide::Right,
-        )
+        search_sorted(self.ends(), index + self.offset, SearchSortedSide::Right)
+            .map(|s| s.to_index())
     }
 
     pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
