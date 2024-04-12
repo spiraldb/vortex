@@ -46,8 +46,8 @@ macro_rules! impl_encoding {
 
             /// The array definition trait
             #[derive(Debug)]
-            pub struct [<$Name Def>];
-            impl ArrayDef for [<$Name Def>] {
+            pub struct $Name;
+            impl ArrayDef for $Name {
                 const ID: EncodingId = EncodingId::new($id);
                 const ENCODING: EncodingRef = &[<$Name Encoding>];
                 type Array<'a> = [<$Name Array>]<'a>;
@@ -55,8 +55,8 @@ macro_rules! impl_encoding {
                 type Encoding = [<$Name Encoding>];
             }
 
-            pub type [<$Name Array>]<'a> = TypedArray<'a, [<$Name Def>]>;
-            pub type [<Owned $Name Array>] = TypedArray<'static, [<$Name Def>]>;
+            pub type [<$Name Array>]<'a> = TypedArray<'a, $Name>;
+            pub type [<Owned $Name Array>] = TypedArray<'static, $Name>;
 
             /// The array encoding
             pub struct [<$Name Encoding>];
@@ -69,7 +69,7 @@ macro_rules! impl_encoding {
                 }
 
                 fn id(&self) -> EncodingId {
-                    [<$Name Def>]::ID
+                    $Name::ID
                 }
 
                 fn flatten<'a>(&self, array: Array<'a>) -> VortexResult<Flattened<'a>> {
@@ -86,7 +86,7 @@ macro_rules! impl_encoding {
                 }
             }
             impl ArrayEncodingExt for [<$Name Encoding>] {
-                type D = [<$Name Def>];
+                type D = $Name;
             }
 
             /// Implement ArrayMetadata
