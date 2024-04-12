@@ -31,4 +31,4 @@ vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 vortex-schema = { path = "../vortex-schema", features = ["serde"] }
 
 [lints]
-# workspace = true
+workspace = true
