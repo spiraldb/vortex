@@ -1,6 +1,6 @@
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::{Array, OwnedArray, WithArray};
+use crate::{Array, OwnedArray};
 
 pub trait PatchFn {
     fn patch(&self, patch: &Array) -> VortexResult<OwnedArray>;
@@ -20,7 +20,7 @@ pub fn patch(array: &Array, patch: &Array) -> VortexResult<OwnedArray> {
         vortex_bail!(MismatchedTypes: array.dtype(), patch.dtype());
     }
 
-    array.with_array(|a| {
+    array.with_dyn(|a| {
         a.patch().map(|t| t.patch(patch)).unwrap_or_else(|| {
             Err(vortex_err!(NotImplemented: "take", array.encoding().id().name()))
         })

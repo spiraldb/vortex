@@ -7,7 +7,7 @@ use crate::array::bool::BoolData;
 use crate::compute::flatten::flatten_bool;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::take::take;
-use crate::{Array, ArrayData, IntoArray, ToArray, ToArrayData, WithArray};
+use crate::{Array, ArrayData, IntoArray, ToArray, ToArrayData};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -59,7 +59,7 @@ impl<'v> Validity<'v> {
             Validity::AllInvalid => Ok(ValidityMetadata::AllInvalid),
             Validity::Array(a) => {
                 // We force the caller to validate the length here.
-                let validity_len = a.with_array(|a| a.len());
+                let validity_len = a.with_dyn(|a| a.len());
                 if validity_len != length {
                     vortex_bail!(
                         "Validity array length {} doesn't match array length {}",

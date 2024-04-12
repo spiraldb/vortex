@@ -3,7 +3,7 @@ use vortex_error::{vortex_err, VortexResult};
 use crate::array::bool::BoolData;
 use crate::array::primitive::PrimitiveData;
 use crate::array::r#struct::StructData;
-use crate::{Array, ArrayData, IntoArray, IntoArrayData, OwnedArray, WithArray};
+use crate::{Array, ArrayData, IntoArray, IntoArrayData, OwnedArray};
 
 pub trait FlattenFn {
     fn flatten(&self) -> VortexResult<FlattenedData>;
@@ -35,7 +35,7 @@ impl IntoArrayData for FlattenedData {
 /// Flatten an array into one of the flat encodings.
 /// This does not guarantee that the array is recursively flattened.
 pub fn flatten(array: &Array) -> VortexResult<FlattenedData> {
-    array.with_array(|a| {
+    array.with_dyn(|a| {
         a.flatten().map(|f| f.flatten()).unwrap_or_else(|| {
             Err(vortex_err!(NotImplemented: "flatten", array.encoding().id().name()))
         })

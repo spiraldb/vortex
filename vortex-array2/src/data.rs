@@ -11,8 +11,7 @@ use crate::encoding::EncodingRef;
 use crate::stats::Stat;
 use crate::stats::Statistics;
 use crate::{
-    Array, ArrayDef, ArrayMetadata, ArrayParts, ArrayTrait, IntoArray, IntoArrayData, OwnedArray,
-    ToArray,
+    Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, IntoArrayData, OwnedArray, ToArray,
 };
 
 #[derive(Clone, Debug)]

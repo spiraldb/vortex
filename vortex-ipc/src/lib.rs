@@ -42,7 +42,7 @@ mod tests {
 
     use vortex_array2::array::primitive::PrimitiveData;
     use vortex_array2::array::r#struct::StructData;
-    use vortex_array2::{IntoArray, IntoArrayData, WithArray};
+    use vortex_array2::{IntoArray, IntoArrayData};
     use vortex_array2::{SerdeContext, ToArray, ToArrayData};
 
     use crate::iter::FallibleLendingIterator;
@@ -72,7 +72,7 @@ mod tests {
         let mut cursor = Cursor::new(Vec::new());
         let ctx = SerdeContext::default();
         let mut writer = StreamWriter::try_new_unbuffered(&mut cursor, ctx).unwrap();
-        arr.with_array(|a| writer.write(a)).unwrap();
+        arr.with_dyn(|a| writer.write(a)).unwrap();
         cursor.flush().unwrap();
         cursor.set_position(0);
 

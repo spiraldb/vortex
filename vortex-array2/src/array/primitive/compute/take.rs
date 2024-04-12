@@ -11,14 +11,14 @@ use crate::{Array, OwnedArray};
 
 impl TakeFn for PrimitiveArray<'_> {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
-        let validity = self.validity().take(indices)?;
+        let validity = self.validity();
         let indices_data = flatten_primitive(indices)?;
         let indices = indices_data.as_typed_array();
         match_each_native_ptype!(self.ptype(), |$T| {
             match_each_integer_ptype!(indices.ptype(), |$I| {
                 Ok(PrimitiveData::from_vec(
                     take_primitive(self.typed_data::<$T>(), indices.typed_data::<$I>()),
-                    validity,
+                    validity.take(indices.array())?,
                 ).into_array())
             })
         })

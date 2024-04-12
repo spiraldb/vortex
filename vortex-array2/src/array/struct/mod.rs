@@ -6,7 +6,7 @@ use crate::compute::ArrayCompute;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ToArray, WithArray};
+use crate::{impl_encoding, ToArray};
 use crate::{ArrayData, TypedArrayData};
 use crate::{ArrayFlatten, ArrayMetadata};
 
@@ -53,7 +53,7 @@ impl StructData {
 
         if fields
             .iter()
-            .any(|a| a.to_array().with_array(|a| a.len()) != length)
+            .any(|a| a.to_array().with_dyn(|a| a.len()) != length)
         {
             vortex_bail!("Expected all struct fields to have length {}", length);
         }

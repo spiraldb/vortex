@@ -4,7 +4,7 @@ use std::io::{BufReader, Read};
 use nougat::gat;
 use vortex::array::composite::COMPOSITE_EXTENSIONS;
 use vortex_array2::buffer::Buffer;
-use vortex_array2::{ArrayView, SerdeContext, ToArray, WithArray};
+use vortex_array2::{ArrayView, SerdeContext, ToArray};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferReader, ReadFlatBuffer};
 use vortex_schema::{DType, DTypeSerdeContext};
@@ -154,7 +154,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
         let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
 
         // Validate it
-        view.to_array().with_array(|_| Ok::<(), VortexError>(()))?;
+        view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;
 
         Ok(Some(view))
     }

@@ -7,7 +7,7 @@ use vortex_schema::DType;
 use crate::buffer::Buffer;
 use crate::encoding::EncodingRef;
 use crate::stats::{EmptyStatistics, Statistics};
-use crate::{Array, ArrayTrait, IntoArray, ToArray};
+use crate::{Array, IntoArray, ToArray};
 use crate::{ArrayParts, SerdeContext};
 
 #[derive(Clone)]
@@ -81,8 +81,8 @@ impl<'v> ArrayView<'v> {
         self.array.metadata().map(|m| m.bytes())
     }
 
-    // FIXME(ngates): detach from DType I think?
-    pub fn child(&self, idx: usize, dtype: &'v DType) -> Option<ArrayView<'v>> {
+    // TODO(ngates): should we separate self and DType lifetimes? Should DType be cloned?
+    pub fn child(&'v self, idx: usize, dtype: &'v DType) -> Option<ArrayView<'v>> {
         let child = self.array_child(idx)?;
 
         // Figure out how many buffers to skip...

@@ -31,8 +31,6 @@ impl FillForwardFn for BoolArray<'_> {
 
 #[cfg(test)]
 mod test {
-    use vortex::validity::OwnedValidity;
-
     use crate::array::bool::{BoolArray, BoolData};
     use crate::validity::Validity;
     use crate::{compute, IntoArray};

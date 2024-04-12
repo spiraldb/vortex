@@ -6,7 +6,7 @@ use vortex_error::{VortexError, VortexResult};
 
 use crate::buffer::Buffer;
 use crate::visitor::ArrayVisitor;
-use crate::{Array, WithArray};
+use crate::Array;
 
 impl Array<'_> {
     pub fn tree_display(&self) -> TreeDisplayWrapper {
@@ -24,7 +24,7 @@ impl<'a> TreeDisplayWrapper<'a> {
 impl<'a, 'fmt: 'a> fmt::Display for TreeDisplayWrapper<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let array = self.0;
-        let nbytes = array.with_array(|a| a.nbytes());
+        let nbytes = array.with_dyn(|a| a.nbytes());
         let mut array_fmt = TreeFormatter::new(f, "".to_string(), nbytes);
         array_fmt
             .visit_child("root", array)
@@ -42,7 +42,7 @@ pub struct TreeFormatter<'a, 'b: 'a> {
 ///  control over how their metadata etc is displayed.
 impl<'a, 'b: 'a> ArrayVisitor for TreeFormatter<'a, 'b> {
     fn visit_child(&mut self, name: &str, array: &Array) -> VortexResult<()> {
-        array.with_array(|a| {
+        array.with_dyn(|a| {
             let nbytes = a.nbytes();
             writeln!(
                 self.fmt,

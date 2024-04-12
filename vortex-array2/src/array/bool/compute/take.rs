@@ -11,13 +11,13 @@ use crate::{Array, OwnedArray};
 
 impl TakeFn for BoolArray<'_> {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
-        let validity = self.validity().take(indices)?;
+        let validity = self.validity();
         let indices_data = flatten_primitive(indices)?;
         let indices = indices_data.as_typed_array();
         match_each_integer_ptype!(indices.ptype(), |$I| {
             Ok(BoolData::from_vec(
                 take_bool(&self.boolean_buffer(), indices.typed_data::<$I>()),
-                validity,
+                validity.take(indices.array())?,
             ).into_array())
         })
     }

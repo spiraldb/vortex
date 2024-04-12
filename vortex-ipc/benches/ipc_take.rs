@@ -6,7 +6,7 @@ use vortex::array::Array;
 use vortex::serde::{ReadCtx, WriteCtx};
 use vortex_array2::array::primitive::PrimitiveData;
 use vortex_array2::compute::take::take;
-use vortex_array2::{IntoArray, SerdeContext, WithArray};
+use vortex_array2::{IntoArray, SerdeContext};
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
@@ -24,7 +24,7 @@ fn ipc_take(c: &mut Criterion) {
     {
         let mut cursor = Cursor::new(&mut buffer);
         let mut writer = StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
-        data.with_array(|a| writer.write(a)).unwrap();
+        data.with_dyn(|a| writer.write(a)).unwrap();
     }
 
     c.bench_function("take_view", |b| {

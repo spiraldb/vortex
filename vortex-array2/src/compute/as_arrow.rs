@@ -2,14 +2,14 @@ use arrow_array::ArrayRef as ArrowArrayRef;
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::compute::flatten::flatten;
-use crate::{Array, IntoArray, WithArray};
+use crate::{Array, IntoArray};
 
 pub trait AsArrowArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef>;
 }
 
 pub fn as_arrow(array: &Array) -> VortexResult<ArrowArrayRef> {
-    array.with_array(|a| {
+    array.with_dyn(|a| {
         // If as_arrow is implemented, then invoke that.
         if let Some(a) = a.as_arrow() {
             return a.as_arrow();

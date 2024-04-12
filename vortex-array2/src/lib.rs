@@ -33,7 +33,7 @@ use vortex_schema::DType;
 
 use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
-use crate::encoding::{ArrayEncodingRef, EncodingRef, WithEncodedArray};
+use crate::encoding::{ArrayEncodingRef, EncodingRef};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute, Statistics};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -65,18 +65,14 @@ impl Array<'_> {
     }
 
     pub fn len(&self) -> usize {
-        self.with_array(|a| a.len())
+        self.with_dyn(|a| a.len())
     }
 
     pub fn is_empty(&self) -> bool {
-        self.with_array(|a| a.is_empty())
+        self.with_dyn(|a| a.is_empty())
     }
 
-    pub fn into_typed_data<D: ArrayDef>(self) -> Option<TypedArrayData<D>> {
-        TypedArrayData::<D>::try_from(self.into_array_data()).ok()
-    }
-
-    pub fn child(&self, idx: usize, dtype: &DType) -> Option<Array> {
+    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array<'a>> {
         match self {
             Array::Data(d) => d.child(idx, dtype).map(Array::DataRef),
             Array::DataRef(d) => d.child(idx, dtype).map(Array::DataRef),
@@ -115,10 +111,6 @@ pub trait ToArrayData {
 
 pub trait IntoArrayData {
     fn into_array_data(self) -> ArrayData;
-}
-
-pub trait WithArray {
-    fn with_array<R, F: FnMut(&dyn ArrayTrait) -> R>(&self, f: F) -> R;
 }
 
 pub trait ToStatic {
@@ -172,7 +164,7 @@ pub trait ArrayTrait:
 struct NBytesVisitor(usize);
 impl ArrayVisitor for NBytesVisitor {
     fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
-        self.0 += array.with_array(|a| a.nbytes());
+        self.0 += array.with_dyn(|a| a.nbytes());
         Ok(())
     }
 
@@ -201,13 +193,9 @@ impl<'a> Array<'a> {
     }
 }
 
-impl WithArray for Array<'_> {
-    fn with_array<R, F: FnMut(&dyn ArrayTrait) -> R>(&self, mut f: F) -> R {
-        match self {
-            Array::Data(d) => d.encoding().with_data(d, &mut f),
-            Array::DataRef(d) => d.encoding().with_data(d, &mut f),
-            Array::View(v) => v.encoding().with_view(v, &mut f),
-        }
+impl ToArrayData for Array<'_> {
+    fn to_array_data(&self) -> ArrayData {
+        todo!()
     }
 }
 
