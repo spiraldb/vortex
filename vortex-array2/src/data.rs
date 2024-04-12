@@ -1,18 +1,15 @@
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
 use vortex::scalar::Scalar;
-use vortex_error::{vortex_bail, VortexError, VortexResult};
+use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::EncodingRef;
 use crate::stats::Stat;
 use crate::stats::Statistics;
-use crate::{
-    Array, ArrayDef, ArrayMetadata, ArrayParts, IntoArray, IntoArrayData, OwnedArray, ToArray,
-};
+use crate::{Array, ArrayMetadata, ArrayParts, IntoArray, ToArray};
 
 #[derive(Clone, Debug)]
 pub struct ArrayData {
@@ -80,10 +77,6 @@ impl ArrayData {
         &self.children
     }
 
-    pub fn into_typed_data<D: ArrayDef>(self) -> Option<TypedArrayData<D>> {
-        TypedArrayData::<D>::try_from(self).ok()
-    }
-
     pub fn depth_first_traversal(&self) -> ArrayDataIterator {
         ArrayDataIterator { stack: vec![self] }
     }
@@ -135,92 +128,6 @@ impl ToArray for ArrayData {
 impl IntoArray<'static> for ArrayData {
     fn into_array(self) -> Array<'static> {
         Array::Data(self)
-    }
-}
-
-#[derive(Debug)]
-pub struct TypedArrayData<D: ArrayDef> {
-    data: ArrayData,
-    phantom: PhantomData<D>,
-}
-
-impl<D: ArrayDef> TypedArrayData<D> {
-    pub fn new_unchecked(
-        dtype: DType,
-        metadata: Arc<D::Metadata>,
-        buffers: Arc<[OwnedBuffer]>,
-        children: Arc<[ArrayData]>,
-    ) -> Self {
-        Self::from_data_unchecked(
-            ArrayData::try_new(
-                D::ENCODING,
-                dtype,
-                metadata,
-                buffers,
-                children,
-                HashMap::default(),
-            )
-            .unwrap(),
-        )
-    }
-
-    pub fn from_data_unchecked(data: ArrayData) -> Self {
-        Self {
-            data,
-            phantom: PhantomData,
-        }
-    }
-
-    pub fn data(&self) -> &ArrayData {
-        &self.data
-    }
-
-    pub fn metadata(&self) -> &D::Metadata {
-        self.data
-            .metadata()
-            .as_any()
-            .downcast_ref::<D::Metadata>()
-            .unwrap()
-    }
-
-    pub fn into_metadata(self) -> Arc<D::Metadata> {
-        self.data
-            .metadata
-            .as_any_arc()
-            .downcast::<D::Metadata>()
-            .unwrap()
-    }
-}
-
-impl<D: ArrayDef> ToArray for TypedArrayData<D> {
-    fn to_array(&self) -> Array {
-        Array::DataRef(&self.data)
-    }
-}
-
-impl<D: ArrayDef> IntoArray<'static> for TypedArrayData<D> {
-    fn into_array(self) -> OwnedArray {
-        Array::Data(self.data)
-    }
-}
-
-impl<D: ArrayDef> IntoArrayData for TypedArrayData<D> {
-    fn into_array_data(self) -> ArrayData {
-        self.data
-    }
-}
-
-impl<D: ArrayDef> TryFrom<ArrayData> for TypedArrayData<D> {
-    type Error = VortexError;
-
-    fn try_from(data: ArrayData) -> Result<Self, Self::Error> {
-        if data.encoding().id() != D::ID {
-            vortex_bail!("Invalid encoding for array")
-        }
-        Ok(Self {
-            data,
-            phantom: PhantomData,
-        })
     }
 }
 

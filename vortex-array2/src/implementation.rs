@@ -58,7 +58,6 @@ macro_rules! impl_encoding {
 
             pub type [<$Name Array>]<'a> = TypedArray<'a, [<$Name Def>]>;
             pub type [<Owned $Name Array>] = TypedArray<'static, [<$Name Def>]>;
-            pub type [<$Name Data>] = TypedArrayData<[<$Name Def>]>;
 
             /// The array encoding
             pub struct [<$Name Encoding>];

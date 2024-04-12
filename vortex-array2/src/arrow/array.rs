@@ -26,7 +26,7 @@ use vortex_schema::DType;
 
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::r#struct::StructData;
+use crate::array::r#struct::StructArray;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
 use crate::{ArrayData, IntoArrayData};
@@ -144,7 +144,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
     fn from_arrow(value: &ArrowStructArray, nullable: bool) -> Self {
         // TODO(ngates): how should we deal with Arrow "logical nulls"?
         assert!(!nullable);
-        StructData::try_new(
+        StructArray::try_new(
             value
                 .column_names()
                 .iter()

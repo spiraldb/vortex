@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, FieldNames};
@@ -6,8 +8,8 @@ use crate::compute::ArrayCompute;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::ArrayData;
 use crate::{impl_encoding, ToArray};
-use crate::{ArrayData, TypedArrayData};
 use crate::{ArrayFlatten, ArrayMetadata};
 
 impl_encoding!("vortex.struct", Struct);
@@ -45,7 +47,7 @@ impl StructArray<'_> {
     }
 }
 
-impl StructData {
+impl StructArray<'_> {
     pub fn try_new(names: FieldNames, fields: Vec<ArrayData>, length: usize) -> VortexResult<Self> {
         if names.len() != fields.len() {
             vortex_bail!("Got {} names and {} fields", names.len(), fields.len());
@@ -59,12 +61,13 @@ impl StructData {
         }
 
         let field_dtypes: Vec<_> = fields.iter().map(|d| d.dtype()).cloned().collect();
-        Ok(Self::new_unchecked(
+        Self::try_from_parts(
             DType::Struct(names, field_dtypes),
-            Arc::new(StructMetadata { length }),
+            StructMetadata { length },
             vec![].into(),
             fields.into(),
-        ))
+            HashMap::default(),
+        )
     }
 }
 

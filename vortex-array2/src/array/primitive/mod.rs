@@ -13,7 +13,6 @@ use vortex_schema::DType;
 use crate::buffer::Buffer;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::TypedArrayData;
 use crate::{impl_encoding, IntoArray};
 use crate::{ArrayFlatten, ArrayMetadata};
 

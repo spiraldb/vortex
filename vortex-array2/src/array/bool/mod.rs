@@ -12,7 +12,6 @@ use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayMetadata;
-use crate::TypedArrayData;
 use crate::{impl_encoding, ArrayFlatten};
 
 impl_encoding!("vortex.bool", Bool);
