@@ -40,7 +40,7 @@ vortex-alloc = { path = "../vortex-alloc" }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 vortex-schema = { path = "../vortex-schema" }
-serde = { workspace = true, features = ["derive"], optional = true }
+serde = { workspace = true, features = ["derive"] }
 
 [build-dependencies]
 flatc = { workspace = true }
