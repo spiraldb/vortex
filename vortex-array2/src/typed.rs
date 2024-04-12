@@ -10,8 +10,8 @@ use crate::encoding::{ArrayEncodingRef, EncodingRef};
 use crate::stats::{ArrayStatistics, Stat, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
-    Array, ArrayData, ArrayDef, ArrayParts, IntoArray, IntoArrayData, ToArrayData, ToStatic,
-    TryDeserializeArrayMetadata,
+    Array, ArrayDType, ArrayData, ArrayDef, ArrayParts, IntoArray, IntoArrayData, ToArray,
+    ToArrayData, ToStatic, TryDeserializeArrayMetadata,
 };
 
 #[derive(Debug)]
@@ -41,6 +41,18 @@ impl<D: ArrayDef> TypedArray<'_, D> {
 
     pub fn array(&self) -> &Array {
         &self.array
+    }
+
+    pub fn len(&self) -> usize {
+        self.array.with_dyn(|a| a.len())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.array.with_dyn(|a| a.is_empty())
+    }
+
+    pub fn dtype(&self) -> &DType {
+        self.array.dtype()
     }
 
     pub fn metadata(&self) -> &D::Metadata {
@@ -91,6 +103,12 @@ impl<'a, D: ArrayDef> TryFrom<&'a Array<'a>> for TypedArray<'a, D> {
     }
 }
 
+impl<D: ArrayDef> ArrayDType for TypedArray<'_, D> {
+    fn dtype(&self) -> &DType {
+        self.array().dtype()
+    }
+}
+
 impl<D: ArrayDef> ArrayEncodingRef for TypedArray<'_, D> {
     fn encoding(&self) -> EncodingRef {
         self.array().encoding()
@@ -104,6 +122,29 @@ impl<D: ArrayDef> ArrayStatistics for TypedArray<'_, D> {
             Array::DataRef(d) => d.statistics(),
             Array::View(v) => v.statistics(),
         }
+    }
+}
+
+impl<D: ArrayDef> ToStatic for TypedArray<'_, D> {
+    type Static = TypedArray<'static, D>;
+
+    fn to_static(&self) -> Self::Static {
+        TypedArray {
+            array: Array::Data(self.to_array_data()),
+            metadata: self.metadata.clone(),
+        }
+    }
+}
+
+impl<'a, D: ArrayDef> AsRef<Array<'a>> for TypedArray<'a, D> {
+    fn as_ref(&self) -> &Array<'a> {
+        &self.array
+    }
+}
+
+impl<D: ArrayDef> ToArray for TypedArray<'_, D> {
+    fn to_array(&self) -> Array {
+        self.array.clone()
     }
 }
 

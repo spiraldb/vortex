@@ -1,6 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
+use crate::array::chunked::ChunkedArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
 use crate::encoding::ArrayEncoding;
@@ -9,6 +10,7 @@ use crate::{Array, IntoArray};
 /// The set of encodings that can be converted to Arrow with zero-copy.
 pub enum Flattened<'a> {
     Bool(BoolArray<'a>),
+    Chunked(ChunkedArray<'a>),
     Primitive(PrimitiveArray<'a>),
     Struct(StructArray<'a>),
 }
@@ -39,6 +41,7 @@ impl<'a> IntoArray<'a> for Flattened<'a> {
             Flattened::Bool(a) => a.into_array(),
             Flattened::Primitive(a) => a.into_array(),
             Flattened::Struct(a) => a.into_array(),
+            Flattened::Chunked(a) => a.into_array(),
         }
     }
 }

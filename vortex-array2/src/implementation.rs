@@ -28,6 +28,7 @@ macro_rules! impl_encoding {
             use $crate::{
                 Array,
                 ArrayDef,
+                ArrayMetadata,
                 ArrayTrait,
                 Flattened,
                 TypedArray,
