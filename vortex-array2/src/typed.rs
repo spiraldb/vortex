@@ -7,10 +7,10 @@ use vortex_schema::DType;
 
 use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
-use crate::stats::{ArrayStatistics, Stat};
+use crate::stats::{ArrayStatistics, Stat, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
-    Array, ArrayData, ArrayDef, IntoArray, IntoArrayData, ToArrayData, ToStatic,
+    Array, ArrayData, ArrayDef, ArrayParts, IntoArray, IntoArrayData, ToArrayData, ToStatic,
     TryDeserializeArrayMetadata,
 };
 
@@ -94,6 +94,16 @@ impl<'a, D: ArrayDef> TryFrom<&'a Array<'a>> for TypedArray<'a, D> {
 impl<D: ArrayDef> ArrayEncodingRef for TypedArray<'_, D> {
     fn encoding(&self) -> EncodingRef {
         self.array().encoding()
+    }
+}
+
+impl<D: ArrayDef> ArrayStatistics for TypedArray<'_, D> {
+    fn statistics(&self) -> &(dyn Statistics + '_) {
+        match self.array() {
+            Array::Data(d) => d.statistics(),
+            Array::DataRef(d) => d.statistics(),
+            Array::View(v) => v.statistics(),
+        }
     }
 }
 

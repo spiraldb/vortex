@@ -25,17 +25,6 @@ pub trait ArrayStatistics {
     }
 }
 
-// TODO(ngates): do we want this here?
-impl<D: ArrayDef> ArrayStatistics for TypedArray<'_, D> {
-    fn statistics(&self) -> &(dyn Statistics + '_) {
-        match self.array() {
-            Array::Data(d) => d.statistics(),
-            Array::DataRef(d) => d.statistics(),
-            Array::View(v) => v.statistics(),
-        }
-    }
-}
-
 pub trait ArrayStatisticsCompute {
     /// Compute the requested statistic. Can return additional stats.
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
