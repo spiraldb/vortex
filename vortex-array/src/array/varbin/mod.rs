@@ -174,7 +174,10 @@ impl VarBinArray {
         let start = self.offset_at(index);
         let end = self.offset_at(index + 1);
         let sliced = slice(self.bytes(), start, end)?;
-        Ok(flatten_primitive(sliced.as_ref())?.buffer().to_vec())
+        Ok(flatten_primitive(sliced.as_ref())?
+            .into_buffer()
+            .into_vec()
+            .unwrap_or_else(|buf| buf.to_vec()))
     }
 }
 
