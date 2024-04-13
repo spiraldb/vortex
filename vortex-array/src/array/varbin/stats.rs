@@ -29,11 +29,11 @@ pub fn compute_stats(
     iter: &mut dyn Iterator<Item = Option<Cow<'_, [u8]>>>,
     dtype: &DType,
 ) -> StatsSet {
-    let mut leading_nulls = Vec::new();
+    let mut leading_nulls: usize = 0;
     let mut first_value: Option<Cow<'_, [u8]>> = None;
     for v in &mut *iter {
         if v.is_none() {
-            leading_nulls.push(v);
+            leading_nulls += 1;
         } else {
             first_value = v;
             break;
@@ -43,10 +43,10 @@ pub fn compute_stats(
     if let Some(first_non_null) = first_value {
         let mut acc = VarBinAccumulator::new(first_non_null);
         iter.for_each(|n| acc.nullable_next(n));
-        acc.n_nulls(leading_nulls.len());
+        acc.n_nulls(leading_nulls);
         acc.finish(dtype)
     } else {
-        all_null_stats(leading_nulls.len(), dtype)
+        all_null_stats(leading_nulls, dtype)
     }
 }
 
@@ -56,7 +56,7 @@ fn all_null_stats(len: usize, dtype: &DType) -> StatsSet {
         (Stat::Max, Scalar::null(dtype)),
         (Stat::IsConstant, true.into()),
         (Stat::IsSorted, true.into()),
-        (Stat::IsStrictSorted, false.into()),
+        (Stat::IsStrictSorted, (len == 1).into()),
         (Stat::RunCount, 1.into()),
         (Stat::NullCount, len.into()),
     ]))
