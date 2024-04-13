@@ -5,6 +5,7 @@ use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::BoolArray;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::slice::slice;
 use crate::compute::take::take;
 use crate::{Array, ArrayData, IntoArray, ToArray, ToArrayData};
 
@@ -90,6 +91,13 @@ impl<'v> Validity<'v> {
             Validity::NonNullable | Validity::AllValid => true,
             Validity::AllInvalid => false,
             Validity::Array(a) => scalar_at(a, index).unwrap().try_into().unwrap(),
+        }
+    }
+
+    pub fn slice(&self, start: usize, stop: usize) -> VortexResult<Validity> {
+        match self {
+            Validity::Array(a) => Ok(Validity::Array(slice(a, start, stop)?)),
+            _ => Ok(self.clone()),
         }
     }
 
