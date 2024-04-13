@@ -11,7 +11,11 @@ use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for VarBinArray {
     fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
-        let mut acc = VarBinAccumulator::default();
+        if self.is_empty() {
+            return Ok(StatsSet::new());
+        }
+
+        let mut acc = VarBinAccumulator::new();
         self.iter_primitive()
             .map(|prim_iter| {
                 for next_val in prim_iter {
@@ -23,10 +27,11 @@ impl StatsCompute for VarBinArray {
                     acc.nullable_next(next_val.map(Cow::from));
                 }
             });
-        Ok(acc.finish(self.dtype()))
+        Ok(acc.finish(self.len(), self.dtype()))
     }
 }
 
+#[derive(Debug, Default)]
 pub struct VarBinAccumulator<'a> {
     min: Cow<'a, [u8]>,
     max: Cow<'a, [u8]>,
@@ -38,8 +43,8 @@ pub struct VarBinAccumulator<'a> {
     runs: usize,
 }
 
-impl Default for VarBinAccumulator<'_> {
-    fn default() -> Self {
+impl<'a> VarBinAccumulator<'a> {
+    pub fn new() -> Self {
         Self {
             min: Cow::from(&[0xFF]),
             max: Cow::from(&[0x00]),
@@ -51,9 +56,7 @@ impl Default for VarBinAccumulator<'_> {
             null_count: 0,
         }
     }
-}
 
-impl<'a> VarBinAccumulator<'a> {
     pub fn nullable_next(&mut self, val: Option<Cow<'a, [u8]>>) {
         match val {
             None => self.null_count += 1,
@@ -81,16 +84,19 @@ impl<'a> VarBinAccumulator<'a> {
         self.runs += 1;
     }
 
-    pub fn finish(&self, dtype: &DType) -> StatsSet {
-        StatsSet::from(HashMap::from([
-            (Stat::Min, varbin_scalar(self.min.to_vec(), dtype)),
-            (Stat::Max, varbin_scalar(self.max.to_vec(), dtype)),
+    pub fn finish(&self, len: usize, dtype: &DType) -> StatsSet {
+        let mut stats = StatsSet::from(HashMap::from([
             (Stat::RunCount, self.runs.into()),
             (Stat::IsSorted, self.is_sorted.into()),
             (Stat::IsStrictSorted, self.is_strict_sorted.into()),
             (Stat::IsConstant, self.is_constant.into()),
             (Stat::NullCount, self.null_count.into()),
-        ]))
+        ]));
+        if self.null_count < len {
+            stats.set(Stat::Min, varbin_scalar(self.min.to_vec(), dtype));
+            stats.set(Stat::Max, varbin_scalar(self.max.to_vec(), dtype));
+        }
+        stats
     }
 }
 
@@ -114,11 +120,11 @@ mod test {
         let arr = array(DType::Utf8(Nullability::NonNullable));
         assert_eq!(
             arr.stats().get_or_compute_as::<String>(&Stat::Min).unwrap(),
-            String::from("hello world")
+            "hello world".to_owned()
         );
         assert_eq!(
             arr.stats().get_or_compute_as::<String>(&Stat::Max).unwrap(),
-            String::from("hello world this is a long string")
+            "hello world this is a long string".to_owned()
         );
         assert_eq!(
             arr.stats()
@@ -165,5 +171,42 @@ mod test {
             .stats()
             .get_or_compute_as::<bool>(&Stat::IsSorted)
             .unwrap());
+    }
+
+    #[test]
+    fn some_nulls() {
+        let array = VarBinArray::from_iter(
+            vec![
+                Some("hello world"),
+                None,
+                Some("hello world this is a long string"),
+                None,
+            ],
+            DType::Utf8(Nullability::Nullable),
+        );
+        assert_eq!(
+            array
+                .stats()
+                .get_or_compute_as::<String>(&Stat::Min)
+                .unwrap(),
+            "hello world".to_owned()
+        );
+        assert_eq!(
+            array
+                .stats()
+                .get_or_compute_as::<String>(&Stat::Max)
+                .unwrap(),
+            "hello world this is a long string".to_owned()
+        );
+    }
+
+    #[test]
+    fn all_nulls() {
+        let array = VarBinArray::from_iter(
+            vec![Option::<&str>::None, None, None],
+            DType::Utf8(Nullability::Nullable),
+        );
+        assert!(array.stats().get_or_compute(&Stat::Min).is_none());
+        assert!(array.stats().get_or_compute(&Stat::Max).is_none());
     }
 }

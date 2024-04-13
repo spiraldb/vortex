@@ -158,7 +158,7 @@ impl VarBinViewArray {
         })
     }
 
-    pub(self) fn view_slice(&self) -> &[BinaryView] {
+    fn view_slice(&self) -> &[BinaryView] {
         unsafe {
             slice::from_raw_parts(
                 self.views.as_primitive().typed_data::<u8>().as_ptr() as _,
@@ -167,7 +167,7 @@ impl VarBinViewArray {
         }
     }
 
-    pub(self) fn view_at(&self, index: usize) -> BinaryView {
+    fn view_at(&self, index: usize) -> BinaryView {
         self.view_slice()[index]
     }
 

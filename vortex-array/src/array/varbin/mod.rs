@@ -113,20 +113,20 @@ impl VarBinArray {
     }
 
     pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
-        let size: usize = vec.iter().map(|v| v.as_ref().len()).sum();
-        if size < u32::MAX as usize {
-            Self::from_vec_sized::<u32, T>(vec, dtype)
+        let values_size: usize = vec.iter().map(|v| v.as_ref().len()).sum();
+        if values_size < u32::MAX as usize {
+            Self::from_vec_sized::<u32, T>(vec, values_size, dtype)
         } else {
-            Self::from_vec_sized::<u64, T>(vec, dtype)
+            Self::from_vec_sized::<u64, T>(vec, values_size, dtype)
         }
     }
 
-    fn from_vec_sized<K, T>(vec: Vec<T>, dtype: DType) -> Self
+    fn from_vec_sized<K, T>(vec: Vec<T>, values_size: usize, dtype: DType) -> Self
     where
         K: NativePType,
         T: AsRef<[u8]>,
     {
-        let mut builder = VarBinBuilder::<K>::with_capacity(vec.len());
+        let mut builder = VarBinBuilder::<K>::with_capacity_and_values_size(vec.len(), values_size);
         for v in vec {
             builder.push_value(v.as_ref());
         }
@@ -156,7 +156,7 @@ impl VarBinArray {
         ArrayIter::new(self)
     }
 
-    pub(self) fn offset_at(&self, index: usize) -> usize {
+    fn offset_at(&self, index: usize) -> usize {
         if let Some(parray) = self.offsets().maybe_primitive() {
             match_each_native_ptype!(parray.ptype(), |$P| {
                 parray.typed_data::<$P>()[index].as_()

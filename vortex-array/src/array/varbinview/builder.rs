@@ -79,10 +79,10 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
         self.nulls.append_null();
     }
 
-    pub fn finish(&mut self, dtype: DType) -> VarBinViewArray {
-        let mut completed = mem::take(&mut self.completed);
+    pub fn finish(mut self, dtype: DType) -> VarBinViewArray {
+        let mut completed = self.completed;
         if !self.in_progress.is_empty() {
-            completed.push(PrimitiveArray::from(mem::take(&mut self.in_progress)).into_array());
+            completed.push(PrimitiveArray::from(self.in_progress).into_array());
         }
 
         let nulls = self.nulls.finish();
@@ -97,6 +97,7 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
             None
         };
 
+        // convert Vec<BinaryView> to Vec<u8> which can be stored as an array
         let views_u8: Vec<u8> = unsafe {
             let mut views_clone = ManuallyDrop::new(mem::take(&mut self.views));
             Vec::from_raw_parts(
