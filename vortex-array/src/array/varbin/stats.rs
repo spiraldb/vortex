@@ -7,6 +7,7 @@ use vortex_schema::DType;
 
 use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::array::Array;
+use crate::scalar::Scalar;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for VarBinArray {
@@ -15,20 +16,50 @@ impl StatsCompute for VarBinArray {
             return Ok(StatsSet::new());
         }
 
-        let mut acc = VarBinAccumulator::new();
-        self.iter_primitive()
-            .map(|prim_iter| {
-                for next_val in prim_iter {
-                    acc.nullable_next(next_val.map(Cow::from));
-                }
-            })
+        Ok(self
+            .iter_primitive()
+            .map(|prim_iter| compute_stats(&mut prim_iter.map(|s| s.map(Cow::from)), self.dtype()))
             .unwrap_or_else(|_| {
-                for next_val in self.iter() {
-                    acc.nullable_next(next_val.map(Cow::from));
-                }
-            });
-        Ok(acc.finish(self.len(), self.dtype()))
+                compute_stats(&mut self.iter().map(|s| s.map(Cow::from)), self.dtype())
+            }))
     }
+}
+
+pub fn compute_stats(
+    iter: &mut dyn Iterator<Item = Option<Cow<'_, [u8]>>>,
+    dtype: &DType,
+) -> StatsSet {
+    let mut leading_nulls: usize = 0;
+    let mut first_value: Option<Cow<'_, [u8]>> = None;
+    for v in &mut *iter {
+        if v.is_none() {
+            leading_nulls += 1;
+        } else {
+            first_value = v;
+            break;
+        }
+    }
+
+    if let Some(first_non_null) = first_value {
+        let mut acc = VarBinAccumulator::new(first_non_null);
+        iter.for_each(|n| acc.nullable_next(n));
+        acc.n_nulls(leading_nulls);
+        acc.finish(dtype)
+    } else {
+        all_null_stats(leading_nulls, dtype)
+    }
+}
+
+fn all_null_stats(len: usize, dtype: &DType) -> StatsSet {
+    StatsSet::from(HashMap::from([
+        (Stat::Min, Scalar::null(dtype)),
+        (Stat::Max, Scalar::null(dtype)),
+        (Stat::IsConstant, true.into()),
+        (Stat::IsSorted, true.into()),
+        (Stat::IsStrictSorted, (len < 2).into()),
+        (Stat::RunCount, 1.into()),
+        (Stat::NullCount, len.into()),
+    ]))
 }
 
 #[derive(Debug, Default)]
@@ -44,15 +75,15 @@ pub struct VarBinAccumulator<'a> {
 }
 
 impl<'a> VarBinAccumulator<'a> {
-    pub fn new() -> Self {
+    pub fn new(value: Cow<'a, [u8]>) -> Self {
         Self {
-            min: Cow::from(&[0xFF]),
-            max: Cow::from(&[0x00]),
+            min: value.clone(),
+            max: value.clone(),
             is_constant: true,
             is_sorted: true,
             is_strict_sorted: true,
-            last_value: Cow::from(&[0x00]),
-            runs: 0,
+            last_value: value,
+            runs: 1,
             null_count: 0,
         }
     }
@@ -62,6 +93,10 @@ impl<'a> VarBinAccumulator<'a> {
             None => self.null_count += 1,
             Some(v) => self.next(v),
         }
+    }
+
+    pub fn n_nulls(&mut self, null_count: usize) {
+        self.null_count += null_count;
     }
 
     pub fn next(&mut self, val: Cow<'a, [u8]>) {
@@ -84,19 +119,16 @@ impl<'a> VarBinAccumulator<'a> {
         self.runs += 1;
     }
 
-    pub fn finish(&self, len: usize, dtype: &DType) -> StatsSet {
-        let mut stats = StatsSet::from(HashMap::from([
+    pub fn finish(&self, dtype: &DType) -> StatsSet {
+        StatsSet::from(HashMap::from([
+            (Stat::Min, varbin_scalar(self.min.to_vec(), dtype)),
+            (Stat::Max, varbin_scalar(self.max.to_vec(), dtype)),
             (Stat::RunCount, self.runs.into()),
             (Stat::IsSorted, self.is_sorted.into()),
             (Stat::IsStrictSorted, self.is_strict_sorted.into()),
             (Stat::IsConstant, self.is_constant.into()),
             (Stat::NullCount, self.null_count.into()),
-        ]));
-        if self.null_count < len {
-            stats.set(Stat::Min, varbin_scalar(self.min.to_vec(), dtype));
-            stats.set(Stat::Max, varbin_scalar(self.max.to_vec(), dtype));
-        }
-        stats
+        ]))
     }
 }
 
@@ -106,6 +138,7 @@ mod test {
 
     use crate::array::varbin::VarBinArray;
     use crate::array::Array;
+    use crate::scalar::Utf8Scalar;
     use crate::stats::Stat;
 
     fn array(dtype: DType) -> VarBinArray {
@@ -206,7 +239,13 @@ mod test {
             vec![Option::<&str>::None, None, None],
             DType::Utf8(Nullability::Nullable),
         );
-        assert!(array.stats().get_or_compute(&Stat::Min).is_none());
-        assert!(array.stats().get_or_compute(&Stat::Max).is_none());
+        assert_eq!(
+            array.stats().get_or_compute(&Stat::Min).unwrap(),
+            Utf8Scalar::none().into()
+        );
+        assert_eq!(
+            array.stats().get_or_compute(&Stat::Max).unwrap(),
+            Utf8Scalar::none().into()
+        );
     }
 }

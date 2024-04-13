@@ -141,6 +141,11 @@ impl PrimitiveArray {
         &self.buffer
     }
 
+    #[inline]
+    pub fn into_buffer(self) -> Buffer {
+        self.buffer
+    }
+
     pub fn scalar_buffer<T: NativePType>(&self) -> ScalarBuffer<T> {
         ScalarBuffer::from(self.buffer().clone())
     }
