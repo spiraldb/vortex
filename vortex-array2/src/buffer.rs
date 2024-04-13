@@ -25,14 +25,14 @@ impl Buffer<'_> {
 }
 
 impl<'a> Buffer<'a> {
-    pub fn as_slice(&self) -> &'a [u8] {
+    pub fn as_slice(&'a self) -> &'a [u8] {
         match self {
             Buffer::Owned(buffer) => buffer.as_slice(),
             Buffer::View(slice) => *slice,
         }
     }
 
-    pub fn typed_data<T: NativePType>(&self) -> &'a [T] {
+    pub fn typed_data<T: NativePType>(&'a self) -> &'a [T] {
         match self {
             Buffer::Owned(buffer) => buffer.typed_data::<T>(),
             Buffer::View(slice) => {

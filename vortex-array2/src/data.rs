@@ -9,7 +9,7 @@ use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::EncodingRef;
 use crate::stats::Stat;
 use crate::stats::Statistics;
-use crate::{Array, ArrayMetadata, ArrayParts, IntoArray, ToArray};
+use crate::{Array, ArrayMetadata, IntoArray, ToArray};
 
 #[derive(Clone, Debug)]
 pub struct ArrayData {
@@ -77,6 +77,10 @@ impl ArrayData {
         &self.children
     }
 
+    pub fn statistics(&self) -> &dyn Statistics {
+        self
+    }
+
     pub fn depth_first_traversal(&self) -> ArrayDataIterator {
         ArrayDataIterator { stack: vec![self] }
     }
@@ -128,28 +132,6 @@ impl ToArray for ArrayData {
 impl IntoArray<'static> for ArrayData {
     fn into_array(self) -> Array<'static> {
         Array::Data(self)
-    }
-}
-
-impl ArrayParts<'static> for ArrayData {
-    fn dtype(&self) -> &DType {
-        &self.dtype
-    }
-
-    fn buffer(&self, idx: usize) -> Option<&Buffer<'static>> {
-        self.buffers().get(idx)
-    }
-
-    fn child(&self, idx: usize, dtype: &DType) -> Option<Array<'static>> {
-        self.child(idx, dtype).map(move |a| a.to_array())
-    }
-
-    fn nchildren(&self) -> usize {
-        self.children.len()
-    }
-
-    fn statistics(&self) -> &(dyn Statistics + 'static) {
-        self
     }
 }
 

@@ -7,8 +7,8 @@ use vortex_schema::DType;
 use crate::buffer::Buffer;
 use crate::encoding::EncodingRef;
 use crate::stats::{EmptyStatistics, Statistics};
+use crate::SerdeContext;
 use crate::{Array, IntoArray, ToArray};
-use crate::{ArrayParts, SerdeContext};
 
 #[derive(Clone)]
 pub struct ArrayView<'v> {
@@ -134,6 +134,11 @@ impl<'v> ArrayView<'v> {
         // This is only true for the immediate current node?
         self.buffers[0..self.nbuffers()].as_ref()
     }
+
+    pub fn statistics(&self) -> &dyn Statistics {
+        // TODO(ngates): store statistics in FlatBuffers
+        &EmptyStatistics
+    }
 }
 
 impl ToArray for ArrayView<'_> {
@@ -147,25 +152,25 @@ impl<'v> IntoArray<'v> for ArrayView<'v> {
         Array::View(self)
     }
 }
-
-impl<'a> ArrayParts<'a> for ArrayView<'a> {
-    fn dtype(&self) -> &DType {
-        self.dtype
-    }
-
-    fn buffer(&self, idx: usize) -> Option<&Buffer<'a>> {
-        self.buffers().get(idx)
-    }
-
-    fn child(&self, idx: usize, dtype: &'a DType) -> Option<Array<'a>> {
-        self.child(idx, dtype).map(|a| a.into_array())
-    }
-
-    fn nchildren(&self) -> usize {
-        self.array.children().map(|c| c.len()).unwrap_or_default()
-    }
-
-    fn statistics(&self) -> &(dyn Statistics + 'a) {
-        &EmptyStatistics
-    }
-}
+//
+// impl<'a> ArrayParts<'a> for ArrayView<'a> {
+//     fn dtype(&self) -> &DType {
+//         self.dtype
+//     }
+//
+//     fn buffer(&self, idx: usize) -> Option<&Buffer<'a>> {
+//         self.buffers().get(idx)
+//     }
+//
+//     fn child(&self, idx: usize, dtype: &'a DType) -> Option<Array<'a>> {
+//         self.child(idx, dtype).map(|a| a.into_array())
+//     }
+//
+//     fn nchildren(&self) -> usize {
+//         self.array.children().map(|c| c.len()).unwrap_or_default()
+//     }
+//
+//     fn statistics(&self) -> &(dyn Statistics + 'a) {
+//         &EmptyStatistics
+//     }
+// }

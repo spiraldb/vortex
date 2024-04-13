@@ -35,7 +35,7 @@ use vortex_schema::DType;
 use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
-use crate::stats::{ArrayStatistics, ArrayStatisticsCompute, Statistics};
+use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
@@ -80,14 +80,12 @@ impl Array<'_> {
             Array::View(v) => v.child(idx, dtype).map(Array::View),
         }
     }
-}
 
-impl<'a, 'b> Array<'b> {
-    pub fn buffer(&'a self, idx: usize) -> Option<&'a Buffer<'b>> {
+    pub fn buffer(&self, idx: usize) -> Option<&Buffer> {
         match self {
-            Array::Data(d) => d.buffer(idx),
-            Array::DataRef(d) => d.buffer(idx),
-            Array::View(v) => v.buffer(idx),
+            Array::Data(d) => d.buffers().get(idx),
+            Array::DataRef(d) => d.buffers().get(idx),
+            Array::View(v) => v.buffers().get(idx),
         }
     }
 }
@@ -120,14 +118,6 @@ pub trait ToStatic {
     type Static;
 
     fn to_static(&self) -> Self::Static;
-}
-
-pub trait ArrayParts<'a> {
-    fn dtype(&self) -> &DType;
-    fn buffer(&self, idx: usize) -> Option<&Buffer<'a>>;
-    fn child(&self, idx: usize, dtype: &'a DType) -> Option<Array<'a>>;
-    fn nchildren(&self) -> usize;
-    fn statistics(&self) -> &(dyn Statistics + 'a);
 }
 
 /// Collects together the behaviour of an array.

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -10,13 +11,13 @@ use crate::encoding::{ArrayEncodingRef, EncodingRef};
 use crate::stats::{ArrayStatistics, Stat, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
-    Array, ArrayDType, ArrayData, ArrayDef, ArrayParts, IntoArray, IntoArrayData, ToArray,
-    ToArrayData, ToStatic, TryDeserializeArrayMetadata,
+    Array, ArrayDType, ArrayData, ArrayDef, IntoArray, IntoArrayData, ToArray, ToArrayData,
+    ToStatic, TryDeserializeArrayMetadata,
 };
 
 #[derive(Debug)]
 pub struct TypedArray<'a, D: ArrayDef> {
-    array: Array<'a>,
+    array: Cow<'a, Array<'a>>,
     metadata: D::Metadata,
 }
 
