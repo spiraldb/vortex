@@ -24,7 +24,7 @@ pub struct BoolMetadata {
 }
 
 impl BoolArray<'_> {
-    pub fn buffer(&self) -> &Buffer {
+    pub fn buffer(&self) -> Buffer {
         self.array().buffer(0).expect("missing buffer")
     }
 
@@ -115,7 +115,7 @@ impl ArrayValidity for BoolArray<'_> {
 
 impl AcceptArrayVisitor for BoolArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_buffer(self.buffer())?;
+        visitor.visit_buffer(&self.buffer())?;
         visitor.visit_validity(&self.validity())
     }
 }

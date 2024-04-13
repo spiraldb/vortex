@@ -34,6 +34,8 @@ impl ValidityMetadata {
     }
 }
 
+pub type OwnedValidity = Validity<'static>;
+
 #[derive(Clone, Debug)]
 pub enum Validity<'v> {
     NonNullable,
@@ -120,7 +122,7 @@ impl<'v> Validity<'v> {
         }
     }
 
-    pub fn to_static(&self) -> Validity<'static> {
+    pub fn to_static(&self) -> OwnedValidity {
         match self {
             Validity::NonNullable => Validity::NonNullable,
             Validity::AllValid => Validity::AllValid,
@@ -145,7 +147,7 @@ impl PartialEq for Validity<'_> {
     }
 }
 
-impl From<Vec<bool>> for Validity<'static> {
+impl From<Vec<bool>> for OwnedValidity {
     fn from(bools: Vec<bool>) -> Self {
         if bools.iter().all(|b| *b) {
             Validity::AllValid
@@ -157,7 +159,7 @@ impl From<Vec<bool>> for Validity<'static> {
     }
 }
 
-impl From<BooleanBuffer> for Validity<'static> {
+impl From<BooleanBuffer> for OwnedValidity {
     fn from(value: BooleanBuffer) -> Self {
         if value.count_set_bits() == value.len() {
             Validity::AllValid
@@ -169,19 +171,25 @@ impl From<BooleanBuffer> for Validity<'static> {
     }
 }
 
-impl<'a> FromIterator<Validity<'a>> for Validity<'static> {
+impl From<NullBuffer> for OwnedValidity {
+    fn from(value: NullBuffer) -> Self {
+        value.into_inner().into()
+    }
+}
+
+impl<'a> FromIterator<Validity<'a>> for OwnedValidity {
     fn from_iter<T: IntoIterator<Item = Validity<'a>>>(_iter: T) -> Self {
         todo!()
     }
 }
 
-impl FromIterator<LogicalValidity> for Validity<'static> {
+impl FromIterator<LogicalValidity> for OwnedValidity {
     fn from_iter<T: IntoIterator<Item = LogicalValidity>>(_iter: T) -> Self {
         todo!()
     }
 }
 
-impl<'a, E> FromIterator<&'a Option<E>> for Validity<'static> {
+impl<'a, E> FromIterator<&'a Option<E>> for OwnedValidity {
     fn from_iter<T: IntoIterator<Item = &'a Option<E>>>(iter: T) -> Self {
         let bools: Vec<bool> = iter.into_iter().map(|option| option.is_some()).collect();
         Validity::from(bools)

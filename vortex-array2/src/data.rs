@@ -136,8 +136,8 @@ impl ArrayParts for ArrayData {
         &self.dtype
     }
 
-    fn buffer(&self, idx: usize) -> Option<&Buffer> {
-        self.buffers().get(idx)
+    fn buffer(&self, idx: usize) -> Option<Buffer> {
+        self.buffers().get(idx).cloned()
     }
 
     fn child(&self, idx: usize, dtype: &DType) -> Option<Array> {

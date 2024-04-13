@@ -2,17 +2,17 @@ use std::collections::HashMap;
 
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
-use vortex::iterator::ArrayIter;
 use vortex::match_each_native_ptype;
-use vortex::ptype::{NativePType, PType};
+use vortex::ptype::NativePType;
 use vortex::scalar::{BinaryScalar, Scalar, Utf8Scalar};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
+use crate::iterator::ArrayIter;
 use crate::validity::{Validity, ValidityMetadata};
 use crate::{impl_encoding, OwnedArray, ToArrayData};
 
@@ -85,9 +85,7 @@ impl VarBinArray<'_> {
 
     #[inline]
     pub fn bytes(&self) -> Array {
-        self.array()
-            .child(1, &PType::U8.into())
-            .expect("missing bytes")
+        self.array().child(1, &DType::BYTES).expect("missing bytes")
     }
 
     pub fn validity(&self) -> Validity {
@@ -135,17 +133,16 @@ impl VarBinArray<'_> {
         }
         builder.finish(dtype)
     }
-    //
-    // pub fn iter_primitive(&self) -> VortexResult<VarBinIter<&[u8]>> {
-    //     self.bytes()
-    //         .maybe_primitive()
-    //         .ok_or_else(|| vortex_err!(ComputeError: "Bytes array was not a primitive array"))
-    //         .map(|_| ArrayIter::new(self))
-    // }
-    //
-    // pub fn iter(&self) -> VarBinIter<Vec<u8>> {
-    //     ArrayIter::new(self)
-    // }
+
+    pub fn iter_primitive(&self) -> VortexResult<VarBinIter<&[u8]>> {
+        PrimitiveArray::try_from(self.bytes())
+            .map(|_| ArrayIter::new(self))
+            .map_err(|_| vortex_err!(ComputeError: "Bytes array was not a primitive array"))
+    }
+
+    pub fn iter(&self) -> VarBinIter<Vec<u8>> {
+        ArrayIter::new(self)
+    }
 
     pub(self) fn offset_at(&self, index: usize) -> usize {
         PrimitiveArray::try_from(self.offsets())
@@ -162,13 +159,13 @@ impl VarBinArray<'_> {
                     .unwrap()
             })
     }
-    //
-    // pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
-    //     let start = self.offset_at(index);
-    //     let end = self.offset_at(index + 1);
-    //     let sliced = slice(self.bytes(), start, end)?;
-    //     Ok(sliced.flatten_primitive().buffer().to_vec())
-    // }
+
+    pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
+        let start = self.offset_at(index);
+        let end = self.offset_at(index + 1);
+        let sliced = slice(&self.bytes(), start, end)?;
+        Ok(sliced.flatten_primitive()?.buffer().as_slice().to_vec())
+    }
 }
 
 pub type VarBinIter<'a, T> = ArrayIter<'a, VarBinArray<'a>, T>;

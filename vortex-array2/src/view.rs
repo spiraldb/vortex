@@ -153,8 +153,8 @@ impl ArrayParts for ArrayView<'_> {
         self.dtype
     }
 
-    fn buffer(&self, idx: usize) -> Option<&Buffer> {
-        self.buffers().get(idx)
+    fn buffer(&self, idx: usize) -> Option<Buffer> {
+        self.buffers().get(idx).cloned()
     }
 
     fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array> {

@@ -10,6 +10,7 @@ mod data;
 pub mod encoding;
 mod flatten;
 mod implementation;
+mod iterator;
 mod metadata;
 mod stats;
 mod tree;
@@ -80,7 +81,7 @@ impl Array<'_> {
         }
     }
 
-    pub fn buffer(&self, idx: usize) -> Option<&Buffer> {
+    pub fn buffer(&self, idx: usize) -> Option<Buffer> {
         match self {
             Array::Data(d) => d.buffer(idx),
             Array::DataRef(d) => d.buffer(idx),
@@ -121,15 +122,10 @@ pub trait ToStatic {
 
 pub trait ArrayParts {
     fn dtype(&self) -> &DType;
-    fn buffer(&self, idx: usize) -> Option<&Buffer>;
+    fn buffer(&self, idx: usize) -> Option<Buffer>;
     fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array>;
     fn nchildren(&self) -> usize;
     fn statistics<'a>(&'a self) -> &'a (dyn Statistics + 'a);
-}
-
-// TODO(ngates): I think we should separate the parts and metadata lifetimes.
-pub trait TryFromArrayParts<'v, M: ArrayMetadata>: Sized + 'v {
-    fn try_from_parts(parts: &'v dyn ArrayParts, metadata: &'v M) -> VortexResult<Self>;
 }
 
 /// Collects together the behaviour of an array.

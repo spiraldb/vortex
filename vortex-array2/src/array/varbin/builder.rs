@@ -73,6 +73,7 @@ mod test {
 
     use crate::array::varbin::builder::VarBinBuilder;
     use crate::compute::scalar_at::scalar_at;
+    use crate::IntoArray;
 
     #[test]
     fn test_builder() {
@@ -80,10 +81,10 @@ mod test {
         builder.push(Some(b"hello"));
         builder.push(None);
         builder.push(Some(b"world"));
-        let array = builder.finish(DType::Utf8(Nullable));
+        let array = builder.finish(DType::Utf8(Nullable)).into_array();
 
         assert_eq!(array.len(), 3);
-        assert_eq!(array.nullability(), Nullable);
+        assert_eq!(array.dtype().nullability(), Nullable);
         assert_eq!(
             scalar_at(&array, 0).unwrap(),
             Utf8Scalar::nullable("hello".to_owned()).into()

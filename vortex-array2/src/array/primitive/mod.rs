@@ -24,7 +24,7 @@ pub struct PrimitiveMetadata {
 }
 
 impl PrimitiveArray<'_> {
-    pub fn buffer(&self) -> &Buffer {
+    pub fn buffer(&self) -> Buffer {
         self.array().buffer(0).expect("missing buffer")
     }
 
@@ -110,7 +110,7 @@ impl ArrayValidity for PrimitiveArray<'_> {
 
 impl AcceptArrayVisitor for PrimitiveArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_buffer(self.buffer())?;
+        visitor.visit_buffer(&self.buffer())?;
         visitor.visit_validity(&self.validity())
     }
 }
