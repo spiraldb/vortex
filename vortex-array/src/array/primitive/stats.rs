@@ -44,7 +44,7 @@ fn all_null_stats<T: NativePType>(len: usize) -> VortexResult<StatsSet> {
         (Stat::Max, Option::<T>::None.into()),
         (Stat::IsConstant, true.into()),
         (Stat::IsSorted, true.into()),
-        (Stat::IsStrictSorted, (len == 1).into()),
+        (Stat::IsStrictSorted, (len < 2).into()),
         (Stat::RunCount, 1.into()),
         (Stat::NullCount, len.into()),
         (

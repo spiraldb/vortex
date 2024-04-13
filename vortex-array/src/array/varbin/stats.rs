@@ -56,7 +56,7 @@ fn all_null_stats(len: usize, dtype: &DType) -> StatsSet {
         (Stat::Max, Scalar::null(dtype)),
         (Stat::IsConstant, true.into()),
         (Stat::IsSorted, true.into()),
-        (Stat::IsStrictSorted, (len == 1).into()),
+        (Stat::IsStrictSorted, (len < 2).into()),
         (Stat::RunCount, 1.into()),
         (Stat::NullCount, len.into()),
     ]))
