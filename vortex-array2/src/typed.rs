@@ -39,10 +39,6 @@ impl<D: ArrayDef> TypedArray<'_, D> {
         Ok(Self { array, metadata })
     }
 
-    pub fn array(&self) -> &Array {
-        &self.array
-    }
-
     pub fn len(&self) -> usize {
         self.array.with_dyn(|a| a.len())
     }
@@ -57,6 +53,12 @@ impl<D: ArrayDef> TypedArray<'_, D> {
 
     pub fn metadata(&self) -> &D::Metadata {
         &self.metadata
+    }
+}
+
+impl<'a, D: ArrayDef> TypedArray<'a, D> {
+    pub fn array(&self) -> &Array<'a> {
+        &self.array
     }
 }
 

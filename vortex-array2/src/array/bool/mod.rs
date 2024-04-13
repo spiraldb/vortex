@@ -24,7 +24,7 @@ pub struct BoolMetadata {
 }
 
 impl BoolArray<'_> {
-    pub fn buffer(&self) -> Buffer {
+    pub fn buffer(&self) -> &Buffer {
         self.array().buffer(0).expect("missing buffer")
     }
 

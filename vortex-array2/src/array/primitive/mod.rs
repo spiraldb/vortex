@@ -24,10 +24,6 @@ pub struct PrimitiveMetadata {
 }
 
 impl PrimitiveArray<'_> {
-    pub fn buffer(&self) -> Buffer {
-        self.array().buffer(0).expect("missing buffer")
-    }
-
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
@@ -41,6 +37,12 @@ impl PrimitiveArray<'_> {
 
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
         self.buffer().typed_data::<T>()
+    }
+}
+
+impl<'a> PrimitiveArray<'a> {
+    pub fn buffer(&'a self) -> &'a Buffer<'a> {
+        self.array().buffer(0).expect("missing buffer")
     }
 }
 
