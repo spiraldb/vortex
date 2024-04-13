@@ -131,16 +131,16 @@ impl IntoArray<'static> for ArrayData {
     }
 }
 
-impl ArrayParts for ArrayData {
+impl ArrayParts<'static> for ArrayData {
     fn dtype(&self) -> &DType {
         &self.dtype
     }
 
-    fn buffer(&self, idx: usize) -> Option<&Buffer> {
+    fn buffer(&self, idx: usize) -> Option<&Buffer<'static>> {
         self.buffers().get(idx)
     }
 
-    fn child(&self, idx: usize, dtype: &DType) -> Option<Array> {
+    fn child(&self, idx: usize, dtype: &DType) -> Option<Array<'static>> {
         self.child(idx, dtype).map(move |a| a.to_array())
     }
 
@@ -148,7 +148,7 @@ impl ArrayParts for ArrayData {
         self.children.len()
     }
 
-    fn statistics<'a>(&'a self) -> &'a (dyn Statistics + 'a) {
+    fn statistics(&self) -> &(dyn Statistics + 'static) {
         self
     }
 }

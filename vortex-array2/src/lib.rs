@@ -122,12 +122,12 @@ pub trait ToStatic {
     fn to_static(&self) -> Self::Static;
 }
 
-pub trait ArrayParts {
+pub trait ArrayParts<'a> {
     fn dtype(&self) -> &DType;
-    fn buffer(&self, idx: usize) -> Option<&Buffer>;
-    fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array>;
+    fn buffer(&self, idx: usize) -> Option<&Buffer<'a>>;
+    fn child(&self, idx: usize, dtype: &'a DType) -> Option<Array<'a>>;
     fn nchildren(&self) -> usize;
-    fn statistics<'a>(&'a self) -> &'a (dyn Statistics + 'a);
+    fn statistics(&self) -> &(dyn Statistics + 'a);
 }
 
 /// Collects together the behaviour of an array.

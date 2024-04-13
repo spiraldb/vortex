@@ -148,16 +148,16 @@ impl<'v> IntoArray<'v> for ArrayView<'v> {
     }
 }
 
-impl<'a, 'b> ArrayParts for ArrayView<'b> {
+impl<'a> ArrayParts<'a> for ArrayView<'a> {
     fn dtype(&self) -> &DType {
         self.dtype
     }
 
-    fn buffer(&'a self, idx: usize) -> Option<&'a Buffer<'b>> {
+    fn buffer(&self, idx: usize) -> Option<&Buffer<'a>> {
         self.buffers().get(idx)
     }
 
-    fn child(&'a self, idx: usize, dtype: &'a DType) -> Option<Array<'b>> {
+    fn child(&self, idx: usize, dtype: &'a DType) -> Option<Array<'a>> {
         self.child(idx, dtype).map(|a| a.into_array())
     }
 
@@ -165,7 +165,7 @@ impl<'a, 'b> ArrayParts for ArrayView<'b> {
         self.array.children().map(|c| c.len()).unwrap_or_default()
     }
 
-    fn statistics(&'a self) -> &'a (dyn Statistics + 'b) {
+    fn statistics(&self) -> &(dyn Statistics + 'a) {
         &EmptyStatistics
     }
 }
