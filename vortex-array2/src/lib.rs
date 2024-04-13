@@ -80,8 +80,10 @@ impl Array<'_> {
             Array::View(v) => v.child(idx, dtype).map(Array::View),
         }
     }
+}
 
-    pub fn buffer(&self, idx: usize) -> Option<&Buffer> {
+impl<'a, 'b> Array<'b> {
+    pub fn buffer(&'a self, idx: usize) -> Option<&'a Buffer<'b>> {
         match self {
             Array::Data(d) => d.buffer(idx),
             Array::DataRef(d) => d.buffer(idx),

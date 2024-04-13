@@ -40,8 +40,8 @@ impl PrimitiveArray<'_> {
     }
 }
 
-impl<'a> PrimitiveArray<'a> {
-    pub fn buffer(&'a self) -> &'a Buffer<'a> {
+impl<'a, 'b> PrimitiveArray<'b> {
+    pub fn buffer(&'a self) -> &'a Buffer<'b> {
         self.array().buffer(0).expect("missing buffer")
     }
 }

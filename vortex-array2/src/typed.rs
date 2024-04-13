@@ -56,8 +56,8 @@ impl<D: ArrayDef> TypedArray<'_, D> {
     }
 }
 
-impl<'a, D: ArrayDef> TypedArray<'a, D> {
-    pub fn array(&self) -> &Array<'a> {
+impl<'a, 'b, D: ArrayDef> TypedArray<'b, D> {
+    pub fn array(&'a self) -> &'a Array<'b> {
         &self.array
     }
 }
