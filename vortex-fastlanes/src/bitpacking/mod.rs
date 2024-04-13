@@ -86,7 +86,7 @@ impl BitPackedArray {
             len,
             bit_width,
             dtype,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
 
@@ -177,7 +177,7 @@ impl ArrayDisplay for BitPackedArray {
 
 impl StatsCompute for BitPackedArray {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::default())
+        Ok(StatsSet::new())
     }
 }
 

@@ -41,7 +41,7 @@ impl CompositeArray {
             metadata,
             underlying,
             dtype,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
 
@@ -122,7 +122,7 @@ impl Array for CompositeArray {
 
 impl StatsCompute for CompositeArray {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::default())
+        Ok(StatsSet::new())
     }
 }
 

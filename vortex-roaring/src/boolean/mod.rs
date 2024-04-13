@@ -33,7 +33,7 @@ impl RoaringBoolArray {
         Self {
             bitmap,
             length,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         }
     }
 

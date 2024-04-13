@@ -54,7 +54,7 @@ impl DeltaArray {
             bases,
             deltas,
             validity,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         };
 
         let expected_bases_len = {
@@ -162,7 +162,7 @@ impl ArrayDisplay for DeltaArray {
 
 impl StatsCompute for DeltaArray {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::default())
+        Ok(StatsSet::new())
     }
 }
 

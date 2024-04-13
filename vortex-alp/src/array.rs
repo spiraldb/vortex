@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use vortex::array::{Array, ArrayRef};
+use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::EncodingCompression;
 use vortex::compute::ArrayCompute;
 use vortex::encoding::{Encoding, EncodingId, EncodingRef};
@@ -48,7 +48,7 @@ impl ALPArray {
             exponents,
             patches,
             dtype,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
 

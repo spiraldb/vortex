@@ -8,7 +8,7 @@ use crate::array::Array;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for VarBinViewArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
         if self.is_empty() {
             return Ok(StatsSet::new());
         }

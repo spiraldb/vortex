@@ -59,7 +59,7 @@ impl DateTimeArray {
             subsecond,
             validity,
             dtype,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
 
@@ -141,7 +141,7 @@ impl ArrayStatistics for DateTimeArray {
 
 impl StatsCompute for DateTimeArray {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::default())
+        Ok(StatsSet::new())
     }
 }
 

@@ -20,6 +20,12 @@ impl From<HashMap<Stat, Scalar>> for StatsSet {
 }
 
 impl StatsSet {
+    pub fn new() -> Self {
+        Self {
+            values: HashMap::new(),
+        }
+    }
+
     pub fn of(stat: Stat, value: Scalar) -> Self {
         StatsSet::from(HashMap::from([(stat, value)]))
     }

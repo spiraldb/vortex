@@ -16,7 +16,7 @@ impl StatsCompute for RoaringIntArray {
         } {
             Ok(StatsSet::of(stat, value))
         } else {
-            Ok(StatsSet::default())
+            Ok(StatsSet::new())
         }
     }
 }

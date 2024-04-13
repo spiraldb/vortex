@@ -29,7 +29,7 @@ impl StatsCompute for RoaringBoolArray {
         } {
             Ok(StatsSet::of(stat, value))
         } else {
-            Ok(StatsSet::default())
+            Ok(StatsSet::new())
         }
     }
 }

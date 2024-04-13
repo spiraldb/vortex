@@ -32,7 +32,7 @@ impl DictArray {
         Ok(Self {
             codes,
             values: dict,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
 

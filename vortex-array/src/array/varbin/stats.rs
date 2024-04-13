@@ -5,12 +5,12 @@ use std::collections::HashMap;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
-use crate::array::varbin::VarBinArray;
+use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::array::Array;
 use crate::stats::{Stat, StatsCompute, StatsSet};
 
 impl StatsCompute for VarBinArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+    fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
         if self.is_empty() {
             return Ok(StatsSet::new());
         }
@@ -105,8 +105,7 @@ mod test {
     use vortex_schema::{DType, Nullability};
 
     use crate::array::varbin::VarBinArray;
-    use crate::array::Array;
-    use crate::stats::ArrayStatistics;
+    use crate::stats::{ArrayStatistics, Stat};
 
     fn array(dtype: DType) -> VarBinArray {
         VarBinArray::from_vec(
@@ -174,7 +173,7 @@ mod test {
             vec![Option::<&str>::None, None, None],
             DType::Utf8(Nullability::Nullable),
         );
-        assert!(array.statistics().compute_min().is_none());
-        assert!(array.statistics().compute_max().is_none());
+        assert!(array.statistics().get(Stat::Min).is_none());
+        assert!(array.statistics().get(Stat::Max).is_none());
     }
 }

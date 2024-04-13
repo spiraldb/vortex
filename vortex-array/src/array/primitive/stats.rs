@@ -30,7 +30,7 @@ impl StatsCompute for PrimitiveArray {
 impl<T: NativePType> StatsCompute for &[T] {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
         if self.is_empty() {
-            return Ok(StatsSet::default());
+            return Ok(StatsSet::new());
         }
         let mut stats = StatsAccumulator::new(self[0]);
         self.iter().skip(1).for_each(|next| stats.next(*next));
@@ -64,7 +64,7 @@ impl<'a, T: NativePType> StatsCompute for NullableValues<'a, T> {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
         let values = self.0;
         if values.is_empty() {
-            return Ok(StatsSet::default());
+            return Ok(StatsSet::new());
         }
 
         let first_non_null = self

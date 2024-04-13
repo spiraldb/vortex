@@ -36,7 +36,7 @@ impl FoRArray {
             encoded: child,
             reference,
             shift,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
 
@@ -120,7 +120,7 @@ impl ArrayDisplay for FoRArray {
 
 impl StatsCompute for FoRArray {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::default())
+        Ok(StatsSet::new())
     }
 }
 

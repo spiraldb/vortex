@@ -86,7 +86,7 @@ impl VarBinArray {
             bytes,
             dtype,
             validity,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
 

@@ -20,6 +20,6 @@ impl StatsCompute for ConstantArray {
             )])));
         }
 
-        Ok(StatsSet::default())
+        Ok(StatsSet::new())
     }
 }

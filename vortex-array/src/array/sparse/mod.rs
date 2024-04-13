@@ -64,7 +64,7 @@ impl SparseArray {
             values,
             indices_offset,
             len,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
             fill_value,
         })
     }
@@ -159,7 +159,7 @@ impl Array for SparseArray {
 
 impl StatsCompute for SparseArray {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::default())
+        Ok(StatsSet::new())
     }
 }
 

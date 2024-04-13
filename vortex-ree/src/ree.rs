@@ -67,7 +67,7 @@ impl REEArray {
             validity,
             length,
             offset,
-            stats: Arc::new(RwLock::new(StatsSet::default())),
+            stats: Arc::new(RwLock::new(StatsSet::new())),
         })
     }
 
@@ -161,7 +161,7 @@ impl OwnedValidity for REEArray {
 
 impl StatsCompute for REEArray {
     fn compute(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::default())
+        Ok(StatsSet::new())
     }
 }
 
