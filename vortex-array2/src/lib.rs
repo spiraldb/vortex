@@ -1,6 +1,6 @@
 extern crate core;
 
-pub mod accessor;
+mod accessor;
 pub mod array;
 mod arrow;
 pub mod buffer;
@@ -10,7 +10,6 @@ mod data;
 pub mod encoding;
 mod flatten;
 mod implementation;
-mod iterator;
 mod metadata;
 mod stats;
 mod tree;

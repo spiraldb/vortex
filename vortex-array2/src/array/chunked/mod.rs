@@ -69,10 +69,6 @@ impl ChunkedArray<'_> {
         self.array().child(idx + 1, self.array().dtype())
     }
 
-    pub fn chunks(&self) -> impl Iterator<Item = Array> {
-        (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
-    }
-
     pub fn nchunks(&self) -> usize {
         self.chunk_ends().len() - 1
     }
@@ -101,6 +97,12 @@ impl ChunkedArray<'_> {
 
         let index_in_chunk = index - chunk_start;
         (index_chunk, index_in_chunk)
+    }
+}
+
+impl<'a> ChunkedArray<'a> {
+    pub fn chunks(&'a self) -> impl Iterator<Item = Array<'a>> {
+        (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
     }
 }
 

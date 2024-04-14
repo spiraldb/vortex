@@ -6,12 +6,12 @@ use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayTrait;
 
 impl ArrayValidity for VarBinArray<'_> {
-    fn is_valid(&self, _index: usize) -> bool {
-        todo!()
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity().is_valid(index)
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        todo!()
+        self.validity().to_logical(self.len())
     }
 }
 
@@ -23,6 +23,6 @@ impl AcceptArrayVisitor for VarBinArray<'_> {
 
 impl ArrayTrait for VarBinArray<'_> {
     fn len(&self) -> usize {
-        todo!()
+        self.offsets().len() - 1
     }
 }

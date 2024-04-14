@@ -35,14 +35,12 @@ impl PrimitiveArray<'_> {
         self.dtype().try_into().unwrap()
     }
 
+    pub fn buffer(&self) -> &Buffer {
+        self.array().buffer(0).expect("missing buffer")
+    }
+
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
         self.buffer().typed_data::<T>()
-    }
-}
-
-impl<'a, 'b> PrimitiveArray<'b> {
-    pub fn buffer(&'a self) -> &'a Buffer<'b> {
-        self.array().buffer(0).expect("missing buffer")
     }
 }
 

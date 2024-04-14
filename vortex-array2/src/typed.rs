@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -17,7 +16,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct TypedArray<'a, D: ArrayDef> {
-    array: Cow<'a, Array<'a>>,
+    array: Array<'a>,
     metadata: D::Metadata,
 }
 

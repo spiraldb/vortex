@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -6,34 +5,29 @@ use vortex::scalar::Scalar;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::accessor::ArrayAccessor;
 use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::stats::{ArrayStatisticsCompute, Stat};
 
 impl ArrayStatisticsCompute for VarBinArray<'_> {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
-        let mut acc = VarBinAccumulator::default();
-        self.iter_primitive()
-            .map(|prim_iter| {
-                for next_val in prim_iter {
-                    acc.nullable_next(next_val.map(Cow::from));
-                }
-            })
-            .unwrap_or_else(|_| {
-                for next_val in self.iter() {
-                    acc.nullable_next(next_val.map(Cow::from));
-                }
-            });
-        Ok(acc.finish(self.dtype()))
+        self.with_iterator(|iter| {
+            let mut acc = VarBinAccumulator::default();
+            for next_val in iter {
+                acc.nullable_next(next_val)
+            }
+            acc.finish(self.dtype())
+        })
     }
 }
 
 pub struct VarBinAccumulator<'a> {
-    min: Cow<'a, [u8]>,
-    max: Cow<'a, [u8]>,
+    min: &'a [u8],
+    max: &'a [u8],
     is_constant: bool,
     is_sorted: bool,
     is_strict_sorted: bool,
-    last_value: Cow<'a, [u8]>,
+    last_value: &'a [u8],
     null_count: usize,
     runs: usize,
 }
@@ -41,12 +35,12 @@ pub struct VarBinAccumulator<'a> {
 impl Default for VarBinAccumulator<'_> {
     fn default() -> Self {
         Self {
-            min: Cow::from(&[0xFF]),
-            max: Cow::from(&[0x00]),
+            min: &[0xFF],
+            max: &[0x00],
             is_constant: true,
             is_sorted: true,
             is_strict_sorted: true,
-            last_value: Cow::from(&[0x00]),
+            last_value: &[0x00],
             runs: 0,
             null_count: 0,
         }
@@ -54,14 +48,14 @@ impl Default for VarBinAccumulator<'_> {
 }
 
 impl<'a> VarBinAccumulator<'a> {
-    pub fn nullable_next(&mut self, val: Option<Cow<'a, [u8]>>) {
+    pub fn nullable_next(&mut self, val: Option<&'a [u8]>) {
         match val {
             None => self.null_count += 1,
             Some(v) => self.next(v),
         }
     }
 
-    pub fn next(&mut self, val: Cow<'a, [u8]>) {
+    pub fn next(&mut self, val: &'a [u8]) {
         if val < self.min {
             self.min.clone_from(&val);
         } else if val > self.max {
