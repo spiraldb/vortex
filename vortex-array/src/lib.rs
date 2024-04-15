@@ -82,6 +82,10 @@ impl Array<'_> {
         self.with_dyn(|a| a.len())
     }
 
+    pub fn nbytes(&self) -> usize {
+        self.with_dyn(|a| a.nbytes())
+    }
+
     pub fn is_empty(&self) -> bool {
         self.with_dyn(|a| a.is_empty())
     }

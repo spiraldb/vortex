@@ -1,6 +1,7 @@
 use arrow_array::ArrayRef as ArrowArrayRef;
 use vortex_error::{vortex_err, VortexResult};
 
+use crate::array::chunked::ChunkedArray;
 use crate::{Array, IntoArray};
 
 pub trait AsArrowArray {
@@ -23,15 +24,13 @@ pub fn as_arrow(array: &Array) -> VortexResult<ArrowArrayRef> {
 }
 
 // TODO(ngates): return a RecordBatchReader instead?
-pub fn as_arrow_chunks(_array: &Array) -> VortexResult<Vec<ArrowArrayRef>> {
-    todo!("PORT")
-    // if let Some(chunked) = array.as_data::<ChunkedDef>() {
-    //     chunked
-    //         .chunks()
-    //         .iter()
-    //         .map(|a| as_arrow(a.as_ref()))
-    //         .try_collect()
-    // } else {
-    //     as_arrow(array).map(|a| vec![a])
-    // }
+pub fn as_arrow_chunks(array: &Array) -> VortexResult<Vec<ArrowArrayRef>> {
+    if let Ok(chunked) = ChunkedArray::try_from(array) {
+        chunked
+            .chunks()
+            .map(|a| as_arrow(&a))
+            .collect::<VortexResult<Vec<_>>>()
+    } else {
+        as_arrow(array).map(|a| vec![a])
+    }
 }
