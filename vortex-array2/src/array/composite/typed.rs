@@ -70,7 +70,7 @@ macro_rules! impl_composite {
         use vortex_schema::{CompositeID, DType, Nullability};
         use $crate::array::composite::{
             CompositeArray, CompositeExtension, TypedCompositeArray, UnderlyingMetadata,
-            COMPOSITE_EXTENSIONS,
+            VORTEX_COMPOSITE_EXTENSIONS,
         };
         use $crate::compute::ArrayCompute;
         use $crate::TryDeserializeArrayMetadata;
@@ -114,7 +114,7 @@ macro_rules! impl_composite {
                 }
             }
 
-            #[distributed_slice(COMPOSITE_EXTENSIONS)]
+            #[distributed_slice(VORTEX_COMPOSITE_EXTENSIONS)]
             static ENCODINGS_COMPOSITE_EXT: &'static dyn CompositeExtension = &[<$T Extension>];
         }
     };
