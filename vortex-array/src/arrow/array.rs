@@ -30,15 +30,12 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
+use crate::arrow::FromArrowArray;
 use crate::ptype::NativePType;
 use crate::scalar::NullScalar;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
 use crate::{ArrayData, IntoArray, IntoArrayData};
-
-pub trait FromArrowArray<A> {
-    fn from_arrow(array: A, nullable: bool) -> Self;
-}
 
 impl IntoArrayData for Buffer {
     fn into_array_data(self) -> ArrayData {

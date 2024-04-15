@@ -11,19 +11,11 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::IntoArray;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::r#struct::StructArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
-use vortex::encoding::{EncodingRef, ENCODINGS};
-use vortex::formatter::display_tree;
-use vortex_alp::ALPEncoding;
-use vortex_datetime::DateTimeEncoding;
-use vortex_dict::DictEncoding;
-use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
-use vortex_ree::REEEncoding;
-use vortex_roaring::RoaringBoolEncoding;
+use vortex::encoding::{EncodingRef, VORTEX_ENCODINGS};
+use vortex::{Array, IntoArray, OwnedArray, ToArrayData};
 use vortex_schema::DType;
 
 use crate::reader::BATCH_SIZE;
@@ -83,16 +75,19 @@ pub fn setup_logger(level: LevelFilter) {
 }
 
 pub fn enumerate_arrays() -> Vec<EncodingRef> {
-    println!("FOUND {:?}", ENCODINGS.iter().map(|e| e.id()).collect_vec());
+    println!(
+        "FOUND {:?}",
+        VORTEX_ENCODINGS.iter().map(|e| e.id()).collect_vec()
+    );
     vec![
-        &ALPEncoding,
-        &DictEncoding,
-        &BitPackedEncoding,
-        &FoREncoding,
-        &DateTimeEncoding,
+        //&ALPEncoding,
+        //&DictEncoding,
+        //&BitPackedEncoding,
+        //&FoREncoding,
+        //&DateTimeEncoding,
         // &DeltaEncoding,  Blows up the search space too much.
-        &REEEncoding,
-        &RoaringBoolEncoding,
+        //&REEEncoding,
+        //&RoaringBoolEncoding,
         // RoaringIntEncoding,
         // Doesn't offer anything more than FoR really
         // ZigZagEncoding,
@@ -105,7 +100,7 @@ pub fn compress_ctx() -> CompressCtx {
     CompressCtx::new(Arc::new(cfg))
 }
 
-pub fn compress_taxi_data() -> ArrayRef {
+pub fn compress_taxi_data() -> OwnedArray {
     let file = File::open(taxi_data_parquet()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
     let _mask = ProjectionMask::roots(builder.parquet_schema(), [1]);
@@ -128,7 +123,7 @@ pub fn compress_taxi_data() -> ArrayRef {
     let chunks = reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
-        .map(|batch| batch.into_array())
+        .map(|batch| batch.to_array_data().into_array())
         .map(|array| {
             uncompressed_size += array.nbytes();
             ctx.clone().compress(&array, None).unwrap()
@@ -138,16 +133,18 @@ pub fn compress_taxi_data() -> ArrayRef {
     chunks_to_array(schema, uncompressed_size, chunks)
 }
 
-fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<ArrayRef>) -> ArrayRef {
+fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<Array>) -> OwnedArray {
     let dtype = DType::from_arrow(schema.clone());
-    let compressed = ChunkedArray::new(chunks.clone(), dtype).into_array();
+    let compressed = ChunkedArray::try_new(chunks.clone(), dtype)
+        .unwrap()
+        .into_array();
 
-    warn!("Compressed array {}", display_tree(compressed.as_ref()));
+    warn!("Compressed array {}", compressed.tree_display());
 
     let mut field_bytes = vec![0; schema.fields().len()];
     for chunk in chunks {
-        let str = chunk.as_struct();
-        for (i, field) in str.fields().iter().enumerate() {
+        let str = StructArray::try_from(chunk).unwrap();
+        for (i, field) in str.children().enumerate() {
             field_bytes[i] += field.nbytes();
         }
     }
@@ -173,10 +170,11 @@ mod test {
     use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-    use vortex::array::ArrayRef;
+    use vortex::arrow::FromArrowArray;
     use vortex::compute::as_arrow::as_arrow;
-    use vortex::encode::FromArrowArray;
-    use vortex::serde::{ReadCtx, WriteCtx};
+    use vortex::{ArrayData, IntoArray};
+    use vortex_ipc::reader::StreamReader;
+    use vortex_ipc::writer::StreamWriter;
 
     use crate::taxi_data::taxi_data_parquet;
     use crate::{compress_ctx, compress_taxi_data, setup_logger};
@@ -198,15 +196,17 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
 
             let mut buf = Vec::<u8>::new();
-            let mut write_ctx = WriteCtx::new(&mut buf);
-            write_ctx.write(vortex_array.as_ref()).unwrap();
+            {
+                let mut writer = StreamWriter::try_new(&mut buf, Default::default()).unwrap();
+                writer.write_array(&vortex_array).unwrap();
+            }
 
             let mut read = buf.as_slice();
-            let mut read_ctx = ReadCtx::new(vortex_array.dtype(), &mut read);
-            read_ctx.read().unwrap();
+            let mut reader = StreamReader::try_new(&mut read).unwrap();
+            reader.read_array().unwrap();
         }
     }
 
@@ -220,8 +220,8 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
-            let vortex_as_arrow = as_arrow(vortex_array.as_ref()).unwrap();
+            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
+            let vortex_as_arrow = as_arrow(&vortex_array).unwrap();
             assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
         }
     }
@@ -239,10 +239,10 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayRef::from_arrow(arrow_array.clone(), false);
+            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
 
-            let compressed = ctx.clone().compress(vortex_array.as_ref(), None).unwrap();
-            let compressed_as_arrow = as_arrow(compressed.as_ref()).unwrap();
+            let compressed = ctx.clone().compress(&vortex_array, None).unwrap();
+            let compressed_as_arrow = as_arrow(&compressed).unwrap();
             assert_eq!(compressed_as_arrow.deref(), arrow_array.deref());
         }
     }

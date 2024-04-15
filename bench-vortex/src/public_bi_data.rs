@@ -10,16 +10,14 @@ use humansize::{format_size, DECIMAL};
 use itertools::Itertools;
 use log::info;
 use reqwest::Url;
-use vortex::array::ArrayRef;
-use vortex::formatter::display_tree;
+use vortex::OwnedArray;
+use vortex_error::VortexError;
 
 use crate::data_downloads::{
     decompress_bz2, download_data, parquet_to_lance, BenchmarkDataset, FileType,
 };
 use crate::public_bi_data::PBIDataset::*;
-use crate::reader::{
-    compress_csv_to_vortex, open_vortex, pbi_csv_format, write_csv_as_parquet, write_csv_to_vortex,
-};
+use crate::reader::{open_vortex, pbi_csv_format, write_csv_as_parquet, write_csv_to_vortex};
 use crate::{idempotent, IdempotentPath};
 
 lazy_static::lazy_static! {
@@ -352,12 +350,14 @@ impl PBIUrl {
         }
     }
     fn to_url_string(&self) -> Url {
-        Url::parse("https://homepages.cwi.nl/~boncz/PublicBIbenchmark")
-            .unwrap()
-            .join(self.dataset_name)
-            .unwrap()
-            .join(self.file_name)
-            .unwrap()
+        Url::parse(
+            format!(
+                "https://homepages.cwi.nl/~boncz/PublicBIbenchmark/{}/{}",
+                self.dataset_name, self.file_name
+            )
+            .as_str(),
+        )
+        .unwrap()
     }
 }
 
@@ -455,14 +455,15 @@ impl BenchmarkDataset for BenchmarkDatasets {
 
     /// Compresses the CSV files to Vortex format. Does NOT write any data to disk.
     /// Used for benchmarking.
-    fn compress_to_vortex(&self) -> Vec<ArrayRef> {
-        self.list_files(FileType::Csv)
-            .into_iter()
-            .map(|csv_input| {
-                info!("Compressing {} to vortex", csv_input.to_str().unwrap());
-                compress_csv_to_vortex(csv_input, pbi_csv_format()).1
-            })
-            .collect_vec()
+    fn compress_to_vortex(&self) -> Vec<OwnedArray> {
+        vec![]
+        // self.list_files(FileType::Csv)
+        //     .into_iter()
+        //     .map(|csv_input| {
+        //         info!("Compressing {} to vortex", csv_input.to_str().unwrap());
+        //         compress_csv_to_vortex(csv_input, pbi_csv_format()).1
+        //     })
+        //     .collect_vec()
     }
 
     fn write_as_vortex(&self) {
@@ -493,7 +494,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 format_size(vx_size as u64, DECIMAL),
                 vx_size
             );
-            info!("{}\n\n", display_tree(from_vortex.as_ref()));
+            info!("{}\n\n", from_vortex.tree_display());
         }
     }
 
@@ -510,10 +511,10 @@ impl BenchmarkDataset for BenchmarkDatasets {
             let compressed = idempotent(
                 &path_for_file_type(self, output_fname, "lance"),
                 |output_path| {
-                    parquet_to_lance(
+                    Ok::<_, VortexError>(parquet_to_lance(
                         output_path,
                         path_for_file_type(self, output_fname, "parquet").as_path(),
-                    )
+                    ))
                 },
             )
             .expect("Failed to compress to lance");

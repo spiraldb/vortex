@@ -28,10 +28,6 @@ impl ChunkedArray<'_> {
         Nullability::NonNullable,
     );
 
-    pub fn new(chunks: Vec<Array>, dtype: DType) -> Self {
-        Self::try_new(chunks, dtype).unwrap()
-    }
-
     pub fn try_new(chunks: Vec<Array>, dtype: DType) -> VortexResult<Self> {
         for chunk in &chunks {
             if chunk.dtype() != &dtype {
@@ -114,7 +110,7 @@ impl FromIterator<OwnedArray> for OwnedChunkedArray {
             .first()
             .map(|c| c.dtype().clone())
             .expect("Cannot create a chunked array from an empty iterator");
-        Self::new(chunks, dtype)
+        Self::try_new(chunks, dtype).unwrap()
     }
 }
 
@@ -165,7 +161,7 @@ mod test {
 
     #[allow(dead_code)]
     fn chunked_array() -> OwnedChunkedArray {
-        ChunkedArray::new(
+        ChunkedArray::try_new(
             vec![
                 vec![1u64, 2, 3].into_array(),
                 vec![4u64, 5, 6].into_array(),
@@ -177,6 +173,7 @@ mod test {
                 Nullability::NonNullable,
             ),
         )
+        .unwrap()
     }
 
     #[allow(dead_code)]

@@ -24,38 +24,41 @@ use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{ArrayRef, IntoArray};
 use vortex::arrow::FromArrowType;
-use vortex::compute::flatten::flatten;
 use vortex::compute::take::take;
-use vortex::ptype::PType;
-use vortex::serde::{ReadCtx, WriteCtx};
+use vortex::{IntoArray, OwnedArray, SerdeContext, ToArrayData, ToStatic};
 use vortex_error::{VortexError, VortexResult};
+use vortex_ipc::iter::FallibleLendingIterator;
+use vortex_ipc::reader::StreamReader;
+use vortex_ipc::writer::StreamWriter;
 use vortex_schema::DType;
 
-use crate::{chunks_to_array, compress_ctx};
+use crate::compress_ctx;
 
 pub const BATCH_SIZE: usize = 65_536;
 pub const CSV_SCHEMA_SAMPLE_ROWS: usize = 10_000_000;
 
-pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
+pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
     let mut file = File::open(path)?;
-    let dummy_dtype: DType = PType::U8.into();
-    let mut read_ctx = ReadCtx::new(&dummy_dtype, &mut file);
-    let dtype = read_ctx.dtype()?;
-    read_ctx.with_schema(&dtype).read()
+
+    let mut reader = StreamReader::try_new(&mut file).unwrap();
+    let mut reader = reader.next()?.unwrap();
+    let dtype = reader.dtype().clone();
+    let mut chunks = vec![];
+    while let Some(chunk) = reader.next()? {
+        chunks.push(chunk.into_array().to_static())
+    }
+    Ok(ChunkedArray::try_new(chunks, dtype)?.into_array())
 }
 
 pub fn rewrite_parquet_as_vortex<W: Write>(
     parquet_path: PathBuf,
     write: &mut W,
 ) -> VortexResult<()> {
-    let (dtype, chunked) = compress_parquet_to_vortex(parquet_path.as_path())?;
+    let (_dtype, chunked) = compress_parquet_to_vortex(parquet_path.as_path())?;
 
-    let mut write_ctx = WriteCtx::new(write);
-    write_ctx.dtype(&dtype).unwrap();
-    write_ctx.write(&chunked).unwrap();
+    let mut writer = StreamWriter::try_new(write, SerdeContext::default()).unwrap();
+    writer.write_array(&chunked.into_array()).unwrap();
     Ok(())
 }
 
@@ -72,11 +75,11 @@ fn compress_parquet_to_vortex(parquet_path: &Path) -> Result<(DType, ChunkedArra
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
-            let vortex_array = record_batch.into_array();
+            let vortex_array = record_batch.to_array_data().into_array();
             ctx.compress(&vortex_array, None).unwrap()
         })
         .collect_vec();
-    let chunked = ChunkedArray::new(chunks, dtype.clone());
+    let chunked = ChunkedArray::try_new(chunks, dtype.clone()).unwrap();
     Ok((dtype, chunked))
 }
 
@@ -87,8 +90,13 @@ pub fn pbi_csv_format() -> Format {
         .with_null_regex("null".parse().unwrap())
 }
 
-pub fn compress_csv_to_vortex(csv_path: PathBuf, format: Format) -> (DType, ArrayRef) {
+pub fn compress_csv_to_vortex<W: Write>(
+    csv_path: PathBuf,
+    format: Format,
+    writer: &mut StreamWriter<W>,
+) {
     let csv_file = File::open(csv_path.clone()).unwrap();
+    info!("Inferring CSV schema for {:?}", csv_path);
     let (schema, _) = format
         .infer_schema(
             &mut csv_file.try_clone().unwrap(),
@@ -99,27 +107,28 @@ pub fn compress_csv_to_vortex(csv_path: PathBuf, format: Format) -> (DType, Arra
     let csv_file2 = File::open(csv_path.clone()).unwrap();
     let reader = BufReader::new(csv_file2.try_clone().unwrap());
 
+    info!("Compressing CSV for {:?}", csv_path);
     let csv_reader = arrow::csv::ReaderBuilder::new(Arc::new(schema.clone()))
         .with_format(format)
         .with_batch_size(BATCH_SIZE)
         .build(reader)
         .unwrap();
 
+    writer
+        .write_schema(&DType::from_arrow(SchemaRef::new(schema)))
+        .unwrap();
+
     let ctx = compress_ctx();
     let mut uncompressed_size: usize = 0;
-    let chunks = csv_reader
+    csv_reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
-        .map(|batch| batch.into_array())
+        .map(|batch| batch.to_array_data().into_array())
         .map(|array| {
             uncompressed_size += array.nbytes();
-            ctx.clone().compress(&array, None).unwrap()
+            ctx.compress(&array, None).unwrap()
         })
-        .collect_vec();
-    (
-        DType::from_arrow(SchemaRef::new(schema.clone())),
-        chunks_to_array(SchemaRef::new(schema), uncompressed_size, chunks),
-    )
+        .for_each(|array| writer.write_batch(&array).unwrap());
 }
 
 pub fn write_csv_to_vortex<W: Write>(
@@ -127,11 +136,8 @@ pub fn write_csv_to_vortex<W: Write>(
     format: Format,
     write: &mut W,
 ) -> VortexResult<()> {
-    let (dtype, chunked) = compress_csv_to_vortex(csv_path, format);
-
-    let mut write_ctx = WriteCtx::new(write);
-    write_ctx.dtype(&dtype).unwrap();
-    write_ctx.write(&chunked).unwrap();
+    let mut writer = StreamWriter::try_new(write, SerdeContext::default())?;
+    compress_csv_to_vortex(csv_path, format, &mut writer);
     Ok(())
 }
 
@@ -175,11 +181,11 @@ pub fn write_csv_as_parquet<W: Write + Send + Sync>(
     Ok(())
 }
 
-pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<ArrayRef> {
+pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<OwnedArray> {
     let array = open_vortex(path)?;
-    let taken = take(&array, &PrimitiveArray::from(indices.to_vec()))?;
+    let taken = take(&array, &indices.to_vec().into_array())?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
-    flatten(&taken).map(|x| x.into_array())
+    taken.flatten().map(|x| x.into_array())
 }
 
 pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {

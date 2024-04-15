@@ -4,18 +4,16 @@ use std::path::{Path, PathBuf};
 
 use arrow_array::RecordBatchReader;
 use bzip2::read::BzDecoder;
-use itertools::Itertools;
 use lance::dataset::WriteParams;
 use lance::Dataset;
 use lance_parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder as LanceParquetRecordBatchReaderBuilder;
 use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
-use vortex::array::chunked::ChunkedArray;
-use vortex::array::{ArrayRef, IntoArray};
 use vortex::arrow::FromArrowType;
-use vortex::serde::WriteCtx;
+use vortex::{IntoArray, OwnedArray, SerdeContext, ToArrayData};
 use vortex_error::{VortexError, VortexResult};
+use vortex_ipc::writer::StreamWriter;
 use vortex_schema::DType;
 
 use crate::idempotent;
@@ -25,14 +23,16 @@ pub fn download_data(fname: PathBuf, data_url: &str) -> PathBuf {
     idempotent(&fname, |path| {
         info!("Downloading {} from {}", fname.to_str().unwrap(), data_url);
         let mut file = File::create(path).unwrap();
-        reqwest::blocking::get(data_url).unwrap().copy_to(&mut file)
+        let mut response = reqwest::blocking::get(data_url).unwrap();
+        assert!(response.status().is_success());
+        response.copy_to(&mut file)
     })
     .unwrap()
 }
 
 pub fn parquet_to_lance(lance_fname: &Path, parquet_file: &Path) -> VortexResult<PathBuf> {
     let write_params = WriteParams::default();
-    let read = File::open(parquet_file).unwrap();
+    let read = File::open(parquet_file)?;
     let reader = LanceParquetRecordBatchReaderBuilder::try_new(read)
         .unwrap()
         .build()
@@ -57,18 +57,19 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
         // FIXME(ngates): #157 the compressor should handle batch size.
         let reader = builder.with_batch_size(BATCH_SIZE).build().unwrap();
 
-        let dtype = DType::from_arrow(reader.schema());
-
-        let chunks = reader
-            .map(|batch_result| batch_result.unwrap())
-            .map(|record_batch| record_batch.into_array())
-            .collect_vec();
-        let chunked = ChunkedArray::new(chunks, dtype.clone());
-
+        let ctx = SerdeContext::default();
         let mut write = File::create(path).unwrap();
-        let mut write_ctx = WriteCtx::new(&mut write);
-        write_ctx.dtype(&dtype)?;
-        write_ctx.write(&chunked)
+        let mut writer = StreamWriter::try_new(&mut write, ctx).unwrap();
+
+        let dtype = DType::from_arrow(reader.schema());
+        writer.write_schema(&dtype).unwrap();
+        for batch_result in reader {
+            writer
+                .write_batch(&batch_result.unwrap().to_array_data().into_array())
+                .unwrap();
+        }
+
+        Ok::<(), VortexError>(())
     })
     .unwrap()
 }
@@ -95,7 +96,7 @@ pub fn decompress_bz2(input_path: PathBuf, output_path: PathBuf) -> PathBuf {
 
 pub trait BenchmarkDataset {
     fn as_uncompressed(&self);
-    fn compress_to_vortex(&self) -> Vec<ArrayRef>;
+    fn compress_to_vortex(&self) -> Vec<OwnedArray>;
     fn write_as_parquet(&self);
     fn write_as_vortex(&self);
     fn write_as_lance(&self);
