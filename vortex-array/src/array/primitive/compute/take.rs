@@ -1,23 +1,24 @@
 use num_traits::PrimInt;
 use vortex_error::VortexResult;
 
-use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayRef};
-use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;
-use crate::match_each_integer_ptype;
 use crate::ptype::NativePType;
+use crate::IntoArray;
+use crate::{match_each_integer_ptype, match_each_native_ptype};
+use crate::{Array, OwnedArray};
 
-impl<T: NativePType> TakeFn for &dyn PrimitiveTrait<T> {
-    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        let validity = self.validity().map(|v| v.take(indices)).transpose()?;
-        let indices = flatten_primitive(indices)?;
-        match_each_integer_ptype!(indices.ptype(), |$I| {
-            Ok(PrimitiveArray::from_nullable(
-                take_primitive(self.typed_data(), indices.typed_data::<$I>()),
-                validity,
-            ).into_array())
+impl TakeFn for PrimitiveArray<'_> {
+    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+        let validity = self.validity();
+        let indices = indices.clone().flatten_primitive()?;
+        match_each_native_ptype!(self.ptype(), |$T| {
+            match_each_integer_ptype!(indices.ptype(), |$I| {
+                Ok(PrimitiveArray::from_vec(
+                    take_primitive(self.typed_data::<$T>(), indices.typed_data::<$I>()),
+                    validity.take(indices.array())?,
+                ).into_array())
+            })
         })
     }
 }

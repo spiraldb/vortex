@@ -1,169 +1,135 @@
-use std::fmt::{Debug, Display};
-use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
 
-use linkme::distributed_slice;
 use vortex_error::VortexResult;
 use vortex_schema::{CompositeID, DType};
 
 use crate::array::composite::{find_extension, CompositeExtensionRef, TypedCompositeArray};
-use crate::array::{Array, ArrayRef};
-use crate::compress::EncodingCompression;
 use crate::compute::ArrayCompute;
-use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
-use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::serde::{ArraySerde, BytesSerde, EncodingSerde};
-use crate::stats::{Stats, StatsCompute, StatsSet};
-use crate::validity::ArrayValidity;
-use crate::validity::Validity;
-use crate::{impl_array, ArrayWalker};
+use crate::scalar::AsBytes;
+use crate::stats::ArrayStatisticsCompute;
+use crate::validity::{ArrayValidity, LogicalValidity};
+use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::{
+    impl_encoding, ArrayFlatten, IntoArrayData, TryDeserializeArrayMetadata,
+    TrySerializeArrayMetadata,
+};
 
-pub trait CompositeMetadata:
-    'static + Debug + Display + Send + Sync + Sized + Clone + BytesSerde
+pub trait UnderlyingMetadata:
+    'static + Send + Sync + Debug + TrySerializeArrayMetadata + for<'m> TryDeserializeArrayMetadata<'m>
 {
     fn id(&self) -> CompositeID;
 }
 
+impl_encoding!("vortex.composite", Composite);
+
 #[derive(Debug, Clone)]
-pub struct CompositeArray {
-    extension: CompositeExtensionRef,
-    metadata: Arc<Vec<u8>>,
-    underlying: ArrayRef,
-    dtype: DType,
-    stats: Arc<RwLock<StatsSet>>,
+pub struct CompositeMetadata {
+    ext: CompositeExtensionRef,
+    underlying_dtype: DType,
+    underlying_metadata: Arc<[u8]>,
 }
 
-impl CompositeArray {
-    pub fn new(id: CompositeID, metadata: Arc<Vec<u8>>, underlying: ArrayRef) -> Self {
+impl<'a> CompositeArray<'a> {
+    pub fn new(id: CompositeID, metadata: Arc<[u8]>, underlying: Array<'a>) -> Self {
         let dtype = DType::Composite(id, underlying.dtype().is_nullable().into());
-        let extension = find_extension(id.0).expect("Unrecognized composite extension");
-        Self {
-            extension,
-            metadata,
-            underlying,
+        let ext = find_extension(id.0).expect("Unrecognized composite extension");
+        Self::try_from_parts(
             dtype,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        }
+            CompositeMetadata {
+                ext,
+                underlying_dtype: underlying.dtype().clone(),
+                underlying_metadata: metadata,
+            },
+            vec![].into(),
+            vec![underlying.into_array_data()].into(),
+            HashMap::default(),
+        )
+        .unwrap()
     }
+}
 
+impl CompositeArray<'_> {
     #[inline]
     pub fn id(&self) -> CompositeID {
-        self.extension.id()
+        self.metadata().ext.id()
     }
 
     #[inline]
     pub fn extension(&self) -> CompositeExtensionRef {
-        self.extension
+        find_extension(self.id().0).expect("Unrecognized composite extension")
     }
 
-    pub fn metadata(&self) -> Arc<Vec<u8>> {
-        self.metadata.clone()
+    pub fn underlying_metadata(&self) -> &Arc<[u8]> {
+        &self.metadata().underlying_metadata
     }
 
-    #[inline]
-    pub fn underlying(&self) -> &ArrayRef {
-        &self.underlying
-    }
-
-    pub fn as_typed<M: CompositeMetadata>(&self) -> TypedCompositeArray<M> {
-        TypedCompositeArray::new(
-            M::deserialize(self.metadata().as_slice()).unwrap(),
-            self.underlying().clone(),
-        )
-    }
-
-    pub fn as_typed_compute(&self) -> Box<dyn ArrayCompute> {
-        self.extension.as_typed_compute(self)
-    }
-}
-
-impl Array for CompositeArray {
-    impl_array!();
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.underlying.len()
+    pub fn underlying_dtype(&self) -> &DType {
+        &self.metadata().underlying_dtype
     }
 
     #[inline]
-    fn is_empty(&self) -> bool {
-        self.underlying.is_empty()
+    pub fn underlying(&self) -> Array {
+        self.array()
+            .child(0, self.underlying_dtype())
+            .expect("CompositeArray must have an underlying array")
     }
 
-    #[inline]
-    fn dtype(&self) -> &DType {
-        &self.dtype
+    pub fn with_compute<R, F>(&self, mut f: F) -> R
+    where
+        F: FnMut(&dyn ArrayCompute) -> R,
+    {
+        let mut result = None;
+
+        self.extension()
+            .with_compute(self, &mut |c| {
+                result = Some(f(c));
+                Ok(())
+            })
+            .unwrap();
+
+        // Now we unwrap the optional, which we know to be populated by the closure.
+        result.unwrap()
     }
 
-    #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
-    fn encoding(&self) -> EncodingRef {
-        &CompositeEncoding
-    }
-
-    fn nbytes(&self) -> usize {
-        self.underlying.nbytes()
-    }
-
-    #[inline]
-    fn with_compute_mut(
+    pub fn as_typed<M: UnderlyingMetadata + for<'a> TryDeserializeArrayMetadata<'a>>(
         &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        walker.visit_child(self.underlying())
+    ) -> VortexResult<TypedCompositeArray<M>> {
+        Ok(TypedCompositeArray::new(
+            M::try_deserialize_metadata(Some(self.underlying_metadata().as_bytes()))?,
+            self.underlying().clone(),
+        ))
     }
 }
 
-impl StatsCompute for CompositeArray {}
-
-impl ArrayDisplay for CompositeArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.property("metadata", format!("{:#?}", self.metadata().as_slice()))?;
-        f.child("underlying", self.underlying.as_ref())
+impl ArrayTrait for CompositeArray<'_> {
+    fn len(&self) -> usize {
+        self.underlying().len()
     }
 }
 
-impl ArrayValidity for CompositeArray {
-    fn logical_validity(&self) -> Validity {
-        self.underlying().logical_validity()
+impl ArrayFlatten for CompositeArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        Ok(Flattened::Composite(self))
     }
+}
 
+impl ArrayValidity for CompositeArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
-        self.underlying().is_valid(index)
+        self.underlying().with_dyn(|a| a.is_valid(index))
+    }
+
+    fn logical_validity(&self) -> LogicalValidity {
+        self.underlying().with_dyn(|a| a.logical_validity())
     }
 }
 
-#[derive(Debug)]
-pub struct CompositeEncoding;
-
-impl CompositeEncoding {
-    pub const ID: EncodingId = EncodingId::new("vortex.composite");
-}
-
-#[distributed_slice(ENCODINGS)]
-static ENCODINGS_COMPOSITE: EncodingRef = &CompositeEncoding;
-
-impl Encoding for CompositeEncoding {
-    fn id(&self) -> EncodingId {
-        Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
-    }
-
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+impl AcceptArrayVisitor for CompositeArray<'_> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_child("underlying", &self.underlying())
     }
 }
+
+impl ArrayStatisticsCompute for CompositeArray<'_> {}

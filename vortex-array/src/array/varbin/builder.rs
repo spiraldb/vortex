@@ -1,11 +1,13 @@
+use std::mem;
+
 use arrow_buffer::NullBufferBuilder;
 use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbin::VarBinArray;
-use crate::array::Array;
+use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
 use crate::ptype::NativePType;
 use crate::validity::Validity;
+use crate::IntoArray;
 
 pub struct VarBinBuilder<O: NativePType> {
     offsets: Vec<O>,
@@ -15,15 +17,11 @@ pub struct VarBinBuilder<O: NativePType> {
 
 impl<O: NativePType> VarBinBuilder<O> {
     pub fn with_capacity(len: usize) -> Self {
-        Self::with_capacity_and_values_size(len, 0)
-    }
-
-    pub fn with_capacity_and_values_size(len: usize, data_size: usize) -> Self {
         let mut offsets = Vec::with_capacity(len + 1);
         offsets.push(O::zero());
         Self {
             offsets,
-            data: Vec::with_capacity(data_size),
+            data: Vec::new(),
             validity: NullBufferBuilder::new(len),
         }
     }
@@ -50,21 +48,17 @@ impl<O: NativePType> VarBinBuilder<O> {
         self.validity.append_null();
     }
 
-    pub fn finish(mut self, dtype: DType) -> VarBinArray {
-        let offsets = PrimitiveArray::from(self.offsets);
-        let data = PrimitiveArray::from(self.data);
+    pub fn finish(&mut self, dtype: DType) -> OwnedVarBinArray {
+        let offsets = PrimitiveArray::from(mem::take(&mut self.offsets));
+        let data = PrimitiveArray::from(mem::take(&mut self.data));
 
         let nulls = self.validity.finish();
 
         let validity = if dtype.is_nullable() {
-            Some(
-                nulls
-                    .map(Validity::from)
-                    .unwrap_or_else(|| Validity::Valid(offsets.len() - 1)),
-            )
+            nulls.map(Validity::from).unwrap_or(Validity::AllValid)
         } else {
             assert!(nulls.is_none(), "dtype and validity mismatch");
-            None
+            Validity::NonNullable
         };
 
         VarBinArray::new(offsets.into_array(), data.into_array(), dtype, validity)
@@ -77,9 +71,9 @@ mod test {
     use vortex_schema::Nullability::Nullable;
 
     use crate::array::varbin::builder::VarBinBuilder;
-    use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
     use crate::scalar::Utf8Scalar;
+    use crate::IntoArray;
 
     #[test]
     fn test_builder() {
@@ -87,10 +81,10 @@ mod test {
         builder.push(Some(b"hello"));
         builder.push(None);
         builder.push(Some(b"world"));
-        let array = builder.finish(DType::Utf8(Nullable));
+        let array = builder.finish(DType::Utf8(Nullable)).into_array();
 
         assert_eq!(array.len(), 3);
-        assert_eq!(array.nullability(), Nullable);
+        assert_eq!(array.dtype().nullability(), Nullable);
         assert_eq!(
             scalar_at(&array, 0).unwrap(),
             Utf8Scalar::nullable("hello".to_owned()).into()

@@ -1,64 +1,45 @@
-use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
 
-use linkme::distributed_slice;
 use num_traits::AsPrimitive;
-pub use stats::compute_stats;
-pub use stats::VarBinAccumulator;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use serde::{Deserialize, Serialize};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
-use crate::array::downcast::DowncastArrayBuiltin;
+use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::builder::VarBinBuilder;
-use crate::array::{Array, ArrayRef};
-use crate::compress::EncodingCompression;
-use crate::compute::flatten::flatten_primitive;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
-use crate::compute::ArrayCompute;
-use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
-use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::iterator::ArrayIter;
 use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
-use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stats, StatsSet};
-use crate::validity::OwnedValidity;
-use crate::validity::{Validity, ValidityView};
-use crate::view::AsView;
-use crate::{impl_array, ArrayWalker};
+use crate::validity::{Validity, ValidityMetadata};
+use crate::{impl_encoding, OwnedArray, ToArrayData};
 
 mod accessor;
+mod array;
 pub mod builder;
-mod compress;
 mod compute;
-mod serde;
+mod flatten;
 mod stats;
 
-#[derive(Debug, Clone)]
-pub struct VarBinArray {
-    offsets: ArrayRef,
-    bytes: ArrayRef,
-    dtype: DType,
-    validity: Option<Validity>,
-    stats: Arc<RwLock<StatsSet>>,
+impl_encoding!("vortex.varbin", VarBin);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VarBinMetadata {
+    validity: ValidityMetadata,
+    offsets_dtype: DType,
 }
 
-impl VarBinArray {
-    pub fn new(
-        offsets: ArrayRef,
-        bytes: ArrayRef,
-        dtype: DType,
-        validity: Option<Validity>,
-    ) -> Self {
+impl VarBinArray<'_> {
+    pub fn new(offsets: Array, bytes: Array, dtype: DType, validity: Validity) -> Self {
         Self::try_new(offsets, bytes, dtype, validity).unwrap()
     }
 
     pub fn try_new(
-        offsets: ArrayRef,
-        bytes: ArrayRef,
+        offsets: Array,
+        bytes: Array,
         dtype: DType,
-        validity: Option<Validity>,
+        validity: Validity,
     ) -> VortexResult<Self> {
         if !matches!(offsets.dtype(), DType::Int(_, _, Nullability::NonNullable)) {
             vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype());
@@ -72,62 +53,77 @@ impl VarBinArray {
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
             vortex_bail!(MismatchedTypes: "utf8 or binary", dtype);
         }
-
-        if let Some(v) = validity.as_view() {
-            assert_eq!(v.len(), offsets.len() - 1);
+        if dtype.is_nullable() == (validity == Validity::NonNullable) {
+            vortex_bail!("incorrect validity {:?}", validity);
         }
-        let dtype = if validity.is_some() && !dtype.is_nullable() {
-            dtype.as_nullable()
-        } else {
-            dtype
+
+        let metadata = VarBinMetadata {
+            validity: validity.to_metadata(offsets.len() - 1)?,
+            offsets_dtype: offsets.dtype().clone(),
         };
 
-        Ok(Self {
-            offsets,
-            bytes,
+        let mut children = Vec::with_capacity(3);
+        children.push(offsets.to_array_data());
+        children.push(bytes.to_array_data());
+        if let Some(a) = validity.into_array_data() {
+            children.push(a)
+        }
+
+        Self::try_from_parts(
             dtype,
-            validity,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        })
+            metadata,
+            vec![].into(),
+            children.into(),
+            HashMap::default(),
+        )
     }
 
     #[inline]
-    pub fn offsets(&self) -> &ArrayRef {
-        &self.offsets
+    pub fn offsets(&self) -> Array {
+        self.array()
+            .child(0, &self.metadata().offsets_dtype)
+            .expect("missing offsets")
     }
 
     pub fn first_offset<T: NativePType>(&self) -> VortexResult<T> {
-        scalar_at(self.offsets(), 0)?
+        scalar_at(&self.offsets(), 0)?
             .cast(&DType::from(T::PTYPE))?
             .try_into()
     }
 
     #[inline]
-    pub fn bytes(&self) -> &ArrayRef {
-        &self.bytes
+    pub fn bytes(&self) -> Array {
+        self.array().child(1, &DType::BYTES).expect("missing bytes")
     }
 
-    pub fn sliced_bytes(&self) -> VortexResult<ArrayRef> {
-        let first_offset: usize = scalar_at(self.offsets(), 0)?.try_into()?;
-        let last_offset: usize = scalar_at(self.offsets(), self.offsets().len() - 1)?.try_into()?;
-        slice(self.bytes(), first_offset, last_offset)
+    pub fn validity(&self) -> Validity {
+        self.metadata()
+            .validity
+            .to_validity(self.array().child(2, &Validity::DTYPE))
+    }
+
+    pub fn sliced_bytes(&self) -> VortexResult<OwnedArray> {
+        let first_offset: usize = scalar_at(&self.offsets(), 0)?.try_into()?;
+        let last_offset: usize =
+            scalar_at(&self.offsets(), self.offsets().len() - 1)?.try_into()?;
+        slice(&self.bytes(), first_offset, last_offset)
     }
 
     pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
-        let values_size: usize = vec.iter().map(|v| v.as_ref().len()).sum();
-        if values_size < u32::MAX as usize {
-            Self::from_vec_sized::<u32, T>(vec, values_size, dtype)
+        let size: usize = vec.iter().map(|v| v.as_ref().len()).sum();
+        if size < u32::MAX as usize {
+            Self::from_vec_sized::<u32, T>(vec, dtype)
         } else {
-            Self::from_vec_sized::<u64, T>(vec, values_size, dtype)
+            Self::from_vec_sized::<u64, T>(vec, dtype)
         }
     }
 
-    fn from_vec_sized<K, T>(vec: Vec<T>, values_size: usize, dtype: DType) -> Self
+    fn from_vec_sized<K, T>(vec: Vec<T>, dtype: DType) -> Self
     where
         K: NativePType,
         T: AsRef<[u8]>,
     {
-        let mut builder = VarBinBuilder::<K>::with_capacity_and_values_size(vec.len(), values_size);
+        let mut builder = VarBinBuilder::<K>::with_capacity(vec.len());
         for v in vec {
             builder.push_value(v.as_ref());
         }
@@ -146,174 +142,73 @@ impl VarBinArray {
         builder.finish(dtype)
     }
 
-    pub fn iter_primitive(&self) -> VortexResult<VarBinIter<&[u8]>> {
-        self.bytes()
-            .maybe_primitive()
-            .ok_or_else(|| vortex_err!(ComputeError: "Bytes array was not a primitive array"))
-            .map(|_| ArrayIter::new(self))
-    }
-
-    pub fn iter(&self) -> VarBinIter<Vec<u8>> {
-        ArrayIter::new(self)
-    }
-
-    fn offset_at(&self, index: usize) -> usize {
-        if let Some(parray) = self.offsets().maybe_primitive() {
-            match_each_native_ptype!(parray.ptype(), |$P| {
-                parray.typed_data::<$P>()[index].as_()
+    pub fn offset_at(&self, index: usize) -> usize {
+        PrimitiveArray::try_from(self.offsets())
+            .ok()
+            .map(|p| {
+                match_each_native_ptype!(p.ptype(), |$P| {
+                    p.typed_data::<$P>()[index].as_()
+                })
             })
-        } else {
-            scalar_at(self.offsets(), index)
-                .unwrap()
-                .try_into()
-                .unwrap()
-        }
+            .unwrap_or_else(|| {
+                scalar_at(&self.offsets(), index)
+                    .unwrap()
+                    .try_into()
+                    .unwrap()
+            })
     }
 
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         let start = self.offset_at(index);
         let end = self.offset_at(index + 1);
-        let sliced = slice(self.bytes(), start, end)?;
-        Ok(flatten_primitive(sliced.as_ref())?
-            .into_buffer()
-            .into_vec()
-            .unwrap_or_else(|buf| buf.to_vec()))
+        let sliced = slice(&self.bytes(), start, end)?;
+        Ok(sliced.flatten_primitive()?.buffer().as_slice().to_vec())
     }
 }
 
-pub type VarBinIter<'a, T> = ArrayIter<'a, VarBinArray, T>;
-
-impl Array for VarBinArray {
-    impl_array!();
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.offsets.len() - 1
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.offsets.len() <= 1
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
-        &self.dtype
-    }
-
-    #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
-    fn encoding(&self) -> EncodingRef {
-        &VarBinEncoding
-    }
-
-    #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    fn nbytes(&self) -> usize {
-        self.bytes.nbytes() + self.offsets.nbytes()
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        walker.visit_child(self.offsets())?;
-        walker.visit_child(self.bytes())
-    }
-}
-
-impl OwnedValidity for VarBinArray {
-    fn validity(&self) -> Option<ValidityView> {
-        self.validity.as_view()
-    }
-}
-
-#[derive(Debug)]
-pub struct VarBinEncoding;
-
-impl VarBinEncoding {
-    pub const ID: EncodingId = EncodingId::new("vortex.varbin");
-}
-
-#[distributed_slice(ENCODINGS)]
-static ENCODINGS_VARBIN: EncodingRef = &VarBinEncoding;
-
-impl Encoding for VarBinEncoding {
-    fn id(&self) -> EncodingId {
-        Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
-    }
-
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
-    }
-}
-
-impl ArrayDisplay for VarBinArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.child("offsets", self.offsets())?;
-        f.child("bytes", self.bytes())?;
-        f.validity(self.validity())
-    }
-}
-
-impl From<Vec<&[u8]>> for VarBinArray {
+impl From<Vec<&[u8]>> for VarBinArray<'_> {
     fn from(value: Vec<&[u8]>) -> Self {
         VarBinArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<Vec<u8>>> for VarBinArray {
+impl From<Vec<Vec<u8>>> for VarBinArray<'_> {
     fn from(value: Vec<Vec<u8>>) -> Self {
         VarBinArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<String>> for VarBinArray {
+impl From<Vec<String>> for VarBinArray<'_> {
     fn from(value: Vec<String>) -> Self {
         VarBinArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<&str>> for VarBinArray {
+impl From<Vec<&str>> for VarBinArray<'_> {
     fn from(value: Vec<&str>) -> Self {
         VarBinArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl<'a> FromIterator<Option<&'a [u8]>> for VarBinArray {
+impl<'a> FromIterator<Option<&'a [u8]>> for VarBinArray<'_> {
     fn from_iter<T: IntoIterator<Item = Option<&'a [u8]>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Binary(Nullability::Nullable))
     }
 }
 
-impl FromIterator<Option<Vec<u8>>> for VarBinArray {
+impl FromIterator<Option<Vec<u8>>> for VarBinArray<'_> {
     fn from_iter<T: IntoIterator<Item = Option<Vec<u8>>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Binary(Nullability::Nullable))
     }
 }
 
-impl FromIterator<Option<String>> for VarBinArray {
+impl FromIterator<Option<String>> for VarBinArray<'_> {
     fn from_iter<T: IntoIterator<Item = Option<String>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Utf8(Nullability::Nullable))
     }
 }
 
-impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
+impl<'a> FromIterator<Option<&'a str>> for VarBinArray<'_> {
     fn from_iter<T: IntoIterator<Item = Option<&'a str>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Utf8(Nullability::Nullable))
     }
@@ -338,11 +233,12 @@ mod test {
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;
-    use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
+    use crate::validity::Validity;
+    use crate::{IntoArray, OwnedArray};
 
-    fn binary_array() -> VarBinArray {
+    fn binary_array() -> OwnedArray {
         let values = PrimitiveArray::from(
             "hello worldhello world this is a long string"
                 .as_bytes()
@@ -354,8 +250,9 @@ mod test {
             offsets.into_array(),
             values.into_array(),
             DType::Utf8(Nullability::NonNullable),
-            None,
+            Validity::NonNullable,
         )
+        .into_array()
     }
 
     #[test]

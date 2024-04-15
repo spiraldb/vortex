@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use arrow_array::RecordBatch;
 
-use crate::array::struct_::StructArray;
-use crate::array::{Array, ArrayRef, IntoArray};
-use crate::encode::FromArrowArray;
+use crate::array::r#struct::StructArray;
+use crate::arrow::array::FromArrowArray;
+use crate::{ArrayData, IntoArrayData, ToArrayData};
 
-impl IntoArray for &RecordBatch {
-    fn into_array(self) -> ArrayRef {
-        StructArray::new(
+impl ToArrayData for RecordBatch {
+    fn to_array_data(&self) -> ArrayData {
+        StructArray::try_new(
             self.schema()
                 .fields()
                 .iter()
@@ -19,10 +19,11 @@ impl IntoArray for &RecordBatch {
             self.columns()
                 .iter()
                 .zip(self.schema().fields())
-                .map(|(array, field)| ArrayRef::from_arrow(array.clone(), field.is_nullable()))
+                .map(|(array, field)| ArrayData::from_arrow(array.clone(), field.is_nullable()))
                 .collect(),
             self.num_rows(),
         )
-        .into_array()
+        .unwrap()
+        .into_array_data()
     }
 }

@@ -1,7 +1,3 @@
-pub mod dtypes;
+mod array;
 mod recordbatch;
 pub mod wrappers;
-
-pub trait FromArrowType<T>: Sized {
-    fn from_arrow(value: T) -> Self;
-}

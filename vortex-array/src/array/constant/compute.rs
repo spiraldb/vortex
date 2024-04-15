@@ -1,36 +1,20 @@
 use itertools::Itertools;
 use vortex_error::{vortex_err, VortexResult};
-use vortex_schema::Nullability;
 
-use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
-use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::AsContiguousFn;
-use crate::compute::flatten::{FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::ScalarAtFn;
-use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
-use crate::validity::Validity;
+use crate::{Array, IntoArray, OwnedArray};
 
-impl ArrayCompute for ConstantArray {
+impl ArrayCompute for ConstantArray<'_> {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
 
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
-        Some(self)
-    }
-
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        Some(self)
-    }
-
-    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
@@ -39,9 +23,13 @@ impl ArrayCompute for ConstantArray {
     }
 }
 
-impl AsContiguousFn for ConstantArray {
-    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
-        let chunks = arrays.iter().map(|a| a.as_constant().clone()).collect_vec();
+impl AsContiguousFn for ConstantArray<'_> {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+        let chunks = arrays
+            .iter()
+            .map(|a| ConstantArray::try_from(a).unwrap())
+            .collect_vec();
+
         if chunks.iter().map(|c| c.scalar()).all_equal() {
             Ok(ConstantArray::new(
                 chunks.first().unwrap().scalar().clone(),
@@ -57,48 +45,14 @@ impl AsContiguousFn for ConstantArray {
     }
 }
 
-impl FlattenFn for ConstantArray {
-    fn flatten(&self) -> VortexResult<FlattenedArray> {
-        let validity = match self.nullability() {
-            Nullability::NonNullable => None,
-            Nullability::Nullable => Some(match self.scalar().is_null() {
-                true => Validity::Invalid(self.len()),
-                false => Validity::Valid(self.len()),
-            }),
-        };
-
-        Ok(match self.scalar() {
-            Scalar::Bool(b) => FlattenedArray::Bool(BoolArray::from_nullable(
-                vec![b.value().copied().unwrap_or_default(); self.len()],
-                validity,
-            )),
-            Scalar::Primitive(p) => {
-                match_each_native_ptype!(p.ptype(), |$P| {
-                    FlattenedArray::Primitive(PrimitiveArray::from_nullable::<$P>(
-                        vec![$P::try_from(self.scalar())?; self.len()],
-                        validity,
-                    ))
-                })
-            }
-            _ => panic!("Unsupported scalar type {}", self.dtype()),
-        })
-    }
-}
-
-impl ScalarAtFn for ConstantArray {
+impl ScalarAtFn for ConstantArray<'_> {
     fn scalar_at(&self, _index: usize) -> VortexResult<Scalar> {
         Ok(self.scalar().clone())
     }
 }
 
-impl TakeFn for ConstantArray {
-    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
+impl TakeFn for ConstantArray<'_> {
+    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         Ok(ConstantArray::new(self.scalar().clone(), indices.len()).into_array())
-    }
-}
-
-impl SliceFn for ConstantArray {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(ConstantArray::new(self.scalar.clone(), stop - start).into_array())
     }
 }

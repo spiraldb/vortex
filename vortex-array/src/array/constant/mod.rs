@@ -1,146 +1,78 @@
-use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
 
-use linkme::distributed_slice;
+use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
-use crate::array::{Array, ArrayRef};
-use crate::compute::ArrayCompute;
-use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
-use crate::formatter::{ArrayDisplay, ArrayFormatter};
+use crate::impl_encoding;
 use crate::scalar::Scalar;
-use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stat, Stats, StatsSet};
-use crate::validity::ArrayValidity;
-use crate::validity::Validity;
-use crate::{impl_array, ArrayWalker};
+use crate::stats::Stat;
+use crate::validity::{ArrayValidity, LogicalValidity};
+use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
 mod compute;
-mod serde;
+mod flatten;
 mod stats;
 
-#[derive(Debug, Clone)]
-pub struct ConstantArray {
+impl_encoding!("vortex.constant", Constant);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConstantMetadata {
     scalar: Scalar,
     length: usize,
-    stats: Arc<RwLock<StatsSet>>,
 }
 
-impl ConstantArray {
+impl ConstantArray<'_> {
     pub fn new<S>(scalar: S, length: usize) -> Self
     where
         Scalar: From<S>,
     {
         let scalar: Scalar = scalar.into();
-        let stats = StatsSet::from(
-            [
-                (Stat::Max, scalar.clone()),
-                (Stat::Min, scalar.clone()),
-                (Stat::IsConstant, true.into()),
-                (Stat::IsSorted, true.into()),
-                (Stat::RunCount, 1.into()),
-            ]
-            .into(),
-        );
-        Self {
-            scalar,
-            length,
-            stats: Arc::new(RwLock::new(stats)),
-        }
+        let stats = HashMap::from([
+            (Stat::Max, scalar.clone()),
+            (Stat::Min, scalar.clone()),
+            (Stat::IsConstant, true.into()),
+            (Stat::IsSorted, true.into()),
+            (Stat::RunCount, 1.into()),
+        ]);
+        Self::try_from_parts(
+            scalar.dtype().clone(),
+            ConstantMetadata { scalar, length },
+            vec![].into(),
+            vec![].into(),
+            stats,
+        )
+        .unwrap()
     }
 
     pub fn scalar(&self) -> &Scalar {
-        &self.scalar
+        &self.metadata().scalar
     }
 }
 
-impl Array for ConstantArray {
-    impl_array!();
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.length
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.length == 0
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
-        self.scalar.dtype()
-    }
-
-    #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
-    fn encoding(&self) -> EncodingRef {
-        &ConstantEncoding
-    }
-
-    fn nbytes(&self) -> usize {
-        self.scalar.nbytes()
-    }
-
-    #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, _walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        Ok(())
-    }
-}
-
-impl ArrayDisplay for ConstantArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.property("scalar", self.scalar())
-    }
-}
-
-impl ArrayValidity for ConstantArray {
-    fn logical_validity(&self) -> Validity {
-        match self.scalar().is_null() {
-            true => Validity::Invalid(self.len()),
-            false => Validity::Valid(self.len()),
-        }
-    }
-
+impl ArrayValidity for ConstantArray<'_> {
     fn is_valid(&self, _index: usize) -> bool {
-        match self.scalar.dtype().is_nullable() {
+        match self.metadata().scalar.dtype().is_nullable() {
             true => !self.scalar().is_null(),
             false => true,
         }
     }
-}
 
-#[derive(Debug)]
-pub struct ConstantEncoding;
-
-impl ConstantEncoding {
-    pub const ID: EncodingId = EncodingId::new("vortex.constant");
-}
-
-#[distributed_slice(ENCODINGS)]
-static ENCODINGS_CONSTANT: EncodingRef = &ConstantEncoding;
-
-impl Encoding for ConstantEncoding {
-    fn id(&self) -> EncodingId {
-        Self::ID
+    fn logical_validity(&self) -> LogicalValidity {
+        match self.scalar().is_null() {
+            true => LogicalValidity::AllInvalid(self.len()),
+            false => LogicalValidity::AllValid(self.len()),
+        }
     }
+}
 
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+impl AcceptArrayVisitor for ConstantArray<'_> {
+    fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        Ok(())
+    }
+}
+
+impl ArrayTrait for ConstantArray<'_> {
+    fn len(&self) -> usize {
+        self.metadata().length
     }
 }

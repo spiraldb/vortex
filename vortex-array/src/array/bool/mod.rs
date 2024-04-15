@@ -1,178 +1,77 @@
-use std::sync::{Arc, RwLock};
-
-use arrow_buffer::buffer::BooleanBuffer;
-use linkme::distributed_slice;
-use vortex_error::VortexResult;
-use vortex_schema::{DType, Nullability};
-
-use super::{Array, ArrayRef};
-use crate::array::IntoArray;
-use crate::compute::ArrayCompute;
-use crate::encoding::{Encoding, EncodingId, EncodingRef, ENCODINGS};
-use crate::formatter::{ArrayDisplay, ArrayFormatter};
-use crate::serde::{ArraySerde, EncodingSerde};
-use crate::stats::{Stat, Stats, StatsSet};
-use crate::validity::OwnedValidity;
-use crate::validity::{Validity, ValidityView};
-use crate::view::AsView;
-use crate::{impl_array, ArrayWalker};
-
 mod compute;
-mod serde;
 mod stats;
 
-#[derive(Debug, Clone)]
-pub struct BoolArray {
-    buffer: BooleanBuffer,
-    stats: Arc<RwLock<StatsSet>>,
-    validity: Option<Validity>,
+use std::collections::HashMap;
+
+use arrow_buffer::BooleanBuffer;
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use vortex_error::VortexResult;
+use vortex_schema::DType;
+
+use crate::buffer::Buffer;
+use crate::validity::{ArrayValidity, ValidityMetadata};
+use crate::validity::{LogicalValidity, Validity};
+use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::{impl_encoding, ArrayFlatten};
+
+impl_encoding!("vortex.bool", Bool);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BoolMetadata {
+    validity: ValidityMetadata,
+    length: usize,
 }
 
-impl BoolArray {
-    pub fn new(buffer: BooleanBuffer, validity: Option<Validity>) -> Self {
-        Self::try_new(buffer, validity).unwrap()
+impl BoolArray<'_> {
+    pub fn buffer(&self) -> &Buffer {
+        self.array().buffer(0).expect("missing buffer")
     }
 
-    pub fn try_new(buffer: BooleanBuffer, validity: Option<Validity>) -> VortexResult<Self> {
-        if let Some(v) = &validity {
-            assert_eq!(v.as_view().len(), buffer.len());
-        }
-        Ok(Self {
-            buffer,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-            validity,
-        })
+    pub fn boolean_buffer(&self) -> BooleanBuffer {
+        BooleanBuffer::new(BoolArray::buffer(self).clone().into(), 0, self.len())
     }
 
-    /// Create an all-null boolean array.
-    pub fn null(n: usize) -> Self {
-        BoolArray::new(
-            BooleanBuffer::from(vec![false; n]),
-            Some(Validity::Invalid(n)),
+    pub fn validity(&self) -> Validity {
+        self.metadata()
+            .validity
+            .to_validity(self.array().child(0, &Validity::DTYPE))
+    }
+}
+
+impl BoolArray<'_> {
+    pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
+        Self::try_from_parts(
+            DType::Bool(validity.nullability()),
+            BoolMetadata {
+                validity: validity.to_metadata(buffer.len())?,
+                length: buffer.len(),
+            },
+            vec![Buffer::Owned(buffer.into_inner())].into(),
+            validity.into_array_data().into_iter().collect_vec().into(),
+            HashMap::default(),
         )
     }
 
-    pub fn from_nullable(values: Vec<bool>, validity: Option<Validity>) -> Self {
-        BoolArray::new(BooleanBuffer::from(values), validity)
-    }
-
-    #[inline]
-    pub fn buffer(&self) -> &BooleanBuffer {
-        &self.buffer
-    }
-
-    pub fn into_buffer(self) -> BooleanBuffer {
-        self.buffer
+    pub fn from_vec(bools: Vec<bool>, validity: Validity) -> Self {
+        let buffer = BooleanBuffer::from(bools);
+        Self::try_new(buffer, validity).unwrap()
     }
 }
 
-impl Array for BoolArray {
-    impl_array!();
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.buffer.len()
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.buffer.is_empty()
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
-        if self.validity().is_some() {
-            &DType::Bool(Nullability::Nullable)
-        } else {
-            &DType::Bool(Nullability::NonNullable)
-        }
-    }
-
-    #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
-    fn encoding(&self) -> EncodingRef {
-        &BoolEncoding
-    }
-
-    #[inline]
-    fn nbytes(&self) -> usize {
-        (self.len() + 7) / 8
-    }
-
-    #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        if let Some(v) = self.validity() {
-            // FIXME(ngates): Validity to implement Array?
-            walker.visit_child(&v.to_array())?;
-        }
-        walker.visit_buffer(self.buffer.inner())
+impl From<BooleanBuffer> for OwnedBoolArray {
+    fn from(value: BooleanBuffer) -> Self {
+        BoolArray::try_new(value, Validity::NonNullable).unwrap()
     }
 }
 
-impl OwnedValidity for BoolArray {
-    fn validity(&self) -> Option<ValidityView> {
-        self.validity.as_view()
-    }
-}
-
-impl ArrayDisplay for BoolArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        let true_count = self.stats().get_or_compute_or(0usize, &Stat::TrueCount);
-        let false_count = self.len() - true_count;
-        f.property("n_true", true_count)?;
-        f.property("n_false", false_count)?;
-        f.validity(self.validity())
-    }
-}
-
-#[derive(Debug)]
-pub struct BoolEncoding;
-
-impl BoolEncoding {
-    pub const ID: EncodingId = EncodingId::new("vortex.bool");
-}
-
-#[distributed_slice(ENCODINGS)]
-static ENCODINGS_BOOL: EncodingRef = &BoolEncoding;
-
-impl Encoding for BoolEncoding {
-    fn id(&self) -> EncodingId {
-        Self::ID
-    }
-
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
-    }
-}
-
-impl From<Vec<bool>> for BoolArray {
+impl From<Vec<bool>> for OwnedBoolArray {
     fn from(value: Vec<bool>) -> Self {
-        BoolArray::new(BooleanBuffer::from(value), None)
+        BoolArray::from_vec(value, Validity::NonNullable)
     }
 }
 
-impl IntoArray for Vec<bool> {
-    fn into_array(self) -> ArrayRef {
-        Arc::new(BoolArray::from(self))
-    }
-}
-
-impl FromIterator<Option<bool>> for BoolArray {
+impl FromIterator<Option<bool>> for OwnedBoolArray {
     fn from_iter<I: IntoIterator<Item = Option<bool>>>(iter: I) -> Self {
         let iter = iter.into_iter();
         let (lower, _) = iter.size_hint();
@@ -185,35 +84,52 @@ impl FromIterator<Option<bool>> for BoolArray {
             })
             .collect::<Vec<_>>();
 
-        if validity.is_empty() {
-            BoolArray::from(values)
-        } else {
-            BoolArray::new(BooleanBuffer::from(values), Some(validity.into()))
-        }
+        BoolArray::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap()
+    }
+}
+
+impl ArrayTrait for BoolArray<'_> {
+    fn len(&self) -> usize {
+        self.metadata().length
+    }
+}
+
+impl ArrayFlatten for BoolArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        Ok(Flattened::Bool(self))
+    }
+}
+
+impl ArrayValidity for BoolArray<'_> {
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity().is_valid(index)
+    }
+
+    fn logical_validity(&self) -> LogicalValidity {
+        self.validity().to_logical(self.len())
+    }
+}
+
+impl AcceptArrayVisitor for BoolArray<'_> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_buffer(self.buffer())?;
+        visitor.visit_validity(&self.validity())
     }
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::array::bool::BoolArray;
-    use crate::array::Array;
     use crate::compute::scalar_at::scalar_at;
-    use crate::compute::slice::slice;
+    use crate::IntoArray;
 
     #[test]
-    fn slice_array() {
-        let arr = slice(&BoolArray::from(vec![true, true, false, false, true]), 1, 4).unwrap();
-        assert_eq!(arr.len(), 3);
-        assert_eq!(scalar_at(&arr, 0).unwrap(), true.into());
-        assert_eq!(scalar_at(&arr, 1).unwrap(), false.into());
-        assert_eq!(scalar_at(&arr, 2).unwrap(), false.into());
-    }
-
-    #[test]
-    fn nbytes() {
-        assert_eq!(
-            BoolArray::from(vec![true, true, false, false, true]).nbytes(),
-            1
-        );
+    fn bool_array() {
+        let arr = BoolArray::from(vec![true, false, true]).into_array();
+        let scalar: bool = scalar_at(&arr, 0).unwrap().try_into().unwrap();
+        assert!(scalar);
     }
 }

@@ -1,49 +1,24 @@
-use std::fmt::Debug;
-
-use arrow_buffer::Buffer;
-
 use crate::array::primitive::PrimitiveArray;
-use crate::array::Array;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::cast::CastFn;
 use crate::compute::fill::FillForwardFn;
-use crate::compute::flatten::FlattenFn;
-use crate::compute::patch::PatchFn;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::search_sorted::SearchSortedFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::ptype::{AsArrowPrimitiveType, NativePType, PType};
-use crate::validity::OwnedValidity;
 
 mod as_arrow;
 mod as_contiguous;
 mod cast;
 mod fill;
-mod flatten;
-mod patch;
 mod scalar_at;
 mod search_sorted;
 mod slice;
 mod take;
 
-pub(crate) trait PrimitiveTrait<T: NativePType>:
-    OwnedValidity + Array + Debug + Send + Sync
-{
-    fn ptype(&self) -> PType;
-
-    fn buffer(&self) -> &Buffer;
-
-    fn to_primitive(&self) -> PrimitiveArray;
-
-    fn typed_data(&self) -> &[T] {
-        self.buffer().typed_data::<T>()
-    }
-}
-
-impl<T: NativePType + AsArrowPrimitiveType> ArrayCompute for &dyn PrimitiveTrait<T> {
+impl ArrayCompute for PrimitiveArray<'_> {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }
@@ -56,15 +31,7 @@ impl<T: NativePType + AsArrowPrimitiveType> ArrayCompute for &dyn PrimitiveTrait
         Some(self)
     }
 
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
-        Some(self)
-    }
-
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
-        Some(self)
-    }
-
-    fn patch(&self) -> Option<&dyn PatchFn> {
         Some(self)
     }
 

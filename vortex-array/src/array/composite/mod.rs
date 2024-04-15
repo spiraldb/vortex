@@ -4,16 +4,15 @@ pub use typed::*;
 use vortex_schema::CompositeID;
 
 mod array;
-mod compress;
 mod compute;
 mod serde;
 mod typed;
 
 #[distributed_slice]
-pub static COMPOSITE_EXTENSIONS: [&'static dyn CompositeExtension] = [..];
+pub static VORTEX_COMPOSITE_EXTENSIONS: [&'static dyn CompositeExtension] = [..];
 
 pub fn find_extension(id: &str) -> Option<&'static dyn CompositeExtension> {
-    COMPOSITE_EXTENSIONS
+    VORTEX_COMPOSITE_EXTENSIONS
         .iter()
         .find(|ext| ext.id().0 == id)
         .copied()

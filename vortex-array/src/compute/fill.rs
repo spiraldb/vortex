@@ -1,18 +1,18 @@
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::array::{Array, ArrayRef, WithArrayCompute};
+use crate::{Array, OwnedArray, ToStatic};
 
 pub trait FillForwardFn {
-    fn fill_forward(&self) -> VortexResult<ArrayRef>;
+    fn fill_forward(&self) -> VortexResult<OwnedArray>;
 }
 
-pub fn fill_forward(array: &dyn Array) -> VortexResult<ArrayRef> {
+pub fn fill_forward(array: &Array) -> VortexResult<OwnedArray> {
     if !array.dtype().is_nullable() {
-        return Ok(array.to_array());
+        return Ok(array.to_static());
     }
 
-    array.with_compute(|c| {
-        c.fill_forward()
+    array.with_dyn(|a| {
+        a.fill_forward()
             .map(|t| t.fill_forward())
             .unwrap_or_else(|| {
                 Err(vortex_err!(

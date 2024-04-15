@@ -1,10 +1,12 @@
+use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
 
 use linkme::distributed_slice;
+use vortex_error::VortexResult;
 
-use crate::compress::EncodingCompression;
-use crate::serde::EncodingSerde;
+use crate::flatten::{ArrayFlatten, Flattened};
+use crate::ArrayDef;
+use crate::{Array, ArrayTrait};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct EncodingId(&'static str);
@@ -26,45 +28,64 @@ impl Display for EncodingId {
     }
 }
 
-pub trait Encoding: Debug + Send + Sync + 'static {
-    fn id(&self) -> EncodingId;
-
-    /// Whether this encoding provides a compressor.
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        None
-    }
-
-    /// Array serialization
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        None
-    }
-}
-
-impl Display for dyn Encoding {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.id())
-    }
-}
-
-pub type EncodingRef = &'static dyn Encoding;
-
-impl PartialEq<Self> for EncodingRef {
-    fn eq(&self, other: &Self) -> bool {
-        self.id() == other.id()
-    }
-}
-
-impl Eq for EncodingRef {}
-
-impl Hash for EncodingRef {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.id().hash(state)
-    }
-}
-
 #[distributed_slice]
-pub static ENCODINGS: [EncodingRef] = [..];
+pub static VORTEX_ENCODINGS: [EncodingRef] = [..];
+
+pub type EncodingRef = &'static dyn ArrayEncoding;
 
 pub fn find_encoding(id: &str) -> Option<EncodingRef> {
-    ENCODINGS.iter().find(|&x| x.id().name() == id).cloned()
+    VORTEX_ENCODINGS
+        .iter()
+        .find(|&x| x.id().name() == id)
+        .cloned()
+}
+
+/// Object-safe encoding trait for an array.
+pub trait ArrayEncoding: 'static + Sync + Send {
+    fn as_any(&self) -> &dyn Any;
+
+    fn id(&self) -> EncodingId;
+
+    /// Flatten the given array.
+    fn flatten<'a>(&self, array: Array<'a>) -> VortexResult<Flattened<'a>>;
+
+    /// Unwrap the provided array into an implementation of ArrayTrait
+    fn with_dyn<'a>(
+        &self,
+        array: &'a Array<'a>,
+        f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
+    ) -> VortexResult<()>;
+}
+
+/// Non-object-safe extensions to the ArrayEncoding trait.
+pub trait ArrayEncodingExt {
+    type D: ArrayDef;
+
+    fn flatten<'a>(array: Array<'a>) -> VortexResult<Flattened<'a>>
+    where
+        <Self as ArrayEncodingExt>::D: 'a,
+    {
+        let typed = <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array)?;
+        ArrayFlatten::flatten(typed)
+    }
+
+    fn with_dyn<'a, R, F>(array: &'a Array<'a>, mut f: F) -> R
+    where
+        F: for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> R,
+        <Self as ArrayEncodingExt>::D: 'a,
+    {
+        let typed =
+            <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array.clone()).unwrap();
+        f(&typed)
+    }
+}
+
+impl Debug for dyn ArrayEncoding + '_ {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.id(), f)
+    }
+}
+
+pub trait ArrayEncodingRef {
+    fn encoding(&self) -> EncodingRef;
 }
