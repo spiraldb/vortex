@@ -492,7 +492,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 format_size(vx_size as u64, DECIMAL),
                 vx_size
             );
-            info!("{}\n\n", display_tree(from_vortex.as_ref()));
+            info!("{}\n\n", from_vortex.tree_display());
         }
     }
 

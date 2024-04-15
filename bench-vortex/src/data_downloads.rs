@@ -4,16 +4,16 @@ use std::path::{Path, PathBuf};
 
 use arrow_array::RecordBatchReader;
 use bzip2::read::BzDecoder;
-use itertools::Itertools;
 use lance::dataset::WriteParams;
 use lance::Dataset;
 use lance_parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder as LanceParquetRecordBatchReaderBuilder;
 use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
-use vortex::array::chunked::ChunkedArray;
-use vortex::OwnedArray;
+use vortex::arrow::FromArrowType;
+use vortex::{IntoArray, OwnedArray, SerdeContext, ToArrayData};
 use vortex_error::{VortexError, VortexResult};
+use vortex_ipc::writer::StreamWriter;
 use vortex_schema::DType;
 
 use crate::idempotent;
@@ -57,16 +57,20 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
 
         let dtype = DType::from_arrow(reader.schema());
 
-        let chunks = reader
-            .map(|batch_result| batch_result.unwrap())
-            .map(|record_batch| record_batch.into_array())
-            .collect_vec();
-        let chunked = ChunkedArray::new(chunks, dtype.clone());
-
+        let ctx = SerdeContext::default();
         let mut write = File::create(path).unwrap();
-        let mut write_ctx = WriteCtx::new(&mut write);
-        write_ctx.dtype(&dtype)?;
-        write_ctx.write(&chunked)
+        let mut writer = StreamWriter::try_new(&mut write, ctx).unwrap();
+
+        // FIXME(ngates): this will come back as separate Arrays instead of chunks of a single array.
+        for batch_result in reader {
+            batch_result
+                .unwrap()
+                .to_array_data()
+                .into_array()
+                .with_dyn(|a| writer.write(a).unwrap())
+        }
+
+        Ok::<(), VortexError>(())
     })
     .unwrap()
 }

@@ -1,6 +1,6 @@
 mod accessor;
 pub mod array;
-mod arrow;
+pub mod arrow;
 pub mod buffer;
 pub mod compress;
 pub mod compute;
@@ -37,7 +37,6 @@ use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
-use crate::tree::TreeDisplayWrapper;
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
@@ -103,8 +102,8 @@ impl Array<'_> {
         }
     }
 
-    pub fn tree(&self) -> TreeDisplayWrapper {
-        TreeDisplayWrapper::new(self)
+    pub fn nbytes(&self) -> usize {
+        self.with_dyn(|a| a.nbytes())
     }
 }
 

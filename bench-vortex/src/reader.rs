@@ -24,10 +24,13 @@ use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
+use vortex::arrow::FromArrowType;
 use vortex::compute::take::take;
 use vortex::ptype::PType;
 use vortex::{IntoArray, OwnedArray};
 use vortex_error::{VortexError, VortexResult};
+use vortex_ipc::iter::FallibleLendingIterator;
+use vortex_ipc::reader::StreamReader;
 use vortex_schema::DType;
 
 use crate::{chunks_to_array, compress_ctx};
@@ -38,9 +41,15 @@ pub const CSV_SCHEMA_SAMPLE_ROWS: usize = 10_000_000;
 pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
     let mut file = File::open(path)?;
     let dummy_dtype: DType = PType::U8.into();
-    let mut read_ctx = ReadCtx::new(&dummy_dtype, &mut file);
-    let dtype = read_ctx.dtype()?;
-    read_ctx.with_schema(&dtype).read()
+
+    let mut reader = StreamReader::try_new(&mut file).unwrap();
+    let mut reader = reader.next()?.unwrap();
+    let dtype = reader.dtype();
+    let mut chunks = vec![];
+    while let Some(chunk) = reader.next()? {
+        chunks.push(chunk.into_array())
+    }
+    Ok(ChunkedArray::try_new(chunks, dtype.clone())?.into_array())
 }
 
 pub fn rewrite_parquet_as_vortex<W: Write>(

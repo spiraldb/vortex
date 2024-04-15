@@ -187,7 +187,7 @@ impl CompressCtx {
                         "Compression changed dtype: {:?} -> {:?} for {}",
                         arr.dtype(),
                         compressed.dtype(),
-                        compressed.tree(),
+                        compressed.tree_display(),
                     );
                 }
                 return Ok(compressed);
@@ -206,7 +206,7 @@ impl CompressCtx {
                 "Compression changed dtype: {:?} -> {:?} for {}",
                 arr.dtype(),
                 compressed.dtype(),
-                compressed.tree(),
+                compressed.tree_display(),
             );
         }
         Ok(compressed)
