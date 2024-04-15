@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 
+use ::serde::{Deserialize, Serialize};
 pub use dtype::*;
 
 mod deserialize;
@@ -9,7 +10,7 @@ mod serialize;
 
 pub use deserialize::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct CompositeID(pub &'static str);
 
 impl Display for CompositeID {

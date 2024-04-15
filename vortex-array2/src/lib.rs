@@ -1,5 +1,3 @@
-extern crate core;
-
 mod accessor;
 pub mod array;
 mod arrow;
@@ -7,6 +5,7 @@ pub mod buffer;
 pub mod compute;
 mod context;
 mod data;
+pub mod datetime;
 pub mod encoding;
 mod flatten;
 mod implementation;
