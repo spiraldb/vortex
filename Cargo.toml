@@ -1,9 +1,9 @@
 [workspace]
 members = [
-    "bench-vortex",
+    # "bench-vortex",
     "fastlanez",
     "fastlanez-sys",
-    "pyvortex",
+    # "pyvortex",
     "vortex-alloc",
     #"vortex-alp",
     "vortex-array",
@@ -30,7 +30,7 @@ keywords = ["vortex"]
 include = [
     "benches/*.rs",
     "src/**/*.rs",
-    "Carsgo.toml",
+    "Cargo.toml",
 ]
 edition = "2021"
 rust-version = "1.76"

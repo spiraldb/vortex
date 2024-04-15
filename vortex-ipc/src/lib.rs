@@ -40,10 +40,10 @@ mod tests {
     use std::io::{Cursor, Write};
     use std::sync::Arc;
 
-    use vortex_array2::array::primitive::PrimitiveArray;
-    use vortex_array2::array::r#struct::StructArray;
-    use vortex_array2::{IntoArray, IntoArrayData};
-    use vortex_array2::{SerdeContext, ToArray};
+    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::r#struct::StructArray;
+    use vortex::{IntoArray, IntoArrayData};
+    use vortex::{SerdeContext, ToArray};
 
     use crate::iter::FallibleLendingIterator;
     use crate::reader::StreamReader;

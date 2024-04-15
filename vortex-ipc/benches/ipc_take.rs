@@ -1,9 +1,9 @@
 use std::io::Cursor;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use vortex_array2::array::primitive::PrimitiveArray;
-use vortex_array2::compute::take::take;
-use vortex_array2::{IntoArray, SerdeContext};
+use vortex::array::primitive::PrimitiveArray;
+use vortex::compute::take::take;
+use vortex::{IntoArray, SerdeContext};
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;

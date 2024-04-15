@@ -1,7 +1,7 @@
 use std::io::{BufWriter, Write};
 
 use itertools::Itertools;
-use vortex_array2::{ArrayTrait, SerdeContext};
+use vortex::{ArrayTrait, SerdeContext};
 use vortex_error::VortexResult;
 use vortex_flatbuffers::FlatBufferWriter;
 

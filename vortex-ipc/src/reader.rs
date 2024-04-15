@@ -3,9 +3,9 @@ use std::io::{BufReader, Read};
 
 use arrow_buffer::MutableBuffer;
 use nougat::gat;
-use vortex::array::composite::COMPOSITE_EXTENSIONS;
-use vortex_array2::buffer::Buffer;
-use vortex_array2::{ArrayView, SerdeContext, ToArray};
+use vortex::array::composite::VORTEX_COMPOSITE_EXTENSIONS;
+use vortex::buffer::Buffer;
+use vortex::{ArrayView, SerdeContext, ToArray};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferReader, ReadFlatBuffer};
 use vortex_schema::{DType, DTypeSerdeContext};
@@ -74,7 +74,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
 
         // TODO(ngates): construct this from the SerdeContext.
         let dtype_ctx =
-            DTypeSerdeContext::new(COMPOSITE_EXTENSIONS.iter().map(|e| e.id()).collect());
+            DTypeSerdeContext::new(VORTEX_COMPOSITE_EXTENSIONS.iter().map(|e| e.id()).collect());
         let dtype = DType::read_flatbuffer(
             &dtype_ctx,
             &schema
