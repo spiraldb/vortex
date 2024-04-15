@@ -24,13 +24,9 @@ use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{ArrayRef, IntoArray};
-use vortex::arrow::FromArrowType;
-use vortex::compute::flatten::flatten;
 use vortex::compute::take::take;
 use vortex::ptype::PType;
-use vortex::serde::{ReadCtx, WriteCtx};
+use vortex::{IntoArray, OwnedArray};
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
@@ -39,7 +35,7 @@ use crate::{chunks_to_array, compress_ctx};
 pub const BATCH_SIZE: usize = 65_536;
 pub const CSV_SCHEMA_SAMPLE_ROWS: usize = 10_000_000;
 
-pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
+pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
     let mut file = File::open(path)?;
     let dummy_dtype: DType = PType::U8.into();
     let mut read_ctx = ReadCtx::new(&dummy_dtype, &mut file);
@@ -87,7 +83,7 @@ pub fn pbi_csv_format() -> Format {
         .with_null_regex("null".parse().unwrap())
 }
 
-pub fn compress_csv_to_vortex(csv_path: PathBuf, format: Format) -> (DType, ArrayRef) {
+pub fn compress_csv_to_vortex(csv_path: PathBuf, format: Format) -> (DType, OwnedArray) {
     let csv_file = File::open(csv_path.clone()).unwrap();
     let (schema, _) = format
         .infer_schema(
@@ -175,9 +171,9 @@ pub fn write_csv_as_parquet<W: Write + Send + Sync>(
     Ok(())
 }
 
-pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<ArrayRef> {
+pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<OwnedArray> {
     let array = open_vortex(path)?;
-    let taken = take(&array, &PrimitiveArray::from(indices.to_vec()))?;
+    let taken = take(&array, &indices.to_vec().into_array())?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
     flatten(&taken).map(|x| x.into_array())
 }

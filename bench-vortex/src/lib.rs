@@ -11,19 +11,9 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::IntoArray;
-use vortex::array::{Array, ArrayRef};
-use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
-use vortex::encoding::{EncodingRef, ENCODINGS};
-use vortex::formatter::display_tree;
-use vortex_alp::ALPEncoding;
-use vortex_datetime::DateTimeEncoding;
-use vortex_dict::DictEncoding;
-use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
-use vortex_ree::REEEncoding;
-use vortex_roaring::RoaringBoolEncoding;
+use vortex::encoding::{EncodingRef, VORTEX_ENCODINGS};
+use vortex::{Array, IntoArray, OwnedArray};
 use vortex_schema::DType;
 
 use crate::reader::BATCH_SIZE;
@@ -83,16 +73,19 @@ pub fn setup_logger(level: LevelFilter) {
 }
 
 pub fn enumerate_arrays() -> Vec<EncodingRef> {
-    println!("FOUND {:?}", ENCODINGS.iter().map(|e| e.id()).collect_vec());
+    println!(
+        "FOUND {:?}",
+        VORTEX_ENCODINGS.iter().map(|e| e.id()).collect_vec()
+    );
     vec![
-        &ALPEncoding,
-        &DictEncoding,
-        &BitPackedEncoding,
-        &FoREncoding,
-        &DateTimeEncoding,
+        //&ALPEncoding,
+        //&DictEncoding,
+        //&BitPackedEncoding,
+        //&FoREncoding,
+        //&DateTimeEncoding,
         // &DeltaEncoding,  Blows up the search space too much.
-        &REEEncoding,
-        &RoaringBoolEncoding,
+        //&REEEncoding,
+        //&RoaringBoolEncoding,
         // RoaringIntEncoding,
         // Doesn't offer anything more than FoR really
         // ZigZagEncoding,
@@ -105,7 +98,7 @@ pub fn compress_ctx() -> CompressCtx {
     CompressCtx::new(Arc::new(cfg))
 }
 
-pub fn compress_taxi_data() -> ArrayRef {
+pub fn compress_taxi_data() -> OwnedArray {
     let file = File::open(taxi_data_parquet()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
     let _mask = ProjectionMask::roots(builder.parquet_schema(), [1]);
@@ -138,7 +131,7 @@ pub fn compress_taxi_data() -> ArrayRef {
     chunks_to_array(schema, uncompressed_size, chunks)
 }
 
-fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<ArrayRef>) -> ArrayRef {
+fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<Array>) -> OwnedArray {
     let dtype = DType::from_arrow(schema.clone());
     let compressed = ChunkedArray::new(chunks.clone(), dtype).into_array();
 
@@ -173,10 +166,7 @@ mod test {
     use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-    use vortex::array::ArrayRef;
     use vortex::compute::as_arrow::as_arrow;
-    use vortex::encode::FromArrowArray;
-    use vortex::serde::{ReadCtx, WriteCtx};
 
     use crate::taxi_data::taxi_data_parquet;
     use crate::{compress_ctx, compress_taxi_data, setup_logger};

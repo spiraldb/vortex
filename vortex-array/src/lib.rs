@@ -2,7 +2,7 @@ mod accessor;
 pub mod array;
 mod arrow;
 pub mod buffer;
-mod compress;
+pub mod compress;
 pub mod compute;
 mod context;
 mod data;

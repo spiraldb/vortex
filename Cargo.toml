@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    # "bench-vortex",
+    "bench-vortex",
     "fastlanez",
     "fastlanez-sys",
     # "pyvortex",

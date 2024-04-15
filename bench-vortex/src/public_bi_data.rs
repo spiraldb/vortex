@@ -10,8 +10,7 @@ use humansize::{format_size, DECIMAL};
 use itertools::Itertools;
 use log::info;
 use reqwest::Url;
-use vortex::array::ArrayRef;
-use vortex::formatter::display_tree;
+use vortex::OwnedArray;
 
 use crate::data_downloads::{
     decompress_bz2, download_data, parquet_to_lance, BenchmarkDataset, FileType,
@@ -455,7 +454,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
 
     /// Compresses the CSV files to Vortex format. Does NOT write any data to disk.
     /// Used for benchmarking.
-    fn compress_to_vortex(&self) -> Vec<ArrayRef> {
+    fn compress_to_vortex(&self) -> Vec<OwnedArray> {
         self.list_files(FileType::Csv)
             .into_iter()
             .map(|csv_input| {
