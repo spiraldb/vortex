@@ -8,6 +8,7 @@ use DType::*;
 use crate::CompositeID;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum Nullability {
     #[default]
     NonNullable,
