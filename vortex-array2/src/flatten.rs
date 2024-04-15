@@ -2,6 +2,7 @@ use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
+use crate::array::composite::CompositeArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
 use crate::array::varbin::VarBinArray;
@@ -12,6 +13,7 @@ use crate::{Array, IntoArray};
 pub enum Flattened<'a> {
     Bool(BoolArray<'a>),
     Chunked(ChunkedArray<'a>),
+    Composite(CompositeArray<'a>),
     Primitive(PrimitiveArray<'a>),
     Struct(StructArray<'a>),
     VarBin(VarBinArray<'a>),
@@ -45,6 +47,7 @@ impl<'a> IntoArray<'a> for Flattened<'a> {
             Flattened::Struct(a) => a.into_array(),
             Flattened::Chunked(a) => a.into_array(),
             Flattened::VarBin(a) => a.into_array(),
+            Flattened::Composite(a) => a.into_array(),
         }
     }
 }

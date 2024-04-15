@@ -23,19 +23,3 @@ impl Display for TimeUnit {
         }
     }
 }
-//
-// impl BytesSerde for TimeUnit {
-//     fn serialize(&self) -> Vec<u8> {
-//         vec![*self as u8]
-//     }
-//
-//     fn deserialize(data: &[u8]) -> VortexResult<Self> {
-//         match data[0] {
-//             0x00 => Ok(TimeUnit::Ns),
-//             0x01 => Ok(TimeUnit::Us),
-//             0x02 => Ok(TimeUnit::Ms),
-//             0x03 => Ok(TimeUnit::S),
-//             _ => Err(vortex_err!("Unknown timeunit variant")),
-//         }
-//     }
-// }

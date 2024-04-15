@@ -112,7 +112,7 @@ impl ArrayFlatten for CompositeArray<'_> {
     where
         Self: 'a,
     {
-        todo!()
+        Ok(Flattened::Composite(self))
     }
 }
 
