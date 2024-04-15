@@ -972,6 +972,7 @@ dependencies = [
  "reqwest 0.12.3",
  "simplelog",
  "tokio",
+ "uuid",
  "vortex-alp",
  "vortex-array",
  "vortex-array2",
