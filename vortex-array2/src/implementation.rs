@@ -3,7 +3,7 @@ use vortex_error::VortexError;
 use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::encoding::{ArrayEncodingExt, EncodingId};
 use crate::{Array, ArrayMetadata};
-use crate::{ArrayTrait, TryDeserializeArrayMetadata, TrySerializeArrayMetadata};
+use crate::{ArrayTrait, TryDeserializeArrayMetadata};
 
 /// Trait the defines the set of types relating to an array.
 /// Because it has associated types it can't be used as a trait object.
@@ -12,10 +12,7 @@ pub trait ArrayDef {
     const ENCODING: EncodingRef;
 
     type Array<'a>: ArrayTrait + TryFrom<Array<'a>, Error = VortexError> + 'a;
-    type Metadata: ArrayMetadata
-        + Clone
-        + TrySerializeArrayMetadata
-        + for<'a> TryDeserializeArrayMetadata<'a>;
+    type Metadata: ArrayMetadata + Clone + for<'m> TryDeserializeArrayMetadata<'m>;
     type Encoding: ArrayEncoding + ArrayEncodingExt<D = Self>;
 }
 

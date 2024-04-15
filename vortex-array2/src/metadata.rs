@@ -19,13 +19,15 @@ pub trait TrySerializeArrayMetadata {
     fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>>;
 }
 
+// TODO(ngates): move 'm lifetime into the function body since the result isn't tied to it.
+//  Although maybe we should make the result tied to ti?
 pub trait TryDeserializeArrayMetadata<'m>: Sized {
     // FIXME(ngates): we could push buffer/child validation into here.
     fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self>;
 }
 
 /// Provide default implementation for metadata serialization based on flexbuffers serde.
-impl<M: ArrayMetadata + Serialize> TrySerializeArrayMetadata for M {
+impl<M: Serialize> TrySerializeArrayMetadata for M {
     fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
         let mut ser = FlexbufferSerializer::new();
         self.serialize(&mut ser)?;
@@ -33,7 +35,7 @@ impl<M: ArrayMetadata + Serialize> TrySerializeArrayMetadata for M {
     }
 }
 
-impl<'de, M: ArrayMetadata + Deserialize<'de>> TryDeserializeArrayMetadata<'de> for M {
+impl<'de, M: Deserialize<'de>> TryDeserializeArrayMetadata<'de> for M {
     fn try_deserialize_metadata(metadata: Option<&'de [u8]>) -> VortexResult<Self> {
         let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
         Ok(M::deserialize(Reader::get_root(bytes)?)?)
