@@ -1,5 +1,3 @@
-mod serde;
-
 use std::io;
 use std::io::{Read, Write};
 
