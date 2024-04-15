@@ -23,6 +23,12 @@ pub struct LocalDateTime {
     time_unit: TimeUnit,
 }
 
+impl LocalDateTime {
+    pub fn new(time_unit: TimeUnit) -> Self {
+        Self { time_unit }
+    }
+}
+
 impl ArrayCompute for LocalDateTimeArray<'_> {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)

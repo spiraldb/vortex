@@ -12,7 +12,7 @@ use crate::compute::slice::slice;
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayData, ArrayFlatten, IntoArrayData, ToArray};
+use crate::{impl_encoding, ArrayFlatten, IntoArray, ToArrayData};
 
 mod accessor;
 mod builder;
@@ -107,8 +107,8 @@ pub struct VarBinViewMetadata {
 
 impl VarBinViewArray<'_> {
     pub fn try_new(
-        views: ArrayData,
-        data: Vec<ArrayData>,
+        views: Array,
+        data: Vec<Array>,
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
@@ -137,13 +137,13 @@ impl VarBinViewArray<'_> {
         }
 
         let metadata = VarBinViewMetadata {
-            validity: validity.to_metadata(views.to_array().len() / VIEW_SIZE)?,
+            validity: validity.to_metadata(views.len() / VIEW_SIZE)?,
             n_children: data.len(),
         };
 
         let mut children = Vec::with_capacity(data.len() + 2);
-        children.push(views);
-        children.extend(data);
+        children.push(views.to_array_data());
+        children.extend(data.iter().map(|d| d.to_array_data()));
         if let Some(a) = validity.into_array_data() {
             children.push(a)
         }
@@ -235,19 +235,14 @@ impl ArrayFlatten for VarBinViewArray<'_> {
     where
         Self: 'a,
     {
-        let views = self.views().into_array_data();
         let data = (0..self.metadata().n_children)
-            .map(|i| {
-                self.bytes(i)
-                    .flatten_primitive()
-                    .map(|t| t.into_array_data())
-            })
+            .map(|i| self.bytes(i).flatten_primitive().map(|t| t.into_array()))
             .collect::<VortexResult<Vec<_>>>()?;
         Ok(Flattened::VarBinView(VarBinViewArray::try_new(
-            views,
+            self.views(),
             data,
             self.dtype().clone(),
-            self.validity().to_owned(),
+            self.validity(),
         )?))
     }
 }
