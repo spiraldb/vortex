@@ -1,13 +1,13 @@
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::search_sorted::SearchSorted;
+use crate::compute::search_sorted::{SearchResult, SearchSorted};
 use crate::compute::search_sorted::{SearchSortedFn, SearchSortedSide};
 use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
 
 impl SearchSortedFn for PrimitiveArray<'_> {
-    fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<usize> {
+    fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
         match_each_native_ptype!(self.ptype(), |$T| {
             let pvalue: $T = value.try_into()?;
             Ok(self.typed_data::<$T>().search_sorted(&pvalue, side))
@@ -27,19 +27,19 @@ mod test {
 
         assert_eq!(
             search_sorted(&values, 0, SearchSortedSide::Left).unwrap(),
-            0
+            SearchResult::NotFound(0)
         );
         assert_eq!(
             search_sorted(&values, 1, SearchSortedSide::Left).unwrap(),
-            0
+            SearchResult::Found(0)
         );
         assert_eq!(
             search_sorted(&values, 1, SearchSortedSide::Right).unwrap(),
-            1
+            SearchResult::Found(1)
         );
         assert_eq!(
             search_sorted(&values, 4, SearchSortedSide::Left).unwrap(),
-            3
+            SearchResult::Found(3)
         );
     }
 }
