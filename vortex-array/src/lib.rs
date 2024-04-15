@@ -1,6 +1,6 @@
 mod accessor;
 pub mod array;
-mod arrow;
+pub mod arrow;
 pub mod buffer;
 mod compress;
 pub mod compute;
@@ -81,6 +81,10 @@ impl Array<'_> {
 
     pub fn len(&self) -> usize {
         self.with_dyn(|a| a.len())
+    }
+
+    pub fn nbytes(&self) -> usize {
+        self.with_dyn(|a| a.nbytes())
     }
 
     pub fn is_empty(&self) -> bool {
