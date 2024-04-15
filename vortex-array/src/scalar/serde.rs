@@ -1,13 +1,13 @@
 use flatbuffers::{root, FlatBufferBuilder, WIPOffset};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use vortex_error::VortexError;
+use vortex_error::{vortex_bail, VortexError};
 use vortex_flatbuffers::{ReadFlatBuffer, WriteFlatBuffer};
 use vortex_schema::DTypeSerdeContext;
 
 use crate::flatbuffers::scalar as fb;
 use crate::ptype::PType;
-use crate::scalar::{PScalar, Scalar};
+use crate::scalar::{PScalar, Scalar, Utf8Scalar};
 
 impl WriteFlatBuffer for Scalar {
     type Target<'a> = fb::Scalar<'a>;
@@ -38,68 +38,26 @@ impl WriteFlatBuffer for Scalar {
                 type_: None,
             },
             Scalar::Primitive(p) => {
-                // TODO(ngates): clean this up.
-                // We could probably just keep PScalar as PType + Option<[u8]> internally too?
-                let primitive = p
-                    .value()
-                    .map(|pscalar| match pscalar {
-                        PScalar::U8(v) => {
-                            let pbytes = fbb.create_vector(&v.to_le_bytes());
-                            fb::PrimitiveArgs {
-                                ptype: fb::PType::U8,
-                                bytes: Some(pbytes),
-                            }
-                        }
-                        _ => panic!(),
-                    })
-                    .unwrap_or_else(|| match p.ptype() {
-                        PType::U8 => fb::PrimitiveArgs {
-                            ptype: fb::PType::U8,
-                            bytes: None,
-                        },
-                        PType::U16 => fb::PrimitiveArgs {
-                            ptype: fb::PType::U16,
-                            bytes: None,
-                        },
-                        PType::U32 => fb::PrimitiveArgs {
-                            ptype: fb::PType::U32,
-                            bytes: None,
-                        },
-                        PType::U64 => fb::PrimitiveArgs {
-                            ptype: fb::PType::U64,
-                            bytes: None,
-                        },
-                        PType::I8 => fb::PrimitiveArgs {
-                            ptype: fb::PType::I8,
-                            bytes: None,
-                        },
-                        PType::I16 => fb::PrimitiveArgs {
-                            ptype: fb::PType::I16,
-                            bytes: None,
-                        },
-                        PType::I32 => fb::PrimitiveArgs {
-                            ptype: fb::PType::I32,
-                            bytes: None,
-                        },
-                        PType::I64 => fb::PrimitiveArgs {
-                            ptype: fb::PType::I64,
-                            bytes: None,
-                        },
-                        PType::F16 => fb::PrimitiveArgs {
-                            ptype: fb::PType::F16,
-                            bytes: None,
-                        },
-                        PType::F32 => fb::PrimitiveArgs {
-                            ptype: fb::PType::F32,
-                            bytes: None,
-                        },
-                        PType::F64 => fb::PrimitiveArgs {
-                            ptype: fb::PType::F64,
-                            bytes: None,
-                        },
-                    });
-
-                let primitive = fb::Primitive::create(fbb, &primitive);
+                let bytes = p.value().map(|pscalar| match pscalar {
+                    PScalar::U8(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::U16(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::U32(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::U64(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::I8(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::I16(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::I32(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::I64(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::F16(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::F32(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::F64(v) => fbb.create_vector(&v.to_le_bytes()),
+                });
+                let primitive = fb::Primitive::create(
+                    fbb,
+                    &fb::PrimitiveArgs {
+                        ptype: p.ptype().into(),
+                        bytes,
+                    },
+                );
                 fb::ScalarArgs {
                     type_type: fb::Type::Primitive,
                     type_: Some(primitive.as_union_value()),
@@ -107,18 +65,35 @@ impl WriteFlatBuffer for Scalar {
             }
             Scalar::Struct(_) => panic!(),
             Scalar::Utf8(utf) => {
-                let value = utf.value().map(|utf| fbb.create_string(utf)).map(|utf| {
-                    fb::UTF8::create(fbb, &fb::UTF8Args { value: Some(utf) }).as_union_value()
-                });
+                let value = utf.value().map(|utf| fbb.create_string(utf));
+                let value = fb::UTF8::create(fbb, &fb::UTF8Args { value }).as_union_value();
                 fb::ScalarArgs {
                     type_type: fb::Type::UTF8,
-                    type_: value,
+                    type_: Some(value),
                 }
             }
             Scalar::Composite(_) => panic!(),
         };
 
         fb::Scalar::create(fbb, &union)
+    }
+}
+
+impl From<PType> for fb::PType {
+    fn from(value: PType) -> Self {
+        match value {
+            PType::U8 => fb::PType::U8,
+            PType::U16 => fb::PType::U16,
+            PType::U32 => fb::PType::U32,
+            PType::U64 => fb::PType::U64,
+            PType::I8 => fb::PType::I8,
+            PType::I16 => fb::PType::I16,
+            PType::I32 => fb::PType::I32,
+            PType::I64 => fb::PType::I64,
+            PType::F16 => fb::PType::F16,
+            PType::F32 => fb::PType::F32,
+            PType::F64 => fb::PType::F64,
+        }
     }
 }
 
@@ -134,9 +109,33 @@ impl ReadFlatBuffer<DTypeSerdeContext> for Scalar {
             fb::Type::Binary => {
                 todo!()
             }
-            _ => {
-                todo!();
+            fb::Type::Bool => {
+                todo!()
             }
+            fb::Type::List => {
+                todo!()
+            }
+            fb::Type::Null => {
+                todo!()
+            }
+            fb::Type::Primitive => {
+                todo!()
+            }
+            fb::Type::Struct_ => {
+                todo!()
+            }
+            fb::Type::UTF8 => {
+                Utf8Scalar::try_new(
+                    fb.type__as_utf8()
+                        .expect("missing UTF8 value")
+                        .value()
+                        .map(|s| s.to_string()),
+                );
+            }
+            fb::Type::Composite => {
+                todo!()
+            }
+            _ => vortex_bail!(InvalidSerde: "Unrecognized scalar type"),
         }
     }
 }
