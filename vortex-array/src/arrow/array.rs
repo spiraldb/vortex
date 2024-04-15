@@ -24,12 +24,17 @@ use arrow_schema::{DataType, TimeUnit};
 use vortex_schema::DType;
 
 use crate::array::bool::BoolArray;
+use crate::array::constant::ConstantArray;
+use crate::array::datetime::{LocalDateTime, LocalDateTimeArray};
 use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
+use crate::array::varbin::VarBinArray;
+use crate::array::varbinview::VarBinViewArray;
 use crate::ptype::NativePType;
+use crate::scalar::NullScalar;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
-use crate::{ArrayData, IntoArrayData};
+use crate::{ArrayData, IntoArray, IntoArrayData};
 
 pub trait FromArrowArray<A> {
     fn from_arrow(array: A, nullable: bool) -> Self;
@@ -96,9 +101,18 @@ where
         }
 
         match T::DATA_TYPE {
-            DataType::Timestamp(_time_unit, _tz) => {
-                todo!("Port from vortex1")
-            }
+            DataType::Timestamp(time_unit, tz) => match tz {
+                // A timestamp with no timezone is the equivalent of an "unknown" timezone.
+                // Therefore, we must treat it as a LocalDateTime and not an Instant.
+                None => LocalDateTimeArray::new(
+                    LocalDateTime::new((&time_unit).into()),
+                    arr.into_array(),
+                )
+                .as_composite()
+                .unwrap()
+                .into_array_data(),
+                Some(_tz) => todo!(),
+            },
             DataType::Date32 => todo!(),
             DataType::Date64 => todo!(),
             DataType::Time32(_) => todo!(),
@@ -110,25 +124,45 @@ where
     }
 }
 
-impl<T: ByteArrayType> FromArrowArray<&GenericByteArray<T>> for ArrayData {
-    fn from_arrow(_value: &GenericByteArray<T>, nullable: bool) -> Self {
-        let _dtype = match T::DATA_TYPE {
+impl<T: ByteArrayType> FromArrowArray<&GenericByteArray<T>> for ArrayData
+where
+    <T as ByteArrayType>::Offset: NativePType,
+{
+    fn from_arrow(value: &GenericByteArray<T>, nullable: bool) -> Self {
+        let dtype = match T::DATA_TYPE {
             DataType::Binary | DataType::LargeBinary => DType::Binary(nullable.into()),
             DataType::Utf8 | DataType::LargeUtf8 => DType::Utf8(nullable.into()),
             _ => panic!("Invalid data type for ByteArray"),
         };
-        todo!("PORT")
+        VarBinArray::new(
+            value.offsets().clone().into_array_data().into_array(),
+            value.values().clone().into_array_data().into_array(),
+            dtype,
+            nulls(value.nulls(), nullable),
+        )
+        .into_array_data()
     }
 }
 
 impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayData {
-    fn from_arrow(_value: &GenericByteViewArray<T>, nullable: bool) -> Self {
-        let _dtype = match T::DATA_TYPE {
+    fn from_arrow(value: &GenericByteViewArray<T>, nullable: bool) -> Self {
+        let dtype = match T::DATA_TYPE {
             DataType::BinaryView => DType::Binary(nullable.into()),
             DataType::Utf8View => DType::Utf8(nullable.into()),
             _ => panic!("Invalid data type for ByteViewArray"),
         };
-        todo!("PORT")
+        VarBinViewArray::try_new(
+            value.views().inner().clone().into_array_data().into_array(),
+            value
+                .data_buffers()
+                .iter()
+                .map(|b| b.clone().into_array_data().into_array())
+                .collect::<Vec<_>>(),
+            dtype,
+            nulls(value.nulls(), nullable),
+        )
+        .unwrap()
+        .into_array_data()
     }
 }
 
@@ -165,10 +199,9 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
 }
 
 impl FromArrowArray<&ArrowNullArray> for ArrayData {
-    fn from_arrow(_value: &ArrowNullArray, nullable: bool) -> Self {
+    fn from_arrow(value: &ArrowNullArray, nullable: bool) -> Self {
         assert!(nullable);
-        todo!("PORT")
-        // ConstantArray::new(NullScalar::new(), value.len()).to_array_data()
+        ConstantArray::new(NullScalar::new(), value.len()).into_array_data()
     }
 }
 

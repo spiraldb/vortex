@@ -9,8 +9,8 @@ use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayData;
-use crate::ArrayFlatten;
 use crate::{impl_encoding, ToArray};
+use crate::{ArrayFlatten, IntoArray, IntoArrayData};
 
 impl_encoding!("vortex.struct", Struct);
 
@@ -82,7 +82,18 @@ impl ArrayFlatten for StructArray<'_> {
     where
         Self: 'a,
     {
-        todo!()
+        Ok(Flattened::Struct(StructArray::try_new(
+            self.names().clone(),
+            (0..self.nfields())
+                .map(|i| {
+                    self.child(i)
+                        .expect("Missing child")
+                        .flatten()
+                        .map(|f| f.into_array().into_array_data())
+                })
+                .collect::<VortexResult<Vec<_>>>()?,
+            self.len(),
+        )?))
     }
 }
 

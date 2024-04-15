@@ -10,7 +10,7 @@ use crate::array::varbinview::{
     BinaryView, Inlined, OwnedVarBinViewArray, Ref, VarBinViewArray, VIEW_SIZE,
 };
 use crate::validity::Validity;
-use crate::{ArrayData, IntoArrayData};
+use crate::{ArrayData, IntoArray, IntoArrayData, ToArray};
 
 pub struct VarBinViewBuilder<T: AsRef<[u8]>> {
     views: Vec<BinaryView>,
@@ -83,9 +83,13 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
     }
 
     pub fn finish(mut self, dtype: DType) -> OwnedVarBinViewArray {
-        let mut completed = self.completed;
+        let mut completed = self
+            .completed
+            .into_iter()
+            .map(|d| d.into_array())
+            .collect::<Vec<_>>();
         if !self.in_progress.is_empty() {
-            completed.push(PrimitiveArray::from(self.in_progress).into_array_data());
+            completed.push(PrimitiveArray::from(self.in_progress).into_array());
         }
 
         let nulls = self.nulls.finish();
@@ -107,7 +111,7 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
         };
 
         VarBinViewArray::try_new(
-            PrimitiveArray::from(views_u8).into_array_data(),
+            PrimitiveArray::from(views_u8).to_array(),
             completed,
             dtype,
             validity,

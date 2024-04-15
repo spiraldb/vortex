@@ -3,7 +3,6 @@ use std::sync::Arc;
 use pyo3::types::PyType;
 use pyo3::{pyclass, pyfunction, pymethods, Py, PyResult, Python};
 use vortex::compress::{CompressConfig, CompressCtx};
-use vortex::encoding::ENCODINGS;
 
 use crate::array::PyArray;
 use crate::error::PyVortexError;

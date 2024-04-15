@@ -83,9 +83,11 @@ impl AsArrowArray for VarBinViewArray<'_> {
 impl SliceFn for VarBinViewArray<'_> {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         Ok(VarBinViewArray::try_new(
-            slice(&self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?.into_array_data(),
+            slice(&self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?
+                .into_array_data()
+                .into_array(),
             (0..self.metadata().n_children)
-                .map(|i| self.bytes(i).into_array_data())
+                .map(|i| self.bytes(i))
                 .collect::<Vec<_>>(),
             self.dtype().clone(),
             self.validity().slice(start, stop)?,

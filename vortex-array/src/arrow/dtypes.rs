@@ -6,9 +6,12 @@ use itertools::Itertools;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::{DType, FloatWidth, IntWidth, Nullability};
 
-use crate::arrow::FromArrowType;
-use crate::datetime::{LocalDateTimeExtension, TimeUnit};
+use crate::array::datetime::{LocalDateTimeExtension, TimeUnit};
 use crate::ptype::PType;
+
+pub trait FromArrowType<T> {
+    fn from_arrow(field: T) -> Self;
+}
 
 impl TryFrom<&DataType> for PType {
     type Error = VortexError;
