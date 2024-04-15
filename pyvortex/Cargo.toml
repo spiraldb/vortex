@@ -37,7 +37,3 @@ pyo3-log = { workspace = true }
 
 # We may need this workaround?
 # https://pyo3.rs/v0.20.2/faq.html#i-cant-run-cargo-test-or-i-cant-build-in-a-cargo-workspace-im-having-linker-issues-like-symbol-not-found-or-undefined-reference-to-_pyexc_systemerror
-
-[tool.maturin]
-# For now, we always build in debug mode to re-use the compiled code.
-profile = "debug"

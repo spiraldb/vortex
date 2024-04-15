@@ -22,17 +22,15 @@ impl Buffer<'_> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-}
 
-impl<'a> Buffer<'a> {
-    pub fn as_slice(&'a self) -> &'a [u8] {
+    pub fn as_slice(&self) -> &[u8] {
         match self {
             Buffer::Owned(buffer) => buffer.as_slice(),
             Buffer::View(slice) => slice,
         }
     }
 
-    pub fn typed_data<T: NativePType>(&'a self) -> &'a [T] {
+    pub fn typed_data<T: NativePType>(&self) -> &[T] {
         match self {
             Buffer::Owned(buffer) => buffer.typed_data::<T>(),
             Buffer::View(slice) => {
@@ -43,7 +41,9 @@ impl<'a> Buffer<'a> {
             }
         }
     }
+}
 
+impl<'a> Buffer<'a> {
     pub fn into_vec<T: NativePType>(self) -> Result<Vec<T>, Buffer<'a>> {
         match self {
             Buffer::Owned(buffer) => buffer.into_vec().map_err(Buffer::Owned),

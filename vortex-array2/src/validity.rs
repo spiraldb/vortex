@@ -28,7 +28,6 @@ impl ValidityMetadata {
             ValidityMetadata::NonNullable => Validity::NonNullable,
             ValidityMetadata::AllValid => Validity::AllValid,
             ValidityMetadata::AllInvalid => Validity::AllInvalid,
-            // TODO(ngates): should we return a result for this?
             ValidityMetadata::Array => match array {
                 None => panic!("Missing validity array"),
                 Some(a) => Validity::Array(a),
