@@ -17,9 +17,7 @@ use crate::data_downloads::{
     decompress_bz2, download_data, parquet_to_lance, BenchmarkDataset, FileType,
 };
 use crate::public_bi_data::PBIDataset::*;
-use crate::reader::{
-    compress_csv_to_vortex, open_vortex, pbi_csv_format, write_csv_as_parquet, write_csv_to_vortex,
-};
+use crate::reader::{open_vortex, pbi_csv_format, write_csv_as_parquet, write_csv_to_vortex};
 use crate::{idempotent, IdempotentPath};
 
 lazy_static::lazy_static! {
@@ -458,13 +456,14 @@ impl BenchmarkDataset for BenchmarkDatasets {
     /// Compresses the CSV files to Vortex format. Does NOT write any data to disk.
     /// Used for benchmarking.
     fn compress_to_vortex(&self) -> Vec<OwnedArray> {
-        self.list_files(FileType::Csv)
-            .into_iter()
-            .map(|csv_input| {
-                info!("Compressing {} to vortex", csv_input.to_str().unwrap());
-                compress_csv_to_vortex(csv_input, pbi_csv_format()).1
-            })
-            .collect_vec()
+        vec![]
+        // self.list_files(FileType::Csv)
+        //     .into_iter()
+        //     .map(|csv_input| {
+        //         info!("Compressing {} to vortex", csv_input.to_str().unwrap());
+        //         compress_csv_to_vortex(csv_input, pbi_csv_format()).1
+        //     })
+        //     .collect_vec()
     }
 
     fn write_as_vortex(&self) {

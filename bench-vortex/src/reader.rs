@@ -33,7 +33,7 @@ use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
 use vortex_schema::DType;
 
-use crate::{chunks_to_array, compress_ctx};
+use crate::compress_ctx;
 
 pub const BATCH_SIZE: usize = 65_536;
 pub const CSV_SCHEMA_SAMPLE_ROWS: usize = 10_000_000;
@@ -90,8 +90,13 @@ pub fn pbi_csv_format() -> Format {
         .with_null_regex("null".parse().unwrap())
 }
 
-pub fn compress_csv_to_vortex(csv_path: PathBuf, format: Format) -> (DType, OwnedArray) {
+pub fn compress_csv_to_vortex<W: Write>(
+    csv_path: PathBuf,
+    format: Format,
+    writer: &mut StreamWriter<W>,
+) {
     let csv_file = File::open(csv_path.clone()).unwrap();
+    info!("Inferring CSV schema for {:?}", csv_path);
     let (schema, _) = format
         .infer_schema(
             &mut csv_file.try_clone().unwrap(),
@@ -102,27 +107,28 @@ pub fn compress_csv_to_vortex(csv_path: PathBuf, format: Format) -> (DType, Owne
     let csv_file2 = File::open(csv_path.clone()).unwrap();
     let reader = BufReader::new(csv_file2.try_clone().unwrap());
 
+    info!("Compressing CSV for {:?}", csv_path);
     let csv_reader = arrow::csv::ReaderBuilder::new(Arc::new(schema.clone()))
         .with_format(format)
         .with_batch_size(BATCH_SIZE)
         .build(reader)
         .unwrap();
 
+    writer
+        .write_schema(&DType::from_arrow(SchemaRef::new(schema)))
+        .unwrap();
+
     let ctx = compress_ctx();
     let mut uncompressed_size: usize = 0;
-    let chunks = csv_reader
+    csv_reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
         .map(|batch| batch.to_array_data().into_array())
         .map(|array| {
             uncompressed_size += array.nbytes();
-            ctx.clone().compress(&array, None).unwrap()
+            ctx.compress(&array, None).unwrap()
         })
-        .collect_vec();
-    (
-        DType::from_arrow(SchemaRef::new(schema.clone())),
-        chunks_to_array(SchemaRef::new(schema), uncompressed_size, chunks),
-    )
+        .for_each(|array| writer.write_batch(&array).unwrap());
 }
 
 pub fn write_csv_to_vortex<W: Write>(
@@ -130,10 +136,8 @@ pub fn write_csv_to_vortex<W: Write>(
     format: Format,
     write: &mut W,
 ) -> VortexResult<()> {
-    let (_dtype, chunked) = compress_csv_to_vortex(csv_path, format);
-
     let mut writer = StreamWriter::try_new(write, SerdeContext::default())?;
-    writer.write_array(&chunked)?;
+    compress_csv_to_vortex(csv_path, format, &mut writer);
     Ok(())
 }
 

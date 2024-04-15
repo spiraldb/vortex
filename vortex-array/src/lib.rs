@@ -105,10 +105,6 @@ impl Array<'_> {
             Array::View(v) => v.buffers().get(idx),
         }
     }
-
-    pub fn nbytes(&self) -> usize {
-        self.with_dyn(|a| a.nbytes())
-    }
 }
 
 impl ToStatic for Array<'_> {
