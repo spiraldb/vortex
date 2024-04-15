@@ -11,14 +11,48 @@ use crate::stats::{ArrayStatisticsCompute, Stat};
 
 impl ArrayStatisticsCompute for VarBinArray<'_> {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
-        self.with_iterator(|iter| {
-            let mut acc = VarBinAccumulator::default();
-            for next_val in iter {
-                acc.nullable_next(next_val)
-            }
-            acc.finish(self.dtype())
-        })
+        if self.is_empty() {
+            return Ok(HashMap::new());
+        }
+        self.with_iterator(|iter| compute_stats(iter, self.dtype()))
     }
+}
+
+pub fn compute_stats(
+    iter: &mut dyn Iterator<Item = Option<&[u8]>>,
+    dtype: &DType,
+) -> HashMap<Stat, Scalar> {
+    let mut leading_nulls: usize = 0;
+    let mut first_value: Option<&[u8]> = None;
+    for v in &mut *iter {
+        if v.is_none() {
+            leading_nulls += 1;
+        } else {
+            first_value = v;
+            break;
+        }
+    }
+
+    if let Some(first_non_null) = first_value {
+        let mut acc = VarBinAccumulator::new(first_non_null);
+        iter.for_each(|n| acc.nullable_next(n));
+        acc.n_nulls(leading_nulls);
+        acc.finish(dtype)
+    } else {
+        all_null_stats(leading_nulls, dtype)
+    }
+}
+
+fn all_null_stats(len: usize, dtype: &DType) -> HashMap<Stat, Scalar> {
+    HashMap::from([
+        (Stat::Min, Scalar::null(dtype)),
+        (Stat::Max, Scalar::null(dtype)),
+        (Stat::IsConstant, true.into()),
+        (Stat::IsSorted, true.into()),
+        (Stat::IsStrictSorted, (len < 2).into()),
+        (Stat::RunCount, 1.into()),
+        (Stat::NullCount, len.into()),
+    ])
 }
 
 pub struct VarBinAccumulator<'a> {
@@ -32,27 +66,29 @@ pub struct VarBinAccumulator<'a> {
     runs: usize,
 }
 
-impl Default for VarBinAccumulator<'_> {
-    fn default() -> Self {
+impl<'a> VarBinAccumulator<'a> {
+    pub fn new(value: &'a [u8]) -> Self {
         Self {
-            min: &[0xFF],
-            max: &[0x00],
+            min: value,
+            max: value,
             is_constant: true,
             is_sorted: true,
             is_strict_sorted: true,
-            last_value: &[0x00],
-            runs: 0,
+            last_value: value,
+            runs: 1,
             null_count: 0,
         }
     }
-}
 
-impl<'a> VarBinAccumulator<'a> {
     pub fn nullable_next(&mut self, val: Option<&'a [u8]>) {
         match val {
             None => self.null_count += 1,
             Some(v) => self.next(v),
         }
+    }
+
+    pub fn n_nulls(&mut self, null_count: usize) {
+        self.null_count += null_count;
     }
 
     pub fn next(&mut self, val: &'a [u8]) {

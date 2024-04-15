@@ -21,6 +21,7 @@ pub mod builder;
 mod compute;
 mod flatten;
 mod stats;
+pub use stats::compute_stats;
 
 impl_encoding!("vortex.varbin", VarBin);
 

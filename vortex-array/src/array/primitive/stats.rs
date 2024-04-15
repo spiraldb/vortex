@@ -19,7 +19,7 @@ impl ArrayStatisticsCompute for PrimitiveArray<'_> {
         match_each_native_ptype!(self.ptype(), |$P| {
             match self.logical_validity() {
                 LogicalValidity::AllValid(_) => self.typed_data::<$P>().compute_statistics(stat),
-                LogicalValidity::AllInvalid(_) => all_null_stats::<$P>(),
+                LogicalValidity::AllInvalid(v) => all_null_stats::<$P>(v),
                 LogicalValidity::Array(a) => NullableValues(
                     self.typed_data::<$P>(),
                     &a.into_array().flatten_bool()?.boolean_buffer(),
@@ -41,15 +41,15 @@ impl<T: NativePType> ArrayStatisticsCompute for &[T] {
     }
 }
 
-fn all_null_stats<T: NativePType>() -> VortexResult<HashMap<Stat, Scalar>> {
+fn all_null_stats<T: NativePType>(len: usize) -> VortexResult<HashMap<Stat, Scalar>> {
     Ok(HashMap::from([
         (Stat::Min, Option::<T>::None.into()),
         (Stat::Max, Option::<T>::None.into()),
         (Stat::IsConstant, true.into()),
         (Stat::IsSorted, true.into()),
-        (Stat::IsStrictSorted, true.into()),
+        (Stat::IsStrictSorted, (len < 2).into()),
         (Stat::RunCount, 1.into()),
-        (Stat::NullCount, 1.into()),
+        (Stat::NullCount, len.into()),
         (
             Stat::BitWidthFreq,
             ListScalarVec(vec![0; size_of::<T>() * 8 + 1]).into(),
