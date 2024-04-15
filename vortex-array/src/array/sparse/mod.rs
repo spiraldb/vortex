@@ -167,6 +167,8 @@ impl ArrayValidity for SparseArray<'_> {
     }
 }
 
+impl EncodingCompression for SparseEncoding {}
+
 #[cfg(test)]
 mod test {
     use itertools::Itertools;

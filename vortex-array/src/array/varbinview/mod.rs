@@ -326,6 +326,8 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray<'_> {
     }
 }
 
+impl EncodingCompression for VarBinViewEncoding {}
+
 #[cfg(test)]
 mod test {
     use arrow_array::array::StringViewArray as ArrowStringViewArray;

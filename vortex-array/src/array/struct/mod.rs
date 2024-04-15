@@ -47,6 +47,12 @@ impl StructArray<'_> {
     }
 }
 
+impl<'a> StructArray<'a> {
+    pub fn children(&'a self) -> impl Iterator<Item = Array<'a>> {
+        (0..self.nfields()).map(move |idx| self.child(idx).unwrap())
+    }
+}
+
 impl StructArray<'_> {
     pub fn try_new(names: FieldNames, fields: Vec<ArrayData>, length: usize) -> VortexResult<Self> {
         if names.len() != fields.len() {
@@ -108,3 +114,5 @@ impl AcceptArrayVisitor for StructArray<'_> {
 
 impl ArrayStatisticsCompute for StructArray<'_> {}
 impl ArrayCompute for StructArray<'_> {}
+
+impl EncodingCompression for StructEncoding {}

@@ -119,3 +119,5 @@ impl AcceptArrayVisitor for PrimitiveArray<'_> {
         visitor.visit_validity(&self.validity())
     }
 }
+
+impl EncodingCompression for PrimitiveEncoding {}

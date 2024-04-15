@@ -2,6 +2,7 @@ mod accessor;
 pub mod array;
 mod arrow;
 pub mod buffer;
+mod compress;
 pub mod compute;
 mod context;
 mod data;
@@ -10,6 +11,7 @@ mod flatten;
 mod implementation;
 mod metadata;
 pub mod ptype;
+mod sampling;
 pub mod scalar;
 mod stats;
 mod tree;
@@ -17,6 +19,7 @@ mod typed;
 pub mod validity;
 mod view;
 mod visitor;
+
 use std::fmt::{Debug, Display, Formatter};
 
 pub use context::*;
@@ -34,6 +37,7 @@ use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
+use crate::tree::TreeDisplayWrapper;
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
@@ -97,6 +101,10 @@ impl Array<'_> {
             Array::DataRef(d) => d.buffers().get(idx),
             Array::View(v) => v.buffers().get(idx),
         }
+    }
+
+    pub fn tree(&self) -> TreeDisplayWrapper {
+        TreeDisplayWrapper::new(self)
     }
 }
 

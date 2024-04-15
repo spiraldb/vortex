@@ -30,6 +30,7 @@ macro_rules! impl_encoding {
                 Flattened,
                 TypedArray,
             };
+            use $crate::compress::EncodingCompression;
             use $crate::encoding::{
                 ArrayEncoding,
                 ArrayEncodingExt,
@@ -57,6 +58,7 @@ macro_rules! impl_encoding {
             pub type [<Owned $Name Array>] = TypedArray<'static, $Name>;
 
             /// The array encoding
+            #[derive(Debug)]
             pub struct [<$Name Encoding>];
             #[$crate::linkme::distributed_slice(VORTEX_ENCODINGS)]
             #[allow(non_upper_case_globals)]
@@ -81,6 +83,10 @@ macro_rules! impl_encoding {
                     f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
                 ) -> VortexResult<()> {
                     <Self as ArrayEncodingExt>::with_dyn(array, f)
+                }
+
+                fn compression(&self) -> &dyn EncodingCompression {
+                    self
                 }
             }
             impl ArrayEncodingExt for [<$Name Encoding>] {

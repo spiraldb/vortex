@@ -153,6 +153,8 @@ impl ArrayValidity for ChunkedArray<'_> {
     }
 }
 
+impl EncodingCompression for ChunkedEncoding {}
+
 #[cfg(test)]
 mod test {
     use vortex_schema::{DType, IntWidth, Nullability, Signedness};

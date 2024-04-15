@@ -133,3 +133,5 @@ impl AcceptArrayVisitor for CompositeArray<'_> {
 }
 
 impl ArrayStatisticsCompute for CompositeArray<'_> {}
+
+impl EncodingCompression for CompositeEncoding {}

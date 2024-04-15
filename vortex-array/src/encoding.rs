@@ -1,9 +1,11 @@
 use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 
 use linkme::distributed_slice;
 use vortex_error::VortexResult;
 
+use crate::compress::EncodingCompression;
 use crate::flatten::{ArrayFlatten, Flattened};
 use crate::ArrayDef;
 use crate::{Array, ArrayTrait};
@@ -41,7 +43,7 @@ pub fn find_encoding(id: &str) -> Option<EncodingRef> {
 }
 
 /// Object-safe encoding trait for an array.
-pub trait ArrayEncoding: 'static + Sync + Send {
+pub trait ArrayEncoding: 'static + Sync + Send + Debug {
     fn as_any(&self) -> &dyn Any;
 
     fn id(&self) -> EncodingId;
@@ -55,6 +57,21 @@ pub trait ArrayEncoding: 'static + Sync + Send {
         array: &'a Array<'a>,
         f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
     ) -> VortexResult<()>;
+
+    /// Return a compressor for this encoding.
+    fn compression(&self) -> &dyn EncodingCompression;
+}
+
+impl PartialEq for dyn ArrayEncoding + '_ {
+    fn eq(&self, other: &Self) -> bool {
+        self.id() == other.id()
+    }
+}
+impl Eq for dyn ArrayEncoding + '_ {}
+impl Hash for dyn ArrayEncoding + '_ {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id().hash(state)
+    }
 }
 
 /// Non-object-safe extensions to the ArrayEncoding trait.
@@ -77,12 +94,6 @@ pub trait ArrayEncodingExt {
         let typed =
             <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array.clone()).unwrap();
         f(&typed)
-    }
-}
-
-impl Debug for dyn ArrayEncoding + '_ {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.id(), f)
     }
 }
 
