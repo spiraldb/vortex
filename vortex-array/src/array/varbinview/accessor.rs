@@ -5,10 +5,8 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::validity::ArrayValidity;
 
-impl ArrayAccessor for VarBinViewArray<'_> {
-    type Item<'a> = Option<&'a [u8]>;
-
-    fn with_iterator<F: for<'a> FnOnce(&mut dyn Iterator<Item = Self::Item<'a>>) -> R, R>(
+impl ArrayAccessor<[u8]> for VarBinViewArray<'_> {
+    fn with_iterator<F: for<'a> FnOnce(&mut dyn Iterator<Item = Option<&'a [u8]>>) -> R, R>(
         &self,
         f: F,
     ) -> VortexResult<R> {
