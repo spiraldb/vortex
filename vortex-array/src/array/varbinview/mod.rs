@@ -164,7 +164,7 @@ impl VarBinViewArray<'_> {
                     .expect("Views must be a primitive array")
                     .typed_data::<u8>()
                     .as_ptr() as _,
-                self.len(),
+                self.views().len() / VIEW_SIZE,
             )
         }
     }
@@ -335,7 +335,7 @@ mod test {
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
     use crate::scalar::Scalar;
-    use crate::ToArray;
+    use crate::IntoArray;
 
     #[test]
     pub fn varbin_view() {
@@ -356,7 +356,7 @@ mod test {
     pub fn slice_array() {
         let binary_arr = slice(
             &VarBinViewArray::from(vec!["hello world", "hello world this is a long string"])
-                .to_array(),
+                .into_array(),
             1,
             2,
         )
