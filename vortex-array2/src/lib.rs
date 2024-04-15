@@ -5,7 +5,6 @@ pub mod buffer;
 pub mod compute;
 mod context;
 mod data;
-pub mod datetime;
 pub mod encoding;
 mod flatten;
 mod implementation;

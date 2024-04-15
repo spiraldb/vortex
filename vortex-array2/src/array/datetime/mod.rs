@@ -1,10 +1,11 @@
 use std::fmt::{Display, Formatter};
 
 pub use localdatetime::*;
+use serde::{Deserialize, Serialize};
 
 mod localdatetime;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum TimeUnit {
     Ns,
     Us,

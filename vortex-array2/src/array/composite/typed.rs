@@ -1,19 +1,21 @@
 use std::fmt::Debug;
 
+use vortex_error::VortexResult;
 use vortex_schema::CompositeID;
 use vortex_schema::DType;
 
 use crate::array::composite::array::CompositeArray;
 use crate::array::composite::UnderlyingMetadata;
 use crate::compute::ArrayCompute;
+use crate::Array;
 
 pub trait CompositeExtension: Debug + Send + Sync + 'static {
     fn id(&self) -> CompositeID;
 
-    fn with_dyn<'a>(
+    fn with_compute<'a>(
         &self,
-        array: &'a Array<'a>,
-        f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
+        array: &'a CompositeArray<'a>,
+        f: &mut dyn for<'b> FnMut(&'b (dyn ArrayCompute + 'a)) -> VortexResult<()>,
     ) -> VortexResult<()>;
 }
 
@@ -61,16 +63,18 @@ impl<'a, M: UnderlyingMetadata> TypedCompositeArray<'a, M> {
 }
 
 #[macro_export]
-macro_rules! composite_impl {
+macro_rules! impl_composite {
     ($id:expr, $T:ty) => {
         use linkme::distributed_slice;
         use paste::paste;
-        use vortex_schema::{DType, Nullability};
+        use vortex_schema::{CompositeID, DType, Nullability};
 
         use crate::array::composite::{
-            CompositeArray, CompositeExtension, UnderlyingMetadata, COMPOSITE_EXTENSIONS,
+            CompositeArray, CompositeExtension, TypedCompositeArray, UnderlyingMetadata,
+            COMPOSITE_EXTENSIONS,
         };
         use crate::compute::ArrayCompute;
+        use crate::TryDeserializeArrayMetadata;
 
         paste! {
             #[derive(Debug)]
@@ -89,11 +93,19 @@ macro_rules! composite_impl {
                     Self::ID
                 }
 
-                fn as_typed_compute(&self, array: &CompositeArray) -> Box<dyn ArrayCompute> {
+                fn with_compute<'a>(
+                    &self,
+                    array: &'a CompositeArray<'a>,
+                    f: &mut dyn for<'b> FnMut(&'b (dyn ArrayCompute + 'a)) -> VortexResult<()>,
+                ) -> VortexResult<()> {
                     if array.id() != Self::ID {
                         panic!("Incorrect CompositeID");
                     }
-                    Box::new(array.as_typed::<$T>())
+                    let typed = TypedCompositeArray::new(
+                        $T::try_deserialize_metadata(Some(array.underlying_metadata().as_ref()))?,
+                        array.underlying().clone(),
+                    );
+                    f(&typed)
                 }
             }
 
@@ -109,7 +121,4 @@ macro_rules! composite_impl {
     };
 }
 
-pub use composite_impl;
-use vortex_error::VortexResult;
-
-use crate::{Array, ArrayTrait};
+pub use impl_composite;

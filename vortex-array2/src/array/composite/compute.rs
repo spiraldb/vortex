@@ -36,16 +36,14 @@ impl ArrayCompute for CompositeArray<'_> {
 
 impl AsArrowArray for CompositeArray<'_> {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
-        self.extension()
-            .as_typed_compute(self)
-            .as_arrow()
-            .map(|a| a.as_arrow())
-            .unwrap_or_else(|| {
+        self.with_compute(|c| {
+            c.as_arrow().map(|a| a.as_arrow()).unwrap_or_else(|| {
                 Err(vortex_err!(
                     NotImplemented: "as_arrow",
                     format!("composite extension {}", self.id())
                 ))
             })
+        })
     }
 }
 

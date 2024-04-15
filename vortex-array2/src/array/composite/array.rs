@@ -5,12 +5,18 @@ use vortex_error::VortexResult;
 use vortex_schema::{CompositeID, DType};
 
 use crate::array::composite::{find_extension, CompositeExtensionRef, TypedCompositeArray};
+use crate::compute::ArrayCompute;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayFlatten, IntoArrayData, TryDeserializeArrayMetadata};
+use crate::{
+    impl_encoding, ArrayFlatten, IntoArrayData, TryDeserializeArrayMetadata,
+    TrySerializeArrayMetadata,
+};
 
-pub trait UnderlyingMetadata: ArrayMetadata {
+pub trait UnderlyingMetadata:
+    'static + Send + Sync + Debug + TrySerializeArrayMetadata + for<'m> TryDeserializeArrayMetadata<'m>
+{
     fn id(&self) -> CompositeID;
 }
 
@@ -68,17 +74,15 @@ impl CompositeArray<'_> {
             .expect("CompositeArray must have an underlying array")
     }
 
-    pub fn with_dyn<R, F>(&self, mut f: F) -> R
+    pub fn with_compute<R, F>(&self, mut f: F) -> R
     where
-        F: FnMut(&dyn ArrayTrait) -> R,
+        F: FnMut(&dyn ArrayCompute) -> R,
     {
         let mut result = None;
 
-        self.extension().as_typed_compute()
-
-        self.encoding()
-            .with_dyn(self, &mut |array| {
-                result = Some(f(array));
+        self.extension()
+            .with_compute(self, &mut |c| {
+                result = Some(f(c));
                 Ok(())
             })
             .unwrap();
@@ -95,11 +99,6 @@ impl CompositeArray<'_> {
             self.underlying().clone(),
         ))
     }
-
-    //
-    // pub fn as_typed_compute(&self) -> Box<dyn ArrayCompute> {
-    //     self.extension.as_typed_compute(self)
-    // }
 }
 
 impl ArrayTrait for CompositeArray<'_> {
