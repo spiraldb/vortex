@@ -1,31 +1,54 @@
+use vortex_error::VortexResult;
+
 use crate::accessor::ArrayAccessor;
-use crate::array::downcast::DowncastArrayBuiltin;
+use crate::array::primitive::PrimitiveArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::validity::ArrayValidity;
 
-impl<'a> ArrayAccessor<'a, &'a [u8]> for VarBinViewArray {
-    fn value(&'a self, index: usize) -> Option<&'a [u8]> {
-        if self.is_valid(index) {
-            let view = &self.view_slice()[index];
-            if view.is_inlined() {
-                Some(unsafe { &view.inlined.data })
-            } else {
-                let offset = unsafe { view._ref.offset as usize };
-                let buffer_idx = unsafe { view._ref.buffer_index as usize };
-                Some(&self.data()[buffer_idx].as_primitive().buffer()[offset..offset + view.size()])
-            }
-        } else {
-            None
-        }
-    }
-}
+impl ArrayAccessor for VarBinViewArray<'_> {
+    type Item<'a> = Option<&'a [u8]>;
 
-impl<'a> ArrayAccessor<'a, Vec<u8>> for VarBinViewArray {
-    fn value(&'a self, index: usize) -> Option<Vec<u8>> {
-        if self.is_valid(index) {
-            Some(self.bytes_at(index).unwrap())
-        } else {
-            None
+    fn with_iterator<F: for<'a> FnOnce(&mut dyn Iterator<Item = Self::Item<'a>>) -> R, R>(
+        &self,
+        f: F,
+    ) -> VortexResult<R> {
+        let views = self.view_slice();
+        let bytes: Vec<PrimitiveArray> = (0..self.metadata().n_children)
+            .map(|i| self.bytes(i).flatten_primitive())
+            .collect::<VortexResult<Vec<_>>>()?;
+        let validity = self.logical_validity().to_null_buffer()?;
+
+        match validity {
+            None => {
+                let mut iter = views.iter().map(|view| {
+                    if view.is_inlined() {
+                        Some(unsafe { &view.inlined.data as &[u8] })
+                    } else {
+                        let offset = unsafe { view._ref.offset as usize };
+                        let buffer_idx = unsafe { view._ref.buffer_index as usize };
+                        Some(&bytes[buffer_idx].typed_data::<u8>()[offset..offset + view.size()])
+                    }
+                });
+                Ok(f(&mut iter))
+            }
+            Some(validity) => {
+                let mut iter = views.iter().zip(validity.iter()).map(|(view, valid)| {
+                    if valid {
+                        if view.is_inlined() {
+                            Some(unsafe { &view.inlined.data as &[u8] })
+                        } else {
+                            let offset = unsafe { view._ref.offset as usize };
+                            let buffer_idx = unsafe { view._ref.buffer_index as usize };
+                            Some(
+                                &bytes[buffer_idx].typed_data::<u8>()[offset..offset + view.size()],
+                            )
+                        }
+                    } else {
+                        None
+                    }
+                });
+                Ok(f(&mut iter))
+            }
         }
     }
 }

@@ -6,14 +6,16 @@ use arrow_buffer::NullBufferBuilder;
 use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE};
-use crate::array::{Array, ArrayRef, IntoArray};
+use crate::array::varbinview::{
+    BinaryView, Inlined, OwnedVarBinViewArray, Ref, VarBinViewArray, VIEW_SIZE,
+};
 use crate::validity::Validity;
+use crate::{ArrayData, IntoArrayData};
 
 pub struct VarBinViewBuilder<T: AsRef<[u8]>> {
     views: Vec<BinaryView>,
     nulls: NullBufferBuilder,
-    completed: Vec<ArrayRef>,
+    completed: Vec<ArrayData>,
     in_progress: Vec<u8>,
     block_size: u32,
     phantom: PhantomData<T>,
@@ -49,7 +51,8 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
             );
             if !done.is_empty() {
                 assert!(self.completed.len() < u32::MAX as usize);
-                self.completed.push(PrimitiveArray::from(done).into_array());
+                self.completed
+                    .push(PrimitiveArray::from(done).into_array_data());
             }
         }
 
@@ -79,22 +82,18 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
         self.nulls.append_null();
     }
 
-    pub fn finish(mut self, dtype: DType) -> VarBinViewArray {
+    pub fn finish(mut self, dtype: DType) -> OwnedVarBinViewArray {
         let mut completed = self.completed;
         if !self.in_progress.is_empty() {
-            completed.push(PrimitiveArray::from(self.in_progress).into_array());
+            completed.push(PrimitiveArray::from(self.in_progress).into_array_data());
         }
 
         let nulls = self.nulls.finish();
         let validity = if dtype.is_nullable() {
-            Some(
-                nulls
-                    .map(Validity::from)
-                    .unwrap_or_else(|| Validity::Valid(self.views.len())),
-            )
+            nulls.map(Validity::from).unwrap_or(Validity::AllValid)
         } else {
             assert!(nulls.is_none(), "dtype and validity mismatch");
-            None
+            Validity::NonNullable
         };
 
         // convert Vec<BinaryView> to Vec<u8> which can be stored as an array
@@ -107,6 +106,12 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
             )
         };
 
-        VarBinViewArray::try_new(views_u8.into_array(), completed, dtype, validity).unwrap()
+        VarBinViewArray::try_new(
+            PrimitiveArray::from(views_u8).into_array_data(),
+            completed,
+            dtype,
+            validity,
+        )
+        .unwrap()
     }
 }

@@ -7,3 +7,4 @@ pub mod primitive;
 pub mod sparse;
 pub mod r#struct;
 pub mod varbin;
+pub mod varbinview;
