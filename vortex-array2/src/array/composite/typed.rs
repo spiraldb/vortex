@@ -68,13 +68,12 @@ macro_rules! impl_composite {
         use linkme::distributed_slice;
         use paste::paste;
         use vortex_schema::{CompositeID, DType, Nullability};
-
-        use crate::array::composite::{
+        use $crate::array::composite::{
             CompositeArray, CompositeExtension, TypedCompositeArray, UnderlyingMetadata,
             COMPOSITE_EXTENSIONS,
         };
-        use crate::compute::ArrayCompute;
-        use crate::TryDeserializeArrayMetadata;
+        use $crate::compute::ArrayCompute;
+        use $crate::TryDeserializeArrayMetadata;
 
         paste! {
             #[derive(Debug)]
