@@ -48,7 +48,7 @@ impl BoolArray<'_> {
                 length: buffer.len(),
             },
             vec![Buffer::Owned(buffer.into_inner())].into(),
-            validity.to_array_data().into_iter().collect_vec().into(),
+            validity.into_array_data().into_iter().collect_vec().into(),
             HashMap::default(),
         )
     }

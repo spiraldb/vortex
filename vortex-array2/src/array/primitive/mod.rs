@@ -24,10 +24,6 @@ pub struct PrimitiveMetadata {
 }
 
 impl PrimitiveArray<'_> {
-    pub fn buffer(&self) -> &Buffer {
-        self.array().buffer(0).expect("missing buffer")
-    }
-
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
@@ -37,6 +33,14 @@ impl PrimitiveArray<'_> {
     pub fn ptype(&self) -> PType {
         // TODO(ngates): we can't really cache this anywhere?
         self.dtype().try_into().unwrap()
+    }
+
+    pub fn buffer(&self) -> &Buffer {
+        self.array().buffer(0).expect("missing buffer")
+    }
+
+    pub fn scalar_buffer<T: NativePType>(&self) -> ScalarBuffer<T> {
+        ScalarBuffer::new(self.buffer().clone().into(), 0, self.len())
     }
 
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
@@ -55,7 +59,7 @@ impl PrimitiveArray<'_> {
                 validity: validity.to_metadata(buffer.len())?,
             },
             vec![Buffer::Owned(buffer.into_inner())].into(),
-            validity.to_array_data().into_iter().collect_vec().into(),
+            validity.into_array_data().into_iter().collect_vec().into(),
             HashMap::default(),
         )
     }

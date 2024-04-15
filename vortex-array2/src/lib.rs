@@ -1,5 +1,6 @@
 extern crate core;
 
+mod accessor;
 pub mod array;
 mod arrow;
 pub mod buffer;
@@ -33,7 +34,7 @@ use vortex_schema::DType;
 use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
-use crate::stats::{ArrayStatistics, ArrayStatisticsCompute, Statistics};
+use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
@@ -81,9 +82,9 @@ impl Array<'_> {
 
     pub fn buffer(&self, idx: usize) -> Option<&Buffer> {
         match self {
-            Array::Data(d) => d.buffer(idx),
-            Array::DataRef(d) => d.buffer(idx),
-            Array::View(v) => v.buffer(idx),
+            Array::Data(d) => d.buffers().get(idx),
+            Array::DataRef(d) => d.buffers().get(idx),
+            Array::View(v) => v.buffers().get(idx),
         }
     }
 }
@@ -116,19 +117,6 @@ pub trait ToStatic {
     type Static;
 
     fn to_static(&self) -> Self::Static;
-}
-
-pub trait ArrayParts {
-    fn dtype(&self) -> &DType;
-    fn buffer(&self, idx: usize) -> Option<&Buffer>;
-    fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array>;
-    fn nchildren(&self) -> usize;
-    fn statistics<'a>(&'a self) -> &'a (dyn Statistics + 'a);
-}
-
-// TODO(ngates): I think we should separate the parts and metadata lifetimes.
-pub trait TryFromArrayParts<'v, M: ArrayMetadata>: Sized + 'v {
-    fn try_from_parts(parts: &'v dyn ArrayParts, metadata: &'v M) -> VortexResult<Self>;
 }
 
 /// Collects together the behaviour of an array.

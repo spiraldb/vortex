@@ -5,8 +5,9 @@ use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::BoolArray;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::slice::slice;
 use crate::compute::take::take;
-use crate::{Array, ArrayData, IntoArray, ToArray, ToArrayData};
+use crate::{Array, ArrayData, IntoArray, IntoArrayData, ToArray, ToArrayData};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -27,11 +28,15 @@ impl ValidityMetadata {
             ValidityMetadata::NonNullable => Validity::NonNullable,
             ValidityMetadata::AllValid => Validity::AllValid,
             ValidityMetadata::AllInvalid => Validity::AllInvalid,
-            // TODO(ngates): should we return a result for this?
-            ValidityMetadata::Array => Validity::Array(array.unwrap()),
+            ValidityMetadata::Array => match array {
+                None => panic!("Missing validity array"),
+                Some(a) => Validity::Array(a),
+            },
         }
     }
 }
+
+pub type OwnedValidity = Validity<'static>;
 
 #[derive(Clone, Debug)]
 pub enum Validity<'v> {
@@ -44,9 +49,9 @@ pub enum Validity<'v> {
 impl<'v> Validity<'v> {
     pub const DTYPE: DType = DType::Bool(Nullability::NonNullable);
 
-    pub fn to_array_data(self) -> Option<ArrayData> {
+    pub fn into_array_data(self) -> Option<ArrayData> {
         match self {
-            Validity::Array(a) => Some(a.to_array_data()),
+            Validity::Array(a) => Some(a.into_array_data()),
             _ => None,
         }
     }
@@ -93,6 +98,13 @@ impl<'v> Validity<'v> {
         }
     }
 
+    pub fn slice(&self, start: usize, stop: usize) -> VortexResult<Validity> {
+        match self {
+            Validity::Array(a) => Ok(Validity::Array(slice(a, start, stop)?)),
+            _ => Ok(self.clone()),
+        }
+    }
+
     pub fn take(&self, indices: &Array) -> VortexResult<Validity> {
         match self {
             Validity::NonNullable => Ok(Validity::NonNullable),
@@ -112,7 +124,7 @@ impl<'v> Validity<'v> {
         }
     }
 
-    pub fn to_static(&self) -> Validity<'static> {
+    pub fn to_static(&self) -> OwnedValidity {
         match self {
             Validity::NonNullable => Validity::NonNullable,
             Validity::AllValid => Validity::AllValid,
@@ -137,7 +149,7 @@ impl PartialEq for Validity<'_> {
     }
 }
 
-impl From<Vec<bool>> for Validity<'static> {
+impl From<Vec<bool>> for OwnedValidity {
     fn from(bools: Vec<bool>) -> Self {
         if bools.iter().all(|b| *b) {
             Validity::AllValid
@@ -149,7 +161,7 @@ impl From<Vec<bool>> for Validity<'static> {
     }
 }
 
-impl From<BooleanBuffer> for Validity<'static> {
+impl From<BooleanBuffer> for OwnedValidity {
     fn from(value: BooleanBuffer) -> Self {
         if value.count_set_bits() == value.len() {
             Validity::AllValid
@@ -161,19 +173,25 @@ impl From<BooleanBuffer> for Validity<'static> {
     }
 }
 
-impl<'a> FromIterator<Validity<'a>> for Validity<'static> {
+impl From<NullBuffer> for OwnedValidity {
+    fn from(value: NullBuffer) -> Self {
+        value.into_inner().into()
+    }
+}
+
+impl<'a> FromIterator<Validity<'a>> for OwnedValidity {
     fn from_iter<T: IntoIterator<Item = Validity<'a>>>(_iter: T) -> Self {
         todo!()
     }
 }
 
-impl FromIterator<LogicalValidity> for Validity<'static> {
+impl FromIterator<LogicalValidity> for OwnedValidity {
     fn from_iter<T: IntoIterator<Item = LogicalValidity>>(_iter: T) -> Self {
         todo!()
     }
 }
 
-impl<'a, E> FromIterator<&'a Option<E>> for Validity<'static> {
+impl<'a, E> FromIterator<&'a Option<E>> for OwnedValidity {
     fn from_iter<T: IntoIterator<Item = &'a Option<E>>>(iter: T) -> Self {
         let bools: Vec<bool> = iter.into_iter().map(|option| option.is_some()).collect();
         Validity::from(bools)

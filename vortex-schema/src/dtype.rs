@@ -136,6 +136,8 @@ pub enum DType {
 }
 
 impl DType {
+    pub const BYTES: DType = Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable);
+
     /// The default DType for indices
     pub const IDX: DType = Int(
         IntWidth::_64,

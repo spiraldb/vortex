@@ -5,6 +5,7 @@ use fill::FillForwardFn;
 use patch::PatchFn;
 use scalar_at::ScalarAtFn;
 use search_sorted::SearchSortedFn;
+use slice::SliceFn;
 use take::TakeFn;
 
 pub mod as_arrow;
@@ -14,6 +15,7 @@ pub mod fill;
 pub mod patch;
 pub mod scalar_at;
 pub mod search_sorted;
+pub mod slice;
 pub mod take;
 
 pub trait ArrayCompute {
@@ -42,6 +44,10 @@ pub trait ArrayCompute {
     }
 
     fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
+        None
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         None
     }
 

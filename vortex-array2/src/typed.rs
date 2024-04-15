@@ -10,8 +10,8 @@ use crate::encoding::{ArrayEncodingRef, EncodingRef};
 use crate::stats::{ArrayStatistics, Stat, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
-    Array, ArrayDType, ArrayData, ArrayDef, ArrayParts, IntoArray, IntoArrayData, ToArray,
-    ToArrayData, ToStatic, TryDeserializeArrayMetadata,
+    Array, ArrayDType, ArrayData, ArrayDef, IntoArray, IntoArrayData, ToArray, ToArrayData,
+    ToStatic, TryDeserializeArrayMetadata,
 };
 
 #[derive(Debug)]
@@ -39,10 +39,6 @@ impl<D: ArrayDef> TypedArray<'_, D> {
         Ok(Self { array, metadata })
     }
 
-    pub fn array(&self) -> &Array {
-        &self.array
-    }
-
     pub fn len(&self) -> usize {
         self.array.with_dyn(|a| a.len())
     }
@@ -57,6 +53,12 @@ impl<D: ArrayDef> TypedArray<'_, D> {
 
     pub fn metadata(&self) -> &D::Metadata {
         &self.metadata
+    }
+}
+
+impl<'a, 'b, D: ArrayDef> TypedArray<'b, D> {
+    pub fn array(&'a self) -> &'a Array<'b> {
+        &self.array
     }
 }
 
