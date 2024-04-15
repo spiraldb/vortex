@@ -21,7 +21,7 @@ fn ipc_take(c: &mut Criterion) {
     {
         let mut cursor = Cursor::new(&mut buffer);
         let mut writer = StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
-        data.with_dyn(|a| writer.write(a)).unwrap();
+        writer.write_array(&data).unwrap();
     }
 
     c.bench_function("take_view", |b| {

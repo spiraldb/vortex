@@ -3,9 +3,10 @@ use std::io::{BufReader, Read};
 
 use arrow_buffer::MutableBuffer;
 use nougat::gat;
+use vortex::array::chunked::ChunkedArray;
 use vortex::array::composite::VORTEX_COMPOSITE_EXTENSIONS;
 use vortex::buffer::Buffer;
-use vortex::{ArrayView, SerdeContext, ToArray};
+use vortex::{Array, ArrayView, IntoArray, SerdeContext, ToArray, ToStatic};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferReader, ReadFlatBuffer};
 use vortex_schema::{DType, DTypeSerdeContext};
@@ -48,6 +49,25 @@ impl<R: Read> StreamReader<R> {
             ctx,
             scratch: Vec::with_capacity(1024),
         })
+    }
+
+    /// Read a single array from the IPC stream.
+    pub fn read_array(&mut self) -> VortexResult<Array> {
+        let mut array_reader = self
+            .next()?
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Unexpected EOF"))?;
+
+        let mut chunks = vec![];
+        while let Some(chunk) = array_reader.next()? {
+            chunks.push(chunk.into_array().to_static());
+        }
+
+        if chunks.len() == 1 {
+            Ok(chunks[0].clone())
+        } else {
+            ChunkedArray::try_new(chunks.into_iter().collect(), array_reader.dtype().clone())
+                .map(|chunked| chunked.into_array())
+        }
     }
 }
 

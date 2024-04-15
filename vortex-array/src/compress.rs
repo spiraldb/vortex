@@ -221,7 +221,10 @@ impl CompressCtx {
                     .chunks()
                     .map(|chunk| self.compress_array(&chunk))
                     .collect();
-                Ok(ChunkedArray::new(compressed_chunks?, chunked.dtype().clone()).into_array())
+                Ok(
+                    ChunkedArray::try_new(compressed_chunks?, chunked.dtype().clone())?
+                        .into_array(),
+                )
             }
             Constant::ID => {
                 // Not much better we can do than constant!

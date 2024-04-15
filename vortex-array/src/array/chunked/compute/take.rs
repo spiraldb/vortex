@@ -45,7 +45,7 @@ impl TakeFn for ChunkedArray<'_> {
             )?);
         }
 
-        Ok(ChunkedArray::new(chunks, self.dtype().clone()).into_array())
+        Ok(ChunkedArray::try_new(chunks, self.dtype().clone())?.into_array())
     }
 }
 
@@ -62,7 +62,8 @@ mod test {
     #[test]
     fn test_take() {
         let a = vec![1i32, 2, 3].into_array();
-        let arr = ChunkedArray::new(vec![a.clone(), a.clone(), a.clone()], a.dtype().clone());
+        let arr = ChunkedArray::try_new(vec![a.clone(), a.clone(), a.clone()], a.dtype().clone())
+            .unwrap();
         assert_eq!(arr.nchunks(), 3);
         assert_eq!(arr.len(), 9);
         let indices = vec![0, 0, 6, 4].into_array();

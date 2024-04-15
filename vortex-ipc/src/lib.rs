@@ -25,7 +25,6 @@ pub mod flatbuffers {
     }
 }
 
-mod chunked;
 pub mod iter;
 mod messages;
 pub mod reader;
@@ -72,7 +71,7 @@ mod tests {
         let mut cursor = Cursor::new(Vec::new());
         let ctx = SerdeContext::default();
         let mut writer = StreamWriter::try_new_unbuffered(&mut cursor, ctx).unwrap();
-        arr.with_dyn(|a| writer.write(a)).unwrap();
+        writer.write_array(&arr).unwrap();
         cursor.flush().unwrap();
         cursor.set_position(0);
 

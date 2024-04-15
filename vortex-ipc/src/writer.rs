@@ -1,9 +1,11 @@
 use std::io::{BufWriter, Write};
 
 use itertools::Itertools;
-use vortex::{ArrayTrait, SerdeContext};
+use vortex::array::chunked::ChunkedArray;
+use vortex::{Array, SerdeContext, ToArrayData};
 use vortex_error::VortexResult;
 use vortex_flatbuffers::FlatBufferWriter;
+use vortex_schema::DType;
 
 use crate::messages::{IPCChunk, IPCContext, IPCMessage, IPCSchema};
 use crate::ALIGNMENT;
@@ -27,20 +29,27 @@ impl<W: Write> StreamWriter<W> {
         Ok(Self { write, ctx })
     }
 
-    pub fn write(&mut self, array: &dyn ArrayTrait) -> VortexResult<()> {
-        // First, write a schema message indicating the start of an array.
-        self.write
-            .write_message(&IPCMessage::Schema(IPCSchema(array.dtype())), ALIGNMENT)?;
-
-        // Then we write the array in batchs.
-        // TODO(ngates): should we do any batching ourselves?
-        // TODO(ngates): If it's a batched array, use those batchs. Else write the whole thing.
-
-        // For now, we write a single batch.
-        self.write_batch(array)
+    pub fn write_array(&mut self, array: &Array) -> VortexResult<()> {
+        self.write_schema(array.dtype())?;
+        match ChunkedArray::try_from(array) {
+            Ok(chunked) => {
+                for chunk in chunked.chunks() {
+                    self.write_batch(&chunk)?;
+                }
+                Ok(())
+            }
+            Err(_) => self.write_batch(array),
+        }
     }
 
-    fn write_batch(&mut self, array: &dyn ArrayTrait) -> VortexResult<()> {
+    pub fn write_schema(&mut self, dtype: &DType) -> VortexResult<()> {
+        Ok(self
+            .write
+            .write_message(&IPCMessage::Schema(IPCSchema(dtype)), ALIGNMENT)?)
+    }
+
+    pub fn write_batch(&mut self, array: &Array) -> VortexResult<()> {
+        // TOOD(ngates): support writing from an ArrayView.
         let data = array.to_array_data();
         let buffer_offsets = data.all_buffer_offsets(ALIGNMENT);
 

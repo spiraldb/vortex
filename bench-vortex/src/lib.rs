@@ -11,6 +11,8 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
+use vortex::array::r#struct::StructArray;
+use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::encoding::{EncodingRef, VORTEX_ENCODINGS};
 use vortex::{Array, IntoArray, OwnedArray, ToArrayData};
@@ -133,14 +135,16 @@ pub fn compress_taxi_data() -> OwnedArray {
 
 fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<Array>) -> OwnedArray {
     let dtype = DType::from_arrow(schema.clone());
-    let compressed = ChunkedArray::new(chunks.clone(), dtype).into_array();
+    let compressed = ChunkedArray::try_new(chunks.clone(), dtype)
+        .unwrap()
+        .into_array();
 
-    warn!("Compressed array {}", display_tree(compressed.as_ref()));
+    warn!("Compressed array {}", compressed.tree_display());
 
     let mut field_bytes = vec![0; schema.fields().len()];
     for chunk in chunks {
-        let str = chunk.as_struct();
-        for (i, field) in str.fields().iter().enumerate() {
+        let str = StructArray::try_from(chunk).unwrap();
+        for (i, field) in str.children().enumerate() {
             field_bytes[i] += field.nbytes();
         }
     }
@@ -166,8 +170,11 @@ mod test {
     use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use vortex::arrow::FromArrowArray;
     use vortex::compute::as_arrow::as_arrow;
-    use vortex::Array;
+    use vortex::{ArrayData, IntoArray};
+    use vortex_ipc::reader::StreamReader;
+    use vortex_ipc::writer::StreamWriter;
 
     use crate::taxi_data::taxi_data_parquet;
     use crate::{compress_ctx, compress_taxi_data, setup_logger};
@@ -189,15 +196,17 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = Array::from_arrow(arrow_array.clone(), false);
+            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
 
             let mut buf = Vec::<u8>::new();
-            let mut write_ctx = WriteCtx::new(&mut buf);
-            write_ctx.write(vortex_array.as_ref()).unwrap();
+            {
+                let mut writer = StreamWriter::try_new(&mut buf, Default::default()).unwrap();
+                writer.write_array(&vortex_array).unwrap();
+            }
 
             let mut read = buf.as_slice();
-            let mut read_ctx = ReadCtx::new(vortex_array.dtype(), &mut read);
-            read_ctx.read().unwrap();
+            let mut reader = StreamReader::try_new(&mut read).unwrap();
+            reader.read_array().unwrap();
         }
     }
 
@@ -211,8 +220,8 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = Array::from_arrow(arrow_array.clone(), false);
-            let vortex_as_arrow = as_arrow(vortex_array.as_ref()).unwrap();
+            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
+            let vortex_as_arrow = as_arrow(&vortex_array).unwrap();
             assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
         }
     }
@@ -230,10 +239,10 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = Array::from_arrow(arrow_array.clone(), false);
+            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
 
-            let compressed = ctx.clone().compress(vortex_array.as_ref(), None).unwrap();
-            let compressed_as_arrow = as_arrow(compressed.as_ref()).unwrap();
+            let compressed = ctx.clone().compress(&vortex_array, None).unwrap();
+            let compressed_as_arrow = as_arrow(&compressed).unwrap();
             assert_eq!(compressed_as_arrow.deref(), arrow_array.deref());
         }
     }

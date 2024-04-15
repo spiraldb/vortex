@@ -55,19 +55,16 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
         // FIXME(ngates): #157 the compressor should handle batch size.
         let reader = builder.with_batch_size(BATCH_SIZE).build().unwrap();
 
-        let dtype = DType::from_arrow(reader.schema());
-
         let ctx = SerdeContext::default();
         let mut write = File::create(path).unwrap();
         let mut writer = StreamWriter::try_new(&mut write, ctx).unwrap();
 
-        // FIXME(ngates): this will come back as separate Arrays instead of chunks of a single array.
+        let dtype = DType::from_arrow(reader.schema());
+        writer.write_schema(&dtype).unwrap();
         for batch_result in reader {
-            batch_result
-                .unwrap()
-                .to_array_data()
-                .into_array()
-                .with_dyn(|a| writer.write(a).unwrap())
+            writer
+                .write_batch(&batch_result.unwrap().to_array_data().into_array())
+                .unwrap();
         }
 
         Ok::<(), VortexError>(())
