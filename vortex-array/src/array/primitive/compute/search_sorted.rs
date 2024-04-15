@@ -39,7 +39,7 @@ mod test {
         );
         assert_eq!(
             search_sorted(&values, 4, SearchSortedSide::Left).unwrap(),
-            SearchResult::Found(3)
+            SearchResult::NotFound(3)
         );
     }
 }
