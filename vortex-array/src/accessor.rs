@@ -1,10 +1,7 @@
 use vortex_error::VortexResult;
 
-pub trait ArrayAccessor {
-    type Item<'a>;
-
-    fn with_iterator<F: for<'a> FnOnce(&mut dyn Iterator<Item = Self::Item<'a>>) -> R, R>(
-        &self,
-        f: F,
-    ) -> VortexResult<R>;
+pub trait ArrayAccessor<Item: ?Sized> {
+    fn with_iterator<F, R>(&self, f: F) -> VortexResult<R>
+    where
+        F: for<'a> FnOnce(&mut (dyn Iterator<Item = Option<&'a Item>>)) -> R;
 }
