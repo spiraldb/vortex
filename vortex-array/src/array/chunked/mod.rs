@@ -84,8 +84,9 @@ impl ChunkedArray<'_> {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
         // TODO(ngates): migrate to the new search_sorted API to subtract 1 if not exact match.
-        let mut index_chunk =
-            search_sorted(&self.chunk_ends(), index, SearchSortedSide::Left).unwrap();
+        let mut index_chunk = search_sorted(&self.chunk_ends(), index, SearchSortedSide::Left)
+            .unwrap()
+            .to_index();
         let mut chunk_start =
             usize::try_from(scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
 

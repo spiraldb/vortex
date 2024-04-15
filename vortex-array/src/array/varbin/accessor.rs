@@ -5,13 +5,11 @@ use crate::array::varbin::VarBinArray;
 use crate::match_each_integer_ptype;
 use crate::validity::ArrayValidity;
 
-impl ArrayAccessor for VarBinArray<'_> {
-    type Item<'a> = Option<&'a [u8]>;
-
-    fn with_iterator<F: for<'a> FnOnce(&mut dyn Iterator<Item = Self::Item<'a>>) -> R, R>(
-        &self,
-        f: F,
-    ) -> VortexResult<R> {
+impl ArrayAccessor<[u8]> for VarBinArray<'_> {
+    fn with_iterator<F, R>(&self, f: F) -> VortexResult<R>
+    where
+        F: for<'a> FnOnce(&mut (dyn Iterator<Item = Option<&'a [u8]>>)) -> R,
+    {
         // TODO(ngates): what happens if bytes is much larger than sliced_bytes?
         let primitive = self.bytes().flatten_primitive()?;
         let offsets = self.offsets().flatten_primitive()?;

@@ -7,7 +7,7 @@ use crate::array::bool::BoolArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::compute::take::take;
-use crate::{Array, ArrayData, IntoArray, IntoArrayData, ToArray, ToArrayData};
+use crate::{Array, ArrayData, IntoArray, IntoArrayData, OwnedArray, ToArray, ToArrayData};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -218,5 +218,15 @@ impl LogicalValidity {
 
     pub fn is_all_valid(&self) -> bool {
         matches!(self, LogicalValidity::AllValid(_))
+    }
+}
+
+impl IntoArray<'static> for LogicalValidity {
+    fn into_array(self) -> OwnedArray {
+        match self {
+            LogicalValidity::AllValid(len) => BoolArray::from(vec![true; len]).into_array(),
+            LogicalValidity::AllInvalid(len) => BoolArray::from(vec![false; len]).into_array(),
+            LogicalValidity::Array(a) => a.into_array(),
+        }
     }
 }
