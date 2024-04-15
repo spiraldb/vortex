@@ -23,14 +23,16 @@ pub fn download_data(fname: PathBuf, data_url: &str) -> PathBuf {
     idempotent(&fname, |path| {
         info!("Downloading {} from {}", fname.to_str().unwrap(), data_url);
         let mut file = File::create(path).unwrap();
-        reqwest::blocking::get(data_url).unwrap().copy_to(&mut file)
+        let mut response = reqwest::blocking::get(data_url).unwrap();
+        assert!(response.status().is_success());
+        response.copy_to(&mut file)
     })
     .unwrap()
 }
 
 pub fn parquet_to_lance(lance_fname: &Path, parquet_file: &Path) -> VortexResult<PathBuf> {
     let write_params = WriteParams::default();
-    let read = File::open(parquet_file).unwrap();
+    let read = File::open(parquet_file)?;
     let reader = LanceParquetRecordBatchReaderBuilder::try_new(read)
         .unwrap()
         .build()

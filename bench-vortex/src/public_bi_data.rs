@@ -11,6 +11,7 @@ use itertools::Itertools;
 use log::info;
 use reqwest::Url;
 use vortex::OwnedArray;
+use vortex_error::VortexError;
 
 use crate::data_downloads::{
     decompress_bz2, download_data, parquet_to_lance, BenchmarkDataset, FileType,
@@ -351,12 +352,14 @@ impl PBIUrl {
         }
     }
     fn to_url_string(&self) -> Url {
-        Url::parse("https://homepages.cwi.nl/~boncz/PublicBIbenchmark")
-            .unwrap()
-            .join(self.dataset_name)
-            .unwrap()
-            .join(self.file_name)
-            .unwrap()
+        Url::parse(
+            format!(
+                "https://homepages.cwi.nl/~boncz/PublicBIbenchmark/{}/{}",
+                self.dataset_name, self.file_name
+            )
+            .as_str(),
+        )
+        .unwrap()
     }
 }
 
@@ -509,10 +512,10 @@ impl BenchmarkDataset for BenchmarkDatasets {
             let compressed = idempotent(
                 &path_for_file_type(self, output_fname, "lance"),
                 |output_path| {
-                    parquet_to_lance(
+                    Ok::<_, VortexError>(parquet_to_lance(
                         output_path,
                         path_for_file_type(self, output_fname, "parquet").as_path(),
-                    )
+                    ))
                 },
             )
             .expect("Failed to compress to lance");
