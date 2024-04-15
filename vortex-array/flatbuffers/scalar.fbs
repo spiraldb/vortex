@@ -3,7 +3,7 @@ include "vortex-schema/flatbuffers/dtype.fbs";
 namespace vortex.scalar;
 
 table Binary {
-    value: [uint8];
+    value: [ubyte];
 }
 
 table Bool {
@@ -35,7 +35,8 @@ enum PType: uint8 {
 
 table Primitive {
     ptype: PType;
-    bytes: [uint8];
+    // TODO(ngates): this isn't an ideal way to store the bytes.
+    bytes: [ubyte];
 }
 
 table Struct_ {

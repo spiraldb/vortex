@@ -1,4 +1,5 @@
-use flatbuffers::{FlatBufferBuilder, WIPOffset};
+use flatbuffers::{root, FlatBufferBuilder, WIPOffset};
+use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use vortex_error::VortexError;
 use vortex_flatbuffers::{ReadFlatBuffer, WriteFlatBuffer};
@@ -105,7 +106,15 @@ impl WriteFlatBuffer for Scalar {
                 }
             }
             Scalar::Struct(_) => panic!(),
-            Scalar::Utf8(_) => panic!(),
+            Scalar::Utf8(utf) => {
+                let value = utf.value().map(|utf| fbb.create_string(utf)).map(|utf| {
+                    fb::UTF8::create(fbb, &fb::UTF8Args { value: Some(utf) }).as_union_value()
+                });
+                fb::ScalarArgs {
+                    type_type: fb::Type::UTF8,
+                    type_: value,
+                }
+            }
             Scalar::Composite(_) => panic!(),
         };
 
@@ -119,27 +128,57 @@ impl ReadFlatBuffer<DTypeSerdeContext> for Scalar {
 
     fn read_flatbuffer(
         _ctx: &DTypeSerdeContext,
-        _fb: &Self::Source<'_>,
+        fb: &Self::Source<'_>,
     ) -> Result<Self, Self::Error> {
-        todo!()
+        match fb.type_type() {
+            fb::Type::Binary => {
+                todo!()
+            }
+            _ => {
+                todo!();
+            }
+        }
     }
 }
 
 impl Serialize for Scalar {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        todo!()
+        let mut fbb = FlatBufferBuilder::new();
+        let root = self.write_flatbuffer(&mut fbb);
+        fbb.finish_minimal(root);
+        serializer.serialize_bytes(fbb.finished_data())
     }
 }
 
+struct ScalarDeserializer(DTypeSerdeContext);
+
+impl<'de> Visitor<'de> for ScalarDeserializer {
+    type Value = Scalar;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a vortex dtype")
+    }
+
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let fb = root::<fb::Scalar>(v).map_err(E::custom)?;
+        Scalar::read_flatbuffer(&self.0, &fb).map_err(E::custom)
+    }
+}
+
+// TODO(ngates): Should we just inline composites in scalars?
 impl<'de> Deserialize<'de> for Scalar {
-    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        todo!()
+        let ctx = DTypeSerdeContext::new(vec![]);
+        deserializer.deserialize_bytes(ScalarDeserializer(ctx))
     }
 }
 
