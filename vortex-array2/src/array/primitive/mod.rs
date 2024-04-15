@@ -39,6 +39,10 @@ impl PrimitiveArray<'_> {
         self.array().buffer(0).expect("missing buffer")
     }
 
+    pub fn scalar_buffer<T: NativePType>(&self) -> ScalarBuffer<T> {
+        ScalarBuffer::new(self.buffer().clone().into(), 0, self.len())
+    }
+
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
         self.buffer().typed_data::<T>()
     }
@@ -55,7 +59,7 @@ impl PrimitiveArray<'_> {
                 validity: validity.to_metadata(buffer.len())?,
             },
             vec![Buffer::Owned(buffer.into_inner())].into(),
-            validity.to_array_data().into_iter().collect_vec().into(),
+            validity.into_array_data().into_iter().collect_vec().into(),
             HashMap::default(),
         )
     }
@@ -110,7 +114,7 @@ impl ArrayValidity for PrimitiveArray<'_> {
 
 impl AcceptArrayVisitor for PrimitiveArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_buffer(&self.buffer())?;
+        visitor.visit_buffer(self.buffer())?;
         visitor.visit_validity(&self.validity())
     }
 }

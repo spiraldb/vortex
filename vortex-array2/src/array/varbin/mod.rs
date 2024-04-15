@@ -53,18 +53,27 @@ impl VarBinArray<'_> {
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {
             vortex_bail!(MismatchedTypes: "utf8 or binary", dtype);
         }
-        if (dtype.is_nullable() == false) != (validity == Validity::NonNullable) {
+        if dtype.is_nullable() == (validity == Validity::NonNullable) {
             vortex_bail!("incorrect validity {:?}", validity);
+        }
+
+        let metadata = VarBinMetadata {
+            validity: validity.to_metadata(offsets.len() - 1)?,
+            offsets_dtype: offsets.dtype().clone(),
+        };
+
+        let mut children = Vec::with_capacity(3);
+        children.push(offsets.to_array_data());
+        children.push(bytes.to_array_data());
+        if let Some(a) = validity.into_array_data() {
+            children.push(a)
         }
 
         Self::try_from_parts(
             dtype,
-            VarBinMetadata {
-                validity: validity.to_metadata(offsets.len() - 1)?,
-                offsets_dtype: offsets.dtype().clone(),
-            },
+            metadata,
             vec![].into(),
-            vec![offsets.to_array_data(), bytes.to_array_data()].into(),
+            children.into(),
             HashMap::default(),
         )
     }

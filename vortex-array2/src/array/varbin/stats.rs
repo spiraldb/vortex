@@ -62,7 +62,7 @@ impl<'a> VarBinAccumulator<'a> {
             self.max.clone_from(&val);
         }
 
-        match val.cmp(&self.last_value) {
+        match val.cmp(self.last_value) {
             Ordering::Less => self.is_sorted = false,
             Ordering::Equal => {
                 self.is_strict_sorted = false;

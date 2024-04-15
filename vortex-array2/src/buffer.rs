@@ -28,7 +28,7 @@ impl<'a> Buffer<'a> {
     pub fn as_slice(&'a self) -> &'a [u8] {
         match self {
             Buffer::Owned(buffer) => buffer.as_slice(),
-            Buffer::View(slice) => *slice,
+            Buffer::View(slice) => slice,
         }
     }
 

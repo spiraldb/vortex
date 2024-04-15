@@ -48,7 +48,7 @@ impl BoolArray<'_> {
                 length: buffer.len(),
             },
             vec![Buffer::Owned(buffer.into_inner())].into(),
-            validity.to_array_data().into_iter().collect_vec().into(),
+            validity.into_array_data().into_iter().collect_vec().into(),
             HashMap::default(),
         )
     }
@@ -115,7 +115,7 @@ impl ArrayValidity for BoolArray<'_> {
 
 impl AcceptArrayVisitor for BoolArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_buffer(&self.buffer())?;
+        visitor.visit_buffer(self.buffer())?;
         visitor.visit_validity(&self.validity())
     }
 }

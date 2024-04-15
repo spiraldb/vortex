@@ -7,7 +7,7 @@ use crate::array::bool::BoolArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::compute::take::take;
-use crate::{Array, ArrayData, IntoArray, ToArray, ToArrayData};
+use crate::{Array, ArrayData, IntoArray, IntoArrayData, ToArray, ToArrayData};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -29,7 +29,10 @@ impl ValidityMetadata {
             ValidityMetadata::AllValid => Validity::AllValid,
             ValidityMetadata::AllInvalid => Validity::AllInvalid,
             // TODO(ngates): should we return a result for this?
-            ValidityMetadata::Array => Validity::Array(array.unwrap()),
+            ValidityMetadata::Array => match array {
+                None => panic!("Missing validity array"),
+                Some(a) => Validity::Array(a),
+            },
         }
     }
 }
@@ -47,9 +50,9 @@ pub enum Validity<'v> {
 impl<'v> Validity<'v> {
     pub const DTYPE: DType = DType::Bool(Nullability::NonNullable);
 
-    pub fn to_array_data(self) -> Option<ArrayData> {
+    pub fn into_array_data(self) -> Option<ArrayData> {
         match self {
-            Validity::Array(a) => Some(a.to_array_data()),
+            Validity::Array(a) => Some(a.into_array_data()),
             _ => None,
         }
     }
