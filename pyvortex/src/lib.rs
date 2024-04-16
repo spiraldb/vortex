@@ -36,6 +36,7 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyCompositeArray>()?;
     m.add_class::<PyConstantArray>()?;
     // m.add_class::<PyDeltaArray>()?;
+    m.add_class::<PyDictArray>()?;
     // m.add_class::<PyFoRArray>()?;
     m.add_class::<PyPrimitiveArray>()?;
     // m.add_class::<PyREEArray>()?;
