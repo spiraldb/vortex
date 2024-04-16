@@ -17,6 +17,7 @@ use vortex::ToStatic;
 use vortex::{ArrayDType, ArrayData, IntoArray, OwnedArray};
 use vortex::{ArrayDef, IntoArrayData};
 use vortex_dict::{Dict, DictArray, DictEncoding, OwnedDictArray};
+use vortex_ree::{OwnedREEArray, REEArray, REEEncoding, REE};
 
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
@@ -67,7 +68,7 @@ pyarray!(VarBinViewEncoding, VarBinViewArray, "VarBinViewArray");
 // pyarray!(FoREncoding, FoRArray, "FoRArray");
 // pyarray!(DeltaEncoding, DeltaArray, "DeltaArray");
 pyarray!(DictEncoding, DictArray, "DictArray");
-// pyarray!(REEEncoding, REEArray, "REEArray");
+pyarray!(REEEncoding, REEArray, "REEArray");
 // pyarray!(RoaringBoolEncoding, RoaringBoolArray, "RoaringBoolArray");
 // pyarray!(RoaringIntEncoding, RoaringIntArray, "RoaringIntArray");
 // pyarray!(ZigZagEncoding, ZigZagArray, "ZigZagArray");
@@ -127,6 +128,11 @@ impl PyArray {
             Dict::ID => PyDictArray::wrap(
                 py,
                 OwnedDictArray::try_from(inner.into_array()).map_err(PyVortexError::map_err)?,
+            )?
+            .extract(py),
+            REE::ID => PyREEArray::wrap(
+                py,
+                OwnedREEArray::try_from(inner.into_array()).map_err(PyVortexError::map_err)?,
             )?
             .extract(py),
             _ => Py::new(
