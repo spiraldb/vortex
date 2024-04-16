@@ -34,10 +34,9 @@ use vortex::serde::{ReadCtx, WriteCtx};
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
-use crate::{chunks_to_array, compress_ctx};
+use crate::{chunks_to_array, compress_ctx, CompressionRunStats};
 
 pub const BATCH_SIZE: usize = 65_536;
-pub const CSV_SCHEMA_SAMPLE_ROWS: usize = 10_000_000;
 
 pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
     let mut file = File::open(path)?;
@@ -84,16 +83,16 @@ pub fn pbi_csv_format() -> Format {
     Format::default()
         .with_delimiter(b'|')
         .with_header(false)
-        .with_null_regex("null".parse().unwrap())
+        .with_null_regex(r"(null|^\s*$)".parse().unwrap())
 }
 
-pub fn compress_csv_to_vortex(csv_path: PathBuf, format: Format) -> (DType, ArrayRef) {
+pub fn compress_csv_to_vortex(
+    csv_path: PathBuf,
+    format: Format,
+) -> (DType, ArrayRef, CompressionRunStats) {
     let csv_file = File::open(csv_path.clone()).unwrap();
     let (schema, _) = format
-        .infer_schema(
-            &mut csv_file.try_clone().unwrap(),
-            Some(CSV_SCHEMA_SAMPLE_ROWS),
-        )
+        .infer_schema(&mut csv_file.try_clone().unwrap(), None)
         .unwrap();
 
     let csv_file2 = File::open(csv_path.clone()).unwrap();
@@ -116,9 +115,23 @@ pub fn compress_csv_to_vortex(csv_path: PathBuf, format: Format) -> (DType, Arra
             ctx.clone().compress(&array, None).unwrap()
         })
         .collect_vec();
+
+    let (compressed, stats) = chunks_to_array(
+        csv_path
+            .clone()
+            .with_extension("")
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        SchemaRef::new(schema.clone()),
+        uncompressed_size,
+        chunks,
+    );
     (
         DType::from_arrow(SchemaRef::new(schema.clone())),
-        chunks_to_array(SchemaRef::new(schema), uncompressed_size, chunks),
+        compressed,
+        stats,
     )
 }
 
@@ -126,13 +139,13 @@ pub fn write_csv_to_vortex<W: Write>(
     csv_path: PathBuf,
     format: Format,
     write: &mut W,
-) -> VortexResult<()> {
-    let (dtype, chunked) = compress_csv_to_vortex(csv_path, format);
+) -> VortexResult<CompressionRunStats> {
+    let (dtype, chunked, stats) = compress_csv_to_vortex(csv_path, format);
 
     let mut write_ctx = WriteCtx::new(write);
     write_ctx.dtype(&dtype).unwrap();
     write_ctx.write(&chunked).unwrap();
-    Ok(())
+    Ok(stats)
 }
 
 pub fn write_csv_as_parquet<W: Write + Send + Sync>(
@@ -149,7 +162,9 @@ pub fn write_csv_as_parquet<W: Write + Send + Sync>(
     // Infer the schema of the CSV file
     let schema_inference_reader =
         BufReader::new(file_handle_for_schema_inference.try_clone().unwrap());
-    let (schema, _) = format.infer_schema(schema_inference_reader, Some(CSV_SCHEMA_SAMPLE_ROWS))?;
+
+    let (schema, _) = format.infer_schema(schema_inference_reader, None)?;
+
     let file_handle_for_read = File::open(csv_path.clone()).unwrap();
 
     let file_reader = BufReader::new(file_handle_for_read.try_clone().unwrap());

@@ -74,7 +74,7 @@ impl Display for Utf8Scalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.value() {
             None => write!(f, "<none>"),
-            Some(v) => Display::fmt(v, f),
+            Some(v) => write!(f, "\"{}\"", v),
         }
     }
 }
