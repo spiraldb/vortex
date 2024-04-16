@@ -219,6 +219,14 @@ impl LogicalValidity {
     pub fn is_all_valid(&self) -> bool {
         matches!(self, LogicalValidity::AllValid(_))
     }
+
+    pub fn into_validity<'a>(self) -> Validity<'a> {
+        match self {
+            LogicalValidity::AllValid(_) => Validity::AllValid,
+            LogicalValidity::AllInvalid(_) => Validity::AllInvalid,
+            LogicalValidity::Array(a) => Validity::Array(a.into_array()),
+        }
+    }
 }
 
 impl IntoArray<'static> for LogicalValidity {

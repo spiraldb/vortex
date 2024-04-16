@@ -976,6 +976,7 @@ dependencies = [
  "vortex-array",
  "vortex-error",
  "vortex-ipc",
+ "vortex-ree",
  "vortex-schema",
 ]
 
@@ -3900,6 +3901,7 @@ dependencies = [
  "vortex-array",
  "vortex-dict",
  "vortex-error",
+ "vortex-ree",
  "vortex-schema",
 ]
 
@@ -5165,6 +5167,23 @@ dependencies = [
  "vortex-flatbuffers",
  "vortex-schema",
  "walkdir",
+]
+
+[[package]]
+name = "vortex-ree"
+version = "0.1.0"
+dependencies = [
+ "arrow-array 51.0.0",
+ "arrow-buffer 51.0.0",
+ "half",
+ "itertools 0.12.1",
+ "linkme",
+ "num-traits",
+ "paste",
+ "serde",
+ "vortex-array",
+ "vortex-error",
+ "vortex-schema",
 ]
 
 [[package]]

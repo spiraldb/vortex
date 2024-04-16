@@ -17,6 +17,7 @@ use crate::compute::slice::slice;
 use crate::encoding::{ArrayEncoding, EncodingRef, VORTEX_ENCODINGS};
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
+use crate::validity::Validity;
 use crate::{
     compute, Array, ArrayDType, ArrayData, ArrayDef, ArrayTrait, IntoArray, IntoArrayData,
     OwnedArray, ToStatic,
@@ -213,6 +214,13 @@ impl CompressCtx {
             );
         }
         Ok(compressed)
+    }
+
+    pub fn compress_validity<'a>(&self, validity: Validity<'a>) -> VortexResult<Validity<'a>> {
+        match validity {
+            Validity::Array(a) => Ok(Validity::Array(self.compress(&a, None)?)),
+            a => Ok(a),
+        }
     }
 
     fn compress_array(&self, arr: &Array) -> VortexResult<OwnedArray> {
