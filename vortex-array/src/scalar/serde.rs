@@ -2,12 +2,15 @@ use flatbuffers::{root, FlatBufferBuilder, WIPOffset};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use vortex_error::{vortex_bail, VortexError};
-use vortex_flatbuffers::{ReadFlatBuffer, WriteFlatBuffer};
-use vortex_schema::DTypeSerdeContext;
+use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, ReadFlatBuffer, WriteFlatBuffer};
+use vortex_schema::{DTypeSerdeContext, Nullability};
 
 use crate::flatbuffers::scalar as fb;
+use crate::match_each_native_ptype;
 use crate::ptype::PType;
-use crate::scalar::{PScalar, Scalar, Utf8Scalar};
+use crate::scalar::{PScalar, PrimitiveScalar, Scalar, Utf8Scalar};
+
+impl FlatBufferRoot for Scalar {}
 
 impl WriteFlatBuffer for Scalar {
     type Target<'a> = fb::Scalar<'a>;
@@ -21,21 +24,26 @@ impl WriteFlatBuffer for Scalar {
                 let bytes = b.value().map(|bytes| fbb.create_vector(bytes));
                 fb::ScalarArgs {
                     type_type: fb::Type::Binary,
-                    type_: bytes.map(|b| {
-                        fb::Binary::create(fbb, &fb::BinaryArgs { value: Some(b) }).as_union_value()
-                    }),
+                    type_: Some(
+                        fb::Binary::create(fbb, &fb::BinaryArgs { value: bytes }).as_union_value(),
+                    ),
+                    nullability: self.nullability().into(),
                 }
             }
             Scalar::Bool(b) => fb::ScalarArgs {
                 type_type: fb::Type::Bool,
+                // TODO(ngates): I think this optional is in the wrong place and should be inside BoolArgs.
+                //  However I think Rust Flatbuffers has incorrectly generated non-optional BoolArgs.
                 type_: b
                     .value()
                     .map(|&value| fb::Bool::create(fbb, &fb::BoolArgs { value }).as_union_value()),
+                nullability: self.nullability().into(),
             },
-            Scalar::List(_) => panic!(),
+            Scalar::List(_) => panic!("List not supported in scalar serde"),
             Scalar::Null(_) => fb::ScalarArgs {
                 type_type: fb::Type::Null,
-                type_: None,
+                type_: Some(fb::Null::create(fbb, &fb::NullArgs {}).as_union_value()),
+                nullability: self.nullability().into(),
             },
             Scalar::Primitive(p) => {
                 let bytes = p.value().map(|pscalar| match pscalar {
@@ -61,6 +69,7 @@ impl WriteFlatBuffer for Scalar {
                 fb::ScalarArgs {
                     type_type: fb::Type::Primitive,
                     type_: Some(primitive.as_union_value()),
+                    nullability: self.nullability().into(),
                 }
             }
             Scalar::Struct(_) => panic!(),
@@ -70,12 +79,67 @@ impl WriteFlatBuffer for Scalar {
                 fb::ScalarArgs {
                     type_type: fb::Type::UTF8,
                     type_: Some(value),
+                    nullability: self.nullability().into(),
                 }
             }
             Scalar::Composite(_) => panic!(),
         };
 
         fb::Scalar::create(fbb, &union)
+    }
+}
+
+impl ReadFlatBuffer<DTypeSerdeContext> for Scalar {
+    type Source<'a> = fb::Scalar<'a>;
+    type Error = VortexError;
+
+    fn read_flatbuffer(
+        _ctx: &DTypeSerdeContext,
+        fb: &Self::Source<'_>,
+    ) -> Result<Self, Self::Error> {
+        let nullability = Nullability::from(fb.nullability());
+        match fb.type_type() {
+            fb::Type::Binary => {
+                todo!()
+            }
+            fb::Type::Bool => {
+                todo!()
+            }
+            fb::Type::List => {
+                todo!()
+            }
+            fb::Type::Null => {
+                todo!()
+            }
+            fb::Type::Primitive => {
+                let primitive = fb.type__as_primitive().expect("missing Primitive value");
+                let ptype = primitive.ptype().try_into()?;
+                Ok(match_each_native_ptype!(ptype, |$T| {
+                    Scalar::Primitive(PrimitiveScalar::try_new(
+                        if let Some(bytes) = primitive.bytes() {
+                            Some($T::from_le_bytes(bytes.bytes().try_into()?))
+                        } else {
+                            None
+                        },
+                        nullability,
+                    )?)
+                }))
+            }
+            fb::Type::Struct_ => {
+                todo!()
+            }
+            fb::Type::UTF8 => Ok(Scalar::Utf8(Utf8Scalar::try_new(
+                fb.type__as_utf8()
+                    .expect("missing UTF8 value")
+                    .value()
+                    .map(|s| s.to_string()),
+                nullability,
+            )?)),
+            fb::Type::Composite => {
+                todo!()
+            }
+            _ => vortex_bail!(InvalidSerde: "Unrecognized scalar type"),
+        }
     }
 }
 
@@ -97,46 +161,24 @@ impl From<PType> for fb::PType {
     }
 }
 
-impl ReadFlatBuffer<DTypeSerdeContext> for Scalar {
-    type Source<'a> = fb::Scalar<'a>;
+impl TryFrom<fb::PType> for PType {
     type Error = VortexError;
 
-    fn read_flatbuffer(
-        _ctx: &DTypeSerdeContext,
-        fb: &Self::Source<'_>,
-    ) -> Result<Self, Self::Error> {
-        match fb.type_type() {
-            fb::Type::Binary => {
-                todo!()
-            }
-            fb::Type::Bool => {
-                todo!()
-            }
-            fb::Type::List => {
-                todo!()
-            }
-            fb::Type::Null => {
-                todo!()
-            }
-            fb::Type::Primitive => {
-                todo!()
-            }
-            fb::Type::Struct_ => {
-                todo!()
-            }
-            fb::Type::UTF8 => {
-                Utf8Scalar::try_new(
-                    fb.type__as_utf8()
-                        .expect("missing UTF8 value")
-                        .value()
-                        .map(|s| s.to_string()),
-                );
-            }
-            fb::Type::Composite => {
-                todo!()
-            }
-            _ => vortex_bail!(InvalidSerde: "Unrecognized scalar type"),
-        }
+    fn try_from(value: fb::PType) -> Result<Self, Self::Error> {
+        Ok(match value {
+            fb::PType::U8 => PType::U8,
+            fb::PType::U16 => PType::U16,
+            fb::PType::U32 => PType::U32,
+            fb::PType::U64 => PType::U64,
+            fb::PType::I8 => PType::I8,
+            fb::PType::I16 => PType::I16,
+            fb::PType::I32 => PType::I32,
+            fb::PType::I64 => PType::I64,
+            fb::PType::F16 => PType::F16,
+            fb::PType::F32 => PType::F32,
+            fb::PType::F64 => PType::F64,
+            _ => vortex_bail!(InvalidSerde: "Unrecognized PType"),
+        })
     }
 }
 
@@ -145,10 +187,7 @@ impl Serialize for Scalar {
     where
         S: Serializer,
     {
-        let mut fbb = FlatBufferBuilder::new();
-        let root = self.write_flatbuffer(&mut fbb);
-        fbb.finish_minimal(root);
-        serializer.serialize_bytes(fbb.finished_data())
+        self.with_flatbuffer_bytes(|bytes| serializer.serialize_bytes(bytes))
     }
 }
 
