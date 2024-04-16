@@ -972,11 +972,7 @@ dependencies = [
  "reqwest 0.12.3",
  "simplelog",
  "tokio",
-<<<<<<< HEAD
-=======
  "uuid",
- "vortex-alp",
->>>>>>> develop
  "vortex-array",
  "vortex-error",
  "vortex-ipc",
@@ -2469,9 +2465,9 @@ dependencies = [
 
 [[package]]
 name = "lance"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c8c86f7f2132c619ae1a8033807b69da12d93f5c67db9eac0e0fb5f53144dc7"
+checksum = "afa389ab3681069a870f0185c17e64a06735223917465592fb15df196b086cfb"
 dependencies = [
  "arrow 50.0.0",
  "arrow-arith 50.0.0",
@@ -2527,9 +2523,9 @@ dependencies = [
 
 [[package]]
 name = "lance-arrow"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4206b5e9a0e7b75becf3563a018206d9cbf19e392a0fcd87ec2e90022d4d9106"
+checksum = "d17e7fa583788b0d1a21c56b5de319b12e86d9dd229e44e64e13eb15dc260fe6"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-buffer 50.0.0",
@@ -2546,9 +2542,9 @@ dependencies = [
 
 [[package]]
 name = "lance-core"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e230eef1736a6a460aca1ee6f29b5181a3519775935bcf69f06b2d6f540359ea"
+checksum = "128df4adeae4371bc42e1f679c4386f1f1f307435c3ec7bbf4eee6a66390600c"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-buffer 50.0.0",
@@ -2581,9 +2577,9 @@ dependencies = [
 
 [[package]]
 name = "lance-datafusion"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "175ed4ba6ea6921338eacfa4fd30fcb99fa8e5724479b2689330b44b20776063"
+checksum = "a6a8c151f6c0c4f4e7d42c15e28f823b197ce482b5da71091fd3a20c45adbba2"
 dependencies = [
  "arrow 50.0.0",
  "arrow-array 50.0.0",
@@ -2604,15 +2600,16 @@ dependencies = [
 
 [[package]]
 name = "lance-datagen"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e4609221f6c941264f0db91239da87cd8b0725c7520c19ac4863980eaaa2907"
+checksum = "adb27ff596acf08fd1c43ddd9aa5860ff1877b0de8d87816b863f9c2f3f737b5"
 dependencies = [
  "arrow 50.0.0",
  "arrow-array 50.0.0",
  "arrow-cast 50.0.0",
  "arrow-schema 50.0.0",
  "chrono",
+ "futures",
  "hex",
  "rand",
  "rand_xoshiro",
@@ -2620,9 +2617,9 @@ dependencies = [
 
 [[package]]
 name = "lance-encoding"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbbc18db5cdce986018a8683c81ea38da03f860c8eaed2fd9737898e04082296"
+checksum = "46923b38df52639c3e7c9ca5bd5a98b5d7efa6695dde88cba16cb811922abd8a"
 dependencies = [
  "arrow-arith 50.0.0",
  "arrow-array 50.0.0",
@@ -2646,9 +2643,9 @@ dependencies = [
 
 [[package]]
 name = "lance-file"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9370e17f5736ea3fa6a47cf52fa0da6e5ba019841a0e9b618c56532de2db1f92"
+checksum = "42c8ff50c7f6981a07cd9ec1e370c5122167840377e55669cd4b56eedd9352f2"
 dependencies = [
  "arrow-arith 50.0.0",
  "arrow-array 50.0.0",
@@ -2680,9 +2677,9 @@ dependencies = [
 
 [[package]]
 name = "lance-index"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "417e465fe442573e7e19d8ed91272f60a3bb8119600fed7082d02c9c1277a06d"
+checksum = "03931b8a5419878233b6abe30f398d8c3fbb9e0c54d3b186af74088130ca7d58"
 dependencies = [
  "arrow 50.0.0",
  "arrow-array 50.0.0",
@@ -2726,9 +2723,9 @@ dependencies = [
 
 [[package]]
 name = "lance-io"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05d4f29ae2bcacc96a2d6f4588e0500a06cd58612493b2bd5506a6a313b4849f"
+checksum = "5e76227d1b1c4e5f6de54b99b50e1ea4d51af62f894b370d17e1845fdb1c38e1"
 dependencies = [
  "arrow 50.0.0",
  "arrow-arith 50.0.0",
@@ -2764,9 +2761,9 @@ dependencies = [
 
 [[package]]
 name = "lance-linalg"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b33b128385416ad9b442f31b7d3b52916300b5053588dea85ec425203054727"
+checksum = "70a7745db846a0446bf3dfaa8365709908d4a015f96b2b8885f9a5ce5e5c82e2"
 dependencies = [
  "arrow-array 50.0.0",
  "arrow-ord 50.0.0",
@@ -2787,10 +2784,11 @@ dependencies = [
 
 [[package]]
 name = "lance-table"
-version = "0.10.12"
+version = "0.10.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2a4d557b925a19084b714358f66b8aae3b96157bdcb3541c8096ccf241e71fb"
+checksum = "0d046f4d07c37ed8e56bfd4685b64289c7a5a4667f7df1f551c1e1fb8b05b01d"
 dependencies = [
+ "arrow 50.0.0",
  "arrow-array 50.0.0",
  "arrow-buffer 50.0.0",
  "arrow-ipc 50.0.0",
@@ -2803,6 +2801,7 @@ dependencies = [
  "futures",
  "lance-arrow",
  "lance-core",
+ "lance-datagen",
  "lance-file",
  "lance-io",
  "log",
@@ -4389,9 +4388,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.115"
+version = "1.0.116"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12dc5c46daa8e9fdf4f5e71b6cf9a53f2487da0e86e55808e2d35539666497dd"
+checksum = "3e17db7126d17feb94eb3fad46bf1a96b034e8aacbc2e775fe81505f8b0b2813"
 dependencies = [
  "itoa",
  "ryu",
