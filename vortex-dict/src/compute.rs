@@ -1,5 +1,3 @@
-use vortex::array::{Array, ArrayRef};
-use vortex::compute::flatten::{flatten, FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
@@ -9,11 +7,7 @@ use vortex_error::VortexResult;
 
 use crate::DictArray;
 
-impl ArrayCompute for DictArray {
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
-        Some(self)
-    }
-
+impl ArrayCompute for DictArray<'_> {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -27,20 +21,14 @@ impl ArrayCompute for DictArray {
     }
 }
 
-impl FlattenFn for DictArray {
-    fn flatten(&self) -> VortexResult<FlattenedArray> {
-        flatten(&take(self.values(), self.codes())?)
-    }
-}
-
-impl ScalarAtFn for DictArray {
+impl ScalarAtFn for DictArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let dict_index: usize = scalar_at(self.codes(), index)?.try_into()?;
         scalar_at(self.values(), dict_index)
     }
 }
 
-impl TakeFn for DictArray {
+impl TakeFn for DictArray<'_> {
     fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
         // Dict
         //   codes: 0 0 1
@@ -50,7 +38,7 @@ impl TakeFn for DictArray {
     }
 }
 
-impl SliceFn for DictArray {
+impl SliceFn for DictArray<'_> {
     // TODO(robert): Add function to trim the dictionary
     fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
         Ok(DictArray::new(slice(self.codes(), start, stop)?, self.values().clone()).into_array())

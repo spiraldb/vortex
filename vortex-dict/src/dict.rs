@@ -1,131 +1,71 @@
-use std::sync::{Arc, RwLock};
-
-use vortex::array::{Array, ArrayRef};
-use vortex::compress::EncodingCompression;
-use vortex::compute::ArrayCompute;
-use vortex::encoding::{Encoding, EncodingId, EncodingRef};
-use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stats, StatsSet};
-use vortex::validity::ArrayValidity;
-use vortex::validity::Validity;
-use vortex::{impl_array, ArrayWalker};
+use serde::{Deserialize, Serialize};
+use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::{impl_encoding, ArrayFlatten};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Signedness};
 
-#[derive(Debug, Clone)]
-pub struct DictArray {
-    codes: ArrayRef,
-    values: ArrayRef,
-    stats: Arc<RwLock<StatsSet>>,
+impl_encoding!("vortex.dict", Dict);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DictMetadata {
+    codes_dtype: DType,
 }
 
-impl DictArray {
-    pub fn new(codes: ArrayRef, dict: ArrayRef) -> Self {
-        Self::try_new(codes, dict).unwrap()
-    }
-
-    pub fn try_new(codes: ArrayRef, dict: ArrayRef) -> VortexResult<Self> {
+impl DictArray<'_> {
+    pub fn try_new(codes: Array, dict: Array) -> VortexResult<Self> {
         if !matches!(codes.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
             vortex_bail!(MismatchedTypes: "unsigned int", codes.dtype());
         }
-        Ok(Self {
-            codes,
-            values: dict,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        })
+        // Ok(Self::try {
+        //     codes,
+        //     values: dict,
+        //     stats: Arc::new(RwLock::new(StatsSet::new())),
+        // })
+        todo!()
     }
 
     #[inline]
-    pub fn values(&self) -> &ArrayRef {
-        &self.values
+    pub fn values(&self) -> Array {
+        self.array()
+            .child(0, &DType::BYTES)
+            .expect("Missing values")
     }
 
     #[inline]
-    pub fn codes(&self) -> &ArrayRef {
-        &self.codes
+    pub fn codes(&self) -> Array {
+        self.array().child(1, &DType::BYTES).expect("Missing codes")
     }
 }
 
-impl Array for DictArray {
-    impl_array!();
+impl ArrayFlatten for DictArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        todo!()
+    }
+}
 
+impl ArrayValidity for DictArray<'_> {
+    fn is_valid(&self, index: usize) -> bool {
+        todo!()
+    }
+
+    fn logical_validity(&self) -> LogicalValidity {
+        todo!()
+    }
+}
+
+impl vortex::visitor::AcceptArrayVisitor for DictArray<'_> {
+    fn accept(&self, visitor: &mut dyn vortex::visitor::ArrayVisitor) -> VortexResult<()> {
+        todo!()
+    }
+}
+
+impl vortex::stats::ArrayStatisticsCompute for DictArray<'_> {}
+
+impl ArrayTrait for DictArray<'_> {
     fn len(&self) -> usize {
-        self.codes.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.codes.is_empty()
-    }
-
-    fn dtype(&self) -> &DType {
-        self.values.dtype()
-    }
-
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    fn encoding(&self) -> EncodingRef {
-        &DictEncoding
-    }
-
-    fn nbytes(&self) -> usize {
-        self.codes().nbytes() + self.values().nbytes()
-    }
-
-    #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        walker.visit_child(self.values())?;
-        walker.visit_child(self.codes())
-    }
-}
-
-impl ArrayValidity for DictArray {
-    fn logical_validity(&self) -> Validity {
-        todo!()
-    }
-
-    fn is_valid(&self, _index: usize) -> bool {
-        todo!()
-    }
-}
-
-impl ArrayDisplay for DictArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.child("values", self.values())?;
-        f.child("codes", self.codes())
-    }
-}
-
-#[derive(Debug)]
-pub struct DictEncoding;
-
-impl DictEncoding {
-    pub const ID: EncodingId = EncodingId::new("vortex.dict");
-}
-
-impl Encoding for DictEncoding {
-    fn id(&self) -> EncodingId {
-        Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
-    }
-
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+        self.codes().len()
     }
 }
