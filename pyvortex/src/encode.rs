@@ -7,10 +7,11 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::{FromArrowArray, FromArrowType};
-use vortex::{ArrayData, IntoArray, IntoArrayData, ToArrayData};
+use vortex::{ArrayData, IntoArray, ToArrayData};
 use vortex_schema::DType;
 
 use crate::array::PyArray;
+use crate::error::PyVortexError;
 use crate::vortex_arrow::map_arrow_err;
 
 /// The main entry point for creating enc arrays from other Python objects.
@@ -42,7 +43,9 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
             .map(|dt| DType::from_arrow(&Field::new("_", dt, false)))?;
         PyArray::wrap(
             obj.py(),
-            ChunkedArray::new(encoded_chunks, dtype).into_array_data(),
+            ChunkedArray::try_new(encoded_chunks, dtype)
+                .map_err(PyVortexError::map_err)?
+                .to_array_data(),
         )
     } else if obj.is_instance(table)? {
         let array_stream = ArrowArrayStreamReader::from_pyarrow(obj)?;
@@ -54,7 +57,12 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
                     .map_err(map_arrow_err)
             })
             .collect::<PyResult<Vec<_>>>()?;
-        PyArray::wrap(obj.py(), ChunkedArray::new(chunks, dtype).into_array_data())
+        PyArray::wrap(
+            obj.py(),
+            ChunkedArray::try_new(chunks, dtype)
+                .map_err(PyVortexError::map_err)?
+                .to_array_data(),
+        )
     } else {
         Err(PyValueError::new_err("Cannot convert object to enc array"))
     }

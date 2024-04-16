@@ -5,7 +5,6 @@ use vortex_schema::CompositeID;
 
 mod array;
 mod compute;
-mod serde;
 mod typed;
 
 #[distributed_slice]
