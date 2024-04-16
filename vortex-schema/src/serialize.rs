@@ -176,8 +176,8 @@ impl From<&FloatWidth> for fb::FloatWidth {
 mod test {
     use std::sync::Arc;
 
-    use flatbuffers::{root, FlatBufferBuilder};
-    use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer, WriteFlatBuffer};
+    use flatbuffers::root;
+    use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
     use crate::flatbuffers as fb;
     use crate::{DType, DTypeSerdeContext, FloatWidth, IntWidth, Nullability, Signedness};
