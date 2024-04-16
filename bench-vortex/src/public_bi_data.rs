@@ -303,7 +303,7 @@ impl PBIDataset {
         };
 
         "PBI"
-            .to_idempotent_path()
+            .to_data_path()
             .join(self.dataset_name())
             .join(extension)
             .join(url.file_name.strip_suffix(".csv.bz2").unwrap())
@@ -321,7 +321,7 @@ impl PBIDataset {
 
     fn get_bzip_path(&self, url: &PBIUrl) -> PathBuf {
         "PBI"
-            .to_idempotent_path()
+            .to_data_path()
             .join(self.dataset_name())
             .join("bzip2")
             .join(url.file_name)
@@ -350,14 +350,12 @@ impl PBIUrl {
         }
     }
     fn to_url_string(&self) -> Url {
-        Url::parse(
-            format!(
-                "https://homepages.cwi.nl/~boncz/PublicBIbenchmark/{}/{}",
-                self.dataset_name, self.file_name
-            )
-            .as_str(),
-        )
-        .unwrap()
+        Url::parse("https://homepages.cwi.nl/~boncz/PublicBIbenchmark/")
+            .unwrap()
+            .join(format!("{}/", self.dataset_name).as_str())
+            .unwrap()
+            .join(self.file_name)
+            .unwrap()
     }
 }
 
@@ -537,9 +535,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
 
     fn directory_location(&self) -> PathBuf {
         match self {
-            BenchmarkDatasets::PBI(dataset) => {
-                "PBI".to_idempotent_path().join(dataset.dataset_name())
-            }
+            BenchmarkDatasets::PBI(dataset) => "PBI".to_data_path().join(dataset.dataset_name()),
         }
     }
 }

@@ -26,7 +26,7 @@ jobs:
         uses: arduino/setup-protoc@v3
 
       - name: Rust Build
-        run: cargo build --all-targets
+        run: cargo build --all-features --all-targets
 
       - name: Python Lint - Format
         run: rye run ruff format --check .
@@ -36,9 +36,9 @@ jobs:
       - name: Rust Lint - Format
         run: cargo fmt --all --check
       - name: Rust Lint - Clippy
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-features --all-targets
       - name: Rust Test
-        run: cargo test --all
+        run: cargo test --workspace --all-features
 
       - name: Pytest - PyVortex
         run: rye run pytest --benchmark-disable test/

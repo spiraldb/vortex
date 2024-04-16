@@ -45,6 +45,7 @@ csv = { workspace = true }
 arrow-csv = { workspace = true }
 arrow = { workspace = true }
 humansize = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

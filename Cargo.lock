@@ -972,6 +972,11 @@ dependencies = [
  "reqwest 0.12.3",
  "simplelog",
  "tokio",
+<<<<<<< HEAD
+=======
+ "uuid",
+ "vortex-alp",
+>>>>>>> develop
  "vortex-array",
  "vortex-error",
  "vortex-ipc",

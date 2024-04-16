@@ -1,3 +1,4 @@
+use std::env::temp_dir;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -32,19 +33,23 @@ pub fn idempotent<T, E, P: IdempotentPath + ?Sized>(
     path: &P,
     f: impl FnOnce(&Path) -> Result<T, E>,
 ) -> Result<PathBuf, E> {
-    let path = path.to_idempotent_path();
-    if !path.exists() {
-        f(path.as_path())?;
+    let data_path = path.to_data_path();
+    if !data_path.exists() {
+        let temp_location = path.to_temp_path();
+        let temp_path = temp_location.as_path();
+        f(temp_path)?;
+        std::fs::rename(temp_path, &data_path).unwrap();
     }
-    Ok(path)
+    Ok(data_path)
 }
 
 pub trait IdempotentPath {
-    fn to_idempotent_path(&self) -> PathBuf;
+    fn to_data_path(&self) -> PathBuf;
+    fn to_temp_path(&self) -> PathBuf;
 }
 
 impl IdempotentPath for str {
-    fn to_idempotent_path(&self) -> PathBuf {
+    fn to_data_path(&self) -> PathBuf {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("data")
             .join(self);
@@ -53,14 +58,30 @@ impl IdempotentPath for str {
         }
         path
     }
+
+    fn to_temp_path(&self) -> PathBuf {
+        let temp_dir = temp_dir().join(uuid::Uuid::new_v4().to_string());
+        if !temp_dir.exists() {
+            create_dir_all(temp_dir.clone()).unwrap();
+        }
+        temp_dir.join(self)
+    }
 }
 
 impl IdempotentPath for PathBuf {
-    fn to_idempotent_path(&self) -> PathBuf {
+    fn to_data_path(&self) -> PathBuf {
         if !self.parent().unwrap().exists() {
             create_dir_all(self.parent().unwrap()).unwrap();
         }
         self.to_path_buf()
+    }
+
+    fn to_temp_path(&self) -> PathBuf {
+        let temp_dir = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        if !temp_dir.exists() {
+            create_dir_all(temp_dir.clone()).unwrap();
+        }
+        temp_dir.join(self.file_name().unwrap())
     }
 }
 
