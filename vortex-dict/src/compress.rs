@@ -35,7 +35,7 @@ impl EncodingCompression for DictEncoding {
         // We don't have a unique stat yet, but strict-sorted implies unique.
         if array
             .statistics()
-            .get_as(Stat::IsStrictSorted)
+            .compute_as(Stat::IsStrictSorted)
             .unwrap_or(false)
         {
             return None;
