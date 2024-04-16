@@ -1,8 +1,14 @@
 use serde::{Deserialize, Serialize};
+use vortex::accessor::ArrayAccessor;
+use vortex::array::bool::BoolArray;
+use vortex::compute::scalar_at::scalar_at;
+use vortex::compute::take::take;
 use vortex::validity::{ArrayValidity, LogicalValidity};
-use vortex::{impl_encoding, ArrayFlatten};
+use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::IntoArrayData;
+use vortex::{impl_encoding, match_each_integer_ptype, ArrayDType, ArrayFlatten, ToArrayData};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{DType, Signedness};
+use vortex_schema::Signedness;
 
 impl_encoding!("vortex.dict", Dict);
 
@@ -12,28 +18,31 @@ pub struct DictMetadata {
 }
 
 impl DictArray<'_> {
-    pub fn try_new(codes: Array, dict: Array) -> VortexResult<Self> {
+    pub fn try_new(codes: Array, values: Array) -> VortexResult<Self> {
         if !matches!(codes.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
             vortex_bail!(MismatchedTypes: "unsigned int", codes.dtype());
         }
-        // Ok(Self::try {
-        //     codes,
-        //     values: dict,
-        //     stats: Arc::new(RwLock::new(StatsSet::new())),
-        // })
-        todo!()
+        Self::try_from_parts(
+            values.dtype().clone(),
+            DictMetadata {
+                codes_dtype: codes.dtype().clone(),
+            },
+            vec![].into(),
+            vec![values.to_array_data(), codes.to_array_data()].into(),
+            HashMap::new(),
+        )
     }
 
     #[inline]
     pub fn values(&self) -> Array {
-        self.array()
-            .child(0, &DType::BYTES)
-            .expect("Missing values")
+        self.array().child(0, self.dtype()).expect("Missing values")
     }
 
     #[inline]
     pub fn codes(&self) -> Array {
-        self.array().child(1, &DType::BYTES).expect("Missing codes")
+        self.array()
+            .child(1, &self.metadata().codes_dtype)
+            .expect("Missing codes")
     }
 }
 
@@ -42,27 +51,40 @@ impl ArrayFlatten for DictArray<'_> {
     where
         Self: 'a,
     {
-        todo!()
+        take(&self.values(), &self.codes())?.flatten()
     }
 }
 
 impl ArrayValidity for DictArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
-        todo!()
+        let values_index = scalar_at(&self.codes(), index).unwrap().try_into().unwrap();
+        self.values().with_dyn(|a| a.is_valid(values_index))
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        todo!()
+        if self.dtype().is_nullable() {
+            let primitive_codes = self.codes().flatten_primitive().unwrap();
+            match_each_integer_ptype!(primitive_codes.ptype(), |$P| {
+                ArrayAccessor::<$P>::with_iterator(&primitive_codes, |iter| {
+                    LogicalValidity::Array(
+                        BoolArray::from(iter.flatten().map(|c| *c != 0).collect::<Vec<_>>())
+                            .into_array_data(),
+                    )
+                })
+                .unwrap()
+            })
+        } else {
+            LogicalValidity::AllValid(self.len())
+        }
     }
 }
 
-impl vortex::visitor::AcceptArrayVisitor for DictArray<'_> {
-    fn accept(&self, visitor: &mut dyn vortex::visitor::ArrayVisitor) -> VortexResult<()> {
-        todo!()
+impl AcceptArrayVisitor for DictArray<'_> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_child("values", &self.values())?;
+        visitor.visit_child("codes", &self.codes())
     }
 }
-
-impl vortex::stats::ArrayStatisticsCompute for DictArray<'_> {}
 
 impl ArrayTrait for DictArray<'_> {
     fn len(&self) -> usize {

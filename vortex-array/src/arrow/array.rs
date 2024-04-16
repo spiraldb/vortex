@@ -131,12 +131,13 @@ where
             DataType::Utf8 | DataType::LargeUtf8 => DType::Utf8(nullable.into()),
             _ => panic!("Invalid data type for ByteArray"),
         };
-        VarBinArray::new(
+        VarBinArray::try_new(
             value.offsets().clone().into_array_data().into_array(),
             value.values().clone().into_array_data().into_array(),
             dtype,
             nulls(value.nulls(), nullable),
         )
+        .unwrap()
         .into_array_data()
     }
 }

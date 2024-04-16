@@ -39,6 +39,10 @@ impl<'a> Array<'a> {
     pub fn flatten_primitive(self) -> VortexResult<PrimitiveArray<'a>> {
         PrimitiveArray::try_from(self.flatten()?.into_array())
     }
+
+    pub fn flatten_varbin(self) -> VortexResult<VarBinArray<'a>> {
+        VarBinArray::try_from(self.flatten()?.into_array())
+    }
 }
 
 impl<'a> IntoArray<'a> for Flattened<'a> {

@@ -2,8 +2,6 @@ mod accessor;
 mod compute;
 mod stats;
 
-use std::collections::HashMap;
-
 use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};

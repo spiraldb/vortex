@@ -4,11 +4,10 @@ use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
-use vortex::array::Array;
-use vortex::match_each_native_ptype;
+use vortex::{match_each_native_ptype, ArrayTrait};
 use vortex_dict::dict_encode_typed_primitive;
 
-fn gen_primitive_dict(len: usize, uniqueness: f64) -> PrimitiveArray {
+fn gen_primitive_dict<'a>(len: usize, uniqueness: f64) -> PrimitiveArray<'a> {
     let mut rng = thread_rng();
     let value_range = len as f64 * uniqueness;
     let range = Uniform::new(-(value_range / 2.0) as i32, (value_range / 2.0) as i32);
@@ -17,7 +16,7 @@ fn gen_primitive_dict(len: usize, uniqueness: f64) -> PrimitiveArray {
     PrimitiveArray::from(data)
 }
 
-fn gen_varbin_dict(len: usize, uniqueness: f64) -> VarBinArray {
+fn gen_varbin_dict<'a>(len: usize, uniqueness: f64) -> VarBinArray<'a> {
     let mut rng = thread_rng();
     let uniq_cnt = (len as f64 * uniqueness) as usize;
     let dict: Vec<String> = (0..uniq_cnt)

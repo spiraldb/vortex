@@ -61,7 +61,7 @@ impl<O: NativePType> VarBinBuilder<O> {
             Validity::NonNullable
         };
 
-        VarBinArray::new(offsets.into_array(), data.into_array(), dtype, validity)
+        VarBinArray::try_new(offsets.into_array(), data.into_array(), dtype, validity).unwrap()
     }
 }
 

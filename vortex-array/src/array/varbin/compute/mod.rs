@@ -78,7 +78,8 @@ impl AsContiguousFn for VarBinArray<'_> {
 
         let offsets_array = PrimitiveArray::from(offsets).into_array();
 
-        Ok(VarBinArray::new(offsets_array, bytes, self.dtype().clone(), validity).into_array())
+        VarBinArray::try_new(offsets_array, bytes, self.dtype().clone(), validity)
+            .map(|a| a.into_array())
     }
 }
 

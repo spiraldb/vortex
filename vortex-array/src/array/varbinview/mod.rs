@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::{mem, slice};
 

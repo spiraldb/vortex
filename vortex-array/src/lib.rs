@@ -1,4 +1,4 @@
-mod accessor;
+pub mod accessor;
 pub mod array;
 pub mod arrow;
 pub mod buffer;
@@ -13,12 +13,12 @@ mod metadata;
 pub mod ptype;
 mod sampling;
 pub mod scalar;
-mod stats;
+pub mod stats;
 mod tree;
 mod typed;
 pub mod validity;
 mod view;
-mod visitor;
+pub mod visitor;
 
 use std::fmt::{Debug, Display, Formatter};
 
