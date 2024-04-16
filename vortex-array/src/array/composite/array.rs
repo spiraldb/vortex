@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use flatbuffers::{root, FlatBufferBuilder};
+use flatbuffers::root;
 use vortex_error::{vortex_err, VortexResult};
-use vortex_flatbuffers::{ReadFlatBuffer, WriteFlatBuffer};
+use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 use vortex_schema::flatbuffers as fb;
 use vortex_schema::{CompositeID, DType, DTypeSerdeContext};
 
