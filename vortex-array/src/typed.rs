@@ -7,12 +7,9 @@ use vortex_schema::DType;
 use crate::buffer::OwnedBuffer;
 use crate::scalar::Scalar;
 use crate::stats::Stat;
-use crate::{
-    Array, ArrayData, ArrayDef, AsArray, IntoArray, ToArray, ToArrayData, ToStatic,
-    TryDeserializeArrayMetadata,
-};
+use crate::{Array, ArrayData, ArrayDef, AsArray, IntoArray, ToArray, TryDeserializeArrayMetadata};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypedArray<'a, D: ArrayDef> {
     array: Array<'a>,
     metadata: D::Metadata,
@@ -48,15 +45,6 @@ impl<'a, 'b, D: ArrayDef> TypedArray<'b, D> {
     }
 }
 
-impl<D: ArrayDef> Clone for TypedArray<'_, D> {
-    fn clone(&self) -> Self {
-        Self {
-            array: self.array.clone(),
-            metadata: self.metadata.clone(),
-        }
-    }
-}
-
 impl<'a, D: ArrayDef> TryFrom<Array<'a>> for TypedArray<'a, D> {
     type Error = VortexError;
 
@@ -88,17 +76,6 @@ impl<'a, D: ArrayDef> TryFrom<&'a Array<'a>> for TypedArray<'a, D> {
 
     fn try_from(value: &'a Array<'a>) -> Result<Self, Self::Error> {
         value.clone().try_into()
-    }
-}
-
-impl<D: ArrayDef> ToStatic for TypedArray<'_, D> {
-    type Static = TypedArray<'static, D>;
-
-    fn to_static(&self) -> Self::Static {
-        TypedArray {
-            array: Array::Data(self.to_array_data()),
-            metadata: self.metadata.clone(),
-        }
     }
 }
 

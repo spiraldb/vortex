@@ -61,7 +61,7 @@ macro_rules! impl_encoding {
             use std::marker::{Send, Sync};
 
             /// The array definition trait
-            #[derive(Debug)]
+            #[derive(Debug, Clone)]
             pub struct $Name;
             impl ArrayDef for $Name {
                 const ID: EncodingId = EncodingId::new($id);
@@ -71,7 +71,7 @@ macro_rules! impl_encoding {
                 type Encoding = [<$Name Encoding>];
             }
 
-            #[derive(Debug)]
+            #[derive(Debug, Clone)]
             pub struct [<$Name Array>]<'a> {
                 typed: TypedArray<'a, $Name>
             }
@@ -261,16 +261,8 @@ impl<'a, T: IntoArray<'a> + ArrayEncodingRef + ArrayStatistics + GetArrayMetadat
     }
 }
 
-impl<T: AsArray> ToArrayData for T {
+impl<T: IntoArrayData + Clone> ToArrayData for T {
     fn to_array_data(&self) -> ArrayData {
-        self.as_array_ref().clone().into_array_data()
+        self.clone().into_array_data()
     }
 }
-//
-// impl<'a, D: ArrayDef, T: From<TypedArray<'a, D>>> TryFrom<Array<'a>> for T {
-//     type Error = VortexError;
-//
-//     fn try_from(value: Array<'a>) -> Result<Self, Self::Error> {
-//         TypedArray::<D>::try_from(value).map(T::from)
-//     }
-// }
