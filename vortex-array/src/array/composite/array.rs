@@ -13,7 +13,7 @@ use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, ArrayFlatten, IntoArrayData, TryDeserializeArrayMetadata,
+    impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, TryDeserializeArrayMetadata,
     TrySerializeArrayMetadata,
 };
 

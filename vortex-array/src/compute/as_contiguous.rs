@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::Array;
+use crate::{Array, ArrayDType};
 
 pub trait AsContiguousFn {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array<'static>>;

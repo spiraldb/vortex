@@ -9,11 +9,11 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
-use crate::match_each_native_ptype;
 use crate::ptype::NativePType;
 use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
 use crate::validity::{Validity, ValidityMetadata};
 use crate::{impl_encoding, OwnedArray, ToArrayData};
+use crate::{match_each_native_ptype, ArrayDType};
 
 mod accessor;
 mod array;

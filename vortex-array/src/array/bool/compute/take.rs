@@ -15,7 +15,7 @@ impl TakeFn for BoolArray<'_> {
         match_each_integer_ptype!(indices.ptype(), |$I| {
             Ok(BoolArray::from_vec(
                 take_bool(&self.boolean_buffer(), indices.typed_data::<$I>()),
-                validity.take(indices.array())?,
+                validity.take(indices.as_ref())?,
             ).into_array())
         })
     }

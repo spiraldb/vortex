@@ -8,6 +8,7 @@ use crate::compute::take::TakeFn;
 use crate::match_each_integer_ptype;
 use crate::ptype::NativePType;
 use crate::validity::Validity;
+use crate::ArrayDType;
 use crate::IntoArray;
 use crate::{Array, OwnedArray};
 

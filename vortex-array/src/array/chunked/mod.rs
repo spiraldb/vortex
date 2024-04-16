@@ -11,7 +11,7 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
+use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
 
 mod compute;
 mod stats;

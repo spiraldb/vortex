@@ -15,7 +15,7 @@ use crate::ptype::{NativePType, PType};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayFlatten;
-use crate::{impl_encoding, IntoArray};
+use crate::{impl_encoding, ArrayDType};
 
 impl_encoding!("vortex.primitive", Primitive);
 

@@ -1,6 +1,6 @@
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::{Array, OwnedArray};
+use crate::{Array, ArrayDType, OwnedArray};
 
 pub trait PatchFn {
     fn patch(&self, patch: &Array) -> VortexResult<OwnedArray>;

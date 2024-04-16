@@ -17,7 +17,9 @@ use crate::compute::slice::slice;
 use crate::encoding::{ArrayEncoding, EncodingRef, VORTEX_ENCODINGS};
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
-use crate::{compute, Array, ArrayData, ArrayDef, IntoArray, IntoArrayData, OwnedArray, ToStatic};
+use crate::{
+    compute, Array, ArrayDType, ArrayData, ArrayDef, IntoArray, IntoArrayData, OwnedArray, ToStatic,
+};
 
 pub trait EncodingCompression: ArrayEncoding {
     fn cost(&self) -> u8 {

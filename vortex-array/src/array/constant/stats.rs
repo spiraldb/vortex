@@ -6,6 +6,7 @@ use vortex_schema::DType;
 use crate::array::constant::ConstantArray;
 use crate::scalar::Scalar;
 use crate::stats::{ArrayStatisticsCompute, Stat};
+use crate::{ArrayDType, ArrayTrait};
 
 impl ArrayStatisticsCompute for ConstantArray<'_> {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {

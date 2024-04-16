@@ -5,6 +5,7 @@ use crate::compute::cast::cast;
 use crate::compute::take::{take, TakeFn};
 use crate::ptype::PType;
 use crate::{Array, IntoArray, OwnedArray, ToArray, ToStatic};
+use crate::{ArrayDType, ArrayTrait};
 
 impl TakeFn for ChunkedArray<'_> {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
@@ -57,7 +58,7 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::compute::as_contiguous::as_contiguous;
     use crate::compute::take::take;
-    use crate::IntoArray;
+    use crate::{ArrayDType, ArrayTrait, IntoArray};
 
     #[test]
     fn test_take() {

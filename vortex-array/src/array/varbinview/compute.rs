@@ -16,7 +16,7 @@ use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::Scalar;
 use crate::validity::ArrayValidity;
-use crate::{IntoArray, IntoArrayData, OwnedArray};
+use crate::{ArrayDType, IntoArray, IntoArrayData, OwnedArray};
 
 impl ArrayCompute for VarBinViewArray<'_> {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {

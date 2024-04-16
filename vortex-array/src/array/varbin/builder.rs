@@ -73,7 +73,7 @@ mod test {
     use crate::array::varbin::builder::VarBinBuilder;
     use crate::compute::scalar_at::scalar_at;
     use crate::scalar::Utf8Scalar;
-    use crate::IntoArray;
+    use crate::{ArrayDType, IntoArray};
 
     #[test]
     fn test_builder() {

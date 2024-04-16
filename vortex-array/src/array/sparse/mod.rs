@@ -10,7 +10,7 @@ use crate::scalar::Scalar;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, match_each_integer_ptype, IntoArray, IntoArrayData, ToArrayData};
+use crate::{impl_encoding, match_each_integer_ptype, ArrayDType, IntoArrayData, ToArrayData};
 
 // mod compress;
 mod compute;

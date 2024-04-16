@@ -11,7 +11,7 @@ use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::scalar::Scalar;
-use crate::{match_each_integer_ptype, Array, IntoArray, OwnedArray};
+use crate::{match_each_integer_ptype, Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
 
 mod slice;
 
@@ -146,7 +146,7 @@ mod test {
     use crate::compute::slice::slice;
     use crate::compute::take::take;
     use crate::scalar::Scalar;
-    use crate::{IntoArray, OwnedArray};
+    use crate::{ArrayTrait, IntoArray, OwnedArray};
 
     fn sparse_array() -> OwnedArray {
         SparseArray::new(

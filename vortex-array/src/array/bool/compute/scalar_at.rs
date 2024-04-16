@@ -4,6 +4,7 @@ use crate::array::bool::BoolArray;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::scalar::{BoolScalar, Scalar};
 use crate::validity::ArrayValidity;
+use crate::ArrayDType;
 
 impl ScalarAtFn for BoolArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {

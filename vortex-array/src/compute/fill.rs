@@ -1,6 +1,6 @@
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::{Array, OwnedArray, ToStatic};
+use crate::{Array, ArrayDType, OwnedArray, ToStatic};
 
 pub trait FillForwardFn {
     fn fill_forward(&self) -> VortexResult<OwnedArray>;

@@ -9,8 +9,8 @@ use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayData;
-use crate::{impl_encoding, ToArray};
-use crate::{ArrayFlatten, IntoArray, IntoArrayData};
+use crate::{impl_encoding, ArrayDType};
+use crate::{ArrayFlatten, IntoArrayData};
 
 impl_encoding!("vortex.struct", Struct);
 
