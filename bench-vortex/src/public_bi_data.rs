@@ -20,7 +20,7 @@ use crate::public_bi_data::PBIDataset::*;
 use crate::reader::{
     compress_csv_to_vortex, open_vortex, pbi_csv_format, write_csv_as_parquet, write_csv_to_vortex,
 };
-use crate::{idempotent, IdempotentPath};
+use crate::{idempotent, CompressionRunStats, IdempotentPath};
 
 lazy_static::lazy_static! {
     // NB: we do not expect this to change, otherwise we'd crawl the site and populate it at runtime
@@ -455,12 +455,13 @@ impl BenchmarkDataset for BenchmarkDatasets {
 
     /// Compresses the CSV files to Vortex format. Does NOT write any data to disk.
     /// Used for benchmarking.
-    fn compress_to_vortex(&self) -> Vec<ArrayRef> {
+    fn compress_to_vortex(&self) -> Vec<(ArrayRef, CompressionRunStats)> {
         self.list_files(FileType::Csv)
             .into_iter()
             .map(|csv_input| {
                 info!("Compressing {} to vortex", csv_input.to_str().unwrap());
-                compress_csv_to_vortex(csv_input, pbi_csv_format()).1
+                let (_, arr_ref, stats) = compress_csv_to_vortex(csv_input, pbi_csv_format());
+                (arr_ref, stats)
             })
             .collect_vec()
     }
