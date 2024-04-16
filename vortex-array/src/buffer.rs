@@ -87,3 +87,11 @@ impl From<&Buffer<'_>> for ArrowBuffer {
         }
     }
 }
+
+impl PartialEq for Buffer<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_slice().eq(other.as_slice())
+    }
+}
+
+impl Eq for Buffer<'_> {}

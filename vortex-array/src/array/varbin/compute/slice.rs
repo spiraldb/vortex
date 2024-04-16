@@ -6,12 +6,12 @@ use crate::{ArrayDType, IntoArray, OwnedArray};
 
 impl SliceFn for VarBinArray<'_> {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
-        Ok(VarBinArray::new(
+        VarBinArray::try_new(
             slice(&self.offsets(), start, stop + 1)?,
             self.bytes().clone(),
             self.dtype().clone(),
             self.validity().slice(start, stop)?,
         )
-        .into_array())
+        .map(|a| a.into_array())
     }
 }

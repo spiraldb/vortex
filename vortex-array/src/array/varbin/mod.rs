@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
@@ -32,10 +30,6 @@ pub struct VarBinMetadata {
 }
 
 impl VarBinArray<'_> {
-    pub fn new(offsets: Array, bytes: Array, dtype: DType, validity: Validity) -> Self {
-        Self::try_new(offsets, bytes, dtype, validity).unwrap()
-    }
-
     pub fn try_new(
         offsets: Array,
         bytes: Array,
@@ -249,12 +243,13 @@ mod test {
         );
         let offsets = PrimitiveArray::from(vec![0, 11, 44]);
 
-        VarBinArray::new(
+        VarBinArray::try_new(
             offsets.into_array(),
             values.into_array(),
             DType::Utf8(Nullability::NonNullable),
             Validity::NonNullable,
         )
+        .unwrap()
         .into_array()
     }
 

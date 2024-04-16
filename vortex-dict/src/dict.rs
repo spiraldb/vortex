@@ -1,131 +1,93 @@
-use std::sync::{Arc, RwLock};
-
-use vortex::array::{Array, ArrayRef};
-use vortex::compress::EncodingCompression;
-use vortex::compute::ArrayCompute;
-use vortex::encoding::{Encoding, EncodingId, EncodingRef};
-use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stats, StatsSet};
-use vortex::validity::ArrayValidity;
-use vortex::validity::Validity;
-use vortex::{impl_array, ArrayWalker};
+use serde::{Deserialize, Serialize};
+use vortex::accessor::ArrayAccessor;
+use vortex::array::bool::BoolArray;
+use vortex::compute::scalar_at::scalar_at;
+use vortex::compute::take::take;
+use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::IntoArrayData;
+use vortex::{impl_encoding, match_each_integer_ptype, ArrayDType, ArrayFlatten, ToArrayData};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{DType, Signedness};
+use vortex_schema::Signedness;
 
-#[derive(Debug, Clone)]
-pub struct DictArray {
-    codes: ArrayRef,
-    values: ArrayRef,
-    stats: Arc<RwLock<StatsSet>>,
+impl_encoding!("vortex.dict", Dict);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DictMetadata {
+    codes_dtype: DType,
 }
 
-impl DictArray {
-    pub fn new(codes: ArrayRef, dict: ArrayRef) -> Self {
-        Self::try_new(codes, dict).unwrap()
-    }
-
-    pub fn try_new(codes: ArrayRef, dict: ArrayRef) -> VortexResult<Self> {
+impl DictArray<'_> {
+    pub fn try_new(codes: Array, values: Array) -> VortexResult<Self> {
         if !matches!(codes.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
             vortex_bail!(MismatchedTypes: "unsigned int", codes.dtype());
         }
-        Ok(Self {
-            codes,
-            values: dict,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        })
+        Self::try_from_parts(
+            values.dtype().clone(),
+            DictMetadata {
+                codes_dtype: codes.dtype().clone(),
+            },
+            vec![].into(),
+            vec![values.to_array_data(), codes.to_array_data()].into(),
+            HashMap::new(),
+        )
     }
 
     #[inline]
-    pub fn values(&self) -> &ArrayRef {
-        &self.values
+    pub fn values(&self) -> Array {
+        self.array().child(0, self.dtype()).expect("Missing values")
     }
 
     #[inline]
-    pub fn codes(&self) -> &ArrayRef {
-        &self.codes
+    pub fn codes(&self) -> Array {
+        self.array()
+            .child(1, &self.metadata().codes_dtype)
+            .expect("Missing codes")
     }
 }
 
-impl Array for DictArray {
-    impl_array!();
+impl ArrayFlatten for DictArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        take(&self.values(), &self.codes())?.flatten()
+    }
+}
 
+impl ArrayValidity for DictArray<'_> {
+    fn is_valid(&self, index: usize) -> bool {
+        let values_index = scalar_at(&self.codes(), index).unwrap().try_into().unwrap();
+        self.values().with_dyn(|a| a.is_valid(values_index))
+    }
+
+    fn logical_validity(&self) -> LogicalValidity {
+        if self.dtype().is_nullable() {
+            let primitive_codes = self.codes().flatten_primitive().unwrap();
+            match_each_integer_ptype!(primitive_codes.ptype(), |$P| {
+                ArrayAccessor::<$P>::with_iterator(&primitive_codes, |iter| {
+                    LogicalValidity::Array(
+                        BoolArray::from(iter.flatten().map(|c| *c != 0).collect::<Vec<_>>())
+                            .into_array_data(),
+                    )
+                })
+                .unwrap()
+            })
+        } else {
+            LogicalValidity::AllValid(self.len())
+        }
+    }
+}
+
+impl AcceptArrayVisitor for DictArray<'_> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_child("values", &self.values())?;
+        visitor.visit_child("codes", &self.codes())
+    }
+}
+
+impl ArrayTrait for DictArray<'_> {
     fn len(&self) -> usize {
-        self.codes.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.codes.is_empty()
-    }
-
-    fn dtype(&self) -> &DType {
-        self.values.dtype()
-    }
-
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    fn encoding(&self) -> EncodingRef {
-        &DictEncoding
-    }
-
-    fn nbytes(&self) -> usize {
-        self.codes().nbytes() + self.values().nbytes()
-    }
-
-    #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        walker.visit_child(self.values())?;
-        walker.visit_child(self.codes())
-    }
-}
-
-impl ArrayValidity for DictArray {
-    fn logical_validity(&self) -> Validity {
-        todo!()
-    }
-
-    fn is_valid(&self, _index: usize) -> bool {
-        todo!()
-    }
-}
-
-impl ArrayDisplay for DictArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.child("values", self.values())?;
-        f.child("codes", self.codes())
-    }
-}
-
-#[derive(Debug)]
-pub struct DictEncoding;
-
-impl DictEncoding {
-    pub const ID: EncodingId = EncodingId::new("vortex.dict");
-}
-
-impl Encoding for DictEncoding {
-    fn id(&self) -> EncodingId {
-        Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
-    }
-
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+        self.codes().len()
     }
 }

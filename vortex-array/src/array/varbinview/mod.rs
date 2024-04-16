@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::{mem, slice};
 
@@ -235,15 +234,7 @@ impl ArrayFlatten for VarBinViewArray<'_> {
     where
         Self: 'a,
     {
-        let data = (0..self.metadata().n_children)
-            .map(|i| self.bytes(i).flatten_primitive().map(|t| t.into_array()))
-            .collect::<VortexResult<Vec<_>>>()?;
-        Ok(Flattened::VarBinView(VarBinViewArray::try_new(
-            self.views(),
-            data,
-            self.dtype().clone(),
-            self.validity(),
-        )?))
+        Ok(Flattened::VarBinView(self))
     }
 }
 

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::FieldNames;

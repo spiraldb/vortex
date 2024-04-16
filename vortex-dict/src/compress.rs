@@ -4,38 +4,38 @@ use ahash::RandomState;
 use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
 use num_traits::AsPrimitive;
-use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-use vortex::array::varbin::{VarBinArray, VarBinEncoding};
-use vortex::array::{Array, ArrayKind, ArrayRef};
+use vortex::accessor::ArrayAccessor;
+use vortex::array::primitive::{Primitive, PrimitiveArray};
+use vortex::array::varbin::{VarBin, VarBinArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::match_each_native_ptype;
 use vortex::ptype::NativePType;
 use vortex::scalar::AsBytes;
-use vortex::stats::Stat;
+use vortex::stats::{ArrayStatistics, Stat};
+use vortex::validity::Validity;
+use vortex::{
+    match_each_native_ptype, Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray,
+};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::dict::{DictArray, DictEncoding};
-use crate::downcast::DowncastDict;
 
 impl EncodingCompression for DictEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &Array,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // TODO(robert): Add support for VarBinView
-        if array.encoding().id() != PrimitiveEncoding::ID
-            && array.encoding().id() != VarBinEncoding::ID
-        {
+        if array.encoding().id() != Primitive::ID && array.encoding().id() != VarBin::ID {
             return None;
         };
 
         // No point dictionary coding if the array is unique.
         // We don't have a unique stat yet, but strict-sorted implies unique.
         if array
-            .stats()
-            .get_or_compute_as(&Stat::IsStrictSorted)
+            .statistics()
+            .get_as(Stat::IsStrictSorted)
             .unwrap_or(false)
         {
             return None;
@@ -46,42 +46,49 @@ impl EncodingCompression for DictEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &Array,
+        like: Option<&Array>,
         ctx: CompressCtx,
-    ) -> VortexResult<ArrayRef> {
-        let dict_like = like.map(|like_arr| like_arr.as_dict());
+    ) -> VortexResult<OwnedArray> {
+        let dict_like = like.map(|like_arr| DictArray::try_from(like_arr).unwrap());
+        let dict_like_ref = dict_like.as_ref();
 
-        let (codes, dict) = match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => {
+        let (codes, dict) = match array.encoding().id() {
+            Primitive::ID => {
+                let p = PrimitiveArray::try_from(array).unwrap();
                 let (codes, dict) = match_each_native_ptype!(p.ptype(), |$P| {
-                    dict_encode_typed_primitive::<$P>(p)
+                    dict_encode_typed_primitive::<$P>(&p)
                 });
                 (
-                    ctx.auxiliary("codes")
-                        .excluding(&DictEncoding)
-                        .compress(&codes, dict_like.map(|dict| dict.codes()))?,
-                    ctx.named("values")
-                        .excluding(&DictEncoding)
-                        .compress(&dict, dict_like.map(|dict| dict.values()))?,
+                    ctx.auxiliary("codes").excluding(&DictEncoding).compress(
+                        &codes.to_array(),
+                        dict_like_ref.map(|dict| dict.codes()).as_ref(),
+                    )?,
+                    ctx.named("values").excluding(&DictEncoding).compress(
+                        &dict.to_array(),
+                        dict_like_ref.map(|dict| dict.values()).as_ref(),
+                    )?,
                 )
             }
-            ArrayKind::VarBin(vb) => {
-                let (codes, dict) = dict_encode_varbin(vb);
+            VarBin::ID => {
+                let vb = VarBinArray::try_from(array).unwrap();
+                let (codes, dict) = dict_encode_varbin(&vb);
                 (
-                    ctx.auxiliary("codes")
-                        .excluding(&DictEncoding)
-                        .compress(&codes, dict_like.map(|dict| dict.codes()))?,
-                    ctx.named("values")
-                        .excluding(&DictEncoding)
-                        .compress(&dict, dict_like.map(|dict| dict.values()))?,
+                    ctx.auxiliary("codes").excluding(&DictEncoding).compress(
+                        &codes.to_array(),
+                        dict_like_ref.map(|dict| dict.codes()).as_ref(),
+                    )?,
+                    ctx.named("values").excluding(&DictEncoding).compress(
+                        &dict.to_array(),
+                        dict_like_ref.map(|dict| dict.values()).as_ref(),
+                    )?,
                 )
             }
 
             _ => unreachable!("This array kind should have been filtered out"),
         };
 
-        Ok(DictArray::new(codes, dict).into_array())
+        DictArray::try_new(codes, dict).map(|a| a.into_array())
     }
 }
 
@@ -104,9 +111,9 @@ impl<T: AsBytes> Eq for Value<T> {}
 
 /// Dictionary encode primitive array with given PType.
 /// Null values in the original array are encoded in the dictionary.
-pub fn dict_encode_typed_primitive<T: NativePType>(
-    array: &PrimitiveArray,
-) -> (PrimitiveArray, PrimitiveArray) {
+pub fn dict_encode_typed_primitive<'a, T: NativePType>(
+    array: &PrimitiveArray<'a>,
+) -> (PrimitiveArray<'a>, PrimitiveArray<'a>) {
     let mut lookup_dict: HashMap<Value<T>, u64> = HashMap::new();
     let mut codes: Vec<u64> = Vec::new();
     let mut values: Vec<T> = Vec::new();
@@ -115,46 +122,47 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
         values.push(T::zero());
     }
 
-    for ov in array.iter() {
-        match ov {
-            None => codes.push(0),
-            Some(v) => {
-                let code = match lookup_dict.entry(Value(v)) {
-                    Entry::Occupied(o) => *o.get(),
-                    Entry::Vacant(vac) => {
-                        let next_code = values.len() as u64;
-                        vac.insert(next_code.as_());
-                        values.push(v);
-                        next_code
-                    }
-                };
-                codes.push(code);
+    ArrayAccessor::<T>::with_iterator(array, |iter| {
+        for ov in iter {
+            match ov {
+                None => codes.push(0),
+                Some(&v) => {
+                    let code = match lookup_dict.entry(Value(v)) {
+                        Entry::Occupied(o) => *o.get(),
+                        Entry::Vacant(vac) => {
+                            let next_code = values.len() as u64;
+                            vac.insert(next_code.as_());
+                            values.push(v);
+                            next_code
+                        }
+                    };
+                    codes.push(code);
+                }
             }
         }
-    }
+    })
+    .unwrap();
 
     let values_validity = if array.dtype().is_nullable() {
-        let mut validity = Vec::with_capacity(values.len());
-        validity.push(false);
-        validity.extend(vec![true; values.len() - 1]);
+        let mut validity = vec![true; values.len()];
+        validity[0] = false;
 
-        Some(validity.into())
+        validity.into()
     } else {
-        None
+        Validity::NonNullable
     };
 
     (
         PrimitiveArray::from(codes),
-        PrimitiveArray::from_nullable(values, values_validity),
+        PrimitiveArray::from_vec(values, values_validity),
     )
 }
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying
-pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
+pub fn dict_encode_varbin<'a>(array: &'a VarBinArray) -> (PrimitiveArray<'a>, VarBinArray<'a>) {
     array
-        .iter_primitive()
-        .map(|prim_iter| dict_encode_typed_varbin(array.dtype().clone(), prim_iter))
-        .unwrap_or_else(|_| dict_encode_typed_varbin(array.dtype().clone(), array.iter()))
+        .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
+        .unwrap()
 }
 
 fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
@@ -167,7 +175,10 @@ fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
     &bytes[begin..end]
 }
 
-fn dict_encode_typed_varbin<I, U>(dtype: DType, values: I) -> (PrimitiveArray, VarBinArray)
+fn dict_encode_typed_varbin<'a, I, U>(
+    dtype: DType,
+    values: I,
+) -> (PrimitiveArray<'a>, VarBinArray<'a>)
 where
     I: Iterator<Item = Option<U>>,
     U: AsRef<[u8]>,
@@ -220,19 +231,20 @@ where
         validity.push(false);
         validity.extend(vec![true; offsets.len() - 2]);
 
-        Some(validity.into())
+        validity.into()
     } else {
-        None
+        Validity::NonNullable
     };
 
     (
         PrimitiveArray::from(codes),
-        VarBinArray::new(
+        VarBinArray::try_new(
             PrimitiveArray::from(offsets).into_array(),
             PrimitiveArray::from(bytes).into_array(),
             dtype,
             values_validity,
-        ),
+        )
+        .unwrap(),
     )
 }
 
@@ -240,6 +252,7 @@ where
 mod test {
     use std::str;
 
+    use vortex::accessor::ArrayAccessor;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
@@ -257,7 +270,7 @@ mod test {
 
     #[test]
     fn encode_primitive_nulls() {
-        let arr = PrimitiveArray::from_iter(vec![
+        let arr = PrimitiveArray::from_nullable_vec(vec![
             Some(1),
             Some(1),
             None,
@@ -273,15 +286,15 @@ mod test {
             &[1, 1, 0, 2, 2, 0, 2, 0]
         );
         assert_eq!(
-            scalar_at(&values, 0).unwrap(),
+            scalar_at(values.array(), 0).unwrap(),
             PrimitiveScalar::nullable::<i32>(None).into()
         );
         assert_eq!(
-            scalar_at(&values, 1).unwrap(),
+            scalar_at(values.array(), 1).unwrap(),
             PrimitiveScalar::nullable(Some(1)).into()
         );
         assert_eq!(
-            scalar_at(&values, 2).unwrap(),
+            scalar_at(values.array(), 2).unwrap(),
             PrimitiveScalar::nullable(Some(3)).into()
         );
     }
@@ -291,15 +304,16 @@ mod test {
         let arr = VarBinArray::from(vec!["hello", "world", "hello", "again", "world"]);
         let (codes, values) = dict_encode_varbin(&arr);
         assert_eq!(codes.buffer().typed_data::<u64>(), &[0, 1, 0, 2, 1]);
-        assert_eq!(
-            values
-                .iter_primitive()
-                .unwrap()
-                .flatten()
-                .map(|b| unsafe { str::from_utf8_unchecked(b) })
-                .collect::<Vec<_>>(),
-            vec!["hello", "world", "again"]
-        );
+        values
+            .with_iterator(|iter| {
+                assert_eq!(
+                    iter.flatten()
+                        .map(|b| unsafe { str::from_utf8_unchecked(b) })
+                        .collect::<Vec<_>>(),
+                    vec!["hello", "world", "again"]
+                );
+            })
+            .unwrap();
     }
 
     #[test]
@@ -322,29 +336,31 @@ mod test {
             &[1, 0, 2, 1, 0, 3, 2, 0]
         );
         assert_eq!(String::from_utf8(values.bytes_at(0).unwrap()).unwrap(), "");
-        assert_eq!(
-            values
-                .iter_primitive()
-                .unwrap()
-                .map(|b| b.map(|bv| unsafe { str::from_utf8_unchecked(bv) }))
-                .collect::<Vec<_>>(),
-            vec![None, Some("hello"), Some("world"), Some("again")]
-        );
+        values
+            .with_iterator(|iter| {
+                assert_eq!(
+                    iter.map(|b| b.map(|v| unsafe { str::from_utf8_unchecked(v) }))
+                        .collect::<Vec<_>>(),
+                    vec![None, Some("hello"), Some("world"), Some("again")]
+                );
+            })
+            .unwrap();
     }
 
     #[test]
     fn repeated_values() {
         let arr = VarBinArray::from(vec!["a", "a", "b", "b", "a", "b", "a", "b"]);
         let (codes, values) = dict_encode_varbin(&arr);
-        assert_eq!(
-            values
-                .iter_primitive()
-                .unwrap()
-                .flatten()
-                .map(|b| unsafe { str::from_utf8_unchecked(b) })
-                .collect::<Vec<_>>(),
-            vec!["a", "b"]
-        );
+        values
+            .with_iterator(|iter| {
+                assert_eq!(
+                    iter.flatten()
+                        .map(|b| unsafe { str::from_utf8_unchecked(b) })
+                        .collect::<Vec<_>>(),
+                    vec!["a", "b"]
+                );
+            })
+            .unwrap();
         assert_eq!(codes.typed_data::<u64>(), &[0u64, 0, 1, 1, 0, 1, 0, 1]);
     }
 }

@@ -3898,6 +3898,7 @@ dependencies = [
  "pyo3",
  "pyo3-log",
  "vortex-array",
+ "vortex-dict",
  "vortex-error",
  "vortex-schema",
 ]
@@ -5104,6 +5105,26 @@ dependencies = [
  "vortex-flatbuffers",
  "vortex-schema",
  "walkdir",
+]
+
+[[package]]
+name = "vortex-dict"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "criterion",
+ "half",
+ "hashbrown",
+ "linkme",
+ "log",
+ "num-traits",
+ "paste",
+ "rand",
+ "serde",
+ "simplelog",
+ "vortex-array",
+ "vortex-error",
+ "vortex-schema",
 ]
 
 [[package]]

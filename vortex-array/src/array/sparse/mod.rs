@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use ::serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 
@@ -129,6 +127,13 @@ impl AcceptArrayVisitor for SparseArray<'_> {
 impl ArrayStatisticsCompute for SparseArray<'_> {}
 
 impl ArrayValidity for SparseArray<'_> {
+    fn is_valid(&self, index: usize) -> bool {
+        match self.find_index(index).unwrap() {
+            None => !self.fill_value().is_null(),
+            Some(idx) => self.values().with_dyn(|a| a.is_valid(idx)),
+        }
+    }
+
     fn logical_validity(&self) -> LogicalValidity {
         let validity = if self.fill_value().is_null() {
             // If we have a null fill value, then the result is a Sparse array with a fill_value
@@ -155,13 +160,6 @@ impl ArrayValidity for SparseArray<'_> {
         .unwrap();
 
         LogicalValidity::Array(validity.into_array_data())
-    }
-
-    fn is_valid(&self, index: usize) -> bool {
-        match self.find_index(index).unwrap() {
-            None => !self.fill_value().is_null(),
-            Some(idx) => self.values().with_dyn(|a| a.is_valid(idx)),
-        }
     }
 }
 
