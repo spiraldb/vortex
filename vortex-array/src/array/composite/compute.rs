@@ -10,7 +10,7 @@ use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::scalar::Scalar;
-use crate::{Array, IntoArray, OwnedArray};
+use crate::{Array, ArrayDType, IntoArray, OwnedArray};
 
 impl ArrayCompute for CompositeArray<'_> {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {

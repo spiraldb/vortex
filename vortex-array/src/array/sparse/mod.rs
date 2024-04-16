@@ -2,15 +2,13 @@ use std::collections::HashMap;
 
 use ::serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::DType;
 
 use crate::array::constant::ConstantArray;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
-use crate::scalar::Scalar;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, match_each_integer_ptype, IntoArray, IntoArrayData, ToArrayData};
+use crate::{impl_encoding, match_each_integer_ptype, ArrayDType, IntoArrayData, ToArrayData};
 
 // mod compress;
 mod compute;

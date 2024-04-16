@@ -7,7 +7,7 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::scalar::Scalar;
-use crate::{Array, IntoArray, OwnedArray};
+use crate::{Array, ArrayTrait, IntoArray, OwnedArray};
 
 impl ArrayCompute for ConstantArray<'_> {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {

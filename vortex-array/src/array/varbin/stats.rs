@@ -8,6 +8,7 @@ use crate::accessor::ArrayAccessor;
 use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::scalar::Scalar;
 use crate::stats::{ArrayStatisticsCompute, Stat};
+use crate::{ArrayDType, ArrayTrait};
 
 impl ArrayStatisticsCompute for VarBinArray<'_> {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {

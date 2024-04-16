@@ -8,14 +8,13 @@ use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::buffer::Buffer;
 use crate::ptype::{NativePType, PType};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayFlatten;
-use crate::{impl_encoding, IntoArray};
+use crate::{impl_encoding, ArrayDType};
 
 impl_encoding!("vortex.primitive", Primitive);
 

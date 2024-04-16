@@ -4,7 +4,7 @@ use std::{mem, slice};
 
 use ::serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+use vortex_schema::{IntWidth, Nullability, Signedness};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbinview::builder::VarBinViewBuilder;
@@ -12,7 +12,7 @@ use crate::compute::slice::slice;
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayFlatten, IntoArray, ToArrayData};
+use crate::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
 
 mod accessor;
 mod builder;
@@ -332,7 +332,7 @@ mod test {
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
     use crate::scalar::Scalar;
-    use crate::IntoArray;
+    use crate::{ArrayTrait, IntoArray};
 
     #[test]
     pub fn varbin_view() {

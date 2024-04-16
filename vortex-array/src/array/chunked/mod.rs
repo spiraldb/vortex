@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+use vortex_schema::{IntWidth, Nullability, Signedness};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
@@ -11,7 +11,7 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
+use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
 
 mod compute;
 mod stats;

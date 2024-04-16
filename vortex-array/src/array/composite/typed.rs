@@ -7,7 +7,7 @@ use vortex_schema::DType;
 use crate::array::composite::array::CompositeArray;
 use crate::array::composite::UnderlyingMetadata;
 use crate::compute::ArrayCompute;
-use crate::Array;
+use crate::{Array, ArrayDType};
 
 pub trait CompositeExtension: Debug + Send + Sync + 'static {
     fn id(&self) -> CompositeID;

@@ -5,7 +5,7 @@ use vortex_error::{vortex_err, VortexResult};
 
 use crate::compute::scalar_at::scalar_at;
 use crate::scalar::Scalar;
-use crate::Array;
+use crate::{Array, ArrayDType};
 
 #[derive(Debug, Copy, Clone)]
 pub enum SearchSortedSide {

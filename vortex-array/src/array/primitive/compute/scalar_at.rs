@@ -6,6 +6,7 @@ use crate::match_each_native_ptype;
 use crate::scalar::PrimitiveScalar;
 use crate::scalar::Scalar;
 use crate::validity::ArrayValidity;
+use crate::ArrayDType;
 
 impl ScalarAtFn for PrimitiveArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {

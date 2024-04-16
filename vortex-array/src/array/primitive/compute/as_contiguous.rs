@@ -3,8 +3,8 @@ use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::as_contiguous::AsContiguousFn;
-use crate::match_each_native_ptype;
 use crate::validity::Validity;
+use crate::{match_each_native_ptype, ArrayDType};
 use crate::{Array, IntoArray, OwnedArray};
 
 impl AsContiguousFn for PrimitiveArray<'_> {

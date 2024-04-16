@@ -86,14 +86,6 @@ impl Array<'_> {
         }
     }
 
-    pub fn dtype(&self) -> &DType {
-        match self {
-            Array::Data(d) => d.dtype(),
-            Array::DataRef(d) => d.dtype(),
-            Array::View(v) => v.dtype(),
-        }
-    }
-
     pub fn len(&self) -> usize {
         self.with_dyn(|a| a.len())
     }
@@ -153,6 +145,10 @@ pub trait ToStatic {
     fn to_static(&self) -> Self::Static;
 }
 
+pub trait AsArray {
+    fn as_array_ref(&self) -> &Array;
+}
+
 /// Collects together the behaviour of an array.
 pub trait ArrayTrait:
     ArrayEncodingRef
@@ -180,6 +176,7 @@ pub trait ArrayTrait:
 }
 
 pub trait ArrayDType {
+    // TODO(ngates): move into ArrayTrait?
     fn dtype(&self) -> &DType;
 }
 
@@ -240,11 +237,5 @@ impl IntoArrayData for Array<'_> {
             Array::DataRef(d) => d.clone(),
             Array::View(_) => self.with_dyn(|a| a.to_array_data()),
         }
-    }
-}
-
-impl ToArrayData for Array<'_> {
-    fn to_array_data(&self) -> ArrayData {
-        self.clone().into_array_data()
     }
 }

@@ -20,7 +20,7 @@ use crate::compute::ArrayCompute;
 use crate::ptype::PType;
 use crate::scalar::Scalar;
 use crate::validity::{ArrayValidity, Validity};
-use crate::{Array, IntoArray, OwnedArray, ToArray};
+use crate::{Array, ArrayDType, IntoArray, OwnedArray, ToArray};
 
 mod slice;
 mod take;

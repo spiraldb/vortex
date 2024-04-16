@@ -7,7 +7,7 @@ use crate::array::sparse::SparseArray;
 use crate::ptype::NativePType;
 use crate::scalar::Scalar;
 use crate::validity::Validity;
-use crate::{match_each_native_ptype, ArrayFlatten, Flattened};
+use crate::{match_each_native_ptype, ArrayFlatten, ArrayTrait, Flattened};
 
 impl ArrayFlatten for SparseArray<'_> {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
