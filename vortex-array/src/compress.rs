@@ -18,7 +18,8 @@ use crate::encoding::{ArrayEncoding, EncodingRef, VORTEX_ENCODINGS};
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
 use crate::{
-    compute, Array, ArrayDType, ArrayData, ArrayDef, IntoArray, IntoArrayData, OwnedArray, ToStatic,
+    compute, Array, ArrayDType, ArrayData, ArrayDef, ArrayTrait, IntoArray, IntoArrayData,
+    OwnedArray, ToStatic,
 };
 
 pub trait EncodingCompression: ArrayEncoding {

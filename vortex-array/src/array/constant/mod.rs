@@ -4,8 +4,6 @@ use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
 
 use crate::impl_encoding;
-use crate::scalar::Scalar;
-use crate::stats::Stat;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 

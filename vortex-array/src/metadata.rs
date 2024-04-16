@@ -15,6 +15,10 @@ pub trait ArrayMetadata: 'static + Send + Sync + Debug + TrySerializeArrayMetada
     fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
 }
 
+pub trait GetArrayMetadata {
+    fn metadata(&self) -> Arc<dyn ArrayMetadata>;
+}
+
 pub trait TrySerializeArrayMetadata {
     fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>>;
 }

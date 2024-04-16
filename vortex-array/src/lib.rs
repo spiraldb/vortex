@@ -145,6 +145,10 @@ pub trait ToStatic {
     fn to_static(&self) -> Self::Static;
 }
 
+pub trait AsArray {
+    fn as_array_ref(&self) -> &Array;
+}
+
 /// Collects together the behaviour of an array.
 pub trait ArrayTrait:
     ArrayEncodingRef

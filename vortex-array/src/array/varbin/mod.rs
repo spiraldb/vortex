@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+use vortex_schema::{IntWidth, Nullability, Signedness};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::ptype::NativePType;
-use crate::scalar::{BinaryScalar, Scalar, Utf8Scalar};
+use crate::scalar::{BinaryScalar, Utf8Scalar};
 use crate::validity::{Validity, ValidityMetadata};
 use crate::{impl_encoding, OwnedArray, ToArrayData};
 use crate::{match_each_native_ptype, ArrayDType};

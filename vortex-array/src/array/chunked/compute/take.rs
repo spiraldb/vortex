@@ -58,7 +58,7 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::compute::as_contiguous::as_contiguous;
     use crate::compute::take::take;
-    use crate::{ArrayDType, ArrayTrait, IntoArray};
+    use crate::{ArrayDType, ArrayTrait, AsArray, IntoArray};
 
     #[test]
     fn test_take() {
@@ -71,7 +71,7 @@ mod test {
 
         let result = PrimitiveArray::try_from(
             as_contiguous(
-                &ChunkedArray::try_from(take(arr.as_ref(), &indices).unwrap())
+                &ChunkedArray::try_from(take(arr.as_array_ref(), &indices).unwrap())
                     .unwrap()
                     .chunks()
                     .collect_vec(),

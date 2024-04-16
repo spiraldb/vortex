@@ -2,13 +2,12 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{DType, FieldNames};
+use vortex_schema::FieldNames;
 
 use crate::compute::ArrayCompute;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::ArrayData;
 use crate::{impl_encoding, ArrayDType};
 use crate::{ArrayFlatten, IntoArrayData};
 

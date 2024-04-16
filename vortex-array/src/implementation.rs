@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use vortex_error::{VortexError, VortexResult};
 use vortex_schema::DType;
 
@@ -9,7 +7,8 @@ use crate::encoding::{ArrayEncodingExt, EncodingId};
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
-    Array, ArrayDType, ArrayData, ArrayMetadata, IntoArray, IntoArrayData, ToArrayData, ToStatic,
+    Array, ArrayDType, ArrayData, ArrayMetadata, AsArray, GetArrayMetadata, IntoArray,
+    IntoArrayData, ToArrayData, ToStatic,
 };
 use crate::{ArrayTrait, TryDeserializeArrayMetadata};
 
@@ -32,10 +31,13 @@ macro_rules! impl_encoding {
         paste! {
             use $crate::{
                 Array,
+                ArrayData,
                 ArrayDef,
                 ArrayMetadata,
                 ArrayTrait,
+                AsArray,
                 Flattened,
+                GetArrayMetadata,
                 IntoArray,
                 ToArray,
                 TypedArray,
@@ -48,7 +50,11 @@ macro_rules! impl_encoding {
                 EncodingRef,
                 VORTEX_ENCODINGS,
             };
+            use $crate::buffer::OwnedBuffer;
+            use $crate::stats::Stat;
+            use $crate::scalar::Scalar;
             use vortex_error::VortexError;
+            use vortex_schema::DType;
             use std::any::Any;
             use std::fmt::Debug;
             use std::sync::Arc;
@@ -65,30 +71,40 @@ macro_rules! impl_encoding {
                 type Encoding = [<$Name Encoding>];
             }
 
+            #[derive(Debug)]
             pub struct [<$Name Array>]<'a> {
                 typed: TypedArray<'a, $Name>
             }
             pub type [<Owned $Name Array>] = [<$Name Array>]<'static>;
             impl<'a> [<$Name Array>]<'a> {
-                fn array(&'a self) -> &'a Array<'a> {
+                pub fn array(&'a self) -> &'a Array<'a> {
                     self.typed.array()
                 }
-                fn metadata(&self) -> &'a [<$Name Metadata>] {
+                pub fn metadata(&'a self) -> &'a [<$Name Metadata>] {
                     self.typed.metadata()
                 }
-            }
-            impl<'a> AsRef<TypedArray<'a, $Name>> for [<$Name Array>]<'a> {
-                fn as_ref(&self) -> &TypedArray<'a, $Name> {
-                    &self.typed
+
+                pub fn try_from_parts(
+                    dtype: DType,
+                    metadata: [<$Name Metadata>],
+                    buffers: Arc<[OwnedBuffer]>,
+                    children: Arc<[ArrayData]>,
+                    stats: HashMap<Stat, Scalar>) -> VortexResult<Self> {
+                    Ok(Self { typed: TypedArray::try_from_parts(dtype, metadata, buffers, children, stats)? })
                 }
             }
-            impl<'a> AsRef<Array<'a>> for [<$Name Array>]<'a> {
-                fn as_ref(&self) -> &Array<'a> {
+            impl<'a> GetArrayMetadata for [<$Name Array>]<'a> {
+                fn metadata(&self) -> Arc<dyn ArrayMetadata> {
+                    Arc::new(self.metadata().clone())
+                }
+            }
+            impl<'a> AsArray for [<$Name Array>]<'a> {
+                fn as_array_ref(&self) -> &Array {
                     self.typed.array()
                 }
             }
             impl<'a> ToArray for [<$Name Array>]<'a> {
-                fn to_array(&self) -> Array<'a> {
+                fn to_array(&self) -> Array {
                     self.typed.to_array()
                 }
             }
@@ -106,6 +122,13 @@ macro_rules! impl_encoding {
                 type Error = VortexError;
 
                 fn try_from(array: Array<'a>) -> Result<Self, Self::Error> {
+                    TypedArray::<$Name>::try_from(array).map(Self::from)
+                }
+            }
+            impl<'a> TryFrom<&'a Array<'a>> for [<$Name Array>]<'a> {
+                type Error = VortexError;
+
+                fn try_from(array: &'a Array<'a>) -> Result<Self, Self::Error> {
                     TypedArray::<$Name>::try_from(array).map(Self::from)
                 }
             }
@@ -160,21 +183,21 @@ macro_rules! impl_encoding {
     };
 }
 
-impl<'a> AsRef<Array<'a>> for Array<'a> {
-    fn as_ref(&self) -> &Array<'a> {
+impl<'a> AsArray for Array<'a> {
+    fn as_array_ref(&self) -> &Array {
         self
     }
 }
 
-impl<'a, T: AsRef<Array<'a>>> ArrayEncodingRef for T {
+impl<T: AsArray> ArrayEncodingRef for T {
     fn encoding(&self) -> EncodingRef {
-        self.as_ref().encoding()
+        self.as_array_ref().encoding()
     }
 }
 
-impl<'a, T: AsRef<Array<'a>> + 'a> ArrayDType for T {
+impl<T: AsArray> ArrayDType for T {
     fn dtype(&self) -> &DType {
-        match self.as_ref() {
+        match self.as_array_ref() {
             Array::Data(d) => d.dtype(),
             Array::DataRef(d) => d.dtype(),
             Array::View(v) => v.dtype(),
@@ -182,9 +205,9 @@ impl<'a, T: AsRef<Array<'a>> + 'a> ArrayDType for T {
     }
 }
 
-impl<'a, T: AsRef<Array<'a>>> ArrayStatistics for T {
+impl<T: AsArray> ArrayStatistics for T {
     fn statistics(&self) -> &(dyn Statistics + '_) {
-        match self.as_ref() {
+        match self.as_array_ref() {
             Array::Data(d) => d.statistics(),
             Array::DataRef(d) => d.statistics(),
             Array::View(v) => v.statistics(),
@@ -192,8 +215,13 @@ impl<'a, T: AsRef<Array<'a>>> ArrayStatistics for T {
     }
 }
 
-impl<'a, T: IntoArray<'a>> IntoArrayData for T {
+impl<'a, T: IntoArray<'a> + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoArrayData
+    for T
+{
     fn into_array_data(self) -> ArrayData {
+        let encoding = self.encoding();
+        let metadata = self.metadata();
+        let stats = self.statistics().to_map();
         let array = self.into_array();
         match array {
             Array::Data(d) => d,
@@ -220,12 +248,12 @@ impl<'a, T: IntoArray<'a>> IntoArrayData for T {
                 };
                 array.with_dyn(|a| a.accept(&mut visitor).unwrap());
                 ArrayData::try_new(
-                    self.encoding(),
+                    encoding,
                     array.dtype().clone(),
-                    Arc::new(self.metadata().clone()),
+                    metadata,
                     visitor.buffers.into(),
                     visitor.children.into(),
-                    self.statistics().to_map(),
+                    stats,
                 )
                 .unwrap()
             }
@@ -233,9 +261,9 @@ impl<'a, T: IntoArray<'a>> IntoArrayData for T {
     }
 }
 
-impl<'a, T: AsRef<Array<'a>>> ToArrayData for T {
+impl<T: AsArray> ToArrayData for T {
     fn to_array_data(&self) -> ArrayData {
-        self.as_ref().clone().into_array_data()
+        self.as_array_ref().clone().into_array_data()
     }
 }
 //

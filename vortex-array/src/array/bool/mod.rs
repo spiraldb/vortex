@@ -1,19 +1,18 @@
-mod compute;
-mod stats;
-
 use std::collections::HashMap;
 
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::buffer::Buffer;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayFlatten};
+
+mod compute;
+mod stats;
 
 impl_encoding!("vortex.bool", Bool);
 

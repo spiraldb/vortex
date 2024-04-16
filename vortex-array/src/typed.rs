@@ -5,11 +5,10 @@ use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::buffer::OwnedBuffer;
-use crate::encoding::ArrayEncodingRef;
 use crate::scalar::Scalar;
 use crate::stats::Stat;
 use crate::{
-    Array, ArrayData, ArrayDef, IntoArray, ToArray, ToArrayData, ToStatic,
+    Array, ArrayData, ArrayDef, AsArray, IntoArray, ToArray, ToArrayData, ToStatic,
     TryDeserializeArrayMetadata,
 };
 
@@ -103,8 +102,8 @@ impl<D: ArrayDef> ToStatic for TypedArray<'_, D> {
     }
 }
 
-impl<'a, D: ArrayDef> AsRef<Array<'a>> for TypedArray<'a, D> {
-    fn as_ref(&self) -> &Array<'a> {
+impl<'a, D: ArrayDef> AsArray for TypedArray<'a, D> {
+    fn as_array_ref(&self) -> &Array {
         &self.array
     }
 }
