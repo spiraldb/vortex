@@ -22,7 +22,7 @@ fs_extra = { workspace = true }
 #vortex-alp = { path = "../vortex-alp" }
 vortex-array = { path = "../vortex-array" }
 #vortex-datetime = { path = "../vortex-datetime" }
-#vortex-dict = { path = "../vortex-dict" }
+vortex-dict = { path = "../vortex-dict" }
 vortex-error = { path = "../vortex-error", features = ["parquet"] }
 #vortex-fastlanes = { path = "../vortex-fastlanes" }
 vortex-ipc = { path = "../vortex-ipc" }

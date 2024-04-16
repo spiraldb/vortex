@@ -17,6 +17,7 @@ use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::encoding::{EncodingRef, VORTEX_ENCODINGS};
 use vortex::{Array, IntoArray, OwnedArray, ToArrayData};
+use vortex_dict::DictEncoding;
 use vortex_schema::DType;
 
 use crate::reader::BATCH_SIZE;
@@ -102,7 +103,7 @@ pub fn enumerate_arrays() -> Vec<EncodingRef> {
     );
     vec![
         //&ALPEncoding,
-        //&DictEncoding,
+        &DictEncoding,
         //&BitPackedEncoding,
         //&FoREncoding,
         //&DateTimeEncoding,

@@ -974,6 +974,7 @@ dependencies = [
  "tokio",
  "uuid",
  "vortex-array",
+ "vortex-dict",
  "vortex-error",
  "vortex-ipc",
  "vortex-schema",
