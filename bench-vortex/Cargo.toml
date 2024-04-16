@@ -15,10 +15,28 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
+arrow = { workspace = true }
 arrow-array = { workspace = true }
+arrow-data = { workspace = true }
+arrow-csv = { workspace = true }
 arrow-select = { workspace = true }
+bzip2 = { workspace = true }
+csv = { workspace = true }
+duckdb = { workspace = true }
 enum-iterator = { workspace = true }
 fs_extra = { workspace = true }
+humansize = { workspace = true }
+itertools = { workspace = true }
+lance = { version = "0.10.5", features = [] }
+lance-arrow-array = { package = "arrow-array", version = "50.0" }
+lance-parquet = { package = "parquet", version = "50.0", features = [] }
+lazy_static = { workspace = true }
+log = { workspace = true }
+parquet = { workspace = true, features = [] }
+reqwest = { workspace = true }
+simplelog = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
 vortex-alp = { path = "../vortex-alp" }
 vortex-array = { path = "../vortex-array" }
 vortex-array2 = { path = "../vortex-array2" }
@@ -31,22 +49,6 @@ vortex-ree = { path = "../vortex-ree" }
 vortex-roaring = { path = "../vortex-roaring" }
 vortex-schema = { path = "../vortex-schema" }
 vortex-zigzag = { path = "../vortex-zigzag" }
-itertools = { workspace = true }
-lance = { version = "0.10.5", features = [] }
-lance-arrow-array = { package = "arrow-array", version = "50.0" }
-lance-parquet = { package = "parquet", version = "50.0", features = [] }
-lazy_static = { workspace = true }
-log = { workspace = true }
-parquet = { workspace = true, features = [] }
-reqwest = { workspace = true }
-simplelog = { workspace = true }
-tokio = "1.0.1"
-bzip2 = { workspace = true }
-csv = { workspace = true }
-arrow-csv = { workspace = true }
-arrow = { workspace = true }
-humansize = { workspace = true }
-uuid = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
