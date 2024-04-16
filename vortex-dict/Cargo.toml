@@ -19,10 +19,10 @@ linkme = { workspace = true }
 log = { workspace = true }
 num-traits = { workspace = true }
 paste = { workspace = true }
+serde = { workspace = true }
 vortex-array = { path = "../vortex-array" }
 vortex-error = { path = "../vortex-error" }
 vortex-schema = { path = "../vortex-schema" }
-serde = { version = "1.0.197", features = ["derive"] }
 
 [lints]
 workspace = true
