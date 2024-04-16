@@ -35,18 +35,13 @@ pub struct CompositeMetadata {
 impl TrySerializeArrayMetadata for CompositeMetadata {
     fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
         let mut fb = flexbuffers::Builder::default();
-        let mut elems = fb.start_vector();
-        elems.push(self.ext.id().0);
-
-        let mut fbb = FlatBufferBuilder::new();
-        let dtype_root = self.underlying_dtype.write_flatbuffer(&mut fbb);
-        fbb.finish_minimal(dtype_root);
-        elems.push(fbb.finished_data());
-
-        elems.push(self.underlying_metadata.as_ref());
-
-        elems.end_vector();
-
+        {
+            let mut elems = fb.start_vector();
+            elems.push(self.ext.id().0);
+            self.underlying_dtype
+                .with_flatbuffer_bytes(|b| elems.push(flexbuffers::Blob(b)));
+            elems.push(flexbuffers::Blob(self.underlying_metadata.as_ref()));
+        }
         Ok(fb.take_buffer().into())
     }
 }

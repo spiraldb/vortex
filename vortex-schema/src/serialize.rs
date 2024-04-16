@@ -176,21 +176,17 @@ impl From<&FloatWidth> for fb::FloatWidth {
 mod test {
     use std::sync::Arc;
 
-    use flatbuffers::{root, FlatBufferBuilder};
-    use vortex_flatbuffers::{ReadFlatBuffer, WriteFlatBuffer};
+    use flatbuffers::root;
+    use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
     use crate::flatbuffers as fb;
     use crate::{DType, DTypeSerdeContext, FloatWidth, IntWidth, Nullability, Signedness};
 
     fn roundtrip_dtype(dtype: DType) {
-        let mut fbb = FlatBufferBuilder::new();
-        let root_offset = dtype.write_flatbuffer(&mut fbb);
-        fbb.finish_minimal(root_offset);
-
-        let bytes = fbb.finished_data();
+        let bytes = dtype.with_flatbuffer_bytes(|bytes| bytes.to_vec());
         let deserialized = DType::read_flatbuffer(
             &DTypeSerdeContext::new(vec![]),
-            &root::<fb::DType>(bytes).unwrap(),
+            &root::<fb::DType>(&bytes).unwrap(),
         )
         .unwrap();
         assert_eq!(dtype, deserialized);

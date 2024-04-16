@@ -63,8 +63,10 @@ union Type {
     Composite,
 }
 
+// TODO(ngates): separate out ScalarValue from Scalar, even in-memory, so we can avoid duplicating dtype information (e.g. Struct field names).
 table Scalar {
   type: Type;
+  nullability: bool;
 }
 
 root_type Scalar;
