@@ -37,11 +37,6 @@ runs:
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV
 
-    - name: Setup DuckDB
-      uses: opt-nc/setup-duckdb-action@v1.0.7
-      with:
-        version: v0.10.1
-
     - name: Export Path
       shell: bash
       run: echo "PATH=$PATH" >> $GITHUB_ENV
