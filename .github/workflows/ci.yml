@@ -43,4 +43,3 @@ jobs:
       - name: Pytest - PyVortex
         run: rye run pytest --benchmark-disable test/
         working-directory: pyvortex/
-
