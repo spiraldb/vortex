@@ -92,7 +92,7 @@ impl EncodingCompression for BitPackedEncoding {
             parray.dtype().clone(),
             parray.len(),
         )
-        .map(move |a| a.into_array())
+        .map(|a| a.into_array())
     }
 }
 
