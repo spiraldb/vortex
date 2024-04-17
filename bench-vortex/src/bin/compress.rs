@@ -14,10 +14,9 @@ use vortex::array::Array;
 pub fn main() {
     setup_logger(LevelFilter::Info);
     compress_pbi(PBIDataset::Medicare1);
-    // compress_taxi();
+    compress_taxi();
 }
 
-#[allow(dead_code)]
 fn compress_taxi() {
     let path: PathBuf = "taxi_data.vortex".to_data_path();
     {
