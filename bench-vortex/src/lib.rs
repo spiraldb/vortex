@@ -1,25 +1,21 @@
-use std::collections::HashMap;
 use std::env::temp_dir;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use arrow::datatypes::SchemaRef;
 use arrow_array::RecordBatchReader;
 use humansize::DECIMAL;
 use itertools::Itertools;
-use log::{info, warn, LevelFilter};
+use log::{info, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::IntoArray;
 use vortex::array::{Array, ArrayRef};
 use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::encoding::{EncodingRef, ENCODINGS};
-use vortex::formatter::display_tree;
 use vortex_alp::ALPEncoding;
 use vortex_datetime::DateTimeEncoding;
 use vortex_dict::DictEncoding;
@@ -37,6 +33,7 @@ pub mod parquet_utils;
 pub mod public_bi_data;
 pub mod reader;
 pub mod taxi_data;
+pub mod vortex_utils;
 
 /// Creates a file if it doesn't already exist.
 /// NB: Does NOT modify the given path to ensure that it resides in the data directory.
@@ -159,41 +156,8 @@ pub fn compress_taxi_data() -> ArrayRef {
         })
         .collect_vec();
 
-    chunks_to_array("taxi_data", schema, uncompressed_size, chunks).0
-}
+    let compressed = ChunkedArray::new(chunks.clone(), DType::from_arrow(schema)).into_array();
 
-fn chunks_to_array(
-    fname: &str,
-    schema: SchemaRef,
-    uncompressed_size: usize,
-    chunks: Vec<ArrayRef>,
-) -> (ArrayRef, CompressionRunStats) {
-    let dtype = DType::from_arrow(schema.clone());
-    let compressed = ChunkedArray::new(chunks.clone(), dtype).into_array();
-
-    warn!("Compressed array {}", display_tree(compressed.as_ref()));
-
-    let mut field_bytes = vec![0; schema.fields().len()];
-    for chunk in chunks {
-        let str = chunk.as_struct();
-        for (i, field) in str.fields().iter().enumerate() {
-            field_bytes[i] += field.nbytes();
-        }
-    }
-    let mut compressed_sizes = HashMap::new();
-
-    field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
-        *compressed_sizes.entry(i as u64).or_insert(0) += nbytes as u64;
-    });
-
-    let stats = CompressionRunStats {
-        schema: Some(schema),
-        file_type: FileType::Vortex,
-        uncompressed_size: Some(uncompressed_size as u64),
-        total_compressed_size: Some(compressed_sizes.values().sum()),
-        compressed_sizes,
-        file_name: fname.to_string(),
-    };
     info!(
         "{}, Bytes: {}, Ratio {}",
         humansize::format_size(compressed.nbytes(), DECIMAL),
@@ -201,55 +165,38 @@ fn chunks_to_array(
         compressed.nbytes() as f32 / uncompressed_size as f32
     );
 
-    (compressed, stats)
+    compressed
 }
 
 pub struct CompressionRunStats {
-    schema: Option<SchemaRef>,
-    uncompressed_size: Option<u64>,
+    schema: DType,
     total_compressed_size: Option<u64>,
-    compressed_sizes: HashMap<u64, u64>,
+    compressed_sizes: Vec<u64>,
     file_type: FileType,
     file_name: String,
 }
 
 impl CompressionRunStats {
     pub fn to_results(&self, dataset_name: String) -> Vec<CompressionRunResults> {
-        let mut results = Vec::new();
+        let DType::Struct(ns, fs) = &self.schema else {
+            unreachable!()
+        };
 
-        for (&col_idx, &size) in &self.compressed_sizes {
-            let column_name = self
-                .schema
-                .as_ref()
-                .map(|s| s.fields().get(col_idx as usize).unwrap().name().clone())
-                .unwrap_or_else(|| format!("column_{}", col_idx));
-
-            let column_type = self
-                .schema
-                .as_ref()
-                .map(|s| {
-                    s.fields()
-                        .get(col_idx as usize)
-                        .map(|f| f.data_type().to_string())
-                        .unwrap_or_default()
-                })
-                .unwrap_or_default();
-
-            let uncompressed_size = self.uncompressed_size;
-
-            results.push(CompressionRunResults {
-                dataset_name: dataset_name.clone(),
-                file_name: self.file_name.clone(),
-                file_type: self.file_type.to_string(),
-                column_name,
-                column_type,
-                uncompressed_size,
-                compressed_size: size,
-                total_compressed_size: self.total_compressed_size,
-            });
-        }
-
-        results
+        self.compressed_sizes
+            .iter()
+            .zip_eq(ns.iter().zip_eq(fs))
+            .map(
+                |(&size, (column_name, column_type))| CompressionRunResults {
+                    dataset_name: dataset_name.clone(),
+                    file_name: self.file_name.clone(),
+                    file_type: self.file_type.to_string(),
+                    column_name: (**column_name).clone(),
+                    column_type: column_type.to_string(),
+                    compressed_size: size,
+                    total_compressed_size: self.total_compressed_size,
+                },
+            )
+            .collect::<Vec<_>>()
     }
 }
 
@@ -259,7 +206,6 @@ pub struct CompressionRunResults {
     pub file_type: String,
     pub column_name: String,
     pub column_type: String,
-    pub uncompressed_size: Option<u64>,
     pub compressed_size: u64,
     pub total_compressed_size: Option<u64>,
 }
