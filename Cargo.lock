@@ -976,6 +976,7 @@ dependencies = [
  "vortex-array",
  "vortex-dict",
  "vortex-error",
+ "vortex-fastlanes",
  "vortex-ipc",
  "vortex-ree",
  "vortex-schema",
@@ -3902,6 +3903,7 @@ dependencies = [
  "vortex-array",
  "vortex-dict",
  "vortex-error",
+ "vortex-fastlanes",
  "vortex-ree",
  "vortex-schema",
 ]
@@ -5139,6 +5141,26 @@ dependencies = [
  "flexbuffers",
  "parquet 51.0.0",
  "thiserror",
+]
+
+[[package]]
+name = "vortex-fastlanes"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
+ "criterion",
+ "fastlanez",
+ "itertools 0.12.1",
+ "linkme",
+ "log",
+ "num-traits",
+ "paste",
+ "rand",
+ "serde",
+ "simplelog",
+ "vortex-array",
+ "vortex-error",
+ "vortex-schema",
 ]
 
 [[package]]

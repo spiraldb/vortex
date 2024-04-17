@@ -1,38 +1,30 @@
-use std::sync::{Arc, RwLock};
-
-use vortex::array::{Array, ArrayRef};
-use vortex::compress::EncodingCompression;
-use vortex::compute::ArrayCompute;
-use vortex::encoding::{Encoding, EncodingId, EncodingRef};
-use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
-use vortex::validity::Validity;
-use vortex::validity::{OwnedValidity, ValidityView};
-use vortex::view::AsView;
-use vortex::{impl_array, match_each_integer_ptype, ArrayWalker};
+use serde::{Deserialize, Serialize};
+use vortex::stats::ArrayStatisticsCompute;
+use vortex::validity::ValidityMetadata;
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
+use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::{impl_encoding, match_each_integer_ptype, ArrayDType, ArrayFlatten, IntoArrayData};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::DType;
+
+use crate::delta::compress::decompress;
 
 mod compress;
 mod compute;
-mod serde;
 
-#[derive(Debug, Clone)]
-pub struct DeltaArray {
+impl_encoding!("fastlanes.delta", Delta);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeltaMetadata {
+    validity: ValidityMetadata,
     len: usize,
-    bases: ArrayRef,
-    deltas: ArrayRef,
-    validity: Option<Validity>,
-    stats: Arc<RwLock<StatsSet>>,
 }
 
-impl DeltaArray {
+impl DeltaArray<'_> {
     pub fn try_new(
         len: usize,
-        bases: ArrayRef,
-        deltas: ArrayRef,
-        validity: Option<Validity>,
+        bases: Array,
+        deltas: Array,
+        validity: Validity,
     ) -> VortexResult<Self> {
         if bases.dtype() != deltas.dtype() {
             vortex_bail!(
@@ -49,23 +41,26 @@ impl DeltaArray {
             );
         }
 
-        let delta = Self {
-            len,
-            bases,
-            deltas,
-            validity,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        };
+        let delta = Self::try_from_parts(
+            bases.dtype().clone(),
+            DeltaMetadata {
+                validity: validity.to_metadata(len)?,
+                len,
+            },
+            vec![].into(),
+            vec![bases.into_array_data(), deltas.into_array_data()].into(),
+            HashMap::new(),
+        )?;
 
         let expected_bases_len = {
             let num_chunks = len / 1024;
             let remainder_base_size = if len % 1024 > 0 { 1 } else { 0 };
             num_chunks * delta.lanes() + remainder_base_size
         };
-        if delta.bases.len() != expected_bases_len {
+        if delta.bases().len() != expected_bases_len {
             vortex_bail!(
                 "DeltaArray: bases.len() ({}) != expected_bases_len ({}), based on len ({}) and lane count ({})",
-                delta.bases.len(),
+                delta.bases().len(),
                 expected_bases_len,
                 len,
                 delta.lanes()
@@ -75,13 +70,13 @@ impl DeltaArray {
     }
 
     #[inline]
-    pub fn bases(&self) -> &ArrayRef {
-        &self.bases
+    pub fn bases(&self) -> Array {
+        self.array().child(0, self.dtype()).expect("Missing bases")
     }
 
     #[inline]
-    pub fn deltas(&self) -> &ArrayRef {
-        &self.deltas
+    pub fn deltas(&self) -> Array {
+        self.array().child(1, self.dtype()).expect("Missing deltas")
     }
 
     #[inline]
@@ -91,103 +86,48 @@ impl DeltaArray {
             <$T as fastlanez::Delta>::lanes()
         })
     }
+
+    pub fn validity(&self) -> Validity {
+        self.metadata()
+            .validity
+            .to_validity(self.array().child(2, &Validity::DTYPE))
+    }
 }
 
-impl Array for DeltaArray {
-    impl_array!();
-    #[inline]
+impl ArrayFlatten for DeltaArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        decompress(self).map(Flattened::Primitive)
+    }
+}
+
+impl ArrayValidity for DeltaArray<'_> {
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity().is_valid(index)
+    }
+
+    fn logical_validity(&self) -> LogicalValidity {
+        self.validity().to_logical(self.len())
+    }
+}
+
+impl AcceptArrayVisitor for DeltaArray<'_> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_child("bases", &self.bases())?;
+        visitor.visit_child("deltas", &self.deltas())
+    }
+}
+
+impl ArrayStatisticsCompute for DeltaArray<'_> {}
+
+impl ArrayTrait for DeltaArray<'_> {
     fn len(&self) -> usize {
-        self.len
+        self.metadata().len
     }
 
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.bases.is_empty()
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
-        self.bases.dtype()
-    }
-
-    #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
-    fn encoding(&self) -> EncodingRef {
-        &DeltaEncoding
-    }
-
-    #[inline]
     fn nbytes(&self) -> usize {
-        self.bases().nbytes()
-            + self.deltas().nbytes()
-            + self.validity().map(|v| v.nbytes()).unwrap_or(0)
-    }
-
-    #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        walker.visit_child(self.bases())?;
-        walker.visit_child(self.deltas())
-    }
-}
-
-impl<'arr> AsRef<(dyn Array + 'arr)> for DeltaArray {
-    fn as_ref(&self) -> &(dyn Array + 'arr) {
-        self
-    }
-}
-
-impl OwnedValidity for DeltaArray {
-    fn validity(&self) -> Option<ValidityView> {
-        self.validity.as_view()
-    }
-}
-
-impl ArrayDisplay for DeltaArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.child("bases", self.bases())?;
-        f.child("deltas", self.deltas())?;
-        f.validity(self.validity())
-    }
-}
-
-impl StatsCompute for DeltaArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::default())
-    }
-}
-
-#[derive(Debug)]
-pub struct DeltaEncoding;
-
-impl DeltaEncoding {
-    pub const ID: EncodingId = EncodingId::new("fastlanes.delta");
-}
-
-impl Encoding for DeltaEncoding {
-    fn id(&self) -> EncodingId {
-        Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
-    }
-
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+        self.bases().nbytes() + self.deltas().nbytes()
     }
 }

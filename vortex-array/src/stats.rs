@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use vortex_error::VortexResult;
+use vortex_schema::DType;
 
+use crate::ptype::NativePType;
 use crate::scalar::Scalar;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -41,6 +43,12 @@ pub trait Statistics {
 impl dyn Statistics + '_ {
     pub fn compute_as<T: TryFrom<Scalar>>(&self, stat: Stat) -> Option<T> {
         self.compute(stat).and_then(|s| T::try_from(s).ok())
+    }
+
+    pub fn compute_as_cast<T: NativePType>(&self, stat: Stat) -> Option<T> {
+        self.compute(stat)
+            .and_then(|s| s.cast(&DType::from(T::PTYPE)).ok())
+            .and_then(|s| T::try_from(s).ok())
     }
 
     pub fn get_as<T: TryFrom<Scalar>>(&self, stat: Stat) -> Option<T> {

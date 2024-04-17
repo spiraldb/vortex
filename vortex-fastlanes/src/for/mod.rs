@@ -1,151 +1,89 @@
-use std::sync::{Arc, RwLock};
-
-use vortex::array::{Array, ArrayRef};
-use vortex::compress::EncodingCompression;
-use vortex::compute::ArrayCompute;
-use vortex::encoding::{Encoding, EncodingId, EncodingRef};
-use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::scalar::Scalar;
-use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
-use vortex::validity::ArrayValidity;
-use vortex::validity::Validity;
-use vortex::{impl_array, ArrayWalker};
+use serde::{Deserialize, Serialize};
+use vortex::stats::ArrayStatisticsCompute;
+use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::DType;
+
+use crate::r#for::compress::decompress;
 
 mod compress;
 mod compute;
-mod serde;
 
-#[derive(Debug, Clone)]
-pub struct FoRArray {
-    encoded: ArrayRef,
+impl_encoding!("fastlanes.for", FoR);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FoRMetadata {
     reference: Scalar,
     shift: u8,
-    stats: Arc<RwLock<StatsSet>>,
 }
 
-impl FoRArray {
-    pub fn try_new(child: ArrayRef, reference: Scalar, shift: u8) -> VortexResult<Self> {
+impl FoRArray<'_> {
+    pub fn try_new(child: Array, reference: Scalar, shift: u8) -> VortexResult<Self> {
         if reference.is_null() {
             vortex_bail!("Reference value cannot be null",);
         }
         let reference = reference.cast(child.dtype())?;
-        Ok(Self {
-            encoded: child,
-            reference,
-            shift,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        })
+        Self::try_from_parts(
+            child.dtype().clone(),
+            FoRMetadata { reference, shift },
+            vec![].into(),
+            vec![child.to_array_data()].into(),
+            HashMap::new(),
+        )
     }
 
     #[inline]
-    pub fn encoded(&self) -> &ArrayRef {
-        &self.encoded
+    pub fn encoded(&self) -> Array {
+        self.array()
+            .child(0, self.dtype())
+            .expect("Missing FoR child")
     }
 
     #[inline]
     pub fn reference(&self) -> &Scalar {
-        &self.reference
+        &self.metadata().reference
     }
 
     #[inline]
     pub fn shift(&self) -> u8 {
-        self.shift
+        self.metadata().shift
     }
 }
 
-impl Array for FoRArray {
-    impl_array!();
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.encoded.len()
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.encoded.is_empty()
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
-        self.encoded.dtype()
-    }
-
-    #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
-    fn encoding(&self) -> EncodingRef {
-        &FoREncoding
-    }
-
-    #[inline]
-    fn nbytes(&self) -> usize {
-        self.encoded.nbytes() + self.reference.nbytes()
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        walker.visit_child(self.encoded())
-    }
-
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-}
-
-impl ArrayValidity for FoRArray {
-    fn logical_validity(&self) -> Validity {
-        self.encoded().logical_validity()
-    }
-
+impl ArrayValidity for FoRArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
-        self.encoded().is_valid(index)
+        self.encoded().with_dyn(|a| a.is_valid(index))
+    }
+
+    fn logical_validity(&self) -> LogicalValidity {
+        self.encoded().with_dyn(|a| a.logical_validity())
     }
 }
 
-impl ArrayDisplay for FoRArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.property("reference", self.reference())?;
-        f.property("shift", self.shift())?;
-        f.child("encoded", self.encoded())
+impl ArrayFlatten for FoRArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        decompress(self).map(Flattened::Primitive)
     }
 }
 
-impl StatsCompute for FoRArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::default())
+impl AcceptArrayVisitor for FoRArray<'_> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_child("encoded", &self.encoded())
     }
 }
 
-#[derive(Debug)]
-pub struct FoREncoding;
+impl ArrayStatisticsCompute for FoRArray<'_> {}
 
-impl FoREncoding {
-    pub const ID: EncodingId = EncodingId::new("fastlanes.for");
-}
-
-impl Encoding for FoREncoding {
-    fn id(&self) -> EncodingId {
-        Self::ID
+impl ArrayTrait for FoRArray<'_> {
+    fn len(&self) -> usize {
+        todo!()
     }
 
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
-    }
-
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+    fn nbytes(&self) -> usize {
+        self.reference().nbytes() + self.encoded().nbytes()
     }
 }

@@ -1,45 +1,35 @@
-use std::sync::{Arc, RwLock};
-
+use ::serde::{Deserialize, Serialize};
 pub use compress::*;
-use vortex::array::{Array, ArrayRef};
-use vortex::compress::EncodingCompression;
-use vortex::compute::ArrayCompute;
-use vortex::encoding::{Encoding, EncodingId, EncodingRef};
-use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stat, Stats, StatsCompute, StatsSet};
-use vortex::validity::Validity;
-use vortex::validity::{OwnedValidity, ValidityView};
-use vortex::view::AsView;
-use vortex::{impl_array, ArrayWalker};
+use vortex::stats::ArrayStatisticsCompute;
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
+use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+use vortex_schema::{IntWidth, Nullability, Signedness};
 
 mod compress;
 mod compute;
-mod serde;
 
-/// NB: All non-null values in the patches array are considered patches
-#[derive(Debug, Clone)]
-pub struct BitPackedArray {
-    encoded: ArrayRef,
-    validity: Option<Validity>,
-    patches: Option<ArrayRef>,
-    offset: usize,
-    len: usize,
+impl_encoding!("fastlanes.bitpacked", BitPacked);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BitPackedMetadata {
+    validity: ValidityMetadata,
+    has_patches: bool,
     bit_width: usize,
-    dtype: DType,
-    stats: Arc<RwLock<StatsSet>>,
+    offset: usize,
+    length: usize,
 }
 
-impl BitPackedArray {
+/// NB: All non-null values in the patches array are considered patches
+impl BitPackedArray<'_> {
     const ENCODED_DTYPE: DType =
         DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable);
 
     pub fn try_new(
-        encoded: ArrayRef,
-        validity: Option<Validity>,
-        patches: Option<ArrayRef>,
+        encoded: Array,
+        validity: Validity,
+        patches: Option<Array>,
         bit_width: usize,
         dtype: DType,
         len: usize,
@@ -48,28 +38,25 @@ impl BitPackedArray {
     }
 
     pub(crate) fn try_new_from_offset(
-        encoded: ArrayRef,
-        validity: Option<Validity>,
-        patches: Option<ArrayRef>,
+        encoded: Array,
+        validity: Validity,
+        patches: Option<Array>,
         bit_width: usize,
         dtype: DType,
-        len: usize,
+        length: usize,
         offset: usize,
     ) -> VortexResult<Self> {
         if encoded.dtype() != &Self::ENCODED_DTYPE {
             vortex_bail!(MismatchedTypes: Self::ENCODED_DTYPE, encoded.dtype());
         }
-        if let Some(v) = &validity {
-            assert_eq!(v.len(), len);
-        }
         if bit_width > 64 {
-            return Err(vortex_err!("Unsupported bit width {}", bit_width));
+            vortex_bail!("Unsupported bit width {}", bit_width);
         }
         if !matches!(dtype, DType::Int(_, _, _)) {
-            return Err(vortex_err!(MismatchedTypes: "int", dtype));
+            vortex_bail!(MismatchedTypes: "int", dtype);
         }
 
-        let expected_packed_size = ((len + 1023) / 1024) * 128 * bit_width;
+        let expected_packed_size = ((length + 1023) / 1024) * 128 * bit_width;
         if encoded.len() != expected_packed_size {
             return Err(vortex_err!(
                 "Expected {} packed bytes, got {}",
@@ -78,132 +65,109 @@ impl BitPackedArray {
             ));
         }
 
-        Ok(Self {
-            encoded,
-            validity,
-            patches,
+        let metadata = BitPackedMetadata {
+            validity: validity.to_metadata(length)?,
+            has_patches: patches.is_some(),
             offset,
-            len,
+            length,
             bit_width,
+        };
+
+        let mut children = Vec::with_capacity(3);
+        children.push(encoded.into_array_data());
+        if let Some(p) = patches {
+            children.push(p.into_array_data());
+        }
+        if let Some(a) = validity.into_array_data() {
+            children.push(a)
+        }
+
+        Self::try_from_parts(
             dtype,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        })
+            metadata,
+            vec![].into(),
+            children.into(),
+            HashMap::new(),
+        )
     }
 
     #[inline]
-    pub fn encoded(&self) -> &ArrayRef {
-        &self.encoded
+    pub fn encoded(&self) -> Array {
+        self.array()
+            .child(0, self.dtype())
+            .expect("Missing encoded array")
     }
 
     #[inline]
     pub fn bit_width(&self) -> usize {
-        self.bit_width
+        self.metadata().bit_width
     }
 
     #[inline]
-    pub fn patches(&self) -> Option<&ArrayRef> {
-        self.patches.as_ref()
+    pub fn patches(&self) -> Option<Array> {
+        self.metadata().has_patches.then(|| {
+            self.array()
+                .child(1, self.dtype())
+                .expect("Missing patches with present metadata flag")
+        })
     }
 
     #[inline]
     pub fn offset(&self) -> usize {
-        self.offset
+        self.metadata().offset
+    }
+
+    pub fn validity(&self) -> Validity {
+        self.metadata().validity.to_validity(self.array().child(
+            if self.metadata().has_patches { 2 } else { 1 },
+            &Validity::DTYPE,
+        ))
     }
 }
 
-impl Array for BitPackedArray {
-    impl_array!();
-    #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
+impl ArrayFlatten for BitPackedArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        unpack(self).map(Flattened::Primitive)
+    }
+}
+
+impl ArrayValidity for BitPackedArray<'_> {
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity().is_valid(index)
     }
 
-    #[inline]
+    fn logical_validity(&self) -> LogicalValidity {
+        self.validity().to_logical(self.len())
+    }
+}
+
+impl AcceptArrayVisitor for BitPackedArray<'_> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_child("encoded", &self.encoded())?;
+        if self.metadata().has_patches {
+            visitor.visit_child(
+                "patches",
+                &self.patches().expect("Expected patches to be present "),
+            )?;
+        }
+        visitor.visit_validity(&self.validity())
+    }
+}
+
+impl ArrayStatisticsCompute for BitPackedArray<'_> {}
+
+impl ArrayTrait for BitPackedArray<'_> {
     fn len(&self) -> usize {
-        self.len
+        todo!()
     }
 
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
-        &self.dtype
-    }
-
-    #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
-    fn encoding(&self) -> EncodingRef {
-        &BitPackedEncoding
-    }
-
-    #[inline]
     fn nbytes(&self) -> usize {
         // Ignore any overheads like padding or the bit-width flag.
-        let packed_size = ((self.bit_width * self.len()) + 7) / 8;
-        packed_size
-            + self.patches().map(|p| p.nbytes()).unwrap_or(0)
-            + self.validity().map(|v| v.nbytes()).unwrap_or(0)
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        walker.visit_child(self.encoded())
-    }
-}
-
-impl OwnedValidity for BitPackedArray {
-    fn validity(&self) -> Option<ValidityView> {
-        self.validity.as_view()
-    }
-}
-
-impl ArrayDisplay for BitPackedArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.property("offset", self.offset)?;
-        f.property("packed", format!("u{}", self.bit_width()))?;
-        f.child("encoded", self.encoded())?;
-        f.maybe_child("patches", self.patches())?;
-        f.validity(self.validity())
-    }
-}
-
-impl StatsCompute for BitPackedArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
-        Ok(StatsSet::default())
-    }
-}
-
-#[derive(Debug)]
-pub struct BitPackedEncoding;
-
-impl BitPackedEncoding {
-    pub const ID: EncodingId = EncodingId::new("fastlanes.bitpacked");
-}
-
-impl Encoding for BitPackedEncoding {
-    fn id(&self) -> EncodingId {
-        Self::ID
-    }
-
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
-    }
-
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+        let packed_size = ((self.bit_width() * self.len()) + 7) / 8;
+        packed_size + self.patches().map(|p| p.nbytes()).unwrap_or(0)
     }
 }
 
@@ -228,7 +192,6 @@ mod test {
     use std::sync::Arc;
 
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::Array;
     use vortex::compress::{CompressConfig, CompressCtx};
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::slice::slice;
@@ -243,7 +206,8 @@ mod test {
 
         let compressed = slice(
             &ctx.compress(
-                &PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()),
+                PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>())
+                    .array(),
                 None,
             )
             .unwrap(),
@@ -268,7 +232,8 @@ mod test {
 
         let compressed = slice(
             &ctx.compress(
-                &PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()),
+                PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>())
+                    .array(),
                 None,
             )
             .unwrap(),
