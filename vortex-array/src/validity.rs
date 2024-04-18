@@ -4,6 +4,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{DType, Nullability};
 
 use crate::array::bool::BoolArray;
+use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::compute::take::take;
@@ -179,15 +180,30 @@ impl From<NullBuffer> for OwnedValidity {
     }
 }
 
-impl<'a> FromIterator<Validity<'a>> for OwnedValidity {
-    fn from_iter<T: IntoIterator<Item = Validity<'a>>>(_iter: T) -> Self {
-        todo!()
-    }
-}
-
 impl FromIterator<LogicalValidity> for OwnedValidity {
-    fn from_iter<T: IntoIterator<Item = LogicalValidity>>(_iter: T) -> Self {
-        todo!()
+    fn from_iter<T: IntoIterator<Item = LogicalValidity>>(iter: T) -> Self {
+        let validities: Vec<LogicalValidity> = iter.into_iter().collect();
+
+        // If they're all valid, then return a single validity.
+        if validities.iter().all(|v| v.is_all_valid()) {
+            return Self::AllValid;
+        }
+        // If they're all invalid, then return a single invalidity.
+        if validities.iter().all(|v| v.is_all_invalid()) {
+            return Self::AllInvalid;
+        }
+
+        // Otherwise, map each to a bool array and concatenate them.
+        let arrays = validities
+            .iter()
+            .map(|v| {
+                v.to_present_null_buffer()
+                    .unwrap()
+                    .into_array_data()
+                    .into_array()
+            })
+            .collect::<Vec<_>>();
+        Self::Array(as_contiguous(&arrays).unwrap())
     }
 }
 
@@ -216,8 +232,30 @@ impl LogicalValidity {
         }
     }
 
+    pub fn to_present_null_buffer(&self) -> VortexResult<NullBuffer> {
+        match self {
+            LogicalValidity::AllValid(l) => Ok(NullBuffer::new_valid(*l)),
+            LogicalValidity::AllInvalid(l) => Ok(NullBuffer::new_null(*l)),
+            LogicalValidity::Array(a) => Ok(NullBuffer::new(
+                a.to_array().flatten_bool()?.boolean_buffer(),
+            )),
+        }
+    }
+
     pub fn is_all_valid(&self) -> bool {
         matches!(self, LogicalValidity::AllValid(_))
+    }
+
+    pub fn is_all_invalid(&self) -> bool {
+        matches!(self, LogicalValidity::AllInvalid(_))
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            LogicalValidity::AllValid(n) => *n,
+            LogicalValidity::AllInvalid(n) => *n,
+            LogicalValidity::Array(a) => a.to_array().len(),
+        }
     }
 
     pub fn into_validity<'a>(self) -> Validity<'a> {

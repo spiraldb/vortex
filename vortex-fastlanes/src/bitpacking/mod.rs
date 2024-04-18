@@ -15,7 +15,7 @@ impl_encoding!("fastlanes.bitpacked", BitPacked);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BitPackedMetadata {
     validity: ValidityMetadata,
-    has_patches: bool,
+    patches_dtype: Option<DType>,
     bit_width: usize,
     offset: usize,
     length: usize,
@@ -67,7 +67,7 @@ impl BitPackedArray<'_> {
 
         let metadata = BitPackedMetadata {
             validity: validity.to_metadata(length)?,
-            has_patches: patches.is_some(),
+            patches_dtype: patches.as_ref().map(|p| p.dtype().clone()),
             offset,
             length,
             bit_width,
@@ -99,9 +99,9 @@ impl BitPackedArray<'_> {
 
     #[inline]
     pub fn patches(&self) -> Option<Array> {
-        self.metadata().has_patches.then(|| {
+        self.metadata().patches_dtype.as_ref().map(|pd| {
             self.array()
-                .child(1, self.dtype())
+                .child(1, pd)
                 .expect("Missing patches with present metadata flag")
         })
     }
@@ -113,7 +113,11 @@ impl BitPackedArray<'_> {
 
     pub fn validity(&self) -> Validity {
         self.metadata().validity.to_validity(self.array().child(
-            if self.metadata().has_patches { 2 } else { 1 },
+            if self.metadata().patches_dtype.is_some() {
+                2
+            } else {
+                1
+            },
             &Validity::DTYPE,
         ))
     }
@@ -141,7 +145,7 @@ impl ArrayValidity for BitPackedArray<'_> {
 impl AcceptArrayVisitor for BitPackedArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("encoded", &self.encoded())?;
-        if self.metadata().has_patches {
+        if self.metadata().patches_dtype.is_some() {
             visitor.visit_child(
                 "patches",
                 &self.patches().expect("Expected patches to be present "),
