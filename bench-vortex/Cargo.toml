@@ -24,7 +24,7 @@ vortex-array = { path = "../vortex-array" }
 #vortex-datetime = { path = "../vortex-datetime" }
 vortex-dict = { path = "../vortex-dict" }
 vortex-error = { path = "../vortex-error", features = ["parquet"] }
-#vortex-fastlanes = { path = "../vortex-fastlanes" }
+vortex-fastlanes = { path = "../vortex-fastlanes" }
 vortex-ipc = { path = "../vortex-ipc" }
 vortex-ree = { path = "../vortex-ree" }
 #vortex-roaring = { path = "../vortex-roaring" }

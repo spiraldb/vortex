@@ -18,6 +18,8 @@ use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::encoding::{EncodingRef, VORTEX_ENCODINGS};
 use vortex::{Array, IntoArray, OwnedArray, ToArrayData};
 use vortex_dict::DictEncoding;
+use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
+use vortex_ree::REEEncoding;
 use vortex_schema::DType;
 
 use crate::reader::BATCH_SIZE;
@@ -104,11 +106,11 @@ pub fn enumerate_arrays() -> Vec<EncodingRef> {
     vec![
         //&ALPEncoding,
         &DictEncoding,
-        //&BitPackedEncoding,
-        //&FoREncoding,
+        &BitPackedEncoding,
+        &FoREncoding,
         //&DateTimeEncoding,
         // &DeltaEncoding,  Blows up the search space too much.
-        //&REEEncoding,
+        &REEEncoding,
         //&RoaringBoolEncoding,
         // RoaringIntEncoding,
         // Doesn't offer anything more than FoR really

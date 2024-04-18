@@ -17,6 +17,10 @@ use vortex::ToStatic;
 use vortex::{ArrayDType, ArrayData, IntoArray, OwnedArray};
 use vortex::{ArrayDef, IntoArrayData};
 use vortex_dict::{Dict, DictArray, DictEncoding, OwnedDictArray};
+use vortex_fastlanes::{
+    BitPacked, BitPackedArray, BitPackedEncoding, Delta, DeltaArray, DeltaEncoding, FoR, FoRArray,
+    FoREncoding, OwnedBitPackedArray, OwnedDeltaArray, OwnedFoRArray,
+};
 use vortex_ree::{OwnedREEArray, REEArray, REEEncoding, REE};
 
 use crate::dtype::PyDType;
@@ -64,9 +68,9 @@ pyarray!(VarBinEncoding, VarBinArray, "VarBinArray");
 pyarray!(VarBinViewEncoding, VarBinViewArray, "VarBinViewArray");
 
 // pyarray!(ALPEncoding, ALPArray, "ALPArray");
-// pyarray!(BitPackedEncoding, BitPackedArray, "BitPackedArray");
-// pyarray!(FoREncoding, FoRArray, "FoRArray");
-// pyarray!(DeltaEncoding, DeltaArray, "DeltaArray");
+pyarray!(BitPackedEncoding, BitPackedArray, "BitPackedArray");
+pyarray!(FoREncoding, FoRArray, "FoRArray");
+pyarray!(DeltaEncoding, DeltaArray, "DeltaArray");
 pyarray!(DictEncoding, DictArray, "DictArray");
 pyarray!(REEEncoding, REEArray, "REEArray");
 // pyarray!(RoaringBoolEncoding, RoaringBoolArray, "RoaringBoolArray");
@@ -135,6 +139,23 @@ impl PyArray {
                 OwnedREEArray::try_from(inner.into_array()).map_err(PyVortexError::map_err)?,
             )?
             .extract(py),
+            Delta::ID => PyDeltaArray::wrap(
+                py,
+                OwnedDeltaArray::try_from(inner.into_array()).map_err(PyVortexError::map_err)?,
+            )?
+            .extract(py),
+            FoR::ID => PyFoRArray::wrap(
+                py,
+                OwnedFoRArray::try_from(inner.into_array()).map_err(PyVortexError::map_err)?,
+            )?
+            .extract(py),
+            BitPacked::ID => PyBitPackedArray::wrap(
+                py,
+                OwnedBitPackedArray::try_from(inner.into_array())
+                    .map_err(PyVortexError::map_err)?,
+            )?
+            .extract(py),
+
             _ => Py::new(
                 py,
                 Self {
@@ -146,27 +167,6 @@ impl PyArray {
             //     // For the remainder, we should have a generic EncArray implementation that supports basic functions.
             //     ALPEncoding::ID => {
             //         PyALPArray::wrap(py, inner.into_any().downcast::<ALPArray>().unwrap())?
-            //             .extract(py)
-            //     }
-            //     DeltaEncoding::ID => {
-            //         PyDeltaArray::wrap(py, inner.into_any().downcast::<DeltaArray>().unwrap())?
-            //             .extract(py)
-            //     }
-            //     DictEncoding::ID => {
-            //         PyDictArray::wrap(py, inner.into_any().downcast::<DictArray>().unwrap())?
-            //             .extract(py)
-            //     }
-            //     FoREncoding::ID => {
-            //         PyFoRArray::wrap(py, inner.into_any().downcast::<FoRArray>().unwrap())?
-            //             .extract(py)
-            //     }
-            //     BitPackedEncoding::ID => PyBitPackedArray::wrap(
-            //         py,
-            //         inner.into_any().downcast::<BitPackedArray>().unwrap(),
-            //     )?
-            //     .extract(py),
-            //     REEEncoding::ID => {
-            //         PyREEArray::wrap(py, inner.into_any().downcast::<REEArray>().unwrap())?
             //             .extract(py)
             //     }
             //     RoaringBoolEncoding::ID => PyRoaringBoolArray::wrap(
