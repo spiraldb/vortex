@@ -125,8 +125,4 @@ impl ArrayTrait for DeltaArray<'_> {
     fn len(&self) -> usize {
         self.metadata().len
     }
-
-    fn nbytes(&self) -> usize {
-        self.bases().nbytes() + self.deltas().nbytes()
-    }
 }

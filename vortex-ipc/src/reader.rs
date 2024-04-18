@@ -1,7 +1,7 @@
 use std::io;
 use std::io::{BufReader, Read};
 
-use arrow_buffer::MutableBuffer;
+use arrow_buffer::Buffer as ArrowBuffer;
 use nougat::gat;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::composite::VORTEX_COMPOSITE_EXTENSIONS;
@@ -163,12 +163,18 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
 
             let buffer_length = buffer.length();
             let mut bytes = Vec::with_capacity(buffer_length as usize);
-            self.read
+            let bytes_read = self
+                .read
                 .take(buffer.length())
                 .read_to_end(&mut bytes)
                 .unwrap();
-            self.buffers
-                .push(Buffer::Owned(ArrowBuffer::from_vec(bytes).into()));
+            if bytes_read < buffer_length as usize {
+                return Err(vortex_err!(InvalidSerde: "Unexpected EOF reading buffer"));
+            }
+
+            let arrow_buffer = ArrowBuffer::from_vec(bytes);
+            assert_eq!(arrow_buffer.len(), buffer_length as usize);
+            self.buffers.push(Buffer::Owned(arrow_buffer));
 
             offset = buffer.offset() + buffer.length();
         }
@@ -179,22 +185,11 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
 
         let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
 
+        println!("VIEW {}", view.to_array().tree_display());
+
         // Validate it
         view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;
 
         Ok(Some(view))
     }
-}
-
-/// FIXME(ngates): this exists to detach the lifetimes of the object as read by read_flatbuffer.
-///  We should be able to fix that.
-pub fn read_into<R: Read>(read: &mut R, buffer: &mut Vec<u8>) -> VortexResult<()> {
-    buffer.clear();
-    let mut buffer_len: [u8; 4] = [0; 4];
-    // FIXME(ngates): return optional for EOF?
-    read.read_exact(&mut buffer_len)?;
-    let buffer_len = u32::from_le_bytes(buffer_len) as usize;
-    read.take(buffer_len as u64).read_to_end(buffer)?;
-
-    Ok(())
 }

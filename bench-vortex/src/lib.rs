@@ -127,7 +127,7 @@ pub fn compress_ctx() -> CompressCtx {
 pub fn compress_taxi_data() -> OwnedArray {
     let file = File::open(taxi_data_parquet()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let _mask = ProjectionMask::roots(builder.parquet_schema(), [1]);
+    let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
     let _no_datetime_mask = ProjectionMask::roots(
         builder.parquet_schema(),
         [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],

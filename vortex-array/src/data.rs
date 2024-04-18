@@ -110,7 +110,7 @@ impl ArrayData {
     }
 }
 
-/// A depth-first iterator over a ArrayData.
+/// A depth-first pre-order iterator over a ArrayData.
 pub struct ArrayDataIterator<'a> {
     stack: Vec<&'a ArrayData>,
 }
@@ -120,7 +120,7 @@ impl<'a> Iterator for ArrayDataIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.stack.pop()?;
-        for child in next.children.as_ref().iter() {
+        for child in next.children.as_ref().iter().rev() {
             self.stack.push(child);
         }
         Some(next)
