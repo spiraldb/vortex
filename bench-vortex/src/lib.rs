@@ -15,6 +15,7 @@ use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::encoding::{EncodingRef, VORTEX_ENCODINGS};
 use vortex::{IntoArray, OwnedArray, ToArrayData};
+use vortex_alp::ALPEncoding;
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
@@ -105,7 +106,7 @@ pub fn enumerate_arrays() -> Vec<EncodingRef> {
         VORTEX_ENCODINGS.iter().map(|e| e.id()).collect_vec()
     );
     vec![
-        //&ALPEncoding,
+        &ALPEncoding,
         &DictEncoding,
         &BitPackedEncoding,
         &FoREncoding,

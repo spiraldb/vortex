@@ -22,7 +22,7 @@ pub struct PrimitiveMetadata {
     validity: ValidityMetadata,
 }
 
-impl PrimitiveArray<'_> {
+impl<'a> PrimitiveArray<'a> {
     pub fn try_new<T: NativePType + ArrowNativeType>(
         buffer: ScalarBuffer<T>,
         validity: Validity,
@@ -114,12 +114,40 @@ impl PrimitiveArray<'_> {
         }
         Self::try_new(ScalarBuffer::from(own_values), validity)
     }
-}
+// }
 
-impl<'a> PrimitiveArray<'a> {
+
+// impl<'a> PrimitiveArray<'a> {
     pub fn into_buffer(self) -> Buffer<'a> {
         self.into_array().into_buffer().unwrap()
     }
+
+    // pub fn try_new<T: NativePType + ArrowNativeType>(
+    //     buffer: ScalarBuffer<T>,
+    //     validity: Validity,
+    // ) -> VortexResult<Self> {
+    //     let d_type = DType::from(T::PTYPE);
+    //     Self::try_from_parts(
+    //
+    //         d_type.with_nullability(validity.nullability()),
+    //         PrimitiveMetadata {
+    //             validity: validity.to_metadata(buffer.len())?,
+    //         },
+    //         vec![Buffer::Owned(buffer.into_inner())].into(),
+    //         validity.into_array_data().into_iter().collect_vec().into(),
+    //         HashMap::default(),
+    //     )
+    // }
+
+    // pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>, validity: Validity) -> Self {
+    //     Self::try_new(ScalarBuffer::from(values), validity).unwrap()
+    // }
+    //
+    // pub fn from_nullable_vec<T: NativePType + ArrowNativeType>(values: Vec<Option<T>>) -> Self {
+    //     let elems: Vec<T> = values.iter().map(|v| v.unwrap_or_default()).collect();
+    //     let validity = Validity::from(values.iter().map(|v| v.is_some()).collect::<Vec<_>>());
+    //     Self::from_vec(elems, validity)
+    // }
 }
 
 impl<T: NativePType> From<Vec<T>> for PrimitiveArray<'_> {

@@ -16,6 +16,7 @@ use vortex::encoding::EncodingRef;
 use vortex::ToStatic;
 use vortex::{ArrayDType, ArrayData, IntoArray, OwnedArray};
 use vortex::{ArrayDef, IntoArrayData};
+use vortex_alp::{ALPArray, ALPEncoding, OwnedALPArray, ALP};
 use vortex_dict::{Dict, DictArray, DictEncoding, OwnedDictArray};
 use vortex_fastlanes::{
     BitPacked, BitPackedArray, BitPackedEncoding, Delta, DeltaArray, DeltaEncoding, FoR, FoRArray,
@@ -67,7 +68,8 @@ pyarray!(StructEncoding, StructArray, "StructArray");
 pyarray!(VarBinEncoding, VarBinArray, "VarBinArray");
 pyarray!(VarBinViewEncoding, VarBinViewArray, "VarBinViewArray");
 
-// pyarray!(ALPEncoding, ALPArray, "ALPArray");
+
+pyarray!(ALPEncoding, ALPArray, "ALPArray");
 pyarray!(BitPackedEncoding, BitPackedArray, "BitPackedArray");
 pyarray!(FoREncoding, FoRArray, "FoRArray");
 pyarray!(DeltaEncoding, DeltaArray, "DeltaArray");
@@ -156,6 +158,11 @@ impl PyArray {
             )?
             .extract(py),
 
+            ALP::ID => PyALPArray::wrap(
+                py,
+                OwnedALPArray::try_from(inner.into_array()).map_err(PyVortexError::map_err)?,
+            )?
+            .extract(py),
             _ => Py::new(
                 py,
                 Self {
