@@ -135,6 +135,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
     type Item<'next> = ArrayView<'next> where Self: 'next;
 
     fn next(&mut self) -> Result<Option<ArrayView<'_>>, Self::Error> {
+        self.column_msg_buffer.clear();
         let msg = self
             .read
             .read_message::<Message>(&mut self.column_msg_buffer)?;
@@ -184,8 +185,6 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
         io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
 
         let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
-
-        println!("VIEW {}", view.to_array().tree_display());
 
         // Validate it
         view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;

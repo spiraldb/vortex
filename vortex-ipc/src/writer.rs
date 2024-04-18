@@ -49,7 +49,7 @@ impl<W: Write> StreamWriter<W> {
     }
 
     pub fn write_batch(&mut self, array: &Array) -> VortexResult<()> {
-        // TOOD(ngates): support writing from an ArrayView.
+        // TODO(ngates): support writing from an ArrayView.
         let data = array.to_array_data();
         let buffer_offsets = data.all_buffer_offsets(ALIGNMENT);
 
