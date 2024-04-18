@@ -2,12 +2,13 @@ use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::FieldNames;
 
-use crate::compute::ArrayCompute;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayDType};
 use crate::{ArrayFlatten, IntoArrayData};
+
+mod compute;
 
 impl_encoding!("vortex.struct", Struct);
 
@@ -120,6 +121,5 @@ impl AcceptArrayVisitor for StructArray<'_> {
 }
 
 impl ArrayStatisticsCompute for StructArray<'_> {}
-impl ArrayCompute for StructArray<'_> {}
 
 impl EncodingCompression for StructEncoding {}
