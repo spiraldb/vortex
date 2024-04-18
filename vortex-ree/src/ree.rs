@@ -59,13 +59,7 @@ impl REEArray<'_> {
             children.push(a)
         }
 
-        Self::try_from_parts(
-            dtype,
-            metadata,
-            vec![].into(),
-            children.into(),
-            HashMap::new(),
-        )
+        Self::try_from_parts(dtype, metadata, children.into(), HashMap::new())
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {

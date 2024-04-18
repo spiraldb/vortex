@@ -1,4 +1,4 @@
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 use vortex_schema::DType;
 
 use crate::buffer::{Buffer, OwnedBuffer};
@@ -50,7 +50,6 @@ macro_rules! impl_encoding {
                 EncodingRef,
                 VORTEX_ENCODINGS,
             };
-            use $crate::buffer::OwnedBuffer;
             use $crate::stats::Stat;
             use $crate::scalar::Scalar;
             use std::any::Any;
@@ -88,10 +87,10 @@ macro_rules! impl_encoding {
                 pub fn try_from_parts(
                     dtype: DType,
                     metadata: [<$Name Metadata>],
-                    buffers: Arc<[OwnedBuffer]>,
                     children: Arc<[ArrayData]>,
-                    stats: HashMap<Stat, Scalar>) -> VortexResult<Self> {
-                    Ok(Self { typed: TypedArray::try_from_parts(dtype, metadata, buffers, children, stats)? })
+                    stats: HashMap<Stat, Scalar>,
+                ) -> VortexResult<Self> {
+                    Ok(Self { typed: TypedArray::try_from_parts(dtype, metadata, None, children, stats)? })
                 }
             }
             impl<'a> GetArrayMetadata for [<$Name Array>]<'a> {
@@ -229,7 +228,7 @@ impl<'a, T: IntoArray<'a> + ArrayEncodingRef + ArrayStatistics + GetArrayMetadat
             Array::DataRef(d) => d.clone(),
             Array::View(_) => {
                 struct Visitor {
-                    buffers: Vec<OwnedBuffer>,
+                    buffer: Option<OwnedBuffer>,
                     children: Vec<ArrayData>,
                 }
                 impl ArrayVisitor for Visitor {
@@ -239,12 +238,15 @@ impl<'a, T: IntoArray<'a> + ArrayEncodingRef + ArrayStatistics + GetArrayMetadat
                     }
 
                     fn visit_buffer(&mut self, buffer: &Buffer) -> VortexResult<()> {
-                        self.buffers.push(buffer.to_static());
+                        if self.buffer.is_some() {
+                            vortex_bail!("Multiple buffers found in view")
+                        }
+                        self.buffer = Some(buffer.to_static());
                         Ok(())
                     }
                 }
                 let mut visitor = Visitor {
-                    buffers: vec![],
+                    buffer: None,
                     children: vec![],
                 };
                 array.with_dyn(|a| a.accept(&mut visitor).unwrap());
@@ -252,7 +254,7 @@ impl<'a, T: IntoArray<'a> + ArrayEncodingRef + ArrayStatistics + GetArrayMetadat
                     encoding,
                     array.dtype().clone(),
                     metadata,
-                    visitor.buffers.into(),
+                    visitor.buffer,
                     visitor.children.into(),
                     stats,
                 )

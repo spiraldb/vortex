@@ -16,7 +16,7 @@ pub struct ArrayData {
     encoding: EncodingRef,
     dtype: DType,
     metadata: Arc<dyn ArrayMetadata>,
-    buffers: Arc<[OwnedBuffer]>, // Should this just be an Option, not an Arc? How many multi-buffer arrays are there?
+    buffer: Option<OwnedBuffer>,
     children: Arc<[ArrayData]>,
     stats_map: Arc<RwLock<HashMap<Stat, Scalar>>>,
 }
@@ -26,7 +26,7 @@ impl ArrayData {
         encoding: EncodingRef,
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
-        buffers: Arc<[OwnedBuffer]>,
+        buffer: Option<OwnedBuffer>,
         children: Arc<[ArrayData]>,
         statistics: HashMap<Stat, Scalar>,
     ) -> VortexResult<Self> {
@@ -34,7 +34,7 @@ impl ArrayData {
             encoding,
             dtype,
             metadata,
-            buffers,
+            buffer,
             children,
             stats_map: Arc::new(RwLock::new(statistics)),
         };
@@ -59,8 +59,8 @@ impl ArrayData {
         &self.metadata
     }
 
-    pub fn buffers(&self) -> &[Buffer] {
-        &self.buffers
+    pub fn buffer(&self) -> Option<&Buffer> {
+        self.buffer.as_ref()
     }
 
     pub fn child(&self, index: usize, dtype: &DType) -> Option<&ArrayData> {
@@ -88,11 +88,11 @@ impl ArrayData {
     /// Return the buffer offsets and the total length of all buffers, assuming the given alignment.
     /// This includes all child buffers.
     pub fn all_buffer_offsets(&self, alignment: usize) -> Vec<u64> {
-        let mut offsets = Vec::with_capacity(self.buffers.len() + 1);
+        let mut offsets = vec![];
         let mut offset = 0;
 
         for col_data in self.depth_first_traversal() {
-            for buffer in col_data.buffers() {
+            if let Some(buffer) = col_data.buffer() {
                 offsets.push(offset as u64);
 
                 let buffer_size = buffer.len();
