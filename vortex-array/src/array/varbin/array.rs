@@ -18,7 +18,7 @@ impl ArrayValidity for VarBinArray<'_> {
 impl AcceptArrayVisitor for VarBinArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("offsets", &self.offsets())?;
-        visitor.visit_child("offsets", &self.bytes())?;
+        visitor.visit_child("bytes", &self.bytes())?;
         visitor.visit_validity(&self.validity())
     }
 }

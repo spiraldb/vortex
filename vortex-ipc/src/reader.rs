@@ -161,10 +161,14 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
             let to_kill = buffer.offset() - offset;
             io::copy(&mut self.read.take(to_kill), &mut io::sink()).unwrap();
 
-            let mut bytes = MutableBuffer::with_capacity(buffer.length() as usize);
-            unsafe { bytes.set_len(buffer.length() as usize) }
-            self.read.read_exact(bytes.as_slice_mut()).unwrap();
-            self.buffers.push(Buffer::Owned(bytes.into()));
+            let buffer_length = buffer.length();
+            let mut bytes = Vec::with_capacity(buffer_length as usize);
+            self.read
+                .take(buffer.length())
+                .read_to_end(&mut bytes)
+                .unwrap();
+            self.buffers
+                .push(Buffer::Owned(ArrowBuffer::from_vec(bytes).into()));
 
             offset = buffer.offset() + buffer.length();
         }

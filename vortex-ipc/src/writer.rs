@@ -64,10 +64,11 @@ impl<W: Write> StreamWriter<W> {
             .flat_map(|data| data.buffer().into_iter())
             .zip_eq(buffer_offsets.iter().skip(1))
         {
+            let buffer_len = buffer.len();
             self.write.write_all(buffer.as_slice())?;
-            current_offset += buffer.len();
-            let padding = (buffer_end as usize) - current_offset;
+            let padding = (buffer_end as usize) - current_offset - buffer_len;
             self.write.write_all(&vec![0; padding])?;
+            current_offset = buffer_end as usize;
         }
 
         Ok(())
