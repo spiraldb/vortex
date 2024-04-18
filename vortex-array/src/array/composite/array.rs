@@ -87,7 +87,6 @@ impl<'a> CompositeArray<'a> {
                 underlying_dtype: underlying.dtype().clone(),
                 underlying_metadata: metadata,
             },
-            vec![].into(),
             vec![underlying.into_array_data()].into(),
             HashMap::default(),
         )

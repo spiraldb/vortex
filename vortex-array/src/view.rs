@@ -116,23 +116,22 @@ impl<'v> ArrayView<'v> {
         }
     }
 
-    /// The number of buffers used by the current Array.
-    pub fn nbuffers(&self) -> usize {
-        self.array.nbuffers() as usize
+    /// Whether the current Array makes use of a buffer
+    pub fn has_buffer(&self) -> bool {
+        self.array.has_buffer()
     }
 
     /// The number of buffers used by the current Array and all its children.
     fn cumulative_nbuffers(array: fb::Array) -> usize {
-        let mut nbuffers = array.nbuffers() as usize;
+        let mut nbuffers = if array.has_buffer() { 1 } else { 0 };
         for child in array.children().unwrap_or_default() {
             nbuffers += Self::cumulative_nbuffers(child)
         }
         nbuffers
     }
 
-    pub fn buffers(&self) -> &'v [Buffer] {
-        // This is only true for the immediate current node?
-        self.buffers[0..self.nbuffers()].as_ref()
+    pub fn buffer(&self) -> Option<&'v Buffer<'v>> {
+        self.has_buffer().then(|| &self.buffers[0])
     }
 
     pub fn statistics(&self) -> &dyn Statistics {

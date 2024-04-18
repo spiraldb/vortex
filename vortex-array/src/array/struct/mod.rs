@@ -67,7 +67,6 @@ impl StructArray<'_> {
         Self::try_from_parts(
             DType::Struct(names, field_dtypes),
             StructMetadata { length },
-            vec![].into(),
             fields.into(),
             HashMap::default(),
         )

@@ -22,7 +22,7 @@ pub struct BoolMetadata {
 
 impl BoolArray<'_> {
     pub fn buffer(&self) -> &Buffer {
-        self.array().buffer(0).expect("missing buffer")
+        self.array().buffer().expect("missing buffer")
     }
 
     pub fn boolean_buffer(&self) -> BooleanBuffer {
@@ -38,16 +38,18 @@ impl BoolArray<'_> {
 
 impl BoolArray<'_> {
     pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
-        Self::try_from_parts(
-            DType::Bool(validity.nullability()),
-            BoolMetadata {
-                validity: validity.to_metadata(buffer.len())?,
-                length: buffer.len(),
-            },
-            vec![Buffer::Owned(buffer.into_inner())].into(),
-            validity.into_array_data().into_iter().collect_vec().into(),
-            HashMap::default(),
-        )
+        Ok(Self {
+            typed: TypedArray::try_from_parts(
+                DType::Bool(validity.nullability()),
+                BoolMetadata {
+                    validity: validity.to_metadata(buffer.len())?,
+                    length: buffer.len(),
+                },
+                Some(Buffer::Owned(buffer.into_inner())),
+                validity.into_array_data().into_iter().collect_vec().into(),
+                HashMap::default(),
+            )?,
+        })
     }
 
     pub fn from_vec(bools: Vec<bool>, validity: Validity) -> Self {

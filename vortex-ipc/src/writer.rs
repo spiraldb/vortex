@@ -61,7 +61,7 @@ impl<W: Write> StreamWriter<W> {
         let mut current_offset = 0;
         for (buffer, &buffer_end) in data
             .depth_first_traversal()
-            .flat_map(|data| data.buffers().iter())
+            .flat_map(|data| data.buffer().into_iter())
             .zip_eq(buffer_offsets.iter().skip(1))
         {
             self.write.write_all(buffer.as_slice())?;
