@@ -56,7 +56,6 @@ impl<'a> SparseArray<'a> {
                 len,
                 fill_value,
             },
-            vec![].into(),
             vec![indices.to_array_data(), values.to_array_data()].into(),
             HashMap::default(),
         )

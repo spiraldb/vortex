@@ -19,7 +19,7 @@ impl<D: ArrayDef> TypedArray<'_, D> {
     pub fn try_from_parts(
         dtype: DType,
         metadata: D::Metadata,
-        buffers: Arc<[OwnedBuffer]>,
+        buffer: Option<OwnedBuffer>,
         children: Arc<[ArrayData]>,
         stats: HashMap<Stat, Scalar>,
     ) -> VortexResult<Self> {
@@ -27,7 +27,7 @@ impl<D: ArrayDef> TypedArray<'_, D> {
             D::ENCODING,
             dtype,
             Arc::new(metadata.clone()),
-            buffers,
+            buffer,
             children,
             stats,
         )?);

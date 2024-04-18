@@ -48,13 +48,7 @@ impl ChunkedArray<'_> {
         let mut children = vec![chunk_ends.into_array_data()];
         children.extend(chunks.iter().map(|a| a.to_array_data()));
 
-        Self::try_from_parts(
-            dtype,
-            ChunkedMetadata,
-            vec![].into(),
-            children.into(),
-            HashMap::default(),
-        )
+        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), HashMap::default())
     }
 
     #[inline]

@@ -106,11 +106,11 @@ impl Array<'_> {
         }
     }
 
-    pub fn buffer(&self, idx: usize) -> Option<&Buffer> {
+    pub fn buffer(&self) -> Option<&Buffer> {
         match self {
-            Array::Data(d) => d.buffers().get(idx),
-            Array::DataRef(d) => d.buffers().get(idx),
-            Array::View(v) => v.buffers().get(idx),
+            Array::Data(d) => d.buffer(),
+            Array::DataRef(d) => d.buffer(),
+            Array::View(v) => v.buffer(),
         }
     }
 }

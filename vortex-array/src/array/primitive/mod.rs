@@ -27,15 +27,27 @@ impl PrimitiveArray<'_> {
         buffer: ScalarBuffer<T>,
         validity: Validity,
     ) -> VortexResult<Self> {
-        Self::try_from_parts(
-            DType::from(T::PTYPE).with_nullability(validity.nullability()),
-            PrimitiveMetadata {
-                validity: validity.to_metadata(buffer.len())?,
-            },
-            vec![Buffer::Owned(buffer.into_inner())].into(),
-            validity.into_array_data().into_iter().collect_vec().into(),
-            HashMap::default(),
-        )
+        Ok(Self {
+            typed: TypedArray::try_from_parts(
+                DType::from(T::PTYPE).with_nullability(validity.nullability()),
+                PrimitiveMetadata {
+                    validity: validity.to_metadata(buffer.len())?,
+                },
+                Some(Buffer::Owned(buffer.into_inner())),
+                validity.into_array_data().into_iter().collect_vec().into(),
+                HashMap::default(),
+            )?,
+        })
+    }
+
+    pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>, validity: Validity) -> Self {
+        Self::try_new(ScalarBuffer::from(values), validity).unwrap()
+    }
+
+    pub fn from_nullable_vec<T: NativePType + ArrowNativeType>(values: Vec<Option<T>>) -> Self {
+        let elems: Vec<T> = values.iter().map(|v| v.unwrap_or_default()).collect();
+        let validity = Validity::from(values.iter().map(|v| v.is_some()).collect::<Vec<_>>());
+        Self::from_vec(elems, validity)
     }
 
     pub fn validity(&self) -> Validity {
@@ -50,7 +62,7 @@ impl PrimitiveArray<'_> {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        self.array().buffer(0).expect("missing buffer")
+        self.array().buffer().expect("missing buffer")
     }
 
     pub fn scalar_buffer<T: NativePType>(&self) -> ScalarBuffer<T> {
@@ -59,16 +71,6 @@ impl PrimitiveArray<'_> {
 
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
         self.buffer().typed_data::<T>()
-    }
-
-    pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>, validity: Validity) -> Self {
-        Self::try_new(ScalarBuffer::from(values), validity).unwrap()
-    }
-
-    pub fn from_nullable_vec<T: NativePType + ArrowNativeType>(values: Vec<Option<T>>) -> Self {
-        let elems: Vec<T> = values.iter().map(|v| v.unwrap_or_default()).collect();
-        let validity = Validity::from(values.iter().map(|v| v.is_some()).collect::<Vec<_>>());
-        Self::from_vec(elems, validity)
     }
 
     pub fn reinterpret_cast(&self, ptype: PType) -> Self {

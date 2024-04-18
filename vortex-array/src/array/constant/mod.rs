@@ -34,7 +34,6 @@ impl ConstantArray<'_> {
             scalar.dtype().clone(),
             ConstantMetadata { scalar, length },
             vec![].into(),
-            vec![].into(),
             stats,
         )
         .unwrap()

@@ -64,13 +64,7 @@ impl VarBinArray<'_> {
             children.push(a)
         }
 
-        Self::try_from_parts(
-            dtype,
-            metadata,
-            vec![].into(),
-            children.into(),
-            HashMap::default(),
-        )
+        Self::try_from_parts(dtype, metadata, children.into(), HashMap::default())
     }
 
     #[inline]

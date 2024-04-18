@@ -6,10 +6,10 @@ enum Version: uint8 {
 
 table Array {
     version: Version = V0;
+    has_buffer: bool;
     encoding: uint16;
     metadata: [ubyte];
     children: [Array];
-    nbuffers: uint16;
 }
 
 root_type Array;
