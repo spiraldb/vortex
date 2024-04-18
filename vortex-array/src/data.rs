@@ -63,6 +63,10 @@ impl ArrayData {
         self.buffer.as_ref()
     }
 
+    pub fn into_buffer(self) -> Option<OwnedBuffer> {
+        self.buffer
+    }
+
     pub fn child(&self, index: usize, dtype: &DType) -> Option<&ArrayData> {
         match self.children.get(index) {
             None => None,

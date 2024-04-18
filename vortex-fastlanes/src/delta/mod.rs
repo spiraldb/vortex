@@ -47,7 +47,6 @@ impl DeltaArray<'_> {
                 validity: validity.to_metadata(len)?,
                 len,
             },
-            vec![].into(),
             vec![bases.into_array_data(), deltas.into_array_data()].into(),
             HashMap::new(),
         )?;

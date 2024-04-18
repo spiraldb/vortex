@@ -27,7 +27,6 @@ impl FoRArray<'_> {
         Self::try_from_parts(
             child.dtype().clone(),
             FoRMetadata { reference, shift },
-            vec![].into(),
             vec![child.to_array_data()].into(),
             HashMap::new(),
         )
@@ -80,7 +79,7 @@ impl ArrayStatisticsCompute for FoRArray<'_> {}
 
 impl ArrayTrait for FoRArray<'_> {
     fn len(&self) -> usize {
-        todo!()
+        self.encoded().len()
     }
 
     fn nbytes(&self) -> usize {

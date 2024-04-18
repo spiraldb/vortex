@@ -115,6 +115,16 @@ impl Array<'_> {
     }
 }
 
+impl<'a> Array<'a> {
+    pub fn into_buffer(self) -> Option<Buffer<'a>> {
+        match self {
+            Array::Data(d) => d.into_buffer(),
+            Array::DataRef(d) => d.buffer().cloned(),
+            Array::View(v) => v.buffer().map(|b| b.to_static()),
+        }
+    }
+}
+
 impl ToStatic for Array<'_> {
     type Static = OwnedArray;
 

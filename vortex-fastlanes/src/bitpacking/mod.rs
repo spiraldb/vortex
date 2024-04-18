@@ -82,19 +82,13 @@ impl BitPackedArray<'_> {
             children.push(a)
         }
 
-        Self::try_from_parts(
-            dtype,
-            metadata,
-            vec![].into(),
-            children.into(),
-            HashMap::new(),
-        )
+        Self::try_from_parts(dtype, metadata, children.into(), HashMap::new())
     }
 
     #[inline]
     pub fn encoded(&self) -> Array {
         self.array()
-            .child(0, self.dtype())
+            .child(0, &DType::BYTES)
             .expect("Missing encoded array")
     }
 
@@ -161,7 +155,7 @@ impl ArrayStatisticsCompute for BitPackedArray<'_> {}
 
 impl ArrayTrait for BitPackedArray<'_> {
     fn len(&self) -> usize {
-        todo!()
+        self.metadata().length
     }
 
     fn nbytes(&self) -> usize {
