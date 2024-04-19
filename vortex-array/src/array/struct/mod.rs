@@ -52,15 +52,12 @@ impl<'a> StructArray<'a> {
 }
 
 impl StructArray<'_> {
-    pub fn try_new(names: FieldNames, fields: Vec<ArrayData>, length: usize) -> VortexResult<Self> {
+    pub fn try_new(names: FieldNames, fields: Vec<Array>, length: usize) -> VortexResult<Self> {
         if names.len() != fields.len() {
             vortex_bail!("Got {} names and {} fields", names.len(), fields.len());
         }
 
-        if fields
-            .iter()
-            .any(|a| a.to_array().with_dyn(|a| a.len()) != length)
-        {
+        if fields.iter().any(|a| a.with_dyn(|a| a.len()) != length) {
             vortex_bail!("Expected all struct fields to have length {}", length);
         }
 
@@ -68,7 +65,7 @@ impl StructArray<'_> {
         Self::try_from_parts(
             DType::Struct(names, field_dtypes),
             StructMetadata { length },
-            fields.into(),
+            fields.into_iter().map(|a| a.into_array_data()).collect(),
             HashMap::default(),
         )
     }
@@ -86,7 +83,7 @@ impl ArrayFlatten for StructArray<'_> {
                     self.child(i)
                         .expect("Missing child")
                         .flatten()
-                        .map(|f| f.into_array().into_array_data())
+                        .map(|f| f.into_array())
                 })
                 .collect::<VortexResult<Vec<_>>>()?,
             self.len(),

@@ -4,7 +4,7 @@ use arrow_array::RecordBatch;
 
 use crate::array::r#struct::StructArray;
 use crate::arrow::FromArrowArray;
-use crate::{ArrayData, IntoArrayData, ToArrayData};
+use crate::{ArrayData, IntoArray, IntoArrayData, ToArrayData};
 
 impl ToArrayData for RecordBatch {
     fn to_array_data(&self) -> ArrayData {
@@ -19,7 +19,9 @@ impl ToArrayData for RecordBatch {
             self.columns()
                 .iter()
                 .zip(self.schema().fields())
-                .map(|(array, field)| ArrayData::from_arrow(array.clone(), field.is_nullable()))
+                .map(|(array, field)| {
+                    ArrayData::from_arrow(array.clone(), field.is_nullable()).into_array()
+                })
                 .collect(),
             self.num_rows(),
         )

@@ -187,7 +187,9 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
                 .columns()
                 .iter()
                 .zip(value.fields())
-                .map(|(c, field)| ArrayData::from_arrow(c.clone(), field.is_nullable()))
+                .map(|(c, field)| {
+                    ArrayData::from_arrow(c.clone(), field.is_nullable()).into_array()
+                })
                 .collect(),
             value.len(),
         )

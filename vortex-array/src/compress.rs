@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
-use itertools::Itertools;
 use log::{debug, info, warn};
 use vortex_error::{vortex_bail, VortexResult};
 
@@ -18,10 +17,7 @@ use crate::encoding::{ArrayEncoding, EncodingRef, VORTEX_ENCODINGS};
 use crate::sampling::stratified_slices;
 use crate::stats::Stat;
 use crate::validity::Validity;
-use crate::{
-    compute, Array, ArrayDType, ArrayData, ArrayDef, ArrayTrait, IntoArray, IntoArrayData,
-    OwnedArray, ToStatic,
-};
+use crate::{compute, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray, ToStatic};
 
 pub trait EncodingCompression: ArrayEncoding {
     fn cost(&self) -> u8 {
@@ -244,15 +240,12 @@ impl CompressCtx {
             Struct::ID => {
                 // For struct arrays, we compress each field individually
                 let strct = StructArray::try_from(arr)?;
-                let compressed_fields: VortexResult<Vec<ArrayData>> = strct
+                let compressed_fields = strct
                     .children()
-                    .map(|field| {
-                        self.compress_array(&field)
-                            .map(|compressed| compressed.into_array_data())
-                    })
-                    .try_collect();
+                    .map(|field| self.compress_array(&field))
+                    .collect::<VortexResult<Vec<_>>>()?;
                 Ok(
-                    StructArray::try_new(strct.names().clone(), compressed_fields?, strct.len())?
+                    StructArray::try_new(strct.names().clone(), compressed_fields, strct.len())?
                         .into_array(),
                 )
             }

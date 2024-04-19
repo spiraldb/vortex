@@ -258,6 +258,14 @@ impl LogicalValidity {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        match self {
+            LogicalValidity::AllValid(n) => *n == 0,
+            LogicalValidity::AllInvalid(n) => *n == 0,
+            LogicalValidity::Array(a) => a.to_array().is_empty(),
+        }
+    }
+
     pub fn into_validity<'a>(self) -> Validity<'a> {
         match self {
             LogicalValidity::AllValid(_) => Validity::AllValid,

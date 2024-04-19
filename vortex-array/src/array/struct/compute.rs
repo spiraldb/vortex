@@ -15,8 +15,8 @@ use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::scalar::{Scalar, StructScalar};
-use crate::{Array, ArrayDType, IntoArray, IntoArrayData, OwnedArray};
-use crate::{ArrayTrait, ToStatic};
+use crate::ArrayTrait;
+use crate::{Array, ArrayDType, IntoArray, OwnedArray};
 
 impl ArrayCompute for StructArray<'_> {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -70,11 +70,14 @@ impl AsArrowArray for StructArray<'_> {
 
 impl AsContiguousFn for StructArray<'_> {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+        let struct_arrays = arrays
+            .iter()
+            .map(StructArray::try_from)
+            .collect::<VortexResult<Vec<_>>>()?;
         let mut fields = vec![Vec::new(); self.fields().len()];
-        for array in arrays {
-            let struct_arr = StructArray::try_from(array).unwrap();
+        for array in struct_arrays.iter() {
             for f in 0..self.fields().len() {
-                fields[f].push(struct_arr.child(f).unwrap().to_static())
+                fields[f].push(array.child(f).unwrap())
             }
         }
 
@@ -82,7 +85,7 @@ impl AsContiguousFn for StructArray<'_> {
             self.names().clone(),
             fields
                 .iter()
-                .map(|field_arrays| as_contiguous(field_arrays).map(|a| a.into_array_data()))
+                .map(|field_arrays| as_contiguous(field_arrays))
                 .try_collect()?,
             self.len(),
         )
@@ -107,7 +110,7 @@ impl TakeFn for StructArray<'_> {
         StructArray::try_new(
             self.names().clone(),
             self.children()
-                .map(|field| take(&field, indices).map(|a| a.into_array_data()))
+                .map(|field| take(&field, indices))
                 .try_collect()?,
             indices.len(),
         )
@@ -119,7 +122,7 @@ impl SliceFn for StructArray<'_> {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         let fields = self
             .children()
-            .map(|field| slice(&field, start, stop).map(|a| a.into_array_data()))
+            .map(|field| slice(&field, start, stop))
             .try_collect()?;
         StructArray::try_new(self.names().clone(), fields, stop - start).map(|a| a.into_array())
     }

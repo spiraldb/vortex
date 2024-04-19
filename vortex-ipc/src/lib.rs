@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn test_write_flatbuffer() {
-        let col = PrimitiveArray::from(vec![0, 1, 2]).into_array_data();
+        let col = PrimitiveArray::from(vec![0, 1, 2]).into_array();
         let nested_struct = StructArray::try_new(
             vec![Arc::new("x".into()), Arc::new("y".into())],
             vec![col.clone(), col.clone()],
@@ -60,7 +60,7 @@ mod tests {
 
         let arr = StructArray::try_new(
             vec![Arc::new("a".into()), Arc::new("b".into())],
-            vec![col.clone(), nested_struct.into_array_data()],
+            vec![col.clone(), nested_struct.into_array()],
             3,
         )
         .unwrap()
