@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -11,7 +12,7 @@ use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::arrow::FromArrowType;
-use vortex::{IntoArray, OwnedArray, SerdeContext, ToArrayData};
+use vortex::{IntoArray, SerdeContext, ToArrayData};
 use vortex_error::{VortexError, VortexResult};
 use vortex_ipc::writer::StreamWriter;
 use vortex_schema::DType;
@@ -98,7 +99,7 @@ pub fn decompress_bz2(input_path: PathBuf, output_path: PathBuf) -> PathBuf {
 
 pub trait BenchmarkDataset {
     fn as_uncompressed(&self);
-    fn compress_to_vortex(&self) -> Vec<OwnedArray>;
+    fn compress_to_vortex(&self) -> VortexResult<()>;
     fn write_as_parquet(&self);
     fn write_as_vortex(&self);
     fn write_as_lance(&self);
@@ -106,10 +107,22 @@ pub trait BenchmarkDataset {
     fn directory_location(&self) -> PathBuf;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum FileType {
     Csv,
     Parquet,
     Vortex,
     Lance,
+}
+
+impl Display for FileType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            FileType::Csv => "csv".to_string(),
+            FileType::Parquet => "parquet".to_string(),
+            FileType::Vortex => "vortex".to_string(),
+            FileType::Lance => "lance".to_string(),
+        };
+        write!(f, "{}", str)
+    }
 }

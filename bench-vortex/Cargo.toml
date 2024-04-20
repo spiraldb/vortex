@@ -15,21 +15,21 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
+#vortex-alp = { path = "../vortex-alp" }
+#vortex-datetime = { path = "../vortex-datetime" }
+#vortex-roaring = { path = "../vortex-roaring" }
+#vortex-zigzag = { path = "../vortex-zigzag" }
+arrow = { workspace = true }
 arrow-array = { workspace = true }
+arrow-csv = { workspace = true }
+arrow-data = { workspace = true }
 arrow-select = { workspace = true }
+bzip2 = { workspace = true }
+csv = { workspace = true }
+duckdb = { workspace = true }
 enum-iterator = { workspace = true }
 fs_extra = { workspace = true }
-#vortex-alp = { path = "../vortex-alp" }
-vortex-array = { path = "../vortex-array" }
-#vortex-datetime = { path = "../vortex-datetime" }
-vortex-dict = { path = "../vortex-dict" }
-vortex-error = { path = "../vortex-error", features = ["parquet"] }
-vortex-fastlanes = { path = "../vortex-fastlanes" }
-vortex-ipc = { path = "../vortex-ipc" }
-vortex-ree = { path = "../vortex-ree" }
-#vortex-roaring = { path = "../vortex-roaring" }
-vortex-schema = { path = "../vortex-schema" }
-#vortex-zigzag = { path = "../vortex-zigzag" }
+humansize = { workspace = true }
 itertools = { workspace = true }
 lance = { version = "0.10.5", features = [] }
 lance-arrow-array = { package = "arrow-array", version = "50.0" }
@@ -39,13 +39,15 @@ log = { workspace = true }
 parquet = { workspace = true, features = [] }
 reqwest = { workspace = true }
 simplelog = { workspace = true }
-tokio = "1.0.1"
-bzip2 = { workspace = true }
-csv = { workspace = true }
-arrow-csv = { workspace = true }
-arrow = { workspace = true }
-humansize = { workspace = true }
+tokio = { workspace = true }
 uuid = { workspace = true }
+vortex-array = { path = "../vortex-array" }
+vortex-dict = { path = "../vortex-dict" }
+vortex-error = { path = "../vortex-error", features = ["parquet"] }
+vortex-fastlanes = { path = "../vortex-fastlanes" }
+vortex-ipc = { path = "../vortex-ipc" }
+vortex-ree = { path = "../vortex-ree" }
+vortex-schema = { path = "../vortex-schema" }
 
 [dev-dependencies]
 criterion = { workspace = true }

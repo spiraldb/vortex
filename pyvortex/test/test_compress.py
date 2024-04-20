@@ -63,7 +63,6 @@ def test_chunked_encode():
     assert encoded.to_pyarrow().combine_chunks() == pa.array([0, 1, 2, 3, 4, 5])
 
 
-@pytest.mark.xfail(reason="Not yet implemented")
 def test_table_encode():
     table = pa.table(
         {

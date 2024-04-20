@@ -3,32 +3,33 @@ use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use arrow::datatypes::SchemaRef;
 use arrow_array::RecordBatchReader;
 use humansize::DECIMAL;
 use itertools::Itertools;
-use log::{info, warn, LevelFilter};
+use log::{info, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::r#struct::StructArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::encoding::{EncodingRef, VORTEX_ENCODINGS};
-use vortex::{Array, IntoArray, OwnedArray, ToArrayData};
+use vortex::{IntoArray, OwnedArray, ToArrayData};
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_schema::DType;
 
+use crate::data_downloads::FileType;
 use crate::reader::BATCH_SIZE;
 use crate::taxi_data::taxi_data_parquet;
 
 pub mod data_downloads;
+pub mod parquet_utils;
 pub mod public_bi_data;
 pub mod reader;
 pub mod taxi_data;
+pub mod vortex_utils;
 
 /// Creates a file if it doesn't already exist.
 /// NB: Does NOT modify the given path to ensure that it resides in the data directory.
@@ -154,28 +155,11 @@ pub fn compress_taxi_data() -> OwnedArray {
         })
         .collect_vec();
 
-    chunks_to_array(schema, uncompressed_size, chunks)
-}
-
-fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<Array>) -> OwnedArray {
-    let dtype = DType::from_arrow(schema.clone());
-    let compressed = ChunkedArray::try_new(chunks.clone(), dtype)
+    let compressed = ChunkedArray::try_new(chunks.clone(), DType::from_arrow(schema))
         .unwrap()
         .into_array();
 
-    warn!("Compressed array {}", compressed.tree_display());
-
-    let mut field_bytes = vec![0; schema.fields().len()];
-    for chunk in chunks {
-        let str = StructArray::try_from(chunk).unwrap();
-        for (i, field) in str.children().enumerate() {
-            field_bytes[i] += field.nbytes();
-        }
-    }
-    field_bytes.iter().enumerate().for_each(|(i, &nbytes)| {
-        println!("{},{}", schema.field(i).name(), nbytes);
-    });
-    println!(
+    info!(
         "{}, Bytes: {}, Ratio {}",
         humansize::format_size(compressed.nbytes(), DECIMAL),
         compressed.nbytes(),
@@ -183,6 +167,48 @@ fn chunks_to_array(schema: SchemaRef, uncompressed_size: usize, chunks: Vec<Arra
     );
 
     compressed
+}
+
+pub struct CompressionRunStats {
+    schema: DType,
+    total_compressed_size: Option<u64>,
+    compressed_sizes: Vec<u64>,
+    file_type: FileType,
+    file_name: String,
+}
+
+impl CompressionRunStats {
+    pub fn to_results(&self, dataset_name: String) -> Vec<CompressionRunResults> {
+        let DType::Struct(ns, fs) = &self.schema else {
+            unreachable!()
+        };
+
+        self.compressed_sizes
+            .iter()
+            .zip_eq(ns.iter().zip_eq(fs))
+            .map(
+                |(&size, (column_name, column_type))| CompressionRunResults {
+                    dataset_name: dataset_name.clone(),
+                    file_name: self.file_name.clone(),
+                    file_type: self.file_type.to_string(),
+                    column_name: (**column_name).clone(),
+                    column_type: column_type.to_string(),
+                    compressed_size: size,
+                    total_compressed_size: self.total_compressed_size,
+                },
+            )
+            .collect::<Vec<_>>()
+    }
+}
+
+pub struct CompressionRunResults {
+    pub dataset_name: String,
+    pub file_name: String,
+    pub file_type: String,
+    pub column_name: String,
+    pub column_type: String,
+    pub compressed_size: u64,
+    pub total_compressed_size: Option<u64>,
 }
 
 #[cfg(test)]

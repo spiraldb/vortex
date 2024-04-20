@@ -28,7 +28,6 @@ fn compress_taxi() {
     let pq_size = taxi_data_parquet().metadata().unwrap().size();
     let vx_size = taxi_vortex.nbytes();
 
-    info!("{}\n\n", taxi_vortex.tree_display());
     info!("Parquet size: {}, Vortex size: {}", pq_size, vx_size);
     info!("Compression ratio: {}", vx_size as f32 / pq_size as f32);
 }
@@ -36,7 +35,6 @@ fn compress_taxi() {
 #[allow(dead_code)]
 fn compress_pbi(which_pbi: PBIDataset) {
     let dataset = PBI(which_pbi);
-    dataset.as_uncompressed();
     dataset.write_as_vortex();
     dataset.write_as_parquet();
     dataset.write_as_lance();

@@ -10,14 +10,16 @@ use humansize::{format_size, DECIMAL};
 use itertools::Itertools;
 use log::info;
 use reqwest::Url;
-use vortex::OwnedArray;
-use vortex_error::VortexError;
+use vortex::ArrayTrait;
+use vortex_error::VortexResult;
 
 use crate::data_downloads::{
     decompress_bz2, download_data, parquet_to_lance, BenchmarkDataset, FileType,
 };
 use crate::public_bi_data::PBIDataset::*;
-use crate::reader::{open_vortex, pbi_csv_format, write_csv_as_parquet, write_csv_to_vortex};
+use crate::reader::{
+    compress_parquet_to_vortex, open_vortex, rewrite_parquet_as_vortex, write_csv_as_parquet,
+};
 use crate::{idempotent, IdempotentPath};
 
 lazy_static::lazy_static! {
@@ -424,7 +426,24 @@ impl BenchmarkDataset for BenchmarkDatasets {
         }
     }
 
+    fn compress_to_vortex(&self) -> VortexResult<()> {
+        self.write_as_parquet();
+        for f in self.list_files(FileType::Parquet) {
+            info!("Compressing and writing {} to vortex", f.to_str().unwrap());
+            let from_vortex = compress_parquet_to_vortex(f.as_path()).unwrap();
+            let vx_size = from_vortex.nbytes();
+
+            info!(
+                "Vortex size: {}, {}B",
+                format_size(vx_size as u64, DECIMAL),
+                vx_size
+            );
+        }
+        Ok(())
+    }
+
     fn write_as_parquet(&self) {
+        self.as_uncompressed();
         for f in self.list_files(FileType::Csv) {
             let output_fname = f
                 .file_name()
@@ -435,11 +454,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 .unwrap();
             let compressed = idempotent(
                 &path_for_file_type(self, output_fname, "parquet"),
-                |output_path| {
-                    let mut write = File::create(output_path).unwrap();
-                    let csv_input = f;
-                    write_csv_as_parquet(csv_input, pbi_csv_format(), &mut write)
-                },
+                |output_path| write_csv_as_parquet(f, output_path),
             )
             .expect("Failed to compress to parquet");
             let pq_size = compressed.metadata().unwrap().size();
@@ -451,36 +466,23 @@ impl BenchmarkDataset for BenchmarkDatasets {
         }
     }
 
-    /// Compresses the CSV files to Vortex format. Does NOT write any data to disk.
-    /// Used for benchmarking.
-    fn compress_to_vortex(&self) -> Vec<OwnedArray> {
-        vec![]
-        // self.list_files(FileType::Csv)
-        //     .into_iter()
-        //     .map(|csv_input| {
-        //         info!("Compressing {} to vortex", csv_input.to_str().unwrap());
-        //         compress_csv_to_vortex(csv_input, pbi_csv_format()).1
-        //     })
-        //     .collect_vec()
-    }
-
     fn write_as_vortex(&self) {
-        for f in self.list_files(FileType::Csv) {
+        self.write_as_parquet();
+        for f in self.list_files(FileType::Parquet) {
             info!("Compressing and writing {} to vortex", f.to_str().unwrap());
             let output_fname = f
                 .file_name()
                 .unwrap()
                 .to_str()
                 .unwrap()
-                .strip_suffix(".csv")
+                .strip_suffix(".parquet")
                 .unwrap();
 
             let compressed = idempotent(
                 &path_for_file_type(self, output_fname, "vortex"),
                 |output_path| {
                     let mut write = File::create(output_path).unwrap();
-                    let csv_input = f;
-                    write_csv_to_vortex(csv_input, pbi_csv_format(), &mut write)
+                    rewrite_parquet_as_vortex(f, &mut write)
                 },
             )
             .expect("Failed to compress to vortex");
@@ -492,11 +494,11 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 format_size(vx_size as u64, DECIMAL),
                 vx_size
             );
-            info!("{}\n\n", from_vortex.tree_display());
         }
     }
 
     fn write_as_lance(&self) {
+        self.as_uncompressed();
         for f in self.list_files(FileType::Csv) {
             info!("Compressing {} to lance", f.to_str().unwrap());
             let output_fname = f
@@ -509,10 +511,10 @@ impl BenchmarkDataset for BenchmarkDatasets {
             let compressed = idempotent(
                 &path_for_file_type(self, output_fname, "lance"),
                 |output_path| {
-                    Ok::<_, VortexError>(parquet_to_lance(
+                    parquet_to_lance(
                         output_path,
                         path_for_file_type(self, output_fname, "parquet").as_path(),
-                    ))
+                    )
                 },
             )
             .expect("Failed to compress to lance");
