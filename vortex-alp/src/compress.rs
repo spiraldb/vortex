@@ -9,7 +9,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::alp::ALPFloat;
 use crate::array::{ALPArray, ALPEncoding};
-use crate::Exponents;
+use crate::{Exponents, OwnedALPArray};
 
 #[macro_export]
 macro_rules! match_each_alp_float_ptype {
@@ -33,7 +33,7 @@ impl EncodingCompression for ALPEncoding {
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
-        let parray = array.clone().flatten_primitive().unwrap();
+        let parray = PrimitiveArray::try_from(array).ok()?;
 
         // Only supports f32 and f64
         if !matches!(parray.ptype(), PType::F32 | PType::F64) {
@@ -50,17 +50,16 @@ impl EncodingCompression for ALPEncoding {
         ctx: CompressCtx,
     ) -> VortexResult<Array<'static>> {
         let like_alp = like.map(|like_array| like_array.as_array_ref());
-        let exponents_cloned = like
+        let like_exponents = like
             .map(|like_array| ALPArray::try_from(like_array).unwrap())
-            .as_ref()
             .map(|a| a.exponents().clone());
 
         // TODO(ngates): fill forward nulls
-        let parray = array.clone().flatten_primitive()?;
+        let parray = PrimitiveArray::try_from(array)?;
 
         let (exponents, encoded, patches) = match_each_alp_float_ptype!(
             parray.ptype(), |$T| {
-            encode_to_array::<$T>(&parray, exponents_cloned.as_ref())
+            encode_to_array::<$T>(&parray, like_exponents.as_ref())
         })?;
 
         let compressed_encoded = ctx
@@ -105,7 +104,7 @@ where
     )
 }
 
-pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray<'static>> {
+pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<OwnedALPArray> {
     let (exponents, encoded, patches) = match parray.ptype() {
         PType::F32 => encode_to_array::<f32>(parray, None),
         PType::F64 => encode_to_array::<f64>(parray, None),
@@ -169,10 +168,7 @@ mod tests {
         let encoded = alp_encode(&array).unwrap();
         assert!(encoded.patches().is_none());
         assert_eq!(
-            encoded
-                .encoded()
-                .clone()
-                .flatten_primitive()
+            PrimitiveArray::try_from(encoded.encoded())
                 .unwrap()
                 .typed_data::<i32>(),
             vec![1234; 1025]
@@ -190,10 +186,7 @@ mod tests {
         println!("Encoded {:?}", encoded);
         assert!(encoded.patches().is_none());
         assert_eq!(
-            encoded
-                .encoded()
-                .clone()
-                .flatten_primitive()
+            PrimitiveArray::try_from(encoded.encoded())
                 .unwrap()
                 .typed_data::<i32>(),
             vec![0, 1234, 0]

@@ -8,7 +8,7 @@ use crate::buffer::Buffer;
 use crate::ptype::{NativePType, PType};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType};
+use crate::{impl_encoding, ArrayDType, ToStatic};
 use crate::{match_each_native_ptype, ArrayFlatten};
 
 mod accessor;
@@ -22,7 +22,7 @@ pub struct PrimitiveMetadata {
     validity: ValidityMetadata,
 }
 
-impl<'a> PrimitiveArray<'a> {
+impl PrimitiveArray<'_> {
     pub fn try_new<T: NativePType + ArrowNativeType>(
         buffer: ScalarBuffer<T>,
         validity: Validity,
@@ -115,8 +115,8 @@ impl<'a> PrimitiveArray<'a> {
         Self::try_new(ScalarBuffer::from(own_values), validity)
     }
 
-    pub fn into_buffer(self) -> Buffer<'a> {
-        self.into_array().into_buffer().unwrap()
+    pub fn into_buffer(self) -> Buffer<'static> {
+        self.into_array().into_buffer().unwrap().to_static()
     }
 }
 

@@ -16,7 +16,7 @@ impl_encoding!("vortex.alp", ALP);
 pub struct ALPMetadata {
     exponents: Exponents,
     has_patches: bool,
-    dtype: DType,
+    encoded_dtype: DType,
 }
 
 impl ALPArray<'_> {
@@ -47,7 +47,7 @@ impl ALPArray<'_> {
             ALPMetadata {
                 exponents,
                 has_patches: patches.is_some(),
-                dtype: d_type,
+                encoded_dtype: d_type,
             },
             children.into(),
             Default::default(),
@@ -64,7 +64,7 @@ impl ALPArray<'_> {
 
     pub fn encoded(&self) -> Array {
         self.array()
-            .child(0, &self.metadata().dtype)
+            .child(0, &self.metadata().encoded_dtype)
             .expect("Missing encoded array")
     }
 
@@ -103,7 +103,7 @@ impl ArrayFlatten for ALPArray<'_> {
 impl AcceptArrayVisitor for ALPArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("encoded", &self.encoded())?;
-        if self.metadata().has_patches {
+        if self.patches().is_some() {
             visitor.visit_child(
                 "patches",
                 &self.patches().expect("Expected patches to be present "),
@@ -117,6 +117,6 @@ impl ArrayStatisticsCompute for ALPArray<'_> {}
 
 impl ArrayTrait for ALPArray<'_> {
     fn len(&self) -> usize {
-        self.array().len()
+        self.encoded().len()
     }
 }
