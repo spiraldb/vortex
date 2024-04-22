@@ -50,13 +50,17 @@ impl EncodingCompression for ALPEncoding {
         ctx: CompressCtx,
     ) -> VortexResult<Array<'static>> {
         let like_alp = like.map(|like_array| like_array.as_array_ref());
+        let exponents_cloned = like
+            .map(|like_array| ALPArray::try_from(like_array).unwrap())
+            .as_ref()
+            .map(|a| a.exponents().clone());
 
         // TODO(ngates): fill forward nulls
         let parray = array.clone().flatten_primitive()?;
 
         let (exponents, encoded, patches) = match_each_alp_float_ptype!(
             parray.ptype(), |$T| {
-            encode_to_array::<$T>(&parray, None)
+            encode_to_array::<$T>(&parray, exponents_cloned.as_ref())
         })?;
 
         let compressed_encoded = ctx
