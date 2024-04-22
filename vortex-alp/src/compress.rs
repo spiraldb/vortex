@@ -52,7 +52,7 @@ impl EncodingCompression for ALPEncoding {
         let like_alp = like.map(|like_array| like_array.as_array_ref());
         let like_exponents = like
             .map(|like_array| ALPArray::try_from(like_array).unwrap())
-            .map(|a| a.exponents().clone());
+            .map(|a| a.exponents().to_owned());
 
         // TODO(ngates): fill forward nulls
         let parray = PrimitiveArray::try_from(array)?;
@@ -114,8 +114,7 @@ pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<OwnedALPArray>
 }
 
 pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
-    let binding = array.clone();
-    let encoded = binding.encoded().clone().flatten_primitive()?;
+    let encoded = array.encoded().clone().flatten_primitive()?;
 
     let decoded = match_each_alp_float_ptype!(array.dtype().try_into().unwrap(), |$T| {
         PrimitiveArray::from_vec(

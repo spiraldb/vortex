@@ -36,7 +36,7 @@ impl ALPArray<'_> {
             d => vortex_bail!(MismatchedTypes: "int32 or int64", d),
         };
 
-        let mut children = vec![];
+        let mut children = Vec::with_capacity(2);
         children.push(encoded.into_array_data());
         patches.iter().for_each(|patch| {
             children.push(patch.to_array_data());
