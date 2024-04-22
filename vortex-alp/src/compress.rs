@@ -4,7 +4,7 @@ use vortex::array::sparse::{Sparse, SparseArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::Scalar;
-use vortex::{Array, ArrayDef, ArrayDType, AsArray, IntoArray, match_each_integer_ptype};
+use vortex::{Array, ArrayDef, ArrayDType, AsArray, IntoArray};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::alp::ALPFloat;
@@ -136,19 +136,15 @@ fn patch_decoded<'a>(
 ) -> VortexResult<PrimitiveArray<'a>> {
     match patches.encoding().id() {
         Sparse::ID => {
-            match_each_integer_ptype!(array.ptype(), |$T| {
+            match_each_alp_float_ptype!(array.ptype(), |$T| {
                 let typed_patches = SparseArray::try_from(patches).unwrap();
                 array.patch(
                     &typed_patches.resolved_indices(),
-                    typed_patches.values().flatten_primitive()?.typed_data::<$T>())
+                    typed_patches.values().flatten_primitive()?.typed_data::<$T>())?
             })
         }
         _ => panic!("can't patch ALP array with {}", patches),
     }
-    // match array.patch() {
-    //     None => Ok(array),
-    //     Some(some_fn) => some_fn.patch(patches)?.flatten_primitive(),
-    // }
 }
 
 fn decompress_primitive<T: NativePType + ALPFloat>(
