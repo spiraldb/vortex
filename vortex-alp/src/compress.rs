@@ -4,7 +4,7 @@ use vortex::array::sparse::{Sparse, SparseArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::Scalar;
-use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray};
+use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray, OwnedArray};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::alp::ALPFloat;
@@ -79,10 +79,10 @@ impl EncodingCompression for ALPEncoding {
     }
 }
 
-fn encode_to_array<'a, T>(
-    values: &'a PrimitiveArray<'a>,
-    exponents: Option<&'a Exponents>,
-) -> (Exponents, Array<'a>, Option<Array<'a>>)
+fn encode_to_array<T>(
+    values: & PrimitiveArray,
+    exponents: Option<& Exponents>,
+) -> (Exponents, OwnedArray, Option<OwnedArray>)
 where
     T: ALPFloat + NativePType,
     T::ALPInt: NativePType,
