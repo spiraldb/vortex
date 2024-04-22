@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
-use vortex::compute::patch::PatchFn;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, OwnedArray, ToArrayData, IntoArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{IntWidth, Signedness};
 
@@ -36,14 +35,12 @@ impl ALPArray<'_> {
             }
             d => vortex_bail!(MismatchedTypes: "int32 or int64", d),
         };
-        // let d2 = dtype.clone();
 
         let mut children = vec![];
         children.push(encoded.into_array_data());
         patches.iter().for_each(|patch| {
             children.push(patch.to_array_data());
         });
-
 
         Self::try_from_parts(
             dtype,
@@ -52,7 +49,6 @@ impl ALPArray<'_> {
                 has_patches: patches.is_some(),
                 dtype: d_type,
             },
-            // vec![].into(),
             children.into(),
             Default::default(),
         )
@@ -105,8 +101,15 @@ impl ArrayFlatten for ALPArray<'_> {
 }
 
 impl AcceptArrayVisitor for ALPArray<'_> {
-    fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        todo!()
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_child("encoded", &self.encoded())?;
+        if self.metadata().has_patches {
+            visitor.visit_child(
+                "patches",
+                &self.patches().expect("Expected patches to be present "),
+            )?;
+        }
+        visitor.visit_validity(&self.logical_validity().into_validity())
     }
 }
 
@@ -114,13 +117,6 @@ impl ArrayStatisticsCompute for ALPArray<'_> {}
 
 impl ArrayTrait for ALPArray<'_> {
     fn len(&self) -> usize {
-        todo!()
-    }
-}
-
-impl PatchFn for ALPArray<'_> {
-    fn patch(&self, _patch: &Array) -> VortexResult<Array<'static>> {
-        // self.
-        todo!()
+        self.array().len()
     }
 }

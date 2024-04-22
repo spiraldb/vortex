@@ -4,7 +4,7 @@ use vortex::array::sparse::{Sparse, SparseArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::Scalar;
-use vortex::{Array, ArrayDef, ArrayDType, AsArray, IntoArray};
+use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::alp::ALPFloat;
@@ -88,9 +88,7 @@ where
     let len = encoded.len();
     (
         exponents,
-        PrimitiveArray::from(encoded)
-            // .into_nullable(values.nullability())
-            .into_array(),
+        PrimitiveArray::from(encoded).into_array(),
         (!exc.is_empty()).then(|| {
             SparseArray::new(
                 PrimitiveArray::from(exc_pos).into_array(),

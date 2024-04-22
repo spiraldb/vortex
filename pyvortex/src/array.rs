@@ -68,7 +68,6 @@ pyarray!(StructEncoding, StructArray, "StructArray");
 pyarray!(VarBinEncoding, VarBinArray, "VarBinArray");
 pyarray!(VarBinViewEncoding, VarBinViewArray, "VarBinViewArray");
 
-
 pyarray!(ALPEncoding, ALPArray, "ALPArray");
 pyarray!(BitPackedEncoding, BitPackedArray, "BitPackedArray");
 pyarray!(FoREncoding, FoRArray, "FoRArray");
