@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 
 use arrow_array::types::Int64Type;
@@ -11,7 +12,6 @@ use arrow_array::{
 };
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
-use duckdb::Connection;
 use itertools::Itertools;
 use lance::Dataset;
 use lance_arrow_array::RecordBatch as LanceRecordBatch;
@@ -81,18 +81,15 @@ pub fn write_csv_as_parquet(csv_path: PathBuf, output_path: &Path) -> VortexResu
         "Compressing {} to parquet",
         csv_path.as_path().to_str().unwrap()
     );
-    let duckdb = Connection::open_in_memory().unwrap();
-    duckdb
-        .prepare(
-            format!(
-                "COPY (SELECT * FROM read_csv('{}', delim = '|', header = false, nullstr = 'null')) TO '{}' (COMPRESSION ZSTD);",
-                csv_path.display(),
-                output_path.display()
-            )
-            .as_str(),
-        )
-        .unwrap()
-        .execute([])
+    Command::new("duckdb")
+        .arg("-c")
+        .arg(format!(
+            "COPY (SELECT * FROM read_csv('{}', delim = '|', header = false, nullstr = 'null')) TO '{}' (COMPRESSION ZSTD);",
+            csv_path.as_path().to_str().unwrap(),
+            output_path.to_str().unwrap()
+        ))
+        .status()?
+        .exit_ok()
         .unwrap();
     Ok(())
 }

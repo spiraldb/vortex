@@ -25,7 +25,6 @@ arrow-data = { workspace = true }
 arrow-select = { workspace = true }
 bzip2 = { workspace = true }
 csv = { workspace = true }
-duckdb = { workspace = true }
 enum-iterator = { workspace = true }
 fs_extra = { workspace = true }
 humansize = { workspace = true }
