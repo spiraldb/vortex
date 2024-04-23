@@ -24,10 +24,7 @@ pub trait TrySerializeArrayMetadata {
     fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>>;
 }
 
-// TODO(ngates): move 'm lifetime into the function body since the result isn't tied to it.
-//  Although maybe we should make the result tied to ti?
 pub trait TryDeserializeArrayMetadata<'m>: Sized {
-    // FIXME(ngates): we could push buffer/child validation into here.
     fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self>;
 }
 

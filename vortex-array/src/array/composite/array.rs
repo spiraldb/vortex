@@ -136,10 +136,10 @@ impl CompositeArray<'_> {
         // Now we unwrap the optional, which we know to be populated by the closure.
         result.unwrap()
     }
+}
 
-    pub fn as_typed<M: UnderlyingMetadata + for<'a> TryDeserializeArrayMetadata<'a>>(
-        &self,
-    ) -> VortexResult<TypedCompositeArray<M>> {
+impl<'a> CompositeArray<'a> {
+    pub fn as_typed<M: UnderlyingMetadata>(&'a self) -> VortexResult<TypedCompositeArray<'a, M>> {
         Ok(TypedCompositeArray::new(
             M::try_deserialize_metadata(Some(self.underlying_metadata().as_bytes()))?,
             self.underlying().clone(),

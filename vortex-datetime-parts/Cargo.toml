@@ -1,5 +1,5 @@
 [package]
-name = "vortex-datetime"
+name = "vortex-datetime-parts"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,3 +12,4 @@ vortex-error = { path = "../vortex-error" }
 vortex-schema = { "path" = "../vortex-schema" }
 linkme = { workspace = true }
 log = { workspace = true }
+serde = { workspace = true, features = ["derive"] }

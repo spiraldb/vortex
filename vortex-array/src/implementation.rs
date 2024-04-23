@@ -26,7 +26,7 @@ pub trait ArrayDef {
 #[macro_export]
 macro_rules! impl_encoding {
     ($id:literal, $Name:ident) => {
-        use paste::paste;
+        use $crate::vendored::paste::paste;
 
         paste! {
             use $crate::{
@@ -84,7 +84,8 @@ macro_rules! impl_encoding {
                     self.typed.metadata()
                 }
 
-                pub fn try_from_parts(
+                #[allow(dead_code)]
+                fn try_from_parts(
                     dtype: DType,
                     metadata: [<$Name Metadata>],
                     children: Arc<[ArrayData]>,
