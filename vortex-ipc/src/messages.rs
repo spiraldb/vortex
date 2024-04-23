@@ -134,8 +134,6 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
                 offset += aligned_size;
             }
         }
-        println!("CHUNK buffer_size: {}, nbuffers: {}", offset, buffers.len());
-
         let buffers = Some(fbb.create_vector(&buffers));
 
         fb::Chunk::create(
