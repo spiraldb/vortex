@@ -47,6 +47,13 @@ impl<'a> SparseArray<'a> {
         if !matches!(indices.dtype(), &DType::IDX) {
             vortex_bail!("Cannot use {} as indices", indices.dtype());
         }
+        if values.dtype() != fill_value.dtype() {
+            vortex_bail!(
+                "Mismatched fill value dtype {} and values dtype {}",
+                fill_value.dtype(),
+                values.dtype(),
+            );
+        }
 
         Self::try_from_parts(
             values.dtype().clone(),

@@ -27,18 +27,18 @@ impl BitPackedArray<'_> {
         DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable);
 
     pub fn try_new(
-        encoded: Array,
+        packed: Array,
         validity: Validity,
         patches: Option<Array>,
         bit_width: usize,
         dtype: DType,
         len: usize,
     ) -> VortexResult<Self> {
-        Self::try_new_from_offset(encoded, validity, patches, bit_width, dtype, len, 0)
+        Self::try_new_from_offset(packed, validity, patches, bit_width, dtype, len, 0)
     }
 
     pub(crate) fn try_new_from_offset(
-        encoded: Array,
+        packed: Array,
         validity: Validity,
         patches: Option<Array>,
         bit_width: usize,
@@ -46,8 +46,8 @@ impl BitPackedArray<'_> {
         length: usize,
         offset: usize,
     ) -> VortexResult<Self> {
-        if encoded.dtype() != &Self::ENCODED_DTYPE {
-            vortex_bail!(MismatchedTypes: Self::ENCODED_DTYPE, encoded.dtype());
+        if packed.dtype() != &Self::ENCODED_DTYPE {
+            vortex_bail!(MismatchedTypes: Self::ENCODED_DTYPE, packed.dtype());
         }
         if bit_width > 64 {
             vortex_bail!("Unsupported bit width {}", bit_width);
@@ -57,11 +57,11 @@ impl BitPackedArray<'_> {
         }
 
         let expected_packed_size = ((length + 1023) / 1024) * 128 * bit_width;
-        if encoded.len() != expected_packed_size {
+        if packed.len() != expected_packed_size {
             return Err(vortex_err!(
                 "Expected {} packed bytes, got {}",
                 expected_packed_size,
-                encoded.len()
+                packed.len()
             ));
         }
 
@@ -74,7 +74,7 @@ impl BitPackedArray<'_> {
         };
 
         let mut children = Vec::with_capacity(3);
-        children.push(encoded.into_array_data());
+        children.push(packed.into_array_data());
         if let Some(p) = patches {
             children.push(p.into_array_data());
         }
@@ -86,10 +86,10 @@ impl BitPackedArray<'_> {
     }
 
     #[inline]
-    pub fn encoded(&self) -> Array {
+    pub fn packed(&self) -> Array {
         self.array()
             .child(0, &DType::BYTES)
-            .expect("Missing encoded array")
+            .expect("Missing packed array")
     }
 
     #[inline]
@@ -144,7 +144,7 @@ impl ArrayValidity for BitPackedArray<'_> {
 
 impl AcceptArrayVisitor for BitPackedArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_child("encoded", &self.encoded())?;
+        visitor.visit_child("packed", &self.packed())?;
         if self.metadata().patches_dtype.is_some() {
             visitor.visit_child(
                 "patches",

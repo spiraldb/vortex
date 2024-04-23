@@ -15,7 +15,7 @@ impl SliceFn for BitPackedArray<'_> {
         let encoded_start = (block_start / 8) * self.bit_width();
         let encoded_stop = (block_stop / 8) * self.bit_width();
         Self::try_new_from_offset(
-            slice(&self.encoded(), encoded_start, encoded_stop)?,
+            slice(&self.packed(), encoded_start, encoded_stop)?,
             self.validity().slice(start, stop)?,
             self.patches().map(|p| slice(&p, start, stop)).transpose()?,
             self.bit_width(),

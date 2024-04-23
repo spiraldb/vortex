@@ -8,6 +8,7 @@ use vortex::ptype::PType::U8;
 use vortex::ptype::{NativePType, PType};
 use vortex::scalar::{ListScalarVec, Scalar};
 use vortex::stats::{ArrayStatistics, Stat};
+use vortex::validity::Validity;
 use vortex::{
     match_each_integer_ptype, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray,
     ToStatic,
@@ -149,7 +150,12 @@ fn bitpack_patches(
                 values.push(*v);
             }
         }
-        SparseArray::try_new(indices.into_array(), values.into_array(), parray.len(), Scalar::null(&parray.dtype().as_nullable())).unwrap().into_array()
+        SparseArray::try_new(
+            indices.into_array(),
+            PrimitiveArray::from_vec(values, Validity::AllValid).into_array(),
+            parray.len(),
+            Scalar::null(&parray.dtype().as_nullable()),
+        ).unwrap().into_array()
     })
 }
 
@@ -157,7 +163,7 @@ pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray<'a>> {
     let bit_width = array.bit_width();
     let length = array.len();
     let offset = array.offset();
-    let encoded = cast(&array.encoded(), U8.into())?.flatten_primitive()?;
+    let encoded = cast(&array.packed(), U8.into())?.flatten_primitive()?;
     let ptype: PType = array.dtype().try_into()?;
 
     let mut unpacked = match_integers_by_width!(ptype, |$P| {
@@ -258,7 +264,7 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
 
 pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
     let bit_width = array.bit_width();
-    let encoded = cast(&array.encoded(), U8.into())?.flatten_primitive()?;
+    let encoded = cast(&array.packed(), U8.into())?.flatten_primitive()?;
     let ptype: PType = array.dtype().try_into()?;
     let index_in_encoded = index + array.offset();
 

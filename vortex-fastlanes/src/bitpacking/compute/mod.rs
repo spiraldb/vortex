@@ -89,7 +89,7 @@ fn take_primitive<T: NativePType + TryBitPack>(
     });
 
     let bit_width = array.bit_width();
-    let packed = array.encoded().flatten_primitive()?;
+    let packed = array.packed().flatten_primitive()?;
     let packed = packed.typed_data::<u8>();
 
     let patches = array.patches().map(SparseArray::try_from).transpose()?;

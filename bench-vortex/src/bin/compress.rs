@@ -24,6 +24,7 @@ fn compress_taxi() {
     }
 
     let taxi_vortex = open_vortex(&path).unwrap();
+    info!("{}", taxi_vortex.tree_display());
 
     let pq_size = taxi_data_parquet().metadata().unwrap().size();
     let vx_size = taxi_vortex.nbytes();
