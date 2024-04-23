@@ -7,7 +7,6 @@ use half::f16;
 pub use list::*;
 pub use null::*;
 pub use primitive::*;
-pub use serde::*;
 pub use struct_::*;
 pub use utf8::*;
 use vortex_error::VortexResult;

@@ -19,26 +19,30 @@ use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef, IntoArray};
 use vortex::arrow::FromArrowType;
-use vortex::compute::flatten::flatten;
 use vortex::compute::take::take;
-use vortex::ptype::PType;
-use vortex::serde::{ReadCtx, WriteCtx};
+use vortex::{IntoArray, OwnedArray, SerdeContext, ToArrayData, ToStatic};
 use vortex_error::VortexResult;
+use vortex_ipc::iter::FallibleLendingIterator;
+use vortex_ipc::reader::StreamReader;
+use vortex_ipc::writer::StreamWriter;
 use vortex_schema::DType;
 
 use crate::compress_ctx;
 
 pub const BATCH_SIZE: usize = 65_536;
 
-pub fn open_vortex(path: &Path) -> VortexResult<ArrayRef> {
+pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
     let mut file = File::open(path)?;
-    let dummy_dtype: DType = PType::U8.into();
-    let mut read_ctx = ReadCtx::new(&dummy_dtype, &mut file);
-    let dtype = read_ctx.dtype()?;
-    read_ctx.with_schema(&dtype).read()
+
+    let mut reader = StreamReader::try_new(&mut file).unwrap();
+    let mut reader = reader.next()?.unwrap();
+    let dtype = reader.dtype().clone();
+    let mut chunks = vec![];
+    while let Some(chunk) = reader.next()? {
+        chunks.push(chunk.to_static())
+    }
+    Ok(ChunkedArray::try_new(chunks, dtype)?.into_array())
 }
 
 pub fn rewrite_parquet_as_vortex<W: Write>(
@@ -47,9 +51,8 @@ pub fn rewrite_parquet_as_vortex<W: Write>(
 ) -> VortexResult<()> {
     let chunked = compress_parquet_to_vortex(parquet_path.as_path())?;
 
-    let mut write_ctx = WriteCtx::new(write);
-    write_ctx.dtype(chunked.dtype()).unwrap();
-    write_ctx.write(&chunked).unwrap();
+    let mut writer = StreamWriter::try_new(write, SerdeContext::default()).unwrap();
+    writer.write_array(&chunked.into_array()).unwrap();
     Ok(())
 }
 
@@ -66,7 +69,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
-            let vortex_array = record_batch.into_array();
+            let vortex_array = record_batch.to_array_data().into_array();
             ctx.compress(&vortex_array, None).unwrap()
         })
         .collect_vec();
@@ -94,11 +97,11 @@ pub fn write_csv_as_parquet(csv_path: PathBuf, output_path: &Path) -> VortexResu
     Ok(())
 }
 
-pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<ArrayRef> {
+pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<OwnedArray> {
     let array = open_vortex(path)?;
-    let taken = take(&array, &PrimitiveArray::from(indices.to_vec()))?;
+    let taken = take(&array, &indices.to_vec().into_array())?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
-    flatten(&taken).map(|x| x.into_array())
+    taken.flatten().map(|x| x.into_array())
 }
 
 pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {

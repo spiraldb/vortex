@@ -1,10 +1,10 @@
-mod serde;
-
 use std::io;
 use std::io::{Read, Write};
 
 use flatbuffers::{root, FlatBufferBuilder, Follow, Verifiable, WIPOffset};
 use vortex_error::{vortex_err, VortexResult};
+
+pub trait FlatBufferRoot {}
 
 pub trait ReadFlatBuffer<Ctx>: Sized {
     type Source<'a>;
@@ -23,17 +23,15 @@ pub trait WriteFlatBuffer {
 }
 
 pub trait FlatBufferToBytes {
-    fn flatbuffer_to_bytes(&self) -> (Vec<u8>, usize);
+    fn with_flatbuffer_bytes<R, Fn: FnOnce(&[u8]) -> R>(&self, f: Fn) -> R;
 }
 
-pub trait FlatBufferRoot {}
-
 impl<F: WriteFlatBuffer + FlatBufferRoot> FlatBufferToBytes for F {
-    fn flatbuffer_to_bytes(&self) -> (Vec<u8>, usize) {
+    fn with_flatbuffer_bytes<R, Fn: FnOnce(&[u8]) -> R>(&self, f: Fn) -> R {
         let mut fbb = FlatBufferBuilder::new();
         let root_offset = self.write_flatbuffer(&mut fbb);
         fbb.finish_minimal(root_offset);
-        fbb.collapse()
+        f(fbb.finished_data())
     }
 }
 

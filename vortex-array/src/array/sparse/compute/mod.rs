@@ -1,31 +1,22 @@
 use std::collections::HashMap;
 
-use arrow_buffer::BooleanBufferBuilder;
 use itertools::Itertools;
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::array::downcast::DowncastArrayBuiltin;
-use crate::array::primitive::PrimitiveArray;
+use crate::array::primitive::{OwnedPrimitiveArray, PrimitiveArray};
 use crate::array::sparse::SparseArray;
-use crate::array::{Array, ArrayRef};
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
-use crate::compute::flatten::{flatten_primitive, FlattenFn, FlattenedArray};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::ptype::NativePType;
 use crate::scalar::Scalar;
-use crate::{match_each_integer_ptype, match_each_native_ptype};
+use crate::{match_each_integer_ptype, Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
 
 mod slice;
 
-impl ArrayCompute for SparseArray {
+impl ArrayCompute for SparseArray<'_> {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
-        Some(self)
-    }
-
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
         Some(self)
     }
 
@@ -42,98 +33,39 @@ impl ArrayCompute for SparseArray {
     }
 }
 
-impl AsContiguousFn for SparseArray {
-    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
-        let all_fill_types_are_equal = arrays
+impl AsContiguousFn for SparseArray<'_> {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+        let sparse = arrays
             .iter()
-            .map(|a| a.as_sparse().fill_value())
-            .all_equal();
-        if !all_fill_types_are_equal {
+            .map(|a| SparseArray::try_from(a).unwrap())
+            .collect_vec();
+
+        if !sparse.iter().map(|a| a.fill_value()).all_equal() {
             vortex_bail!("Cannot concatenate SparseArrays with differing fill values");
         }
 
         Ok(SparseArray::new(
-            as_contiguous(
-                &arrays
-                    .iter()
-                    .map(|a| a.as_sparse().indices())
-                    .cloned()
-                    .collect_vec(),
-            )?,
-            as_contiguous(
-                &arrays
-                    .iter()
-                    .map(|a| a.as_sparse().values())
-                    .cloned()
-                    .collect_vec(),
-            )?,
-            arrays.iter().map(|a| a.len()).sum(),
+            as_contiguous(&sparse.iter().map(|a| a.indices()).collect_vec())?,
+            as_contiguous(&sparse.iter().map(|a| a.values()).collect_vec())?,
+            sparse.iter().map(|a| a.len()).sum(),
             self.fill_value().clone(),
         )
         .into_array())
     }
 }
 
-impl FlattenFn for SparseArray {
-    fn flatten(&self) -> VortexResult<FlattenedArray> {
-        // Resolve our indices into a vector of usize applying the offset
-        let indices = self.resolved_indices();
-
-        let mut validity = BooleanBufferBuilder::new(self.len());
-        validity.append_n(self.len(), false);
-        let values = flatten_primitive(self.values())?;
-        match_each_native_ptype!(values.ptype(), |$P| {
-            flatten_sparse_values(
-                values.typed_data::<$P>(),
-                &indices,
-                self.len(),
-                self.fill_value(),
-                validity
-            )
-        })
-    }
-}
-
-fn flatten_sparse_values<T: NativePType>(
-    values: &[T],
-    indices: &[usize],
-    len: usize,
-    fill_value: &Scalar,
-    mut validity: BooleanBufferBuilder,
-) -> VortexResult<FlattenedArray> {
-    let primitive_fill = if fill_value.is_null() {
-        T::default()
-    } else {
-        fill_value.try_into()?
-    };
-    let mut result = vec![primitive_fill; len];
-
-    for (v, idx) in values.iter().zip_eq(indices) {
-        result[*idx] = *v;
-        validity.set_bit(*idx, true);
-    }
-
-    let validity = validity.finish();
-    let array = if fill_value.is_null() {
-        PrimitiveArray::from_nullable(result, Some(validity.into()))
-    } else {
-        PrimitiveArray::from(result)
-    };
-    Ok(FlattenedArray::Primitive(array))
-}
-
-impl ScalarAtFn for SparseArray {
+impl ScalarAtFn for SparseArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         match self.find_index(index)? {
             None => self.fill_value().clone().cast(self.dtype()),
-            Some(idx) => scalar_at(self.values(), idx)?.cast(self.dtype()),
+            Some(idx) => scalar_at(&self.values(), idx)?.cast(self.dtype()),
         }
     }
 }
 
-impl TakeFn for SparseArray {
-    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        let flat_indices = flatten_primitive(indices)?;
+impl TakeFn for SparseArray<'_> {
+    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+        let flat_indices = indices.clone().flatten_primitive()?;
         // if we are taking a lot of values we should build a hashmap
         let (positions, physical_take_indices) = if indices.len() > 128 {
             take_map(self, &flat_indices)?
@@ -141,7 +73,7 @@ impl TakeFn for SparseArray {
             take_search_sorted(self, &flat_indices)?
         };
 
-        let taken_values = take(self.values(), &physical_take_indices)?;
+        let taken_values = take(&self.values(), &physical_take_indices.into_array())?;
 
         Ok(SparseArray::new(
             positions.into_array(),
@@ -156,7 +88,7 @@ impl TakeFn for SparseArray {
 fn take_map(
     array: &SparseArray,
     indices: &PrimitiveArray,
-) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
+) -> VortexResult<(OwnedPrimitiveArray, OwnedPrimitiveArray)> {
     let indices_map: HashMap<u64, u64> = array
         .resolved_indices()
         .iter()
@@ -180,7 +112,7 @@ fn take_map(
 fn take_search_sorted(
     array: &SparseArray,
     indices: &PrimitiveArray,
-) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
+) -> VortexResult<(OwnedPrimitiveArray, OwnedPrimitiveArray)> {
     let resolved = match_each_integer_ptype!(indices.ptype(), |$P| {
         indices
             .typed_data::<$P>()
@@ -207,43 +139,39 @@ mod test {
     use itertools::Itertools;
     use vortex_schema::{DType, FloatWidth, Nullability};
 
-    use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::compute::take_map;
     use crate::array::sparse::SparseArray;
-    use crate::array::Array;
     use crate::compute::as_contiguous::as_contiguous;
     use crate::compute::slice::slice;
     use crate::compute::take::take;
     use crate::scalar::Scalar;
+    use crate::validity::Validity;
+    use crate::{ArrayTrait, IntoArray, OwnedArray};
 
-    fn sparse_array() -> SparseArray {
+    fn sparse_array() -> OwnedArray {
         SparseArray::new(
             PrimitiveArray::from(vec![0u64, 37, 47, 99]).into_array(),
-            PrimitiveArray::from(vec![1.23f64, 0.47, 9.99, 3.5]).into_array(),
+            PrimitiveArray::from_vec(vec![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid)
+                .into_array(),
             100,
             Scalar::null(&DType::Float(FloatWidth::_64, Nullability::Nullable)),
         )
+        .into_array()
     }
 
     #[test]
     fn sparse_take() {
         let sparse = sparse_array();
-        let taken = take(&sparse, &PrimitiveArray::from(vec![0, 47, 47, 0, 99])).unwrap();
+        let taken =
+            SparseArray::try_from(take(&sparse, &vec![0, 47, 47, 0, 99].into_array()).unwrap())
+                .unwrap();
         assert_eq!(
-            taken
-                .as_sparse()
-                .indices()
-                .as_primitive()
-                .typed_data::<u64>(),
+            taken.indices().into_primitive().typed_data::<u64>(),
             [0, 1, 2, 3, 4]
         );
         assert_eq!(
-            taken
-                .as_sparse()
-                .values()
-                .as_primitive()
-                .typed_data::<f64>(),
+            taken.values().into_primitive().typed_data::<f64>(),
             [1.23f64, 9.99, 9.99, 1.23, 3.5]
         );
     }
@@ -251,43 +179,27 @@ mod test {
     #[test]
     fn nonexistent_take() {
         let sparse = sparse_array();
-        let taken = take(&sparse, &PrimitiveArray::from(vec![69])).unwrap();
-        assert_eq!(
-            taken
-                .as_sparse()
-                .indices()
-                .as_primitive()
-                .typed_data::<u64>(),
-            []
-        );
-        assert_eq!(
-            taken
-                .as_sparse()
-                .values()
-                .as_primitive()
-                .typed_data::<f64>(),
-            []
-        );
+        let taken = SparseArray::try_from(take(&sparse, &vec![69].into_array()).unwrap()).unwrap();
+        assert!(taken
+            .indices()
+            .into_primitive()
+            .typed_data::<u64>()
+            .is_empty());
+        assert!(taken
+            .values()
+            .into_primitive()
+            .typed_data::<f64>()
+            .is_empty());
     }
 
     #[test]
     fn ordered_take() {
         let sparse = sparse_array();
-        let taken = take(&sparse, &PrimitiveArray::from(vec![69, 37])).unwrap();
+        let taken =
+            SparseArray::try_from(take(&sparse, &vec![69, 37].into_array()).unwrap()).unwrap();
+        assert_eq!(taken.indices().into_primitive().typed_data::<u64>(), [1]);
         assert_eq!(
-            taken
-                .as_sparse()
-                .indices()
-                .as_primitive()
-                .typed_data::<u64>(),
-            [1]
-        );
-        assert_eq!(
-            taken
-                .as_sparse()
-                .values()
-                .as_primitive()
-                .typed_data::<f64>(),
+            taken.values().into_primitive().typed_data::<f64>(),
             [0.47f64]
         );
         assert_eq!(taken.len(), 2);
@@ -296,49 +208,44 @@ mod test {
     #[test]
     fn take_slices_and_reassemble() {
         let sparse = sparse_array();
-        let indices: PrimitiveArray = (0u64..10).collect_vec().into();
         let slices = (0..10)
             .map(|i| slice(&sparse, i * 10, (i + 1) * 10).unwrap())
             .collect_vec();
 
         let taken = slices
             .iter()
-            .map(|s| take(s, &indices).unwrap())
+            .map(|s| take(s, &(0u64..10).collect_vec().into_array()).unwrap())
             .collect_vec();
         for i in [1, 2, 5, 6, 7, 8] {
-            assert_eq!(taken[i].as_sparse().indices().len(), 0);
+            assert_eq!(SparseArray::try_from(&taken[i]).unwrap().indices().len(), 0);
         }
         for i in [0, 3, 4, 9] {
-            assert_eq!(taken[i].as_sparse().indices().len(), 1);
+            assert_eq!(SparseArray::try_from(&taken[i]).unwrap().indices().len(), 1);
         }
 
-        let contiguous = as_contiguous(&taken).unwrap();
+        let contiguous = SparseArray::try_from(as_contiguous(&taken).unwrap()).unwrap();
         assert_eq!(
-            contiguous
-                .as_sparse()
-                .indices()
-                .as_primitive()
-                .typed_data::<u64>(),
+            contiguous.indices().into_primitive().typed_data::<u64>(),
             [0u64, 7, 7, 9] // relative offsets
         );
         assert_eq!(
-            contiguous
-                .as_sparse()
+            contiguous.values().into_primitive().typed_data::<f64>(),
+            SparseArray::try_from(sparse)
+                .unwrap()
                 .values()
-                .as_primitive()
-                .typed_data::<f64>(),
-            sparse.values().as_primitive().typed_data()
+                .into_primitive()
+                .typed_data::<f64>()
         );
     }
 
     #[test]
     fn test_take_map() {
-        let sparse = sparse_array();
+        let sparse = SparseArray::try_from(sparse_array()).unwrap();
         let indices = PrimitiveArray::from((0u64..100).collect_vec());
         let (positions, patch_indices) = take_map(&sparse, &indices).unwrap();
         assert_eq!(
             positions.typed_data::<u64>(),
-            sparse.indices().as_primitive().typed_data()
+            sparse.indices().into_primitive().typed_data::<u64>()
         );
         assert_eq!(patch_indices.typed_data::<u64>(), [0u64, 1, 2, 3]);
     }

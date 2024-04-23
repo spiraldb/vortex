@@ -1,27 +1,28 @@
+use arrow_buffer::NullBuffer;
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
 use crate::array::varbin::builder::VarBinBuilder;
-use crate::array::varbin::VarBinArray;
-use crate::array::{Array, ArrayRef};
-use crate::compute::flatten::flatten_primitive;
+use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
 use crate::compute::take::TakeFn;
 use crate::match_each_integer_ptype;
 use crate::ptype::NativePType;
-use crate::validity::OwnedValidity;
-use crate::validity::ValidityView;
+use crate::validity::Validity;
+use crate::ArrayDType;
+use crate::IntoArray;
+use crate::{Array, OwnedArray};
 
-impl TakeFn for VarBinArray {
-    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
+impl TakeFn for VarBinArray<'_> {
+    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         // TODO(ngates): support i64 indices.
         assert!(
             indices.len() < i32::MAX as usize,
             "indices.len() must be less than i32::MAX"
         );
 
-        let offsets = flatten_primitive(self.offsets())?;
-        let data = flatten_primitive(self.bytes())?;
-        let indices = flatten_primitive(indices)?;
+        let offsets = self.offsets().flatten_primitive()?;
+        let data = self.bytes().flatten_primitive()?;
+        let indices = indices.clone().flatten_primitive()?;
         match_each_integer_ptype!(offsets.ptype(), |$O| {
             match_each_integer_ptype!(indices.ptype(), |$I| {
                 Ok(take(
@@ -30,7 +31,7 @@ impl TakeFn for VarBinArray {
                     data.typed_data::<u8>(),
                     indices.typed_data::<$I>(),
                     self.validity(),
-                ).into_array())
+                )?.into_array())
             })
         })
     }
@@ -41,10 +42,11 @@ fn take<I: NativePType, O: NativePType>(
     offsets: &[O],
     data: &[u8],
     indices: &[I],
-    validity: Option<ValidityView>,
-) -> VarBinArray {
-    if let Some(v) = validity {
-        return take_nullable(dtype, offsets, data, indices, v);
+    validity: Validity,
+) -> VortexResult<OwnedVarBinArray> {
+    let logical_validity = validity.to_logical(offsets.len() - 1);
+    if let Some(v) = logical_validity.to_null_buffer()? {
+        return Ok(take_nullable(dtype, offsets, data, indices, v));
     }
 
     let mut builder = VarBinBuilder::<I>::with_capacity(indices.len());
@@ -54,7 +56,7 @@ fn take<I: NativePType, O: NativePType>(
         let stop = offsets[idx + 1].to_usize().unwrap();
         builder.push(Some(&data[start..stop]));
     }
-    builder.finish(dtype)
+    Ok(builder.finish(dtype))
 }
 
 fn take_nullable<I: NativePType, O: NativePType>(
@@ -62,12 +64,12 @@ fn take_nullable<I: NativePType, O: NativePType>(
     offsets: &[O],
     data: &[u8],
     indices: &[I],
-    validity: ValidityView,
-) -> VarBinArray {
+    null_buffer: NullBuffer,
+) -> OwnedVarBinArray {
     let mut builder = VarBinBuilder::<I>::with_capacity(indices.len());
     for &idx in indices {
         let idx = idx.to_usize().unwrap();
-        if validity.is_valid(idx) {
+        if null_buffer.is_valid(idx) {
             let start = offsets[idx].to_usize().unwrap();
             let stop = offsets[idx + 1].to_usize().unwrap();
             builder.push(Some(&data[start..stop]));

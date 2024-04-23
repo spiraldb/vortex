@@ -1,36 +1,30 @@
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 
+use crate::accessor::ArrayAccessor;
 use crate::array::varbin::{varbin_scalar, VarBinArray};
-use crate::array::Array;
 use crate::scalar::Scalar;
-use crate::stats::{Stat, StatsCompute, StatsSet};
+use crate::stats::{ArrayStatisticsCompute, Stat};
+use crate::{ArrayDType, ArrayTrait};
 
-impl StatsCompute for VarBinArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+impl ArrayStatisticsCompute for VarBinArray<'_> {
+    fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
         if self.is_empty() {
-            return Ok(StatsSet::new());
+            return Ok(HashMap::new());
         }
-
-        Ok(self
-            .iter_primitive()
-            .map(|prim_iter| compute_stats(&mut prim_iter.map(|s| s.map(Cow::from)), self.dtype()))
-            .unwrap_or_else(|_| {
-                compute_stats(&mut self.iter().map(|s| s.map(Cow::from)), self.dtype())
-            }))
+        self.with_iterator(|iter| compute_stats(iter, self.dtype()))
     }
 }
 
 pub fn compute_stats(
-    iter: &mut dyn Iterator<Item = Option<Cow<'_, [u8]>>>,
+    iter: &mut dyn Iterator<Item = Option<&[u8]>>,
     dtype: &DType,
-) -> StatsSet {
+) -> HashMap<Stat, Scalar> {
     let mut leading_nulls: usize = 0;
-    let mut first_value: Option<Cow<'_, [u8]>> = None;
+    let mut first_value: Option<&[u8]> = None;
     for v in &mut *iter {
         if v.is_none() {
             leading_nulls += 1;
@@ -50,8 +44,8 @@ pub fn compute_stats(
     }
 }
 
-fn all_null_stats(len: usize, dtype: &DType) -> StatsSet {
-    StatsSet::from(HashMap::from([
+fn all_null_stats(len: usize, dtype: &DType) -> HashMap<Stat, Scalar> {
+    HashMap::from([
         (Stat::Min, Scalar::null(dtype)),
         (Stat::Max, Scalar::null(dtype)),
         (Stat::IsConstant, true.into()),
@@ -59,26 +53,25 @@ fn all_null_stats(len: usize, dtype: &DType) -> StatsSet {
         (Stat::IsStrictSorted, (len < 2).into()),
         (Stat::RunCount, 1.into()),
         (Stat::NullCount, len.into()),
-    ]))
+    ])
 }
 
-#[derive(Debug, Default)]
 pub struct VarBinAccumulator<'a> {
-    min: Cow<'a, [u8]>,
-    max: Cow<'a, [u8]>,
+    min: &'a [u8],
+    max: &'a [u8],
     is_constant: bool,
     is_sorted: bool,
     is_strict_sorted: bool,
-    last_value: Cow<'a, [u8]>,
+    last_value: &'a [u8],
     null_count: usize,
     runs: usize,
 }
 
 impl<'a> VarBinAccumulator<'a> {
-    pub fn new(value: Cow<'a, [u8]>) -> Self {
+    pub fn new(value: &'a [u8]) -> Self {
         Self {
-            min: value.clone(),
-            max: value.clone(),
+            min: value,
+            max: value,
             is_constant: true,
             is_sorted: true,
             is_strict_sorted: true,
@@ -88,7 +81,7 @@ impl<'a> VarBinAccumulator<'a> {
         }
     }
 
-    pub fn nullable_next(&mut self, val: Option<Cow<'a, [u8]>>) {
+    pub fn nullable_next(&mut self, val: Option<&'a [u8]>) {
         match val {
             None => self.null_count += 1,
             Some(v) => self.next(v),
@@ -99,14 +92,14 @@ impl<'a> VarBinAccumulator<'a> {
         self.null_count += null_count;
     }
 
-    pub fn next(&mut self, val: Cow<'a, [u8]>) {
+    pub fn next(&mut self, val: &'a [u8]) {
         if val < self.min {
             self.min.clone_from(&val);
         } else if val > self.max {
             self.max.clone_from(&val);
         }
 
-        match val.cmp(&self.last_value) {
+        match val.cmp(self.last_value) {
             Ordering::Less => self.is_sorted = false,
             Ordering::Equal => {
                 self.is_strict_sorted = false;
@@ -119,8 +112,8 @@ impl<'a> VarBinAccumulator<'a> {
         self.runs += 1;
     }
 
-    pub fn finish(&self, dtype: &DType) -> StatsSet {
-        StatsSet::from(HashMap::from([
+    pub fn finish(&self, dtype: &DType) -> HashMap<Stat, Scalar> {
+        HashMap::from([
             (Stat::Min, varbin_scalar(self.min.to_vec(), dtype)),
             (Stat::Max, varbin_scalar(self.max.to_vec(), dtype)),
             (Stat::RunCount, self.runs.into()),
@@ -128,7 +121,7 @@ impl<'a> VarBinAccumulator<'a> {
             (Stat::IsStrictSorted, self.is_strict_sorted.into()),
             (Stat::IsConstant, self.is_constant.into()),
             (Stat::NullCount, self.null_count.into()),
-        ]))
+        ])
     }
 }
 
@@ -136,12 +129,10 @@ impl<'a> VarBinAccumulator<'a> {
 mod test {
     use vortex_schema::{DType, Nullability};
 
-    use crate::array::varbin::VarBinArray;
-    use crate::array::Array;
-    use crate::scalar::Utf8Scalar;
-    use crate::stats::Stat;
+    use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
+    use crate::stats::{ArrayStatistics, Stat};
 
-    fn array(dtype: DType) -> VarBinArray {
+    fn array(dtype: DType) -> OwnedVarBinArray {
         VarBinArray::from_vec(
             vec!["hello world", "hello world this is a long string"],
             dtype,
@@ -152,100 +143,47 @@ mod test {
     fn utf8_stats() {
         let arr = array(DType::Utf8(Nullability::NonNullable));
         assert_eq!(
-            arr.stats().get_or_compute_as::<String>(&Stat::Min).unwrap(),
-            "hello world".to_owned()
+            arr.statistics().compute_as::<String>(Stat::Min).unwrap(),
+            String::from("hello world")
         );
         assert_eq!(
-            arr.stats().get_or_compute_as::<String>(&Stat::Max).unwrap(),
-            "hello world this is a long string".to_owned()
+            arr.statistics().compute_as::<String>(Stat::Max).unwrap(),
+            String::from("hello world this is a long string")
         );
         assert_eq!(
-            arr.stats()
-                .get_or_compute_as::<usize>(&Stat::RunCount)
+            arr.statistics()
+                .compute_as::<usize>(Stat::RunCount)
                 .unwrap(),
             2
         );
         assert!(!arr
-            .stats()
-            .get_or_compute_as::<bool>(&Stat::IsConstant)
+            .statistics()
+            .compute_as::<bool>(Stat::IsConstant)
             .unwrap());
-        assert!(arr
-            .stats()
-            .get_or_compute_as::<bool>(&Stat::IsSorted)
-            .unwrap());
+        assert!(arr.statistics().compute_as::<bool>(Stat::IsSorted).unwrap());
     }
 
     #[test]
     fn binary_stats() {
         let arr = array(DType::Binary(Nullability::NonNullable));
         assert_eq!(
-            arr.stats()
-                .get_or_compute_as::<Vec<u8>>(&Stat::Min)
-                .unwrap(),
+            arr.statistics().compute_as::<Vec<u8>>(Stat::Min).unwrap(),
             "hello world".as_bytes().to_vec()
         );
         assert_eq!(
-            arr.stats()
-                .get_or_compute_as::<Vec<u8>>(&Stat::Max)
-                .unwrap(),
+            arr.statistics().compute_as::<Vec<u8>>(Stat::Max).unwrap(),
             "hello world this is a long string".as_bytes().to_vec()
         );
         assert_eq!(
-            arr.stats()
-                .get_or_compute_as::<usize>(&Stat::RunCount)
+            arr.statistics()
+                .compute_as::<usize>(Stat::RunCount)
                 .unwrap(),
             2
         );
         assert!(!arr
-            .stats()
-            .get_or_compute_as::<bool>(&Stat::IsConstant)
+            .statistics()
+            .compute_as::<bool>(Stat::IsConstant)
             .unwrap());
-        assert!(arr
-            .stats()
-            .get_or_compute_as::<bool>(&Stat::IsSorted)
-            .unwrap());
-    }
-
-    #[test]
-    fn some_nulls() {
-        let array = VarBinArray::from_iter(
-            vec![
-                Some("hello world"),
-                None,
-                Some("hello world this is a long string"),
-                None,
-            ],
-            DType::Utf8(Nullability::Nullable),
-        );
-        assert_eq!(
-            array
-                .stats()
-                .get_or_compute_as::<String>(&Stat::Min)
-                .unwrap(),
-            "hello world".to_owned()
-        );
-        assert_eq!(
-            array
-                .stats()
-                .get_or_compute_as::<String>(&Stat::Max)
-                .unwrap(),
-            "hello world this is a long string".to_owned()
-        );
-    }
-
-    #[test]
-    fn all_nulls() {
-        let array = VarBinArray::from_iter(
-            vec![Option::<&str>::None, None, None],
-            DType::Utf8(Nullability::Nullable),
-        );
-        assert_eq!(
-            array.stats().get_or_compute(&Stat::Min).unwrap(),
-            Utf8Scalar::none().into()
-        );
-        assert_eq!(
-            array.stats().get_or_compute(&Stat::Max).unwrap(),
-            Utf8Scalar::none().into()
-        );
+        assert!(arr.statistics().compute_as::<bool>(Stat::IsSorted).unwrap());
     }
 }

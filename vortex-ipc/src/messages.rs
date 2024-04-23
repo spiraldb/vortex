@@ -1,8 +1,8 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
+use vortex::encoding::find_encoding;
 use vortex::flatbuffers::array as fba;
-use vortex_array2::encoding::find_encoding;
-use vortex_array2::{ArrayData, SerdeContext};
+use vortex::{ArrayData, SerdeContext};
 use vortex_error::{vortex_err, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 use vortex_schema::DType;
@@ -117,14 +117,14 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
-        let col_data = self.1;
-        let array = Some(IPCArray(self.0, col_data).write_flatbuffer(fbb));
+        let array_data = self.1;
+        let array = Some(IPCArray(self.0, array_data).write_flatbuffer(fbb));
 
         // Walk the ColumnData depth-first to compute the buffer offsets.
-        let mut buffers = Vec::with_capacity(col_data.buffers().len());
+        let mut buffers = vec![];
         let mut offset = 0;
-        for col_data in col_data.depth_first_traversal() {
-            for buffer in col_data.buffers() {
+        for array_data in array_data.depth_first_traversal() {
+            if let Some(buffer) = array_data.buffer() {
                 buffers.push(fb::Buffer::new(
                     offset as u64,
                     buffer.len() as u64,
@@ -134,6 +134,8 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
                 offset += aligned_size;
             }
         }
+        println!("CHUNK buffer_size: {}, nbuffers: {}", offset, buffers.len());
+
         let buffers = Some(fbb.create_vector(&buffers));
 
         fb::Chunk::create(
@@ -180,16 +182,14 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
             .collect_vec();
         let children = Some(fbb.create_vector(&children));
 
-        let nbuffers = column_data.buffers().len() as u16; // TODO(ngates): checked cast
-
         fba::Array::create(
             fbb,
             &fba::ArrayArgs {
                 version: Default::default(),
+                has_buffer: column_data.buffer().is_some(),
                 encoding,
                 metadata,
                 children,
-                nbuffers,
             },
         )
     }

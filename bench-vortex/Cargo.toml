@@ -15,10 +15,13 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
+#vortex-alp = { path = "../vortex-alp" }
+vortex-roaring = { path = "../vortex-roaring" }
+#vortex-zigzag = { path = "../vortex-zigzag" }
 arrow = { workspace = true }
 arrow-array = { workspace = true }
-arrow-data = { workspace = true }
 arrow-csv = { workspace = true }
+arrow-data = { workspace = true }
 arrow-select = { workspace = true }
 bzip2 = { workspace = true }
 csv = { workspace = true }
@@ -39,16 +42,13 @@ tokio = { workspace = true }
 uuid = { workspace = true }
 vortex-alp = { path = "../vortex-alp" }
 vortex-array = { path = "../vortex-array" }
-vortex-array2 = { path = "../vortex-array2" }
-vortex-datetime = { path = "../vortex-datetime" }
+vortex-datetime-parts = { path = "../vortex-datetime-parts" }
 vortex-dict = { path = "../vortex-dict" }
 vortex-error = { path = "../vortex-error", features = ["parquet"] }
 vortex-fastlanes = { path = "../vortex-fastlanes" }
 vortex-ipc = { path = "../vortex-ipc" }
 vortex-ree = { path = "../vortex-ree" }
-vortex-roaring = { path = "../vortex-roaring" }
 vortex-schema = { path = "../vortex-schema" }
-vortex-zigzag = { path = "../vortex-zigzag" }
 
 [dev-dependencies]
 criterion = { workspace = true }

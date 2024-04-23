@@ -2,35 +2,34 @@ use std::cmp::min;
 
 use itertools::Itertools;
 use num_traits::AsPrimitive;
-use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
-use vortex::array::{Array, ArrayRef};
+use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::encoding::Encoding;
-use vortex::match_each_integer_ptype;
 use vortex::ptype::{match_each_native_ptype, NativePType};
-use vortex::stats::Stat;
-use vortex::validity::OwnedValidity;
+use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
+use vortex::ArrayDType;
+use vortex::ArrayTrait;
+use vortex::{match_each_integer_ptype, Array, ArrayDef, IntoArray, OwnedArray};
 use vortex_error::VortexResult;
+use vortex_schema::Nullability;
 
-use crate::downcast::DowncastREE;
 use crate::{REEArray, REEEncoding};
 
 impl EncodingCompression for REEEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &Array,
         config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
-        if array.encoding().id() != PrimitiveEncoding.id() {
+        if array.encoding().id() != Primitive::ID {
             return None;
         }
 
         let avg_run_length = array.len() as f32
             / array
-                .stats()
-                .get_or_compute_or::<usize>(array.len(), &Stat::RunCount) as f32;
+                .statistics()
+                .compute_as(Stat::RunCount)
+                .unwrap_or(array.len()) as f32;
         if avg_run_length < config.ree_average_run_threshold {
             return None;
         }
@@ -40,48 +39,55 @@ impl EncodingCompression for REEEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &Array,
+        like: Option<&Array>,
         ctx: CompressCtx,
-    ) -> VortexResult<ArrayRef> {
-        let ree_like = like.map(|like_arr| like_arr.as_ree());
+    ) -> VortexResult<OwnedArray> {
+        let ree_like = like.map(|like_arr| REEArray::try_from(like_arr).unwrap());
+        let ree_like_ref = ree_like.as_ref();
         let primitive_array = array.as_primitive();
 
-        let (ends, values) = ree_encode(primitive_array);
+        let (ends, values) = ree_encode(&primitive_array);
         let compressed_ends = ctx
             .auxiliary("ends")
-            .compress(&ends, ree_like.map(|ree| ree.ends()))?;
-        let compressed_values = ctx
-            .named("values")
-            .excluding(&REEEncoding)
-            .compress(&values, ree_like.map(|ree| ree.values()))?;
+            .compress(ends.array(), ree_like_ref.map(|ree| ree.ends()).as_ref())?;
+        let compressed_values = ctx.named("values").excluding(&REEEncoding).compress(
+            values.array(),
+            ree_like_ref.map(|ree| ree.values()).as_ref(),
+        )?;
 
-        Ok(REEArray::new(
+        REEArray::try_new(
             compressed_ends,
             compressed_values,
             ctx.compress_validity(primitive_array.validity())?,
         )
-        .into_array())
+        .map(|a| a.into_array())
     }
 }
 
-pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
+pub fn ree_encode<'a>(array: &PrimitiveArray) -> (PrimitiveArray<'a>, PrimitiveArray<'a>) {
+    let validity = if array.validity().nullability() == Nullability::NonNullable {
+        Validity::NonNullable
+    } else {
+        Validity::AllValid
+    };
     match_each_native_ptype!(array.ptype(), |$P| {
         let (ends, values) = ree_encode_primitive(array.typed_data::<$P>());
 
-        let mut compressed_values = PrimitiveArray::from(values).into_nullable(array.dtype().nullability());
-        compressed_values.stats().set(Stat::IsConstant, false.into());
-        compressed_values.stats().set(Stat::RunCount, compressed_values.len().into());
-        compressed_values.stats().set_many(&array.stats(), vec![
-            &Stat::Min, &Stat::Max, &Stat::IsSorted, &Stat::IsStrictSorted,
-        ]);
+        let mut compressed_values = PrimitiveArray::from_vec(values, validity);
+        compressed_values.statistics().set(Stat::IsConstant, false.into());
+        compressed_values.statistics().set(Stat::RunCount, compressed_values.len().into());
+        array.statistics().get(Stat::Min).map(|s| compressed_values.statistics().set(Stat::Min, s));
+        array.statistics().get(Stat::Max).map(|s| compressed_values.statistics().set(Stat::Max, s));
+        array.statistics().get(Stat::IsSorted).map(|s| compressed_values.statistics().set(Stat::IsSorted, s));
+        array.statistics().get(Stat::IsStrictSorted).map(|s| compressed_values.statistics().set(Stat::IsStrictSorted, s));
 
         let compressed_ends = PrimitiveArray::from(ends);
-        compressed_ends.stats().set(Stat::IsSorted, true.into());
-        compressed_ends.stats().set(Stat::IsStrictSorted, true.into());
-        compressed_ends.stats().set(Stat::IsConstant, false.into());
-        compressed_ends.stats().set(Stat::Max, array.len().into());
-        compressed_ends.stats().set(Stat::RunCount, compressed_ends.len().into());
+        compressed_ends.statistics().set(Stat::IsSorted, true.into());
+        compressed_ends.statistics().set(Stat::IsStrictSorted, true.into());
+        compressed_ends.statistics().set(Stat::IsConstant, false.into());
+        compressed_ends.statistics().set(Stat::Max, array.len().into());
+        compressed_ends.statistics().set(Stat::RunCount, compressed_ends.len().into());
 
         assert_eq!(array.dtype(), compressed_values.dtype());
         (compressed_ends, compressed_values)
@@ -113,16 +119,16 @@ fn ree_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
     (ends, values)
 }
 
-pub fn ree_decode(
+pub fn ree_decode<'a>(
     ends: &PrimitiveArray,
     values: &PrimitiveArray,
-    validity: Option<Validity>,
+    validity: Validity,
     offset: usize,
     length: usize,
-) -> VortexResult<PrimitiveArray> {
+) -> VortexResult<PrimitiveArray<'a>> {
     match_each_native_ptype!(values.ptype(), |$P| {
         match_each_integer_ptype!(ends.ptype(), |$E| {
-            Ok(PrimitiveArray::from_nullable(ree_decode_primitive(
+            Ok(PrimitiveArray::from_vec(ree_decode_primitive(
                 ends.typed_data::<$E>(),
                 values.typed_data::<$P>(),
                 offset,
@@ -154,12 +160,10 @@ pub fn ree_decode_primitive<E: NativePType + AsPrimitive<usize> + Ord, T: Native
 
 #[cfg(test)]
 mod test {
-    use vortex::array::downcast::DowncastArrayBuiltin;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::{Array, IntoArray};
+    use vortex::validity::ArrayValidity;
     use vortex::validity::Validity;
-    use vortex::validity::{ArrayValidity, OwnedValidity};
-    use vortex::view::ToOwnedView;
+    use vortex::{ArrayTrait, IntoArray};
 
     use crate::compress::{ree_decode, ree_encode};
     use crate::REEArray;
@@ -177,7 +181,7 @@ mod test {
     fn decode() {
         let ends = PrimitiveArray::from(vec![2, 5, 10]);
         let values = PrimitiveArray::from(vec![1i32, 2, 3]);
-        let decoded = ree_decode(&ends, &values, None, 0, 10).unwrap();
+        let decoded = ree_decode(&ends, &values, Validity::NonNullable, 0, 10).unwrap();
 
         assert_eq!(
             decoded.typed_data::<i32>(),
@@ -193,16 +197,17 @@ mod test {
             validity[7] = false;
             Validity::from(validity)
         };
-        let arr = REEArray::new(
+        let arr = REEArray::try_new(
             vec![2u32, 5, 10].into_array(),
-            vec![1i32, 2, 3].into_array(),
-            Some(validity),
-        );
+            PrimitiveArray::from_vec(vec![1i32, 2, 3], Validity::AllValid).into_array(),
+            validity,
+        )
+        .unwrap();
 
         let decoded = ree_decode(
-            arr.ends().as_primitive(),
-            arr.values().as_primitive(),
-            arr.validity().to_owned_view(),
+            &arr.ends().into_primitive(),
+            &arr.values().into_primitive(),
+            arr.validity(),
             0,
             arr.len(),
         )
@@ -213,7 +218,7 @@ mod test {
             vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3].as_slice()
         );
         assert_eq!(
-            decoded.logical_validity(),
+            decoded.logical_validity().into_validity(),
             Validity::from(vec![
                 true, true, false, true, true, true, true, false, true, true,
             ])

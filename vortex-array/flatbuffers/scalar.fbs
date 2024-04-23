@@ -1,0 +1,72 @@
+include "vortex-schema/flatbuffers/dtype.fbs";
+
+namespace vortex.scalar;
+
+table Binary {
+    value: [ubyte];
+}
+
+table Bool {
+    value: bool;
+}
+
+table List {
+    value: [Scalar];
+}
+
+table Null {
+}
+
+// Since Rust doesn't support structs in a union, it would be very inefficient to wrap each primitive type in a table.
+// So instead we store a PType and a byte vector.
+enum PType: uint8 {
+    U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
+    I32,
+    I64,
+    F16,
+    F32,
+    F64,
+}
+
+table Primitive {
+    ptype: PType;
+    // TODO(ngates): this isn't an ideal way to store the bytes.
+    bytes: [ubyte];
+}
+
+table Struct_ {
+    names: [string];
+    value: [Scalar];
+}
+
+table UTF8 {
+    value: string;
+}
+
+table Composite {
+    value: Scalar;
+}
+
+union Type {
+    Binary,
+    Bool,
+    List,
+    Null,
+    Primitive,
+    Struct_,
+    UTF8,
+    Composite,
+}
+
+// TODO(ngates): separate out ScalarValue from Scalar, even in-memory, so we can avoid duplicating dtype information (e.g. Struct field names).
+table Scalar {
+  type: Type;
+  nullability: bool;
+}
+
+root_type Scalar;

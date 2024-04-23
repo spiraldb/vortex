@@ -25,6 +25,15 @@ impl From<bool> for Nullability {
     }
 }
 
+impl From<Nullability> for bool {
+    fn from(value: Nullability) -> Self {
+        match value {
+            Nullability::NonNullable => false,
+            Nullability::Nullable => true,
+        }
+    }
+}
+
 impl Display for Nullability {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

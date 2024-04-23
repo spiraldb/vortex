@@ -1,21 +1,14 @@
-use vortex::array::{Array, ArrayRef};
-use vortex::compute::flatten::{FlattenFn, FlattenedArray};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::match_each_integer_ptype;
 use vortex::scalar::{PrimitiveScalar, Scalar};
+use vortex::{match_each_integer_ptype, Array, IntoArray, OwnedArray};
 use vortex_error::VortexResult;
 
-use crate::r#for::compress::decompress;
 use crate::FoRArray;
 
-impl ArrayCompute for FoRArray {
-    fn flatten(&self) -> Option<&dyn FlattenFn> {
-        Some(self)
-    }
-
+impl ArrayCompute for FoRArray<'_> {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -29,26 +22,20 @@ impl ArrayCompute for FoRArray {
     }
 }
 
-impl FlattenFn for FoRArray {
-    fn flatten(&self) -> VortexResult<FlattenedArray> {
-        decompress(self).map(FlattenedArray::Primitive)
+impl TakeFn for FoRArray<'_> {
+    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+        FoRArray::try_new(
+            take(&self.encoded(), indices)?,
+            self.reference().clone(),
+            self.shift(),
+        )
+        .map(|a| a.into_array())
     }
 }
 
-impl TakeFn for FoRArray {
-    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        Ok(FoRArray::try_new(
-            take(self.encoded(), indices)?,
-            self.reference.clone(),
-            self.shift,
-        )?
-        .into_array())
-    }
-}
-
-impl ScalarAtFn for FoRArray {
+impl ScalarAtFn for FoRArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let encoded_scalar = scalar_at(self.encoded(), index)?;
+        let encoded_scalar = scalar_at(&self.encoded(), index)?;
 
         match (&encoded_scalar, self.reference()) {
             (Scalar::Primitive(p), Scalar::Primitive(r)) => match p.value() {
@@ -66,14 +53,14 @@ impl ScalarAtFn for FoRArray {
     }
 }
 
-impl SliceFn for FoRArray {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(FoRArray::try_new(
-            slice(self.encoded(), start, stop)?,
+impl SliceFn for FoRArray<'_> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+        FoRArray::try_new(
+            slice(&self.encoded(), start, stop)?,
             self.reference().clone(),
             self.shift(),
-        )?
-        .into_array())
+        )
+        .map(|a| a.into_array())
     }
 }
 
@@ -89,7 +76,7 @@ mod test {
     fn for_scalar_at() {
         let forarr = FoREncoding
             .compress(
-                &PrimitiveArray::from(vec![11, 15, 19]),
+                PrimitiveArray::from(vec![11, 15, 19]).array(),
                 None,
                 CompressCtx::default(),
             )

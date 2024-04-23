@@ -1,13 +1,13 @@
 use itertools::Itertools;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::array::{Array, ArrayRef, WithArrayCompute};
+use crate::{Array, ArrayDType, OwnedArray};
 
 pub trait AsContiguousFn {
-    fn as_contiguous(&self, arrays: &[ArrayRef]) -> VortexResult<ArrayRef>;
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray>;
 }
 
-pub fn as_contiguous(arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
+pub fn as_contiguous(arrays: &[Array]) -> VortexResult<OwnedArray> {
     if arrays.is_empty() {
         vortex_bail!(ComputeError: "No arrays to concatenate");
     }
@@ -16,10 +16,15 @@ pub fn as_contiguous(arrays: &[ArrayRef]) -> VortexResult<ArrayRef> {
             "Chunks have differing encodings",
         );
     }
+    if !arrays.iter().map(|chunk| chunk.dtype()).all_equal() {
+        vortex_bail!(ComputeError:
+            "Chunks have differing dtypes",
+        );
+    }
 
     let first = arrays.first().unwrap();
-    first.with_compute(|c| {
-        c.as_contiguous()
+    first.with_dyn(|a| {
+        a.as_contiguous()
             .map(|f| f.as_contiguous(arrays))
             .unwrap_or_else(|| {
                 Err(vortex_err!(

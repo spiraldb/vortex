@@ -1,21 +1,19 @@
 use vortex_error::VortexResult;
 
-use crate::array::primitive::compute::PrimitiveTrait;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::{Array, ArrayRef};
 use crate::compute::slice::SliceFn;
-use crate::ptype::NativePType;
+use crate::match_each_native_ptype;
+use crate::IntoArray;
+use crate::OwnedArray;
 
-impl<T: NativePType> SliceFn for &dyn PrimitiveTrait<T> {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        let byte_start = start * self.ptype().byte_width();
-        let byte_length = (stop - start) * self.ptype().byte_width();
-
-        Ok(PrimitiveArray::new(
-            self.ptype(),
-            self.buffer().slice_with_length(byte_start, byte_length),
-            self.validity().map(|v| v.slice(start, stop)).transpose()?,
-        )
-        .into_array())
+impl SliceFn for PrimitiveArray<'_> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+        match_each_native_ptype!(self.ptype(), |$T| {
+            Ok(PrimitiveArray::try_new(
+                self.scalar_buffer::<$T>().slice(start, stop - start),
+                self.validity().slice(start, stop)?,
+            )?
+            .into_array())
+        })
     }
 }

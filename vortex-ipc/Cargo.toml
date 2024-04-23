@@ -19,7 +19,6 @@ lending-iterator = "0.1.7"
 nougat = "0.2.4"
 streaming-iterator = "0.1.9"
 vortex-array = { path = "../vortex-array" }
-vortex-array2 = { path = "../vortex-array2" }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 vortex-schema = { path = "../vortex-schema" }

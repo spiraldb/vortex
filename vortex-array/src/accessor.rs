@@ -1,5 +1,7 @@
-use crate::array::Array;
+use vortex_error::VortexResult;
 
-pub trait ArrayAccessor<'a, T>: Array {
-    fn value(&'a self, index: usize) -> Option<T>;
+pub trait ArrayAccessor<Item: ?Sized> {
+    fn with_iterator<F, R>(&self, f: F) -> VortexResult<R>
+    where
+        F: for<'a> FnOnce(&mut (dyn Iterator<Item = Option<&'a Item>>)) -> R;
 }

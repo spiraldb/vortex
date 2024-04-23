@@ -10,7 +10,7 @@ use humansize::{format_size, DECIMAL};
 use itertools::Itertools;
 use log::info;
 use reqwest::Url;
-use vortex::array::Array;
+use vortex::ArrayTrait;
 use vortex_error::VortexResult;
 
 use crate::data_downloads::{

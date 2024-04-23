@@ -1,23 +1,19 @@
-use std::borrow::Cow;
+use std::collections::HashMap;
 
 use vortex_error::VortexResult;
 
+use crate::accessor::ArrayAccessor;
 use crate::array::varbin::compute_stats;
 use crate::array::varbinview::VarBinViewArray;
-use crate::array::Array;
-use crate::stats::{Stat, StatsCompute, StatsSet};
+use crate::scalar::Scalar;
+use crate::stats::{ArrayStatisticsCompute, Stat};
+use crate::{ArrayDType, ArrayTrait};
 
-impl StatsCompute for VarBinViewArray {
-    fn compute(&self, _stat: &Stat) -> VortexResult<StatsSet> {
+impl ArrayStatisticsCompute for VarBinViewArray<'_> {
+    fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
         if self.is_empty() {
-            return Ok(StatsSet::new());
+            return Ok(HashMap::new());
         }
-
-        Ok(self
-            .iter_primitive()
-            .map(|prim_iter| compute_stats(&mut prim_iter.map(|s| s.map(Cow::from)), self.dtype()))
-            .unwrap_or_else(|_| {
-                compute_stats(&mut self.iter().map(|s| s.map(Cow::from)), self.dtype())
-            }))
+        self.with_iterator(|iter| compute_stats(iter, self.dtype()))
     }
 }

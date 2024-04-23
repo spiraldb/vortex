@@ -1,23 +1,19 @@
 #![cfg(feature = "serde")]
 
-use flatbuffers::{root, FlatBufferBuilder};
+use flatbuffers::root;
 use serde::de::{DeserializeSeed, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use vortex_flatbuffers::{ReadFlatBuffer, WriteFlatBuffer};
+use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
 use crate::DType;
 use crate::{flatbuffers as fb, DTypeSerdeContext};
 
-/// Implement the `Serialize` and trait for `DType` using the flatbuffers.
 impl Serialize for DType {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let mut fbb = FlatBufferBuilder::new();
-        let root = self.write_flatbuffer(&mut fbb);
-        fbb.finish_minimal(root);
-        serializer.serialize_bytes(fbb.finished_data())
+        self.with_flatbuffer_bytes(|bytes| serializer.serialize_bytes(bytes))
     }
 }
 

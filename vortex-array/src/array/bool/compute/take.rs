@@ -3,20 +3,20 @@ use num_traits::AsPrimitive;
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
-use crate::array::{Array, ArrayRef};
-use crate::compute::flatten::flatten_primitive;
 use crate::compute::take::TakeFn;
 use crate::match_each_integer_ptype;
-use crate::validity::OwnedValidity;
+use crate::AsArray;
+use crate::IntoArray;
+use crate::{Array, OwnedArray};
 
-impl TakeFn for BoolArray {
-    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        let validity = self.validity().map(|v| v.take(indices)).transpose()?;
-        let indices = flatten_primitive(indices)?;
+impl TakeFn for BoolArray<'_> {
+    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+        let validity = self.validity();
+        let indices = indices.clone().flatten_primitive()?;
         match_each_integer_ptype!(indices.ptype(), |$I| {
-            Ok(BoolArray::from_nullable(
-                take_bool(self.buffer(), indices.typed_data::<$I>()),
-                validity,
+            Ok(BoolArray::from_vec(
+                take_bool(&self.boolean_buffer(), indices.typed_data::<$I>()),
+                validity.take(indices.as_array_ref())?,
             ).into_array())
         })
     }
@@ -29,9 +29,9 @@ fn take_bool<I: AsPrimitive<usize>>(bools: &BooleanBuffer, indices: &[I]) -> Vec
 #[cfg(test)]
 mod test {
     use crate::array::bool::BoolArray;
-    use crate::array::downcast::DowncastArrayBuiltin;
     use crate::array::primitive::PrimitiveArray;
     use crate::compute::take::take;
+    use crate::IntoArray;
 
     #[test]
     fn take_nullable() {
@@ -41,11 +41,20 @@ mod test {
             Some(false),
             None,
             Some(false),
-        ]);
-        let res = take(&reference, &PrimitiveArray::from(vec![0, 3, 4])).unwrap();
+        ])
+        .into_array();
+
+        let b = BoolArray::try_from(
+            take(
+                &reference,
+                &PrimitiveArray::from(vec![0, 3, 4]).into_array(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(
-            res.as_bool().buffer(),
-            BoolArray::from_iter(vec![Some(false), None, Some(false)]).buffer()
+            b.boolean_buffer(),
+            BoolArray::from_iter(vec![Some(false), None, Some(false)]).boolean_buffer()
         );
     }
 }

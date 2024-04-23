@@ -3,9 +3,9 @@ use std::cmp::Ordering::{Equal, Greater, Less};
 
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::array::{Array, WithArrayCompute};
 use crate::compute::scalar_at::scalar_at;
 use crate::scalar::Scalar;
+use crate::{Array, ArrayDType};
 
 #[derive(Debug, Copy, Clone)]
 pub enum SearchSortedSide {
@@ -40,18 +40,18 @@ pub trait SearchSortedFn {
 }
 
 pub fn search_sorted<T: Into<Scalar>>(
-    array: &dyn Array,
+    array: &Array,
     target: T,
     side: SearchSortedSide,
 ) -> VortexResult<SearchResult> {
     let scalar = target.into().cast(array.dtype())?;
-    array.with_compute(|c| {
-        if let Some(search_sorted) = c.search_sorted() {
+    array.with_dyn(|a| {
+        if let Some(search_sorted) = a.search_sorted() {
             return search_sorted.search_sorted(&scalar, side);
         }
 
-        if c.scalar_at().is_some() {
-            return Ok(SearchSorted::search_sorted(&array, &scalar, side));
+        if a.scalar_at().is_some() {
+            return Ok(SearchSorted::search_sorted(array, &scalar, side));
         }
 
         Err(vortex_err!(
@@ -180,9 +180,9 @@ fn search_sorted_side_idx<F: FnMut(usize) -> Ordering>(
     SearchResult::NotFound(left)
 }
 
-impl IndexOrd<Scalar> for &dyn Array {
+impl IndexOrd<Scalar> for Array<'_> {
     fn index_cmp(&self, idx: usize, elem: &Scalar) -> Option<Ordering> {
-        let scalar_a = scalar_at(*self, idx).ok()?;
+        let scalar_a = scalar_at(self, idx).ok()?;
         scalar_a.partial_cmp(elem)
     }
 }
@@ -194,9 +194,9 @@ impl<T: PartialOrd> IndexOrd<T> for [T] {
     }
 }
 
-impl Len for &dyn Array {
+impl Len for Array<'_> {
     fn len(&self) -> usize {
-        Array::len(*self)
+        Array::len(self)
     }
 }
 

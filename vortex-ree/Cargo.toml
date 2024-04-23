@@ -12,15 +12,17 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+arrow-array = { workspace = true }
+arrow-buffer = { workspace = true }
+half = { workspace = true }
+itertools = { workspace = true }
+linkme = { workspace = true }
+num-traits = { workspace = true }
+paste = { workspace = true }
+serde = { workspace = true }
 vortex-array = { path = "../vortex-array" }
 vortex-error = { path = "../vortex-error" }
 vortex-schema = { path = "../vortex-schema" }
-arrow-array = { workspace = true }
-arrow-buffer = { workspace = true }
-linkme = { workspace = true }
-half = { workspace = true }
-num-traits = { workspace = true }
-itertools = { workspace = true }
 
 [lints]
 workspace = true

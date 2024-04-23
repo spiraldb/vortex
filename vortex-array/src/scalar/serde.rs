@@ -1,230 +1,276 @@
-use std::io;
-use std::sync::Arc;
-
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use flatbuffers::{root, FlatBufferBuilder, WIPOffset};
+use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use vortex_error::VortexResult;
-use vortex_schema::{DType, Nullability};
+use vortex_error::{vortex_bail, VortexError};
+use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, ReadFlatBuffer, WriteFlatBuffer};
+use vortex_schema::{DTypeSerdeContext, Nullability};
 
+use crate::flatbuffers::scalar as fb;
 use crate::match_each_native_ptype;
-use crate::scalar::composite::CompositeScalar;
-use crate::scalar::{
-    BinaryScalar, BoolScalar, ListScalar, NullScalar, PScalar, PrimitiveScalar, Scalar,
-    StructScalar, Utf8Scalar,
-};
-use crate::serde::{ReadCtx, WriteCtx};
+use crate::ptype::PType;
+use crate::scalar::{PScalar, PrimitiveScalar, Scalar, Utf8Scalar};
 
-pub struct ScalarReader<'a, 'b> {
-    reader: &'b mut ReadCtx<'a>,
+impl FlatBufferRoot for Scalar {}
+
+impl WriteFlatBuffer for Scalar {
+    type Target<'a> = fb::Scalar<'a>;
+
+    fn write_flatbuffer<'fb>(
+        &self,
+        fbb: &mut FlatBufferBuilder<'fb>,
+    ) -> WIPOffset<Self::Target<'fb>> {
+        let union = match self {
+            Scalar::Binary(b) => {
+                let bytes = b.value().map(|bytes| fbb.create_vector(bytes));
+                fb::ScalarArgs {
+                    type_type: fb::Type::Binary,
+                    type_: Some(
+                        fb::Binary::create(fbb, &fb::BinaryArgs { value: bytes }).as_union_value(),
+                    ),
+                    nullability: self.nullability().into(),
+                }
+            }
+            Scalar::Bool(b) => fb::ScalarArgs {
+                type_type: fb::Type::Bool,
+                // TODO(ngates): I think this optional is in the wrong place and should be inside BoolArgs.
+                //  However I think Rust Flatbuffers has incorrectly generated non-optional BoolArgs.
+                type_: b
+                    .value()
+                    .map(|&value| fb::Bool::create(fbb, &fb::BoolArgs { value }).as_union_value()),
+                nullability: self.nullability().into(),
+            },
+            Scalar::List(_) => panic!("List not supported in scalar serde"),
+            Scalar::Null(_) => fb::ScalarArgs {
+                type_type: fb::Type::Null,
+                type_: Some(fb::Null::create(fbb, &fb::NullArgs {}).as_union_value()),
+                nullability: self.nullability().into(),
+            },
+            Scalar::Primitive(p) => {
+                let bytes = p.value().map(|pscalar| match pscalar {
+                    PScalar::U8(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::U16(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::U32(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::U64(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::I8(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::I16(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::I32(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::I64(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::F16(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::F32(v) => fbb.create_vector(&v.to_le_bytes()),
+                    PScalar::F64(v) => fbb.create_vector(&v.to_le_bytes()),
+                });
+                let primitive = fb::Primitive::create(
+                    fbb,
+                    &fb::PrimitiveArgs {
+                        ptype: p.ptype().into(),
+                        bytes,
+                    },
+                );
+                fb::ScalarArgs {
+                    type_type: fb::Type::Primitive,
+                    type_: Some(primitive.as_union_value()),
+                    nullability: self.nullability().into(),
+                }
+            }
+            Scalar::Struct(_) => panic!(),
+            Scalar::Utf8(utf) => {
+                let value = utf.value().map(|utf| fbb.create_string(utf));
+                let value = fb::UTF8::create(fbb, &fb::UTF8Args { value }).as_union_value();
+                fb::ScalarArgs {
+                    type_type: fb::Type::UTF8,
+                    type_: Some(value),
+                    nullability: self.nullability().into(),
+                }
+            }
+            Scalar::Composite(_) => panic!(),
+        };
+
+        fb::Scalar::create(fbb, &union)
+    }
 }
 
-impl<'a, 'b> ScalarReader<'a, 'b> {
-    pub fn new(reader: &'b mut ReadCtx<'a>) -> Self {
-        Self { reader }
-    }
+impl ReadFlatBuffer<DTypeSerdeContext> for Scalar {
+    type Source<'a> = fb::Scalar<'a>;
+    type Error = VortexError;
 
-    pub fn read(&mut self) -> VortexResult<Scalar> {
-        let tag = ScalarTag::try_from(self.reader.read_nbytes::<1>()?[0])
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let nullability = self.reader.nullability()?;
-
-        match tag {
-            ScalarTag::Binary => {
-                let slice = self.reader.read_optional_slice()?;
-                Ok(BinaryScalar::try_new(slice, nullability)?.into())
+    fn read_flatbuffer(
+        _ctx: &DTypeSerdeContext,
+        fb: &Self::Source<'_>,
+    ) -> Result<Self, Self::Error> {
+        let nullability = Nullability::from(fb.nullability());
+        match fb.type_type() {
+            fb::Type::Binary => {
+                todo!()
             }
-            ScalarTag::Bool => {
-                let is_present = self.reader.read_option_tag()?;
-                let bool = self.reader.read_nbytes::<1>()?[0] != 0;
-                Ok(BoolScalar::try_new(is_present.then_some(bool), nullability)?.into())
+            fb::Type::Bool => {
+                todo!()
             }
-            ScalarTag::PrimitiveS => self.read_primitive_scalar(nullability).map(|p| p.into()),
-            ScalarTag::List => {
-                let is_present = self.reader.read_option_tag()?;
-                if is_present {
-                    let elems = self.reader.read_usize()?;
-                    let mut values = Vec::with_capacity(elems);
-                    for _ in 0..elems {
-                        values.push(self.read()?);
-                    }
-                    Ok(ListScalar::new(values[0].dtype().clone(), Some(values)).into())
-                } else {
-                    Ok(ListScalar::new(self.reader.dtype()?, None).into())
-                }
+            fb::Type::List => {
+                todo!()
             }
-            ScalarTag::Null => Ok(NullScalar::new().into()),
-            ScalarTag::Struct => {
-                let field_num = self.reader.read_usize()?;
-                let mut names = Vec::with_capacity(field_num);
-                for _ in 0..field_num {
-                    names.push(Arc::new(
-                        self.reader
-                            .read_slice()
-                            .map(|v| unsafe { String::from_utf8_unchecked(v) })?,
-                    ));
-                }
-                let mut values = Vec::with_capacity(field_num);
-                for _ in 0..field_num {
-                    values.push(self.read()?);
-                }
-                let dtypes = values.iter().map(|s| s.dtype().clone()).collect::<Vec<_>>();
-                Ok(StructScalar::new(DType::Struct(names, dtypes), values).into())
+            fb::Type::Null => {
+                todo!()
             }
-            ScalarTag::Utf8 => {
-                let value = self.reader.read_optional_slice()?;
-                Ok(Utf8Scalar::try_new(
-                    value.map(|v| unsafe { String::from_utf8_unchecked(v) }),
-                    nullability,
-                )?
-                .into())
+            fb::Type::Primitive => {
+                let primitive = fb.type__as_primitive().expect("missing Primitive value");
+                let ptype = primitive.ptype().try_into()?;
+                Ok(match_each_native_ptype!(ptype, |$T| {
+                    Scalar::Primitive(PrimitiveScalar::try_new(
+                        if let Some(bytes) = primitive.bytes() {
+                            Some($T::from_le_bytes(bytes.bytes().try_into()?))
+                        } else {
+                            None
+                        },
+                        nullability,
+                    )?)
+                }))
             }
-            ScalarTag::Composite => {
-                let dtype = self.reader.dtype()?;
-                let scalar = self.read()?;
-                Ok(CompositeScalar::new(dtype, Box::new(scalar)).into())
+            fb::Type::Struct_ => {
+                todo!()
             }
+            fb::Type::UTF8 => Ok(Scalar::Utf8(Utf8Scalar::try_new(
+                fb.type__as_utf8()
+                    .expect("missing UTF8 value")
+                    .value()
+                    .map(|s| s.to_string()),
+                nullability,
+            )?)),
+            fb::Type::Composite => {
+                todo!()
+            }
+            _ => vortex_bail!(InvalidSerde: "Unrecognized scalar type"),
         }
     }
+}
 
-    fn read_primitive_scalar(&mut self, nullability: Nullability) -> VortexResult<PrimitiveScalar> {
-        let ptype = self.reader.ptype()?;
-        let is_present = self.reader.read_option_tag()?;
-        match_each_native_ptype!(ptype, |$P| {
-            let value = if is_present {
-                Some($P::from_le_bytes(self.reader.read_nbytes()?))
-            } else {
-                None
-            };
-            Ok(PrimitiveScalar::try_new::<$P>(value, nullability)?)
+impl From<PType> for fb::PType {
+    fn from(value: PType) -> Self {
+        match value {
+            PType::U8 => fb::PType::U8,
+            PType::U16 => fb::PType::U16,
+            PType::U32 => fb::PType::U32,
+            PType::U64 => fb::PType::U64,
+            PType::I8 => fb::PType::I8,
+            PType::I16 => fb::PType::I16,
+            PType::I32 => fb::PType::I32,
+            PType::I64 => fb::PType::I64,
+            PType::F16 => fb::PType::F16,
+            PType::F32 => fb::PType::F32,
+            PType::F64 => fb::PType::F64,
+        }
+    }
+}
+
+impl TryFrom<fb::PType> for PType {
+    type Error = VortexError;
+
+    fn try_from(value: fb::PType) -> Result<Self, Self::Error> {
+        Ok(match value {
+            fb::PType::U8 => PType::U8,
+            fb::PType::U16 => PType::U16,
+            fb::PType::U32 => PType::U32,
+            fb::PType::U64 => PType::U64,
+            fb::PType::I8 => PType::I8,
+            fb::PType::I16 => PType::I16,
+            fb::PType::I32 => PType::I32,
+            fb::PType::I64 => PType::I64,
+            fb::PType::F16 => PType::F16,
+            fb::PType::F32 => PType::F32,
+            fb::PType::F64 => PType::F64,
+            _ => vortex_bail!(InvalidSerde: "Unrecognized PType"),
         })
     }
 }
 
-pub struct ScalarWriter<'a, 'b> {
-    writer: &'b mut WriteCtx<'a>,
-}
-
-impl<'a, 'b> ScalarWriter<'a, 'b> {
-    pub fn new(writer: &'b mut WriteCtx<'a>) -> Self {
-        Self { writer }
-    }
-
-    pub fn write(&mut self, scalar: &Scalar) -> VortexResult<()> {
-        self.writer
-            .write_fixed_slice([ScalarTag::from(scalar).into()])?;
-        self.writer.nullability(scalar.nullability())?;
-
-        match scalar {
-            Scalar::Binary(b) => self
-                .writer
-                .write_optional_slice(b.value().map(|b| b.as_slice())),
-            Scalar::Bool(b) => {
-                self.writer.write_option_tag(b.value().is_some())?;
-                if let Some(&v) = b.value() {
-                    self.writer.write_fixed_slice([v as u8])?;
-                }
-                Ok(())
-            }
-            Scalar::List(ls) => {
-                self.writer.write_option_tag(ls.values().is_some())?;
-                if let Some(vs) = ls.values() {
-                    self.writer.write_usize(vs.len())?;
-                    for elem in vs {
-                        self.write(elem)?;
-                    }
-                } else {
-                    self.writer.dtype(ls.dtype())?;
-                }
-                Ok(())
-            }
-            Scalar::Null(_) => Ok(()),
-            Scalar::Primitive(p) => self.write_primitive_scalar(p),
-            Scalar::Struct(s) => {
-                let names = s.names();
-                self.writer.write_usize(names.len())?;
-                for n in names {
-                    self.writer.write_slice(n.as_bytes())?;
-                }
-                for field in s.values() {
-                    self.write(field)?;
-                }
-                Ok(())
-            }
-            Scalar::Utf8(u) => self
-                .writer
-                .write_optional_slice(u.value().map(|s| s.as_bytes())),
-            Scalar::Composite(c) => {
-                self.writer.dtype(c.dtype())?;
-                self.write(c.scalar())
-            }
-        }
-    }
-
-    fn write_primitive_scalar(&mut self, scalar: &PrimitiveScalar) -> VortexResult<()> {
-        self.writer.ptype(scalar.ptype())?;
-        self.writer.write_option_tag(scalar.value().is_some())?;
-        if let Some(ps) = scalar.value() {
-            match ps {
-                PScalar::F16(f) => self.writer.write_fixed_slice(f.to_le_bytes())?,
-                PScalar::F32(f) => self.writer.write_fixed_slice(f.to_le_bytes())?,
-                PScalar::F64(f) => self.writer.write_fixed_slice(f.to_le_bytes())?,
-                PScalar::I16(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
-                PScalar::I32(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
-                PScalar::I64(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
-                PScalar::I8(i) => self.writer.write_fixed_slice(i.to_le_bytes())?,
-                PScalar::U16(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
-                PScalar::U32(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
-                PScalar::U64(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
-                PScalar::U8(u) => self.writer.write_fixed_slice(u.to_le_bytes())?,
-            }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Copy, Clone, IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-enum ScalarTag {
-    Binary,
-    Bool,
-    List,
-    Null,
-    // TODO(robert): rename to primitive once we stop using enum for serialization
-    PrimitiveS,
-    Struct,
-    Utf8,
-    Composite,
-}
-
-impl From<&Scalar> for ScalarTag {
-    fn from(value: &Scalar) -> Self {
-        match value {
-            Scalar::Binary(_) => ScalarTag::Binary,
-            Scalar::Bool(_) => ScalarTag::Bool,
-            Scalar::List(_) => ScalarTag::List,
-            Scalar::Null(_) => ScalarTag::Null,
-            Scalar::Primitive(_) => ScalarTag::PrimitiveS,
-            Scalar::Struct(_) => ScalarTag::Struct,
-            Scalar::Utf8(_) => ScalarTag::Utf8,
-            Scalar::Composite(_) => ScalarTag::Composite,
-        }
-    }
-}
-
 impl Serialize for Scalar {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        todo!()
+        self.with_flatbuffer_bytes(|bytes| serializer.serialize_bytes(bytes))
     }
 }
 
+struct ScalarDeserializer(DTypeSerdeContext);
+
+impl<'de> Visitor<'de> for ScalarDeserializer {
+    type Value = Scalar;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a vortex dtype")
+    }
+
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let fb = root::<fb::Scalar>(v).map_err(E::custom)?;
+        Scalar::read_flatbuffer(&self.0, &fb).map_err(E::custom)
+    }
+}
+
+// TODO(ngates): Should we just inline composites in scalars?
 impl<'de> Deserialize<'de> for Scalar {
-    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        todo!()
+        let ctx = DTypeSerdeContext::new(vec![]);
+        deserializer.deserialize_bytes(ScalarDeserializer(ctx))
     }
 }
+
+// impl<'a, 'b> ScalarReader<'a, 'b> {
+//     pub fn read(&mut self) -> VortexResult<Scalar> {
+//         let bytes = self.reader.read_slice()?;
+//         let scalar = root::<scalar::Scalar>(&bytes)
+//             .map_err(|_e| VortexError::InvalidArgument("Invalid FlatBuffer".into()))
+//             .unwrap();
+
+//     }
+//
+//     fn read_primitive_scalar(&mut self) -> VortexResult<PrimitiveScalar> {
+//         let ptype = self.reader.ptype()?;
+//         let is_present = self.reader.read_option_tag()?;
+//         if is_present {
+//             let pscalar = match ptype {
+//                 PType::U8 => PrimitiveScalar::some(PScalar::U8(u8::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::U16 => PrimitiveScalar::some(PScalar::U16(u16::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::U32 => PrimitiveScalar::some(PScalar::U32(u32::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::U64 => PrimitiveScalar::some(PScalar::U64(u64::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::I8 => PrimitiveScalar::some(PScalar::I8(i8::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::I16 => PrimitiveScalar::some(PScalar::I16(i16::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::I32 => PrimitiveScalar::some(PScalar::I32(i32::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::I64 => PrimitiveScalar::some(PScalar::I64(i64::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::F16 => PrimitiveScalar::some(PScalar::F16(f16::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::F32 => PrimitiveScalar::some(PScalar::F32(f32::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::F64 => PrimitiveScalar::some(PScalar::F64(f64::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//             };
+//             Ok(pscalar)
+//         } else {
+//             Ok(PrimitiveScalar::none(ptype))
+//         }
+//     }
+// }

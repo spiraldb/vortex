@@ -6,8 +6,8 @@ use itertools::Itertools;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_schema::{DType, FloatWidth, IntWidth, Nullability};
 
+use crate::array::datetime::{LocalDateTimeExtension, TimeUnit};
 use crate::arrow::FromArrowType;
-use crate::datetime::{LocalDateTimeExtension, TimeUnit};
 use crate::ptype::PType;
 
 impl TryFrom<&DataType> for PType {

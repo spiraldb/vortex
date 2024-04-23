@@ -1,51 +1,45 @@
 use vortex_error::VortexResult;
 
-use crate::array::primitive::compute::PrimitiveTrait;
+use crate::array::primitive::PrimitiveArray;
 use crate::compute::search_sorted::{SearchResult, SearchSorted};
 use crate::compute::search_sorted::{SearchSortedFn, SearchSortedSide};
-use crate::ptype::NativePType;
+use crate::match_each_native_ptype;
 use crate::scalar::Scalar;
 
-impl<T: NativePType> SearchSortedFn for &dyn PrimitiveTrait<T> {
+impl SearchSortedFn for PrimitiveArray<'_> {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
-        let pvalue: T = value.try_into()?;
-        Ok(self.typed_data().search_sorted(&pvalue, side))
+        match_each_native_ptype!(self.ptype(), |$T| {
+            let pvalue: $T = value.try_into()?;
+            Ok(self.typed_data::<$T>().search_sorted(&pvalue, side))
+        })
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::array::IntoArray;
     use crate::compute::search_sorted::search_sorted;
+    use crate::IntoArray;
 
     #[test]
     fn test_searchsorted_primitive() {
         let values = vec![1u16, 2, 3].into_array();
 
         assert_eq!(
-            search_sorted(&values, 0, SearchSortedSide::Left)
-                .unwrap()
-                .to_index(),
-            0
+            search_sorted(&values, 0, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(0)
         );
         assert_eq!(
-            search_sorted(&values, 1, SearchSortedSide::Left)
-                .unwrap()
-                .to_index(),
-            0
+            search_sorted(&values, 1, SearchSortedSide::Left).unwrap(),
+            SearchResult::Found(0)
         );
         assert_eq!(
-            search_sorted(&values, 1, SearchSortedSide::Right)
-                .unwrap()
-                .to_index(),
-            1
+            search_sorted(&values, 1, SearchSortedSide::Right).unwrap(),
+            SearchResult::Found(1)
         );
         assert_eq!(
-            search_sorted(&values, 4, SearchSortedSide::Left)
-                .unwrap()
-                .to_index(),
-            3
+            search_sorted(&values, 4, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(3)
         );
     }
 }

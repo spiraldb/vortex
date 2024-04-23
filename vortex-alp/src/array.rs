@@ -1,39 +1,31 @@
-use std::sync::{Arc, RwLock};
-
-use vortex::array::{Array, ArrayKind, ArrayRef};
-use vortex::compress::EncodingCompression;
-use vortex::compute::ArrayCompute;
-use vortex::encoding::{Encoding, EncodingId, EncodingRef};
-use vortex::formatter::{ArrayDisplay, ArrayFormatter};
-use vortex::serde::{ArraySerde, EncodingSerde};
-use vortex::stats::{Stats, StatsSet};
-use vortex::validity::{ArrayValidity, Validity};
-use vortex::{impl_array, ArrayWalker};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_schema::{DType, IntWidth, Signedness};
+use serde::{Deserialize, Serialize};
+use vortex::array::primitive::PrimitiveArray;
+use vortex::stats::ArrayStatisticsCompute;
+use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
+use vortex_error::{vortex_bail, VortexResult};
+use vortex_schema::{IntWidth, Signedness};
 
 use crate::alp::Exponents;
-use crate::compress::alp_encode;
+use crate::compress::{alp_encode, decompress};
 
-#[derive(Debug, Clone)]
-pub struct ALPArray {
-    encoded: ArrayRef,
+impl_encoding!("vortex.alp", ALP);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ALPMetadata {
     exponents: Exponents,
-    patches: Option<ArrayRef>,
-    dtype: DType,
-    stats: Arc<RwLock<StatsSet>>,
+    encoded_dtype: DType,
+    patches_dtype: Option<DType>,
 }
 
-impl ALPArray {
-    pub fn new(encoded: ArrayRef, exponents: Exponents, patches: Option<ArrayRef>) -> Self {
-        Self::try_new(encoded, exponents, patches).unwrap()
-    }
-
+impl ALPArray<'_> {
     pub fn try_new(
-        encoded: ArrayRef,
+        encoded: Array,
         exponents: Exponents,
-        patches: Option<ArrayRef>,
+        patches: Option<Array>,
     ) -> VortexResult<Self> {
+        let encoded_dtype = encoded.dtype().clone();
         let dtype = match encoded.dtype() {
             DType::Int(IntWidth::_32, Signedness::Signed, nullability) => {
                 DType::Float(32.into(), *nullability)
@@ -43,120 +35,88 @@ impl ALPArray {
             }
             d => vortex_bail!(MismatchedTypes: "int32 or int64", d),
         };
-        Ok(Self {
-            encoded,
-            exponents,
-            patches,
+
+        let mut children = Vec::with_capacity(2);
+        children.push(encoded.into_array_data());
+        if let Some(ref patch) = patches {
+            children.push(patch.to_array_data());
+        }
+
+        Self::try_from_parts(
             dtype,
-            stats: Arc::new(RwLock::new(StatsSet::new())),
-        })
+            ALPMetadata {
+                exponents,
+                encoded_dtype,
+                patches_dtype: patches.map(|a| a.dtype().as_nullable()),
+            },
+            children.into(),
+            Default::default(),
+        )
     }
 
-    pub fn encode(array: &dyn Array) -> VortexResult<ArrayRef> {
-        match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => Ok(alp_encode(p)?.into_array()),
-            _ => Err(vortex_err!("ALP can only encoding primitive arrays")),
+    pub fn encode(array: Array<'_>) -> VortexResult<OwnedArray> {
+        if let Ok(parray) = PrimitiveArray::try_from(array) {
+            Ok(alp_encode(&parray)?.into_array())
+        } else {
+            vortex_bail!("ALP can only encode primitive arrays");
         }
     }
 
-    pub fn encoded(&self) -> &ArrayRef {
-        &self.encoded
+    pub fn encoded(&self) -> Array {
+        self.array()
+            .child(0, &self.metadata().encoded_dtype)
+            .expect("Missing encoded array")
     }
 
     pub fn exponents(&self) -> &Exponents {
-        &self.exponents
+        &self.metadata().exponents
     }
 
-    pub fn patches(&self) -> Option<&ArrayRef> {
-        self.patches.as_ref()
-    }
-}
-
-impl Array for ALPArray {
-    impl_array!();
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.encoded.len()
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.encoded.is_empty()
-    }
-
-    #[inline]
-    fn dtype(&self) -> &DType {
-        &self.dtype
-    }
-
-    #[inline]
-    fn stats(&self) -> Stats {
-        Stats::new(&self.stats, self)
-    }
-
-    #[inline]
-    fn with_compute_mut(
-        &self,
-        f: &mut dyn FnMut(&dyn ArrayCompute) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        f(self)
-    }
-
-    #[inline]
-    fn encoding(&self) -> EncodingRef {
-        &ALPEncoding
-    }
-
-    #[inline]
-    fn nbytes(&self) -> usize {
-        self.encoded().nbytes() + self.patches().map(|p| p.nbytes()).unwrap_or(0)
-    }
-
-    fn serde(&self) -> Option<&dyn ArraySerde> {
-        Some(self)
-    }
-
-    fn walk(&self, walker: &mut dyn ArrayWalker) -> VortexResult<()> {
-        walker.visit_child(self.encoded())
+    pub fn patches(&self) -> Option<Array> {
+        self.metadata().patches_dtype.as_ref().map(|dt| {
+            self.array()
+                .child(1, dt)
+                .expect("Missing patches with present metadata flag")
+        })
     }
 }
 
-impl ArrayDisplay for ALPArray {
-    fn fmt(&self, f: &mut ArrayFormatter) -> std::fmt::Result {
-        f.property("exponents", format!("{:?}", self.exponents()))?;
-        f.child("encoded", self.encoded())?;
-        f.maybe_child("patches", self.patches())
-    }
-}
-
-impl ArrayValidity for ALPArray {
-    fn logical_validity(&self) -> Validity {
-        self.encoded().logical_validity()
-    }
-
+impl ArrayValidity for ALPArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
-        self.encoded().is_valid(index)
+        self.encoded().with_dyn(|a| a.is_valid(index))
+    }
+
+    fn logical_validity(&self) -> LogicalValidity {
+        self.encoded().with_dyn(|a| a.logical_validity())
     }
 }
 
-#[derive(Debug)]
-pub struct ALPEncoding;
-
-impl ALPEncoding {
-    pub const ID: EncodingId = EncodingId::new("vortex.alp");
+impl ArrayFlatten for ALPArray<'_> {
+    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
+    where
+        Self: 'a,
+    {
+        decompress(self).map(Flattened::Primitive)
+    }
 }
 
-impl Encoding for ALPEncoding {
-    fn id(&self) -> EncodingId {
-        Self::ID
+impl AcceptArrayVisitor for ALPArray<'_> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_child("encoded", &self.encoded())?;
+        if self.patches().is_some() {
+            visitor.visit_child(
+                "patches",
+                &self.patches().expect("Expected patches to be present "),
+            )?;
+        }
+        Ok(())
     }
+}
 
-    fn compression(&self) -> Option<&dyn EncodingCompression> {
-        Some(self)
-    }
+impl ArrayStatisticsCompute for ALPArray<'_> {}
 
-    fn serde(&self) -> Option<&dyn EncodingSerde> {
-        Some(self)
+impl ArrayTrait for ALPArray<'_> {
+    fn len(&self) -> usize {
+        self.encoded().len()
     }
 }
