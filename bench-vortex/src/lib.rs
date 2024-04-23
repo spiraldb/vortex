@@ -20,6 +20,7 @@ use vortex_datetime_parts::DateTimePartsEncoding;
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
+use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
 
 use crate::data_downloads::FileType;
@@ -114,8 +115,8 @@ pub fn enumerate_arrays() -> Vec<EncodingRef> {
         &DateTimePartsEncoding,
         // &DeltaEncoding,  Blows up the search space too much.
         &REEEncoding,
-        //&RoaringBoolEncoding,
-        // RoaringIntEncoding,
+        &RoaringBoolEncoding,
+        // &RoaringIntEncoding,
         // Doesn't offer anything more than FoR really
         // ZigZagEncoding,
     ]
