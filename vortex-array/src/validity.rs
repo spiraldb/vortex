@@ -8,6 +8,7 @@ use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::compute::take::take;
+use crate::stats::{ArrayStatistics, Stat};
 use crate::{Array, ArrayData, IntoArray, IntoArrayData, OwnedArray, ToArray, ToArrayData};
 
 pub trait ArrayValidity {
@@ -115,13 +116,21 @@ impl<'v> Validity<'v> {
         }
     }
 
-    // TODO(ngates): into_logical
     pub fn to_logical(&self, length: usize) -> LogicalValidity {
         match self {
             Validity::NonNullable => LogicalValidity::AllValid(length),
             Validity::AllValid => LogicalValidity::AllValid(length),
             Validity::AllInvalid => LogicalValidity::AllInvalid(length),
-            Validity::Array(a) => LogicalValidity::Array(a.to_array_data()),
+            Validity::Array(a) => {
+                // Logical validity should map into AllValid/AllInvalid where possible.
+                if a.statistics().compute_as::<bool>(Stat::Min) == Some(true) {
+                    LogicalValidity::AllValid(length)
+                } else if a.statistics().compute_as::<bool>(Stat::Max) == Some(false) {
+                    LogicalValidity::AllInvalid(length)
+                } else {
+                    LogicalValidity::Array(a.to_array_data())
+                }
+            }
         }
     }
 
@@ -185,11 +194,11 @@ impl FromIterator<LogicalValidity> for OwnedValidity {
         let validities: Vec<LogicalValidity> = iter.into_iter().collect();
 
         // If they're all valid, then return a single validity.
-        if validities.iter().all(|v| v.is_all_valid()) {
+        if validities.iter().all(|v| v.all_valid()) {
             return Self::AllValid;
         }
         // If they're all invalid, then return a single invalidity.
-        if validities.iter().all(|v| v.is_all_invalid()) {
+        if validities.iter().all(|v| v.all_invalid()) {
             return Self::AllInvalid;
         }
 
@@ -242,11 +251,11 @@ impl LogicalValidity {
         }
     }
 
-    pub fn is_all_valid(&self) -> bool {
+    pub fn all_valid(&self) -> bool {
         matches!(self, LogicalValidity::AllValid(_))
     }
 
-    pub fn is_all_invalid(&self) -> bool {
+    pub fn all_invalid(&self) -> bool {
         matches!(self, LogicalValidity::AllInvalid(_))
     }
 

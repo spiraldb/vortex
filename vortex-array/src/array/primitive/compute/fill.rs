@@ -43,7 +43,7 @@ mod test {
             .into_array();
         let p = compute::fill::fill_forward(&arr).unwrap().into_primitive();
         assert_eq!(p.typed_data::<u8>(), vec![0, 8, 8, 10, 10]);
-        assert!(p.logical_validity().is_all_valid());
+        assert!(p.logical_validity().all_valid());
     }
 
     #[test]
@@ -54,7 +54,7 @@ mod test {
 
         let p = compute::fill::fill_forward(&arr).unwrap().into_primitive();
         assert_eq!(p.typed_data::<u8>(), vec![0, 0, 0, 0, 0]);
-        assert!(p.logical_validity().is_all_valid());
+        assert!(p.logical_validity().all_valid());
     }
 
     #[test]
@@ -66,6 +66,6 @@ mod test {
         .into_array();
         let p = compute::fill::fill_forward(&arr).unwrap().into_primitive();
         assert_eq!(p.typed_data::<u8>(), vec![8, 10, 12, 14, 16]);
-        assert!(p.logical_validity().is_all_valid());
+        assert!(p.logical_validity().all_valid());
     }
 }
