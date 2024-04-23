@@ -1,22 +1,22 @@
 use croaring::Bitmap;
-use vortex::array::bool::{BoolArray, BoolEncoding};
-use vortex::array::downcast::DowncastArrayBuiltin;
-use vortex::array::{Array, ArrayRef};
+use vortex::array::bool::BoolArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray};
 use vortex_error::VortexResult;
 use vortex_schema::DType;
 use vortex_schema::Nullability::NonNullable;
 
-use crate::boolean::{RoaringBoolArray, RoaringBoolEncoding};
+use crate::boolean::RoaringBoolArray;
+use crate::{OwnedRoaringBoolArray, RoaringBool, RoaringBoolEncoding};
 
 impl EncodingCompression for RoaringBoolEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &Array,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support bool enc arrays
-        if array.encoding().id() != BoolEncoding::ID {
+        if array.encoding().id() != RoaringBool::ID {
             return None;
         }
 
@@ -34,19 +34,19 @@ impl EncodingCompression for RoaringBoolEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        _like: Option<&dyn Array>,
+        array: &Array,
+        _like: Option<&Array>,
         _ctx: CompressCtx,
-    ) -> VortexResult<ArrayRef> {
-        Ok(roaring_encode(array.as_bool()).into_array())
+    ) -> VortexResult<OwnedArray> {
+        roaring_encode(array.clone().flatten_bool()?).map(move |a| a.into_array())
     }
 }
 
-pub fn roaring_encode(bool_array: &BoolArray) -> RoaringBoolArray {
+pub fn roaring_encode(bool_array: BoolArray) -> VortexResult<OwnedRoaringBoolArray> {
     let mut bitmap = Bitmap::new();
     bitmap.extend(
         bool_array
-            .buffer()
+            .boolean_buffer()
             .iter()
             .enumerate()
             .filter(|(_, b)| *b)
@@ -55,5 +55,5 @@ pub fn roaring_encode(bool_array: &BoolArray) -> RoaringBoolArray {
     bitmap.run_optimize();
     bitmap.shrink_to_fit();
 
-    RoaringBoolArray::new(bitmap, bool_array.buffer().len())
+    RoaringBoolArray::try_new(bitmap, bool_array.len())
 }
