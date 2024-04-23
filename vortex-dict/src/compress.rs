@@ -55,7 +55,7 @@ impl EncodingCompression for DictEncoding {
 
         let (codes, dict) = match array.encoding().id() {
             Primitive::ID => {
-                let p = PrimitiveArray::try_from(array).unwrap();
+                let p = PrimitiveArray::try_from(array)?;
                 let (codes, dict) = match_each_native_ptype!(p.ptype(), |$P| {
                     dict_encode_typed_primitive::<$P>(&p)
                 });

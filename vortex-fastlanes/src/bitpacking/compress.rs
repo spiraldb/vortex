@@ -56,7 +56,7 @@ impl EncodingCompression for BitPackedEncoding {
         like: Option<&Array>,
         ctx: CompressCtx,
     ) -> VortexResult<OwnedArray> {
-        let parray = PrimitiveArray::try_from(array).unwrap();
+        let parray = array.as_primitive();
         let bit_width_freq = parray
             .statistics()
             .compute_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)

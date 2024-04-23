@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{IntWidth, Nullability, Signedness};
 
-use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
@@ -20,6 +19,8 @@ mod compute;
 mod flatten;
 mod stats;
 pub use stats::compute_stats;
+
+use crate::array::primitive::PrimitiveArray;
 
 impl_encoding!("vortex.varbin", VarBin);
 
