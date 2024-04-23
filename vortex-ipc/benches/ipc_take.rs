@@ -29,34 +29,11 @@ fn ipc_take(c: &mut Criterion) {
             let mut cursor = Cursor::new(&buffer);
             let mut reader = StreamReader::try_new(&mut cursor).unwrap();
             let mut array_reader = reader.next().unwrap().unwrap();
-            let array_view = array_reader.next().unwrap().unwrap().into_array();
+            let array_view = array_reader.next().unwrap().unwrap();
             black_box(take(&array_view, &indices))
         });
     });
 }
-//
-// #[allow(dead_code)]
-// fn ipc_take_old(c: &mut Criterion) {
-//     // Try the old way of taking data.
-//     let arr = PrimitiveArray::from(vec![5; 3_000_000]);
-//     let indices = PrimitiveArray::from(vec![10, 11, 12, 13, 100_000, 2_999_999]);
-//
-//     let mut buffer = vec![];
-//     {
-//         let mut cursor = Cursor::new(&mut buffer);
-//         let mut ctx = WriteCtx::new(&mut cursor);
-//         arr.serde().unwrap().write(&mut ctx).unwrap();
-//     }
-//
-//     c.bench_function("take_old", |b| {
-//         b.iter(|| {
-//             let mut cursor = Cursor::new(&buffer);
-//             let mut ctx = ReadCtx::new(arr.dtype(), &mut cursor);
-//             let arr = ctx.read().unwrap();
-//             black_box(vortex::compute::take::take(arr.as_ref(), &indices).unwrap())
-//         });
-//     });
-// }
 
 criterion_group!(benches, ipc_take);
 criterion_main!(benches);
