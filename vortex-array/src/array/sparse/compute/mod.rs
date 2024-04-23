@@ -165,15 +165,11 @@ mod test {
             SparseArray::try_from(take(&sparse, &vec![0, 47, 47, 0, 99].into_array()).unwrap())
                 .unwrap();
         assert_eq!(
-            taken
-                .indices()
-                .into_primitive()
-                .unwrap()
-                .typed_data::<u64>(),
+            taken.indices().into_primitive().typed_data::<u64>(),
             [0, 1, 2, 3, 4]
         );
         assert_eq!(
-            taken.values().into_primitive().unwrap().typed_data::<f64>(),
+            taken.values().into_primitive().typed_data::<f64>(),
             [1.23f64, 9.99, 9.99, 1.23, 3.5]
         );
     }
@@ -185,13 +181,11 @@ mod test {
         assert!(taken
             .indices()
             .into_primitive()
-            .unwrap()
             .typed_data::<u64>()
             .is_empty());
         assert!(taken
             .values()
             .into_primitive()
-            .unwrap()
             .typed_data::<f64>()
             .is_empty());
     }
@@ -201,16 +195,9 @@ mod test {
         let sparse = sparse_array();
         let taken =
             SparseArray::try_from(take(&sparse, &vec![69, 37].into_array()).unwrap()).unwrap();
+        assert_eq!(taken.indices().into_primitive().typed_data::<u64>(), [1]);
         assert_eq!(
-            taken
-                .indices()
-                .into_primitive()
-                .unwrap()
-                .typed_data::<u64>(),
-            [1]
-        );
-        assert_eq!(
-            taken.values().into_primitive().unwrap().typed_data::<f64>(),
+            taken.values().into_primitive().typed_data::<f64>(),
             [0.47f64]
         );
         assert_eq!(taken.len(), 2);
@@ -236,24 +223,15 @@ mod test {
 
         let contiguous = SparseArray::try_from(as_contiguous(&taken).unwrap()).unwrap();
         assert_eq!(
-            contiguous
-                .indices()
-                .into_primitive()
-                .unwrap()
-                .typed_data::<u64>(),
+            contiguous.indices().into_primitive().typed_data::<u64>(),
             [0u64, 7, 7, 9] // relative offsets
         );
         assert_eq!(
-            contiguous
-                .values()
-                .into_primitive()
-                .unwrap()
-                .typed_data::<f64>(),
+            contiguous.values().into_primitive().typed_data::<f64>(),
             SparseArray::try_from(sparse)
                 .unwrap()
                 .values()
                 .into_primitive()
-                .unwrap()
                 .typed_data::<f64>()
         );
     }
@@ -265,11 +243,7 @@ mod test {
         let (positions, patch_indices) = take_map(&sparse, &indices).unwrap();
         assert_eq!(
             positions.typed_data::<u64>(),
-            sparse
-                .indices()
-                .into_primitive()
-                .unwrap()
-                .typed_data::<u64>()
+            sparse.indices().into_primitive().typed_data::<u64>()
         );
         assert_eq!(patch_indices.typed_data::<u64>(), [0u64, 1, 2, 3]);
     }

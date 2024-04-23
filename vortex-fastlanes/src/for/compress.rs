@@ -22,7 +22,7 @@ impl EncodingCompression for FoREncoding {
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
-        let parray = array.as_primitive()?;
+        let parray = PrimitiveArray::try_from(array).ok()?;
 
         // Only supports integers
         if !parray.ptype().is_int() {

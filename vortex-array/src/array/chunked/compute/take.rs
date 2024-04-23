@@ -75,8 +75,7 @@ mod test {
                 .collect_vec(),
         )
         .unwrap()
-        .into_primitive()
-        .unwrap();
+        .into_primitive();
         assert_eq!(result.typed_data::<i32>(), &[1, 1, 1, 2]);
     }
 }

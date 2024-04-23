@@ -20,6 +20,8 @@ mod flatten;
 mod stats;
 pub use stats::compute_stats;
 
+use crate::array::primitive::PrimitiveArray;
+
 impl_encoding!("vortex.varbin", VarBin);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,8 +133,8 @@ impl VarBinArray<'_> {
     }
 
     pub fn offset_at(&self, index: usize) -> usize {
-        self.offsets()
-            .into_primitive()
+        PrimitiveArray::try_from(self.offsets())
+            .ok()
             .map(|p| {
                 match_each_native_ptype!(p.ptype(), |$P| {
                     p.typed_data::<$P>()[index].as_()

@@ -51,8 +51,7 @@ mod test {
         let arr = vec![0u32, 10, 200].into_array();
         let p = compute::cast::cast(&arr, PType::U8.into())
             .unwrap()
-            .into_primitive()
-            .unwrap();
+            .into_primitive();
         assert_eq!(p.typed_data::<u8>(), vec![0u8, 10, 200]);
     }
 
@@ -61,8 +60,7 @@ mod test {
         let arr = vec![0u32, 10, 200].into_array();
         let u8arr = compute::cast::cast(&arr, PType::F32.into())
             .unwrap()
-            .into_primitive()
-            .unwrap();
+            .into_primitive();
         assert_eq!(u8arr.typed_data::<f32>(), vec![0.0f32, 10., 200.]);
     }
 
