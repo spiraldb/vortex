@@ -9,10 +9,6 @@ use vortex_error::VortexResult;
 use crate::RoaringBoolArray;
 
 impl ArrayCompute for RoaringBoolArray<'_> {
-    // fn flatten(&self) -> Option<&dyn FlattenFn> {
-    //     Some(self)
-    // }
-
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -21,27 +17,6 @@ impl ArrayCompute for RoaringBoolArray<'_> {
         Some(self)
     }
 }
-
-// impl FlattenFn for RoaringBoolArray {
-//     fn flatten(&self) -> VortexResult<FlattenedArray> {
-//         // TODO(ngates): benchmark the fastest conversion from BitMap.
-//         //  Via bitset requires two copies.
-//         let bitset = self
-//             .bitmap
-//             .to_bitset()
-//             .ok_or(vortex_err!("Failed to convert RoaringBitmap to Bitset"))?;
-//
-//         let bytes = &bitset.as_slice().as_bytes()[0..bitset.size_in_bytes()];
-//         let buffer = Buffer::from_slice_ref(bytes);
-//         Ok(FlattenedArray::Bool(BoolArray::new(
-//             BooleanBuffer::new(buffer, 0, bitset.size_in_bits()),
-//             match self.nullability() {
-//                 Nullability::NonNullable => None,
-//                 Nullability::Nullable => Some(Validity::Valid(self.len())),
-//             },
-//         )))
-//     }
-// }
 
 impl ScalarAtFn for RoaringBoolArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
