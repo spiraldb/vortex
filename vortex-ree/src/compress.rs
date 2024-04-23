@@ -45,7 +45,7 @@ impl EncodingCompression for REEEncoding {
     ) -> VortexResult<OwnedArray> {
         let ree_like = like.map(|like_arr| REEArray::try_from(like_arr).unwrap());
         let ree_like_ref = ree_like.as_ref();
-        let primitive_array = PrimitiveArray::try_from(array).unwrap();
+        let primitive_array = array.as_primitive().unwrap();
 
         let (ends, values) = ree_encode(&primitive_array);
         let compressed_ends = ctx
@@ -205,8 +205,8 @@ mod test {
         .unwrap();
 
         let decoded = ree_decode(
-            &PrimitiveArray::try_from(arr.ends()).unwrap(),
-            &PrimitiveArray::try_from(arr.values()).unwrap(),
+            &arr.ends().into_primitive().unwrap(),
+            &arr.values().into_primitive().unwrap(),
             arr.validity(),
             0,
             arr.len(),

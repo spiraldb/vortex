@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::{IntWidth, Nullability, Signedness};
 
-use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
@@ -132,8 +131,8 @@ impl VarBinArray<'_> {
     }
 
     pub fn offset_at(&self, index: usize) -> usize {
-        PrimitiveArray::try_from(self.offsets())
-            .ok()
+        self.offsets()
+            .into_primitive()
             .map(|p| {
                 match_each_native_ptype!(p.ptype(), |$P| {
                     p.typed_data::<$P>()[index].as_()

@@ -33,7 +33,7 @@ impl EncodingCompression for ALPEncoding {
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
-        let parray = PrimitiveArray::try_from(array).ok()?;
+        let parray = array.as_primitive()?;
 
         // Only supports f32 and f64
         if !matches!(parray.ptype(), PType::F32 | PType::F64) {
@@ -55,7 +55,7 @@ impl EncodingCompression for ALPEncoding {
             .map(|a| a.exponents().to_owned());
 
         // TODO(ngates): fill forward nulls
-        let parray = PrimitiveArray::try_from(array)?;
+        let parray = array.as_primitive().unwrap();
 
         let (exponents, encoded, patches) = match_each_alp_float_ptype!(
             parray.ptype(), |$T| {
@@ -167,7 +167,9 @@ mod tests {
         let encoded = alp_encode(&array).unwrap();
         assert!(encoded.patches().is_none());
         assert_eq!(
-            PrimitiveArray::try_from(encoded.encoded())
+            encoded
+                .encoded()
+                .into_primitive()
                 .unwrap()
                 .typed_data::<i32>(),
             vec![1234; 1025]
@@ -185,7 +187,9 @@ mod tests {
         println!("Encoded {:?}", encoded);
         assert!(encoded.patches().is_none());
         assert_eq!(
-            PrimitiveArray::try_from(encoded.encoded())
+            encoded
+                .encoded()
+                .into_primitive()
                 .unwrap()
                 .typed_data::<i32>(),
             vec![0, 1234, 0]
@@ -208,8 +212,7 @@ mod tests {
         assert_eq!(
             encoded
                 .encoded()
-                .clone()
-                .flatten_primitive()
+                .into_primitive()
                 .unwrap()
                 .typed_data::<i64>(),
             vec![1234i64, 2718, 2718, 4000] // fill forward

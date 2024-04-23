@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -56,8 +55,8 @@ impl ALPArray<'_> {
     }
 
     pub fn encode(array: Array<'_>) -> VortexResult<OwnedArray> {
-        if array.encoding().id() == Primitive::ID {
-            Ok(alp_encode(&PrimitiveArray::try_from(array)?)?.into_array())
+        if let Some(parray) = array.into_primitive() {
+            Ok(alp_encode(&parray)?.into_array())
         } else {
             vortex_bail!("ALP can only encode primitive arrays");
         }

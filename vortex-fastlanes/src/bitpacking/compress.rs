@@ -27,7 +27,7 @@ impl EncodingCompression for BitPackedEncoding {
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
-        let parray = PrimitiveArray::try_from(array).ok()?;
+        let parray = array.as_primitive().unwrap();
 
         // Only supports ints
         if !parray.ptype().is_int() {
@@ -55,7 +55,7 @@ impl EncodingCompression for BitPackedEncoding {
         like: Option<&Array>,
         ctx: CompressCtx,
     ) -> VortexResult<OwnedArray> {
-        let parray = PrimitiveArray::try_from(array).unwrap();
+        let parray = array.as_primitive().unwrap();
         let bit_width_freq = parray
             .statistics()
             .compute_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)

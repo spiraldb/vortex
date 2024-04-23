@@ -166,4 +166,14 @@ impl AcceptArrayVisitor for PrimitiveArray<'_> {
     }
 }
 
+impl<'a> Array<'a> {
+    pub fn into_primitive(self) -> Option<PrimitiveArray<'a>> {
+        PrimitiveArray::try_from(self).ok()
+    }
+
+    pub fn as_primitive(&'a self) -> Option<PrimitiveArray<'a>> {
+        PrimitiveArray::try_from(self).ok()
+    }
+}
+
 impl EncodingCompression for PrimitiveEncoding {}

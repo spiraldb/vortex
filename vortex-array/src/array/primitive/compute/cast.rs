@@ -43,22 +43,25 @@ fn cast<T: NativePType>(array: &PrimitiveArray) -> VortexResult<Vec<T>> {
 mod test {
     use vortex_error::VortexError;
 
-    use crate::array::primitive::PrimitiveArray;
     use crate::ptype::PType;
     use crate::{compute, IntoArray};
 
     #[test]
     fn cast_u32_u8() {
         let arr = vec![0u32, 10, 200].into_array();
-        let p =
-            PrimitiveArray::try_from(compute::cast::cast(&arr, PType::U8.into()).unwrap()).unwrap();
+        let p = compute::cast::cast(&arr, PType::U8.into())
+            .unwrap()
+            .into_primitive()
+            .unwrap();
         assert_eq!(p.typed_data::<u8>(), vec![0u8, 10, 200]);
     }
 
     #[test]
     fn cast_u32_f32() {
         let arr = vec![0u32, 10, 200].into_array();
-        let u8arr = PrimitiveArray::try_from(compute::cast::cast(&arr, PType::F32.into()).unwrap())
+        let u8arr = compute::cast::cast(&arr, PType::F32.into())
+            .unwrap()
+            .into_primitive()
             .unwrap();
         assert_eq!(u8arr.typed_data::<f32>(), vec![0.0f32, 10., 200.]);
     }
