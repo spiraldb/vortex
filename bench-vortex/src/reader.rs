@@ -40,7 +40,7 @@ pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
     let dtype = reader.dtype().clone();
     let mut chunks = vec![];
     while let Some(chunk) = reader.next()? {
-        chunks.push(chunk.into_array().to_static())
+        chunks.push(chunk.to_static())
     }
     Ok(ChunkedArray::try_new(chunks, dtype)?.into_array())
 }

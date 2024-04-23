@@ -41,8 +41,8 @@ mod tests {
 
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::r#struct::StructArray;
+    use vortex::SerdeContext;
     use vortex::{IntoArray, IntoArrayData};
-    use vortex::{SerdeContext, ToArray};
 
     use crate::iter::FallibleLendingIterator;
     use crate::reader::StreamReader;
@@ -84,7 +84,7 @@ mod tests {
             // Read some number of chunks from the stream.
             while let Some(chunk) = array_reader.next().unwrap() {
                 println!("VIEW: {:?}", &chunk);
-                let _data = chunk.to_array().into_array_data();
+                let _data = chunk.into_array_data();
                 // let taken = take(&chunk, &PrimitiveArray::from(vec![0, 3, 0, 1])).unwrap();
                 // let taken = taken.as_primitive().typed_data::<i32>();
                 // println!("Taken: {:?}", &taken);

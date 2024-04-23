@@ -6,8 +6,9 @@ use nougat::gat;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::composite::VORTEX_COMPOSITE_EXTENSIONS;
 use vortex::buffer::Buffer;
-use vortex::{Array, ArrayView, IntoArray, SerdeContext, ToArray, ToStatic};
-use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex::stats::{ArrayStatistics, Stat};
+use vortex::{Array, ArrayView, IntoArray, OwnedArray, SerdeContext, ToArray, ToStatic};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferReader, ReadFlatBuffer};
 use vortex_schema::{DType, DTypeSerdeContext};
 
@@ -20,11 +21,6 @@ pub struct StreamReader<R: Read> {
 
     pub(crate) ctx: SerdeContext,
     // Optionally take a projection?
-
-    // Use replace to swap the scratch buffer.
-    // std::mem::replace
-    // We could use a cell to avoid the need for mutable borrow.
-    scratch: Vec<u8>,
 }
 
 impl<R: Read> StreamReader<BufReader<R>> {
@@ -44,11 +40,7 @@ impl<R: Read> StreamReader<R> {
         )?;
         let ctx: SerdeContext = fb_ctx.try_into()?;
 
-        Ok(Self {
-            read,
-            ctx,
-            scratch: Vec::with_capacity(1024),
-        })
+        Ok(Self { read, ctx })
     }
 
     /// Read a single array from the IPC stream.
@@ -59,7 +51,7 @@ impl<R: Read> StreamReader<R> {
 
         let mut chunks = vec![];
         while let Some(chunk) = array_reader.next()? {
-            chunks.push(chunk.into_array().to_static());
+            chunks.push(chunk.to_static());
         }
 
         if chunks.len() == 1 {
@@ -71,14 +63,12 @@ impl<R: Read> StreamReader<R> {
     }
 }
 
-/// We implement a lending iterator here so that each StreamArrayChunkReader can be lent as
-/// mutable to the caller. This is necessary because we need a mutable handle to the reader.
 #[gat]
 impl<R: Read> FallibleLendingIterator for StreamReader<R> {
     type Error = VortexError;
-    type Item<'next> =  StreamArrayChunkReader<'next, R> where Self: 'next;
+    type Item<'next> =  StreamArrayReader<'next, R> where Self: 'next;
 
-    fn next(&mut self) -> Result<Option<StreamArrayChunkReader<'_, R>>, Self::Error> {
+    fn next(&mut self) -> Result<Option<StreamArrayReader<'_, R>>, Self::Error> {
         let mut fb_vec = Vec::new();
         let msg = self.read.read_message::<Message>(&mut fb_vec)?;
         if msg.is_none() {
@@ -104,7 +94,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
         .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
         // Figure out how many columns we have and therefore how many buffers there?
-        Ok(Some(StreamArrayChunkReader {
+        Ok(Some(StreamArrayReader {
             read: &mut self.read,
             ctx: &self.ctx,
             dtype,
@@ -115,7 +105,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
 }
 
 #[allow(dead_code)]
-pub struct StreamArrayChunkReader<'a, R: Read> {
+pub struct StreamArrayReader<'a, R: Read> {
     read: &'a mut R,
     ctx: &'a SerdeContext,
     dtype: DType,
@@ -123,18 +113,29 @@ pub struct StreamArrayChunkReader<'a, R: Read> {
     column_msg_buffer: Vec<u8>,
 }
 
-impl<'a, R: Read> StreamArrayChunkReader<'a, R> {
+impl<'a, R: Read> StreamArrayReader<'a, R> {
     pub fn dtype(&self) -> &DType {
         &self.dtype
+    }
+
+    pub fn take(&self, indices: &Array<'_>) -> VortexResult<OwnedArray> {
+        if !indices
+            .statistics()
+            .compute_as::<bool>(Stat::IsSorted)
+            .unwrap_or_default()
+        {
+            vortex_bail!("Indices must be sorted to take from IPC stream")
+        }
+        todo!()
     }
 }
 
 #[gat]
-impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R> {
+impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
     type Error = VortexError;
-    type Item<'next> = ArrayView<'next> where Self: 'next;
+    type Item<'next> = Array<'next> where Self: 'next;
 
-    fn next(&mut self) -> Result<Option<ArrayView<'_>>, Self::Error> {
+    fn next(&mut self) -> Result<Option<Array<'_>>, Self::Error> {
         self.column_msg_buffer.clear();
         let msg = self
             .read
@@ -189,6 +190,6 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayChunkReader<'iter, R
         // Validate it
         view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;
 
-        Ok(Some(view))
+        Ok(Some(view.into_array()))
     }
 }
