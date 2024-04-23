@@ -4,7 +4,6 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadat
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::Signedness;
 
 impl_encoding!("vortex.datetimeparts", DateTimeParts);
 
@@ -24,14 +23,14 @@ impl DateTimePartsArray<'_> {
         subsecond: Array,
         validity: Validity,
     ) -> VortexResult<Self> {
-        if !matches!(days.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
-            vortex_bail!(MismatchedTypes: "unsigned int", days.dtype());
+        if !matches!(days.dtype(), DType::Int(_, _, _)) {
+            vortex_bail!(MismatchedTypes: "any integer", days.dtype());
         }
-        if !matches!(seconds.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
-            vortex_bail!(MismatchedTypes: "unsigned int", seconds.dtype());
+        if !matches!(seconds.dtype(), DType::Int(_, _, _)) {
+            vortex_bail!(MismatchedTypes: "any integer", seconds.dtype());
         }
-        if !matches!(subsecond.dtype(), DType::Float(_, _)) {
-            vortex_bail!(MismatchedTypes: "float", subsecond.dtype());
+        if !matches!(subsecond.dtype(), DType::Int(_, _, _)) {
+            vortex_bail!(MismatchedTypes: "any integer", subsecond.dtype());
         }
 
         let length = days.len();
