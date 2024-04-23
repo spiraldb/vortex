@@ -109,7 +109,7 @@ impl AcceptArrayVisitor for ALPArray<'_> {
                 &self.patches().expect("Expected patches to be present "),
             )?;
         }
-        visitor.visit_validity(&self.logical_validity().into_validity())
+        Ok(())
     }
 }
 

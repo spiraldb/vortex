@@ -80,8 +80,8 @@ impl EncodingCompression for ALPEncoding {
 }
 
 fn encode_to_array<T>(
-    values: & PrimitiveArray,
-    exponents: Option<& Exponents>,
+    values: &PrimitiveArray,
+    exponents: Option<&Exponents>,
 ) -> (Exponents, OwnedArray, Option<OwnedArray>)
 where
     T: ALPFloat + NativePType,
