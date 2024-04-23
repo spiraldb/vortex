@@ -40,6 +40,7 @@ reqwest = { workspace = true }
 simplelog = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }
+vortex-alp = { path = "../vortex-alp" }
 vortex-array = { path = "../vortex-array" }
 vortex-datetime-parts = { path = "../vortex-datetime-parts" }
 vortex-dict = { path = "../vortex-dict" }
