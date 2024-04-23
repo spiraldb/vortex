@@ -5,7 +5,6 @@ use serde::ser::Error;
 use vortex_error::{VortexError, VortexResult};
 
 use crate::array::chunked::ChunkedArray;
-use crate::array::r#struct::StructArray;
 use crate::buffer::Buffer;
 use crate::visitor::ArrayVisitor;
 use crate::{Array, ToArrayData};
@@ -66,7 +65,7 @@ impl<'a, 'b: 'a> ArrayVisitor for TreeFormatter<'a, 'b> {
             })?;
 
             let old_total_size = self.total_size;
-            if ChunkedArray::try_from(array).is_ok() || StructArray::try_from(array).is_ok() {
+            if ChunkedArray::try_from(array).is_ok() {
                 // Clear the total size so each chunk is treated as a new root.
                 self.total_size = None
             } else {
