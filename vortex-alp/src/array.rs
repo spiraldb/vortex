@@ -25,7 +25,7 @@ impl ALPArray<'_> {
         exponents: Exponents,
         patches: Option<Array>,
     ) -> VortexResult<Self> {
-        let d_type = encoded.dtype().clone();
+        let encoded_dtype = encoded.dtype().clone();
         let dtype = match encoded.dtype() {
             DType::Int(IntWidth::_32, Signedness::Signed, nullability) => {
                 DType::Float(32.into(), *nullability)
@@ -38,16 +38,17 @@ impl ALPArray<'_> {
 
         let mut children = Vec::with_capacity(2);
         children.push(encoded.into_array_data());
-        patches.iter().for_each(|patch| {
+
+        if let Some(ref patch) = patches {
             children.push(patch.to_array_data());
-        });
+        }
 
         Self::try_from_parts(
             dtype,
             ALPMetadata {
                 exponents,
                 has_patches: patches.is_some(),
-                encoded_dtype: d_type,
+                encoded_dtype,
             },
             children.into(),
             Default::default(),
