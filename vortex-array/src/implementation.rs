@@ -200,7 +200,6 @@ impl<T: AsArray> ArrayDType for T {
     fn dtype(&self) -> &DType {
         match self.as_array_ref() {
             Array::Data(d) => d.dtype(),
-            Array::DataRef(d) => d.dtype(),
             Array::View(v) => v.dtype(),
         }
     }
@@ -210,7 +209,6 @@ impl<T: AsArray> ArrayStatistics for T {
     fn statistics(&self) -> &(dyn Statistics + '_) {
         match self.as_array_ref() {
             Array::Data(d) => d.statistics(),
-            Array::DataRef(d) => d.statistics(),
             Array::View(v) => v.statistics(),
         }
     }
@@ -226,7 +224,6 @@ impl<'a, T: IntoArray<'a> + ArrayEncodingRef + ArrayStatistics + GetArrayMetadat
         let array = self.into_array();
         match array {
             Array::Data(d) => d,
-            Array::DataRef(d) => d.clone(),
             Array::View(_) => {
                 struct Visitor {
                     buffer: Option<OwnedBuffer>,

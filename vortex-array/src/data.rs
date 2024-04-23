@@ -14,7 +14,7 @@ use crate::{Array, ArrayMetadata, IntoArray, ToArray};
 #[derive(Clone, Debug)]
 pub struct ArrayData {
     encoding: EncodingRef,
-    dtype: DType,
+    dtype: DType, // FIXME(ngates): Arc?
     metadata: Arc<dyn ArrayMetadata>,
     buffer: Option<OwnedBuffer>,
     children: Arc<[ArrayData]>,
@@ -129,7 +129,7 @@ impl<'a> Iterator for ArrayDataIterator<'a> {
 
 impl ToArray for ArrayData {
     fn to_array(&self) -> Array {
-        Array::DataRef(self)
+        Array::Data(self.clone())
     }
 }
 

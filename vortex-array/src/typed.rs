@@ -59,12 +59,6 @@ impl<'a, D: ArrayDef> TryFrom<Array<'a>> for TypedArray<'a, D> {
                 .downcast_ref::<D::Metadata>()
                 .unwrap()
                 .clone(),
-            Array::DataRef(d) => d
-                .metadata()
-                .as_any()
-                .downcast_ref::<D::Metadata>()
-                .unwrap()
-                .clone(),
             Array::View(v) => D::Metadata::try_deserialize_metadata(v.metadata())?,
         };
         Ok(TypedArray { array, metadata })

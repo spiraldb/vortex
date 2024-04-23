@@ -73,7 +73,6 @@ pub mod flatbuffers {
 #[derive(Debug, Clone)]
 pub enum Array<'v> {
     Data(ArrayData),
-    DataRef(&'v ArrayData),
     View(ArrayView<'v>),
 }
 
@@ -83,7 +82,6 @@ impl Array<'_> {
     pub fn encoding(&self) -> EncodingRef {
         match self {
             Array::Data(d) => d.encoding(),
-            Array::DataRef(d) => d.encoding(),
             Array::View(v) => v.encoding(),
         }
     }
@@ -102,8 +100,7 @@ impl Array<'_> {
 
     pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array<'a>> {
         match self {
-            Array::Data(d) => d.child(idx, dtype).map(Array::DataRef),
-            Array::DataRef(d) => d.child(idx, dtype).map(Array::DataRef),
+            Array::Data(d) => d.child(idx, dtype).cloned().map(Array::Data),
             Array::View(v) => v.child(idx, dtype).map(Array::View),
         }
     }
@@ -111,7 +108,6 @@ impl Array<'_> {
     pub fn buffer(&self) -> Option<&Buffer> {
         match self {
             Array::Data(d) => d.buffer(),
-            Array::DataRef(d) => d.buffer(),
             Array::View(v) => v.buffer(),
         }
     }
@@ -121,7 +117,6 @@ impl<'a> Array<'a> {
     pub fn into_buffer(self) -> Option<Buffer<'a>> {
         match self {
             Array::Data(d) => d.into_buffer(),
-            Array::DataRef(d) => d.buffer().cloned(),
             Array::View(v) => v.buffer().map(|b| b.to_static()),
         }
     }
@@ -228,7 +223,6 @@ impl Display for Array<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let prefix = match self {
             Array::Data(_) => "",
-            Array::DataRef(_) => "&",
             Array::View(_) => "$",
         };
         write!(
@@ -246,7 +240,6 @@ impl IntoArrayData for Array<'_> {
     fn into_array_data(self) -> ArrayData {
         match self {
             Array::Data(d) => d,
-            Array::DataRef(d) => d.clone(),
             Array::View(_) => self.with_dyn(|a| a.to_array_data()),
         }
     }
