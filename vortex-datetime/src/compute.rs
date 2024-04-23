@@ -1,14 +1,12 @@
-use vortex::array::{Array, ArrayRef};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::validity::OwnedValidity;
-use vortex::view::ToOwnedView;
+use vortex::{Array, ArrayDType, IntoArray, OwnedArray};
 use vortex_error::VortexResult;
 
-use crate::DateTimeArray;
+use crate::DateTimePartsArray;
 
-impl ArrayCompute for DateTimeArray {
+impl ArrayCompute for DateTimePartsArray<'_> {
     fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
@@ -18,28 +16,28 @@ impl ArrayCompute for DateTimeArray {
     }
 }
 
-impl TakeFn for DateTimeArray {
-    fn take(&self, indices: &dyn Array) -> VortexResult<ArrayRef> {
-        Ok(DateTimeArray::new(
-            take(self.days(), indices)?,
-            take(self.seconds(), indices)?,
-            take(self.subsecond(), indices)?,
-            self.validity().to_owned_view(),
+impl TakeFn for DateTimePartsArray<'_> {
+    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+        Ok(DateTimePartsArray::try_new(
             self.dtype().clone(),
-        )
+            take(&self.days(), indices)?,
+            take(&self.seconds(), indices)?,
+            take(&self.subsecond(), indices)?,
+            self.validity(),
+        )?
         .into_array())
     }
 }
 
-impl SliceFn for DateTimeArray {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<ArrayRef> {
-        Ok(DateTimeArray::new(
-            slice(self.days(), start, stop)?,
-            slice(self.seconds(), start, stop)?,
-            slice(self.subsecond(), start, stop)?,
-            self.validity().map(|v| v.slice(start, stop)).transpose()?,
+impl SliceFn for DateTimePartsArray<'_> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+        Ok(DateTimePartsArray::try_new(
             self.dtype().clone(),
-        )
+            slice(&self.days(), start, stop)?,
+            slice(&self.seconds(), start, stop)?,
+            slice(&self.subsecond(), start, stop)?,
+            self.validity().slice(start, stop)?,
+        )?
         .into_array())
     }
 }

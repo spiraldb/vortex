@@ -17,11 +17,13 @@ pub mod stats;
 mod tree;
 mod typed;
 pub mod validity;
+pub mod vendored;
 mod view;
 pub mod visitor;
 
 use std::fmt::{Debug, Display, Formatter};
 
+pub use ::paste;
 pub use context::*;
 pub use data::*;
 pub use flatten::*;

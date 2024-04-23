@@ -15,6 +15,7 @@ use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
 use vortex::encoding::{EncodingRef, VORTEX_ENCODINGS};
 use vortex::{IntoArray, OwnedArray, ToArrayData};
+use vortex_datetime::DateTimePartsEncoding;
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
@@ -109,7 +110,7 @@ pub fn enumerate_arrays() -> Vec<EncodingRef> {
         &DictEncoding,
         &BitPackedEncoding,
         &FoREncoding,
-        //&DateTimeEncoding,
+        &DateTimePartsEncoding,
         // &DeltaEncoding,  Blows up the search space too much.
         &REEEncoding,
         //&RoaringBoolEncoding,

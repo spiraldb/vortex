@@ -1,28 +1,25 @@
-use vortex::array::composite::CompositeEncoding;
-use vortex::array::downcast::DowncastArrayBuiltin;
+use vortex::array::composite::{Composite, CompositeArray};
+use vortex::array::datetime::{LocalDateTimeArray, LocalDateTimeExtension, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
-use vortex::compute::flatten::flatten_primitive;
-use vortex::datetime::{LocalDateTime, LocalDateTimeArray, LocalDateTimeExtension, TimeUnit};
 use vortex::ptype::PType;
-use vortex::validity::OwnedValidity;
+use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray};
 use vortex_error::VortexResult;
 
-use crate::{DateTimeArray, DateTimeEncoding};
+use crate::{DateTimePartsArray, DateTimePartsEncoding};
 
-impl EncodingCompression for DateTimeEncoding {
+impl EncodingCompression for DateTimePartsEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &Array,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
-        if array.encoding().id() != CompositeEncoding::ID {
+        if array.encoding().id() != Composite::ID {
             return None;
         }
 
-        let composite = array.as_composite();
+        let composite = CompositeArray::try_from(array).unwrap();
         if !matches!(composite.id(), LocalDateTimeExtension::ID) {
             return None;
         }
@@ -32,15 +29,17 @@ impl EncodingCompression for DateTimeEncoding {
 
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &Array,
+        like: Option<&Array>,
         ctx: CompressCtx,
-    ) -> VortexResult<ArrayRef> {
-        let array = array.as_composite();
+    ) -> VortexResult<OwnedArray> {
+        let array = CompositeArray::try_from(array)?;
         match array.id() {
             LocalDateTimeExtension::ID => compress_localdatetime(
-                array.as_typed::<LocalDateTime>(),
-                like.map(|l| l.as_any().downcast_ref::<DateTimeArray>().unwrap()),
+                array
+                    .as_typed()
+                    .expect("Can only compress LocalDateTimeArray"),
+                like.map(|l| DateTimePartsArray::try_from(l).unwrap()),
                 ctx,
             ),
             _ => panic!("Unsupported composite ID {}", array.id()),
@@ -50,21 +49,22 @@ impl EncodingCompression for DateTimeEncoding {
 
 fn compress_localdatetime(
     array: LocalDateTimeArray,
-    like: Option<&DateTimeArray>,
+    like: Option<DateTimePartsArray>,
     ctx: CompressCtx,
-) -> VortexResult<ArrayRef> {
-    let underlying = flatten_primitive(cast(array.underlying(), PType::I64.into())?.as_ref())?;
+) -> VortexResult<OwnedArray> {
+    let underlying = cast(&array.underlying(), PType::I64.into())?.flatten_primitive()?;
 
-    let divisor = match array.metadata().time_unit() {
+    let divisor = match array.underlying_metadata().time_unit() {
         TimeUnit::Ns => 1_000_000_000,
         TimeUnit::Us => 1_000_000,
         TimeUnit::Ms => 1_000,
         TimeUnit::S => 1,
     };
 
-    let mut days = Vec::with_capacity(underlying.len());
-    let mut seconds = Vec::with_capacity(underlying.len());
-    let mut subsecond = Vec::with_capacity(underlying.len());
+    let length = underlying.len();
+    let mut days = Vec::with_capacity(length);
+    let mut seconds = Vec::with_capacity(length);
+    let mut subsecond = Vec::with_capacity(length);
 
     for &t in underlying.typed_data::<i64>().iter() {
         days.push(t / (86_400 * divisor));
@@ -72,17 +72,21 @@ fn compress_localdatetime(
         subsecond.push((t % (86_400 * divisor)) % divisor);
     }
 
-    Ok(DateTimeArray::new(
-        ctx.named("days")
-            .compress(&PrimitiveArray::from(days), like.map(|l| l.days()))?,
-        ctx.named("seconds")
-            .compress(&PrimitiveArray::from(seconds), like.map(|l| l.seconds()))?,
+    Ok(DateTimePartsArray::try_new(
+        LocalDateTimeExtension::dtype(underlying.dtype().nullability()),
+        ctx.named("days").compress(
+            &PrimitiveArray::from(days).into_array(),
+            like.as_ref().map(|l| l.days()).as_ref(),
+        )?,
+        ctx.named("seconds").compress(
+            &PrimitiveArray::from(seconds).into_array(),
+            like.as_ref().map(|l| l.seconds()).as_ref(),
+        )?,
         ctx.named("subsecond").compress(
-            &PrimitiveArray::from(subsecond),
-            like.map(|l| l.subsecond()),
+            &PrimitiveArray::from(subsecond).into_array(),
+            like.as_ref().map(|l| l.subsecond()).as_ref(),
         )?,
         ctx.compress_validity(underlying.validity())?,
-        LocalDateTimeExtension::dtype(underlying.validity().is_some().into()),
-    )
+    )?
     .into_array())
 }

@@ -1,11 +1,5 @@
-pub use datetime::*;
-use linkme::distributed_slice;
-use vortex::encoding::{EncodingRef, ENCODINGS};
+pub use array::*;
 
+mod array;
 mod compress;
 mod compute;
-mod datetime;
-mod serde;
-
-#[distributed_slice(ENCODINGS)]
-static ENCODINGS_DATETIME: EncodingRef = &DateTimeEncoding;

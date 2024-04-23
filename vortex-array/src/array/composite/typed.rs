@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use vortex_error::VortexResult;
+use vortex_error::{VortexError, VortexResult};
 use vortex_schema::CompositeID;
 use vortex_schema::DType;
 
@@ -59,6 +59,14 @@ impl<'a, M: UnderlyingMetadata> TypedCompositeArray<'a, M> {
             self.underlying_metadata().try_serialize_metadata()?,
             self.underlying().clone(),
         ))
+    }
+}
+
+impl<'a, M: UnderlyingMetadata> TryFrom<&'a CompositeArray<'a>> for TypedCompositeArray<'a, M> {
+    type Error = VortexError;
+
+    fn try_from(value: &'a CompositeArray<'a>) -> Result<Self, Self::Error> {
+        value.as_typed::<M>()
     }
 }
 
