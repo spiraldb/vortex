@@ -8,7 +8,7 @@ use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, match_each_integer_ptype, ArrayDType, IntoArrayData, ToArrayData};
 
-// mod compress;
+mod compress;
 mod compute;
 mod flatten;
 
@@ -168,8 +168,6 @@ impl ArrayValidity for SparseArray<'_> {
         LogicalValidity::Array(validity.into_array_data())
     }
 }
-
-impl EncodingCompression for SparseEncoding {}
 
 #[cfg(test)]
 mod test {

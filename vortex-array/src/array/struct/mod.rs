@@ -111,7 +111,7 @@ impl AcceptArrayVisitor for StructArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         for (idx, name) in self.names().iter().enumerate() {
             let child = self.child(idx).unwrap();
-            visitor.visit_child(name, &child)?;
+            visitor.visit_child(&format!("\"{}\"", name), &child)?;
         }
         Ok(())
     }
