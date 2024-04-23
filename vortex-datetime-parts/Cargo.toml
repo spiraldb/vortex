@@ -1,5 +1,5 @@
 [package]
-name = "vortex-datetime"
+name = "vortex-datetime-parts"
 version = "0.1.0"
 edition = "2021"
 

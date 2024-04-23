@@ -1148,7 +1148,7 @@ dependencies = [
  "tokio",
  "uuid",
  "vortex-array",
- "vortex-datetime",
+ "vortex-datetime-parts",
  "vortex-dict",
  "vortex-error",
  "vortex-fastlanes",
@@ -5600,7 +5600,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vortex-datetime"
+name = "vortex-datetime-parts"
 version = "0.1.0"
 dependencies = [
  "linkme",
