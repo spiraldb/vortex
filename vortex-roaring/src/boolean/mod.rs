@@ -22,15 +22,13 @@ impl_encoding!("vortex.roaring_bool", RoaringBool);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoaringBoolMetadata {
-    // NB: this is stored because we want to avoid the overhead of deserializing the bitmap
-    // on every len() call. It's CRITICAL that this is kept up-to date.
     length: usize,
 }
 
 impl RoaringBoolArray<'_> {
     pub fn try_new(bitmap: Bitmap, length: usize) -> VortexResult<Self> {
-        if length > bitmap.cardinality() as usize {
-            vortex_bail!("RoaringBoolArray length is greater than bitmap cardinality")
+        if length < bitmap.cardinality() as usize {
+            vortex_bail!("RoaringBoolArray length is less than bitmap cardinality")
         } else {
             Ok(Self {
                 typed: TypedArray::try_from_parts(
@@ -64,6 +62,10 @@ impl RoaringBoolArray<'_> {
 }
 impl AcceptArrayVisitor for RoaringBoolArray<'_> {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        // TODO(ngates): should we store a buffer in memory? Or delay serialization?
+        //  Or serialize into metadata? The only reason we support buffers is so we can write to
+        //  the wire without copying into FlatBuffers. But if we need to allocate to serialize
+        //  the bitmap anyway, then may as well shove it into metadata.
         todo!()
     }
 }

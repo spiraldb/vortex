@@ -19,6 +19,8 @@ impl_encoding!("vortex.roaring_int", RoaringInt);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoaringIntMetadata {
     ptype: PType,
+    // NB: this is stored because we want to avoid the overhead of deserializing the bitmap
+    // on every len() call. It's CRITICAL that this is kept up-to date.
     length: usize,
 }
 

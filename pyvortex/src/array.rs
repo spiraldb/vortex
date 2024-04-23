@@ -28,7 +28,6 @@ use vortex_roaring::{
     RoaringBoolEncoding, RoaringInt, RoaringIntArray, RoaringIntEncoding,
 };
 
-
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
 use crate::vortex_arrow;
