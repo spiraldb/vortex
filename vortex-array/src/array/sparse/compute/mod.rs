@@ -146,12 +146,14 @@ mod test {
     use crate::compute::slice::slice;
     use crate::compute::take::take;
     use crate::scalar::Scalar;
+    use crate::validity::Validity;
     use crate::{ArrayTrait, IntoArray, OwnedArray};
 
     fn sparse_array() -> OwnedArray {
         SparseArray::new(
             PrimitiveArray::from(vec![0u64, 37, 47, 99]).into_array(),
-            PrimitiveArray::from(vec![1.23f64, 0.47, 9.99, 3.5]).into_array(),
+            PrimitiveArray::from_vec(vec![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid)
+                .into_array(),
             100,
             Scalar::null(&DType::Float(FloatWidth::_64, Nullability::Nullable)),
         )

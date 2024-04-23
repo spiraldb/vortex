@@ -181,6 +181,7 @@ mod test {
 
     use crate::accessor::ArrayAccessor;
     use crate::array::sparse::SparseArray;
+    use crate::compute::cast::cast;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
     use crate::scalar::Scalar;
@@ -197,13 +198,10 @@ mod test {
 
     fn sparse_array(fill_value: Scalar) -> OwnedArray {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
-        SparseArray::new(
-            vec![2u64, 5, 8].into_array(),
-            vec![100i32, 200, 300].into_array(),
-            10,
-            fill_value,
-        )
-        .into_array()
+        let mut values = vec![100i32, 200, 300].into_array();
+        values = cast(&values, fill_value.dtype()).unwrap();
+
+        SparseArray::new(vec![2u64, 5, 8].into_array(), values, 10, fill_value).into_array()
     }
 
     fn assert_sparse_array(sparse: &Array, values: &[Option<i32>]) {

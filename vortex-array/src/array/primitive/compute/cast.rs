@@ -3,18 +3,26 @@ use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::cast::CastFn;
-use crate::match_each_native_ptype;
 use crate::ptype::{NativePType, PType};
-use crate::{IntoArray, OwnedArray, ToArrayData};
+use crate::validity::Validity;
+use crate::{match_each_native_ptype, ArrayDType};
+use crate::{IntoArray, OwnedArray};
 
 impl CastFn for PrimitiveArray<'_> {
     fn cast(&self, dtype: &DType) -> VortexResult<OwnedArray> {
-        // TODO(ngates): check validity
         let ptype = PType::try_from(dtype)?;
-        if ptype == self.ptype() {
-            return Ok(self.to_array_data().into_array());
+
+        // Short-cut if we can just change the nullability
+        if self.ptype() == ptype && !self.dtype().is_nullable() && dtype.is_nullable() {
+            match_each_native_ptype!(self.ptype(), |$T| {
+                return Ok(
+                    PrimitiveArray::try_new(self.scalar_buffer::<$T>(), Validity::AllValid)?
+                        .into_array(),
+                );
+            })
         }
 
+        // FIXME(ngates): #260 - check validity and nullability
         match_each_native_ptype!(ptype, |$T| {
             Ok(PrimitiveArray::from_vec(
                 cast::<$T>(self)?,

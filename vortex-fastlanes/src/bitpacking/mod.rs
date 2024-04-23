@@ -67,7 +67,7 @@ impl BitPackedArray<'_> {
 
         let metadata = BitPackedMetadata {
             validity: validity.to_metadata(length)?,
-            patches_dtype: patches.as_ref().map(|p| p.dtype().clone()),
+            patches_dtype: patches.as_ref().map(|p| p.dtype().as_nullable()),
             offset,
             length,
             bit_width,

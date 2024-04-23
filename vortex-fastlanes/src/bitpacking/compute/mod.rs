@@ -186,7 +186,6 @@ mod test {
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::take::take;
     use vortex::encoding::EncodingRef;
-    use vortex::scalar::Scalar;
     use vortex::{ArrayDef, IntoArray};
 
     use crate::{BitPackedArray, BitPackedEncoding};
@@ -243,12 +242,12 @@ mod test {
             .enumerate()
             .for_each(|(ti, i)| {
                 assert_eq!(
-                    scalar_at(packed.array(), *i as usize).unwrap(),
-                    Scalar::from(values[*i as usize])
+                    u32::try_from(scalar_at(packed.array(), *i as usize).unwrap()).unwrap(),
+                    values[*i as usize]
                 );
                 assert_eq!(
-                    scalar_at(&taken, ti).unwrap(),
-                    Scalar::from(values[*i as usize])
+                    u32::try_from(scalar_at(&taken, ti).unwrap()).unwrap(),
+                    values[*i as usize]
                 );
             });
     }
@@ -270,7 +269,10 @@ mod test {
         assert_eq!(patches.resolved_indices(), vec![256]);
 
         values.iter().enumerate().for_each(|(i, v)| {
-            assert_eq!(scalar_at(packed.array(), i).unwrap(), Scalar::from(*v));
+            assert_eq!(
+                u32::try_from(scalar_at(packed.array(), i).unwrap()).unwrap(),
+                *v
+            );
         });
     }
 }

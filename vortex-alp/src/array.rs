@@ -15,8 +15,8 @@ impl_encoding!("vortex.alp", ALP);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ALPMetadata {
     exponents: Exponents,
-    has_patches: bool,
     encoded_dtype: DType,
+    patches_dtype: Option<DType>,
 }
 
 impl ALPArray<'_> {
@@ -38,7 +38,6 @@ impl ALPArray<'_> {
 
         let mut children = Vec::with_capacity(2);
         children.push(encoded.into_array_data());
-
         if let Some(ref patch) = patches {
             children.push(patch.to_array_data());
         }
@@ -47,8 +46,8 @@ impl ALPArray<'_> {
             dtype,
             ALPMetadata {
                 exponents,
-                has_patches: patches.is_some(),
                 encoded_dtype,
+                patches_dtype: patches.map(|a| a.dtype().as_nullable()),
             },
             children.into(),
             Default::default(),
@@ -74,9 +73,9 @@ impl ALPArray<'_> {
     }
 
     pub fn patches(&self) -> Option<Array> {
-        self.metadata().has_patches.then(|| {
+        self.metadata().patches_dtype.as_ref().map(|dt| {
             self.array()
-                .child(1, self.dtype())
+                .child(1, dt)
                 .expect("Missing patches with present metadata flag")
         })
     }
