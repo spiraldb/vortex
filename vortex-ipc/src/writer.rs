@@ -39,11 +39,7 @@ impl<W: Write> StreamWriter<W> {
                 Ok(())
             }
             Err(_) => self.write_batch(array),
-        }?;
-        // TODO(ngates): rewrite the reader logic to avoid a terminator for each array, instead
-        //  just write one terminator at the end of the stream. This can be done by sharing a
-        //  message buffer between the StreamReader and StreamArrayReader.
-        self.finish_array()
+        }
     }
 
     pub fn write_schema(&mut self, dtype: &DType) -> VortexResult<()> {
@@ -87,7 +83,7 @@ impl<W: Write> StreamWriter<W> {
 
 impl<W: Write> Drop for StreamWriter<W> {
     fn drop(&mut self) {
-        // Terminate the stream with an empty message length.
-        let _ = self.finish_array();
+        // Terminate the stream
+        let _ = self.write.write_all(&[u8::MAX; 4]);
     }
 }
