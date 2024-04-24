@@ -56,7 +56,7 @@ impl<R: Read> FlatBufferReader for R {
         }
         let msg_size = u32::from_le_bytes(msg_size) as u64;
         if msg_size == 0 {
-            // FIXME(ngates): I think this is wrong.
+            // Signifies the end of a stream of messages. For example, the end of an Array.
             return Ok(None);
         }
         self.take(msg_size).read_to_end(buffer)?;

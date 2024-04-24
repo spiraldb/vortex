@@ -22,6 +22,7 @@ fn ipc_take(c: &mut Criterion) {
         let mut cursor = Cursor::new(&mut buffer);
         let mut writer = StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
         writer.write_array(&data).unwrap();
+        writer.write_array(&data).unwrap();
     }
 
     c.bench_function("take_view", |b| {
@@ -29,8 +30,9 @@ fn ipc_take(c: &mut Criterion) {
             let mut cursor = Cursor::new(&buffer);
             let mut reader = StreamReader::try_new(&mut cursor).unwrap();
             let mut array_reader = reader.next().unwrap().unwrap();
-            let array_view = array_reader.next().unwrap().unwrap();
-            black_box(take(&array_view, &indices))
+            while let Some(array_chunk) = array_reader.next().unwrap() {
+                black_box(take(&array_chunk, &indices).unwrap());
+            }
         });
     });
 }
