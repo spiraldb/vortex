@@ -33,6 +33,8 @@ fn ipc_take(c: &mut Criterion) {
             while let Some(array_chunk) = array_reader.next().unwrap() {
                 black_box(take(&array_chunk, &indices).unwrap());
             }
+            assert!(reader.next().unwrap().is_some());
+            assert!(reader.next().unwrap().is_none());
         });
     });
 }
