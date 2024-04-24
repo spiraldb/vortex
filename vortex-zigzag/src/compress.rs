@@ -1,26 +1,25 @@
-use vortex::array::downcast::DowncastArrayBuiltin;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::{Array, ArrayKind, ArrayRef};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
-use vortex::stats::Stat;
-use vortex::validity::{OwnedValidity, ValidityView};
-use vortex::view::ToOwnedView;
+use vortex::stats::{ArrayStatistics, Stat};
+use vortex::validity::Validity;
+use vortex::{Array, ArrayDef, AsArray, IntoArray, OwnedArray, ToStatic};
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 use vortex_error::VortexResult;
-use zigzag::ZigZag;
+use zigzag::ZigZag as ExternalZigZag;
 
-use crate::downcast::DowncastZigzag;
-use crate::zigzag::{ZigZagArray, ZigZagEncoding};
+use crate::{OwnedZigZagArray, ZigZag, ZigZagEncoding};
+
+// use crate::zigzag::{ZigZagArray, ZigZagEncoding};
 
 impl EncodingCompression for ZigZagEncoding {
     fn can_compress(
         &self,
-        array: &dyn Array,
+        array: &Array,
         _config: &CompressConfig,
     ) -> Option<&dyn EncodingCompression> {
         // Only support primitive arrays
-        let parray = array.maybe_primitive()?;
+        let parray = array.as_primitive();
 
         // Only supports signed integers
         if !parray.ptype().is_signed_int() {
@@ -30,87 +29,100 @@ impl EncodingCompression for ZigZagEncoding {
         // Only compress if the array has negative values
         // TODO(ngates): also check that Stat::Max is less than half the max value of the type
         parray
-            .stats()
-            .get_or_compute_cast::<i64>(&Stat::Min)
+            .statistics()
+            .compute_as::<i64>(Stat::Min)
             .filter(|&min| min < 0)
             .map(|_| self as &dyn EncodingCompression)
     }
 
+    #[allow(unused_variables)]
     fn compress(
         &self,
-        array: &dyn Array,
-        like: Option<&dyn Array>,
+        array: &Array,
+        like: Option<&Array>,
         ctx: CompressCtx,
-    ) -> VortexResult<ArrayRef> {
-        let zigzag_like = like.map(|like_arr| like_arr.as_zigzag());
-        let encoded = match ArrayKind::from(array) {
-            ArrayKind::Primitive(p) => zigzag_encode(p),
-            _ => unreachable!("This array kind should have been filtered out"),
-        }
-        .unwrap();
+    ) -> VortexResult<OwnedArray> {
+        let zigzag_like = like.map(|like_arr| like_arr.as_array_ref());
 
-        Ok(
-            ZigZagArray::new(ctx.compress(encoded.encoded(), zigzag_like.map(|z| z.encoded()))?)
-                .into_array(),
-        )
+        if array.encoding().id() == ZigZag::ID {
+            return Ok(array.clone().to_static());
+        }
+        let encoded = if array.encoding().id() == ZigZag::ID {
+            zigzag_encode(&array.as_primitive())?
+        } else {
+            unreachable!("This array kind should have been filtered out")
+        };
+
+        // Ok(
+        //     OwnedZigZagArray::new(ctx.compress(array, zigzag_like).map(|a| a.into_array()))
+        // )
+        Ok(OwnedZigZagArray::new(ctx.compress(&encoded.encoded(), zigzag_like)?).into_array())
     }
 }
 
-pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
+pub fn zigzag_encode(parray: &PrimitiveArray<'_>) -> VortexResult<OwnedZigZagArray> {
     let encoded = match parray.ptype() {
-        PType::I8 => zigzag_encode_primitive::<i8>(parray.buffer().typed_data(), parray.validity()),
+        PType::I8 => {
+            zigzag_encode_primitive::<i8>(parray.buffer().typed_data(), Some(parray.validity()))
+        }
         PType::I16 => {
-            zigzag_encode_primitive::<i16>(parray.buffer().typed_data(), parray.validity())
+            zigzag_encode_primitive::<i16>(parray.buffer().typed_data(), Some(parray.validity()))
         }
         PType::I32 => {
-            zigzag_encode_primitive::<i32>(parray.buffer().typed_data(), parray.validity())
+            zigzag_encode_primitive::<i32>(parray.buffer().typed_data(), Some(parray.validity()))
         }
         PType::I64 => {
-            zigzag_encode_primitive::<i64>(parray.buffer().typed_data(), parray.validity())
+            zigzag_encode_primitive::<i64>(parray.buffer().typed_data(), Some(parray.validity()))
         }
         _ => panic!("Unsupported ptype {}", parray.ptype()),
     };
-    ZigZagArray::try_new(encoded.into_array())
+    OwnedZigZagArray::try_new(encoded.into_array())
 }
 
-fn zigzag_encode_primitive<T: ZigZag + NativePType>(
-    values: &[T],
-    validity: Option<ValidityView>,
-) -> PrimitiveArray
+fn zigzag_encode_primitive<'a, T: ExternalZigZag + NativePType>(
+    values: &'a [T],
+    validity: Option<Validity<'a>>,
+) -> PrimitiveArray<'a>
 where
-    <T as ZigZag>::UInt: NativePType,
+    <T as ExternalZigZag>::UInt: NativePType,
 {
     let mut encoded = AlignedVec::with_capacity_in(values.len(), ALIGNED_ALLOCATOR);
     encoded.extend(values.iter().map(|v| T::encode(*v)));
-    PrimitiveArray::from_nullable_in(encoded, validity.to_owned_view())
+    PrimitiveArray::from_vec(encoded.to_vec(), validity.to_owned().unwrap())
 }
 
 #[allow(dead_code)]
-pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
+pub fn zigzag_decode<'a>(parray: &'a PrimitiveArray<'a>) -> PrimitiveArray<'a> {
     match parray.ptype() {
-        PType::U8 => zigzag_decode_primitive::<i8>(parray.buffer().typed_data(), parray.validity()),
+        PType::U8 => {
+            zigzag_decode_primitive::<i8>(parray.buffer().typed_data(), Some(parray.validity()))
+        }
         PType::U16 => {
-            zigzag_decode_primitive::<i16>(parray.buffer().typed_data(), parray.validity())
+            zigzag_decode_primitive::<i16>(parray.buffer().typed_data(), Some(parray.validity()))
         }
         PType::U32 => {
-            zigzag_decode_primitive::<i32>(parray.buffer().typed_data(), parray.validity())
+            zigzag_decode_primitive::<i32>(parray.buffer().typed_data(), Some(parray.validity()))
         }
         PType::U64 => {
-            zigzag_decode_primitive::<i64>(parray.buffer().typed_data(), parray.validity())
+            zigzag_decode_primitive::<i64>(parray.buffer().typed_data(), Some(parray.validity()))
         }
         _ => panic!("Unsupported ptype {}", parray.ptype()),
     }
 }
 
 #[allow(dead_code)]
-fn zigzag_decode_primitive<T: ZigZag + NativePType>(
-    values: &[T::UInt],
-    validity: Option<ValidityView>,
-) -> PrimitiveArray
+fn zigzag_decode_primitive<'a, T: ExternalZigZag + NativePType>(
+    values: &'a [T::UInt],
+    validity: Option<Validity<'a>>,
+) -> PrimitiveArray<'a>
 where
-    <T as ZigZag>::UInt: NativePType,
+    <T as ExternalZigZag>::UInt: NativePType,
 {
     let mut encoded: AlignedVec<T> = AlignedVec::with_capacity_in(values.len(), ALIGNED_ALLOCATOR);
     encoded.extend(values.iter().map(|v| T::decode(*v)));
-    PrimitiveArray::from_nullable_in(encoded, validity.to_owned_view())
+    if let Some(valid) = validity {
+        PrimitiveArray::from_vec(encoded.to_vec(), valid)
+    } else {
+        PrimitiveArray::from(encoded.to_vec())
+    }
 }

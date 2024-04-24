@@ -1157,6 +1157,7 @@ dependencies = [
  "vortex-ree",
  "vortex-roaring",
  "vortex-schema",
+ "vortex-zigzag",
 ]
 
 [[package]]
@@ -4325,6 +4326,7 @@ dependencies = [
  "vortex-ree",
  "vortex-roaring",
  "vortex-schema",
+ "vortex-zigzag",
 ]
 
 [[package]]
@@ -5828,6 +5830,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-zigzag"
+version = "0.1.0"
+dependencies = [
+ "linkme",
+ "paste",
+ "serde",
+ "vortex-alloc",
+ "vortex-array",
+ "vortex-error",
+ "vortex-schema",
+ "zigzag",
+]
+
+[[package]]
 name = "vsimd"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6218,6 +6234,15 @@ name = "zeroize"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "525b4ec142c6b68a2d10f01f7bbf6755599ca3f81ea53b8431b7dd348f5fdb2d"
+
+[[package]]
+name = "zigzag"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70b40401a28d86ce16a330b863b86fd7dbee4d7c940587ab09ab8c019f9e3fdf"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "zstd"

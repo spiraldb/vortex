@@ -22,6 +22,7 @@ use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_schema::DType;
+use vortex_zigzag::ZigZagEncoding;
 
 use crate::data_downloads::FileType;
 use crate::reader::BATCH_SIZE;
@@ -118,7 +119,7 @@ pub fn enumerate_arrays() -> Vec<EncodingRef> {
         &RoaringBoolEncoding,
         // &RoaringIntEncoding,
         // Doesn't offer anything more than FoR really
-        // ZigZagEncoding,
+        &ZigZagEncoding,
     ]
 }
 
