@@ -1,4 +1,3 @@
-// use vortex::array::{Array, ArrayRef};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::ArrayCompute;

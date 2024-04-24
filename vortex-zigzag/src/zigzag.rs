@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use vortex::array::primitive::Primitive;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -36,7 +37,7 @@ impl ZigZagArray<'_> {
     }
 
     pub fn encode<'a>(array: &'a Array<'a>) -> VortexResult<Array<'a>> {
-        if array.encoding().id() == ZigZag::ID {
+        if array.encoding().id() == Primitive::ID {
             Ok(zigzag_encode(&array.as_primitive())?.into_array())
         } else {
             Err(vortex_err!("ZigZag can only encoding primitive arrays"))

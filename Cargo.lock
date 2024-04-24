@@ -5839,6 +5839,7 @@ dependencies = [
  "vortex-alloc",
  "vortex-array",
  "vortex-error",
+ "vortex-fastlanes",
  "vortex-schema",
  "zigzag",
 ]
