@@ -73,12 +73,6 @@ impl<W: Write> StreamWriter<W> {
 
         Ok(())
     }
-
-    pub fn finish_array(&mut self) -> VortexResult<()> {
-        self.write
-            .write_all(&[0u8; ALIGNMENT])
-            .map_err(VortexError::from)
-    }
 }
 
 impl<W: Write> Drop for StreamWriter<W> {
