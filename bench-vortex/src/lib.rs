@@ -1,3 +1,5 @@
+#![feature(exit_status_error)]
+
 use std::env::temp_dir;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
