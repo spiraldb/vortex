@@ -2,7 +2,7 @@ use std::io;
 use std::io::{BufReader, Read};
 
 use arrow_buffer::Buffer as ArrowBuffer;
-use flatbuffers::root;
+use flatbuffers::{root, root_unchecked};
 use nougat::gat;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::composite::VORTEX_COMPOSITE_EXTENSIONS;
@@ -13,7 +13,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 use vortex_schema::{DType, DTypeSerdeContext};
 
-use crate::flatbuffers::ipc::Message;
+use crate::flatbuffers::ipc::{Message, MessageHeader};
 use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
 
 #[allow(dead_code)]
@@ -77,20 +77,17 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
         if !self.messages.load_next_message(self.read.by_ref())? {
             return Ok(None);
         }
-        let msg = root::<Message>(self.messages.message())?;
-        let schema = match msg.header_as_schema() {
-            None => {
-                self.messages.put_back();
-                return Ok(None);
-            }
-            Some(header) => header,
+
+        let Some(schema_msg) = root::<Message>(self.messages.message())?.header_as_schema() else {
+            self.messages.put_back();
+            return Ok(None);
         };
         // TODO(ngates): construct this from the SerdeContext.
         let dtype_ctx =
             DTypeSerdeContext::new(VORTEX_COMPOSITE_EXTENSIONS.iter().map(|e| e.id()).collect());
         let dtype = DType::read_flatbuffer(
             &dtype_ctx,
-            &schema
+            &schema_msg
                 .dtype()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
         )
@@ -137,20 +134,15 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
     type Error = VortexError;
     type Item<'next> = Array<'next> where Self: 'next;
 
-    fn next<'next>(&'next mut self) -> Result<Option<Array<'next>>, Self::Error> {
+    fn next(&mut self) -> Result<Option<Array<'_>>, Self::Error> {
         if !self.messages.load_next_message(&mut self.read)? {
             return Ok(None);
         }
-
-        if !root::<Message>(self.messages.message())?
-            .header_as_chunk()
-            .is_some()
-        {
+        if root::<Message>(self.messages.message())?.header_type() != MessageHeader::Chunk {
             self.messages.put_back();
             return Ok(None);
         }
-
-        let chunk_msg = root::<Message>(self.messages.message())?
+        let chunk_msg = unsafe { root_unchecked::<Message>(self.messages.message()) }
             .header_as_chunk()
             .unwrap();
         let col_array = chunk_msg
