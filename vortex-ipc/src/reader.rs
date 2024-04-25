@@ -13,7 +13,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 use vortex_schema::{DType, DTypeSerdeContext};
 
-use crate::flatbuffers::ipc::{Message, MessageHeader};
+use crate::flatbuffers::ipc::Message;
 use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
 
 #[allow(dead_code)]
@@ -31,15 +31,21 @@ impl<R: Read> StreamReader<BufReader<R>> {
 
 impl<R: Read> StreamReader<R> {
     pub fn try_new_unbuffered(mut read: R) -> VortexResult<Self> {
-        let mut messages = StreamMessageReader::new();
-        if !messages.load_next_message(&mut read)? {
-            vortex_bail!("Unexpected EOF reading IPC format");
+        let mut messages = StreamMessageReader::try_new(&mut read)?;
+        match messages.peek() {
+            None => vortex_bail!("IPC stream is empty"),
+            Some(msg) => {
+                if msg.header_as_context().is_none() {
+                    vortex_bail!(InvalidSerde: "Expected IPC Context as first message in stream")
+                }
+            }
         }
-        let fb_msg = root::<Message>(messages.message())?;
-        let fb_ctx = fb_msg.header_as_context().ok_or_else(
-            || vortex_err!(InvalidSerde: "Expected IPC Context as first message in stream"),
-        )?;
-        let ctx: SerdeContext = fb_ctx.try_into()?;
+
+        let ctx: SerdeContext = messages
+            .next(&mut read)?
+            .header_as_context()
+            .unwrap()
+            .try_into()?;
 
         Ok(Self {
             read,
@@ -74,14 +80,21 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
     type Item<'next> =  StreamArrayReader<'next, R> where Self: 'next;
 
     fn next(&mut self) -> Result<Option<StreamArrayReader<'_, R>>, Self::Error> {
-        if !self.messages.load_next_message(self.read.by_ref())? {
+        if self
+            .messages
+            .peek()
+            .and_then(|msg| msg.header_as_schema())
+            .is_none()
+        {
             return Ok(None);
         }
 
-        let Some(schema_msg) = root::<Message>(self.messages.message())?.header_as_schema() else {
-            self.messages.put_back();
-            return Ok(None);
-        };
+        let schema_msg = self
+            .messages
+            .next(&mut self.read)?
+            .header_as_schema()
+            .unwrap();
+
         // TODO(ngates): construct this from the SerdeContext.
         let dtype_ctx =
             DTypeSerdeContext::new(VORTEX_COMPOSITE_EXTENSIONS.iter().map(|e| e.id()).collect());
@@ -135,20 +148,9 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
     type Item<'next> = Array<'next> where Self: 'next;
 
     fn next(&mut self) -> Result<Option<Array<'_>>, Self::Error> {
-        if !self.messages.load_next_message(&mut self.read)? {
+        let Some(chunk_msg) = self.messages.peek().and_then(|msg| msg.header_as_chunk()) else {
             return Ok(None);
-        }
-        if root::<Message>(self.messages.message())?.header_type() != MessageHeader::Chunk {
-            self.messages.put_back();
-            return Ok(None);
-        }
-        let chunk_msg = unsafe { root_unchecked::<Message>(self.messages.message()) }
-            .header_as_chunk()
-            .unwrap();
-        let col_array = chunk_msg
-            .array()
-            .ok_or_else(|| vortex_err!(InvalidSerde: "Chunk column missing Array"))
-            .unwrap();
+        };
 
         // Read all the column's buffers
         self.buffers.clear();
@@ -168,6 +170,14 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
         // Consume any remaining padding after the final buffer.
         self.read.skip(chunk_msg.buffer_size() - offset)?;
 
+        // After reading the buffers we're now able to load the next message.
+        let col_array = self
+            .messages
+            .next(&mut self.read)?
+            .header_as_chunk()
+            .unwrap()
+            .array()
+            .unwrap();
         let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
 
         // Validate it
@@ -201,44 +211,48 @@ impl<R: Read> ReadExtensions for R {}
 
 struct StreamMessageReader {
     message: Vec<u8>,
-    peeked: bool,
+    prev_message: Vec<u8>,
     finished: bool,
 }
 
 impl StreamMessageReader {
-    pub fn new() -> Self {
-        Self {
+    pub fn try_new<R: Read>(read: &mut R) -> VortexResult<Self> {
+        let mut reader = Self {
             message: Vec::new(),
-            peeked: false,
+            prev_message: Vec::new(),
             finished: false,
-        }
+        };
+        reader.load_next_message(read)?;
+        Ok(reader)
     }
 
-    pub fn message(&self) -> &[u8] {
-        &self.message
-    }
-
-    pub fn put_back(&mut self) {
-        self.peeked = true;
-    }
-
-    pub fn load_next_message<R: Read>(&mut self, read: &mut R) -> io::Result<bool> {
+    pub fn peek(&self) -> Option<Message> {
         if self.finished {
-            return Ok(false);
+            return None;
         }
+        // The message has been validated by the next() call.
+        Some(unsafe { root_unchecked::<Message>(&self.message) })
+    }
 
-        if self.peeked {
-            self.peeked = false;
-            return Ok(true);
+    pub fn next<R: Read>(&mut self, read: &mut R) -> VortexResult<Message> {
+        if self.finished {
+            panic!("StreamMessageReader is finished - should've checked peek!");
         }
+        std::mem::swap(&mut self.prev_message, &mut self.message);
+        if !self.load_next_message(read)? {
+            self.finished = false;
+        }
+        Ok(unsafe { root_unchecked::<Message>(&self.prev_message) })
+    }
 
+    fn load_next_message<R: Read>(&mut self, read: &mut R) -> VortexResult<bool> {
         let mut len_buf = [0u8; 4];
         match read.read_exact(&mut len_buf) {
             Ok(_) => {}
             Err(e) => {
                 return match e.kind() {
                     io::ErrorKind::UnexpectedEof => Ok(false),
-                    _ => Err(e),
+                    _ => Err(e.into()),
                 }
             }
         }
@@ -246,18 +260,18 @@ impl StreamMessageReader {
         let len = u32::from_le_bytes(len_buf);
         if len == u32::MAX {
             // Marker for no more messages.
-            self.finished = true;
             return Ok(false);
         }
 
         self.message.clear();
         self.message.reserve(len as usize);
         if read.take(len as u64).read_to_end(&mut self.message)? != len as usize {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "Failed to read all bytes",
-            ));
+            return Err(
+                io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read all bytes").into(),
+            );
         }
+
+        std::hint::black_box(root::<Message>(&self.message)?);
         Ok(true)
     }
 }
