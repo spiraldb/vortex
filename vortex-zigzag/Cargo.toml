@@ -19,7 +19,6 @@ vortex-error = { path = "../vortex-error" }
 vortex-fastlanes = { path = "../vortex-fastlanes" }
 vortex-schema = { path = "../vortex-schema" }
 zigzag = { workspace = true }
-paste = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 
 [lints]
