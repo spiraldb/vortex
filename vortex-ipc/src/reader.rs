@@ -156,6 +156,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
         self.buffers.clear();
         let mut offset = 0;
         for buffer in chunk_msg.buffers().unwrap_or_default().iter() {
+            let _skip = buffer.offset() - offset;
             self.read.skip(buffer.offset() - offset)?;
 
             // TODO(ngates): read into a single buffer, then Arc::clone and slice
@@ -195,13 +196,10 @@ pub trait ReadExtensions: Read {
     }
 
     /// Read exactly nbytes into the buffer.
-    fn read_into(&mut self, nbytes: u64, buffer: &mut Vec<u8>) -> io::Result<()> {
+    fn read_into(&mut self, nbytes: u64, buffer: &mut Vec<u8>) -> VortexResult<()> {
         buffer.reserve_exact(nbytes as usize);
         if self.take(nbytes).read_to_end(buffer)? != nbytes as usize {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "Failed to read all bytes",
-            ));
+            vortex_bail!(InvalidSerde: "Failed to read all bytes")
         }
         Ok(())
     }
@@ -240,7 +238,7 @@ impl StreamMessageReader {
         }
         std::mem::swap(&mut self.prev_message, &mut self.message);
         if !self.load_next_message(read)? {
-            self.finished = false;
+            self.finished = true;
         }
         Ok(unsafe { root_unchecked::<Message>(&self.prev_message) })
     }
@@ -266,9 +264,7 @@ impl StreamMessageReader {
         self.message.clear();
         self.message.reserve(len as usize);
         if read.take(len as u64).read_to_end(&mut self.message)? != len as usize {
-            return Err(
-                io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read all bytes").into(),
-            );
+            vortex_bail!(InvalidSerde: "Failed to read all bytes")
         }
 
         std::hint::black_box(root::<Message>(&self.message)?);
