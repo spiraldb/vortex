@@ -175,7 +175,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
         // After reading the buffers we're now able to load the next message.
         let col_array = self
             .messages
-            .next(&mut self.read)?
+            .next(self.read)?
             .header_as_chunk()
             .unwrap()
             .array()
@@ -221,7 +221,7 @@ impl<R: Read> StreamMessageReader<R> {
             message: Vec::new(),
             prev_message: Vec::new(),
             finished: false,
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         };
         reader.load_next_message(read)?;
         Ok(reader)
