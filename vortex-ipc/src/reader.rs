@@ -1,5 +1,6 @@
 use std::io;
 use std::io::{BufReader, Read};
+use std::marker::PhantomData;
 
 use arrow_buffer::Buffer as ArrowBuffer;
 use flatbuffers::{root, root_unchecked};
@@ -19,7 +20,7 @@ use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
 #[allow(dead_code)]
 pub struct StreamReader<R: Read> {
     read: R,
-    messages: StreamMessageReader,
+    messages: StreamMessageReader<R>,
     ctx: SerdeContext,
 }
 
@@ -120,7 +121,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
 pub struct StreamArrayReader<'a, R: Read> {
     ctx: &'a SerdeContext,
     read: &'a mut R,
-    messages: &'a mut StreamMessageReader,
+    messages: &'a mut StreamMessageReader<R>,
     dtype: DType,
     buffers: Vec<Buffer<'a>>,
 }
@@ -207,18 +208,20 @@ pub trait ReadExtensions: Read {
 
 impl<R: Read> ReadExtensions for R {}
 
-struct StreamMessageReader {
+struct StreamMessageReader<R: Read> {
     message: Vec<u8>,
     prev_message: Vec<u8>,
     finished: bool,
+    phantom: PhantomData<R>,
 }
 
-impl StreamMessageReader {
-    pub fn try_new<R: Read>(read: &mut R) -> VortexResult<Self> {
+impl<R: Read> StreamMessageReader<R> {
+    pub fn try_new(read: &mut R) -> VortexResult<Self> {
         let mut reader = Self {
             message: Vec::new(),
             prev_message: Vec::new(),
             finished: false,
+            phantom: PhantomData::default(),
         };
         reader.load_next_message(read)?;
         Ok(reader)
@@ -232,7 +235,7 @@ impl StreamMessageReader {
         Some(unsafe { root_unchecked::<Message>(&self.message) })
     }
 
-    pub fn next<R: Read>(&mut self, read: &mut R) -> VortexResult<Message> {
+    pub fn next(&mut self, read: &mut R) -> VortexResult<Message> {
         if self.finished {
             panic!("StreamMessageReader is finished - should've checked peek!");
         }
@@ -243,7 +246,7 @@ impl StreamMessageReader {
         Ok(unsafe { root_unchecked::<Message>(&self.prev_message) })
     }
 
-    fn load_next_message<R: Read>(&mut self, read: &mut R) -> VortexResult<bool> {
+    fn load_next_message(&mut self, read: &mut R) -> VortexResult<bool> {
         let mut len_buf = [0u8; 4];
         match read.read_exact(&mut len_buf) {
             Ok(_) => {}
