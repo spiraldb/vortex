@@ -290,7 +290,7 @@ mod tests {
         }
         // Push some extra bytes to test that the reader is well-behaved and doesn't read past the
         // end of the stream.
-        cursor.write(b"hello").unwrap();
+        let _ = cursor.write(b"hello").unwrap();
 
         cursor.set_position(0);
         {
