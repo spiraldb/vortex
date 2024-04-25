@@ -168,7 +168,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
         // Consume any remaining padding after the final buffer.
         self.read.skip(chunk_msg.buffer_size() - offset)?;
 
-        let view = ArrayView::try_new(&self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
+        let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
 
         // Validate it
         view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;
@@ -187,8 +187,13 @@ pub trait ReadExtensions: Read {
     /// Read exactly nbytes into the buffer.
     fn read_into(&mut self, nbytes: u64, buffer: &mut Vec<u8>) -> io::Result<()> {
         buffer.reserve_exact(nbytes as usize);
-        unsafe { buffer.set_len(nbytes as usize) };
-        self.read_exact(buffer.as_mut_slice())
+        if self.take(nbytes).read_to_end(buffer)? != nbytes as usize {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "Failed to read all bytes",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -247,8 +252,12 @@ impl StreamMessageReader {
 
         self.message.clear();
         self.message.reserve(len as usize);
-        unsafe { self.message.set_len(len as usize) };
-        read.read_exact(self.message.as_mut_slice())?;
+        if read.take(len as u64).read_to_end(&mut self.message)? != len as usize {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "Failed to read all bytes",
+            ));
+        }
         Ok(true)
     }
 }
