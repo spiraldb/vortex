@@ -3,7 +3,7 @@ use std::io::{BufWriter, Write};
 use itertools::Itertools;
 use vortex::array::chunked::ChunkedArray;
 use vortex::{Array, ArrayDType, SerdeContext, ToArrayData};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::VortexResult;
 use vortex_flatbuffers::FlatBufferWriter;
 use vortex_schema::DType;
 
