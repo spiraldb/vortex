@@ -185,7 +185,7 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
 
         let mut row_offset = self.row_offset;
 
-        // Continue reading batches from the stream until we either run out or find all indices
+        // Continue reading batches from the stream until we run out
         while let Some(batch) = self.next()? {
             let left =
                 search_sorted::<usize>(indices, row_offset, SearchSortedSide::Left)?.to_index();
@@ -542,6 +542,14 @@ mod tests {
         );
     }
 
+    /// This test ensures that our take function doesn't partially consume an array, leaving the
+    /// stream in a bad state. This could happen if we:
+    /// - write a chunked array with multiple chunks
+    /// - write another array
+    /// - stop consuming the stream after we find all the desired indices, but before we have
+    ///   consumed the entire array
+    /// - the next reader tries to create a new array from the stream, but can't because the stream
+    ///   is in the middle of the prior array
     #[test]
     fn test_write_read_does_not_compromise_stream() {
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
