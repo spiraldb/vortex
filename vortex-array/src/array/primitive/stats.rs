@@ -277,8 +277,10 @@ mod test {
         let arr = PrimitiveArray::from_nullable_vec(vec![None, Some(1i32), None, Some(2)]);
         let min: Option<i32> = arr.statistics().compute_as(Stat::Min);
         let max: Option<i32> = arr.statistics().compute_as(Stat::Max);
+        let null_count: Option<u64> = arr.statistics().compute_as(Stat::NullCount);
         assert_eq!(min, Some(1));
         assert_eq!(max, Some(2));
+        assert_eq!(null_count, Some(2));
     }
 
     #[test]
