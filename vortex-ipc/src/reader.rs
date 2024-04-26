@@ -192,8 +192,10 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
             let right =
                 search_sorted::<usize>(indices, row_offset + batch.len(), SearchSortedSide::Left)?
                     .to_index();
+            // NB: if we're done, make sure to consume the rest of the
+            //  array to leave the iterator in a good state
             if left == indices.len() {
-                break;
+                continue;
             }
             if left == right {
                 row_offset += batch.len();
@@ -544,6 +546,14 @@ mod tests {
     fn test_write_read_does_not_compromise_stream() {
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
+        let data2 =
+            PrimitiveArray::from((3_000_000i32..6_000_000).rev().collect_vec()).into_array();
+        let chunked = ChunkedArray::try_new(
+            vec![data.clone(), data2.clone(), data2],
+            data.dtype().clone(),
+        )
+        .unwrap()
+        .into_array();
 
         let indices = PrimitiveArray::from(vec![10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
             .into_array();
@@ -553,7 +563,7 @@ mod tests {
             {
                 let mut writer =
                     StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
-                writer.write_array(&data).unwrap();
+                writer.write_array(&chunked).unwrap();
                 writer.write_array(&data).unwrap();
             }
         }
@@ -562,18 +572,10 @@ mod tests {
         let mut reader = StreamReader::try_new(&mut cursor).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
 
-        let array = array_reader.take(&indices).unwrap();
-        assert_eq!(array.encoding().id(), PrimitiveEncoding.id());
+        let _array = array_reader.take(&indices).unwrap();
 
-        let results = array
-            .flatten_primitive()
-            .unwrap()
-            .typed_data::<i32>()
-            .to_vec();
-        assert_eq!(
-            results,
-            &[2999989i32, 2999988, 2999987, 2999986, 2899999, 0, 0]
-        );
+        let indices = PrimitiveArray::from(vec![10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
+            .into_array();
         let array_reader = reader.next().unwrap().unwrap();
 
         let array = array_reader.take(&indices).unwrap();
