@@ -90,6 +90,7 @@ warnings = "deny"
 
 [workspace.lints.clippy]
 all = "deny"
+unwrap_used = { level = "deny", allow-unwrap-in-tests = true }
 
 [profile.dev]
 # Need this for linkme crate to work. See https://github.com/dtolnay/linkme/issues/61
