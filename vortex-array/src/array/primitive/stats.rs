@@ -36,7 +36,7 @@ impl<T: NativePType> ArrayStatisticsCompute for &[T] {
             return Ok(HashMap::default());
         }
         let mut stats = StatsAccumulator::new(self[0]);
-        self.iter().skip(1).for_each(|next| stats.next(*next));
+        self.iter().for_each(|next| stats.next(*next));
         Ok(stats.into_map())
     }
 }
@@ -83,7 +83,6 @@ impl<'a, T: NativePType> ArrayStatisticsCompute for NullableValues<'a, T> {
         values
             .iter()
             .zip(self.1.iter())
-            .skip(1)
             .map(|(next, valid)| valid.then_some(*next))
             .for_each(|next| stats.nullable_next(next));
         Ok(stats.into_map())
