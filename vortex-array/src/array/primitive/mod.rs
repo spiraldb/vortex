@@ -10,7 +10,7 @@ use crate::ptype::{NativePType, PType};
 use crate::scalar;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, OwnedArray, ToStatic};
+use crate::{impl_encoding, ArrayDType, OwnedArray};
 use crate::{match_each_native_ptype, ArrayFlatten};
 
 mod accessor;
@@ -195,23 +195,23 @@ impl<'a> Array<'a> {
 impl EncodingCompression for PrimitiveEncoding {}
 
 impl ScalarSubtractFn for PrimitiveArray<'_> {
-    fn scalar_subtract(&self, summand: Scalar) -> VortexResult<OwnedArray> {
-        if self.dtype() != summand.dtype() {
-            vortex_bail!("MismatchedTypes: {}, {}", self.dtype(), summand.dtype())
+    fn scalar_subtract(&self, to_subtract: Scalar) -> VortexResult<OwnedArray> {
+        if self.dtype() != to_subtract.dtype() {
+            vortex_bail!(MismatchedTypes: self.dtype(), to_subtract.dtype())
         }
-        match summand.dtype() {
+        match to_subtract.dtype() {
             DType::Int(..) => {}
             DType::Decimal(..) => {}
             DType::Float(..) => {}
             DType::Utf8(_) => {}
-            _ => vortex_bail!(InvalidArgument: "summand must be a numeric type"),
+            _ => vortex_bail!(InvalidArgument: "Can only subtract numeric types"),
         }
 
-        let summed = match_each_native_ptype!(self.ptype(), |$T| {
-            let summand = <scalar::Scalar as TryInto<$T>>::try_into(summand)?;
-            let sum_vec : Vec<$T> = self.typed_data::<$T>().iter().map(|&v| v - summand).collect_vec();
-            PrimitiveArray::from(sum_vec)
+        let result = match_each_native_ptype!(self.ptype(), |$T| {
+            let to_subtract = <scalar::Scalar as TryInto<$T>>::try_into(to_subtract)?;
+            let sub_vec : Vec<$T> = self.typed_data::<$T>().iter().map(|&v| v - to_subtract).collect_vec();
+            PrimitiveArray::from(sub_vec)
         });
-        Ok(summed.to_array().to_static())
+        Ok(result.into_array())
     }
 }
