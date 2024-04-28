@@ -81,6 +81,23 @@ mod test {
     }
 
     #[test]
+    fn test_scalar_subtract_signed_overflow() {
+        let values = vec![i8::MAX, 2, 3].into_array();
+        let to_subtract = -1i8;
+        let _results =
+            scalar_subtract(&values, to_subtract.into()).expect_err("should fail with overflow");
+        let values = vec![i16::MAX, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, to_subtract.into()).expect_err("should fail with overflow");
+        let values = vec![i32::MAX, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, to_subtract.into()).expect_err("should fail with overflow");
+        let values = vec![i64::MAX, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, to_subtract.into()).expect_err("should fail with overflow");
+    }
+
+    #[test]
     fn test_scalar_subtract_signed_underflow() {
         let values = vec![i8::MIN, 2, 3].into_array();
         let _results =

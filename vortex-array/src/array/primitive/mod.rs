@@ -205,9 +205,17 @@ impl ScalarSubtractFn for PrimitiveArray<'_> {
             DType::Int(..) => {
                 match_each_integer_ptype!(self.ptype(), |$T| {
                     let to_subtract = <scalar::Scalar as TryInto<$T>>::try_into(to_subtract)?;
-                    let min = self.statistics().compute_as_cast(Stat::Min).unwrap_or($T::MAX);
-                    if let (_, true) = min.overflowing_sub(to_subtract) {
-                        vortex_bail!("Integer subtraction underflow")
+                    let maybe_min = self.statistics().compute_as_cast(Stat::Min);//.unwrap_or($T::MAX);
+
+                    if maybe_min.is_some() {
+                        let min: $T = maybe_min.unwrap();
+                        let max: $T = self.statistics().compute_as_cast(Stat::Max).unwrap();
+                        if let (min, true) = min.overflowing_sub(to_subtract) {
+                            vortex_bail!("Integer subtraction over/underflow: {}, {}", min, to_subtract)
+                        }
+                        if let (max, true) = max.overflowing_sub(to_subtract) {
+                                vortex_bail!("Integer subtraction over/underflow: {}, {}", max, to_subtract)
+                        }
                     }
                     let sub_vec : Vec<$T> = self.typed_data::<$T>().iter().map(|&v| v - to_subtract).collect_vec();
                     PrimitiveArray::from(sub_vec)
