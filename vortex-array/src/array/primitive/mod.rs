@@ -7,10 +7,11 @@ use vortex_error::{vortex_bail, VortexResult};
 use crate::buffer::Buffer;
 use crate::compute::scalar_subtract::ScalarSubtractFn;
 use crate::ptype::{NativePType, PType};
-use crate::scalar;
+use crate::stats::ArrayStatistics;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayDType, OwnedArray};
+use crate::{match_each_integer_ptype, scalar};
 use crate::{match_each_native_ptype, ArrayFlatten};
 
 mod accessor;
@@ -199,19 +200,29 @@ impl ScalarSubtractFn for PrimitiveArray<'_> {
         if self.dtype() != to_subtract.dtype() {
             vortex_bail!(MismatchedTypes: self.dtype(), to_subtract.dtype())
         }
-        match to_subtract.dtype() {
-            DType::Int(..) => {}
-            DType::Decimal(..) => {}
-            DType::Float(..) => {}
-            DType::Utf8(_) => {}
-            _ => vortex_bail!(InvalidArgument: "Can only subtract numeric types"),
-        }
 
-        let result = match_each_native_ptype!(self.ptype(), |$T| {
-            let to_subtract = <scalar::Scalar as TryInto<$T>>::try_into(to_subtract)?;
-            let sub_vec : Vec<$T> = self.typed_data::<$T>().iter().map(|&v| v - to_subtract).collect_vec();
-            PrimitiveArray::from(sub_vec)
-        });
+        let result = match to_subtract.dtype() {
+            DType::Int(..) => {
+                match_each_integer_ptype!(self.ptype(), |$T| {
+                    let to_subtract = <scalar::Scalar as TryInto<$T>>::try_into(to_subtract)?;
+                    let min = self.statistics().compute_as_cast(Stat::Min).unwrap_or($T::MAX);
+                    if let (_, true) = min.overflowing_sub(to_subtract) {
+                        vortex_bail!("Integer subtraction underflow")
+                    }
+                    let sub_vec : Vec<$T> = self.typed_data::<$T>().iter().map(|&v| v - to_subtract).collect_vec();
+                    PrimitiveArray::from(sub_vec)
+                })
+            }
+            DType::Decimal(..) | DType::Float(..) => {
+                match_each_native_ptype!(self.ptype(), |$T| {
+                    let to_subtract = <scalar::Scalar as TryInto<$T>>::try_into(to_subtract)?;
+                    let sub_vec : Vec<$T> = self.typed_data::<$T>().iter().map(|&v| v - to_subtract).collect_vec();
+                    PrimitiveArray::from(sub_vec)
+                })
+            }
+            _ => vortex_bail!(InvalidArgument: "Can only subtract numeric types"),
+        };
+
         Ok(result.into_array())
     }
 }

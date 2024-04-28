@@ -9,14 +9,15 @@ pub trait ScalarSubtractFn {
 
 pub fn scalar_subtract(array: &Array, to_subtract: Scalar) -> VortexResult<OwnedArray> {
     array.with_dyn(|c| {
-        c.scalar_subtract()
-            .map(|t| t.scalar_subtract(to_subtract.clone()))
-            .unwrap_or_else(|| {
-                Err(vortex_err!(
-                    NotImplemented: "scalar_subtract",
-                    array.encoding().id().name()
-                ))
-            })
+        let option = c
+            .scalar_subtract()
+            .map(|t| t.scalar_subtract(to_subtract.clone()));
+        option.unwrap_or_else(|| {
+            Err(vortex_err!(
+                NotImplemented: "scalar_subtract",
+                array.encoding().id().name()
+            ))
+        })
     })
 }
 
@@ -35,20 +36,6 @@ mod test {
             .typed_data::<u16>()
             .to_vec();
         assert_eq!(results, &[0u16, 1, 2]);
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_scalar_subtract_unsigned_wrapping() {
-        let values = vec![0u16, 2, 3].into_array();
-        let _results = scalar_subtract(&values, 1u16.into()).unwrap();
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_scalar_subtract_signed_wrapping() {
-        let values = vec![i16::MIN, 2, 3].into_array();
-        let _results = scalar_subtract(&values, 1u16.into()).unwrap();
     }
 
     #[test]
@@ -75,6 +62,45 @@ mod test {
             .typed_data::<f64>()
             .to_vec();
         assert_eq!(results, &[2.0f64, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_scalar_subtract_unsigned_underflow() {
+        let values = vec![u8::MIN, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, 1u8.into()).expect_err("should fail with underflow");
+        let values = vec![u16::MIN, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, 1u16.into()).expect_err("should fail with underflow");
+        let values = vec![u32::MIN, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, 1u32.into()).expect_err("should fail with underflow");
+        let values = vec![u64::MIN, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, 1u64.into()).expect_err("should fail with underflow");
+    }
+
+    #[test]
+    fn test_scalar_subtract_signed_underflow() {
+        let values = vec![i8::MIN, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, 1i8.into()).expect_err("should fail with underflow");
+        let values = vec![i16::MIN, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, 1i16.into()).expect_err("should fail with underflow");
+        let values = vec![i32::MIN, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, 1i32.into()).expect_err("should fail with underflow");
+        let values = vec![i64::MIN, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, 1i64.into()).expect_err("should fail with underflow");
+    }
+
+    #[test]
+    fn test_scalar_subtract_float_underflow_is_ok() {
+        let values = vec![f32::MIN, 2.0, 3.0].into_array();
+        let _results = scalar_subtract(&values, 1.0f32.into()).unwrap();
+        let _results = scalar_subtract(&values, f32::MAX.into()).unwrap();
     }
 
     #[test]
