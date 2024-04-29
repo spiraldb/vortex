@@ -27,7 +27,7 @@ vortex-error = { path = "../vortex-error" }
 vortex-fastlanes = { path = "../vortex-fastlanes" }
 vortex-ree = { path = "../vortex-ree" }
 vortex-roaring = { path = "../vortex-roaring" }
-vortex-schema = { path = "../vortex-schema" }
+vortex-dtype = { path = "../vortex-dtype" }
 vortex-zigzag = { path = "../vortex-zigzag" }
 itertools = { workspace = true }
 log = { workspace = true }

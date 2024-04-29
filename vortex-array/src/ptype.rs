@@ -6,9 +6,9 @@ use arrow_buffer::ArrowNativeType;
 use half::f16;
 use num_traits::{Num, NumCast};
 use serde::{Deserialize, Serialize};
+use vortex_dtype::DType::*;
+use vortex_dtype::{DType, FloatWidth, IntWidth};
 use vortex_error::{vortex_err, VortexError, VortexResult};
-use vortex_schema::DType::*;
-use vortex_schema::{DType, FloatWidth, IntWidth};
 
 use crate::scalar::{PScalar, Scalar};
 
@@ -207,7 +207,7 @@ impl TryFrom<&DType> for PType {
     type Error = VortexError;
 
     fn try_from(value: &DType) -> VortexResult<Self> {
-        use vortex_schema::Signedness::*;
+        use vortex_dtype::Signedness::*;
         match value {
             Int(w, s, _) => match (w, s) {
                 (IntWidth::_8, Signed) => Ok(PType::I8),
@@ -231,8 +231,8 @@ impl TryFrom<&DType> for PType {
 
 impl From<PType> for &DType {
     fn from(item: PType) -> Self {
-        use vortex_schema::Nullability::*;
-        use vortex_schema::Signedness::*;
+        use vortex_dtype::Nullability::*;
+        use vortex_dtype::Signedness::*;
 
         match item {
             PType::I8 => &Int(IntWidth::_8, Signed, NonNullable),
@@ -252,8 +252,8 @@ impl From<PType> for &DType {
 
 impl From<PType> for DType {
     fn from(item: PType) -> Self {
-        use vortex_schema::Nullability::*;
-        use vortex_schema::Signedness::*;
+        use vortex_dtype::Nullability::*;
+        use vortex_dtype::Signedness::*;
 
         match item {
             PType::I8 => Int(IntWidth::_8, Signed, NonNullable),

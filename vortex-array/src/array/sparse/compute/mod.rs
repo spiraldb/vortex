@@ -137,7 +137,7 @@ fn take_search_sorted(
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_schema::{DType, FloatWidth, Nullability};
+    use vortex_dtype::{DType, FloatWidth, Nullability};
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::compute::take_map;

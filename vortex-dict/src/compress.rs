@@ -15,8 +15,8 @@ use vortex::validity::Validity;
 use vortex::{
     match_each_native_ptype, Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray,
 };
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::dict::{DictArray, DictEncoding};
 

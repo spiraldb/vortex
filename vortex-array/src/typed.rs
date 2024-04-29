@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
-use vortex_schema::DType;
 
 use crate::buffer::OwnedBuffer;
 use crate::scalar::Scalar;

@@ -1,8 +1,8 @@
 use flatbuffers::root;
+use vortex_dtype::flatbuffers as fb;
+use vortex_dtype::{CompositeID, DTypeSerdeContext};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
-use vortex_schema::flatbuffers as fb;
-use vortex_schema::{CompositeID, DTypeSerdeContext};
 
 use crate::array::composite::{find_extension, CompositeExtensionRef, TypedCompositeArray};
 use crate::compute::ArrayCompute;

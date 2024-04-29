@@ -20,7 +20,7 @@ pub mod flatbuffers {
             pub use vortex::flatbuffers::array;
         }
         pub mod dtype {
-            pub use vortex_schema::flatbuffers as dtype;
+            pub use vortex_dtype::flatbuffers as dtype;
         }
     }
 }

@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use vortex_dtype::{IntWidth, Nullability, Signedness};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{IntWidth, Nullability, Signedness};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
@@ -145,7 +145,7 @@ impl EncodingCompression for ChunkedEncoding {}
 
 #[cfg(test)]
 mod test {
-    use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+    use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
 
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
     use crate::ptype::NativePType;

@@ -1,5 +1,5 @@
+use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
-use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::cast::CastFn;

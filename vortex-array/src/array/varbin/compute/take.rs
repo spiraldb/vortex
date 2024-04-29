@@ -1,6 +1,6 @@
 use arrow_buffer::NullBuffer;
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::{OwnedVarBinArray, VarBinArray};

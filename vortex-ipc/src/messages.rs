@@ -3,9 +3,9 @@ use itertools::Itertools;
 use vortex::encoding::find_encoding;
 use vortex::flatbuffers::array as fba;
 use vortex::{ArrayData, SerdeContext};
+use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
-use vortex_schema::DType;
 
 use crate::flatbuffers::ipc as fb;
 use crate::flatbuffers::ipc::Compression;

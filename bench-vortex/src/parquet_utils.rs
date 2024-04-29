@@ -4,8 +4,8 @@ use std::path::Path;
 
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use vortex::arrow::FromArrowType;
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::data_downloads::FileType;
 use crate::CompressionRunStats;

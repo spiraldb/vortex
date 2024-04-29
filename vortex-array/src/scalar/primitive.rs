@@ -3,8 +3,8 @@ use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use half::f16;
+use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_schema::{DType, Nullability};
 
 use crate::ptype::{NativePType, PType};
 use crate::scalar::Scalar;
@@ -337,8 +337,8 @@ impl Display for PScalar {
 
 #[cfg(test)]
 mod test {
+    use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
     use vortex_error::VortexError;
-    use vortex_schema::{DType, IntWidth, Nullability, Signedness};
 
     use crate::ptype::PType;
     use crate::scalar::Scalar;

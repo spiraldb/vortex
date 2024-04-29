@@ -4,10 +4,10 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::{IntoArray, SerdeContext};
+use vortex_dtype::{DType, Nullability, Signedness};
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
-use vortex_schema::{DType, Nullability, Signedness};
 
 // 100 record batches, 100k rows each
 // take from the first 20 batches and last batch

@@ -6,10 +6,10 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::ptype::{NativePType, PType};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToStatic};
+use vortex_dtype::DType;
+use vortex_dtype::Nullability::NonNullable;
+use vortex_dtype::Signedness::Unsigned;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
-use vortex_schema::Nullability::NonNullable;
-use vortex_schema::Signedness::Unsigned;
 
 use crate::{OwnedRoaringIntArray, RoaringInt, RoaringIntArray, RoaringIntEncoding};
 

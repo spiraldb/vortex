@@ -1,5 +1,5 @@
+use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::Nullability;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct ScalarValue<T> {

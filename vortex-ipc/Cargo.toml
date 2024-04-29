@@ -21,7 +21,7 @@ streaming-iterator = "0.1.9"
 vortex-array = { path = "../vortex-array" }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
-vortex-schema = { path = "../vortex-schema" }
+vortex-dtype = { path = "../vortex-dtype" }
 
 [build-dependencies]
 flatc = { workspace = true }

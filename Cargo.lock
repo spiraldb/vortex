@@ -979,12 +979,12 @@ dependencies = [
  "vortex-array",
  "vortex-datetime-parts",
  "vortex-dict",
+ "vortex-dtype",
  "vortex-error",
  "vortex-fastlanes",
  "vortex-ipc",
  "vortex-ree",
  "vortex-roaring",
- "vortex-schema",
  "vortex-zigzag",
 ]
 
@@ -3960,11 +3960,11 @@ dependencies = [
  "vortex-alp",
  "vortex-array",
  "vortex-dict",
+ "vortex-dtype",
  "vortex-error",
  "vortex-fastlanes",
  "vortex-ree",
  "vortex-roaring",
- "vortex-schema",
  "vortex-zigzag",
 ]
 
@@ -5169,8 +5169,8 @@ dependencies = [
  "paste",
  "serde",
  "vortex-array",
+ "vortex-dtype",
  "vortex-error",
- "vortex-schema",
 ]
 
 [[package]]
@@ -5198,9 +5198,9 @@ dependencies = [
  "serde",
  "thiserror",
  "vortex-alloc",
+ "vortex-dtype",
  "vortex-error",
  "vortex-flatbuffers",
- "vortex-schema",
  "walkdir",
 ]
 
@@ -5212,8 +5212,8 @@ dependencies = [
  "log",
  "serde",
  "vortex-array",
+ "vortex-dtype",
  "vortex-error",
- "vortex-schema",
 ]
 
 [[package]]
@@ -5232,8 +5232,24 @@ dependencies = [
  "serde",
  "simplelog",
  "vortex-array",
+ "vortex-dtype",
  "vortex-error",
- "vortex-schema",
+]
+
+[[package]]
+name = "vortex-dtype"
+version = "0.1.0"
+dependencies = [
+ "arrow-schema 51.0.0",
+ "flatbuffers",
+ "flatc",
+ "itertools 0.12.1",
+ "linkme",
+ "serde",
+ "thiserror",
+ "vortex-error",
+ "vortex-flatbuffers",
+ "walkdir",
 ]
 
 [[package]]
@@ -5263,8 +5279,8 @@ dependencies = [
  "serde",
  "simplelog",
  "vortex-array",
+ "vortex-dtype",
  "vortex-error",
- "vortex-schema",
 ]
 
 [[package]]
@@ -5296,10 +5312,10 @@ dependencies = [
  "streaming-iterator",
  "vortex-alp",
  "vortex-array",
+ "vortex-dtype",
  "vortex-error",
  "vortex-fastlanes",
  "vortex-flatbuffers",
- "vortex-schema",
  "walkdir",
 ]
 
@@ -5316,8 +5332,8 @@ dependencies = [
  "paste",
  "serde",
  "vortex-array",
+ "vortex-dtype",
  "vortex-error",
- "vortex-schema",
 ]
 
 [[package]]
@@ -5332,24 +5348,8 @@ dependencies = [
  "paste",
  "serde",
  "vortex-array",
+ "vortex-dtype",
  "vortex-error",
- "vortex-schema",
-]
-
-[[package]]
-name = "vortex-schema"
-version = "0.1.0"
-dependencies = [
- "arrow-schema 51.0.0",
- "flatbuffers",
- "flatc",
- "itertools 0.12.1",
- "linkme",
- "serde",
- "thiserror",
- "vortex-error",
- "vortex-flatbuffers",
- "walkdir",
 ]
 
 [[package]]
@@ -5360,9 +5360,9 @@ dependencies = [
  "serde",
  "vortex-alloc",
  "vortex-array",
+ "vortex-dtype",
  "vortex-error",
  "vortex-fastlanes",
- "vortex-schema",
  "zigzag",
 ]
 

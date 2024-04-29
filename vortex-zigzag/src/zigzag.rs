@@ -4,8 +4,8 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use vortex_dtype::Signedness;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_schema::Signedness;
 
 use crate::compress::zigzag_encode;
 

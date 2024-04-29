@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
+use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
-use vortex_schema::DType;
 
 use crate::scalar::Scalar;
 

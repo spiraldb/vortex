@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
 
+use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_schema::DType;
 
 use crate::buffer::Buffer;
 use crate::encoding::EncodingRef;

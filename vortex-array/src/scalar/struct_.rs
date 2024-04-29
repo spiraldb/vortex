@@ -3,8 +3,8 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use itertools::Itertools;
+use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_schema::DType;
 
 use crate::scalar::Scalar;
 

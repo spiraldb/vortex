@@ -20,10 +20,10 @@ use vortex::{IntoArray, OwnedArray, ToArrayData};
 use vortex_alp::ALPEncoding;
 use vortex_datetime_parts::DateTimePartsEncoding;
 use vortex_dict::DictEncoding;
+use vortex_dtype::DType;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
-use vortex_schema::DType;
 
 use crate::data_downloads::FileType;
 use crate::reader::BATCH_SIZE;

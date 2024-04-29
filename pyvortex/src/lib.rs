@@ -2,8 +2,8 @@ use dtype::PyDType;
 use log::debug;
 use pyo3::prelude::*;
 use vortex::encoding::VORTEX_ENCODINGS;
-use vortex_schema::DType;
-use vortex_schema::Signedness::{Signed, Unsigned};
+use vortex_dtype::DType;
+use vortex_dtype::Signedness::{Signed, Unsigned};
 
 use crate::array::*;
 

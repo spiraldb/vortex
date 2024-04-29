@@ -1,7 +1,7 @@
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
+use vortex_dtype::{IntWidth, Nullability, Signedness};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{IntWidth, Nullability, Signedness};
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
@@ -221,7 +221,7 @@ impl EncodingCompression for VarBinEncoding {}
 
 #[cfg(test)]
 mod test {
-    use vortex_schema::{DType, Nullability};
+    use vortex_dtype::{DType, Nullability};
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;

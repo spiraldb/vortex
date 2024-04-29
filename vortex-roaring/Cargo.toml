@@ -15,7 +15,7 @@ rust-version = { workspace = true }
 arrow-buffer = { workspace = true }
 vortex-array = { path = "../vortex-array" }
 vortex-error = { path = "../vortex-error" }
-vortex-schema = { path = "../vortex-schema" }
+vortex-dtype = { path = "../vortex-dtype" }
 linkme = { workspace = true }
 croaring = { workspace = true }
 num-traits = { workspace = true }

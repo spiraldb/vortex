@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::EncodingRef;
