@@ -4,7 +4,9 @@ use vortex_dtype::{IntWidth, Nullability, Signedness};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
+use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::scalar_subtract::{scalar_subtract, ScalarSubtractFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
@@ -143,13 +145,25 @@ impl ArrayValidity for ChunkedArray<'_> {
 
 impl EncodingCompression for ChunkedEncoding {}
 
+impl ScalarSubtractFn for ChunkedArray<'_> {
+    fn scalar_subtract(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
+        as_contiguous(
+            &self
+                .chunks()
+                .map(|c| scalar_subtract(&c, to_subtract.clone()).unwrap())
+                .collect_vec(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
 
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
+    use crate::compute::scalar_subtract::scalar_subtract;
     use crate::ptype::NativePType;
-    use crate::{Array, IntoArray};
+    use crate::{Array, IntoArray, ToArray, ToStatic};
 
     #[allow(dead_code)]
     fn chunked_array() -> OwnedChunkedArray {
@@ -177,6 +191,29 @@ mod test {
             .map(|a| a.flatten_primitive().unwrap())
             .for_each(|a| values.extend_from_slice(a.typed_data::<T>()));
         assert_eq!(values, slice);
+    }
+
+    #[test]
+    fn test_scalar_subtract() {
+        let chunk1 = vec![1.0f64, 2.0, 3.0].into_array();
+        let chunk2 = vec![4.0f64, 5.0, 6.0].into_array();
+        let to_subtract = -1f64;
+
+        let chunked = ChunkedArray::try_new(
+            vec![chunk1, chunk2],
+            DType::Float(64.into(), Nullability::NonNullable),
+        )
+        .unwrap()
+        .to_array()
+        .to_static();
+
+        let array = scalar_subtract(&chunked, to_subtract).unwrap();
+        let results = array
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<f64>()
+            .to_vec();
+        assert_eq!(results, &[2.0f64, 3.0, 4.0, 5.0, 6.0, 7.0]);
     }
 
     // FIXME(ngates): bring back when slicing is a compute function.

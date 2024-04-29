@@ -139,6 +139,22 @@ macro_rules! match_each_integer_ptype {
 }
 pub use match_each_integer_ptype;
 
+#[macro_export]
+macro_rules! match_each_float_ptype {
+    ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
+        macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
+        use $crate::ptype::PType;
+        use half::f16;
+        match $self {
+            PType::F16 => __with__! { f16 },
+            PType::F32 => __with__! { f32 },
+            PType::F64 => __with__! { f64 },
+            _ => panic!("Unsupported ptype {}", $self),
+        }
+    })
+}
+pub use match_each_float_ptype;
+
 impl PType {
     pub const fn is_unsigned_int(self) -> bool {
         matches!(self, PType::U8 | PType::U16 | PType::U32 | PType::U64)

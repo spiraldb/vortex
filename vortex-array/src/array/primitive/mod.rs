@@ -6,12 +6,12 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use crate::buffer::Buffer;
 use crate::compute::scalar_subtract::ScalarSubtractFn;
+use crate::match_each_integer_ptype;
 use crate::ptype::{NativePType, PType};
 use crate::stats::ArrayStatistics;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, OwnedArray};
-use crate::{match_each_integer_ptype, scalar};
+use crate::{impl_encoding, match_each_float_ptype, ArrayDType, OwnedArray};
 use crate::{match_each_native_ptype, ArrayFlatten};
 
 mod accessor;
@@ -196,7 +196,7 @@ impl<'a> Array<'a> {
 impl EncodingCompression for PrimitiveEncoding {}
 
 impl ScalarSubtractFn for PrimitiveArray<'_> {
-    fn scalar_subtract(&self, to_subtract: Scalar) -> VortexResult<OwnedArray> {
+    fn scalar_subtract(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
         if self.dtype() != to_subtract.dtype() {
             vortex_bail!(MismatchedTypes: self.dtype(), to_subtract.dtype())
         }
@@ -204,17 +204,19 @@ impl ScalarSubtractFn for PrimitiveArray<'_> {
         let result = match to_subtract.dtype() {
             DType::Int(..) => {
                 match_each_integer_ptype!(self.ptype(), |$T| {
-                    let to_subtract = <scalar::Scalar as TryInto<$T>>::try_into(to_subtract)?;
-                    let maybe_min = self.statistics().compute_as_cast(Stat::Min);//.unwrap_or($T::MAX);
+                    let to_subtract = $T::try_from(to_subtract)?;
+                    let maybe_min = self.statistics().compute_as_cast(Stat::Min);
 
-                    if maybe_min.is_some() {
-                        let min: $T = maybe_min.unwrap();
-                        let max: $T = self.statistics().compute_as_cast(Stat::Max).unwrap();
+                    if let Some(min) = maybe_min {
+                        let min: $T = min;
                         if let (min, true) = min.overflowing_sub(to_subtract) {
                             vortex_bail!("Integer subtraction over/underflow: {}, {}", min, to_subtract)
                         }
-                        if let (max, true) = max.overflowing_sub(to_subtract) {
+                        if let Some(max) = self.statistics().compute_as_cast(Stat::Max) {
+                            let max: $T = max;
+                            if let (max, true) = max.overflowing_sub(to_subtract) {
                                 vortex_bail!("Integer subtraction over/underflow: {}, {}", max, to_subtract)
+                            }
                         }
                     }
                     let sub_vec : Vec<$T> = self.typed_data::<$T>().iter().map(|&v| v - to_subtract).collect_vec();
@@ -222,8 +224,8 @@ impl ScalarSubtractFn for PrimitiveArray<'_> {
                 })
             }
             DType::Decimal(..) | DType::Float(..) => {
-                match_each_native_ptype!(self.ptype(), |$T| {
-                    let to_subtract = <scalar::Scalar as TryInto<$T>>::try_into(to_subtract)?;
+                match_each_float_ptype!(self.ptype(), |$T| {
+                    let to_subtract = $T::try_from(to_subtract)?;
                     let sub_vec : Vec<$T> = self.typed_data::<$T>().iter().map(|&v| v - to_subtract).collect_vec();
                     PrimitiveArray::from(sub_vec)
                 })
@@ -232,5 +234,116 @@ impl ScalarSubtractFn for PrimitiveArray<'_> {
         };
 
         Ok(result.into_array())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::compute::scalar_subtract::scalar_subtract;
+    use crate::IntoArray;
+
+    #[test]
+    fn test_scalar_subtract_unsigned() {
+        let values = vec![1u16, 2, 3].into_array();
+        let results = scalar_subtract(&values, 1u16)
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u16>()
+            .to_vec();
+        assert_eq!(results, &[0u16, 1, 2]);
+    }
+
+    #[test]
+    fn test_scalar_subtract_signed() {
+        let values = vec![1i64, 2, 3].into_array();
+        let results = scalar_subtract(&values, -1i64)
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<i64>()
+            .to_vec();
+        assert_eq!(results, &[2i64, 3, 4]);
+    }
+
+    #[test]
+    fn test_scalar_subtract_float() {
+        let values = vec![1.0f64, 2.0, 3.0].into_array();
+        let to_subtract = -1f64;
+        let results = scalar_subtract(&values, to_subtract)
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<f64>()
+            .to_vec();
+        assert_eq!(results, &[2.0f64, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_scalar_subtract_int_from_float() {
+        let values = vec![3.0f64, 4.0, 5.0].into_array();
+        // Ints can be cast to floats, so there's no problem here
+        let results = scalar_subtract(&values, 1u64)
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<f64>()
+            .to_vec();
+        assert_eq!(results, &[2.0f64, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_scalar_subtract_unsigned_underflow() {
+        let values = vec![u8::MIN, 2, 3].into_array();
+        let _results = scalar_subtract(&values, 1u8).expect_err("should fail with underflow");
+        let values = vec![u16::MIN, 2, 3].into_array();
+        let _results = scalar_subtract(&values, 1u16).expect_err("should fail with underflow");
+        let values = vec![u32::MIN, 2, 3].into_array();
+        let _results = scalar_subtract(&values, 1u32).expect_err("should fail with underflow");
+        let values = vec![u64::MIN, 2, 3].into_array();
+        let _results = scalar_subtract(&values, 1u64).expect_err("should fail with underflow");
+    }
+
+    #[test]
+    fn test_scalar_subtract_signed_overflow() {
+        let values = vec![i8::MAX, 2, 3].into_array();
+        let to_subtract = -1i8;
+        let _results =
+            scalar_subtract(&values, to_subtract).expect_err("should fail with overflow");
+        let values = vec![i16::MAX, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, to_subtract).expect_err("should fail with overflow");
+        let values = vec![i32::MAX, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, to_subtract).expect_err("should fail with overflow");
+        let values = vec![i64::MAX, 2, 3].into_array();
+        let _results =
+            scalar_subtract(&values, to_subtract).expect_err("should fail with overflow");
+    }
+
+    #[test]
+    fn test_scalar_subtract_signed_underflow() {
+        let values = vec![i8::MIN, 2, 3].into_array();
+        let _results = scalar_subtract(&values, 1i8).expect_err("should fail with underflow");
+        let values = vec![i16::MIN, 2, 3].into_array();
+        let _results = scalar_subtract(&values, 1i16).expect_err("should fail with underflow");
+        let values = vec![i32::MIN, 2, 3].into_array();
+        let _results = scalar_subtract(&values, 1i32).expect_err("should fail with underflow");
+        let values = vec![i64::MIN, 2, 3].into_array();
+        let _results = scalar_subtract(&values, 1i64).expect_err("should fail with underflow");
+    }
+
+    #[test]
+    fn test_scalar_subtract_float_underflow_is_ok() {
+        let values = vec![f32::MIN, 2.0, 3.0].into_array();
+        let _results = scalar_subtract(&values, 1.0f32).unwrap();
+        let _results = scalar_subtract(&values, f32::MAX).unwrap();
+    }
+
+    #[test]
+    fn test_scalar_subtract_type_mismatch_fails() {
+        let values = vec![1u64, 2, 3].into_array();
+        // Subtracting incompatible dtypes should fail
+        let _results = scalar_subtract(&values, 1.5f64).expect_err("Expected type mismatch error");
     }
 }

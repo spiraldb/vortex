@@ -204,7 +204,7 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
 
             let indices_for_batch = slice(indices, left, right)?.flatten_primitive()?;
             let shifted_arr = match_each_integer_ptype!(indices_for_batch.ptype(), |$T| {
-                indices_for_batch.scalar_subtract(Scalar::from(row_offset as $T))?
+                indices_for_batch.scalar_subtract(&Scalar::from(row_offset as $T))?
             });
 
             let from_current_batch = take(&batch, &shifted_arr)?;
