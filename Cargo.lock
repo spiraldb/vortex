@@ -5185,7 +5185,6 @@ dependencies = [
  "flatbuffers",
  "flatc",
  "flexbuffers",
- "half",
  "humansize",
  "itertools 0.12.1",
  "leb128",
@@ -5222,7 +5221,6 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "criterion",
- "half",
  "hashbrown",
  "linkme",
  "log",
@@ -5240,8 +5238,6 @@ dependencies = [
 name = "vortex-dtype"
 version = "0.1.0"
 dependencies = [
- "arrow-buffer 51.0.0",
- "arrow-schema 51.0.0",
  "flatbuffers",
  "flatc",
  "half",

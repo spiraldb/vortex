@@ -2,7 +2,7 @@ use std::any;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
-use half::f16;
+use vortex_dtype::half::f16;
 use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype};
 use vortex_dtype::{DType, Nullability};
 use vortex_dtype::{NativePType, PType};

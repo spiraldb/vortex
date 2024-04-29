@@ -15,12 +15,7 @@ rust-version = { workspace = true }
 name = "vortex_dtype"
 path = "src/lib.rs"
 
-[features]
-arrow = ["arrow-buffer", "arrow-schema"]
-
 [dependencies]
-arrow-buffer = { workspace = true, optional = true }
-arrow-schema = { workspace = true, optional = true }
 flatbuffers = { workspace = true }
 half = { workspace = true }
 itertools = { workspace = true }
