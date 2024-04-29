@@ -49,7 +49,6 @@ walkdir = { workspace = true }
 [dev-dependencies]
 criterion = { workspace = true }
 
-
 [[bench]]
 name = "search_sorted"
 harness = false
