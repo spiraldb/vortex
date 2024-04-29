@@ -95,18 +95,22 @@ impl EncodingCompression for BitPackedEncoding {
     }
 }
 
-pub(crate) fn bitpack_encode(array: PrimitiveArray<'_>) -> VortexResult<OwnedArray> {
+pub(crate) fn bitpack_encode(
+    array: PrimitiveArray<'_>,
+    bit_width: usize,
+) -> VortexResult<BitPackedArray> {
     let bit_width_freq = array
         .statistics()
         .compute_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)
         .ok_or_else(|| vortex_err!("Could not compute bit width frequencies"))?
         .0;
-    let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception(array.ptype()));
     let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
-    if bit_width == array.ptype().bit_width() {
+    if bit_width >= array.ptype().bit_width() {
         // Nothing we can do
-        return Ok(array.into_array().to_static());
+        vortex_bail!(
+            "Cannot pack -- specified bit width is greater than or equal to the type's bit width"
+        )
     }
 
     let packed = bitpack(&array, bit_width)?;
@@ -124,7 +128,6 @@ pub(crate) fn bitpack_encode(array: PrimitiveArray<'_>) -> VortexResult<OwnedArr
         array.dtype().clone(),
         array.len(),
     )
-    .map(|a| a.into_array())
 }
 
 pub(crate) fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<OwnedArray> {
@@ -359,6 +362,9 @@ fn bytes_per_exception(ptype: PType) -> usize {
 }
 
 fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
+    if (bit_width_freq.len()) <= bit_width {
+        return 0;
+    }
     bit_width_freq[bit_width + 1..].iter().sum()
 }
 

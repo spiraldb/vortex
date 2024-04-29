@@ -4,7 +4,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_schema::{IntWidth, Nullability, Signedness};
 
@@ -123,9 +123,9 @@ impl BitPackedArray<'_> {
         ))
     }
 
-    pub fn encode(array: Array<'_>) -> VortexResult<OwnedArray> {
+    pub fn encode(array: Array<'_>, bit_width: usize) -> VortexResult<BitPackedArray> {
         if let Ok(parray) = PrimitiveArray::try_from(array) {
-            Ok(bitpack_encode(parray)?)
+            Ok(bitpack_encode(parray, bit_width)?)
         } else {
             vortex_bail!("Bitpacking can only encode primitive arrays");
         }
@@ -202,7 +202,7 @@ mod test {
     use vortex::compress::{CompressConfig, CompressCtx};
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::slice::slice;
-    use vortex::encoding::{ArrayEncoding, EncodingRef};
+    use vortex::encoding::EncodingRef;
     use vortex::IntoArray;
 
     use crate::{BitPackedArray, BitPackedEncoding};
@@ -263,14 +263,24 @@ mod test {
     fn test_encode() {
         let values = vec![Some(1), None, Some(1), None, Some(1), None, Some(u64::MAX)];
         let uncompressed = PrimitiveArray::from_nullable_vec(values);
-        let packed = BitPackedArray::encode(uncompressed.into_array()).unwrap();
-        assert_eq!(packed.encoding().id(), BitPackedEncoding.id());
+        let packed = BitPackedArray::encode(uncompressed.into_array(), 1).unwrap();
         let expected = &[1, 0, 1, 0, 1, 0, u64::MAX];
         let results = packed
+            .into_array()
             .flatten_primitive()
             .unwrap()
             .typed_data::<u64>()
             .to_vec();
         assert_eq!(results, expected);
+    }
+
+    #[test]
+    fn test_encode_too_wide() {
+        let values = vec![Some(1u8), None, Some(1), None, Some(1), None];
+        let uncompressed = PrimitiveArray::from_nullable_vec(values);
+        let _packed = BitPackedArray::encode(uncompressed.clone().into_array(), 8)
+            .expect_err("Cannot pack value into the same width");
+        let _packed = BitPackedArray::encode(uncompressed.into_array(), 9)
+            .expect_err("Cannot pack value into larger width");
     }
 }
