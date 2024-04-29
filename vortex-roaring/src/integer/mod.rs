@@ -3,12 +3,12 @@ use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::buffer::Buffer;
-use vortex::ptype::PType;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayFlatten, OwnedArray};
 use vortex_dtype::Nullability::NonNullable;
+use vortex_dtype::PType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 mod compress;

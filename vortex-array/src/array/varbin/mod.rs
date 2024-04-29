@@ -1,16 +1,16 @@
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
+use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_dtype::{IntWidth, Nullability, Signedness};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
-use crate::ptype::NativePType;
 use crate::scalar::{BinaryScalar, Utf8Scalar};
 use crate::validity::{Validity, ValidityMetadata};
+use crate::ArrayDType;
 use crate::{impl_encoding, OwnedArray, ToArrayData};
-use crate::{match_each_native_ptype, ArrayDType};
 
 mod accessor;
 mod array;
@@ -75,7 +75,9 @@ impl VarBinArray<'_> {
             .expect("missing offsets")
     }
 
-    pub fn first_offset<T: NativePType>(&self) -> VortexResult<T> {
+    pub fn first_offset<T: NativePType + TryFrom<Scalar, Error = VortexError>>(
+        &self,
+    ) -> VortexResult<T> {
         scalar_at(&self.offsets(), 0)?
             .cast(&DType::from(T::PTYPE))?
             .try_into()

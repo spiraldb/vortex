@@ -145,10 +145,10 @@ impl EncodingCompression for ChunkedEncoding {}
 
 #[cfg(test)]
 mod test {
+    use vortex_dtype::NativePType;
     use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
 
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
-    use crate::ptype::NativePType;
     use crate::{Array, IntoArray};
 
     #[allow(dead_code)]

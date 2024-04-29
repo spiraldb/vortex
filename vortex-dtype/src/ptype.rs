@@ -1,19 +1,15 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::panic::RefUnwindSafe;
 
-use arrow_array::types::*;
-use arrow_buffer::ArrowNativeType;
-use half::f16;
-use num_traits::{Num, NumCast};
-use serde::{Deserialize, Serialize};
-use vortex_dtype::DType::*;
-use vortex_dtype::{DType, FloatWidth, IntWidth};
+use num_traits::{FromPrimitive, Num, NumCast};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
-use crate::scalar::{PScalar, Scalar};
+use crate::half::f16;
+use crate::DType::*;
+use crate::{DType, FloatWidth, IntWidth};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub enum PType {
     U8,
     U16,
@@ -39,15 +35,10 @@ pub trait NativePType:
     + PartialEq
     + PartialOrd
     + Default
-    + ArrowNativeType
     + RefUnwindSafe
     + Num
     + NumCast
-    + Into<Scalar>
-    + TryFrom<Scalar, Error = VortexError>
-    + for<'a> TryFrom<&'a Scalar, Error = VortexError>
-    + Into<PScalar>
-    + TryFrom<PScalar, Error = VortexError>
+    + FromPrimitive
 {
     const PTYPE: PType;
 }
@@ -72,36 +63,12 @@ native_ptype!(f16, F16);
 native_ptype!(f32, F32);
 native_ptype!(f64, F64);
 
-pub trait AsArrowPrimitiveType {
-    type ArrowType: ArrowPrimitiveType;
-}
-
-macro_rules! impl_as_arrow_primitive_type {
-    ($T:ty, $A:ty) => {
-        impl AsArrowPrimitiveType for $T {
-            type ArrowType = $A;
-        }
-    };
-}
-
-impl_as_arrow_primitive_type!(u8, UInt8Type);
-impl_as_arrow_primitive_type!(u16, UInt16Type);
-impl_as_arrow_primitive_type!(u32, UInt32Type);
-impl_as_arrow_primitive_type!(u64, UInt64Type);
-impl_as_arrow_primitive_type!(i8, Int8Type);
-impl_as_arrow_primitive_type!(i16, Int16Type);
-impl_as_arrow_primitive_type!(i32, Int32Type);
-impl_as_arrow_primitive_type!(i64, Int64Type);
-impl_as_arrow_primitive_type!(f16, Float16Type);
-impl_as_arrow_primitive_type!(f32, Float32Type);
-impl_as_arrow_primitive_type!(f64, Float64Type);
-
 #[macro_export]
 macro_rules! match_each_native_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use $crate::ptype::PType;
-        use half::f16;
+        use $crate::PType;
+        use $crate::half::f16;
         match $self {
             PType::I8 => __with__! { i8 },
             PType::I16 => __with__! { i16 },
@@ -117,13 +84,12 @@ macro_rules! match_each_native_ptype {
         }
     })
 }
-pub use match_each_native_ptype;
 
 #[macro_export]
 macro_rules! match_each_integer_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use $crate::ptype::PType;
+        use $crate::PType;
         match $self {
             PType::I8 => __with__! { i8 },
             PType::I16 => __with__! { i16 },
@@ -137,7 +103,6 @@ macro_rules! match_each_integer_ptype {
         }
     })
 }
-pub use match_each_integer_ptype;
 
 impl PType {
     pub const fn is_unsigned_int(self) -> bool {
@@ -207,7 +172,7 @@ impl TryFrom<&DType> for PType {
     type Error = VortexError;
 
     fn try_from(value: &DType) -> VortexResult<Self> {
-        use vortex_dtype::Signedness::*;
+        use crate::Signedness::*;
         match value {
             Int(w, s, _) => match (w, s) {
                 (IntWidth::_8, Signed) => Ok(PType::I8),
@@ -231,8 +196,8 @@ impl TryFrom<&DType> for PType {
 
 impl From<PType> for &DType {
     fn from(item: PType) -> Self {
-        use vortex_dtype::Nullability::*;
-        use vortex_dtype::Signedness::*;
+        use crate::Nullability::*;
+        use crate::Signedness::*;
 
         match item {
             PType::I8 => &Int(IntWidth::_8, Signed, NonNullable),
@@ -252,8 +217,8 @@ impl From<PType> for &DType {
 
 impl From<PType> for DType {
     fn from(item: PType) -> Self {
-        use vortex_dtype::Nullability::*;
-        use vortex_dtype::Signedness::*;
+        use crate::Nullability::*;
+        use crate::Signedness::*;
 
         match item {
             PType::I8 => Int(IntWidth::_8, Signed, NonNullable),

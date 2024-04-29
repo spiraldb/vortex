@@ -1,3 +1,5 @@
+extern crate core;
+
 pub mod accessor;
 pub mod array;
 pub mod arrow;
@@ -10,7 +12,6 @@ pub mod encoding;
 mod flatten;
 mod implementation;
 mod metadata;
-pub mod ptype;
 mod sampling;
 pub mod scalar;
 pub mod stats;

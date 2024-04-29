@@ -182,7 +182,7 @@ impl ArrayTrait for BitPackedArray<'_> {
 macro_rules! match_integers_by_width {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use vortex::ptype::PType;
+        use vortex_dtype::PType;
         use vortex_error::vortex_bail;
         match $self {
             PType::I8 | PType::U8 => __with__! { u8 },

@@ -8,14 +8,12 @@ use vortex::accessor::ArrayAccessor;
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::array::varbin::{VarBin, VarBinArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::NativePType;
 use vortex::scalar::AsBytes;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
-use vortex::{
-    match_each_native_ptype, Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray,
-};
-use vortex_dtype::DType;
+use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray};
+use vortex_dtype::NativePType;
+use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_error::VortexResult;
 
 use crate::dict::{DictArray, DictEncoding};

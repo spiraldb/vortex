@@ -1,9 +1,9 @@
+use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
 use crate::compute::cast::cast;
 use crate::compute::take::{take, TakeFn};
-use crate::ptype::PType;
 use crate::{Array, IntoArray, OwnedArray, ToArray, ToStatic};
 use crate::{ArrayDType, ArrayTrait};
 

@@ -1,13 +1,13 @@
 use flatbuffers::{root, FlatBufferBuilder, WIPOffset};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use vortex_dtype::match_each_native_ptype;
+use vortex_dtype::PType;
 use vortex_dtype::{DTypeSerdeContext, Nullability};
 use vortex_error::{vortex_bail, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, ReadFlatBuffer, WriteFlatBuffer};
 
 use crate::flatbuffers::scalar as fb;
-use crate::match_each_native_ptype;
-use crate::ptype::PType;
 use crate::scalar::{PScalar, PrimitiveScalar, Scalar, Utf8Scalar};
 
 impl FlatBufferRoot for Scalar {}

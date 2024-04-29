@@ -4,7 +4,8 @@ use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::scalar::Scalar;
-use vortex::{match_each_integer_ptype, Array, IntoArray, OwnedArray};
+use vortex::{Array, IntoArray, OwnedArray};
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 
 use crate::REEArray;

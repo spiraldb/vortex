@@ -6,7 +6,6 @@ use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
 use crate::array::composite::{find_extension, CompositeExtensionRef, TypedCompositeArray};
 use crate::compute::ArrayCompute;
-use crate::scalar::AsBytes;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -141,7 +140,7 @@ impl CompositeArray<'_> {
 impl<'a> CompositeArray<'a> {
     pub fn as_typed<M: UnderlyingMetadata>(&'a self) -> VortexResult<TypedCompositeArray<'a, M>> {
         Ok(TypedCompositeArray::new(
-            M::try_deserialize_metadata(Some(self.underlying_metadata().as_bytes()))?,
+            M::try_deserialize_metadata(Some(self.underlying_metadata()))?,
             self.underlying().clone(),
         ))
     }

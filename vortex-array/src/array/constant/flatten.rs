@@ -1,4 +1,4 @@
-use vortex_dtype::Nullability;
+use vortex_dtype::{match_each_native_ptype, Nullability};
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
@@ -6,7 +6,7 @@ use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::scalar::Scalar;
 use crate::validity::Validity;
-use crate::{match_each_native_ptype, ArrayDType, ArrayTrait};
+use crate::{ArrayDType, ArrayTrait};
 use crate::{ArrayFlatten, Flattened};
 
 impl ArrayFlatten for ConstantArray<'_> {

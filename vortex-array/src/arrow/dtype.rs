@@ -3,17 +3,15 @@ use std::sync::Arc;
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::{DataType, Field, SchemaRef};
 use itertools::Itertools;
+use vortex_dtype::PType;
 use vortex_dtype::{DType, FloatWidth, IntWidth, Nullability};
-use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::datetime::{LocalDateTimeExtension, TimeUnit};
-use crate::arrow::FromArrowType;
-use crate::ptype::PType;
+use crate::arrow::{FromArrowType, TryFromArrowType};
 
-impl TryFrom<&DataType> for PType {
-    type Error = VortexError;
-
-    fn try_from(value: &DataType) -> VortexResult<Self> {
+impl TryFromArrowType<&DataType> for PType {
+    fn try_from_arrow(value: &DataType) -> VortexResult<Self> {
         match value {
             DataType::Int8 => Ok(PType::I8),
             DataType::Int16 => Ok(PType::I16),

@@ -9,10 +9,9 @@ pub use null::*;
 pub use primitive::*;
 pub use struct_::*;
 pub use utf8::*;
+use vortex_dtype::NativePType;
 use vortex_dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness};
 use vortex_error::VortexResult;
-
-use crate::ptype::NativePType;
 
 mod binary;
 mod bool;
@@ -143,22 +142,6 @@ impl Display for Scalar {
 pub trait AsBytes {
     /// Converts this instance into a byte slice
     fn as_bytes(&self) -> &[u8];
-}
-
-impl<T: NativePType> AsBytes for [T] {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        let raw_ptr = self.as_ptr() as *const u8;
-        unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of_val(self)) }
-    }
-}
-
-impl<T: NativePType> AsBytes for &[T] {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        let raw_ptr = (*self).as_ptr() as *const u8;
-        unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of_val(*self)) }
-    }
 }
 
 impl<T: NativePType> AsBytes for T {

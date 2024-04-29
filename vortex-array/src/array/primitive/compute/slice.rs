@@ -1,8 +1,8 @@
+use vortex_dtype::match_each_native_ptype;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::slice::SliceFn;
-use crate::match_each_native_ptype;
 use crate::IntoArray;
 use crate::OwnedArray;
 

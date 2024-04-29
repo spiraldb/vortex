@@ -1,13 +1,13 @@
 use arrow_buffer::BooleanBufferBuilder;
 use itertools::Itertools;
-use vortex_error::VortexResult;
+use vortex_dtype::{match_each_native_ptype, NativePType};
+use vortex_error::{VortexError, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
-use crate::ptype::NativePType;
 use crate::scalar::Scalar;
 use crate::validity::Validity;
-use crate::{match_each_native_ptype, ArrayFlatten, ArrayTrait, Flattened};
+use crate::{ArrayFlatten, ArrayTrait, Flattened};
 
 impl ArrayFlatten for SparseArray<'_> {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
@@ -32,7 +32,7 @@ impl ArrayFlatten for SparseArray<'_> {
     }
 }
 
-fn flatten_sparse_values<T: NativePType>(
+fn flatten_sparse_values<T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
     values: &[T],
     indices: &[usize],
     len: usize,

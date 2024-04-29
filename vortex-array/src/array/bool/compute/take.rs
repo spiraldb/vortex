@@ -1,10 +1,10 @@
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::compute::take::TakeFn;
-use crate::match_each_integer_ptype;
 use crate::AsArray;
 use crate::IntoArray;
 use crate::{Array, OwnedArray};

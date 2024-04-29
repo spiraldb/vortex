@@ -1,10 +1,10 @@
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::{NativePType, PType};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray, OwnedArray};
 use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
+use vortex_dtype::{NativePType, PType};
 use vortex_error::VortexResult;
 use zigzag::ZigZag as ExternalZigZag;
 

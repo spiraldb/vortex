@@ -2,10 +2,10 @@ use std::mem;
 
 use arrow_buffer::NullBufferBuilder;
 use vortex_dtype::DType;
+use vortex_dtype::NativePType;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
-use crate::ptype::NativePType;
 use crate::validity::Validity;
 use crate::IntoArray;
 
