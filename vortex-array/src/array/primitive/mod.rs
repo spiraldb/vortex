@@ -238,7 +238,7 @@ impl ScalarSubtractFn for PrimitiveArray<'_> {
                     PrimitiveArray::from(sub_vec)
                 })
             }
-            DType::Decimal(..) | DType::Float(..) => {
+            DType::Float(..) => {
                 match_each_float_ptype!(self.ptype(), |$T| {
                     let to_subtract = $T::try_from(to_subtract)?;
                     let sub_vec : Vec<$T> = self.typed_data::<$T>().iter().map(|&v| v - to_subtract).collect_vec();
