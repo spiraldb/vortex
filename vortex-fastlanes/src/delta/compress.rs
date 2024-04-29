@@ -9,8 +9,8 @@ use vortex::compute::fill::fill_forward;
 use vortex::ptype::NativePType;
 use vortex::validity::Validity;
 use vortex::{match_each_integer_ptype, Array, IntoArray, OwnedArray};
+use vortex_dtype::Nullability;
 use vortex_error::VortexResult;
-use vortex_schema::Nullability;
 
 use crate::{DeltaArray, DeltaEncoding};
 

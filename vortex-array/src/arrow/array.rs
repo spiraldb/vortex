@@ -21,7 +21,7 @@ use arrow_array::{BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit};
-use vortex_schema::DType;
+use vortex_dtype::DType;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;

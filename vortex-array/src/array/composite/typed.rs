@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
+use vortex_dtype::CompositeID;
+use vortex_dtype::DType;
 use vortex_error::{VortexError, VortexResult};
-use vortex_schema::CompositeID;
-use vortex_schema::DType;
 
 use crate::array::composite::array::CompositeArray;
 use crate::array::composite::UnderlyingMetadata;
@@ -75,7 +75,7 @@ macro_rules! impl_composite {
     ($id:expr, $T:ty) => {
         use linkme::distributed_slice;
         use paste::paste;
-        use vortex_schema::{CompositeID, DType, Nullability};
+        use vortex_dtype::{CompositeID, DType, Nullability};
         use $crate::array::composite::{
             CompositeArray, CompositeExtension, TypedCompositeArray, UnderlyingMetadata,
             VORTEX_COMPOSITE_EXTENSIONS,

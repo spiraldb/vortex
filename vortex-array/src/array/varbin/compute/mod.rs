@@ -4,8 +4,8 @@ use arrow_array::{
     ArrayRef as ArrowArrayRef, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray,
 };
 use itertools::Itertools;
+use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::DType;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::{varbin_scalar, VarBinArray};

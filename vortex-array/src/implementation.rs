@@ -1,5 +1,5 @@
+use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
-use vortex_schema::DType;
 
 use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::{ArrayEncoding, ArrayEncodingRef, EncodingRef};
@@ -58,7 +58,7 @@ macro_rules! impl_encoding {
             use std::marker::{Send, Sync};
             use std::sync::Arc;
             use vortex_error::VortexError;
-            use vortex_schema::DType;
+            use vortex_dtype::DType;
 
             /// The array definition trait
             #[derive(Debug, Clone)]

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::{DataType, Field, SchemaRef};
 use itertools::Itertools;
+use vortex_dtype::{DType, FloatWidth, IntWidth, Nullability};
 use vortex_error::{vortex_err, VortexError, VortexResult};
-use vortex_schema::{DType, FloatWidth, IntWidth, Nullability};
 
 use crate::array::datetime::{LocalDateTimeExtension, TimeUnit};
 use crate::arrow::FromArrowType;
@@ -59,8 +59,8 @@ impl FromArrowType<SchemaRef> for DType {
 
 impl FromArrowType<&Field> for DType {
     fn from_arrow(field: &Field) -> Self {
-        use vortex_schema::DType::*;
-        use vortex_schema::Signedness::*;
+        use vortex_dtype::DType::*;
+        use vortex_dtype::Signedness::*;
 
         let nullability: Nullability = field.is_nullable().into();
 

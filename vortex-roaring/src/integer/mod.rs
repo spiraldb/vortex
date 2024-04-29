@@ -8,8 +8,8 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayFlatten, OwnedArray};
+use vortex_dtype::Nullability::NonNullable;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_schema::Nullability::NonNullable;
 
 mod compress;
 mod compute;

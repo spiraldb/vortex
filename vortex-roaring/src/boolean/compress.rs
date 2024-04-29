@@ -2,9 +2,9 @@ use croaring::Bitmap;
 use vortex::array::bool::BoolArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray};
+use vortex_dtype::DType;
+use vortex_dtype::Nullability::NonNullable;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
-use vortex_schema::Nullability::NonNullable;
 
 use crate::boolean::RoaringBoolArray;
 use crate::{OwnedRoaringBoolArray, RoaringBool, RoaringBoolEncoding};

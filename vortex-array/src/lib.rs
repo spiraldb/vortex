@@ -32,8 +32,8 @@ pub use linkme;
 pub use metadata::*;
 pub use typed::*;
 pub use view::*;
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
@@ -65,7 +65,7 @@ pub mod flatbuffers {
     mod deps {
         pub mod dtype {
             #[allow(unused_imports)]
-            pub use vortex_schema::flatbuffers as dtype;
+            pub use vortex_dtype::flatbuffers as dtype;
         }
     }
 }

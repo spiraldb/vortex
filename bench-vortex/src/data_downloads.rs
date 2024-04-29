@@ -13,9 +13,9 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::arrow::FromArrowType;
 use vortex::{IntoArray, SerdeContext, ToArrayData};
+use vortex_dtype::DType;
 use vortex_error::{VortexError, VortexResult};
 use vortex_ipc::writer::StreamWriter;
-use vortex_schema::DType;
 
 use crate::idempotent;
 use crate::reader::BATCH_SIZE;

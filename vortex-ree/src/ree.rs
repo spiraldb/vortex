@@ -145,7 +145,7 @@ mod test {
     use vortex::compute::slice::slice;
     use vortex::validity::Validity;
     use vortex::{ArrayDType, ArrayTrait, IntoArray};
-    use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+    use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
 
     use crate::REEArray;
 

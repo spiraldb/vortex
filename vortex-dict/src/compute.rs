@@ -52,7 +52,7 @@ mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::{IntoArray, ToArray};
-    use vortex_schema::{DType, Nullability};
+    use vortex_dtype::{DType, Nullability};
 
     use crate::{dict_encode_typed_primitive, dict_encode_varbin, DictArray};
 

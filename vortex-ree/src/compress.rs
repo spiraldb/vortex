@@ -10,8 +10,8 @@ use vortex::validity::Validity;
 use vortex::ArrayDType;
 use vortex::ArrayTrait;
 use vortex::{match_each_integer_ptype, Array, ArrayDef, IntoArray, OwnedArray};
+use vortex_dtype::Nullability;
 use vortex_error::VortexResult;
-use vortex_schema::Nullability;
 
 use crate::{REEArray, REEEncoding};
 

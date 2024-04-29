@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::ptype::NativePType;
 use crate::scalar::Scalar;

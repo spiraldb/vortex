@@ -10,9 +10,9 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, OwnedArray};
+use vortex_dtype::Nullability;
+use vortex_dtype::Nullability::NonNullable;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_schema::Nullability;
-use vortex_schema::Nullability::NonNullable;
 use Nullability::Nullable;
 
 mod compress;

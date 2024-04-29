@@ -22,11 +22,11 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compute::take::take;
 use vortex::{IntoArray, OwnedArray, SerdeContext, ToArrayData, ToStatic};
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
-use vortex_schema::DType;
 
 use crate::compress_ctx;
 

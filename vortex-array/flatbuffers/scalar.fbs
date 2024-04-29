@@ -1,4 +1,4 @@
-include "vortex-schema/flatbuffers/dtype.fbs";
+include "vortex-dtype/flatbuffers/dtype.fbs";
 
 namespace vortex.scalar;
 

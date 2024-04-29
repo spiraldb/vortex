@@ -3,9 +3,9 @@ use std::io::{BufWriter, Write};
 use itertools::Itertools;
 use vortex::array::chunked::ChunkedArray;
 use vortex::{Array, ArrayDType, SerdeContext, ToArrayData};
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_flatbuffers::FlatBufferWriter;
-use vortex_schema::DType;
 
 use crate::messages::{IPCChunk, IPCContext, IPCMessage, IPCSchema};
 use crate::ALIGNMENT;

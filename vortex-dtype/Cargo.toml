@@ -1,5 +1,5 @@
 [package]
-name = "vortex-schema"
+name = "vortex-dtype"
 version = { workspace = true }
 description = "Vortex schema"
 homepage = { workspace = true }
@@ -12,7 +12,7 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [lib]
-name = "vortex_schema"
+name = "vortex_dtype"
 path = "src/lib.rs"
 
 [dependencies]

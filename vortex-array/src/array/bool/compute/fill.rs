@@ -1,5 +1,5 @@
+use vortex_dtype::Nullability;
 use vortex_error::VortexResult;
-use vortex_schema::Nullability;
 
 use crate::array::bool::BoolArray;
 use crate::compute::fill::FillForwardFn;

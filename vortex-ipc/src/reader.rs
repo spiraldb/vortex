@@ -18,9 +18,9 @@ use vortex::{
     match_each_integer_ptype, Array, ArrayDType, ArrayView, IntoArray, OwnedArray, SerdeContext,
     ToArray, ToStatic,
 };
+use vortex_dtype::{DType, DTypeSerdeContext, Signedness};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
-use vortex_schema::{DType, DTypeSerdeContext, Signedness};
 
 use crate::flatbuffers::ipc::Message;
 use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};

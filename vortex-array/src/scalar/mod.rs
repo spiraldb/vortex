@@ -9,8 +9,8 @@ pub use null::*;
 pub use primitive::*;
 pub use struct_::*;
 pub use utf8::*;
+use vortex_dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness};
 use vortex_error::VortexResult;
-use vortex_schema::{DType, FloatWidth, IntWidth, Nullability, Signedness};
 
 use crate::ptype::NativePType;
 

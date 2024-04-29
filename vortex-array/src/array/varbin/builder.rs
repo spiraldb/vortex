@@ -1,7 +1,7 @@
 use std::mem;
 
 use arrow_buffer::NullBufferBuilder;
-use vortex_schema::DType;
+use vortex_dtype::DType;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
@@ -67,8 +67,8 @@ impl<O: NativePType> VarBinBuilder<O> {
 
 #[cfg(test)]
 mod test {
-    use vortex_schema::DType;
-    use vortex_schema::Nullability::Nullable;
+    use vortex_dtype::DType;
+    use vortex_dtype::Nullability::Nullable;
 
     use crate::array::varbin::builder::VarBinBuilder;
     use crate::compute::scalar_at::scalar_at;

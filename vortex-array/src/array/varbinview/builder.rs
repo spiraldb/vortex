@@ -3,7 +3,7 @@ use std::mem;
 use std::mem::ManuallyDrop;
 
 use arrow_buffer::NullBufferBuilder;
-use vortex_schema::DType;
+use vortex_dtype::DType;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbinview::{

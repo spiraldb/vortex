@@ -5,8 +5,8 @@ use std::path::Path;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::r#struct::StructArray;
 use vortex::ArrayDType;
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::data_downloads::FileType;
 use crate::reader::open_vortex;

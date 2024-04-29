@@ -4,8 +4,8 @@ use arrow_array::{ArrayRef as ArrowArrayRef, BinaryViewArray, StringViewArray};
 use arrow_buffer::Buffer as ArrowBuffer;
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
+use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::DType;
 
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};

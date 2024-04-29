@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::accessor::ArrayAccessor;
 use crate::array::varbin::{varbin_scalar, VarBinArray};
@@ -127,7 +127,7 @@ impl<'a> VarBinAccumulator<'a> {
 
 #[cfg(test)]
 mod test {
-    use vortex_schema::{DType, Nullability};
+    use vortex_dtype::{DType, Nullability};
 
     use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
     use crate::stats::{ArrayStatistics, Stat};

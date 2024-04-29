@@ -17,7 +17,7 @@ vortex-alloc = { path = "../vortex-alloc" }
 vortex-array = { path = "../vortex-array" }
 vortex-error = { path = "../vortex-error" }
 vortex-fastlanes = { path = "../vortex-fastlanes" }
-vortex-schema = { path = "../vortex-schema" }
+vortex-dtype = { path = "../vortex-dtype" }
 zigzag = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 

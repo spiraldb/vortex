@@ -172,10 +172,10 @@ impl ArrayValidity for SparseArray<'_> {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
+    use vortex_dtype::Nullability::Nullable;
+    use vortex_dtype::Signedness::Signed;
+    use vortex_dtype::{DType, IntWidth};
     use vortex_error::VortexError;
-    use vortex_schema::Nullability::Nullable;
-    use vortex_schema::Signedness::Signed;
-    use vortex_schema::{DType, IntWidth};
 
     use crate::accessor::ArrayAccessor;
     use crate::array::sparse::SparseArray;
