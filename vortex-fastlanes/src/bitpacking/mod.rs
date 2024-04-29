@@ -1,5 +1,6 @@
 use ::serde::{Deserialize, Serialize};
 pub use compress::*;
+use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -121,6 +122,14 @@ impl BitPackedArray<'_> {
             &Validity::DTYPE,
         ))
     }
+
+    pub fn encode(array: Array<'_>, bit_width: usize) -> VortexResult<BitPackedArray> {
+        if let Ok(parray) = PrimitiveArray::try_from(array) {
+            Ok(bitpack_encode(parray, bit_width)?)
+        } else {
+            vortex_bail!("Bitpacking can only encode primitive arrays");
+        }
+    }
 }
 
 impl ArrayFlatten for BitPackedArray<'_> {
@@ -194,8 +203,9 @@ mod test {
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::slice::slice;
     use vortex::encoding::EncodingRef;
+    use vortex::IntoArray;
 
-    use crate::BitPackedEncoding;
+    use crate::{BitPackedArray, BitPackedEncoding};
 
     #[test]
     fn slice_within_block() {
@@ -247,5 +257,30 @@ mod test {
             scalar_at(&compressed, compressed.len() - 1).unwrap(),
             ((9215 % 63) as u8).into()
         );
+    }
+
+    #[test]
+    fn test_encode() {
+        let values = vec![Some(1), None, Some(1), None, Some(1), None, Some(u64::MAX)];
+        let uncompressed = PrimitiveArray::from_nullable_vec(values);
+        let packed = BitPackedArray::encode(uncompressed.into_array(), 1).unwrap();
+        let expected = &[1, 0, 1, 0, 1, 0, u64::MAX];
+        let results = packed
+            .into_array()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, expected);
+    }
+
+    #[test]
+    fn test_encode_too_wide() {
+        let values = vec![Some(1u8), None, Some(1), None, Some(1), None];
+        let uncompressed = PrimitiveArray::from_nullable_vec(values);
+        let _packed = BitPackedArray::encode(uncompressed.clone().into_array(), 8)
+            .expect_err("Cannot pack value into the same width");
+        let _packed = BitPackedArray::encode(uncompressed.into_array(), 9)
+            .expect_err("Cannot pack value into larger width");
     }
 }

@@ -72,10 +72,8 @@ impl EncodingCompression for BitPackedEncoding {
             return Ok(array.to_static());
         }
 
-        let packed = bitpack(&parray, bit_width)?;
-
         let validity = ctx.compress_validity(parray.validity())?;
-
+        let packed = bitpack(&parray, bit_width)?;
         let patches = if num_exceptions > 0 {
             Some(ctx.auxiliary("patches").compress(
                 &bitpack_patches(&parray, bit_width, num_exceptions),
@@ -97,7 +95,42 @@ impl EncodingCompression for BitPackedEncoding {
     }
 }
 
-fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<OwnedArray> {
+pub(crate) fn bitpack_encode(
+    array: PrimitiveArray<'_>,
+    bit_width: usize,
+) -> VortexResult<BitPackedArray> {
+    let bit_width_freq = array
+        .statistics()
+        .compute_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)
+        .ok_or_else(|| vortex_err!("Could not compute bit width frequencies"))?
+        .0;
+    let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
+
+    if bit_width >= array.ptype().bit_width() {
+        // Nothing we can do
+        vortex_bail!(
+            "Cannot pack -- specified bit width is greater than or equal to the type's bit width"
+        )
+    }
+
+    let packed = bitpack(&array, bit_width)?;
+    let patches = if num_exceptions > 0 {
+        Some(bitpack_patches(&array, bit_width, num_exceptions))
+    } else {
+        None
+    };
+
+    BitPackedArray::try_new(
+        packed,
+        array.validity(),
+        patches,
+        bit_width,
+        array.dtype().clone(),
+        array.len(),
+    )
+}
+
+pub(crate) fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<OwnedArray> {
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     // TODO(ngates): we should implement this using a vortex cast to centralize this hack.
     let bytes = match_integers_by_width!(parray.ptype(), |$P| {
@@ -329,6 +362,9 @@ fn bytes_per_exception(ptype: PType) -> usize {
 }
 
 fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
+    if (bit_width_freq.len()) <= bit_width {
+        return 0;
+    }
     bit_width_freq[bit_width + 1..].iter().sum()
 }
 
