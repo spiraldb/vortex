@@ -377,7 +377,6 @@ mod tests {
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId};
     use vortex::ptype::NativePType;
-    use vortex::validity::Validity;
     use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, SerdeContext};
     use vortex_alp::{ALPArray, ALPEncoding};
     use vortex_error::VortexResult;
@@ -441,9 +440,10 @@ mod tests {
                 .collect_vec(),
         )
         .into_array();
-        let apl_encoded = ALPArray::encode(pdata).unwrap();
+        let alp_encoded = ALPArray::encode(pdata).unwrap();
+        assert_eq!(alp_encoded.encoding().id(), ALPEncoding.id());
         test_base_case(
-            &apl_encoded,
+            &alp_encoded,
             &[
                 2999989.5f64,
                 2999988.5,
@@ -485,11 +485,8 @@ mod tests {
     fn test_write_read_bitpacked() {
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let uncompressed = PrimitiveArray::from((0i64..3_000).rev().collect_vec());
-        // NB: bit_width here must be >= 2^ceil(log2(MAX_VALUE)) for correct packing w/o patches
-        let packed = BitPackedArray::encode(&uncompressed, Validity::AllValid, None, 12).unwrap();
-
+        let packed = BitPackedArray::encode(uncompressed.into_array()).unwrap();
         assert_eq!(packed.encoding().id(), BitPackedEncoding.id());
-
         let indices = PrimitiveArray::from(vec![1i32, 2, 3, 4, 5, 6, 7, 7, 7, 8]).into_array();
         let array = test_read_write_inner(&packed, &indices).unwrap();
         let expected = &[2998, 2997, 2996, 2995, 2994, 2993, 2992, 2992, 2992, 2991];

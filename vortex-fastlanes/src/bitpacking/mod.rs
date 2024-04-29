@@ -123,22 +123,12 @@ impl BitPackedArray<'_> {
         ))
     }
 
-    pub fn encode(
-        parray: &PrimitiveArray<'_>,
-        validity: Validity,
-        patches: Option<Array>,
-        bit_width: usize,
-    ) -> VortexResult<OwnedArray> {
-        let packed = bitpack(parray, bit_width)?;
-        BitPackedArray::try_new(
-            packed,
-            validity,
-            patches,
-            bit_width,
-            parray.dtype().clone(),
-            parray.len(),
-        )
-        .map(|a| a.into_array())
+    pub fn encode(array: Array<'_>) -> VortexResult<OwnedArray> {
+        if let Ok(parray) = PrimitiveArray::try_from(array) {
+            Ok(bitpack_encode(parray)?)
+        } else {
+            vortex_bail!("Bitpacking can only encode primitive arrays");
+        }
     }
 }
 
@@ -212,9 +202,10 @@ mod test {
     use vortex::compress::{CompressConfig, CompressCtx};
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::slice::slice;
-    use vortex::encoding::EncodingRef;
+    use vortex::encoding::{ArrayEncoding, EncodingRef};
+    use vortex::IntoArray;
 
-    use crate::BitPackedEncoding;
+    use crate::{BitPackedArray, BitPackedEncoding};
 
     #[test]
     fn slice_within_block() {
@@ -266,5 +257,20 @@ mod test {
             scalar_at(&compressed, compressed.len() - 1).unwrap(),
             ((9215 % 63) as u8).into()
         );
+    }
+
+    #[test]
+    fn test_encode() {
+        let values = vec![Some(1), None, Some(1), None, Some(1), None, Some(u64::MAX)];
+        let uncompressed = PrimitiveArray::from_nullable_vec(values);
+        let packed = BitPackedArray::encode(uncompressed.into_array()).unwrap();
+        assert_eq!(packed.encoding().id(), BitPackedEncoding.id());
+        let expected = &[1, 0, 1, 0, 1, 0, u64::MAX];
+        let results = packed
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, expected);
     }
 }

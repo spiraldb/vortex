@@ -95,6 +95,38 @@ impl EncodingCompression for BitPackedEncoding {
     }
 }
 
+pub(crate) fn bitpack_encode(array: PrimitiveArray<'_>) -> VortexResult<OwnedArray> {
+    let bit_width_freq = array
+        .statistics()
+        .compute_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)
+        .ok_or_else(|| vortex_err!("Could not compute bit width frequencies"))?
+        .0;
+    let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception(array.ptype()));
+    let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
+
+    if bit_width == array.ptype().bit_width() {
+        // Nothing we can do
+        return Ok(array.into_array().to_static());
+    }
+
+    let packed = bitpack(&array, bit_width)?;
+    let patches = if num_exceptions > 0 {
+        Some(bitpack_patches(&array, bit_width, num_exceptions))
+    } else {
+        None
+    };
+
+    BitPackedArray::try_new(
+        packed,
+        array.validity(),
+        patches,
+        bit_width,
+        array.dtype().clone(),
+        array.len(),
+    )
+    .map(|a| a.into_array())
+}
+
 pub(crate) fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<OwnedArray> {
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     // TODO(ngates): we should implement this using a vortex cast to centralize this hack.
