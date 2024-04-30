@@ -174,10 +174,20 @@ impl<'a> PrimitiveArray<'a> {
         }
 
         let sub_vec: Vec<T> = if should_wrap {
-            self.typed_data::<T>()
+            let validity = self
+                .logical_validity()
+                .to_null_buffer()?
+                .expect("should_wrap only true if there are nulls");
+            self.typed_data()
                 .iter()
-                .map(|v| T::checked_sub(v, &to_subtract))
-                .map(|v| v.unwrap_or_default())
+                .zip(validity.iter())
+                .map(|(&v, is_valid): (&T, bool)| {
+                    if is_valid {
+                        v - to_subtract
+                    } else {
+                        T::default()
+                    }
+                })
                 .collect_vec()
         } else {
             self.typed_data::<T>()
