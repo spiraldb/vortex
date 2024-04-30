@@ -5365,6 +5365,7 @@ dependencies = [
  "flatbuffers",
  "flatc",
  "itertools 0.12.1",
+ "num-traits",
  "serde",
  "vortex-dtype",
  "vortex-error",

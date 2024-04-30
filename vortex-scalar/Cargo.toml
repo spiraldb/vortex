@@ -18,6 +18,7 @@ serde = { workspace = true, optional = true }
 vortex-dtype = { path = "../vortex-dtype" }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
+num-traits = "0.2.18"
 
 [build-dependencies]
 flatc = { workspace = true }
