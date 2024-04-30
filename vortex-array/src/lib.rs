@@ -42,7 +42,6 @@ use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
 pub mod flatbuffers {
     pub use gen_array::vortex::*;
-    pub use gen_scalar::vortex::*;
 
     #[allow(unused_imports)]
     #[allow(dead_code)]
@@ -52,18 +51,14 @@ pub mod flatbuffers {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/array.rs"));
     }
 
-    #[allow(unused_imports)]
-    #[allow(dead_code)]
-    #[allow(non_camel_case_types)]
-    #[allow(clippy::all)]
-    mod gen_scalar {
-        include!(concat!(env!("OUT_DIR"), "/flatbuffers/scalar.rs"));
-    }
-
     mod deps {
         pub mod dtype {
             #[allow(unused_imports)]
             pub use vortex_dtype::flatbuffers as dtype;
+        }
+        pub mod scalar {
+            #[allow(unused_imports)]
+            pub use vortex_scalar::flatbuffers as scalar;
         }
     }
 }
