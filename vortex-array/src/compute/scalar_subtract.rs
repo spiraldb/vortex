@@ -4,33 +4,28 @@ use vortex_scalar::Scalar;
 
 use crate::{Array, ArrayDType, OwnedArray};
 
-pub trait ScalarSubtractFn {
-    fn scalar_subtract(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray>;
+pub trait SubtractScalarFn {
+    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray>;
 }
 
-pub fn scalar_subtract<T: Into<Scalar>>(array: &Array, to_subtract: T) -> VortexResult<OwnedArray> {
+pub fn subtract_scalar<T: Into<Scalar>>(array: &Array, to_subtract: T) -> VortexResult<OwnedArray> {
     let to_subtract = to_subtract.into().cast(array.dtype())?;
 
     if let Some(subtraction_result) =
-        array.with_dyn(|c| c.scalar_subtract().map(|t| t.scalar_subtract(&to_subtract)))
+        array.with_dyn(|c| c.subtract_scalar().map(|t| t.subtract_scalar(&to_subtract)))
     {
         return subtraction_result;
     }
     // if subtraction is not implemented for the given array type, but the array has a numeric
     // DType, we can flatten the array and apply subtraction to the flattened primitive array
-    let result = match array.dtype() {
+    match array.dtype() {
         DType::Primitive(..) => {
-            let array = array.clone();
-            let flat = array.flatten_primitive()?;
-            Some(flat.scalar_subtract(&to_subtract))
+            let flat = array.clone().flatten_primitive()?;
+            flat.subtract_scalar(&to_subtract)
         }
-        _ => None,
-    };
-
-    result.unwrap_or_else(|| {
-        Err(vortex_err!(
+        _ => Err(vortex_err!(
             NotImplemented: "scalar_subtract",
             array.encoding().id().name()
-        ))
-    })
+        )),
+    }
 }

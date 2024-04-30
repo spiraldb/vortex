@@ -22,29 +22,15 @@ fn scalar_subtract(c: &mut Criterion) {
 
     let to_subtract = -1i64;
 
-    let chunked = ChunkedArray::from_iter(vec![data1.clone(), data2]).into_array();
+    let chunked = ChunkedArray::from_iter([data1.clone(), data2]).into_array();
 
     group.bench_function("vortex", |b| {
         b.iter(|| {
             let array =
-                vortex::compute::scalar_subtract::scalar_subtract(&chunked, to_subtract).unwrap();
+                vortex::compute::scalar_subtract::subtract_scalar(&chunked, to_subtract).unwrap();
 
             let chunked = ChunkedArray::try_from(array).unwrap();
-            let mut chunks_out = chunked.chunks();
-            let results = chunks_out
-                .next()
-                .unwrap()
-                .flatten_primitive()?
-                .typed_data::<i64>()
-                .to_vec();
-            black_box(results);
-            let results = chunks_out
-                .next()
-                .unwrap()
-                .flatten_primitive()?
-                .typed_data::<i64>()
-                .to_vec();
-            black_box(results);
+            black_box(chunked);
             Ok::<(), VortexError>(())
         });
     });

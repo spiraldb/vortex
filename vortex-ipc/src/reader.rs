@@ -8,7 +8,7 @@ use nougat::gat;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::composite::VORTEX_COMPOSITE_EXTENSIONS;
 use vortex::buffer::Buffer;
-use vortex::compute::scalar_subtract::scalar_subtract;
+use vortex::compute::scalar_subtract::subtract_scalar;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
 use vortex::compute::take::take;
@@ -200,7 +200,7 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
 
             let indices_for_batch = slice(indices, left, right)?.flatten_primitive()?;
             let shifted_arr = match_each_integer_ptype!(indices_for_batch.ptype(), |$T| {
-                scalar_subtract(&indices_for_batch.into_array(), Scalar::from(row_offset as $T))?
+                subtract_scalar(&indices_for_batch.into_array(), Scalar::from(row_offset as $T))?
             });
 
             let from_current_batch = take(&batch, &shifted_arr)?;

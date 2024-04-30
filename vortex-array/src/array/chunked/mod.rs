@@ -5,7 +5,7 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
-use crate::compute::scalar_subtract::{scalar_subtract, ScalarSubtractFn};
+use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
@@ -140,12 +140,16 @@ impl ArrayValidity for ChunkedArray<'_> {
 
 impl EncodingCompression for ChunkedEncoding {}
 
-impl ScalarSubtractFn for ChunkedArray<'_> {
-    fn scalar_subtract(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
+impl SubtractScalarFn for ChunkedArray<'_> {
+    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
         self.chunks()
-            .map(|chunk| scalar_subtract(&chunk, to_subtract.clone()))
+            .map(|chunk| subtract_scalar(&chunk, to_subtract.clone()))
             .collect::<VortexResult<Vec<_>>>()
-            .map(|chunks| ChunkedArray::from_iter(chunks).into_array())
+            .map(|chunks| {
+                ChunkedArray::try_new(chunks, self.dtype().clone())
+                    .expect("Mismatched types in chunked array")
+                    .into_array()
+            })
     }
 }
 
@@ -155,7 +159,7 @@ mod test {
     use vortex_dtype::{NativePType, PType};
 
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
-    use crate::compute::scalar_subtract::scalar_subtract;
+    use crate::compute::scalar_subtract::subtract_scalar;
     use crate::{Array, IntoArray, ToArray};
 
     #[allow(dead_code)]
@@ -190,7 +194,7 @@ mod test {
 
         let chunked = ChunkedArray::from_iter(vec![chunk1, chunk2]);
 
-        let array = scalar_subtract(&chunked.to_array(), to_subtract).unwrap();
+        let array = subtract_scalar(&chunked.to_array(), to_subtract).unwrap();
 
         let chunked = ChunkedArray::try_from(array).unwrap();
         let mut chunks_out = chunked.chunks();

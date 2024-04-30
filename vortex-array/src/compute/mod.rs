@@ -8,7 +8,7 @@ use search_sorted::SearchSortedFn;
 use slice::SliceFn;
 use take::TakeFn;
 
-use crate::compute::scalar_subtract::ScalarSubtractFn;
+use crate::compute::scalar_subtract::SubtractScalarFn;
 
 pub mod as_arrow;
 pub mod as_contiguous;
@@ -46,7 +46,7 @@ pub trait ArrayCompute {
         None
     }
 
-    fn scalar_subtract(&self) -> Option<&dyn ScalarSubtractFn> {
+    fn subtract_scalar(&self) -> Option<&dyn SubtractScalarFn> {
         None
     }
 
