@@ -20,7 +20,10 @@ impl SliceFn for ChunkedArray<'_> {
         }
 
         let mut chunks = (offset_chunk..length_chunk + 1)
-            .map(|i| self.chunk(i).unwrap())
+            .map(|i| {
+                self.chunk(i)
+                    .expect("find_chunk_idx returned an incorrect index")
+            })
             .collect::<Vec<_>>();
         if let Some(c) = chunks.first_mut() {
             *c = slice(c, offset_in_first_chunk, c.len())?;
