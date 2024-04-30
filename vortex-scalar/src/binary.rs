@@ -4,8 +4,8 @@ use vortex_dtype::DType;
 use vortex_dtype::Nullability::{NonNullable, Nullable};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::scalar::value::ScalarValue;
-use crate::scalar::Scalar;
+use crate::value::ScalarValue;
+use crate::Scalar;
 
 pub type BinaryScalar = ScalarValue<Vec<u8>>;
 

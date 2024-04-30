@@ -2,11 +2,11 @@ use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::scalar::Scalar;
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray, OwnedArray};
 use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::alp::ALPFloat;
 use crate::array::{ALPArray, ALPEncoding};

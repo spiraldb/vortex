@@ -1,9 +1,9 @@
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::ArrayCompute;
-use vortex::scalar::{PScalar, Scalar};
 use vortex::{ArrayDType, IntoArray, OwnedArray};
 use vortex_error::{vortex_err, VortexResult};
+use vortex_scalar::{PScalar, Scalar};
 use zigzag::ZigZag as ExternalZigZag;
 
 use crate::ZigZagArray;

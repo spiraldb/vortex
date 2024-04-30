@@ -4,13 +4,13 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
-use vortex::scalar::{ListScalarVec, Scalar};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray, ToStatic};
 use vortex_dtype::PType::U8;
 use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_scalar::{ListScalarVec, Scalar};
 
 use crate::{match_integers_by_width, BitPackedArray, BitPackedEncoding};
 

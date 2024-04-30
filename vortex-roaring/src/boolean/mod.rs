@@ -115,9 +115,9 @@ impl ArrayFlatten for RoaringBoolArray<'_> {
 mod test {
     use vortex::array::bool::BoolArray;
     use vortex::compute::scalar_at::scalar_at;
-    use vortex::scalar::Scalar;
     use vortex::IntoArray;
     use vortex_error::VortexResult;
+    use vortex_scalar::Scalar;
 
     use crate::RoaringBoolArray;
 

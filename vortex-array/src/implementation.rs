@@ -51,7 +51,6 @@ macro_rules! impl_encoding {
                 VORTEX_ENCODINGS,
             };
             use $crate::stats::Stat;
-            use $crate::scalar::Scalar;
             use std::any::Any;
             use std::collections::HashMap;
             use std::fmt::Debug;
@@ -59,6 +58,7 @@ macro_rules! impl_encoding {
             use std::sync::Arc;
             use vortex_error::VortexError;
             use vortex_dtype::DType;
+            use vortex_scalar::Scalar;
 
             /// The array definition trait
             #[derive(Debug, Clone)]

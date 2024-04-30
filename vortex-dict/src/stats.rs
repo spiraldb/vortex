@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use vortex::scalar::Scalar;
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, Stat};
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::dict::DictArray;
 

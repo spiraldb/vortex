@@ -6,7 +6,7 @@ use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::scalar::Scalar;
+use crate::Scalar;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructScalar {

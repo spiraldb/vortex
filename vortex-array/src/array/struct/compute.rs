@@ -6,6 +6,7 @@ use arrow_array::{
 use arrow_schema::{Field, Fields};
 use itertools::Itertools;
 use vortex_error::VortexResult;
+use vortex_scalar::{Scalar, StructScalar};
 
 use crate::array::r#struct::StructArray;
 use crate::compute::as_arrow::{as_arrow, AsArrowArray};
@@ -14,7 +15,6 @@ use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::scalar::{Scalar, StructScalar};
 use crate::ArrayTrait;
 use crate::{Array, ArrayDType, IntoArray, OwnedArray};
 

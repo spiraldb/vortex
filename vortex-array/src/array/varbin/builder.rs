@@ -69,10 +69,10 @@ impl<O: NativePType> VarBinBuilder<O> {
 mod test {
     use vortex_dtype::DType;
     use vortex_dtype::Nullability::Nullable;
+    use vortex_scalar::Utf8Scalar;
 
     use crate::array::varbin::builder::VarBinBuilder;
     use crate::compute::scalar_at::scalar_at;
-    use crate::scalar::Utf8Scalar;
     use crate::{ArrayDType, IntoArray};
 
     #[test]

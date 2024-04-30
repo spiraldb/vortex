@@ -11,7 +11,6 @@ mod flatten;
 mod implementation;
 mod metadata;
 mod sampling;
-pub mod scalar;
 pub mod stats;
 mod tree;
 mod typed;

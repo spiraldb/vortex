@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use vortex_dtype::DType;
 use vortex_dtype::NativePType;
 use vortex_error::VortexResult;
-
-use crate::scalar::Scalar;
+use vortex_scalar::Scalar;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Stat {

@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
-use crate::scalar::Scalar;
+use crate::Scalar;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CompositeScalar {

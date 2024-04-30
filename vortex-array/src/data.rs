@@ -3,10 +3,10 @@ use std::sync::{Arc, RwLock};
 
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::EncodingRef;
-use crate::scalar::Scalar;
 use crate::stats::Stat;
 use crate::stats::Statistics;
 use crate::{Array, ArrayMetadata, IntoArray, OwnedArray, ToArray};

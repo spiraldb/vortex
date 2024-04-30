@@ -1,10 +1,10 @@
 use vortex_dtype::{match_each_native_ptype, Nullability};
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::scalar::Scalar;
 use crate::validity::Validity;
 use crate::{ArrayDType, ArrayTrait};
 use crate::{ArrayFlatten, Flattened};

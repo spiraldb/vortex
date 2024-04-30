@@ -177,13 +177,13 @@ mod test {
     use vortex_dtype::Signedness::Signed;
     use vortex_dtype::{DType, IntWidth};
     use vortex_error::VortexError;
+    use vortex_scalar::Scalar;
 
     use crate::accessor::ArrayAccessor;
     use crate::array::sparse::SparseArray;
     use crate::compute::cast::cast;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::scalar::Scalar;
     use crate::{Array, IntoArray, OwnedArray};
 
     fn nullable_fill() -> Scalar {

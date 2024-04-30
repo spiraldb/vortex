@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
-use crate::scalar::Scalar;
 use crate::stats::{ArrayStatisticsCompute, Stat};
 
 impl ArrayStatisticsCompute for ChunkedArray<'_> {

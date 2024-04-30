@@ -4,7 +4,7 @@ use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
-use crate::scalar::Scalar;
+use crate::Scalar;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct ListScalar {

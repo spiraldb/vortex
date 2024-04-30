@@ -311,12 +311,12 @@ impl EncodingCompression for VarBinViewEncoding {}
 #[cfg(test)]
 mod test {
     use arrow_array::array::StringViewArray as ArrowStringViewArray;
+    use vortex_scalar::Scalar;
 
     use crate::array::varbinview::VarBinViewArray;
     use crate::compute::as_arrow::as_arrow;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::scalar::Scalar;
     use crate::{ArrayTrait, IntoArray};
 
     #[test]

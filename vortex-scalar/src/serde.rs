@@ -1,3 +1,5 @@
+#![cfg(feature = "serde")]
+
 use flatbuffers::{root, FlatBufferBuilder, WIPOffset};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -8,7 +10,7 @@ use vortex_error::{vortex_bail, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, ReadFlatBuffer, WriteFlatBuffer};
 
 use crate::flatbuffers::scalar as fb;
-use crate::scalar::{PScalar, PrimitiveScalar, Scalar, Utf8Scalar};
+use crate::{PScalar, PrimitiveScalar, Scalar, Utf8Scalar};
 
 impl FlatBufferRoot for Scalar {}
 

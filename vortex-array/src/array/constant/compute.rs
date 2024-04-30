@@ -1,12 +1,12 @@
 use itertools::Itertools;
 use vortex_error::{vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::scalar::Scalar;
 use crate::{Array, ArrayTrait, IntoArray, OwnedArray};
 
 impl ArrayCompute for ConstantArray<'_> {
