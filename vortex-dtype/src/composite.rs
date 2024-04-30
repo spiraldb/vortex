@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 
 use linkme::distributed_slice;
-use serde::{Deserialize, Deserializer};
 use vortex_error::{vortex_err, VortexError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
@@ -33,17 +32,6 @@ impl AsRef<str> for CompositeID {
 impl Display for CompositeID {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for CompositeID {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        CompositeID::try_from(<&'de str>::deserialize(deserializer)?)
-            .map_err(serde::de::Error::custom)
     }
 }
 

@@ -3,11 +3,11 @@ pub use half;
 pub use ptype::*;
 mod deserialize;
 pub use composite::*;
-mod dtype;
-mod ptype;
-// mod serde;
 mod composite;
+mod dtype;
 mod nullability;
+mod ptype;
+mod serde;
 mod serialize;
 
 pub use nullability::*;
