@@ -5171,6 +5171,7 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
@@ -5200,6 +5201,7 @@ dependencies = [
  "vortex-dtype",
  "vortex-error",
  "vortex-flatbuffers",
+ "vortex-scalar",
  "walkdir",
 ]
 
@@ -5213,6 +5215,7 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
@@ -5232,6 +5235,7 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
@@ -5280,6 +5284,7 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
@@ -5332,6 +5337,7 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
@@ -5348,6 +5354,21 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
+]
+
+[[package]]
+name = "vortex-scalar"
+version = "0.1.0"
+dependencies = [
+ "flatbuffers",
+ "flatc",
+ "itertools 0.12.1",
+ "serde",
+ "vortex-dtype",
+ "vortex-error",
+ "vortex-flatbuffers",
+ "walkdir",
 ]
 
 [[package]]
@@ -5361,6 +5382,7 @@ dependencies = [
  "vortex-dtype",
  "vortex-error",
  "vortex-fastlanes",
+ "vortex-scalar",
  "zigzag",
 ]
 

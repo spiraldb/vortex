@@ -1,6 +1,6 @@
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
-use crate::scalar::Scalar;
 use crate::Array;
 
 pub trait ScalarAtFn {

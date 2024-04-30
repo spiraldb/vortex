@@ -23,6 +23,7 @@ use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit};
 use vortex_dtype::DType;
 use vortex_dtype::NativePType;
+use vortex_scalar::NullScalar;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
@@ -32,7 +33,6 @@ use crate::array::r#struct::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::arrow::FromArrowArray;
-use crate::scalar::NullScalar;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
 use crate::{ArrayData, IntoArray, IntoArrayData};

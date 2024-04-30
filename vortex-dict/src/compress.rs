@@ -8,13 +8,13 @@ use vortex::accessor::ArrayAccessor;
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::array::varbin::{VarBin, VarBinArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::scalar::AsBytes;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray};
 use vortex_dtype::NativePType;
 use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_error::VortexResult;
+use vortex_scalar::AsBytes;
 
 use crate::dict::{DictArray, DictEncoding};
 
@@ -254,7 +254,7 @@ mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
-    use vortex::scalar::PrimitiveScalar;
+    use vortex_scalar::PrimitiveScalar;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
 

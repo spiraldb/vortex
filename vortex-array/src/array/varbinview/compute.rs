@@ -7,6 +7,7 @@ use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
@@ -14,7 +15,6 @@ use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::ArrayCompute;
-use crate::scalar::Scalar;
 use crate::validity::ArrayValidity;
 use crate::{ArrayDType, IntoArray, IntoArrayData, OwnedArray};
 

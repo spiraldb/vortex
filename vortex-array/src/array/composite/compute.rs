@@ -1,6 +1,7 @@
 use arrow_array::ArrayRef as ArrowArrayRef;
 use itertools::Itertools;
 use vortex_error::{vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::array::composite::array::CompositeArray;
 use crate::compute::as_arrow::AsArrowArray;
@@ -9,7 +10,6 @@ use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::scalar::Scalar;
 use crate::{Array, ArrayDType, IntoArray, OwnedArray};
 
 impl ArrayCompute for CompositeArray<'_> {

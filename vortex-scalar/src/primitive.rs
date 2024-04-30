@@ -8,7 +8,7 @@ use vortex_dtype::{DType, Nullability};
 use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::scalar::Scalar;
+use crate::Scalar;
 
 pub trait PScalarType: NativePType + Into<PScalar> + TryFrom<PScalar, Error = VortexError> {}
 impl<T: NativePType + Into<PScalar> + TryFrom<PScalar, Error = VortexError>> PScalarType for T {}
@@ -344,7 +344,7 @@ mod test {
     use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
     use vortex_error::VortexError;
 
-    use crate::scalar::Scalar;
+    use crate::Scalar;
 
     #[test]
     fn into_from() {

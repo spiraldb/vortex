@@ -2,10 +2,10 @@ use arrow_buffer::BooleanBufferBuilder;
 use itertools::Itertools;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::{VortexError, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
-use crate::scalar::Scalar;
 use crate::validity::Validity;
 use crate::{ArrayFlatten, ArrayTrait, Flattened};
 

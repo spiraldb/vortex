@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::accessor::ArrayAccessor;
 use crate::array::varbin::compute_stats;
 use crate::array::varbinview::VarBinViewArray;
-use crate::scalar::Scalar;
 use crate::stats::{ArrayStatisticsCompute, Stat};
 use crate::{ArrayDType, ArrayTrait};
 

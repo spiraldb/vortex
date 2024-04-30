@@ -7,6 +7,7 @@ use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::{varbin_scalar, VarBinArray};
@@ -18,7 +19,6 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::scalar::Scalar;
 use crate::validity::{ArrayValidity, Validity};
 use crate::{Array, ArrayDType, IntoArray, OwnedArray, ToArray};
 

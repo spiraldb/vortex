@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::array::bool::BoolArray;
-use crate::scalar::Scalar;
 use crate::stats::{ArrayStatisticsCompute, Stat};
 use crate::ArrayTrait;
 

@@ -24,6 +24,25 @@ mod struct_;
 mod utf8;
 mod value;
 
+pub mod flatbuffers {
+    pub use gen_scalar::vortex::*;
+
+    #[allow(unused_imports)]
+    #[allow(dead_code)]
+    #[allow(non_camel_case_types)]
+    #[allow(clippy::all)]
+    mod gen_scalar {
+        include!(concat!(env!("OUT_DIR"), "/flatbuffers/scalar.rs"));
+    }
+
+    mod deps {
+        pub mod dtype {
+            #[allow(unused_imports)]
+            pub use vortex_dtype::flatbuffers as dtype;
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Scalar {
     Binary(BinaryScalar),
@@ -156,7 +175,7 @@ impl<T: NativePType> AsBytes for T {
 mod test {
     use std::mem;
 
-    use crate::scalar::Scalar;
+    use crate::Scalar;
 
     #[test]
     fn size_of() {

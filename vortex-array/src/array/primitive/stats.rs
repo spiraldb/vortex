@@ -4,10 +4,10 @@ use std::mem::size_of;
 use arrow_buffer::buffer::BooleanBuffer;
 use vortex_dtype::match_each_native_ptype;
 use vortex_error::VortexResult;
+use vortex_scalar::{ListScalarVec, PScalar};
+use vortex_scalar::{PScalarType, Scalar};
 
 use crate::array::primitive::PrimitiveArray;
-use crate::scalar::{ListScalarVec, PScalar};
-use crate::scalar::{PScalarType, Scalar};
 use crate::stats::{ArrayStatisticsCompute, Stat};
 use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
@@ -229,8 +229,9 @@ impl<T: PStatsType> StatsAccumulator<T> {
 
 #[cfg(test)]
 mod test {
+    use vortex_scalar::ListScalarVec;
+
     use crate::array::primitive::PrimitiveArray;
-    use crate::scalar::ListScalarVec;
     use crate::stats::{ArrayStatistics, Stat};
 
     #[test]

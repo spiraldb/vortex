@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
-use crate::scalar::Scalar;
 use crate::stats::{ArrayStatisticsCompute, Stat};
 use crate::{ArrayDType, ArrayTrait};
 
