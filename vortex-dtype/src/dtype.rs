@@ -16,7 +16,7 @@ pub type Metadata = Vec<u8>;
 pub enum DType {
     Null,
     Bool(Nullability),
-    #[serde(with = "primitive_serde")]
+    #[serde(with = "crate::serde::dtype_primitive")]
     Primitive(PType, Nullability),
     Utf8(Nullability),
     Binary(Nullability),
@@ -26,38 +26,6 @@ pub enum DType {
     },
     List(Box<DType>, Nullability),
     Composite(CompositeID, Nullability),
-}
-
-#[cfg(feature = "serde")]
-mod primitive_serde {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    use crate::{Nullability, PType};
-
-    #[derive(Serialize, Deserialize)]
-    struct PrimitiveSerde {
-        ptype: PType,
-        n: Nullability,
-    }
-
-    pub fn serialize<S>(ptype: &PType, n: &Nullability, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        PrimitiveSerde {
-            ptype: *ptype,
-            n: *n,
-        }
-        .serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<(PType, Nullability), D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let PrimitiveSerde { ptype, n } = PrimitiveSerde::deserialize(deserializer)?;
-        Ok((ptype, n))
-    }
 }
 
 impl DType {
