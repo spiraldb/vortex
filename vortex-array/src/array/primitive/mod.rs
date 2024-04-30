@@ -172,6 +172,8 @@ impl<'a> PrimitiveArray<'a> {
                     )
                 }
             }
+            // if to_subtract is zero, skip operation
+            return Ok(self.clone());
         }
 
         let sub_vec: Vec<T> = if should_wrap {
