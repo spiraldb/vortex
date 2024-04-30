@@ -4,7 +4,6 @@ use vortex_dtype::{IntWidth, Nullability, Signedness};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{scalar_subtract, ScalarSubtractFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
@@ -92,13 +91,13 @@ impl ChunkedArray<'_> {
 }
 
 impl<'a> ChunkedArray<'a> {
-    pub fn chunks(&'a self) -> impl Iterator<Item = Array<'a>> {
+    pub fn chunks(&'a self) -> impl Iterator<Item=Array<'a>> {
         (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
     }
 }
 
 impl FromIterator<OwnedArray> for OwnedChunkedArray {
-    fn from_iter<T: IntoIterator<Item = OwnedArray>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item=OwnedArray>>(iter: T) -> Self {
         let chunks: Vec<OwnedArray> = iter.into_iter().collect();
         let dtype = chunks
             .first()
@@ -110,8 +109,8 @@ impl FromIterator<OwnedArray> for OwnedChunkedArray {
 
 impl ArrayFlatten for ChunkedArray<'_> {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
+        where
+            Self: 'a,
     {
         Ok(Flattened::Chunked(self))
     }
@@ -147,12 +146,11 @@ impl EncodingCompression for ChunkedEncoding {}
 
 impl ScalarSubtractFn for ChunkedArray<'_> {
     fn scalar_subtract(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
-        as_contiguous(
-            &self
-                .chunks()
-                .map(|c| scalar_subtract(&c, to_subtract.clone()).unwrap())
-                .collect_vec(),
-        )
+        let mut subs = Vec::with_capacity(self.nchunks());
+        for chunk in self.chunks() {
+            subs.push(scalar_subtract(&chunk, to_subtract.clone())?);
+        }
+        ChunkedArray::try_new(subs, self.dtype().clone()).map(|c| c.into_array())
     }
 }
 
@@ -179,7 +177,7 @@ mod test {
                 Nullability::NonNullable,
             ),
         )
-        .unwrap()
+            .unwrap()
     }
 
     #[allow(dead_code)]
@@ -203,17 +201,30 @@ mod test {
             vec![chunk1, chunk2],
             DType::Float(64.into(), Nullability::NonNullable),
         )
-        .unwrap()
-        .to_array()
-        .to_static();
+            .unwrap()
+            .to_array()
+            .to_static();
 
         let array = scalar_subtract(&chunked, to_subtract).unwrap();
-        let results = array
+
+        let chunked = ChunkedArray::try_from(array).unwrap();
+        let mut chunks_out = chunked.chunks();
+        let results = chunks_out
+            .next()
+            .unwrap()
             .flatten_primitive()
             .unwrap()
             .typed_data::<f64>()
             .to_vec();
-        assert_eq!(results, &[2.0f64, 3.0, 4.0, 5.0, 6.0, 7.0]);
+        assert_eq!(results, &[2.0f64, 3.0, 4.0]);
+        let results = chunks_out
+            .next()
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<f64>()
+            .to_vec();
+        assert_eq!(results, &[5.0f64, 6.0, 7.0]);
     }
 
     // FIXME(ngates): bring back when slicing is a compute function.
