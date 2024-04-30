@@ -37,13 +37,8 @@ impl VarBinArray<'_> {
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
-        match offsets.dtype() {
-            DType::Primitive(p, Nullability::NonNullable) => {
-                if !p.is_int() {
-                    vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype());
-                }
-            }
-            _ => vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype()),
+        if !offsets.dtype().is_int() || offsets.dtype().is_nullable() {
+            vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype());
         }
         if !matches!(bytes.dtype(), &DType::BYTES,) {
             vortex_bail!(MismatchedTypes: "u8", bytes.dtype());
