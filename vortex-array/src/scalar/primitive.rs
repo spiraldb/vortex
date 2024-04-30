@@ -179,6 +179,41 @@ impl PScalar {
             PScalar::F64(v) => from_floating!(ptype, v),
         }
     }
+    pub fn is_positive(&self) -> bool {
+        match self {
+            PScalar::U8(v) => *v > 0,
+            PScalar::U16(v) => *v > 0,
+            PScalar::U32(v) => *v > 0,
+            PScalar::U64(v) => *v > 0,
+            PScalar::I8(v) => *v > 0,
+            PScalar::I16(v) => *v > 0,
+            PScalar::I32(v) => *v > 0,
+            PScalar::I64(v) => *v > 0,
+            PScalar::F16(v) => v.to_f32() > 0.0,
+            PScalar::F32(v) => *v > 0.0,
+            PScalar::F64(v) => *v > 0.0,
+        }
+    }
+
+    pub fn is_negative(&self) -> bool {
+        match self {
+            PScalar::U8(_) => false,
+            PScalar::U16(_) => false,
+            PScalar::U32(_) => false,
+            PScalar::U64(_) => false,
+            PScalar::I8(v) => *v < 0,
+            PScalar::I16(v) => *v < 0,
+            PScalar::I32(v) => *v < 0,
+            PScalar::I64(v) => *v < 0,
+            PScalar::F16(v) => v.to_f32() < 0.0,
+            PScalar::F32(v) => *v < 0.0,
+            PScalar::F64(v) => *v < 0.0,
+        }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        !self.is_negative() && !self.is_positive()
+    }
 }
 
 #[inline]

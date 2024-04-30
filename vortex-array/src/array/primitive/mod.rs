@@ -150,16 +150,17 @@ impl<'a> PrimitiveArray<'a> {
         should_wrap: bool,
     ) -> VortexResult<PrimitiveArray<'a>> {
         let to_subtract = T::try_from(to_subtract)?;
-        let maybe_min = self.statistics().compute_as_cast(Stat::Min);
 
-        if let Some(min) = maybe_min {
-            let min: T = min;
-            if let (min, true) = min.overflowing_sub(&to_subtract) {
-                vortex_bail!(
-                    "Integer subtraction over/underflow: {}, {}",
-                    min,
-                    to_subtract
-                )
+        if to_subtract.is_zero() {
+            if let Some(min) = self.statistics().compute_as_cast(Stat::Min) {
+                let min: T = min;
+                if let (min, true) = min.overflowing_sub(&to_subtract) {
+                    vortex_bail!(
+                        "Integer subtraction over/underflow: {}, {}",
+                        min,
+                        to_subtract
+                    )
+                }
             }
             if let Some(max) = self.statistics().compute_as_cast(Stat::Max) {
                 let max: T = max;
