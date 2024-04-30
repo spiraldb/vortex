@@ -91,13 +91,13 @@ impl ChunkedArray<'_> {
 }
 
 impl<'a> ChunkedArray<'a> {
-    pub fn chunks(&'a self) -> impl Iterator<Item=Array<'a>> {
+    pub fn chunks(&'a self) -> impl Iterator<Item = Array<'a>> {
         (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
     }
 }
 
 impl FromIterator<OwnedArray> for OwnedChunkedArray {
-    fn from_iter<T: IntoIterator<Item=OwnedArray>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item = OwnedArray>>(iter: T) -> Self {
         let chunks: Vec<OwnedArray> = iter.into_iter().collect();
         let dtype = chunks
             .first()
@@ -109,8 +109,8 @@ impl FromIterator<OwnedArray> for OwnedChunkedArray {
 
 impl ArrayFlatten for ChunkedArray<'_> {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-        where
-            Self: 'a,
+    where
+        Self: 'a,
     {
         Ok(Flattened::Chunked(self))
     }
@@ -177,7 +177,7 @@ mod test {
                 Nullability::NonNullable,
             ),
         )
-            .unwrap()
+        .unwrap()
     }
 
     #[allow(dead_code)]
@@ -201,9 +201,9 @@ mod test {
             vec![chunk1, chunk2],
             DType::Float(64.into(), Nullability::NonNullable),
         )
-            .unwrap()
-            .to_array()
-            .to_static();
+        .unwrap()
+        .to_array()
+        .to_static();
 
         let array = scalar_subtract(&chunked, to_subtract).unwrap();
 
