@@ -163,8 +163,8 @@ impl<T: NativePType> IntoArray<'static> for Vec<T> {
 
 impl ArrayFlatten for PrimitiveArray<'_> {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-        where
-            Self: 'a,
+    where
+        Self: 'a,
     {
         Ok(Flattened::Primitive(self))
     }
@@ -239,13 +239,7 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
     }
 }
 
-fn subtract_scalar_integer<
-    'a,
-    T: NativePType
-    + OverflowingSub
-    + PScalarType
-    + TryFrom<Scalar>,
->(
+fn subtract_scalar_integer<'a, T: NativePType + OverflowingSub + PScalarType + TryFrom<Scalar>>(
     subtract_from: &PrimitiveArray<'a>,
     to_subtract: PrimitiveScalar,
 ) -> VortexResult<PrimitiveArray<'a>> {
@@ -313,6 +307,7 @@ fn subtract_scalar_integer<
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
+    use vortex_scalar::Scalar;
 
     use crate::array::primitive::PrimitiveArray;
     use crate::compute::scalar_subtract::subtract_scalar;
@@ -321,7 +316,7 @@ mod test {
     #[test]
     fn test_scalar_subtract_unsigned() {
         let values = vec![1u16, 2, 3].into_array();
-        let results = subtract_scalar(&values, 1u16)
+        let results = subtract_scalar(&values, &1u16.into())
             .unwrap()
             .flatten_primitive()
             .unwrap()
@@ -333,7 +328,7 @@ mod test {
     #[test]
     fn test_scalar_subtract_signed() {
         let values = vec![1i64, 2, 3].into_array();
-        let results = subtract_scalar(&values, -1i64)
+        let results = subtract_scalar(&values, &(-1i64).into())
             .unwrap()
             .flatten_primitive()
             .unwrap()
@@ -346,7 +341,7 @@ mod test {
     fn test_scalar_subtract_nullable() {
         let values = PrimitiveArray::from_nullable_vec(vec![Some(1u16), Some(2), None, Some(3)])
             .into_array();
-        let flattened = subtract_scalar(&values, Some(1u16))
+        let flattened = subtract_scalar(&values, &Some(1u16).into())
             .unwrap()
             .flatten_primitive()
             .unwrap();
@@ -368,20 +363,7 @@ mod test {
     fn test_scalar_subtract_float() {
         let values = vec![1.0f64, 2.0, 3.0].into_array();
         let to_subtract = -1f64;
-        let results = subtract_scalar(&values, to_subtract)
-            .unwrap()
-            .flatten_primitive()
-            .unwrap()
-            .typed_data::<f64>()
-            .to_vec();
-        assert_eq!(results, &[2.0f64, 3.0, 4.0]);
-    }
-
-    #[test]
-    fn test_scalar_subtract_int_from_float() {
-        let values = vec![3.0f64, 4.0, 5.0].into_array();
-        // Ints can be cast to floats, so there's no problem here
-        let results = subtract_scalar(&values, 1u64)
+        let results = subtract_scalar(&values, &to_subtract.into())
             .unwrap()
             .flatten_primitive()
             .unwrap()
@@ -393,55 +375,64 @@ mod test {
     #[test]
     fn test_scalar_subtract_unsigned_underflow() {
         let values = vec![u8::MIN, 2, 3].into_array();
-        let _results = subtract_scalar(&values, 1u8).expect_err("should fail with underflow");
+        let _results =
+            subtract_scalar(&values, &1u8.into()).expect_err("should fail with underflow");
         let values = vec![u16::MIN, 2, 3].into_array();
-        let _results = subtract_scalar(&values, 1u16).expect_err("should fail with underflow");
+        let _results =
+            subtract_scalar(&values, &1u16.into()).expect_err("should fail with underflow");
         let values = vec![u32::MIN, 2, 3].into_array();
-        let _results = subtract_scalar(&values, 1u32).expect_err("should fail with underflow");
+        let _results =
+            subtract_scalar(&values, &1u32.into()).expect_err("should fail with underflow");
         let values = vec![u64::MIN, 2, 3].into_array();
-        let _results = subtract_scalar(&values, 1u64).expect_err("should fail with underflow");
+        let _results =
+            subtract_scalar(&values, &1u64.into()).expect_err("should fail with underflow");
     }
 
     #[test]
     fn test_scalar_subtract_signed_overflow() {
         let values = vec![i8::MAX, 2, 3].into_array();
-        let to_subtract = -1i8;
+        let to_subtract: Scalar = (-1i8).into();
         let _results =
-            subtract_scalar(&values, to_subtract).expect_err("should fail with overflow");
+            subtract_scalar(&values, &to_subtract).expect_err("should fail with overflow");
         let values = vec![i16::MAX, 2, 3].into_array();
         let _results =
-            subtract_scalar(&values, to_subtract).expect_err("should fail with overflow");
+            subtract_scalar(&values, &to_subtract).expect_err("should fail with overflow");
         let values = vec![i32::MAX, 2, 3].into_array();
         let _results =
-            subtract_scalar(&values, to_subtract).expect_err("should fail with overflow");
+            subtract_scalar(&values, &to_subtract).expect_err("should fail with overflow");
         let values = vec![i64::MAX, 2, 3].into_array();
         let _results =
-            subtract_scalar(&values, to_subtract).expect_err("should fail with overflow");
+            subtract_scalar(&values, &to_subtract).expect_err("should fail with overflow");
     }
 
     #[test]
     fn test_scalar_subtract_signed_underflow() {
         let values = vec![i8::MIN, 2, 3].into_array();
-        let _results = subtract_scalar(&values, 1i8).expect_err("should fail with underflow");
+        let _results =
+            subtract_scalar(&values, &1i8.into()).expect_err("should fail with underflow");
         let values = vec![i16::MIN, 2, 3].into_array();
-        let _results = subtract_scalar(&values, 1i16).expect_err("should fail with underflow");
+        let _results =
+            subtract_scalar(&values, &1i16.into()).expect_err("should fail with underflow");
         let values = vec![i32::MIN, 2, 3].into_array();
-        let _results = subtract_scalar(&values, 1i32).expect_err("should fail with underflow");
+        let _results =
+            subtract_scalar(&values, &1i32.into()).expect_err("should fail with underflow");
         let values = vec![i64::MIN, 2, 3].into_array();
-        let _results = subtract_scalar(&values, 1i64).expect_err("should fail with underflow");
+        let _results =
+            subtract_scalar(&values, &1i64.into()).expect_err("should fail with underflow");
     }
 
     #[test]
     fn test_scalar_subtract_float_underflow_is_ok() {
         let values = vec![f32::MIN, 2.0, 3.0].into_array();
-        let _results = subtract_scalar(&values, 1.0f32).unwrap();
-        let _results = subtract_scalar(&values, f32::MAX).unwrap();
+        let _results = subtract_scalar(&values, &1.0f32.into()).unwrap();
+        let _results = subtract_scalar(&values, &f32::MAX.into()).unwrap();
     }
 
     #[test]
     fn test_scalar_subtract_type_mismatch_fails() {
         let values = vec![1u64, 2, 3].into_array();
         // Subtracting incompatible dtypes should fail
-        let _results = subtract_scalar(&values, 1.5f64).expect_err("Expected type mismatch error");
+        let _results =
+            subtract_scalar(&values, &1.5f64.into()).expect_err("Expected type mismatch error");
     }
 }

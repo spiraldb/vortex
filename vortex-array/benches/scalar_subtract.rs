@@ -27,7 +27,8 @@ fn scalar_subtract(c: &mut Criterion) {
     group.bench_function("vortex", |b| {
         b.iter(|| {
             let array =
-                vortex::compute::scalar_subtract::subtract_scalar(&chunked, to_subtract).unwrap();
+                vortex::compute::scalar_subtract::subtract_scalar(&chunked, &to_subtract.into())
+                    .unwrap();
 
             let chunked = ChunkedArray::try_from(array).unwrap();
             black_box(chunked);

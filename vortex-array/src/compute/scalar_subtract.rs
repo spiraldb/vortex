@@ -8,11 +8,19 @@ pub trait SubtractScalarFn {
     fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray>;
 }
 
-pub fn subtract_scalar<T: Into<Scalar>>(array: &Array, to_subtract: T) -> VortexResult<OwnedArray> {
+pub fn subtract_scalar2<T: Into<Scalar>>(
+    array: &Array,
+    to_subtract: T,
+) -> VortexResult<OwnedArray> {
     let to_subtract = to_subtract.into().cast(array.dtype())?;
+    subtract_scalar(array, &to_subtract)
+}
+
+pub fn subtract_scalar(array: &Array, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
+    // let to_subtract = to_subtract.into().cast(array.dtype())?;
 
     if let Some(subtraction_result) =
-        array.with_dyn(|c| c.subtract_scalar().map(|t| t.subtract_scalar(&to_subtract)))
+        array.with_dyn(|c| c.subtract_scalar().map(|t| t.subtract_scalar(to_subtract)))
     {
         return subtraction_result;
     }
@@ -21,7 +29,7 @@ pub fn subtract_scalar<T: Into<Scalar>>(array: &Array, to_subtract: T) -> Vortex
     match array.dtype() {
         DType::Primitive(..) => {
             let flat = array.clone().flatten_primitive()?;
-            flat.subtract_scalar(&to_subtract)
+            flat.subtract_scalar(to_subtract)
         }
         _ => Err(vortex_err!(
             NotImplemented: "scalar_subtract",

@@ -143,7 +143,7 @@ impl EncodingCompression for ChunkedEncoding {}
 impl SubtractScalarFn for ChunkedArray<'_> {
     fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
         self.chunks()
-            .map(|chunk| subtract_scalar(&chunk, to_subtract.clone()))
+            .map(|chunk| subtract_scalar(&chunk, to_subtract))
             .collect::<VortexResult<Vec<_>>>()
             .map(|chunks| {
                 ChunkedArray::try_new(chunks, self.dtype().clone())
@@ -194,7 +194,7 @@ mod test {
 
         let chunked = ChunkedArray::from_iter(vec![chunk1, chunk2]);
 
-        let array = subtract_scalar(&chunked.to_array(), to_subtract).unwrap();
+        let array = subtract_scalar(&chunked.to_array(), &to_subtract.into()).unwrap();
 
         let chunked = ChunkedArray::try_from(array).unwrap();
         let mut chunks_out = chunked.chunks();
