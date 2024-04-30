@@ -5,9 +5,6 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToStatic};
-use vortex_dtype::DType;
-use vortex_dtype::Nullability::NonNullable;
-use vortex_dtype::Signedness::Unsigned;
 use vortex_dtype::{NativePType, PType};
 use vortex_error::VortexResult;
 
@@ -25,8 +22,8 @@ impl EncodingCompression for RoaringIntEncoding {
         }
 
         // Only support non-nullable uint arrays
-        if !matches!(array.dtype(), DType::Int(_, Unsigned, NonNullable)) {
-            debug!("Skipping roaring int, not non-nullable");
+        if !array.dtype().is_unsigned_int() || array.dtype().is_nullable() {
+            debug!("Skipping roaring int, not a uint");
             return None;
         }
 

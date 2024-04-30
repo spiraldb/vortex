@@ -8,9 +8,8 @@ pub use null::*;
 pub use primitive::*;
 pub use struct_::*;
 pub use utf8::*;
-use vortex_dtype::half::f16;
 use vortex_dtype::NativePType;
-use vortex_dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness};
+use vortex_dtype::{DType, Nullability};
 use vortex_error::VortexResult;
 
 mod binary;
@@ -126,22 +125,8 @@ impl Scalar {
         match dtype {
             DType::Null => NullScalar::new().into(),
             DType::Bool(_) => BoolScalar::none().into(),
-            DType::Int(w, s, _) => match (w, s) {
-                (IntWidth::_8, Signedness::Signed) => PrimitiveScalar::none::<i8>().into(),
-                (IntWidth::_16, Signedness::Signed) => PrimitiveScalar::none::<i16>().into(),
-                (IntWidth::_32, Signedness::Signed) => PrimitiveScalar::none::<i32>().into(),
-                (IntWidth::_64, Signedness::Signed) => PrimitiveScalar::none::<i64>().into(),
-                (IntWidth::_8, Signedness::Unsigned) => PrimitiveScalar::none::<u8>().into(),
-                (IntWidth::_16, Signedness::Unsigned) => PrimitiveScalar::none::<u16>().into(),
-                (IntWidth::_32, Signedness::Unsigned) => PrimitiveScalar::none::<u32>().into(),
-                (IntWidth::_64, Signedness::Unsigned) => PrimitiveScalar::none::<u64>().into(),
-            },
+            DType::Primitive(p, _) => PrimitiveScalar::none_from_ptype(*p).into(),
             DType::Decimal(..) => unimplemented!("DecimalScalar"),
-            DType::Float(w, _) => match w {
-                FloatWidth::_16 => PrimitiveScalar::none::<f16>().into(),
-                FloatWidth::_32 => PrimitiveScalar::none::<f32>().into(),
-                FloatWidth::_64 => PrimitiveScalar::none::<f64>().into(),
-            },
             DType::Utf8(_) => Utf8Scalar::none().into(),
             DType::Binary(_) => BinaryScalar::none().into(),
             DType::Struct(..) => StructScalar::new(dtype.clone(), vec![]).into(),

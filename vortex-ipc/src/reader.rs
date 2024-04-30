@@ -17,7 +17,7 @@ use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{
     Array, ArrayDType, ArrayView, IntoArray, OwnedArray, SerdeContext, ToArray, ToStatic,
 };
-use vortex_dtype::{match_each_integer_ptype, DType, DTypeSerdeContext, Signedness};
+use vortex_dtype::{match_each_integer_ptype, DType, DTypeSerdeContext};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 
@@ -159,21 +159,18 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
             vortex_bail!("Indices must not contain nulls")
         }
 
-        match indices.dtype() {
-            DType::Int(_, signedness, _) => {
-                // indices must be positive integers
-                if signedness == &Signedness::Signed
-                    && indices
-                        .statistics()
-                        // min cast should be safe
-                        .compute_as_cast::<i64>(Stat::Min)
-                        .unwrap()
-                        < 0
-                {
-                    vortex_bail!("Indices must be positive")
-                }
-            }
-            _ => vortex_bail!("Indices must be integers"),
+        if !indices.dtype().is_int() {
+            vortex_bail!("Indices must be integers")
+        }
+        if indices.dtype().is_signed_int()
+            && indices
+                .statistics()
+                // min cast should be safe
+                .compute_as_cast::<i64>(Stat::Min)
+                .unwrap()
+                < 0
+        {
+            vortex_bail!("Indices must be positive")
         }
 
         if self.row_offset != 0 {

@@ -1,4 +1,5 @@
 use std::any;
+use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
@@ -13,7 +14,7 @@ use crate::Scalar;
 pub trait PScalarType: NativePType + Into<PScalar> + TryFrom<PScalar, Error = VortexError> {}
 impl<T: NativePType + Into<PScalar> + TryFrom<PScalar, Error = VortexError>> PScalarType for T {}
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PrimitiveScalar {
     ptype: PType,
     dtype: DType,
@@ -35,6 +36,15 @@ impl PrimitiveScalar {
             nullability,
             value: value.map(|v| Into::<PScalar>::into(v)),
         })
+    }
+
+    pub fn none_from_ptype(ptype: PType) -> Self {
+        Self {
+            ptype,
+            dtype: DType::from(ptype).with_nullability(Nullability::Nullable),
+            nullability: Nullability::Nullable,
+            value: None,
+        }
     }
 
     pub fn nullable<T: PScalarType>(value: Option<T>) -> Self {
@@ -89,6 +99,16 @@ impl PrimitiveScalar {
 
     pub fn nbytes(&self) -> usize {
         size_of::<Self>()
+    }
+}
+
+impl PartialOrd for PrimitiveScalar {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if let (Some(s), Some(o)) = (self.value, other.value) {
+            s.partial_cmp(&o)
+        } else {
+            None
+        }
     }
 }
 
@@ -341,7 +361,7 @@ impl Display for PScalar {
 #[cfg(test)]
 mod test {
     use vortex_dtype::PType;
-    use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
+    use vortex_dtype::{DType, Nullability};
     use vortex_error::VortexError;
 
     use crate::Scalar;
@@ -365,11 +385,7 @@ mod test {
     fn cast() {
         let scalar: Scalar = 10u16.into();
         let u32_scalar = scalar
-            .cast(&DType::Int(
-                IntWidth::_32,
-                Signedness::Unsigned,
-                Nullability::NonNullable,
-            ))
+            .cast(&DType::Primitive(PType::U32, Nullability::NonNullable))
             .unwrap();
         let u32_scalar_ptype: PType = u32_scalar.dtype().try_into().unwrap();
         assert_eq!(u32_scalar_ptype, PType::U32);

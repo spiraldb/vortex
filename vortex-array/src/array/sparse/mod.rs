@@ -174,8 +174,7 @@ impl ArrayValidity for SparseArray<'_> {
 mod test {
     use itertools::Itertools;
     use vortex_dtype::Nullability::Nullable;
-    use vortex_dtype::Signedness::Signed;
-    use vortex_dtype::{DType, IntWidth};
+    use vortex_dtype::{DType, PType};
     use vortex_error::VortexError;
     use vortex_scalar::Scalar;
 
@@ -187,7 +186,7 @@ mod test {
     use crate::{Array, IntoArray, OwnedArray};
 
     fn nullable_fill() -> Scalar {
-        Scalar::null(&DType::Int(IntWidth::_32, Signed, Nullable))
+        Scalar::null(&DType::Primitive(PType::I32, Nullable))
     }
 
     #[allow(dead_code)]

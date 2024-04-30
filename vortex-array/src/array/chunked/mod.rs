@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use vortex_dtype::{IntWidth, Nullability, Signedness};
+use vortex_dtype::{Nullability, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
@@ -20,11 +20,7 @@ impl_encoding!("vortex.chunked", Chunked);
 pub struct ChunkedMetadata;
 
 impl ChunkedArray<'_> {
-    const ENDS_DTYPE: DType = DType::Int(
-        IntWidth::_64,
-        Signedness::Unsigned,
-        Nullability::NonNullable,
-    );
+    const ENDS_DTYPE: DType = DType::Primitive(PType::U64, Nullability::NonNullable);
 
     pub fn try_new(chunks: Vec<Array>, dtype: DType) -> VortexResult<Self> {
         for chunk in &chunks {
@@ -145,8 +141,8 @@ impl EncodingCompression for ChunkedEncoding {}
 
 #[cfg(test)]
 mod test {
-    use vortex_dtype::NativePType;
-    use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
+    use vortex_dtype::{DType, Nullability};
+    use vortex_dtype::{NativePType, PType};
 
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
     use crate::{Array, IntoArray};
@@ -159,11 +155,7 @@ mod test {
                 vec![4u64, 5, 6].into_array(),
                 vec![7u64, 8, 9].into_array(),
             ],
-            DType::Int(
-                IntWidth::_64,
-                Signedness::Unsigned,
-                Nullability::NonNullable,
-            ),
+            DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap()
     }

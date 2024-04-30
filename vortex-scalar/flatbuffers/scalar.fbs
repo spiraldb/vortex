@@ -17,24 +17,8 @@ table List {
 table Null {
 }
 
-// Since Rust doesn't support structs in a union, it would be very inefficient to wrap each primitive type in a table.
-// So instead we store a PType and a byte vector.
-enum PType: uint8 {
-    U8,
-    U16,
-    U32,
-    U64,
-    I8,
-    I16,
-    I32,
-    I64,
-    F16,
-    F32,
-    F64,
-}
-
 table Primitive {
-    ptype: PType;
+    ptype: dtype.PType;
     // TODO(ngates): this isn't an ideal way to store the bytes.
     bytes: [ubyte];
 }

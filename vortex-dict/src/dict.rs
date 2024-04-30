@@ -7,7 +7,7 @@ use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::IntoArrayData;
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
-use vortex_dtype::{match_each_integer_ptype, Signedness};
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 
 impl_encoding!("vortex.dict", Dict);
@@ -19,7 +19,7 @@ pub struct DictMetadata {
 
 impl DictArray<'_> {
     pub fn try_new(codes: Array, values: Array) -> VortexResult<Self> {
-        if !matches!(codes.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
+        if !codes.dtype().is_unsigned_int() {
             vortex_bail!(MismatchedTypes: "unsigned int", codes.dtype());
         }
         Self::try_from_parts(

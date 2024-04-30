@@ -1,9 +1,10 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
+use vortex_error::{vortex_bail, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 
-use crate::flatbuffers as fb;
-use crate::{DType, FloatWidth, IntWidth, Nullability, Signedness};
+use crate::{flatbuffers as fb, PType};
+use crate::{DType, Nullability};
 
 impl FlatBufferRoot for DType {}
 impl WriteFlatBuffer for DType {
@@ -22,11 +23,10 @@ impl WriteFlatBuffer for DType {
                 },
             )
             .as_union_value(),
-            DType::Int(width, signednedss, n) => fb::Int::create(
+            DType::Primitive(ptype, n) => fb::Primitive::create(
                 fbb,
-                &fb::IntArgs {
-                    width: width.into(),
-                    signedness: signednedss.into(),
+                &fb::PrimitiveArgs {
+                    ptype: (*ptype).into(),
                     nullability: n.into(),
                 },
             )
@@ -36,14 +36,6 @@ impl WriteFlatBuffer for DType {
                 &fb::DecimalArgs {
                     precision: *p,
                     scale: *s,
-                    nullability: n.into(),
-                },
-            )
-            .as_union_value(),
-            DType::Float(width, n) => fb::Float::create(
-                fbb,
-                &fb::FloatArgs {
-                    width: width.into(),
                     nullability: n.into(),
                 },
             )
@@ -104,9 +96,8 @@ impl WriteFlatBuffer for DType {
         let dtype_type = match self {
             DType::Null => fb::Type::Null,
             DType::Bool(_) => fb::Type::Bool,
-            DType::Int(..) => fb::Type::Int,
+            DType::Primitive(..) => fb::Type::Primitive,
             DType::Decimal(..) => fb::Type::Decimal,
-            DType::Float(..) => fb::Type::Float,
             DType::Utf8(_) => fb::Type::Utf8,
             DType::Binary(_) => fb::Type::Binary,
             DType::Struct(..) => fb::Type::Struct_,
@@ -142,33 +133,42 @@ impl From<&Nullability> for fb::Nullability {
     }
 }
 
-impl From<&IntWidth> for fb::IntWidth {
-    fn from(value: &IntWidth) -> Self {
+impl From<PType> for fb::PType {
+    fn from(value: PType) -> Self {
         match value {
-            IntWidth::_8 => fb::IntWidth::_8,
-            IntWidth::_16 => fb::IntWidth::_16,
-            IntWidth::_32 => fb::IntWidth::_32,
-            IntWidth::_64 => fb::IntWidth::_64,
+            PType::U8 => fb::PType::U8,
+            PType::U16 => fb::PType::U16,
+            PType::U32 => fb::PType::U32,
+            PType::U64 => fb::PType::U64,
+            PType::I8 => fb::PType::I8,
+            PType::I16 => fb::PType::I16,
+            PType::I32 => fb::PType::I32,
+            PType::I64 => fb::PType::I64,
+            PType::F16 => fb::PType::F16,
+            PType::F32 => fb::PType::F32,
+            PType::F64 => fb::PType::F64,
         }
     }
 }
 
-impl From<&Signedness> for fb::Signedness {
-    fn from(value: &Signedness) -> Self {
-        match value {
-            Signedness::Unsigned => fb::Signedness::Unsigned,
-            Signedness::Signed => fb::Signedness::Signed,
-        }
-    }
-}
+impl TryFrom<fb::PType> for PType {
+    type Error = VortexError;
 
-impl From<&FloatWidth> for fb::FloatWidth {
-    fn from(value: &FloatWidth) -> Self {
-        match value {
-            FloatWidth::_16 => fb::FloatWidth::_16,
-            FloatWidth::_32 => fb::FloatWidth::_32,
-            FloatWidth::_64 => fb::FloatWidth::_64,
-        }
+    fn try_from(value: fb::PType) -> Result<Self, Self::Error> {
+        Ok(match value {
+            fb::PType::U8 => PType::U8,
+            fb::PType::U16 => PType::U16,
+            fb::PType::U32 => PType::U32,
+            fb::PType::U64 => PType::U64,
+            fb::PType::I8 => PType::I8,
+            fb::PType::I16 => PType::I16,
+            fb::PType::I32 => PType::I32,
+            fb::PType::I64 => PType::I64,
+            fb::PType::F16 => PType::F16,
+            fb::PType::F32 => PType::F32,
+            fb::PType::F64 => PType::F64,
+            _ => vortex_bail!(InvalidSerde: "Unknown PType variant"),
+        })
     }
 }
 
@@ -179,8 +179,8 @@ mod test {
     use flatbuffers::root;
     use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
-    use crate::flatbuffers as fb;
-    use crate::{DType, DTypeSerdeContext, FloatWidth, IntWidth, Nullability, Signedness};
+    use crate::{flatbuffers as fb, PType};
+    use crate::{DType, DTypeSerdeContext, Nullability};
 
     fn roundtrip_dtype(dtype: DType) {
         let bytes = dtype.with_flatbuffer_bytes(|bytes| bytes.to_vec());
@@ -196,24 +196,19 @@ mod test {
     fn roundtrip() {
         roundtrip_dtype(DType::Null);
         roundtrip_dtype(DType::Bool(Nullability::NonNullable));
-        roundtrip_dtype(DType::Int(
-            IntWidth::_64,
-            Signedness::Unsigned,
-            Nullability::NonNullable,
-        ));
+        roundtrip_dtype(DType::Primitive(PType::U64, Nullability::NonNullable));
         roundtrip_dtype(DType::Decimal(18, 9, Nullability::NonNullable));
-        roundtrip_dtype(DType::Float(FloatWidth::_64, Nullability::NonNullable));
         roundtrip_dtype(DType::Binary(Nullability::NonNullable));
         roundtrip_dtype(DType::Utf8(Nullability::NonNullable));
         roundtrip_dtype(DType::List(
-            Box::new(DType::Float(FloatWidth::_32, Nullability::Nullable)),
+            Box::new(DType::Primitive(PType::F32, Nullability::Nullable)),
             Nullability::NonNullable,
         ));
         roundtrip_dtype(DType::Struct(
             vec![Arc::new("strings".into()), Arc::new("ints".into())],
             vec![
                 DType::Utf8(Nullability::NonNullable),
-                DType::Int(IntWidth::_16, Signedness::Unsigned, Nullability::Nullable),
+                DType::Primitive(PType::U16, Nullability::Nullable),
             ],
         ))
     }

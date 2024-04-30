@@ -23,13 +23,13 @@ impl DateTimePartsArray<'_> {
         subsecond: Array,
         validity: Validity,
     ) -> VortexResult<Self> {
-        if !matches!(days.dtype(), DType::Int(_, _, _)) {
+        if !days.dtype().is_int() {
             vortex_bail!(MismatchedTypes: "any integer", days.dtype());
         }
-        if !matches!(seconds.dtype(), DType::Int(_, _, _)) {
+        if !seconds.dtype().is_int() {
             vortex_bail!(MismatchedTypes: "any integer", seconds.dtype());
         }
-        if !matches!(subsecond.dtype(), DType::Int(_, _, _)) {
+        if !subsecond.dtype().is_int() {
             vortex_bail!(MismatchedTypes: "any integer", subsecond.dtype());
         }
 

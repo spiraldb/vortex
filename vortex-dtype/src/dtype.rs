@@ -5,7 +5,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use DType::*;
 
-use crate::CompositeID;
+use crate::{CompositeID, PType};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -43,101 +43,16 @@ impl Display for Nullability {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub enum Signedness {
-    Unsigned,
-    Signed,
-}
-
-impl From<bool> for Signedness {
-    fn from(value: bool) -> Self {
-        if value {
-            Signedness::Signed
-        } else {
-            Signedness::Unsigned
-        }
-    }
-}
-
-impl Display for Signedness {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Signedness::Unsigned => write!(f, "unsigned"),
-            Signedness::Signed => write!(f, "signed"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub enum IntWidth {
-    _8,
-    _16,
-    _32,
-    _64,
-}
-
-impl From<u16> for IntWidth {
-    fn from(item: u16) -> Self {
-        match item {
-            8 => IntWidth::_8,
-            16 => IntWidth::_16,
-            32 => IntWidth::_32,
-            64 => IntWidth::_64,
-            _ => panic!("Invalid int width: {}", item),
-        }
-    }
-}
-
-impl Display for IntWidth {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            IntWidth::_8 => write!(f, "8"),
-            IntWidth::_16 => write!(f, "16"),
-            IntWidth::_32 => write!(f, "32"),
-            IntWidth::_64 => write!(f, "64"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub enum FloatWidth {
-    _16,
-    _32,
-    _64,
-}
-
-impl From<i8> for FloatWidth {
-    fn from(item: i8) -> Self {
-        match item {
-            16 => FloatWidth::_16,
-            32 => FloatWidth::_32,
-            64 => FloatWidth::_64,
-            _ => panic!("Invalid float width: {}", item),
-        }
-    }
-}
-
-impl Display for FloatWidth {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FloatWidth::_16 => write!(f, "16"),
-            FloatWidth::_32 => write!(f, "32"),
-            FloatWidth::_64 => write!(f, "64"),
-        }
-    }
-}
-
 pub type FieldNames = Vec<Arc<String>>;
 
 pub type Metadata = Vec<u8>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DType {
     Null,
     Bool(Nullability),
-    Int(IntWidth, Signedness, Nullability),
+    Primitive(PType, Nullability),
     Decimal(u8, i8, Nullability),
-    Float(FloatWidth, Nullability),
     Utf8(Nullability),
     Binary(Nullability),
     Struct(FieldNames, Vec<DType>),
@@ -146,14 +61,10 @@ pub enum DType {
 }
 
 impl DType {
-    pub const BYTES: DType = Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable);
+    pub const BYTES: DType = Primitive(PType::U8, Nullability::NonNullable);
 
     /// The default DType for indices
-    pub const IDX: DType = Int(
-        IntWidth::_64,
-        Signedness::Unsigned,
-        Nullability::NonNullable,
-    );
+    pub const IDX: DType = Primitive(PType::U64, Nullability::NonNullable);
 
     pub fn nullability(&self) -> Nullability {
         self.is_nullable().into()
@@ -165,9 +76,8 @@ impl DType {
         match self {
             Null => true,
             Bool(n) => matches!(n, Nullable),
-            Int(_, _, n) => matches!(n, Nullable),
+            Primitive(_, n) => matches!(n, Nullable),
             Decimal(_, _, n) => matches!(n, Nullable),
-            Float(_, n) => matches!(n, Nullable),
             Utf8(n) => matches!(n, Nullable),
             Binary(n) => matches!(n, Nullable),
             Struct(_, fs) => fs.iter().all(|f| f.is_nullable()),
@@ -188,9 +98,8 @@ impl DType {
         match self {
             Null => Null,
             Bool(_) => Bool(nullability),
-            Int(w, s, _) => Int(*w, *s, nullability),
+            Primitive(p, _) => Primitive(*p, nullability),
             Decimal(s, p, _) => Decimal(*s, *p, nullability),
-            Float(w, _) => Float(*w, nullability),
             Utf8(_) => Utf8(nullability),
             Binary(_) => Binary(nullability),
             Struct(n, fs) => Struct(
@@ -209,16 +118,11 @@ impl DType {
 
 impl Display for DType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use Signedness::*;
         match self {
             Null => write!(f, "null"),
             Bool(n) => write!(f, "bool{}", n),
-            Int(w, s, n) => match s {
-                Unsigned => write!(f, "uint({}){}", w, n),
-                Signed => write!(f, "int({}){}", w, n),
-            },
+            Primitive(p, n) => write!(f, "{}{}", p, n),
             Decimal(p, s, n) => write!(f, "decimal({}, {}){}", p, s, n),
-            Float(w, n) => write!(f, "float({}){}", w, n),
             Utf8(n) => write!(f, "utf8{}", n),
             Binary(n) => write!(f, "binary{}", n),
             Struct(n, dt) => write!(
