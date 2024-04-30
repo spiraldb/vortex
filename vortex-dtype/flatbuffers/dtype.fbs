@@ -5,22 +5,18 @@ enum Nullability: byte {
     Nullable,
 }
 
-enum Signedness: byte {
-    Signed,
-    Unsigned,
-}
-
-enum IntWidth: byte {
-    _8,
-    _16,
-    _32,
-    _64,
-}
-
-enum FloatWidth: byte {
-    _16,
-    _32,
-    _64,
+enum PType: uint8 {
+    U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
+    I32,
+    I64,
+    F16,
+    F32,
+    F64,
 }
 
 table Null {}
@@ -29,9 +25,8 @@ table Bool {
     nullability: Nullability;
 }
 
-table Int {
-    width: IntWidth;
-    signedness: Signedness;
+table Primitive {
+    ptype: PType;
     nullability: Nullability;
 }
 
@@ -41,11 +36,6 @@ table Decimal {
 
     /// Number of digits after the decimal point "."
     scale: byte;
-    nullability: Nullability;
-}
-
-table Float {
-    width: FloatWidth;
     nullability: Nullability;
 }
 
@@ -75,9 +65,8 @@ table Composite {
 union Type {
     Null,
     Bool,
-    Int,
+    Primitive,
     Decimal,
-    Float,
     Utf8,
     Binary,
     Struct_,

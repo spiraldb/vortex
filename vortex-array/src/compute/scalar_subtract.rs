@@ -1,7 +1,7 @@
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
-use crate::scalar::Scalar;
 use crate::{Array, ArrayDType, OwnedArray};
 
 pub trait ScalarSubtractFn {
@@ -19,7 +19,7 @@ pub fn scalar_subtract<T: Into<Scalar>>(array: &Array, to_subtract: T) -> Vortex
     // if subtraction is not implemented for the given array type, but the array has a numeric
     // DType, we can flatten the array and apply subtraction to the flattened primitive array
     let result = match array.dtype() {
-        DType::Int(..) | DType::Float(..) => {
+        DType::Primitive(..) => {
             let array = array.clone();
             let flat = array.flatten_primitive()?;
             Some(flat.scalar_subtract(&to_subtract))

@@ -2,11 +2,11 @@ use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::{NativePType, PType};
-use vortex::scalar::Scalar;
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray, OwnedArray};
+use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::alp::ALPFloat;
 use crate::array::{ALPArray, ALPEncoding};
@@ -16,8 +16,8 @@ use crate::{Exponents, OwnedALPArray};
 macro_rules! match_each_alp_float_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
+        use vortex_dtype::PType;
         use vortex_error::vortex_err;
-        use vortex::ptype::PType;
         let ptype = $self;
         match ptype {
             PType::F32 => Ok(__with__! { f32 }),

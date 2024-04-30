@@ -1,14 +1,15 @@
+#![cfg(feature = "serde")]
+
 use flatbuffers::{root, FlatBufferBuilder, WIPOffset};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use vortex_dtype::match_each_native_ptype;
 use vortex_dtype::{DTypeSerdeContext, Nullability};
 use vortex_error::{vortex_bail, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, ReadFlatBuffer, WriteFlatBuffer};
 
 use crate::flatbuffers::scalar as fb;
-use crate::match_each_native_ptype;
-use crate::ptype::PType;
-use crate::scalar::{PScalar, PrimitiveScalar, Scalar, Utf8Scalar};
+use crate::{PScalar, PrimitiveScalar, Scalar, Utf8Scalar};
 
 impl FlatBufferRoot for Scalar {}
 
@@ -140,45 +141,6 @@ impl ReadFlatBuffer<DTypeSerdeContext> for Scalar {
             }
             _ => vortex_bail!(InvalidSerde: "Unrecognized scalar type"),
         }
-    }
-}
-
-impl From<PType> for fb::PType {
-    fn from(value: PType) -> Self {
-        match value {
-            PType::U8 => fb::PType::U8,
-            PType::U16 => fb::PType::U16,
-            PType::U32 => fb::PType::U32,
-            PType::U64 => fb::PType::U64,
-            PType::I8 => fb::PType::I8,
-            PType::I16 => fb::PType::I16,
-            PType::I32 => fb::PType::I32,
-            PType::I64 => fb::PType::I64,
-            PType::F16 => fb::PType::F16,
-            PType::F32 => fb::PType::F32,
-            PType::F64 => fb::PType::F64,
-        }
-    }
-}
-
-impl TryFrom<fb::PType> for PType {
-    type Error = VortexError;
-
-    fn try_from(value: fb::PType) -> Result<Self, Self::Error> {
-        Ok(match value {
-            fb::PType::U8 => PType::U8,
-            fb::PType::U16 => PType::U16,
-            fb::PType::U32 => PType::U32,
-            fb::PType::U64 => PType::U64,
-            fb::PType::I8 => PType::I8,
-            fb::PType::I16 => PType::I16,
-            fb::PType::I32 => PType::I32,
-            fb::PType::I64 => PType::I64,
-            fb::PType::F16 => PType::F16,
-            fb::PType::F32 => PType::F32,
-            fb::PType::F64 => PType::F64,
-            _ => vortex_bail!(InvalidSerde: "Unrecognized PType"),
-        })
     }
 }
 

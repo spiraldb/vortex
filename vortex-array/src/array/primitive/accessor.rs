@@ -1,8 +1,8 @@
+use vortex_dtype::NativePType;
 use vortex_error::VortexResult;
 
 use crate::accessor::ArrayAccessor;
 use crate::array::primitive::PrimitiveArray;
-use crate::ptype::NativePType;
 use crate::validity::ArrayValidity;
 
 impl<T: NativePType> ArrayAccessor<T> for PrimitiveArray<'_> {

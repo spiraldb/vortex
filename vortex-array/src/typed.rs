@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::buffer::OwnedBuffer;
-use crate::scalar::Scalar;
 use crate::stats::Stat;
 use crate::{Array, ArrayData, ArrayDef, AsArray, IntoArray, ToArray, TryDeserializeArrayMetadata};
 

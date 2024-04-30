@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use itertools::Itertools;
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::{OwnedPrimitiveArray, PrimitiveArray};
 use crate::array::sparse::SparseArray;
@@ -10,8 +12,7 @@ use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::scalar::Scalar;
-use crate::{match_each_integer_ptype, Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use crate::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
 
 mod slice;
 
@@ -137,7 +138,8 @@ fn take_search_sorted(
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_dtype::{DType, FloatWidth, Nullability};
+    use vortex_dtype::{DType, Nullability, PType};
+    use vortex_scalar::Scalar;
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::compute::take_map;
@@ -145,7 +147,6 @@ mod test {
     use crate::compute::as_contiguous::as_contiguous;
     use crate::compute::slice::slice;
     use crate::compute::take::take;
-    use crate::scalar::Scalar;
     use crate::validity::Validity;
     use crate::{ArrayTrait, IntoArray, OwnedArray};
 
@@ -155,7 +156,7 @@ mod test {
             PrimitiveArray::from_vec(vec![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid)
                 .into_array(),
             100,
-            Scalar::null(&DType::Float(FloatWidth::_64, Nullability::Nullable)),
+            Scalar::null(&DType::Primitive(PType::F64, Nullability::Nullable)),
         )
         .into_array()
     }

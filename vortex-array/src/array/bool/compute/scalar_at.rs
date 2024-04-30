@@ -1,8 +1,8 @@
 use vortex_error::VortexResult;
+use vortex_scalar::{BoolScalar, Scalar};
 
 use crate::array::bool::BoolArray;
 use crate::compute::scalar_at::ScalarAtFn;
-use crate::scalar::{BoolScalar, Scalar};
 use crate::validity::ArrayValidity;
 use crate::ArrayDType;
 

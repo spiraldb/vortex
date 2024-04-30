@@ -1,10 +1,11 @@
 use arrow_buffer::{MutableBuffer, ScalarBuffer};
+use vortex_dtype::match_each_native_ptype;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::validity::Validity;
-use crate::{match_each_native_ptype, ArrayDType};
+use crate::ArrayDType;
 use crate::{Array, IntoArray, OwnedArray};
 
 impl AsContiguousFn for PrimitiveArray<'_> {

@@ -1,5 +1,7 @@
+use vortex_error::VortexResult;
+
 mod array;
-mod dtypes;
+mod dtype;
 mod recordbatch;
 pub mod wrappers;
 
@@ -9,4 +11,8 @@ pub trait FromArrowArray<A> {
 
 pub trait FromArrowType<T>: Sized {
     fn from_arrow(value: T) -> Self;
+}
+
+pub trait TryFromArrowType<T>: Sized {
+    fn try_from_arrow(value: T) -> VortexResult<Self>;
 }

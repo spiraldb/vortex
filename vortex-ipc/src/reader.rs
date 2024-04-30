@@ -12,15 +12,14 @@ use vortex::compute::scalar_subtract::scalar_subtract;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
 use vortex::compute::take::take;
-use vortex::scalar::Scalar;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{
-    match_each_integer_ptype, Array, ArrayDType, ArrayView, IntoArray, OwnedArray, SerdeContext,
-    ToArray, ToStatic,
+    Array, ArrayDType, ArrayView, IntoArray, OwnedArray, SerdeContext, ToArray, ToStatic,
 };
-use vortex_dtype::{DType, DTypeSerdeContext, Signedness};
+use vortex_dtype::{match_each_integer_ptype, DType, DTypeSerdeContext};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
+use vortex_scalar::Scalar;
 
 use crate::flatbuffers::ipc::Message;
 use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
@@ -160,21 +159,18 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
             vortex_bail!("Indices must not contain nulls")
         }
 
-        match indices.dtype() {
-            DType::Int(_, signedness, _) => {
-                // indices must be positive integers
-                if signedness == &Signedness::Signed
-                    && indices
-                        .statistics()
-                        // min cast should be safe
-                        .compute_as_cast::<i64>(Stat::Min)
-                        .unwrap()
-                        < 0
-                {
-                    vortex_bail!("Indices must be positive")
-                }
-            }
-            _ => vortex_bail!("Indices must be integers"),
+        if !indices.dtype().is_int() {
+            vortex_bail!("Indices must be integers")
+        }
+        if indices.dtype().is_signed_int()
+            && indices
+                .statistics()
+                // min cast should be safe
+                .compute_as_cast::<i64>(Stat::Min)
+                .unwrap()
+                < 0
+        {
+            vortex_bail!("Indices must be positive")
         }
 
         if self.row_offset != 0 {
@@ -205,7 +201,6 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
             let indices_for_batch = slice(indices, left, right)?.flatten_primitive()?;
             let shifted_arr = match_each_integer_ptype!(indices_for_batch.ptype(), |$T| {
                 scalar_subtract(&indices_for_batch.into_array(), Scalar::from(row_offset as $T))?
-                // indices_for_batch.scalar_subtract(&Scalar::from(row_offset as $T))?
             });
 
             let from_current_batch = take(&batch, &shifted_arr)?;
@@ -368,9 +363,9 @@ mod tests {
     use vortex::array::chunked::{Chunked, ChunkedArray, ChunkedEncoding};
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId};
-    use vortex::ptype::NativePType;
     use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, SerdeContext};
     use vortex_alp::{ALPArray, ALPEncoding};
+    use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
     use vortex_fastlanes::BitPackedArray;
 

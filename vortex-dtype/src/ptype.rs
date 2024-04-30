@@ -1,19 +1,16 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::panic::RefUnwindSafe;
 
-use arrow_array::types::*;
-use arrow_buffer::ArrowNativeType;
-use half::f16;
-use num_traits::{Num, NumCast};
-use serde::{Deserialize, Serialize};
-use vortex_dtype::DType::*;
-use vortex_dtype::{DType, FloatWidth, IntWidth};
+use num_traits::{FromPrimitive, Num, NumCast};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
-use crate::scalar::{PScalar, Scalar};
+use crate::half::f16;
+use crate::DType;
+use crate::DType::*;
+use crate::Nullability::NonNullable;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub enum PType {
     U8,
     U16,
@@ -39,15 +36,10 @@ pub trait NativePType:
     + PartialEq
     + PartialOrd
     + Default
-    + ArrowNativeType
     + RefUnwindSafe
     + Num
     + NumCast
-    + Into<Scalar>
-    + TryFrom<Scalar, Error = VortexError>
-    + for<'a> TryFrom<&'a Scalar, Error = VortexError>
-    + Into<PScalar>
-    + TryFrom<PScalar, Error = VortexError>
+    + FromPrimitive
 {
     const PTYPE: PType;
 }
@@ -72,36 +64,12 @@ native_ptype!(f16, F16);
 native_ptype!(f32, F32);
 native_ptype!(f64, F64);
 
-pub trait AsArrowPrimitiveType {
-    type ArrowType: ArrowPrimitiveType;
-}
-
-macro_rules! impl_as_arrow_primitive_type {
-    ($T:ty, $A:ty) => {
-        impl AsArrowPrimitiveType for $T {
-            type ArrowType = $A;
-        }
-    };
-}
-
-impl_as_arrow_primitive_type!(u8, UInt8Type);
-impl_as_arrow_primitive_type!(u16, UInt16Type);
-impl_as_arrow_primitive_type!(u32, UInt32Type);
-impl_as_arrow_primitive_type!(u64, UInt64Type);
-impl_as_arrow_primitive_type!(i8, Int8Type);
-impl_as_arrow_primitive_type!(i16, Int16Type);
-impl_as_arrow_primitive_type!(i32, Int32Type);
-impl_as_arrow_primitive_type!(i64, Int64Type);
-impl_as_arrow_primitive_type!(f16, Float16Type);
-impl_as_arrow_primitive_type!(f32, Float32Type);
-impl_as_arrow_primitive_type!(f64, Float64Type);
-
 #[macro_export]
 macro_rules! match_each_native_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use $crate::ptype::PType;
-        use half::f16;
+        use $crate::PType;
+        use $crate::half::f16;
         match $self {
             PType::I8 => __with__! { i8 },
             PType::I16 => __with__! { i16 },
@@ -122,7 +90,7 @@ macro_rules! match_each_native_ptype {
 macro_rules! match_each_integer_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use $crate::ptype::PType;
+        use $crate::PType;
         match $self {
             PType::I8 => __with__! { i8 },
             PType::I16 => __with__! { i16 },
@@ -141,8 +109,8 @@ macro_rules! match_each_integer_ptype {
 macro_rules! match_each_float_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use $crate::ptype::PType;
-        use half::f16;
+        use $crate::PType;
+        use vortex_dtype::half::f16;
         match $self {
             PType::F16 => __with__! { f16 },
             PType::F32 => __with__! { f32 },
@@ -198,6 +166,32 @@ impl PType {
     }
 }
 
+impl DType {
+    pub fn is_unsigned_int(&self) -> bool {
+        PType::try_from(self)
+            .map(|ptype| ptype.is_unsigned_int())
+            .unwrap_or_default()
+    }
+
+    pub fn is_signed_int(&self) -> bool {
+        PType::try_from(self)
+            .map(|ptype| ptype.is_signed_int())
+            .unwrap_or_default()
+    }
+
+    pub fn is_int(&self) -> bool {
+        PType::try_from(self)
+            .map(|ptype| ptype.is_int())
+            .unwrap_or_default()
+    }
+
+    pub fn is_float(&self) -> bool {
+        PType::try_from(self)
+            .map(|ptype| ptype.is_float())
+            .unwrap_or_default()
+    }
+}
+
 impl Display for PType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -220,23 +214,8 @@ impl TryFrom<&DType> for PType {
     type Error = VortexError;
 
     fn try_from(value: &DType) -> VortexResult<Self> {
-        use vortex_dtype::Signedness::*;
         match value {
-            Int(w, s, _) => match (w, s) {
-                (IntWidth::_8, Signed) => Ok(PType::I8),
-                (IntWidth::_16, Signed) => Ok(PType::I16),
-                (IntWidth::_32, Signed) => Ok(PType::I32),
-                (IntWidth::_64, Signed) => Ok(PType::I64),
-                (IntWidth::_8, Unsigned) => Ok(PType::U8),
-                (IntWidth::_16, Unsigned) => Ok(PType::U16),
-                (IntWidth::_32, Unsigned) => Ok(PType::U32),
-                (IntWidth::_64, Unsigned) => Ok(PType::U64),
-            },
-            Float(f, _) => match f {
-                FloatWidth::_16 => Ok(PType::F16),
-                FloatWidth::_32 => Ok(PType::F32),
-                FloatWidth::_64 => Ok(PType::F64),
-            },
+            Primitive(p, _) => Ok(*p),
             _ => Err(vortex_err!("Cannot convert DType {} into PType", value)),
         }
     }
@@ -244,42 +223,25 @@ impl TryFrom<&DType> for PType {
 
 impl From<PType> for &DType {
     fn from(item: PType) -> Self {
-        use vortex_dtype::Nullability::*;
-        use vortex_dtype::Signedness::*;
-
+        // We expand this match statement so that we can return a static reference.
         match item {
-            PType::I8 => &Int(IntWidth::_8, Signed, NonNullable),
-            PType::I16 => &Int(IntWidth::_16, Signed, NonNullable),
-            PType::I32 => &Int(IntWidth::_32, Signed, NonNullable),
-            PType::I64 => &Int(IntWidth::_64, Signed, NonNullable),
-            PType::U8 => &Int(IntWidth::_8, Unsigned, NonNullable),
-            PType::U16 => &Int(IntWidth::_16, Unsigned, NonNullable),
-            PType::U32 => &Int(IntWidth::_32, Unsigned, NonNullable),
-            PType::U64 => &Int(IntWidth::_64, Unsigned, NonNullable),
-            PType::F16 => &Float(FloatWidth::_16, NonNullable),
-            PType::F32 => &Float(FloatWidth::_32, NonNullable),
-            PType::F64 => &Float(FloatWidth::_64, NonNullable),
+            PType::I8 => &Primitive(PType::I8, NonNullable),
+            PType::I16 => &Primitive(PType::I16, NonNullable),
+            PType::I32 => &Primitive(PType::I32, NonNullable),
+            PType::I64 => &Primitive(PType::I64, NonNullable),
+            PType::U8 => &Primitive(PType::U8, NonNullable),
+            PType::U16 => &Primitive(PType::U16, NonNullable),
+            PType::U32 => &Primitive(PType::U32, NonNullable),
+            PType::U64 => &Primitive(PType::U64, NonNullable),
+            PType::F16 => &Primitive(PType::F16, NonNullable),
+            PType::F32 => &Primitive(PType::F32, NonNullable),
+            PType::F64 => &Primitive(PType::F64, NonNullable),
         }
     }
 }
 
 impl From<PType> for DType {
     fn from(item: PType) -> Self {
-        use vortex_dtype::Nullability::*;
-        use vortex_dtype::Signedness::*;
-
-        match item {
-            PType::I8 => Int(IntWidth::_8, Signed, NonNullable),
-            PType::I16 => Int(IntWidth::_16, Signed, NonNullable),
-            PType::I32 => Int(IntWidth::_32, Signed, NonNullable),
-            PType::I64 => Int(IntWidth::_64, Signed, NonNullable),
-            PType::U8 => Int(IntWidth::_8, Unsigned, NonNullable),
-            PType::U16 => Int(IntWidth::_16, Unsigned, NonNullable),
-            PType::U32 => Int(IntWidth::_32, Unsigned, NonNullable),
-            PType::U64 => Int(IntWidth::_64, Unsigned, NonNullable),
-            PType::F16 => Float(FloatWidth::_16, NonNullable),
-            PType::F32 => Float(FloatWidth::_32, NonNullable),
-            PType::F64 => Float(FloatWidth::_64, NonNullable),
-        }
+        Primitive(item, NonNullable)
     }
 }

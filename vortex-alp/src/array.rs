@@ -4,7 +4,7 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
-use vortex_dtype::{IntWidth, Signedness};
+use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::alp::Exponents;
@@ -27,12 +27,8 @@ impl ALPArray<'_> {
     ) -> VortexResult<Self> {
         let encoded_dtype = encoded.dtype().clone();
         let dtype = match encoded.dtype() {
-            DType::Int(IntWidth::_32, Signedness::Signed, nullability) => {
-                DType::Float(32.into(), *nullability)
-            }
-            DType::Int(IntWidth::_64, Signedness::Signed, nullability) => {
-                DType::Float(64.into(), *nullability)
-            }
+            DType::Primitive(PType::I32, nullability) => DType::Primitive(PType::F32, *nullability),
+            DType::Primitive(PType::I64, nullability) => DType::Primitive(PType::F64, *nullability),
             d => vortex_bail!(MismatchedTypes: "int32 or int64", d),
         };
 

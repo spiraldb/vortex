@@ -1,11 +1,11 @@
-use vortex_dtype::DType;
+use vortex_dtype::{match_each_native_ptype, DType};
+use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::cast::CastFn;
-use crate::ptype::{NativePType, PType};
 use crate::validity::Validity;
-use crate::{match_each_native_ptype, ArrayDType};
+use crate::ArrayDType;
 use crate::{IntoArray, OwnedArray};
 
 impl CastFn for PrimitiveArray<'_> {
@@ -49,9 +49,9 @@ fn cast<T: NativePType>(array: &PrimitiveArray) -> VortexResult<Vec<T>> {
 
 #[cfg(test)]
 mod test {
+    use vortex_dtype::PType;
     use vortex_error::VortexError;
 
-    use crate::ptype::PType;
     use crate::{compute, IntoArray};
 
     #[test]

@@ -3,17 +3,15 @@ use std::sync::Arc;
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::{DataType, Field, SchemaRef};
 use itertools::Itertools;
-use vortex_dtype::{DType, FloatWidth, IntWidth, Nullability};
-use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex_dtype::PType;
+use vortex_dtype::{DType, Nullability};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::datetime::{LocalDateTimeExtension, TimeUnit};
-use crate::arrow::FromArrowType;
-use crate::ptype::PType;
+use crate::arrow::{FromArrowType, TryFromArrowType};
 
-impl TryFrom<&DataType> for PType {
-    type Error = VortexError;
-
-    fn try_from(value: &DataType) -> VortexResult<Self> {
+impl TryFromArrowType<&DataType> for PType {
+    fn try_from_arrow(value: &DataType) -> VortexResult<Self> {
         match value {
             DataType::Int8 => Ok(PType::I8),
             DataType::Int16 => Ok(PType::I16),
@@ -60,24 +58,16 @@ impl FromArrowType<SchemaRef> for DType {
 impl FromArrowType<&Field> for DType {
     fn from_arrow(field: &Field) -> Self {
         use vortex_dtype::DType::*;
-        use vortex_dtype::Signedness::*;
 
         let nullability: Nullability = field.is_nullable().into();
+
+        if let Ok(ptype) = PType::try_from_arrow(field.data_type()) {
+            return Primitive(ptype, nullability);
+        }
 
         match field.data_type() {
             DataType::Null => Null,
             DataType::Boolean => Bool(nullability),
-            DataType::Int8 => Int(IntWidth::_8, Signed, nullability),
-            DataType::Int16 => Int(IntWidth::_16, Signed, nullability),
-            DataType::Int32 => Int(IntWidth::_32, Signed, nullability),
-            DataType::Int64 => Int(IntWidth::_64, Signed, nullability),
-            DataType::UInt8 => Int(IntWidth::_8, Unsigned, nullability),
-            DataType::UInt16 => Int(IntWidth::_16, Unsigned, nullability),
-            DataType::UInt32 => Int(IntWidth::_32, Unsigned, nullability),
-            DataType::UInt64 => Int(IntWidth::_64, Unsigned, nullability),
-            DataType::Float16 => Float(FloatWidth::_16, nullability),
-            DataType::Float32 => Float(FloatWidth::_32, nullability),
-            DataType::Float64 => Float(FloatWidth::_64, nullability),
             DataType::Utf8 | DataType::LargeUtf8 => Utf8(nullability),
             DataType::Binary | DataType::LargeBinary => Binary(nullability),
             DataType::Timestamp(_u, tz) => match tz {

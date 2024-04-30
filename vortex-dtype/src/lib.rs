@@ -1,15 +1,17 @@
 use std::fmt::{Display, Formatter};
 
 pub use dtype::*;
-
+pub use half;
+pub use ptype::*;
 mod deserialize;
 mod dtype;
+mod ptype;
 mod serde;
 mod serialize;
 
 pub use deserialize::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct CompositeID(pub &'static str);
 

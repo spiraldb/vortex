@@ -3,9 +3,9 @@ use std::fmt::{Display, Formatter};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
-use crate::scalar::Scalar;
+use crate::Scalar;
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CompositeScalar {
     dtype: DType,
     scalar: Box<Scalar>,
@@ -31,6 +31,12 @@ impl CompositeScalar {
 
     pub fn nbytes(&self) -> usize {
         self.scalar.nbytes()
+    }
+}
+
+impl PartialOrd for CompositeScalar {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.scalar.as_ref().partial_cmp(other.scalar.as_ref())
     }
 }
 

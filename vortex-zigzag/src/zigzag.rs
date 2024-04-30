@@ -4,7 +4,7 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
-use vortex_dtype::Signedness;
+use vortex_dtype::PType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::compress::zigzag_encode;
@@ -23,11 +23,11 @@ impl ZigZagArray<'_> {
 
     pub fn try_new(encoded: Array) -> VortexResult<Self> {
         let encoded_dtype = encoded.dtype().clone();
-        let dtype = match encoded_dtype {
-            DType::Int(width, Signedness::Unsigned, nullability) => {
-                DType::Int(width, Signedness::Signed, nullability)
-            }
-            d => vortex_bail!(MismatchedTypes: "unsigned int", d),
+        let dtype = if encoded_dtype.is_unsigned_int() {
+            DType::from(PType::try_from(&encoded_dtype).unwrap().to_signed())
+                .with_nullability(encoded_dtype.nullability())
+        } else {
+            vortex_bail!(MismatchedTypes: "unsigned int", encoded_dtype)
         };
 
         let children = vec![encoded.into_array_data()];

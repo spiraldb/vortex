@@ -2,10 +2,10 @@ use std::mem;
 
 use arrow_buffer::NullBufferBuilder;
 use vortex_dtype::DType;
+use vortex_dtype::NativePType;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
-use crate::ptype::NativePType;
 use crate::validity::Validity;
 use crate::IntoArray;
 
@@ -69,10 +69,10 @@ impl<O: NativePType> VarBinBuilder<O> {
 mod test {
     use vortex_dtype::DType;
     use vortex_dtype::Nullability::Nullable;
+    use vortex_scalar::Utf8Scalar;
 
     use crate::array::varbin::builder::VarBinBuilder;
     use crate::compute::scalar_at::scalar_at;
-    use crate::scalar::Utf8Scalar;
     use crate::{ArrayDType, IntoArray};
 
     #[test]

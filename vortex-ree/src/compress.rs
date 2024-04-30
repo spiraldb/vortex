@@ -1,17 +1,14 @@
 use std::cmp::min;
 
 use itertools::Itertools;
-use num_traits::AsPrimitive;
+use num_traits::{AsPrimitive, FromPrimitive};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::NativePType;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
-use vortex::{
-    match_each_integer_ptype, match_each_native_ptype, Array, ArrayDType, ArrayDef, ArrayTrait,
-    IntoArray, OwnedArray,
-};
+use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray};
 use vortex_dtype::Nullability;
+use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
 
 use crate::{REEArray, REEEncoding};
@@ -139,7 +136,10 @@ pub fn ree_decode<'a>(
     })
 }
 
-pub fn ree_decode_primitive<E: NativePType + AsPrimitive<usize> + Ord, T: NativePType>(
+pub fn ree_decode_primitive<
+    E: NativePType + AsPrimitive<usize> + FromPrimitive + Ord,
+    T: NativePType,
+>(
     run_ends: &[E],
     values: &[T],
     offset: usize,

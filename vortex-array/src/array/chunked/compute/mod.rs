@@ -1,4 +1,5 @@
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
@@ -6,7 +7,6 @@ use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::scalar_subtract::ScalarSubtractFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::scalar::Scalar;
 use crate::{Array, OwnedArray, ToStatic};
 
 mod take;

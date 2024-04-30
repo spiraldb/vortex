@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use vortex_dtype::{IntWidth, Nullability, Signedness};
+use vortex_dtype::{Nullability, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
@@ -21,11 +21,7 @@ impl_encoding!("vortex.chunked", Chunked);
 pub struct ChunkedMetadata;
 
 impl ChunkedArray<'_> {
-    const ENDS_DTYPE: DType = DType::Int(
-        IntWidth::_64,
-        Signedness::Unsigned,
-        Nullability::NonNullable,
-    );
+    const ENDS_DTYPE: DType = DType::Primitive(PType::U64, Nullability::NonNullable);
 
     pub fn try_new(chunks: Vec<Array>, dtype: DType) -> VortexResult<Self> {
         for chunk in &chunks {
@@ -155,12 +151,12 @@ impl ScalarSubtractFn for ChunkedArray<'_> {
 
 #[cfg(test)]
 mod test {
-    use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
+    use vortex_dtype::{DType, Nullability};
+    use vortex_dtype::{NativePType, PType};
 
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
     use crate::compute::scalar_subtract::scalar_subtract;
-    use crate::ptype::NativePType;
-    use crate::{Array, IntoArray, ToArray, ToStatic};
+    use crate::{Array, IntoArray, ToArray};
 
     #[allow(dead_code)]
     fn chunked_array() -> OwnedChunkedArray {
@@ -170,11 +166,7 @@ mod test {
                 vec![4u64, 5, 6].into_array(),
                 vec![7u64, 8, 9].into_array(),
             ],
-            DType::Int(
-                IntWidth::_64,
-                Signedness::Unsigned,
-                Nullability::NonNullable,
-            ),
+            DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap()
     }
@@ -196,15 +188,9 @@ mod test {
         let chunk2 = vec![4.0f64, 5.0, 6.0].into_array();
         let to_subtract = -1f64;
 
-        let chunked = ChunkedArray::try_new(
-            vec![chunk1, chunk2],
-            DType::Float(64.into(), Nullability::NonNullable),
-        )
-        .unwrap()
-        .to_array()
-        .to_static();
+        let chunked = ChunkedArray::from_iter(vec![chunk1, chunk2]);
 
-        let array = scalar_subtract(&chunked, to_subtract).unwrap();
+        let array = scalar_subtract(&chunked.to_array(), to_subtract).unwrap();
 
         let chunked = ChunkedArray::try_from(array).unwrap();
         let mut chunks_out = chunked.chunks();

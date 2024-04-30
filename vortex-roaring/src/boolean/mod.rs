@@ -5,7 +5,6 @@ use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::bool::{Bool, BoolArray};
 use vortex::buffer::Buffer;
-use vortex::scalar::AsBytes;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -100,7 +99,7 @@ impl ArrayFlatten for RoaringBoolArray<'_> {
             .to_bitset()
             .ok_or(vortex_err!("Failed to convert RoaringBitmap to Bitset"))?;
 
-        let bytes = &bitset.as_slice().as_bytes()[0..bitset.size_in_bytes()];
+        let bytes = &bitset.as_slice()[0..bitset.size_in_bytes()];
         let buffer = ArrowBuffer::from_slice_ref(bytes);
         Ok(Flattened::Bool(BoolArray::try_new(
             BooleanBuffer::new(buffer, 0, bitset.size_in_bits()),
@@ -116,9 +115,9 @@ impl ArrayFlatten for RoaringBoolArray<'_> {
 mod test {
     use vortex::array::bool::BoolArray;
     use vortex::compute::scalar_at::scalar_at;
-    use vortex::scalar::Scalar;
     use vortex::IntoArray;
     use vortex_error::VortexResult;
+    use vortex_scalar::Scalar;
 
     use crate::RoaringBoolArray;
 

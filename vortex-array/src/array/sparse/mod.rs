@@ -1,4 +1,5 @@
 use ::serde::{Deserialize, Serialize};
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::constant::ConstantArray;
@@ -6,7 +7,7 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, match_each_integer_ptype, ArrayDType, IntoArrayData, ToArrayData};
+use crate::{impl_encoding, ArrayDType, IntoArrayData, ToArrayData};
 
 mod compress;
 mod compute;
@@ -173,20 +174,19 @@ impl ArrayValidity for SparseArray<'_> {
 mod test {
     use itertools::Itertools;
     use vortex_dtype::Nullability::Nullable;
-    use vortex_dtype::Signedness::Signed;
-    use vortex_dtype::{DType, IntWidth};
+    use vortex_dtype::{DType, PType};
     use vortex_error::VortexError;
+    use vortex_scalar::Scalar;
 
     use crate::accessor::ArrayAccessor;
     use crate::array::sparse::SparseArray;
     use crate::compute::cast::cast;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::scalar::Scalar;
     use crate::{Array, IntoArray, OwnedArray};
 
     fn nullable_fill() -> Scalar {
-        Scalar::null(&DType::Int(IntWidth::_32, Signed, Nullable))
+        Scalar::null(&DType::Primitive(PType::I32, Nullable))
     }
 
     #[allow(dead_code)]

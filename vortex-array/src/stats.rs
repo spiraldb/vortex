@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
 use vortex_dtype::DType;
+use vortex_dtype::NativePType;
 use vortex_error::VortexResult;
-
-use crate::ptype::NativePType;
-use crate::scalar::Scalar;
+use vortex_scalar::Scalar;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Stat {
@@ -45,7 +44,7 @@ impl dyn Statistics + '_ {
         self.compute(stat).and_then(|s| T::try_from(s).ok())
     }
 
-    pub fn compute_as_cast<T: NativePType>(&self, stat: Stat) -> Option<T> {
+    pub fn compute_as_cast<T: NativePType + TryFrom<Scalar>>(&self, stat: Stat) -> Option<T> {
         self.compute(stat)
             .and_then(|s| s.cast(&DType::from(T::PTYPE)).ok())
             .and_then(|s| T::try_from(s).ok())

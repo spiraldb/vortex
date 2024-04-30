@@ -3,8 +3,8 @@ use std::fmt::{Display, Formatter};
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::scalar::value::ScalarValue;
-use crate::scalar::Scalar;
+use crate::value::ScalarValue;
+use crate::Scalar;
 
 pub type BoolScalar = ScalarValue<bool>;
 

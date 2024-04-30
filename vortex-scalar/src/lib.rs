@@ -3,16 +3,14 @@ use std::fmt::{Debug, Display, Formatter};
 pub use binary::*;
 pub use bool::*;
 pub use composite::*;
-use half::f16;
 pub use list::*;
 pub use null::*;
 pub use primitive::*;
 pub use struct_::*;
 pub use utf8::*;
-use vortex_dtype::{DType, FloatWidth, IntWidth, Nullability, Signedness};
+use vortex_dtype::NativePType;
+use vortex_dtype::{DType, Nullability};
 use vortex_error::VortexResult;
-
-use crate::ptype::NativePType;
 
 mod binary;
 mod bool;
@@ -24,6 +22,25 @@ mod serde;
 mod struct_;
 mod utf8;
 mod value;
+
+pub mod flatbuffers {
+    pub use gen_scalar::vortex::*;
+
+    #[allow(unused_imports)]
+    #[allow(dead_code)]
+    #[allow(non_camel_case_types)]
+    #[allow(clippy::all)]
+    mod gen_scalar {
+        include!(concat!(env!("OUT_DIR"), "/flatbuffers/scalar.rs"));
+    }
+
+    mod deps {
+        pub mod dtype {
+            #[allow(unused_imports)]
+            pub use vortex_dtype::flatbuffers as dtype;
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Scalar {
@@ -108,22 +125,8 @@ impl Scalar {
         match dtype {
             DType::Null => NullScalar::new().into(),
             DType::Bool(_) => BoolScalar::none().into(),
-            DType::Int(w, s, _) => match (w, s) {
-                (IntWidth::_8, Signedness::Signed) => PrimitiveScalar::none::<i8>().into(),
-                (IntWidth::_16, Signedness::Signed) => PrimitiveScalar::none::<i16>().into(),
-                (IntWidth::_32, Signedness::Signed) => PrimitiveScalar::none::<i32>().into(),
-                (IntWidth::_64, Signedness::Signed) => PrimitiveScalar::none::<i64>().into(),
-                (IntWidth::_8, Signedness::Unsigned) => PrimitiveScalar::none::<u8>().into(),
-                (IntWidth::_16, Signedness::Unsigned) => PrimitiveScalar::none::<u16>().into(),
-                (IntWidth::_32, Signedness::Unsigned) => PrimitiveScalar::none::<u32>().into(),
-                (IntWidth::_64, Signedness::Unsigned) => PrimitiveScalar::none::<u64>().into(),
-            },
+            DType::Primitive(p, _) => PrimitiveScalar::none_from_ptype(*p).into(),
             DType::Decimal(..) => unimplemented!("DecimalScalar"),
-            DType::Float(w, _) => match w {
-                FloatWidth::_16 => PrimitiveScalar::none::<f16>().into(),
-                FloatWidth::_32 => PrimitiveScalar::none::<f32>().into(),
-                FloatWidth::_64 => PrimitiveScalar::none::<f64>().into(),
-            },
             DType::Utf8(_) => Utf8Scalar::none().into(),
             DType::Binary(_) => BinaryScalar::none().into(),
             DType::Struct(..) => StructScalar::new(dtype.clone(), vec![]).into(),
@@ -145,22 +148,6 @@ pub trait AsBytes {
     fn as_bytes(&self) -> &[u8];
 }
 
-impl<T: NativePType> AsBytes for [T] {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        let raw_ptr = self.as_ptr() as *const u8;
-        unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of_val(self)) }
-    }
-}
-
-impl<T: NativePType> AsBytes for &[T] {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        let raw_ptr = (*self).as_ptr() as *const u8;
-        unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of_val(*self)) }
-    }
-}
-
 impl<T: NativePType> AsBytes for T {
     #[inline]
     fn as_bytes(&self) -> &[u8] {
@@ -173,7 +160,7 @@ impl<T: NativePType> AsBytes for T {
 mod test {
     use std::mem;
 
-    use crate::scalar::Scalar;
+    use crate::Scalar;
 
     #[test]
     fn size_of() {

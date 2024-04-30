@@ -2,9 +2,9 @@ use croaring::Bitmap;
 use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::slice::SliceFn;
 use vortex::compute::ArrayCompute;
-use vortex::scalar::Scalar;
 use vortex::{IntoArray, OwnedArray};
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::RoaringBoolArray;
 

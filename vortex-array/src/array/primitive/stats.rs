@@ -2,17 +2,19 @@ use std::collections::HashMap;
 use std::mem::size_of;
 
 use arrow_buffer::buffer::BooleanBuffer;
+use vortex_dtype::match_each_native_ptype;
 use vortex_error::VortexResult;
+use vortex_scalar::{ListScalarVec, PScalar};
+use vortex_scalar::{PScalarType, Scalar};
 
 use crate::array::primitive::PrimitiveArray;
-use crate::match_each_native_ptype;
-use crate::ptype::NativePType;
-use crate::scalar::Scalar;
-use crate::scalar::{ListScalarVec, PScalar};
 use crate::stats::{ArrayStatisticsCompute, Stat};
 use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
 use crate::IntoArray;
+
+trait PStatsType: PScalarType + Into<Scalar> {}
+impl<T: PScalarType + Into<Scalar>> PStatsType for T {}
 
 impl ArrayStatisticsCompute for PrimitiveArray<'_> {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
@@ -30,7 +32,7 @@ impl ArrayStatisticsCompute for PrimitiveArray<'_> {
     }
 }
 
-impl<T: NativePType> ArrayStatisticsCompute for &[T] {
+impl<T: PStatsType> ArrayStatisticsCompute for &[T] {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
         if self.is_empty() {
             return Ok(HashMap::default());
@@ -41,7 +43,7 @@ impl<T: NativePType> ArrayStatisticsCompute for &[T] {
     }
 }
 
-fn all_null_stats<T: NativePType>(len: usize) -> VortexResult<HashMap<Stat, Scalar>> {
+fn all_null_stats<T: PStatsType>(len: usize) -> VortexResult<HashMap<Stat, Scalar>> {
     Ok(HashMap::from([
         (Stat::Min, Option::<T>::None.into()),
         (Stat::Max, Option::<T>::None.into()),
@@ -61,9 +63,9 @@ fn all_null_stats<T: NativePType>(len: usize) -> VortexResult<HashMap<Stat, Scal
     ]))
 }
 
-struct NullableValues<'a, T: NativePType>(&'a [T], &'a BooleanBuffer);
+struct NullableValues<'a, T: PStatsType>(&'a [T], &'a BooleanBuffer);
 
-impl<'a, T: NativePType> ArrayStatisticsCompute for NullableValues<'a, T> {
+impl<'a, T: PStatsType> ArrayStatisticsCompute for NullableValues<'a, T> {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
         let values = self.0;
         if values.is_empty() {
@@ -98,7 +100,7 @@ trait BitWidth {
     fn trailing_zeros(self) -> usize;
 }
 
-impl<T: NativePType + Into<PScalar>> BitWidth for T {
+impl<T: PStatsType> BitWidth for T {
     fn bit_width(self) -> usize {
         let bit_width = size_of::<T>() * 8;
         let scalar: PScalar = self.into();
@@ -135,7 +137,7 @@ impl<T: NativePType + Into<PScalar>> BitWidth for T {
     }
 }
 
-struct StatsAccumulator<T: NativePType> {
+struct StatsAccumulator<T: PStatsType> {
     prev: T,
     min: T,
     max: T,
@@ -147,7 +149,7 @@ struct StatsAccumulator<T: NativePType> {
     trailing_zeros: Vec<usize>,
 }
 
-impl<T: NativePType> StatsAccumulator<T> {
+impl<T: PStatsType> StatsAccumulator<T> {
     fn new(first_value: T) -> Self {
         let mut stats = Self {
             prev: first_value,
@@ -227,8 +229,9 @@ impl<T: NativePType> StatsAccumulator<T> {
 
 #[cfg(test)]
 mod test {
+    use vortex_scalar::ListScalarVec;
+
     use crate::array::primitive::PrimitiveArray;
-    use crate::scalar::ListScalarVec;
     use crate::stats::{ArrayStatistics, Stat};
 
     #[test]

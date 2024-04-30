@@ -2,9 +2,9 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::scalar::Scalar;
 use vortex::{Array, ArrayDType, IntoArray, OwnedArray};
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::{match_each_alp_float_ptype, ALPArray};
 

@@ -5171,6 +5171,7 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
@@ -5185,7 +5186,6 @@ dependencies = [
  "flatbuffers",
  "flatc",
  "flexbuffers",
- "half",
  "humansize",
  "itertools 0.12.1",
  "leb128",
@@ -5201,6 +5201,7 @@ dependencies = [
  "vortex-dtype",
  "vortex-error",
  "vortex-flatbuffers",
+ "vortex-scalar",
  "walkdir",
 ]
 
@@ -5214,6 +5215,7 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
@@ -5222,7 +5224,6 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "criterion",
- "half",
  "hashbrown",
  "linkme",
  "log",
@@ -5234,17 +5235,19 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
 name = "vortex-dtype"
 version = "0.1.0"
 dependencies = [
- "arrow-schema 51.0.0",
  "flatbuffers",
  "flatc",
+ "half",
  "itertools 0.12.1",
  "linkme",
+ "num-traits",
  "serde",
  "thiserror",
  "vortex-error",
@@ -5281,6 +5284,7 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
@@ -5316,6 +5320,7 @@ dependencies = [
  "vortex-error",
  "vortex-fastlanes",
  "vortex-flatbuffers",
+ "vortex-scalar",
  "walkdir",
 ]
 
@@ -5325,7 +5330,6 @@ version = "0.1.0"
 dependencies = [
  "arrow-array 51.0.0",
  "arrow-buffer 51.0.0",
- "half",
  "itertools 0.12.1",
  "linkme",
  "num-traits",
@@ -5334,6 +5338,7 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
@@ -5350,6 +5355,21 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-scalar",
+]
+
+[[package]]
+name = "vortex-scalar"
+version = "0.1.0"
+dependencies = [
+ "flatbuffers",
+ "flatc",
+ "itertools 0.12.1",
+ "serde",
+ "vortex-dtype",
+ "vortex-error",
+ "vortex-flatbuffers",
+ "walkdir",
 ]
 
 [[package]]
@@ -5363,6 +5383,7 @@ dependencies = [
  "vortex-dtype",
  "vortex-error",
  "vortex-fastlanes",
+ "vortex-scalar",
  "zigzag",
 ]
 

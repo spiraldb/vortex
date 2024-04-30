@@ -2,7 +2,7 @@ use std::fmt::Formatter;
 use std::{mem, slice};
 
 use ::serde::{Deserialize, Serialize};
-use vortex_dtype::{IntWidth, Nullability, Signedness};
+use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
@@ -111,18 +111,12 @@ impl VarBinViewArray<'_> {
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
-        if !matches!(
-            views.dtype(),
-            DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
-        ) {
+        if !matches!(views.dtype(), &DType::BYTES) {
             vortex_bail!(MismatchedTypes: "u8", views.dtype());
         }
 
         for d in data.iter() {
-            if !matches!(
-                d.dtype(),
-                DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
-            ) {
+            if !matches!(d.dtype(), &DType::BYTES) {
                 vortex_bail!(MismatchedTypes: "u8", d.dtype());
             }
         }
@@ -311,12 +305,12 @@ impl EncodingCompression for VarBinViewEncoding {}
 #[cfg(test)]
 mod test {
     use arrow_array::array::StringViewArray as ArrowStringViewArray;
+    use vortex_scalar::Scalar;
 
     use crate::array::varbinview::VarBinViewArray;
     use crate::compute::as_arrow::as_arrow;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::scalar::Scalar;
     use crate::{ArrayTrait, IntoArray};
 
     #[test]

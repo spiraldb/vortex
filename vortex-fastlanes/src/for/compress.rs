@@ -3,11 +3,11 @@ use num_traits::{PrimInt, WrappingAdd, WrappingSub};
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::{NativePType, PType};
-use vortex::scalar::ListScalarVec;
 use vortex::stats::{ArrayStatistics, Stat};
-use vortex::{match_each_integer_ptype, Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
 use vortex_error::{vortex_err, VortexResult};
+use vortex_scalar::ListScalarVec;
 
 use crate::{FoRArray, FoREncoding};
 

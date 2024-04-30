@@ -9,10 +9,10 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::ptype::NativePType;
-use vortex::scalar::Scalar;
-use vortex::{match_each_integer_ptype, Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::bitpacking::compress::unpack_single;
 use crate::{match_integers_by_width, unpack_single_primitive, BitPackedArray};
