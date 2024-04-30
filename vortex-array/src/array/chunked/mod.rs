@@ -164,7 +164,9 @@ mod test {
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
     use crate::compute::scalar_subtract::subtract_scalar;
     use crate::compute::slice::slice;
+    use crate::{Array, IntoArray};
 
+    #[allow(dead_code)]
     fn chunked_array() -> OwnedChunkedArray {
         ChunkedArray::try_new(
             vec![
@@ -177,6 +179,7 @@ mod test {
             .unwrap()
     }
 
+    #[allow(dead_code)]
     fn assert_equal_slices<T: NativePType>(arr: Array, slice: &[T]) {
         let mut values = Vec::with_capacity(arr.len());
         ChunkedArray::try_from(arr)
