@@ -1,10 +1,7 @@
-use std::fmt::Display;
-use std::ops::Sub;
-
 use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use num_traits::ops::overflowing::OverflowingSub;
-use num_traits::{AsPrimitive, CheckedSub};
+use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{
     match_each_float_ptype, match_each_integer_ptype, match_each_native_ptype, NativePType, PType,
@@ -166,8 +163,8 @@ impl<T: NativePType> IntoArray<'static> for Vec<T> {
 
 impl ArrayFlatten for PrimitiveArray<'_> {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
+        where
+            Self: 'a,
     {
         Ok(Flattened::Primitive(self))
     }
@@ -245,13 +242,9 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
 fn subtract_scalar_integer<
     'a,
     T: NativePType
-        + Display
-        + OverflowingSub
-        + Sub
-        + CheckedSub
-        + Clone
-        + PScalarType
-        + TryFrom<Scalar>,
+    + OverflowingSub
+    + PScalarType
+    + TryFrom<Scalar>,
 >(
     subtract_from: &PrimitiveArray<'a>,
     to_subtract: PrimitiveScalar,
@@ -287,7 +280,7 @@ fn subtract_scalar_integer<
     }
 
     let contains_nulls = !subtract_from.logical_validity().all_valid();
-    if contains_nulls {
+    let subtraction_result = if contains_nulls {
         let validity = subtract_from
             .logical_validity()
             .to_null_buffer()?
@@ -304,16 +297,17 @@ fn subtract_scalar_integer<
                 }
             })
             .collect_vec();
-        Ok(PrimitiveArray::from_nullable_vec(sub_vec))
+        PrimitiveArray::from_nullable_vec(sub_vec)
     } else {
-        Ok(PrimitiveArray::from(
+        PrimitiveArray::from(
             subtract_from
                 .typed_data::<T>()
                 .iter()
                 .map(|&v| v - to_subtract)
                 .collect_vec(),
-        ))
-    }
+        )
+    };
+    Ok(subtraction_result)
 }
 
 #[cfg(test)]
