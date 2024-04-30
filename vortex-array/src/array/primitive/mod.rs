@@ -1,18 +1,22 @@
+use std::fmt::Display;
+use std::ops::Sub;
+
 use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
-use num_traits::AsPrimitive;
+use num_traits::ops::overflowing::OverflowingSub;
+use num_traits::{AsPrimitive, CheckedSub};
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_bail, VortexResult};
 
+use crate::array::constant::ConstantArray;
 use crate::buffer::Buffer;
 use crate::compute::scalar_subtract::ScalarSubtractFn;
 use crate::ptype::{NativePType, PType};
 use crate::stats::ArrayStatistics;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, match_each_float_ptype, ArrayDType, OwnedArray};
-use crate::{match_each_integer_ptype, ToStatic};
-use crate::{match_each_native_ptype, ArrayFlatten};
+use crate::{impl_encoding, match_each_float_ptype, ArrayDType, OwnedArray, ToStatic};
+use crate::{match_each_integer_ptype, match_each_native_ptype, ArrayFlatten};
 
 mod accessor;
 mod compute;
@@ -137,6 +141,52 @@ impl<'a> PrimitiveArray<'a> {
     pub fn into_buffer(self) -> Buffer<'a> {
         self.into_array().into_buffer().unwrap()
     }
+
+    fn subtract_scalar_integer<
+        T: NativePType + Display + OverflowingSub + Sub + CheckedSub + Clone,
+    >(
+        &self,
+        to_subtract: &Scalar,
+        should_wrap: bool,
+    ) -> VortexResult<PrimitiveArray<'a>> {
+        let to_subtract = T::try_from(to_subtract)?;
+        let maybe_min = self.statistics().compute_as_cast(Stat::Min);
+
+        if let Some(min) = maybe_min {
+            let min: T = min;
+            if let (min, true) = min.overflowing_sub(&to_subtract) {
+                vortex_bail!(
+                    "Integer subtraction over/underflow: {}, {}",
+                    min,
+                    to_subtract
+                )
+            }
+            if let Some(max) = self.statistics().compute_as_cast(Stat::Max) {
+                let max: T = max;
+                if let (max, true) = max.overflowing_sub(&to_subtract) {
+                    vortex_bail!(
+                        "Integer subtraction over/underflow: {}, {}",
+                        max,
+                        to_subtract
+                    )
+                }
+            }
+        }
+
+        let sub_vec: Vec<T> = if should_wrap {
+            self.typed_data::<T>()
+                .iter()
+                .map(|v| T::checked_sub(v, &to_subtract))
+                .map(|v| v.unwrap_or_default())
+                .collect_vec()
+        } else {
+            self.typed_data::<T>()
+                .iter()
+                .map(|&v| v - to_subtract)
+                .collect_vec()
+        };
+        Ok(PrimitiveArray::from(sub_vec))
+    }
 }
 
 impl<T: NativePType> From<Vec<T>> for PrimitiveArray<'_> {
@@ -197,57 +247,34 @@ impl EncodingCompression for PrimitiveEncoding {}
 
 impl ScalarSubtractFn for PrimitiveArray<'_> {
     fn scalar_subtract(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
-        if !self.dtype().eq_ignore_nullability(to_subtract.dtype()) {
+        if self.dtype() != to_subtract.dtype() {
             vortex_bail!(MismatchedTypes: self.dtype(), to_subtract.dtype())
         }
 
-        let should_wrap = match self.validity() {
-            Validity::AllInvalid => {
-                return Ok(self.clone().into_array().to_static());
-            }
-            Validity::NonNullable | Validity::AllValid => false,
-            Validity::Array(_) => true,
-        };
+        let validity = self.validity().to_logical(self.len());
+        if validity.all_invalid() {
+            return Ok(ConstantArray::new(Scalar::null(self.dtype()), self.len()).into_array());
+        }
+        let should_wrap = !validity.all_valid();
 
         let result = match to_subtract.dtype() {
             DType::Int(..) => {
                 match_each_integer_ptype!(self.ptype(), |$T| {
-                    let to_subtract = $T::try_from(to_subtract)?;
-                    let maybe_min = self.statistics().compute_as_cast(Stat::Min);
-
-                    if let Some(min) = maybe_min {
-                        let min: $T = min;
-                        if let (min, true) = min.overflowing_sub(to_subtract) {
-                            vortex_bail!("Integer subtraction over/underflow: {}, {}", min, to_subtract)
-                        }
-                        if let Some(max) = self.statistics().compute_as_cast(Stat::Max) {
-                            let max: $T = max;
-                            if let (max, true) = max.overflowing_sub(to_subtract) {
-                                vortex_bail!("Integer subtraction over/underflow: {}, {}", max, to_subtract)
-                            }
-                        }
-                    }
-
-                    let sub_vec : Vec<$T> = if should_wrap {
-                        self.typed_data::<$T>().iter().map(|&v| $T::checked_sub(v, to_subtract))
-                        .map(|v| v.unwrap_or_default())
-                        .collect_vec()
-                    } else {
-                        self.typed_data::<$T>().iter().map(|&v| v - to_subtract).collect_vec()
-                    };
-                    PrimitiveArray::from(sub_vec)
+                    self.subtract_scalar_integer::<$T>(to_subtract, should_wrap)?
                 })
             }
             DType::Float(..) => {
                 match_each_float_ptype!(self.ptype(), |$T| {
                     let to_subtract = $T::try_from(to_subtract)?;
-                    let sub_vec : Vec<$T> = self.typed_data::<$T>().iter().map(|&v| v - to_subtract).collect_vec();
+                    let sub_vec : Vec<$T> = self.typed_data::<$T>()
+                    .iter()
+                    .map(|&v| v - to_subtract).collect_vec();
                     PrimitiveArray::from(sub_vec)
                 })
             }
             _ => vortex_bail!(InvalidArgument: "Can only subtract numeric types"),
         };
-        Ok(result.into_array())
+        Ok(result.into_array().to_static())
     }
 }
 
@@ -285,12 +312,11 @@ mod test {
     fn test_scalar_subtract_nullable() {
         let values = PrimitiveArray::from_nullable_vec(vec![Some(1u16), Some(2), None, Some(3)])
             .into_array();
-        let results = scalar_subtract(&values, 1u16)
+        let flattened = scalar_subtract(&values, Some(1u16))
             .unwrap()
             .flatten_primitive()
-            .unwrap()
-            .typed_data::<u16>()
-            .to_vec();
+            .unwrap();
+        let results = flattened.typed_data::<u16>().to_vec();
         assert_eq!(results, &[0u16, 1, 0, 2]);
     }
 

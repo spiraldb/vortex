@@ -4,12 +4,13 @@ use itertools::Itertools;
 use num_traits::AsPrimitive;
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::{match_each_native_ptype, NativePType};
+use vortex::ptype::NativePType;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
-use vortex::ArrayDType;
-use vortex::ArrayTrait;
-use vortex::{match_each_integer_ptype, Array, ArrayDef, IntoArray, OwnedArray};
+use vortex::{
+    match_each_integer_ptype, match_each_native_ptype, Array, ArrayDType, ArrayDef, ArrayTrait,
+    IntoArray, OwnedArray,
+};
 use vortex_dtype::Nullability;
 use vortex_error::VortexResult;
 

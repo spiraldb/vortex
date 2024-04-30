@@ -117,7 +117,6 @@ macro_rules! match_each_native_ptype {
         }
     })
 }
-pub use match_each_native_ptype;
 
 #[macro_export]
 macro_rules! match_each_integer_ptype {
@@ -137,7 +136,6 @@ macro_rules! match_each_integer_ptype {
         }
     })
 }
-pub use match_each_integer_ptype;
 
 #[macro_export]
 macro_rules! match_each_float_ptype {
@@ -153,7 +151,6 @@ macro_rules! match_each_float_ptype {
         }
     })
 }
-pub use match_each_float_ptype;
 
 impl PType {
     pub const fn is_unsigned_int(self) -> bool {

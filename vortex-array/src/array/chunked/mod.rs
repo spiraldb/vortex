@@ -146,11 +146,10 @@ impl EncodingCompression for ChunkedEncoding {}
 
 impl ScalarSubtractFn for ChunkedArray<'_> {
     fn scalar_subtract(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
-        let mut subs = Vec::with_capacity(self.nchunks());
-        for chunk in self.chunks() {
-            subs.push(scalar_subtract(&chunk, to_subtract.clone())?);
-        }
-        ChunkedArray::try_new(subs, self.dtype().clone()).map(|c| c.into_array())
+        self.chunks()
+            .map(|chunk| scalar_subtract(&chunk, to_subtract.clone()))
+            .collect::<VortexResult<Vec<_>>>()
+            .map(|chunks| ChunkedArray::from_iter(chunks).into_array())
     }
 }
 
