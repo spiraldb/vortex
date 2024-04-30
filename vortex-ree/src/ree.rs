@@ -145,7 +145,7 @@ mod test {
     use vortex::compute::slice::slice;
     use vortex::validity::Validity;
     use vortex::{ArrayDType, ArrayTrait, IntoArray};
-    use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
+    use vortex_dtype::{DType, Nullability, PType};
 
     use crate::REEArray;
 
@@ -160,7 +160,7 @@ mod test {
         assert_eq!(arr.len(), 10);
         assert_eq!(
             arr.dtype(),
-            &DType::Int(IntWidth::_32, Signedness::Signed, Nullability::NonNullable)
+            &DType::Primitive(PType::I32, Nullability::NonNullable)
         );
 
         // 0, 1 => 1
@@ -188,7 +188,7 @@ mod test {
         .unwrap();
         assert_eq!(
             arr.dtype(),
-            &DType::Int(IntWidth::_32, Signedness::Signed, Nullability::NonNullable)
+            &DType::Primitive(PType::I32, Nullability::NonNullable)
         );
         assert_eq!(arr.len(), 5);
 

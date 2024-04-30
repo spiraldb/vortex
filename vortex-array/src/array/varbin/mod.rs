@@ -1,7 +1,7 @@
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
+use vortex_dtype::Nullability;
 use vortex_dtype::{match_each_native_ptype, NativePType};
-use vortex_dtype::{IntWidth, Nullability, Signedness};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{BinaryScalar, Utf8Scalar};
 
@@ -37,13 +37,10 @@ impl VarBinArray<'_> {
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
-        if !matches!(offsets.dtype(), DType::Int(_, _, Nullability::NonNullable)) {
+        if !offsets.dtype().is_int() || offsets.dtype().is_nullable() {
             vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype());
         }
-        if !matches!(
-            bytes.dtype(),
-            DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
-        ) {
+        if !matches!(bytes.dtype(), &DType::BYTES,) {
             vortex_bail!(MismatchedTypes: "u8", bytes.dtype());
         }
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {

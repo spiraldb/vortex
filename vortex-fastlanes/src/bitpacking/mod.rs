@@ -5,7 +5,6 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
-use vortex_dtype::{IntWidth, Nullability, Signedness};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 mod compress;
@@ -24,9 +23,6 @@ pub struct BitPackedMetadata {
 
 /// NB: All non-null values in the patches array are considered patches
 impl BitPackedArray<'_> {
-    const ENCODED_DTYPE: DType =
-        DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable);
-
     pub fn try_new(
         packed: Array,
         validity: Validity,
@@ -47,13 +43,13 @@ impl BitPackedArray<'_> {
         length: usize,
         offset: usize,
     ) -> VortexResult<Self> {
-        if packed.dtype() != &Self::ENCODED_DTYPE {
-            vortex_bail!(MismatchedTypes: Self::ENCODED_DTYPE, packed.dtype());
+        if packed.dtype() != &DType::BYTES {
+            vortex_bail!(MismatchedTypes: DType::BYTES, packed.dtype());
         }
         if bit_width > 64 {
             vortex_bail!("Unsupported bit width {}", bit_width);
         }
-        if !matches!(dtype, DType::Int(_, _, _)) {
+        if !dtype.is_int() {
             vortex_bail!(MismatchedTypes: "int", dtype);
         }
 
