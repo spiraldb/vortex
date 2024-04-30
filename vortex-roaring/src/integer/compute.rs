@@ -1,7 +1,7 @@
 use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::ArrayCompute;
-use vortex::ptype::PType;
 use vortex::scalar::Scalar;
+use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
 use crate::RoaringIntArray;

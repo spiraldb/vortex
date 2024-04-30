@@ -2,14 +2,14 @@ use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
+use vortex_dtype::{match_each_native_ptype, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::buffer::Buffer;
-use crate::ptype::{NativePType, PType};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::ArrayFlatten;
 use crate::{impl_encoding, ArrayDType, OwnedArray};
-use crate::{match_each_native_ptype, ArrayFlatten};
 
 mod accessor;
 mod compute;
@@ -23,6 +23,7 @@ pub struct PrimitiveMetadata {
 }
 
 impl PrimitiveArray<'_> {
+    // TODO(ngates): remove the Arrow types from this API.
     pub fn try_new<T: NativePType + ArrowNativeType>(
         buffer: ScalarBuffer<T>,
         validity: Validity,
@@ -40,11 +41,15 @@ impl PrimitiveArray<'_> {
         })
     }
 
-    pub fn from_vec<T: NativePType + ArrowNativeType>(values: Vec<T>, validity: Validity) -> Self {
-        Self::try_new(ScalarBuffer::from(values), validity).unwrap()
+    pub fn from_vec<T: NativePType>(values: Vec<T>, validity: Validity) -> Self {
+        match_each_native_ptype!(T::PTYPE, |$P| {
+            Self::try_new(ScalarBuffer::<$P>::from(
+                unsafe { std::mem::transmute::<Vec<T>, Vec<$P>>(values) }
+            ), validity).unwrap()
+        })
     }
 
-    pub fn from_nullable_vec<T: NativePType + ArrowNativeType>(values: Vec<Option<T>>) -> Self {
+    pub fn from_nullable_vec<T: NativePType>(values: Vec<Option<T>>) -> Self {
         let elems: Vec<T> = values.iter().map(|v| v.unwrap_or_default()).collect();
         let validity = Validity::from(values.iter().map(|v| v.is_some()).collect::<Vec<_>>());
         Self::from_vec(elems, validity)
@@ -65,7 +70,8 @@ impl PrimitiveArray<'_> {
         self.array().buffer().expect("missing buffer")
     }
 
-    pub fn scalar_buffer<T: NativePType>(&self) -> ScalarBuffer<T> {
+    // TODO(ngates): deprecated, remove this.
+    pub fn scalar_buffer<T: NativePType + ArrowNativeType>(&self) -> ScalarBuffer<T> {
         assert_eq!(
             T::PTYPE,
             self.ptype(),
@@ -126,7 +132,7 @@ impl PrimitiveArray<'_> {
         for (idx, value) in positions.iter().zip_eq(values.iter()) {
             own_values[(*idx).as_()] = *value;
         }
-        Self::try_new(ScalarBuffer::from(own_values), validity)
+        Ok(Self::from_vec(own_values, validity))
     }
 }
 

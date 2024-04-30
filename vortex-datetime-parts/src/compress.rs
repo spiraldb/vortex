@@ -3,8 +3,8 @@ use vortex::array::datetime::{LocalDateTimeArray, LocalDateTimeExtension, TimeUn
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
-use vortex::ptype::PType;
 use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray};
+use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
 use crate::{DateTimePartsArray, DateTimePartsEncoding};

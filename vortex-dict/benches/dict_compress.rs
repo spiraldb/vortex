@@ -4,8 +4,9 @@ use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
-use vortex::{match_each_native_ptype, ArrayTrait};
+use vortex::ArrayTrait;
 use vortex_dict::dict_encode_typed_primitive;
+use vortex_dtype::match_each_native_ptype;
 
 fn gen_primitive_dict<'a>(len: usize, uniqueness: f64) -> PrimitiveArray<'a> {
     let mut rng = thread_rng();

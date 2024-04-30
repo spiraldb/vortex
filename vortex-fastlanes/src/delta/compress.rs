@@ -6,10 +6,10 @@ use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::fill::fill_forward;
-use vortex::ptype::NativePType;
 use vortex::validity::Validity;
-use vortex::{match_each_integer_ptype, Array, IntoArray, OwnedArray};
+use vortex::{Array, IntoArray, OwnedArray};
 use vortex_dtype::Nullability;
+use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::VortexResult;
 
 use crate::{DeltaArray, DeltaEncoding};

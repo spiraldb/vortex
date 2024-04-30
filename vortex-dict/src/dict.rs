@@ -6,8 +6,8 @@ use vortex::compute::take::take;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::IntoArrayData;
-use vortex::{impl_encoding, match_each_integer_ptype, ArrayDType, ArrayFlatten, ToArrayData};
-use vortex_dtype::Signedness;
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
+use vortex_dtype::{match_each_integer_ptype, Signedness};
 use vortex_error::{vortex_bail, VortexResult};
 
 impl_encoding!("vortex.dict", Dict);

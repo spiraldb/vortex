@@ -1,12 +1,12 @@
 use arrow_buffer::NullBuffer;
+use vortex_dtype::match_each_integer_ptype;
 use vortex_dtype::DType;
+use vortex_dtype::NativePType;
 use vortex_error::VortexResult;
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
 use crate::compute::take::TakeFn;
-use crate::match_each_integer_ptype;
-use crate::ptype::NativePType;
 use crate::validity::Validity;
 use crate::ArrayDType;
 use crate::IntoArray;

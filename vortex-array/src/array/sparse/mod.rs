@@ -1,4 +1,5 @@
 use ::serde::{Deserialize, Serialize};
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::constant::ConstantArray;
@@ -6,7 +7,7 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, match_each_integer_ptype, ArrayDType, IntoArrayData, ToArrayData};
+use crate::{impl_encoding, ArrayDType, IntoArrayData, ToArrayData};
 
 mod compress;
 mod compute;

@@ -5,13 +5,13 @@ use arrow_array::{
     TimestampNanosecondArray, TimestampSecondArray,
 };
 use serde::{Deserialize, Serialize};
+use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
 use crate::array::datetime::TimeUnit;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::cast::cast;
 use crate::impl_composite;
-use crate::ptype::PType;
 use crate::validity::ArrayValidity;
 
 impl_composite!("vortex.localdatetime", LocalDateTime);

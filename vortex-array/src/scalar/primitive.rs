@@ -2,13 +2,16 @@ use std::any;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
-use half::f16;
+use vortex_dtype::half::f16;
+use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype};
 use vortex_dtype::{DType, Nullability};
+use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::ptype::{NativePType, PType};
 use crate::scalar::Scalar;
-use crate::{match_each_integer_ptype, match_each_native_ptype};
+
+pub trait PScalarType: NativePType + Into<PScalar> + TryFrom<PScalar, Error = VortexError> {}
+impl<T: NativePType + Into<PScalar> + TryFrom<PScalar, Error = VortexError>> PScalarType for T {}
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct PrimitiveScalar {
@@ -19,7 +22,7 @@ pub struct PrimitiveScalar {
 }
 
 impl PrimitiveScalar {
-    pub fn try_new<T: NativePType>(
+    pub fn try_new<T: PScalarType>(
         value: Option<T>,
         nullability: Nullability,
     ) -> VortexResult<Self> {
@@ -34,15 +37,15 @@ impl PrimitiveScalar {
         })
     }
 
-    pub fn nullable<T: NativePType>(value: Option<T>) -> Self {
+    pub fn nullable<T: PScalarType>(value: Option<T>) -> Self {
         Self::try_new(value, Nullability::Nullable).unwrap()
     }
 
-    pub fn some<T: NativePType>(value: T) -> Self {
+    pub fn some<T: PScalarType>(value: T) -> Self {
         Self::try_new::<T>(Some(value), Nullability::default()).unwrap()
     }
 
-    pub fn none<T: NativePType>() -> Self {
+    pub fn none<T: PScalarType>() -> Self {
         Self::try_new::<T>(None, Nullability::Nullable).unwrap()
     }
 
@@ -51,7 +54,7 @@ impl PrimitiveScalar {
         self.value
     }
 
-    pub fn typed_value<T: NativePType>(&self) -> Option<T> {
+    pub fn typed_value<T: PScalarType>(&self) -> Option<T> {
         assert_eq!(
             T::PTYPE,
             self.ptype,
@@ -264,7 +267,7 @@ pscalar!(f16, F16);
 pscalar!(f32, F32);
 pscalar!(f64, F64);
 
-impl<T: NativePType> From<Option<T>> for Scalar {
+impl<T: PScalarType> From<Option<T>> for Scalar {
     fn from(value: Option<T>) -> Self {
         PrimitiveScalar::nullable(value).into()
     }
@@ -337,10 +340,10 @@ impl Display for PScalar {
 
 #[cfg(test)]
 mod test {
+    use vortex_dtype::PType;
     use vortex_dtype::{DType, IntWidth, Nullability, Signedness};
     use vortex_error::VortexError;
 
-    use crate::ptype::PType;
     use crate::scalar::Scalar;
 
     #[test]

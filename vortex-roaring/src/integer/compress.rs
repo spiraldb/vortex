@@ -3,12 +3,12 @@ use log::debug;
 use num_traits::NumCast;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::{NativePType, PType};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToStatic};
 use vortex_dtype::DType;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::Signedness::Unsigned;
+use vortex_dtype::{NativePType, PType};
 use vortex_error::VortexResult;
 
 use crate::{OwnedRoaringIntArray, RoaringInt, RoaringIntArray, RoaringIntEncoding};

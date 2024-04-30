@@ -1,6 +1,6 @@
 use arrow_buffer::Buffer as ArrowBuffer;
+use vortex_dtype::{match_each_native_ptype, NativePType};
 
-use crate::ptype::NativePType;
 use crate::ToStatic;
 
 #[derive(Debug, Clone)]
@@ -32,7 +32,11 @@ impl Buffer<'_> {
 
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
         match self {
-            Buffer::Owned(buffer) => buffer.typed_data::<T>(),
+            Buffer::Owned(buffer) => unsafe {
+                match_each_native_ptype!(T::PTYPE, |$T| {
+                    std::mem::transmute(buffer.typed_data::<$T>())
+                })
+            },
             Buffer::View(slice) => {
                 // From ArrowBuffer::typed_data
                 let (prefix, offsets, suffix) = unsafe { slice.align_to::<T>() };
@@ -46,7 +50,12 @@ impl Buffer<'_> {
 impl<'a> Buffer<'a> {
     pub fn into_vec<T: NativePType>(self) -> Result<Vec<T>, Buffer<'a>> {
         match self {
-            Buffer::Owned(buffer) => buffer.into_vec().map_err(Buffer::Owned),
+            Buffer::Owned(buffer) => match_each_native_ptype!(T::PTYPE, |$T| {
+                buffer
+                    .into_vec()
+                    .map(|vec| unsafe { std::mem::transmute::<Vec<$T>, Vec<T>>(vec) })
+                    .map_err(Buffer::Owned)
+            }),
             Buffer::View(_) => Err(self),
         }
     }

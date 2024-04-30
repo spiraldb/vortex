@@ -15,10 +15,9 @@ use vortex::compute::slice::slice;
 use vortex::compute::take::take;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{
-    match_each_integer_ptype, Array, ArrayDType, ArrayView, IntoArray, OwnedArray, SerdeContext,
-    ToArray, ToStatic,
+    Array, ArrayDType, ArrayView, IntoArray, OwnedArray, SerdeContext, ToArray, ToStatic,
 };
-use vortex_dtype::{DType, DTypeSerdeContext, Signedness};
+use vortex_dtype::{match_each_integer_ptype, DType, DTypeSerdeContext, Signedness};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 
@@ -376,9 +375,9 @@ mod tests {
     use vortex::array::chunked::{Chunked, ChunkedArray, ChunkedEncoding};
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId};
-    use vortex::ptype::NativePType;
     use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, SerdeContext};
     use vortex_alp::{ALPArray, ALPEncoding};
+    use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
     use vortex_fastlanes::BitPackedArray;
 

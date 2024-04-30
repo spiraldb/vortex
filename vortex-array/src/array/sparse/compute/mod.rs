@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use itertools::Itertools;
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::primitive::{OwnedPrimitiveArray, PrimitiveArray};
@@ -11,7 +12,7 @@ use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::scalar::Scalar;
-use crate::{match_each_integer_ptype, Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use crate::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
 
 mod slice;
 
