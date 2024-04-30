@@ -13,7 +13,7 @@ pub static VORTEX_COMPOSITE_EXTENSIONS: [&'static dyn CompositeExtension] = [..]
 pub fn find_extension(id: &str) -> Option<&'static dyn CompositeExtension> {
     VORTEX_COMPOSITE_EXTENSIONS
         .iter()
-        .find(|ext| ext.id().0 == id)
+        .find(|ext| ext.id().as_ref() == id)
         .copied()
 }
 

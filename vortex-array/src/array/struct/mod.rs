@@ -19,25 +19,25 @@ pub struct StructMetadata {
 
 impl StructArray<'_> {
     pub fn child(&self, idx: usize) -> Option<Array> {
-        let DType::Struct(_, fields) = self.dtype() else {
+        let DType::Struct { dtypes, .. } = self.dtype() else {
             unreachable!()
         };
-        let dtype = fields.get(idx)?;
+        let dtype = dtypes.get(idx)?;
         self.array().child(idx, dtype)
     }
 
     pub fn names(&self) -> &FieldNames {
-        let DType::Struct(names, _fields) = self.dtype() else {
+        let DType::Struct { names, .. } = self.dtype() else {
             unreachable!()
         };
         names
     }
 
     pub fn fields(&self) -> &[DType] {
-        let DType::Struct(_names, fields) = self.dtype() else {
+        let DType::Struct { dtypes, .. } = self.dtype() else {
             unreachable!()
         };
-        fields.as_slice()
+        dtypes.as_slice()
     }
 
     pub fn nfields(&self) -> usize {
@@ -61,9 +61,9 @@ impl StructArray<'_> {
             vortex_bail!("Expected all struct fields to have length {}", length);
         }
 
-        let field_dtypes: Vec<_> = fields.iter().map(|d| d.dtype()).cloned().collect();
+        let dtypes: Vec<_> = fields.iter().map(|d| d.dtype()).cloned().collect();
         Self::try_from_parts(
-            DType::Struct(names, field_dtypes),
+            DType::Struct { names, dtypes },
             StructMetadata { length },
             fields.into_iter().map(|a| a.into_array_data()).collect(),
             HashMap::default(),

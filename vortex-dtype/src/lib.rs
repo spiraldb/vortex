@@ -1,25 +1,16 @@
-use std::fmt::{Display, Formatter};
-
 pub use dtype::*;
 pub use half;
 pub use ptype::*;
 mod deserialize;
+pub use composite::*;
 mod dtype;
 mod ptype;
-mod serde;
+// mod serde;
+mod composite;
+mod nullability;
 mod serialize;
 
-pub use deserialize::*;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-pub struct CompositeID(pub &'static str);
-
-impl Display for CompositeID {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+pub use nullability::*;
 
 pub mod flatbuffers {
     #[allow(unused_imports)]

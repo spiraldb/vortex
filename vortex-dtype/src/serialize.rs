@@ -31,15 +31,6 @@ impl WriteFlatBuffer for DType {
                 },
             )
             .as_union_value(),
-            DType::Decimal(p, s, n) => fb::Decimal::create(
-                fbb,
-                &fb::DecimalArgs {
-                    precision: *p,
-                    scale: *s,
-                    nullability: n.into(),
-                },
-            )
-            .as_union_value(),
             DType::Utf8(n) => fb::Utf8::create(
                 fbb,
                 &fb::Utf8Args {
@@ -54,7 +45,7 @@ impl WriteFlatBuffer for DType {
                 },
             )
             .as_union_value(),
-            DType::Struct(names, dtypes) => {
+            DType::Struct { names, dtypes } => {
                 let names = names
                     .iter()
                     .map(|n| fbb.create_string(n.as_str()))
@@ -81,7 +72,7 @@ impl WriteFlatBuffer for DType {
                 .as_union_value()
             }
             DType::Composite(id, n) => {
-                let id = Some(fbb.create_string(id.0));
+                let id = Some(fbb.create_string(id.as_ref()));
                 fb::Composite::create(
                     fbb,
                     &fb::CompositeArgs {
@@ -97,10 +88,9 @@ impl WriteFlatBuffer for DType {
             DType::Null => fb::Type::Null,
             DType::Bool(_) => fb::Type::Bool,
             DType::Primitive(..) => fb::Type::Primitive,
-            DType::Decimal(..) => fb::Type::Decimal,
             DType::Utf8(_) => fb::Type::Utf8,
             DType::Binary(_) => fb::Type::Binary,
-            DType::Struct(..) => fb::Type::Struct_,
+            DType::Struct { .. } => fb::Type::Struct_,
             DType::List(..) => fb::Type::List,
             DType::Composite(..) => fb::Type::Composite,
         };
@@ -180,15 +170,12 @@ mod test {
     use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
     use crate::{flatbuffers as fb, PType};
-    use crate::{DType, DTypeSerdeContext, Nullability};
+    use crate::{DType, Nullability};
 
     fn roundtrip_dtype(dtype: DType) {
         let bytes = dtype.with_flatbuffer_bytes(|bytes| bytes.to_vec());
-        let deserialized = DType::read_flatbuffer(
-            &DTypeSerdeContext::new(vec![]),
-            &root::<fb::DType>(&bytes).unwrap(),
-        )
-        .unwrap();
+        let deserialized =
+            DType::read_flatbuffer(&(), &root::<fb::DType>(&bytes).unwrap()).unwrap();
         assert_eq!(dtype, deserialized);
     }
 
@@ -197,19 +184,18 @@ mod test {
         roundtrip_dtype(DType::Null);
         roundtrip_dtype(DType::Bool(Nullability::NonNullable));
         roundtrip_dtype(DType::Primitive(PType::U64, Nullability::NonNullable));
-        roundtrip_dtype(DType::Decimal(18, 9, Nullability::NonNullable));
         roundtrip_dtype(DType::Binary(Nullability::NonNullable));
         roundtrip_dtype(DType::Utf8(Nullability::NonNullable));
         roundtrip_dtype(DType::List(
             Box::new(DType::Primitive(PType::F32, Nullability::Nullable)),
             Nullability::NonNullable,
         ));
-        roundtrip_dtype(DType::Struct(
-            vec![Arc::new("strings".into()), Arc::new("ints".into())],
-            vec![
+        roundtrip_dtype(DType::Struct {
+            names: vec![Arc::new("strings".into()), Arc::new("ints".into())],
+            dtypes: vec![
                 DType::Utf8(Nullability::NonNullable),
                 DType::Primitive(PType::U16, Nullability::Nullable),
             ],
-        ))
+        })
     }
 }

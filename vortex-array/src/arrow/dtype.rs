@@ -40,18 +40,18 @@ impl TryFromArrowType<&DataType> for PType {
 
 impl FromArrowType<SchemaRef> for DType {
     fn from_arrow(value: SchemaRef) -> Self {
-        DType::Struct(
-            value
+        DType::Struct {
+            names: value
                 .fields()
                 .iter()
                 .map(|f| Arc::new(f.name().clone()))
                 .collect(),
-            value
+            dtypes: value
                 .fields()
                 .iter()
                 .map(|f| DType::from_arrow(f.as_ref()))
                 .collect_vec(),
-        )
+        }
     }
 }
 
@@ -81,13 +81,13 @@ impl FromArrowType<&Field> for DType {
             DataType::List(e) | DataType::LargeList(e) => {
                 List(Box::new(DType::from_arrow(e.as_ref())), nullability)
             }
-            DataType::Struct(f) => Struct(
-                f.iter().map(|f| Arc::new(f.name().clone())).collect(),
-                f.iter()
+            DataType::Struct(f) => Struct {
+                names: f.iter().map(|f| Arc::new(f.name().clone())).collect(),
+                dtypes: f
+                    .iter()
                     .map(|f| DType::from_arrow(f.as_ref()))
                     .collect_vec(),
-            ),
-            DataType::Decimal128(p, s) | DataType::Decimal256(p, s) => Decimal(*p, *s, nullability),
+            },
             _ => unimplemented!("Arrow data type not yet supported: {:?}", field.data_type()),
         }
     }

@@ -88,7 +88,7 @@ macro_rules! impl_composite {
             pub struct [<$T Extension>];
 
             impl [<$T Extension>] {
-                pub const ID: CompositeID = CompositeID($id);
+                pub const ID: CompositeID = CompositeID::new($id);
 
                 pub fn dtype(nullability: Nullability) -> DType {
                     DType::Composite(Self::ID, nullability)

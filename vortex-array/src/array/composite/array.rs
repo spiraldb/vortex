@@ -1,6 +1,6 @@
 use flatbuffers::root;
 use vortex_dtype::flatbuffers as fb;
-use vortex_dtype::{CompositeID, DTypeSerdeContext};
+use vortex_dtype::CompositeID;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
@@ -34,7 +34,7 @@ impl TrySerializeArrayMetadata for CompositeMetadata {
         let mut fb = flexbuffers::Builder::default();
         {
             let mut elems = fb.start_vector();
-            elems.push(self.ext.id().0);
+            elems.push(self.ext.id().as_ref());
             self.underlying_dtype
                 .with_flatbuffer_bytes(|b| elems.push(flexbuffers::Blob(b)));
             elems.push(flexbuffers::Blob(self.underlying_metadata.as_ref()));
@@ -53,9 +53,8 @@ impl TryDeserializeArrayMetadata<'_> for CompositeMetadata {
             .ok_or_else(|| vortex_err!("Unrecognized composite extension: {}", ext_id))?;
 
         let dtype_blob = elems.index(1).expect("missing dtype").as_blob();
-        let ctx = DTypeSerdeContext::new(vec![]); // FIXME: composite_ids
         let underlying_dtype = DType::read_flatbuffer(
-            &ctx,
+            &(),
             &root::<fb::DType>(dtype_blob.0).expect("invalid dtype"),
         )?;
 
@@ -77,8 +76,8 @@ impl TryDeserializeArrayMetadata<'_> for CompositeMetadata {
 
 impl<'a> CompositeArray<'a> {
     pub fn new(id: CompositeID, metadata: Arc<[u8]>, underlying: Array<'a>) -> Self {
-        let dtype = DType::Composite(id, underlying.dtype().is_nullable().into());
-        let ext = find_extension(id.0).expect("Unrecognized composite extension");
+        let dtype = DType::Composite(id.clone(), underlying.dtype().is_nullable().into());
+        let ext = find_extension(id.as_ref()).expect("Unrecognized composite extension");
         Self::try_from_parts(
             dtype,
             CompositeMetadata {
@@ -101,7 +100,7 @@ impl CompositeArray<'_> {
 
     #[inline]
     pub fn extension(&self) -> CompositeExtensionRef {
-        find_extension(self.id().0).expect("Unrecognized composite extension")
+        find_extension(self.id().as_ref()).expect("Unrecognized composite extension")
     }
 
     pub fn underlying_metadata(&self) -> &Arc<[u8]> {

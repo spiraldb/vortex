@@ -3,61 +3,61 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use DType::*;
 
-use crate::{CompositeID, PType};
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Ord, PartialOrd)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-pub enum Nullability {
-    #[default]
-    NonNullable,
-    Nullable,
-}
-
-impl From<bool> for Nullability {
-    fn from(value: bool) -> Self {
-        if value {
-            Nullability::Nullable
-        } else {
-            Nullability::NonNullable
-        }
-    }
-}
-
-impl From<Nullability> for bool {
-    fn from(value: Nullability) -> Self {
-        match value {
-            Nullability::NonNullable => false,
-            Nullability::Nullable => true,
-        }
-    }
-}
-
-impl Display for Nullability {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Nullability::NonNullable => write!(f, ""),
-            Nullability::Nullable => write!(f, "?"),
-        }
-    }
-}
+use crate::{CompositeID, Nullability, PType};
 
 pub type FieldNames = Vec<Arc<String>>;
 
 pub type Metadata = Vec<u8>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DType {
     Null,
     Bool(Nullability),
+    #[serde(with = "primitive_serde")]
     Primitive(PType, Nullability),
-    Decimal(u8, i8, Nullability),
     Utf8(Nullability),
     Binary(Nullability),
-    Struct(FieldNames, Vec<DType>),
+    Struct {
+        names: FieldNames,
+        dtypes: Vec<DType>,
+    },
     List(Box<DType>, Nullability),
     Composite(CompositeID, Nullability),
+}
+
+#[cfg(feature = "serde")]
+mod primitive_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use crate::{Nullability, PType};
+
+    #[derive(Serialize, Deserialize)]
+    struct PrimitiveSerde {
+        ptype: PType,
+        n: Nullability,
+    }
+
+    pub fn serialize<S>(ptype: &PType, n: &Nullability, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        PrimitiveSerde {
+            ptype: *ptype,
+            n: *n,
+        }
+        .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<(PType, Nullability), D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let PrimitiveSerde { ptype, n } = PrimitiveSerde::deserialize(deserializer)?;
+        Ok((ptype, n))
+    }
 }
 
 impl DType {
@@ -77,10 +77,9 @@ impl DType {
             Null => true,
             Bool(n) => matches!(n, Nullable),
             Primitive(_, n) => matches!(n, Nullable),
-            Decimal(_, _, n) => matches!(n, Nullable),
             Utf8(n) => matches!(n, Nullable),
             Binary(n) => matches!(n, Nullable),
-            Struct(_, fs) => fs.iter().all(|f| f.is_nullable()),
+            Struct { dtypes, .. } => dtypes.iter().all(|dt| dt.is_nullable()),
             List(_, n) => matches!(n, Nullable),
             Composite(_, n) => matches!(n, Nullable),
         }
@@ -99,15 +98,17 @@ impl DType {
             Null => Null,
             Bool(_) => Bool(nullability),
             Primitive(p, _) => Primitive(*p, nullability),
-            Decimal(s, p, _) => Decimal(*s, *p, nullability),
             Utf8(_) => Utf8(nullability),
             Binary(_) => Binary(nullability),
-            Struct(n, fs) => Struct(
-                n.clone(),
-                fs.iter().map(|f| f.with_nullability(nullability)).collect(),
-            ),
+            Struct { names, dtypes } => Struct {
+                names: names.clone(),
+                dtypes: dtypes
+                    .iter()
+                    .map(|dt| dt.with_nullability(nullability))
+                    .collect(),
+            },
             List(c, _) => List(c.clone(), nullability),
-            Composite(id, _) => Composite(*id, nullability),
+            Composite(id, _) => Composite(id.clone(), nullability),
         }
     }
 
@@ -122,14 +123,14 @@ impl Display for DType {
             Null => write!(f, "null"),
             Bool(n) => write!(f, "bool{}", n),
             Primitive(p, n) => write!(f, "{}{}", p, n),
-            Decimal(p, s, n) => write!(f, "decimal({}, {}){}", p, s, n),
             Utf8(n) => write!(f, "utf8{}", n),
             Binary(n) => write!(f, "binary{}", n),
-            Struct(n, dt) => write!(
+            Struct { names, dtypes } => write!(
                 f,
                 "{{{}}}",
-                n.iter()
-                    .zip(dt.iter())
+                names
+                    .iter()
+                    .zip(dtypes.iter())
                     .map(|(n, dt)| format!("{}={}", n, dt))
                     .join(", ")
             ),

@@ -6,31 +6,11 @@ use vortex_flatbuffers::ReadFlatBuffer;
 use crate::{flatbuffers as fb, Nullability};
 use crate::{CompositeID, DType};
 
-#[allow(dead_code)]
-pub struct DTypeSerdeContext {
-    composite_ids: Arc<[CompositeID]>,
-}
-
-impl DTypeSerdeContext {
-    pub fn new(composite_ids: Vec<CompositeID>) -> Self {
-        Self {
-            composite_ids: composite_ids.into(),
-        }
-    }
-
-    pub fn find_composite_id(&self, id: &str) -> Option<CompositeID> {
-        self.composite_ids.iter().find(|c| c.0 == id).copied()
-    }
-}
-
-impl ReadFlatBuffer<DTypeSerdeContext> for DType {
+impl ReadFlatBuffer<()> for DType {
     type Source<'a> = fb::DType<'a>;
     type Error = VortexError;
 
-    fn read_flatbuffer(
-        ctx: &DTypeSerdeContext,
-        fb: &Self::Source<'_>,
-    ) -> Result<Self, Self::Error> {
+    fn read_flatbuffer(ctx: &(), fb: &Self::Source<'_>) -> Result<Self, Self::Error> {
         match fb.type_type() {
             fb::Type::Null => Ok(DType::Null),
             fb::Type::Bool => Ok(DType::Bool(
@@ -41,14 +21,6 @@ impl ReadFlatBuffer<DTypeSerdeContext> for DType {
                 Ok(DType::Primitive(
                     fb_primitive.ptype().try_into()?,
                     fb_primitive.nullability().try_into()?,
-                ))
-            }
-            fb::Type::Decimal => {
-                let fb_decimal = fb.type__as_decimal().unwrap();
-                Ok(DType::Decimal(
-                    fb_decimal.precision(),
-                    fb_decimal.scale(),
-                    fb_decimal.nullability().try_into()?,
                 ))
             }
             fb::Type::Binary => Ok(DType::Binary(
@@ -73,19 +45,17 @@ impl ReadFlatBuffer<DTypeSerdeContext> for DType {
                     .iter()
                     .map(|n| Arc::new(n.to_string()))
                     .collect::<Vec<_>>();
-                let fields: Vec<DType> = fb_struct
+                let dtypes: Vec<DType> = fb_struct
                     .fields()
                     .unwrap()
                     .iter()
                     .map(|f| DType::read_flatbuffer(ctx, &f))
                     .collect::<VortexResult<Vec<_>>>()?;
-                Ok(DType::Struct(names, fields))
+                Ok(DType::Struct { names, dtypes })
             }
             fb::Type::Composite => {
                 let fb_composite = fb.type__as_composite().unwrap();
-                let id = ctx
-                    .find_composite_id(fb_composite.id().unwrap())
-                    .ok_or_else(|| vortex_err!("Couldn't find composite id"))?;
+                let id = CompositeID::try_from(fb_composite.id().unwrap())?;
                 Ok(DType::Composite(id, fb_composite.nullability().try_into()?))
             }
             _ => Err(vortex_err!("Unknown DType variant")),

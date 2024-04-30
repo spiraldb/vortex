@@ -4,7 +4,7 @@ use flatbuffers::{root, FlatBufferBuilder, WIPOffset};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use vortex_dtype::match_each_native_ptype;
-use vortex_dtype::{DTypeSerdeContext, Nullability};
+use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, ReadFlatBuffer, WriteFlatBuffer};
 
@@ -90,14 +90,11 @@ impl WriteFlatBuffer for Scalar {
     }
 }
 
-impl ReadFlatBuffer<DTypeSerdeContext> for Scalar {
+impl ReadFlatBuffer<()> for Scalar {
     type Source<'a> = fb::Scalar<'a>;
     type Error = VortexError;
 
-    fn read_flatbuffer(
-        _ctx: &DTypeSerdeContext,
-        fb: &Self::Source<'_>,
-    ) -> Result<Self, Self::Error> {
+    fn read_flatbuffer(_ctx: &(), fb: &Self::Source<'_>) -> Result<Self, Self::Error> {
         let nullability = Nullability::from(fb.nullability());
         match fb.type_type() {
             fb::Type::Binary => {
@@ -153,7 +150,7 @@ impl Serialize for Scalar {
     }
 }
 
-struct ScalarDeserializer(DTypeSerdeContext);
+struct ScalarDeserializer;
 
 impl<'de> Visitor<'de> for ScalarDeserializer {
     type Value = Scalar;
@@ -167,7 +164,7 @@ impl<'de> Visitor<'de> for ScalarDeserializer {
         E: serde::de::Error,
     {
         let fb = root::<fb::Scalar>(v).map_err(E::custom)?;
-        Scalar::read_flatbuffer(&self.0, &fb).map_err(E::custom)
+        Scalar::read_flatbuffer(&(), &fb).map_err(E::custom)
     }
 }
 
@@ -177,8 +174,7 @@ impl<'de> Deserialize<'de> for Scalar {
     where
         D: Deserializer<'de>,
     {
-        let ctx = DTypeSerdeContext::new(vec![]);
-        deserializer.deserialize_bytes(ScalarDeserializer(ctx))
+        deserializer.deserialize_bytes(ScalarDeserializer)
     }
 }
 

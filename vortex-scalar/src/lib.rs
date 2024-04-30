@@ -126,10 +126,9 @@ impl Scalar {
             DType::Null => NullScalar::new().into(),
             DType::Bool(_) => BoolScalar::none().into(),
             DType::Primitive(p, _) => PrimitiveScalar::none_from_ptype(*p).into(),
-            DType::Decimal(..) => unimplemented!("DecimalScalar"),
             DType::Utf8(_) => Utf8Scalar::none().into(),
             DType::Binary(_) => BinaryScalar::none().into(),
-            DType::Struct(..) => StructScalar::new(dtype.clone(), vec![]).into(),
+            DType::Struct { .. } => StructScalar::new(dtype.clone(), vec![]).into(),
             DType::List(..) => ListScalar::new(dtype.clone(), None).into(),
             DType::Composite(..) => unimplemented!("CompositeScalar"),
         }

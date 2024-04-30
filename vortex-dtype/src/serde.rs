@@ -1,59 +1,84 @@
 #![cfg(feature = "serde")]
-
-use flatbuffers::root;
-use serde::de::{DeserializeSeed, Visitor};
+/// We hand-write the serde implementation for DType so we can retain more ergonomic tuple variants.
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
-use crate::DType;
-use crate::{flatbuffers as fb, DTypeSerdeContext};
+use crate::{DType, Nullability};
 
 impl Serialize for DType {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        self.with_flatbuffer_bytes(|bytes| serializer.serialize_bytes(bytes))
+        match self {
+            DType::Null => serializer
+                .serialize_map(Some(1))?
+                .serialize_entry("type", "null"),
+            DType::Bool(n) => serializer
+                .serialize_map(Some(2))?
+                .serialize_entry("type", "null")?
+                .serialize_entry("n", n),
+            DType::Primitive(ptype, n) => serializer
+                .serialize_map(Some(3))?
+                .serialize_entry("type", "primitive")?
+                .serialize_entry("ptype", *ptype)?
+                .serialize_entry("n", n),
+            DType::Utf8(n) => serializer
+                .serialize_map(Some(2))?
+                .serialize_entry("type", "utf8")?
+                .serialize_entry("n", n),
+            DType::Binary(n) => serializer
+                .serialize_map(Some(2))?
+                .serialize_entry("type", "binary")?
+                .serialize_entry("n", n),
+            DType::Struct { names, dtypes } => serializer
+                .serialize_map(Some(3))?
+                .serialize_entry("type", "struct")?
+                .serialize_entry("names", names)?
+                .serialize_entry("dtypes", dtypes),
+            DType::List(element, n) => serializer
+                .serialize_map(Some(3))?
+                .serialize_entry("type", "primitive")?
+                .serialize_entry("element", element)?
+                .serialize_entry("n", n),
+            DType::Composite(id, n) => serializer
+                .serialize_map(Some(3))?
+                .serialize_entry("type", "composite")?
+                .serialize_entry("id", id)?
+                .serialize_entry("n", n),
+        }
     }
 }
 
-struct DTypeDeserializer(DTypeSerdeContext);
-
-impl<'de> Visitor<'de> for DTypeDeserializer {
-    type Value = DType;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("a vortex dtype")
-    }
-
-    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        let fb = root::<fb::DType>(v).map_err(E::custom)?;
-        DType::read_flatbuffer(&self.0, &fb).map_err(E::custom)
-    }
-}
-
-impl<'de> DeserializeSeed<'de> for DTypeSerdeContext {
-    type Value = DType;
-
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_bytes(DTypeDeserializer(self))
-    }
-}
-
-// TODO(ngates): Remove this trait in favour of storing e.g. IdxType which doesn't require
-//  the context for composite types.
 impl<'de> Deserialize<'de> for DType {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let ctx = DTypeSerdeContext::new(vec![]);
-        deserializer.deserialize_bytes(DTypeDeserializer(ctx))
+        todo!()
+    }
+}
+
+impl Serialize for Nullability {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Nullability::NonNullable => serializer.serialize_bool(false),
+            Nullability::Nullable => serializer.serialize_bool(true),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Nullability {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(match bool::deserialize(deserializer)? {
+            true => Nullability::Nullable,
+            false => Nullability::NonNullable,
+        })
     }
 }

@@ -31,16 +31,16 @@ impl StructScalar {
     }
 
     pub fn names(&self) -> &[Arc<String>] {
-        let DType::Struct(ns, _) = self.dtype() else {
+        let DType::Struct { names, .. } = self.dtype() else {
             unreachable!("Not a scalar dtype");
         };
-        ns.as_slice()
+        names.as_slice()
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
         match dtype {
-            DType::Struct(names, field_dtypes) => {
-                if field_dtypes.len() != self.values.len() {
+            DType::Struct { names, dtypes } => {
+                if dtypes.len() != self.values.len() {
                     vortex_bail!(
                         MismatchedTypes: format!("Struct with {} fields", self.values.len()),
                         dtype
@@ -50,14 +50,14 @@ impl StructScalar {
                 let new_fields: Vec<Scalar> = self
                     .values
                     .iter()
-                    .zip_eq(field_dtypes.iter())
+                    .zip_eq(dtypes.iter())
                     .map(|(field, field_dtype)| field.cast(field_dtype))
                     .try_collect()?;
 
-                let new_type = DType::Struct(
-                    names.clone(),
-                    new_fields.iter().map(|x| x.dtype().clone()).collect(),
-                );
+                let new_type = DType::Struct {
+                    names: names.clone(),
+                    dtypes: new_fields.iter().map(|x| x.dtype().clone()).collect(),
+                };
                 Ok(StructScalar::new(new_type, new_fields).into())
             }
             _ => Err(vortex_err!(MismatchedTypes: "struct", dtype)),
@@ -81,7 +81,7 @@ impl PartialOrd for StructScalar {
 
 impl Display for StructScalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let DType::Struct(names, _) = self.dtype() else {
+        let DType::Struct { names, .. } = self.dtype() else {
             unreachable!()
         };
         for (n, v) in names.iter().zip(self.values.iter()) {
