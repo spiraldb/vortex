@@ -26,7 +26,7 @@ impl<'a> TryFrom<&'a str> for CompositeID {
 
 impl AsRef<str> for CompositeID {
     fn as_ref(&self) -> &str {
-        self.0.as_ref()
+        self.0
     }
 }
 

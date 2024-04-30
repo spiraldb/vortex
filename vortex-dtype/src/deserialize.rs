@@ -10,7 +10,7 @@ impl ReadFlatBuffer<()> for DType {
     type Source<'a> = fb::DType<'a>;
     type Error = VortexError;
 
-    fn read_flatbuffer(ctx: &(), fb: &Self::Source<'_>) -> Result<Self, Self::Error> {
+    fn read_flatbuffer(_ctx: &(), fb: &Self::Source<'_>) -> Result<Self, Self::Error> {
         match fb.type_type() {
             fb::Type::Null => Ok(DType::Null),
             fb::Type::Bool => Ok(DType::Bool(
@@ -31,7 +31,7 @@ impl ReadFlatBuffer<()> for DType {
             )),
             fb::Type::List => {
                 let fb_list = fb.type__as_list().unwrap();
-                let element_dtype = DType::read_flatbuffer(ctx, &fb_list.element_type().unwrap())?;
+                let element_dtype = DType::read_flatbuffer(&(), &fb_list.element_type().unwrap())?;
                 Ok(DType::List(
                     Box::new(element_dtype),
                     fb_list.nullability().try_into()?,
@@ -49,7 +49,7 @@ impl ReadFlatBuffer<()> for DType {
                     .fields()
                     .unwrap()
                     .iter()
-                    .map(|f| DType::read_flatbuffer(ctx, &f))
+                    .map(|f| DType::read_flatbuffer(&(), &f))
                     .collect::<VortexResult<Vec<_>>>()?;
                 Ok(DType::Struct { names, dtypes })
             }
