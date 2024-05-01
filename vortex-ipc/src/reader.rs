@@ -575,6 +575,9 @@ mod tests {
 
         {
             let mut iter = array_reader.take(&indices).unwrap();
+
+            // verify that for a fully-consumed iterator, the destructor does not advance the
+            // underlying message stream to the next message, which would be very bad
             while iter.next().is_some() {
                 // Consume the iterator
             }
