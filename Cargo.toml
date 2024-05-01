@@ -56,6 +56,7 @@ divan = "0.1.14"
 duckdb = { version = "0.10.1", features = ["bundled"] }
 enum-iterator = "2.0.0"
 enum_dispatch = "0.3.13"
+fallible-iterator = "0.3.0"
 flatbuffers = "23.5.26"
 flatc = "0.2.2"
 flexbuffers = "2.0.0"
