@@ -103,7 +103,6 @@ impl WriteFlatBuffer for Scalar {
                     nullability: self.nullability().into(),
                 }
             }
-            Scalar::Composite(_) => panic!(),
         };
 
         fb::Scalar::create(fbb, &union)

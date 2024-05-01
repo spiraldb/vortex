@@ -6,7 +6,6 @@ use log::{debug, info, warn};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::chunked::{Chunked, ChunkedArray, ChunkedEncoding};
-use crate::array::composite::CompositeEncoding;
 use crate::array::constant::{Constant, ConstantArray};
 use crate::array::r#struct::{Struct, StructArray, StructEncoding};
 use crate::array::sparse::SparseEncoding;
@@ -72,7 +71,6 @@ impl Default for CompressConfig {
             ree_average_run_threshold: 2.0,
             encodings: HashSet::from([
                 &ChunkedEncoding as EncodingRef,
-                &CompositeEncoding,
                 &SparseEncoding,
                 &StructEncoding,
                 &VarBinEncoding,

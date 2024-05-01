@@ -87,7 +87,6 @@ impl FromArrowType<&Field> for DType {
                     .map(|f| DType::from_arrow(f.as_ref()))
                     .collect_vec(),
             ),
-            DataType::Decimal128(p, s) | DataType::Decimal256(p, s) => Decimal(*p, *s, nullability),
             _ => unimplemented!("Arrow data type not yet supported: {:?}", field.data_type()),
         }
     }
