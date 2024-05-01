@@ -2,6 +2,7 @@ use std::fmt::{Debug, Display, Formatter};
 
 pub use binary::*;
 pub use bool::*;
+pub use extension::*;
 pub use list::*;
 pub use null::*;
 pub use primitive::*;
@@ -10,8 +11,6 @@ pub use utf8::*;
 use vortex_dtype::NativePType;
 use vortex_dtype::{DType, Nullability};
 use vortex_error::VortexResult;
-
-use crate::extension::ExtScalar;
 
 mod binary;
 mod bool;
