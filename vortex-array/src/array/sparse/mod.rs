@@ -65,7 +65,7 @@ impl<'a> SparseArray<'a> {
                 len,
                 fill_value,
             },
-            vec![indices.to_array_data(), values.to_array_data()].into(),
+            [indices.to_array_data(), values.to_array_data()].into(),
             StatsSet::new(),
         )
     }

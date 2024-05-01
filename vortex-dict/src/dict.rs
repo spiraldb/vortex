@@ -27,7 +27,7 @@ impl DictArray<'_> {
             DictMetadata {
                 codes_dtype: codes.dtype().clone(),
             },
-            vec![values.to_array_data(), codes.to_array_data()].into(),
+            [values.to_array_data(), codes.to_array_data()].into(),
             StatsSet::new(),
         )
     }

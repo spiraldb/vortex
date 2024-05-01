@@ -28,7 +28,7 @@ impl FoRArray<'_> {
         Self::try_from_parts(
             child.dtype().clone(),
             FoRMetadata { reference, shift },
-            vec![child.to_array_data()].into(),
+            [child.to_array_data()].into(),
             StatsSet::new(),
         )
     }
