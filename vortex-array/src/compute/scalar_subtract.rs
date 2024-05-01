@@ -17,8 +17,6 @@ pub fn subtract_scalar2<T: Into<Scalar>>(
 }
 
 pub fn subtract_scalar(array: &Array, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
-    // let to_subtract = to_subtract.into().cast(array.dtype())?;
-
     if let Some(subtraction_result) =
         array.with_dyn(|c| c.subtract_scalar().map(|t| t.subtract_scalar(to_subtract)))
     {

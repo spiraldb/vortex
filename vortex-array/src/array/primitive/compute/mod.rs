@@ -17,6 +17,7 @@ mod fill;
 mod scalar_at;
 mod search_sorted;
 mod slice;
+mod subtract_scalar;
 mod take;
 
 impl ArrayCompute for PrimitiveArray<'_> {
