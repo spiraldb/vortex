@@ -147,7 +147,7 @@ impl SubtractScalarFn for ChunkedArray<'_> {
             .collect::<VortexResult<Vec<_>>>()
             .map(|chunks| {
                 ChunkedArray::try_new(chunks, self.dtype().clone())
-                    .expect("Mismatched types in chunked array")
+                    .expect("Subtraction on chunked array changed dtype")
                     .into_array()
             })
     }
