@@ -107,7 +107,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
                 .dtype()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
         )
-        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
+            .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
         Ok(Some(StreamArrayReader {
             ctx: &self.ctx,
@@ -116,7 +116,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
             dtype,
             buffers: vec![],
             row_offset: 0,
-            indices: None,
+            finished: false,
         }))
     }
 }
@@ -129,7 +129,7 @@ pub struct StreamArrayReader<'a, R: Read> {
     dtype: DType,
     buffers: Vec<Buffer<'a>>,
     row_offset: usize,
-    indices: Option<&'a Array<'a>>,
+    finished: bool,
 }
 
 impl<'a, R: Read> StreamArrayReader<'a, R> {
@@ -137,7 +137,7 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
         &self.dtype
     }
 
-    pub fn take(mut self, indices: &'a Array<'_>) -> VortexResult<TakeIterator<'a, R>> {
+    pub fn take(self, indices: &'a Array<'_>) -> VortexResult<TakeIterator<'a, R>> {
         if !indices
             .statistics()
             .compute_as::<bool>(Stat::IsSorted)
@@ -160,35 +160,27 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
         }
         if indices.dtype().is_signed_int()
             && indices
-                .statistics()
-                // min cast should be safe
-                .compute_as_cast::<i64>(Stat::Min)
-                .unwrap()
-                < 0
+            .statistics()
+            // min cast should be safe
+            .compute_as_cast::<i64>(Stat::Min)
+            .unwrap()
+            < 0
         {
             vortex_bail!("Indices must be positive")
         }
 
-        if self.row_offset != 0 {
-            vortex_bail!("Stream has already been (at least partially) consumed")
-        }
-        self.indices = Some(indices);
-
-        Ok(self.into_iter())
+        Ok(TakeIterator { reader: self, indices, row_offset: 0 })
     }
-}
 
-impl<'a, R: Read> IntoIterator for StreamArrayReader<'a, R> {
-    type Item = OwnedArray;
-    type IntoIter = TakeIterator<'a, R>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        TakeIterator { reader: self }
+    fn finish(&mut self) {
+        self.finished = true;
     }
 }
 
 pub struct TakeIterator<'a, R: Read> {
     reader: StreamArrayReader<'a, R>,
+    indices: &'a Array<'a>,
+    row_offset: usize,
 }
 
 /// NB: if the StreamArrayReader expires without being fully-consumed by the underlying iterator,
@@ -197,9 +189,11 @@ pub struct TakeIterator<'a, R: Read> {
 /// For this reason, we force full consumption of the reader when it goes out of scope.
 impl<'a, R: Read> Drop for StreamArrayReader<'a, R> {
     fn drop(&mut self) {
+        // if !self.finished {
         while self.next().unwrap().is_some() {
             // Continue until the reader is exhausted
         }
+        // }
     }
 }
 
@@ -207,45 +201,35 @@ impl<'a, R: Read> Iterator for TakeIterator<'a, R> {
     type Item = OwnedArray;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.reader.indices.is_none() {
-            if let Some(batch) = self.reader.next().unwrap() {
-                return Some(batch.to_static());
-            } else {
-                return None;
-            }
-        }
-
-        let indices = self.reader.indices.unwrap();
-        let mut row_offset = self.reader.row_offset;
         while let Some(batch) = self.reader.next().unwrap() {
-            let left = search_sorted::<usize>(indices, row_offset, SearchSortedSide::Left)
-                .unwrap()
+            let curr_offset = self.row_offset;
+            let left = search_sorted::<usize>(self.indices, curr_offset, SearchSortedSide::Left)
+                .expect("Unexpected failure searching indices for batch")
                 .to_index();
             let right =
-                search_sorted::<usize>(indices, row_offset + batch.len(), SearchSortedSide::Left)
-                    .unwrap()
+                search_sorted::<usize>(self.indices, curr_offset + batch.len(), SearchSortedSide::Left)
+                    .expect("Unexpected failure searching indices for batch")
                     .to_index();
-            // NB: if we're done, make sure to consume the rest of the
-            //  array to leave the iterator in a good state
-            if left == indices.len() {
-                continue;
-            }
+
+            self.row_offset += batch.len();
+
             if left == right {
-                row_offset += batch.len();
                 continue;
             }
 
-            let indices_for_batch = slice(indices, left, right)
-                .expect("Unexpexted failure slicing indices for batch")
+            let indices_for_batch = slice(self.indices, left, right)
+                .expect("Unexpected failure slicing indices for batch")
                 .flatten_primitive()
-                .expect("Unexpexted failure flattening indices for batch");
+                .expect("Unexpected failure flattening indices for batch");
             let shifted_arr = match_each_integer_ptype!(indices_for_batch.ptype(), |$T| {
-                subtract_scalar(&indices_for_batch.into_array(), &Scalar::from(row_offset as $T))
+                subtract_scalar(&indices_for_batch.into_array(), &Scalar::from(curr_offset as $T))
                 .expect("Unexpexted failure subtracting scalar from indices array")
             });
 
+
             return Some(take(&batch, &shifted_arr).unwrap());
         }
+        self.reader.finish();
         None
     }
 }
@@ -455,7 +439,7 @@ mod tests {
                 .map(|v| v as f64 + 0.5)
                 .collect_vec(),
         )
-        .into_array();
+            .into_array();
         let alp_encoded = ALPArray::encode(pdata).unwrap();
         assert_eq!(alp_encoded.encoding().id(), ALPEncoding.id());
         test_base_case(
@@ -512,7 +496,7 @@ mod tests {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
-        .into_array();
+            .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
@@ -570,13 +554,13 @@ mod tests {
             vec![data.clone(), data2.clone(), data2],
             data.dtype().clone(),
         )
-        .unwrap()
-        .into_array();
+            .unwrap()
+            .into_array();
 
         let indices = PrimitiveArray::from(vec![
             10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 4_000_000,
         ])
-        .into_array();
+            .into_array();
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
@@ -594,7 +578,9 @@ mod tests {
 
         {
             let mut iter = array_reader.take(&indices).unwrap();
-            iter.next();
+            while let Some(_) = iter.next() {
+                // Consume the iterator
+            }
         }
 
         let indices = PrimitiveArray::from(vec![10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
@@ -621,7 +607,7 @@ mod tests {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
-        .into_array();
+            .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
