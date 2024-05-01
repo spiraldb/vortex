@@ -160,9 +160,9 @@ mod test {
 
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
     use crate::compute::scalar_subtract::subtract_scalar;
+    use crate::compute::slice::slice;
     use crate::{Array, IntoArray, ToArray};
 
-    #[allow(dead_code)]
     fn chunked_array() -> OwnedChunkedArray {
         ChunkedArray::try_new(
             vec![
@@ -175,7 +175,6 @@ mod test {
         .unwrap()
     }
 
-    #[allow(dead_code)]
     fn assert_equal_slices<T: NativePType>(arr: Array, slice: &[T]) {
         let mut values = Vec::with_capacity(arr.len());
         ChunkedArray::try_from(arr)
@@ -187,58 +186,65 @@ mod test {
     }
 
     #[test]
+    pub fn slice_middle() {
+        assert_equal_slices(slice(chunked_array().array(), 2, 5).unwrap(), &[3u64, 4, 5])
+    }
+
+    #[test]
+    pub fn slice_begin() {
+        assert_equal_slices(slice(chunked_array().array(), 1, 3).unwrap(), &[2u64, 3]);
+    }
+
+    #[test]
+    pub fn slice_aligned() {
+        assert_equal_slices(slice(chunked_array().array(), 3, 6).unwrap(), &[4u64, 5, 6]);
+    }
+
+    #[test]
+    pub fn slice_many_aligned() {
+        assert_equal_slices(
+            slice(chunked_array().array(), 0, 6).unwrap(),
+            &[1u64, 2, 3, 4, 5, 6],
+        );
+    }
+
+    #[test]
+    pub fn slice_end() {
+        assert_equal_slices(slice(chunked_array().array(), 7, 8).unwrap(), &[8u64]);
+    }
+
+    #[test]
     fn test_scalar_subtract() {
-        let chunk1 = vec![1.0f64, 2.0, 3.0].into_array();
-        let chunk2 = vec![4.0f64, 5.0, 6.0].into_array();
-        let to_subtract = -1f64;
-
-        let chunked = ChunkedArray::from_iter(vec![chunk1, chunk2]);
-
+        let chunked = chunked_array();
+        let to_subtract = 1u64;
         let array = subtract_scalar(&chunked.to_array(), &to_subtract.into()).unwrap();
 
         let chunked = ChunkedArray::try_from(array).unwrap();
         let mut chunks_out = chunked.chunks();
-        let results = chunks_out
-            .next()
-            .unwrap()
-            .flatten_primitive()
-            .unwrap()
-            .typed_data::<f64>()
-            .to_vec();
-        assert_eq!(results, &[2.0f64, 3.0, 4.0]);
-        let results = chunks_out
-            .next()
-            .unwrap()
-            .flatten_primitive()
-            .unwrap()
-            .typed_data::<f64>()
-            .to_vec();
-        assert_eq!(results, &[5.0f64, 6.0, 7.0]);
-    }
 
-    // FIXME(ngates): bring back when slicing is a compute function.
-    // #[test]
-    // pub fn slice_middle() {
-    //     assert_equal_slices(chunked_array().slice(2, 5).unwrap(), &[3u64, 4, 5])
-    // }
-    //
-    // #[test]
-    // pub fn slice_begin() {
-    //     assert_equal_slices(chunked_array().slice(1, 3).unwrap(), &[2u64, 3]);
-    // }
-    //
-    // #[test]
-    // pub fn slice_aligned() {
-    //     assert_equal_slices(chunked_array().slice(3, 6).unwrap(), &[4u64, 5, 6]);
-    // }
-    //
-    // #[test]
-    // pub fn slice_many_aligned() {
-    //     assert_equal_slices(chunked_array().slice(0, 6).unwrap(), &[1u64, 2, 3, 4, 5, 6]);
-    // }
-    //
-    // #[test]
-    // pub fn slice_end() {
-    //     assert_equal_slices(chunked_array().slice(7, 8).unwrap(), &[8u64]);
-    // }
+        let results = chunks_out
+            .next()
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, &[0u64, 1, 2]);
+        let results = chunks_out
+            .next()
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, &[3u64, 4, 5]);
+        let results = chunks_out
+            .next()
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, &[6u64, 7, 8]);
+    }
 }
