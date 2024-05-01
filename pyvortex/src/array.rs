@@ -2,7 +2,6 @@ use paste::paste;
 use pyo3::prelude::*;
 use vortex::array::bool::{Bool, BoolArray, BoolEncoding, OwnedBoolArray};
 use vortex::array::chunked::{Chunked, ChunkedArray, ChunkedEncoding, OwnedChunkedArray};
-use vortex::array::composite::{Composite, CompositeArray, CompositeEncoding, OwnedCompositeArray};
 use vortex::array::constant::{Constant, ConstantArray, ConstantEncoding, OwnedConstantArray};
 use vortex::array::primitive::{OwnedPrimitiveArray, Primitive, PrimitiveArray, PrimitiveEncoding};
 use vortex::array::r#struct::{OwnedStructArray, Struct, StructArray, StructEncoding};
@@ -65,7 +64,6 @@ macro_rules! pyarray {
 
 pyarray!(BoolEncoding, BoolArray, "BoolArray");
 pyarray!(ChunkedEncoding, ChunkedArray, "ChunkedArray");
-pyarray!(CompositeEncoding, CompositeArray, "CompositeArray");
 pyarray!(ConstantEncoding, ConstantArray, "ConstantArray");
 pyarray!(PrimitiveEncoding, PrimitiveArray, "PrimitiveArray");
 pyarray!(SparseEncoding, SparseArray, "SparseArray");
@@ -95,12 +93,6 @@ impl PyArray {
             Chunked::ID => PyChunkedArray::wrap(
                 py,
                 OwnedChunkedArray::try_from(inner.into_array()).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            Composite::ID => PyCompositeArray::wrap(
-                py,
-                OwnedCompositeArray::try_from(inner.into_array())
-                    .map_err(PyVortexError::map_err)?,
             )?
             .extract(py),
             Constant::ID => PyConstantArray::wrap(

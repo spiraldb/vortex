@@ -5,7 +5,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use DType::*;
 
-use crate::{CompositeID, ExtDType, PType};
+use crate::{ExtDType, PType};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -53,14 +53,11 @@ pub enum DType {
     Null,
     Bool(Nullability),
     Primitive(PType, Nullability),
-    Decimal(u8, i8, Nullability),
     Utf8(Nullability),
     Binary(Nullability),
     Struct(FieldNames, Vec<DType>),
     List(Box<DType>, Nullability),
     Extension(ExtDType, Nullability),
-    #[serde(skip)]
-    Composite(CompositeID, Nullability),
 }
 
 impl DType {
@@ -80,13 +77,11 @@ impl DType {
             Null => true,
             Bool(n) => matches!(n, Nullable),
             Primitive(_, n) => matches!(n, Nullable),
-            Decimal(_, _, n) => matches!(n, Nullable),
             Utf8(n) => matches!(n, Nullable),
             Binary(n) => matches!(n, Nullable),
             Struct(_, fs) => fs.iter().all(|f| f.is_nullable()),
             List(_, n) => matches!(n, Nullable),
             Extension(_, n) => matches!(n, Nullable),
-            Composite(_, n) => matches!(n, Nullable),
         }
     }
 
@@ -103,7 +98,6 @@ impl DType {
             Null => Null,
             Bool(_) => Bool(nullability),
             Primitive(p, _) => Primitive(*p, nullability),
-            Decimal(s, p, _) => Decimal(*s, *p, nullability),
             Utf8(_) => Utf8(nullability),
             Binary(_) => Binary(nullability),
             Struct(n, fs) => Struct(
@@ -112,7 +106,6 @@ impl DType {
             ),
             List(c, _) => List(c.clone(), nullability),
             Extension(ext, _) => Extension(ext.clone(), nullability),
-            Composite(id, _) => Composite(*id, nullability),
         }
     }
 
@@ -127,7 +120,6 @@ impl Display for DType {
             Null => write!(f, "null"),
             Bool(n) => write!(f, "bool{}", n),
             Primitive(p, n) => write!(f, "{}{}", p, n),
-            Decimal(p, s, n) => write!(f, "decimal({}, {}){}", p, s, n),
             Utf8(n) => write!(f, "utf8{}", n),
             Binary(n) => write!(f, "binary{}", n),
             Struct(n, dt) => write!(
@@ -148,7 +140,6 @@ impl Display for DType {
                     .unwrap_or_else(|| "".to_string()),
                 n
             ),
-            Composite(id, n) => write!(f, "<{}>{}", id, n),
         }
     }
 }

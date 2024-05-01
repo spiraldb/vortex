@@ -31,15 +31,6 @@ impl WriteFlatBuffer for DType {
                 },
             )
             .as_union_value(),
-            DType::Decimal(p, s, n) => fb::Decimal::create(
-                fbb,
-                &fb::DecimalArgs {
-                    precision: *p,
-                    scale: *s,
-                    nullability: n.into(),
-                },
-            )
-            .as_union_value(),
             DType::Utf8(n) => fb::Utf8::create(
                 fbb,
                 &fb::Utf8Args {
@@ -93,20 +84,17 @@ impl WriteFlatBuffer for DType {
                 )
                 .as_union_value()
             }
-            DType::Composite(..) => todo!(),
         };
 
         let dtype_type = match self {
             DType::Null => fb::Type::Null,
             DType::Bool(_) => fb::Type::Bool,
             DType::Primitive(..) => fb::Type::Primitive,
-            DType::Decimal(..) => fb::Type::Decimal,
             DType::Utf8(_) => fb::Type::Utf8,
             DType::Binary(_) => fb::Type::Binary,
             DType::Struct(..) => fb::Type::Struct_,
             DType::List(..) => fb::Type::List,
             DType::Extension { .. } => fb::Type::Extension,
-            DType::Composite(..) => unreachable!(),
         };
 
         fb::DType::create(
@@ -197,7 +185,6 @@ mod test {
         roundtrip_dtype(DType::Null);
         roundtrip_dtype(DType::Bool(Nullability::NonNullable));
         roundtrip_dtype(DType::Primitive(PType::U64, Nullability::NonNullable));
-        roundtrip_dtype(DType::Decimal(18, 9, Nullability::NonNullable));
         roundtrip_dtype(DType::Binary(Nullability::NonNullable));
         roundtrip_dtype(DType::Utf8(Nullability::NonNullable));
         roundtrip_dtype(DType::List(
