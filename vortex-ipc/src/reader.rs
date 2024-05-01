@@ -460,14 +460,16 @@ mod tests {
         let indices =
             PrimitiveArray::from(vec![-1i32, 10, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
                 .into_array();
-        test_read_write_inner(&data, &indices).expect_err("Expected negative index to fail");
+        test_read_write_single_chunk_array(&data, &indices)
+            .expect_err("Expected negative index to fail");
     }
 
     #[test]
     fn test_noninteger_index_fails() {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices = PrimitiveArray::from(vec![1f32, 10.0, 11.0, 12.0]).into_array();
-        test_read_write_inner(&data, &indices).expect_err("Expected float index to fail");
+        test_read_write_single_chunk_array(&data, &indices)
+            .expect_err("Expected float index to fail");
     }
 
     #[test]
@@ -475,7 +477,8 @@ mod tests {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices = PrimitiveArray::from_nullable_vec(vec![None, Some(1i32), Some(10), Some(11)])
             .into_array();
-        test_read_write_inner(&data, &indices).expect_err("Expected float index to fail");
+        test_read_write_single_chunk_array(&data, &indices)
+            .expect_err("Expected float index to fail");
     }
 
     #[test]
@@ -675,7 +678,10 @@ mod tests {
         assert_eq!(results, expected);
     }
 
-    fn test_read_write_inner<'a>(data: &'a Array, indices: &'a Array) -> VortexResult<OwnedArray> {
+    fn test_read_write_single_chunk_array<'a>(
+        data: &'a Array,
+        indices: &'a Array,
+    ) -> VortexResult<OwnedArray> {
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
