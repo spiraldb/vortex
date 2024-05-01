@@ -51,7 +51,11 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
 
 fn subtract_scalar_integer<
     'a,
-    T: NativePType + OverflowingSub + SaturatingSub + PScalarType + TryFrom<Scalar, Error = VortexError>,
+    T: NativePType
+        + OverflowingSub
+        + SaturatingSub
+        + PScalarType
+        + TryFrom<Scalar, Error = VortexError>,
 >(
     subtract_from: &PrimitiveArray<'a>,
     to_subtract: T,
