@@ -3,7 +3,7 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
 use crate::r#for::compress::decompress;
@@ -28,7 +28,7 @@ impl FoRArray<'_> {
         Self::try_from_parts(
             child.dtype().clone(),
             FoRMetadata { reference, shift },
-            vec![child.to_array_data()].into(),
+            [child.to_array_data()].into(),
             StatsSet::new(),
         )
     }

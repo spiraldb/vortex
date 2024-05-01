@@ -1,7 +1,7 @@
 use flatbuffers::root;
 use vortex_dtype::flatbuffers as fb;
 use vortex_dtype::CompositeID;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::vortex_err;
 use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
 use crate::array::composite::{find_extension, CompositeExtensionRef, TypedCompositeArray};
@@ -83,7 +83,7 @@ impl<'a> CompositeArray<'a> {
                 underlying_dtype: underlying.dtype().clone(),
                 underlying_metadata: metadata,
             },
-            vec![underlying.into_array_data()].into(),
+            [underlying.into_array_data()].into(),
             StatsSet::new(),
         )
         .unwrap()

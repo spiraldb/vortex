@@ -55,7 +55,7 @@ macro_rules! impl_encoding {
             use std::fmt::Debug;
             use std::marker::{Send, Sync};
             use std::sync::Arc;
-            use vortex_error::VortexError;
+            use vortex_error::{VortexError, VortexResult};
             use vortex_dtype::DType;
 
             /// The array definition trait
@@ -73,6 +73,7 @@ macro_rules! impl_encoding {
             pub struct [<$Name Array>]<'a> {
                 typed: TypedArray<'a, $Name>
             }
+            #[allow(dead_code)]
             pub type [<Owned $Name Array>] = [<$Name Array>]<'static>;
             impl<'a> [<$Name Array>]<'a> {
                 pub fn array(&'a self) -> &'a Array<'a> {

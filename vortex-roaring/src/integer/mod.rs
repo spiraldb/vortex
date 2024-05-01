@@ -9,7 +9,7 @@ use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayFlatten, OwnedArray};
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::PType;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err};
 
 mod compress;
 mod compute;

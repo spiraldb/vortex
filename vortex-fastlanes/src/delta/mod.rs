@@ -5,7 +5,7 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::vortex_bail;
 
 use crate::delta::compress::decompress;
 
@@ -48,7 +48,7 @@ impl DeltaArray<'_> {
                 validity: validity.to_metadata(len)?,
                 len,
             },
-            vec![bases.into_array_data(), deltas.into_array_data()].into(),
+            [bases.into_array_data(), deltas.into_array_data()].into(),
             StatsSet::new(),
         )?;
 

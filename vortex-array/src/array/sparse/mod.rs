@@ -1,6 +1,6 @@
 use ::serde::{Deserialize, Serialize};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
@@ -65,7 +65,7 @@ impl<'a> SparseArray<'a> {
                 len,
                 fill_value,
             },
-            vec![indices.to_array_data(), values.to_array_data()].into(),
+            [indices.to_array_data(), values.to_array_data()].into(),
             StatsSet::new(),
         )
     }

@@ -25,7 +25,7 @@ pub fn subtract_scalar(array: &Array, to_subtract: &Scalar) -> VortexResult<Owne
         }
         _ => Err(vortex_err!(
             NotImplemented: "scalar_subtract",
-            array.encoding().id().name()
+            array.encoding().id()
         )),
     }
 }
