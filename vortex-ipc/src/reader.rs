@@ -480,12 +480,26 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_index_fails() {
+    fn test_empty_index() {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices: Vec<i32> = vec![];
         let indices = PrimitiveArray::from(indices).into_array();
-        test_read_write_single_chunk_array(&data, &indices)
-            .expect_err("Expected empty indices to fail");
+        let mut buffer = vec![];
+        {
+            let mut cursor = Cursor::new(&mut buffer);
+            {
+                let mut writer =
+                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+                writer.write_array(&data).unwrap();
+            }
+        }
+
+        let mut cursor = Cursor::new(&buffer);
+        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+        let array_reader = reader.next().unwrap().unwrap();
+        let mut result_iter = array_reader.take(&indices).unwrap();
+        let result = result_iter.next().unwrap();
+        assert!(result.is_none())
     }
 
     #[test]
