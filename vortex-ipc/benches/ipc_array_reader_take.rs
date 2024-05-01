@@ -38,7 +38,10 @@ fn ipc_array_reader_take(c: &mut Criterion) {
             let mut cursor = Cursor::new(&buffer);
             let mut reader = StreamReader::try_new(&mut cursor).unwrap();
             let array_reader = reader.next().unwrap().unwrap();
-            black_box(array_reader.take(&indices))
+            let iterator = array_reader.take(&indices).unwrap();
+            for arr in iterator {
+                black_box(arr);
+            }
         });
     });
 }
