@@ -1,6 +1,6 @@
 use ::serde::{Deserialize, Serialize};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::vortex_bail;
 
 use crate::array::constant::ConstantArray;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};

@@ -6,7 +6,7 @@ use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::vortex_bail;
 
 use crate::compress::{ree_decode, ree_encode};
 

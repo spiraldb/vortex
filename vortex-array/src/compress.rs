@@ -38,7 +38,7 @@ pub trait EncodingCompression: ArrayEncoding {
         _like: Option<&Array>,
         _ctx: CompressCtx,
     ) -> VortexResult<OwnedArray> {
-        vortex_bail!(NotImplemented: "compress not implemented for {}", self.id().name())
+        vortex_bail!(NotImplemented: "compress", self.id())
     }
 
     // For an array returned by this encoding, give the size in bytes minus any constant overheads.

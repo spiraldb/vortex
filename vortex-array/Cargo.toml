@@ -27,6 +27,7 @@ flatbuffers = { workspace = true }
 flexbuffers = { workspace = true }
 humansize = { workspace = true }
 itertools = { workspace = true }
+lazy_static = { workspace = true }
 leb128 = { workspace = true }
 linkme = { workspace = true }
 log = { workspace = true }

@@ -2,7 +2,7 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::Nullability;
 use vortex_dtype::{match_each_native_ptype, NativePType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::vortex_bail;
 use vortex_scalar::{BinaryScalar, Utf8Scalar};
 
 use crate::array::varbin::builder::VarBinBuilder;

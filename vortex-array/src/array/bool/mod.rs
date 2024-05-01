@@ -1,7 +1,6 @@
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use vortex_error::VortexResult;
 
 use crate::buffer::Buffer;
 use crate::validity::{ArrayValidity, ValidityMetadata};

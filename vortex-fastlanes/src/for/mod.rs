@@ -3,7 +3,7 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::vortex_bail;
 
 use crate::r#for::compress::decompress;
 

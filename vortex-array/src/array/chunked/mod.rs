@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{Nullability, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::vortex_bail;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;

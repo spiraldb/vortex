@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use vortex_error::VortexResult;
 
 use crate::impl_encoding;
 use crate::validity::{ArrayValidity, LogicalValidity};
