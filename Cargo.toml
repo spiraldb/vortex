@@ -7,8 +7,7 @@ members = [
     "vortex-alloc",
     "vortex-alp",
     "vortex-array",
-    # TODO(ngates): bring back with new Extension API
-    # "vortex-datetime-parts",
+    "vortex-datetime-parts",
     "vortex-dict",
     "vortex-error",
     "vortex-fastlanes",
