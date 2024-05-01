@@ -172,6 +172,6 @@ mod test {
 
     #[test]
     fn size_of() {
-        assert_eq!(mem::size_of::<Scalar>(), 80);
+        assert_eq!(mem::size_of::<Scalar>(), 88);
     }
 }
