@@ -2,6 +2,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{Nullability, PType};
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
@@ -45,7 +46,7 @@ impl ChunkedArray<'_> {
         let mut children = vec![chunk_ends.into_array_data()];
         children.extend(chunks.iter().map(|a| a.to_array_data()));
 
-        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), HashMap::default())
+        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), StatsSet::new())
     }
 
     #[inline]

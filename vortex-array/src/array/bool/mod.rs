@@ -47,7 +47,7 @@ impl BoolArray<'_> {
                 },
                 Some(Buffer::Owned(buffer.into_inner())),
                 validity.into_array_data().into_iter().collect_vec().into(),
-                HashMap::default(),
+                StatsSet::new(),
             )?,
         })
     }

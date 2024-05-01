@@ -2,7 +2,7 @@ use itertools::Itertools;
 use num_traits::ops::overflowing::OverflowingSub;
 use num_traits::SaturatingSub;
 use vortex_dtype::{match_each_float_ptype, match_each_integer_ptype, NativePType};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_scalar::{PScalarType, Scalar};
 
 use crate::array::constant::ConstantArray;
@@ -51,7 +51,11 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
 
 fn subtract_scalar_integer<
     'a,
-    T: NativePType + OverflowingSub + SaturatingSub + PScalarType + TryFrom<Scalar>,
+    T: NativePType
+        + OverflowingSub
+        + SaturatingSub
+        + PScalarType
+        + TryFrom<Scalar, Error = VortexError>,
 >(
     subtract_from: &PrimitiveArray<'a>,
     to_subtract: T,
@@ -61,7 +65,7 @@ fn subtract_scalar_integer<
         return Ok(subtract_from.clone());
     }
 
-    if let Some(min) = subtract_from.statistics().compute_as_cast::<T>(Stat::Min) {
+    if let Ok(min) = subtract_from.statistics().compute_as_cast::<T>(Stat::Min) {
         if let (_, true) = min.overflowing_sub(&to_subtract) {
             vortex_bail!(
                 "Integer subtraction over/underflow: {}, {}",
@@ -70,7 +74,7 @@ fn subtract_scalar_integer<
             )
         }
     }
-    if let Some(max) = subtract_from.statistics().compute_as_cast::<T>(Stat::Max) {
+    if let Ok(max) = subtract_from.statistics().compute_as_cast::<T>(Stat::Max) {
         if let (_, true) = max.overflowing_sub(&to_subtract) {
             vortex_bail!(
                 "Integer subtraction over/underflow: {}, {}",
