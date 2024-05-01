@@ -1,5 +1,4 @@
-use std::sync::Arc;
-
+use itertools::Itertools;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 
@@ -43,8 +42,9 @@ impl ReadFlatBuffer for DType {
                     .names()
                     .unwrap()
                     .iter()
-                    .map(|n| Arc::new(n.to_string()))
-                    .collect::<Vec<_>>();
+                    .map(|n| n.into())
+                    .collect_vec()
+                    .into();
                 let fields: Vec<DType> = fb_struct
                     .fields()
                     .unwrap()

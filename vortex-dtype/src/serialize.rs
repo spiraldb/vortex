@@ -49,7 +49,7 @@ impl WriteFlatBuffer for DType {
                 let names = st
                     .names()
                     .iter()
-                    .map(|n| fbb.create_string(n.as_str()))
+                    .map(|n| fbb.create_string(n.as_ref()))
                     .collect_vec();
                 let names = Some(fbb.create_vector(&names));
 
@@ -176,7 +176,6 @@ impl TryFrom<fb::PType> for PType {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
 
     use flatbuffers::root;
     use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
@@ -203,7 +202,7 @@ mod test {
         ));
         roundtrip_dtype(DType::Struct(
             StructDType::new(
-                vec![Arc::new("strings".into()), Arc::new("ints".into())],
+                ["strings".into(), "ints".into()].into(),
                 vec![
                     DType::Utf8(Nullability::NonNullable),
                     DType::Primitive(PType::U16, Nullability::Nullable),

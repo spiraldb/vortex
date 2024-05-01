@@ -37,7 +37,6 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
-    use std::sync::Arc;
 
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::r#struct::StructArray;
@@ -53,7 +52,7 @@ mod tests {
     fn test_write_flatbuffer() {
         let col = PrimitiveArray::from(vec![0, 1, 2]).into_array();
         let nested_struct = StructArray::try_new(
-            vec![Arc::new("x".into()), Arc::new("y".into())],
+            ["x".into(), "y".into()].into(),
             vec![col.clone(), col.clone()],
             3,
             Validity::AllValid,
@@ -61,7 +60,7 @@ mod tests {
         .unwrap();
 
         let arr = StructArray::try_new(
-            vec![Arc::new("a".into()), Arc::new("b".into())],
+            ["a".into(), "b".into()].into(),
             vec![col.clone(), nested_struct.into_array()],
             3,
             Validity::AllValid,

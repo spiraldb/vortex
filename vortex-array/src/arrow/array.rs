@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use arrow_array::array::{
     Array as ArrowArray, ArrayRef as ArrowArrayRef, BooleanArray as ArrowBooleanArray,
     GenericByteArray, NullArray as ArrowNullArray, PrimitiveArray as ArrowPrimitiveArray,
@@ -21,6 +19,7 @@ use arrow_array::{BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit};
+use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_dtype::NativePType;
 use vortex_scalar::NullScalar;
@@ -176,9 +175,9 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
             value
                 .column_names()
                 .iter()
-                .map(|s| s.to_string())
-                .map(Arc::new)
-                .collect(),
+                .map(|s| (*s).into())
+                .collect_vec()
+                .into(),
             value
                 .columns()
                 .iter()

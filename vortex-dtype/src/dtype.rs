@@ -43,8 +43,7 @@ impl Display for Nullability {
     }
 }
 
-// TODO(ngates): Arc<[Arc<str>]>
-pub type FieldNames = Vec<Arc<String>>;
+pub type FieldNames = Arc<[Arc<str>]>;
 
 pub type Metadata = Vec<u8>;
 

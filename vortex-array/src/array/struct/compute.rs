@@ -53,7 +53,7 @@ impl AsArrowArray for StructArray<'_> {
             .zip(self.dtypes().iter())
             .map(|((name, arrow_field), vortex_field)| {
                 Field::new(
-                    name.as_str(),
+                    &**name,
                     arrow_field.data_type().clone(),
                     vortex_field.is_nullable(),
                 )

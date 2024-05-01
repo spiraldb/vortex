@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::{DataType, Field, SchemaRef};
 use itertools::Itertools;
@@ -45,8 +43,9 @@ impl FromArrowType<SchemaRef> for DType {
                 value
                     .fields()
                     .iter()
-                    .map(|f| Arc::new(f.name().clone()))
-                    .collect(),
+                    .map(|f| f.name().as_str().into())
+                    .collect_vec()
+                    .into(),
                 value
                     .fields()
                     .iter()
@@ -86,7 +85,10 @@ impl FromArrowType<&Field> for DType {
             }
             DataType::Struct(f) => Struct(
                 StructDType::new(
-                    f.iter().map(|f| Arc::new(f.name().clone())).collect(),
+                    f.iter()
+                        .map(|f| f.name().as_str().into())
+                        .collect_vec()
+                        .into(),
                     f.iter()
                         .map(|f| DType::from_arrow(f.as_ref()))
                         .collect_vec(),

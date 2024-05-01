@@ -196,7 +196,7 @@ impl CompressionRunStats {
                     dataset_name: dataset_name.clone(),
                     file_name: self.file_name.clone(),
                     file_type: self.file_type.to_string(),
-                    column_name: (**column_name).clone(),
+                    column_name: (**column_name).to_string(),
                     column_type: column_type.to_string(),
                     compressed_size: size,
                     total_compressed_size: self.total_compressed_size,
