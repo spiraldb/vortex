@@ -1,46 +1,47 @@
-use std::io;
-use std::io::{BufReader, Read};
+use std::{io, mem};
 use std::marker::PhantomData;
 
 use arrow_buffer::Buffer as ArrowBuffer;
-use fallible_iterator::FallibleIterator;
 use flatbuffers::{root, root_unchecked};
+use futures::executor::block_on;
 use log::error;
+use monoio::buf::SliceMut;
+use monoio::io::{AsyncReadRent, AsyncReadRentExt, BufReader};
 use nougat::gat;
+
+use vortex::{Array, ArrayDType, ArrayView, Context, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext};
 use vortex::array::chunked::ChunkedArray;
 use vortex::compute::scalar_subtract::subtract_scalar;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
 use vortex::compute::take::take;
 use vortex::stats::{ArrayStatistics, Stat};
-use vortex::{
-    Array, ArrayDType, ArrayView, Context, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext,
-};
 use vortex_buffer::Buffer;
-use vortex_dtype::{match_each_integer_ptype, DType};
+use vortex_dtype::{DType, match_each_integer_ptype};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 use vortex_scalar::Scalar;
 
 use crate::flatbuffers::ipc::Message;
-use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
+use crate::iter::{FallibleIterator, FallibleLendingIterator, FallibleLendingIteratorඞItem};
 use crate::messages::SerdeContextDeserializer;
+use crate::read_ext::AsyncReadRentSkip;
 
-pub struct StreamReader<R: Read> {
+pub struct StreamReader<R: AsyncReadRent> {
     read: R,
     messages: StreamMessageReader<R>,
     ctx: ViewContext,
 }
 
-impl<R: Read> StreamReader<BufReader<R>> {
-    pub fn try_new(read: R, ctx: &Context) -> VortexResult<Self> {
-        Self::try_new_unbuffered(BufReader::new(read), ctx)
+impl<R: AsyncReadRent> StreamReader<BufReader<R>> {
+    pub async fn try_new(read: R, ctx: &Context) -> VortexResult<Self> {
+        Self::try_new_unbuffered(BufReader::new(read), ctx).await
     }
 }
 
-impl<R: Read> StreamReader<R> {
-    pub fn try_new_unbuffered(mut read: R, ctx: &Context) -> VortexResult<Self> {
-        let mut messages = StreamMessageReader::try_new(&mut read)?;
+impl<R: AsyncReadRent> StreamReader<R> {
+    pub async fn try_new_unbuffered(mut read: R, ctx: &Context) -> VortexResult<Self> {
+        let mut messages = StreamMessageReader::try_new(&mut read).await?;
         match messages.peek() {
             None => vortex_bail!("IPC stream is empty"),
             Some(msg) => {
@@ -51,10 +52,10 @@ impl<R: Read> StreamReader<R> {
         }
 
         let view_ctx: ViewContext = SerdeContextDeserializer {
-            fb: messages.next(&mut read)?.header_as_context().unwrap(),
+            fb: messages.next(&mut read).await?.header_as_context().unwrap(),
             ctx,
         }
-        .try_into()?;
+            .try_into()?;
 
         Ok(Self {
             read,
@@ -64,13 +65,13 @@ impl<R: Read> StreamReader<R> {
     }
 
     /// Read a single array from the IPC stream.
-    pub fn read_array(&mut self) -> VortexResult<Array> {
+    pub async fn read_array(&mut self) -> VortexResult<Array> {
         let mut array_reader = self
-            .next()?
+            .next().await?
             .ok_or_else(|| vortex_err!(InvalidSerde: "Unexpected EOF"))?;
 
         let mut chunks = vec![];
-        while let Some(chunk) = array_reader.next()? {
+        while let Some(chunk) = array_reader.next().await? {
             chunks.push(chunk.to_static());
         }
 
@@ -84,11 +85,11 @@ impl<R: Read> StreamReader<R> {
 }
 
 #[gat]
-impl<R: Read> FallibleLendingIterator for StreamReader<R> {
+impl<R: AsyncReadRent> FallibleLendingIterator for StreamReader<R> {
     type Error = VortexError;
     type Item<'next> = StreamArrayReader<'next, R> where Self: 'next;
 
-    fn next(&mut self) -> Result<Option<StreamArrayReader<'_, R>>, Self::Error> {
+    async fn next(&mut self) -> Result<Option<StreamArrayReader<'_, R>>, Self::Error> {
         if self
             .messages
             .peek()
@@ -100,7 +101,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
 
         let schema_msg = self
             .messages
-            .next(&mut self.read)?
+            .next(&mut self.read).await?
             .header_as_schema()
             .unwrap();
 
@@ -109,7 +110,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
                 .dtype()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
         )
-        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
+            .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
         Ok(Some(StreamArrayReader {
             ctx: &self.ctx,
@@ -123,7 +124,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
 }
 
 #[allow(dead_code)]
-pub struct StreamArrayReader<'a, R: Read> {
+pub struct StreamArrayReader<'a, R: AsyncReadRent> {
     ctx: &'a ViewContext,
     read: &'a mut R,
     messages: &'a mut StreamMessageReader<R>,
@@ -132,7 +133,7 @@ pub struct StreamArrayReader<'a, R: Read> {
     row_offset: usize,
 }
 
-impl<'a, R: Read> StreamArrayReader<'a, R> {
+impl<'a, R: AsyncReadRent> StreamArrayReader<'a, R> {
     pub fn dtype(&self) -> &DType {
         &self.dtype
     }
@@ -170,7 +171,7 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
     }
 }
 
-pub struct TakeIterator<'a, R: Read> {
+pub struct TakeIterator<'a, R: AsyncReadRent> {
     reader: StreamArrayReader<'a, R>,
     indices: &'a Array<'a>,
     row_offset: usize,
@@ -180,11 +181,11 @@ pub struct TakeIterator<'a, R: Read> {
 /// it will leave the underlying messages stream in an unreadable state and free up a mutable ref
 /// to that stream, allowing someone else to try to issue a read that will inevitably fail.
 /// For this reason, we force full consumption of the reader when it goes out of scope.
-impl<'a, R: Read> Drop for StreamArrayReader<'a, R> {
+impl<'a, R: AsyncReadRent> Drop for StreamArrayReader<'a, R> {
     fn drop(&mut self) {
         // NB: can't catch_unwind/unwrap here because &mut self can't be made UnwindSafe
         loop {
-            let next = self.next();
+            let next = block_on(self.next());
             match next {
                 Ok(result) => {
                     if result.is_none() {
@@ -206,15 +207,15 @@ impl<'a, R: Read> Drop for StreamArrayReader<'a, R> {
 /// consistent state when the StreamArrayReader is dropped, but it also is not free. If users wish
 /// to avoid this work happening at exipry, users can just consume the rest of the iterator
 /// themselves when they see fit.
-impl<'a, R: Read> FallibleIterator for TakeIterator<'a, R> {
+impl<'a, R: AsyncReadRent> FallibleIterator for TakeIterator<'a, R> {
     type Item = OwnedArray;
     type Error = VortexError;
 
-    fn next(&mut self) -> VortexResult<Option<Self::Item>> {
+    async fn next(&mut self) -> VortexResult<Option<Self::Item>> {
         if self.indices.is_empty() {
             return Ok(None);
         }
-        while let Some(batch) = self.reader.next()? {
+        while let Some(batch) = self.reader.next().await? {
             let curr_offset = self.row_offset;
             let left = search_sorted::<usize>(self.indices, curr_offset, SearchSortedSide::Left)?
                 .to_index();
@@ -223,7 +224,7 @@ impl<'a, R: Read> FallibleIterator for TakeIterator<'a, R> {
                 curr_offset + batch.len(),
                 SearchSortedSide::Left,
             )?
-            .to_index();
+                .to_index();
 
             self.row_offset += batch.len();
 
@@ -243,38 +244,41 @@ impl<'a, R: Read> FallibleIterator for TakeIterator<'a, R> {
 }
 
 #[gat]
-impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
+impl<'iter, R: AsyncReadRent> FallibleLendingIterator for StreamArrayReader<'iter, R> {
     type Error = VortexError;
     type Item<'next> = Array<'next> where Self: 'next;
 
-    fn next(&mut self) -> Result<Option<Array<'_>>, Self::Error> {
+    async fn next(&mut self) -> Result<Option<Array<'_>>, Self::Error> {
         let Some(chunk_msg) = self.messages.peek().and_then(|msg| msg.header_as_chunk()) else {
             return Ok(None);
         };
 
         // Read all the column's buffers
         self.buffers.clear();
-        let mut offset = 0;
+        let mut offset: usize = 0;
         for buffer in chunk_msg.buffers().unwrap_or_default().iter() {
-            let _skip = buffer.offset() - offset;
-            self.read.skip(buffer.offset() - offset)?;
+            let _skip = buffer.offset() as usize - offset;
+            self.read.skip(buffer.offset() as usize - offset).await?;
 
             // TODO(ngates): read into a single buffer, then Arc::clone and slice
-            let mut bytes = Vec::with_capacity(buffer.length() as usize);
-            self.read.read_into(buffer.length(), &mut bytes)?;
-            let arrow_buffer = ArrowBuffer::from_vec(bytes);
+            let bytes = Vec::with_capacity(buffer.length() as usize);
+            let (len_res, bytes_read) = self.read.read_exact(bytes).await;
+            if len_res? != buffer.length() as usize {
+                vortex_bail!("Mismatched length read from buffer");
+            }
+            let arrow_buffer = ArrowBuffer::from_vec(bytes_read);
             self.buffers.push(Buffer::from(arrow_buffer));
 
-            offset = buffer.offset() + buffer.length();
+            offset = (buffer.offset() + buffer.length()) as usize;
         }
 
         // Consume any remaining padding after the final buffer.
-        self.read.skip(chunk_msg.buffer_size() - offset)?;
+        self.read.skip(chunk_msg.buffer_size() as usize - offset).await?;
 
         // After reading the buffers we're now able to load the next message.
         let col_array = self
             .messages
-            .next(self.read)?
+            .next(self.read).await?
             .header_as_chunk()
             .unwrap()
             .array()
@@ -290,41 +294,22 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
     }
 }
 
-pub trait ReadExtensions: Read {
-    /// Skip n bytes in the stream.
-    fn skip(&mut self, nbytes: u64) -> io::Result<()> {
-        io::copy(&mut self.take(nbytes), &mut io::sink())?;
-        Ok(())
-    }
-
-    /// Read exactly nbytes into the buffer.
-    fn read_into(&mut self, nbytes: u64, buffer: &mut Vec<u8>) -> VortexResult<()> {
-        buffer.reserve_exact(nbytes as usize);
-        if self.take(nbytes).read_to_end(buffer)? != nbytes as usize {
-            vortex_bail!(InvalidSerde: "Failed to read all bytes")
-        }
-        Ok(())
-    }
-}
-
-impl<R: Read> ReadExtensions for R {}
-
-struct StreamMessageReader<R: Read> {
+struct StreamMessageReader<R: AsyncReadRent> {
     message: Vec<u8>,
     prev_message: Vec<u8>,
     finished: bool,
     phantom: PhantomData<R>,
 }
 
-impl<R: Read> StreamMessageReader<R> {
-    pub fn try_new(read: &mut R) -> VortexResult<Self> {
+impl<R: AsyncReadRent> StreamMessageReader<R> {
+    pub async fn try_new(read: &mut R) -> VortexResult<Self> {
         let mut reader = Self {
             message: Vec::new(),
             prev_message: Vec::new(),
             finished: false,
             phantom: PhantomData,
         };
-        reader.load_next_message(read)?;
+        reader.load_next_message(read).await?;
         Ok(reader)
     }
 
@@ -336,20 +321,21 @@ impl<R: Read> StreamMessageReader<R> {
         Some(unsafe { root_unchecked::<Message>(&self.message) })
     }
 
-    pub fn next(&mut self, read: &mut R) -> VortexResult<Message> {
+    pub async fn next(&mut self, read: &mut R) -> VortexResult<Message> {
         if self.finished {
             panic!("StreamMessageReader is finished - should've checked peek!");
         }
-        std::mem::swap(&mut self.prev_message, &mut self.message);
-        if !self.load_next_message(read)? {
+        mem::swap(&mut self.prev_message, &mut self.message);
+        if !self.load_next_message(read).await? {
             self.finished = true;
         }
         Ok(unsafe { root_unchecked::<Message>(&self.prev_message) })
     }
 
-    fn load_next_message(&mut self, read: &mut R) -> VortexResult<bool> {
-        let mut len_buf = [0u8; 4];
-        match read.read_exact(&mut len_buf) {
+    async fn load_next_message(&mut self, read: &mut R) -> VortexResult<bool> {
+        let len_buf = Vec::with_capacity(4);
+        let (len_res, read_buf) = read.read_exact(len_buf).await;
+        match len_res {
             Ok(_) => {}
             Err(e) => {
                 return match e.kind() {
@@ -359,7 +345,7 @@ impl<R: Read> StreamMessageReader<R> {
             }
         }
 
-        let len = u32::from_le_bytes(len_buf);
+        let len = u32::from_le_bytes(read_buf.as_slice().try_into().unwrap());
         if len == u32::MAX {
             // Marker for no more messages.
             return Ok(false);
@@ -367,9 +353,11 @@ impl<R: Read> StreamMessageReader<R> {
 
         self.message.clear();
         self.message.reserve(len as usize);
-        if read.take(len as u64).read_to_end(&mut self.message)? != len as usize {
+        let (len_res, read_buf) = read.read_exact(SliceMut::new(mem::take(&mut self.message), 0, len as usize)).await;
+        if len_res? != len as usize {
             vortex_bail!(InvalidSerde: "Failed to read all bytes")
         }
+        self.message = read_buf.into_inner();
 
         std::hint::black_box(root::<Message>(&self.message)?);
         Ok(true)
@@ -378,25 +366,26 @@ impl<R: Read> StreamMessageReader<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Read, Write};
+    use std::io::Cursor;
 
-    use fallible_iterator::FallibleIterator;
     use itertools::Itertools;
+
+    use vortex::{Array, ArrayDef, ArrayDType, IntoArray, OwnedArray};
     use vortex::array::chunked::{Chunked, ChunkedArray};
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId, EncodingRef};
-    use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray, OwnedArray};
     use vortex_alp::{ALPArray, ALPEncoding};
     use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
     use vortex_fastlanes::{BitPackedArray, BitPackedEncoding};
 
-    use crate::iter::FallibleLendingIterator;
+    use crate::iter::{FallibleIterator, FallibleLendingIterator};
+    use crate::reader::Context;
     use crate::reader::StreamReader;
     use crate::writer::StreamWriter;
 
-    #[test]
-    fn test_read_write() {
+    #[monoio::test_all]
+    async fn test_read_write() {
         let ctx = Context::default().with_encodings([
             &ALPEncoding as EncodingRef,
             &BitPackedEncoding as EncodingRef,
@@ -416,43 +405,40 @@ mod tests {
         }
         // Push some extra bytes to test that the reader is well-behaved and doesn't read past the
         // end of the stream.
-        let _ = cursor.write(b"hello").unwrap();
+        buffer.extend_from_slice(b"hello");
+        let mut read_buf = buffer.as_slice();
 
-        cursor.set_position(0);
         {
-            let mut reader = StreamReader::try_new_unbuffered(&mut cursor, &ctx).unwrap();
-            let first = reader.read_array().unwrap();
+            let mut reader = StreamReader::try_new_unbuffered(&mut read_buf, &ctx).await.unwrap();
+            let first = reader.read_array().await.unwrap();
             assert_eq!(first.encoding().id(), Primitive::ID);
-            let second = reader.read_array().unwrap();
+            let second = reader.read_array().await.unwrap();
             assert_eq!(second.encoding().id(), Chunked::ID);
         }
-        let _pos = cursor.position();
         // Test our termination bytes exist
-        let mut terminator = [0u8; 5];
-        cursor.read_exact(&mut terminator).unwrap();
-        assert_eq!(&terminator, b"hello");
+        assert_eq!(read_buf, b"hello");
     }
 
-    #[test]
-    fn test_write_read_primitive() {
+    #[monoio::test_all]
+    async fn test_write_read_primitive() {
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         test_base_case(
             &data,
             &[2999989i32, 2999988, 2999987, 2999986, 2899999, 0, 0],
             PrimitiveEncoding.id(),
-        );
+        ).await;
     }
 
-    #[test]
-    fn test_write_read_alp() {
+    #[monoio::test_all]
+    async fn test_write_read_alp() {
         let pdata = PrimitiveArray::from(
             (0i32..3_000_000)
                 .rev()
                 .map(|v| v as f64 + 0.5)
                 .collect_vec(),
         )
-        .into_array();
+            .into_array();
         let alp_encoded = ALPArray::encode(pdata).unwrap();
         assert_eq!(alp_encoded.encoding().id(), ALPEncoding.id());
         test_base_case(
@@ -467,11 +453,11 @@ mod tests {
                 0.5,
             ],
             ALPEncoding.id(),
-        );
+        ).await;
     }
 
-    #[test]
-    fn test_empty_index() {
+    #[monoio::test_all]
+    async fn test_empty_index() {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices: Vec<i32> = vec![];
         let indices = PrimitiveArray::from(indices).into_array();
@@ -484,57 +470,56 @@ mod tests {
             }
         }
 
-        let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
-        let array_reader = reader.next().unwrap().unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default()).await.unwrap();
+        let array_reader = reader.next().await.unwrap().unwrap();
         let mut result_iter = array_reader.take(&indices).unwrap();
-        let result = result_iter.next().unwrap();
+        let result = result_iter.next().await.unwrap();
         assert!(result.is_none())
     }
 
-    #[test]
-    fn test_negative_index_fails() {
+    #[monoio::test_all]
+    async fn test_negative_index_fails() {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices =
             PrimitiveArray::from(vec![-1i32, 10, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
                 .into_array();
-        test_read_write_single_chunk_array(&data, &indices)
+        test_read_write_single_chunk_array(&data, &indices).await
             .expect_err("Expected negative index to fail");
     }
 
-    #[test]
-    fn test_noninteger_index_fails() {
+    #[monoio::test_all]
+    async fn test_noninteger_index_fails() {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices = PrimitiveArray::from(vec![1f32, 10.0, 11.0, 12.0]).into_array();
         test_read_write_single_chunk_array(&data, &indices)
-            .expect_err("Expected float index to fail");
+            .await.expect_err("Expected float index to fail");
     }
 
-    #[test]
-    fn test_null_index_fails() {
+    #[monoio::test_all]
+    async fn test_rnull_index_fails() {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices = PrimitiveArray::from_nullable_vec(vec![None, Some(1i32), Some(10), Some(11)])
             .into_array();
         test_read_write_single_chunk_array(&data, &indices)
-            .expect_err("Expected float index to fail");
+            .await.expect_err("Expected float index to fail");
     }
 
-    #[test]
-    fn test_write_read_bitpacked() {
+    #[monoio::test_all]
+    async fn test_write_read_bitpacked() {
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let uncompressed = PrimitiveArray::from((0i64..3_000).rev().collect_vec());
         let packed = BitPackedArray::encode(uncompressed.array(), 5).unwrap();
 
         let expected = &[2989i64, 2988, 2987, 2986];
-        test_base_case(&packed.into_array(), expected, PrimitiveEncoding.id());
+        test_base_case(&packed.into_array(), expected, PrimitiveEncoding.id()).await;
     }
 
-    #[test]
-    fn test_write_read_chunked() {
+    #[monoio::test_all]
+    async fn test_write_read_chunked() {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
-        .into_array();
+            .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
@@ -552,11 +537,10 @@ mod tests {
             }
         }
 
-        let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
-        let array_reader = reader.next().unwrap().unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default()).await.unwrap();
+        let array_reader = reader.next().await.unwrap().unwrap();
         let mut take_iter = array_reader.take(&indices).unwrap();
-        let next = take_iter.next().unwrap().unwrap();
+        let next = take_iter.next().await.unwrap().unwrap();
         assert_eq!(next.encoding().id(), PrimitiveEncoding.id());
 
         assert_eq!(
@@ -566,7 +550,7 @@ mod tests {
         assert_eq!(
             take_iter
                 .next()
-                .unwrap()
+                .await.unwrap()
                 .unwrap()
                 .into_primitive()
                 .typed_data::<i32>(),
@@ -582,8 +566,8 @@ mod tests {
     ///   consumed the entire array
     /// - the next reader tries to create a new array from the stream, but can't because the stream
     ///   is in the middle of the prior array
-    #[test]
-    fn test_write_read_does_not_compromise_stream() {
+    #[monoio::test_all]
+    async fn test_write_read_does_not_compromise_stream() {
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let data2 =
@@ -592,13 +576,13 @@ mod tests {
             vec![data.clone(), data2.clone(), data2],
             data.dtype().clone(),
         )
-        .unwrap()
-        .into_array();
+            .unwrap()
+            .into_array();
 
         let indices = PrimitiveArray::from(vec![
             10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 4_000_000,
         ])
-        .into_array();
+            .into_array();
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
@@ -609,30 +593,29 @@ mod tests {
             }
         }
 
-        let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
-        let array_reader = reader.next().unwrap().unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default()).await.unwrap();
+        let array_reader = reader.next().await.unwrap().unwrap();
 
         {
             let mut iter = array_reader.take(&indices).unwrap();
 
             // verify that for a fully-consumed iterator, the destructor does not advance the
             // underlying message stream to the next message, which would be very bad
-            while iter.next().unwrap().is_some() {
+            while iter.next().await.unwrap().is_some() {
                 // Consume the iterator
             }
             // verify that if we continue to call next on the iterator, we get none and
             // nothing happens to the underlying stream
-            assert!(iter.next().unwrap().is_none());
-            assert!(iter.next().unwrap().is_none());
+            assert!(iter.next().await.unwrap().is_none());
+            assert!(iter.next().await.unwrap().is_none());
         }
 
         let indices = PrimitiveArray::from(vec![10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
             .into_array();
-        let array_reader = reader.next().unwrap().unwrap();
+        let array_reader = reader.next().await.unwrap().unwrap();
 
         let mut take_iter = array_reader.take(&indices).unwrap();
-        let array = take_iter.next().unwrap().unwrap();
+        let array = take_iter.next().await.unwrap().unwrap();
         assert_eq!(array.encoding().id(), PrimitiveEncoding.id());
 
         let results = array
@@ -646,12 +629,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_take_iter() {
+    #[monoio::test_all]
+    async fn test_take_iter() {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
-        .into_array();
+            .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
@@ -669,24 +652,23 @@ mod tests {
             }
         }
 
-        let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
-        let array_reader = reader.next().unwrap().unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default()).await.unwrap();
+        let array_reader = reader.next().await.unwrap().unwrap();
 
         let mut iter = array_reader.take(&indices).unwrap();
 
-        let chunk = iter.next().unwrap().unwrap();
+        let chunk = iter.next().await.unwrap().unwrap();
         assert_eq!(chunk.encoding().id(), PrimitiveEncoding.id());
         assert_eq!(
             chunk.into_primitive().typed_data::<i32>(),
             vec![2999989, 2999988, 2999987, 2999986, 2899999, 0, 0]
         );
-        let chunk = iter.next().unwrap().unwrap();
+        let chunk = iter.next().await.unwrap().unwrap();
         assert_eq!(chunk.into_primitive().typed_data::<i32>(), vec![5999999]);
     }
 
-    fn test_base_case<T: NativePType>(
-        data: &Array,
+    async fn test_base_case<T: NativePType>(
+        data: &Array<'_>,
         expected: &[T],
         expected_encoding_id: EncodingId,
     ) {
@@ -704,12 +686,11 @@ mod tests {
             }
         }
 
-        let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor, &ctx).unwrap();
-        let array_reader = reader.next().unwrap().unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &ctx).await.unwrap();
+        let array_reader = reader.next().await.unwrap().unwrap();
         let mut take_iter = array_reader.take(&indices).unwrap();
 
-        let array = take_iter.next().unwrap().unwrap();
+        let array = take_iter.next().await.unwrap().unwrap();
         assert_eq!(array.encoding().id(), expected_encoding_id);
 
         let results = array
@@ -720,9 +701,9 @@ mod tests {
         assert_eq!(results, expected);
     }
 
-    fn test_read_write_single_chunk_array<'a>(
-        data: &'a Array,
-        indices: &'a Array,
+    async fn test_read_write_single_chunk_array<'a>(
+        data: &'a Array<'_>,
+        indices: &'a Array<'_>,
     ) -> VortexResult<OwnedArray> {
         let ctx =
             Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
@@ -736,12 +717,11 @@ mod tests {
             }
         }
 
-        let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor, &ctx).unwrap();
-        let array_reader = reader.next().unwrap().unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &ctx).await.unwrap();
+        let array_reader = reader.next().await.unwrap().unwrap();
         let mut result_iter = array_reader.take(indices)?;
-        let result = result_iter.next().unwrap();
-        assert!(result_iter.next().unwrap().is_none());
+        let result = result_iter.next().await.unwrap();
+        assert!(result_iter.next().await.unwrap().is_none());
         Ok(result.unwrap())
     }
 }

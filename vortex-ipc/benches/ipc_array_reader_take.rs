@@ -1,14 +1,26 @@
+use std::cell::RefCell;
+use std::future::Future;
 use std::io::Cursor;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use fallible_iterator::FallibleIterator;
+use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use criterion::async_executor::AsyncExecutor;
 use itertools::Itertools;
+use monoio::{Driver, FusionDriver, FusionRuntime, RuntimeBuilder};
+
+use vortex::{Array, Context, IntoArray};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::{Context, IntoArray};
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_ipc::iter::FallibleLendingIterator;
+use vortex_ipc::iter::{FallibleIterator, FallibleLendingIterator};
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
+
+pub struct MonoioExecutor<D: Driver>(pub RefCell<FusionRuntime<D>>);
+
+impl<D: Driver> AsyncExecutor for MonoioExecutor<D> {
+    fn block_on<T>(&self, future: impl Future<Output=T>) -> T {
+        self.0.borrow_mut().block_on(future)
+    }
+}
 
 // 100 record batches, 100k rows each
 // take from the first 20 batches and last batch
@@ -36,17 +48,23 @@ fn ipc_array_reader_take(c: &mut Criterion) {
             });
         }
         let indices = indices.clone().into_array();
+        let rt = RuntimeBuilder::<FusionDriver>::new().build()
+            .expect("Unable to build runtime");
+        let executor = MonoioExecutor(RefCell::new(rt));
 
-        b.iter(|| {
-            let mut cursor = Cursor::new(&buffer);
-            let mut reader = StreamReader::try_new(&mut cursor, &ctx).unwrap();
-            let array_reader = reader.next().unwrap().unwrap();
-            let mut iterator = array_reader.take(&indices).unwrap();
-            while let Some(arr) = iterator.next().unwrap() {
-                black_box(arr);
-            }
+        b.to_async(executor).iter(|| {
+            bench_array_reader_take(&buffer, &indices, &ctx)
         });
     });
+}
+
+async fn bench_array_reader_take(buf: &Vec<u8>, indices: &Array<'_>, ctx: &Context) {
+    let mut reader = StreamReader::try_new(buf.as_slice(), ctx).await.unwrap();
+    let array_reader = reader.next().await.unwrap().unwrap();
+    let mut iterator = array_reader.take(indices).unwrap();
+    while let Some(arr) = iterator.next().await.unwrap() {
+        black_box(arr);
+    }
 }
 
 criterion_group!(benches, ipc_array_reader_take);

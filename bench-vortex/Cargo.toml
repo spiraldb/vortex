@@ -29,6 +29,7 @@ lance = { version = "0.10.16", features = [] }
 #lance-parquet = { package = "parquet", version = "51.0", features = [] }
 lazy_static = { workspace = true }
 log = { workspace = true }
+monoio = "0.2.3"
 parquet = { workspace = true, features = [] }
 reqwest = { workspace = true }
 simplelog = { workspace = true }

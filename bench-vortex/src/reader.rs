@@ -5,25 +5,29 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use arrow_array::types::Int64Type;
 use arrow_array::{
     ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray, RecordBatch,
     RecordBatchReader,
 };
+use arrow_array::types::Int64Type;
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
 use itertools::Itertools;
 use lance::Dataset;
 use log::info;
+use monoio::{BufResult, FusionDriver, RuntimeBuilder};
+use monoio::buf::{IoBufMut, IoVecBufMut};
+use monoio::io::AsyncReadRent;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
+
+use vortex::{IntoArray, OwnedArray, ToArrayData, ToStatic};
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
-use vortex::{IntoArray, OwnedArray, ToArrayData, ToStatic};
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
@@ -33,13 +37,33 @@ use crate::CTX;
 pub const BATCH_SIZE: usize = 65_536;
 
 pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
-    let mut file = File::open(path)?;
+    let mut rt = RuntimeBuilder::<FusionDriver>::new().build()
+        .expect("Unable to build runtime");
+    rt.block_on(async_open_vortex(path))
+}
 
-    let mut reader = StreamReader::try_new(&mut file, &CTX)?;
-    let mut reader = reader.next()?.unwrap();
+struct MonoioFile(pub monoio::fs::File, pub u64);
+
+impl AsyncReadRent for MonoioFile {
+    async fn read<T: IoBufMut>(&mut self, mut buf: T) -> BufResult<usize, T> {
+        let buf_len = buf.bytes_total();
+        let (len_res, buf) = self.0.read_exact_at(buf, self.1).await;
+        (len_res.map(|_| buf_len), buf)
+    }
+
+    async fn readv<T: IoVecBufMut>(&mut self, _buf: T) -> BufResult<usize, T> {
+        unimplemented!("Reading multiple buffers at once for files is not implemented")
+    }
+}
+
+pub async fn async_open_vortex(path: &Path) -> VortexResult<OwnedArray> {
+    let file = MonoioFile(monoio::fs::File::open(path).await.map_err(|e| vortex_err!(IOError: e))?, 0);
+
+    let mut reader = StreamReader::try_new(file, &CTX).await?;
+    let mut reader = reader.next().await?.unwrap();
     let dtype = reader.dtype().clone();
     let mut chunks = vec![];
-    while let Some(chunk) = reader.next()? {
+    while let Some(chunk) = reader.next().await? {
         chunks.push(chunk.to_static())
     }
     Ok(ChunkedArray::try_new(chunks, dtype)?.into_array())

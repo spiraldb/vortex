@@ -11,7 +11,8 @@ use lazy_static::lazy_static;
 use log::{info, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
-use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, Config, TerminalMode, TermLogger};
+
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
@@ -214,10 +215,11 @@ mod test {
     use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+    use vortex::{ArrayData, IntoArray};
     use vortex::arrow::FromArrowArray;
     use vortex::compress::Compressor;
     use vortex::compute::as_arrow::as_arrow;
-    use vortex::{ArrayData, IntoArray};
     use vortex_ipc::reader::StreamReader;
     use vortex_ipc::writer::StreamWriter;
 
@@ -232,8 +234,8 @@ mod test {
     }
 
     #[ignore]
-    #[test]
-    fn round_trip_serde() {
+    #[monoio::test_all]
+    async fn round_trip_serde() {
         let file = File::open(taxi_data_parquet()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
         let reader = builder.with_limit(1).build().unwrap();
@@ -249,9 +251,8 @@ mod test {
                 writer.write_array(&vortex_array).unwrap();
             }
 
-            let mut read = buf.as_slice();
-            let mut reader = StreamReader::try_new(&mut read, &CTX).unwrap();
-            reader.read_array().unwrap();
+            let mut reader = StreamReader::try_new(buf.as_slice(), &CTX).await.unwrap();
+            reader.read_array().await.unwrap();
         }
     }
 

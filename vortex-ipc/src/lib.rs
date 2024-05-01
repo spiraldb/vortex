@@ -17,6 +17,7 @@ pub mod flatbuffers {
         pub mod array {
             pub use vortex::flatbuffers::array;
         }
+
         pub mod dtype {
             pub use vortex_dtype::flatbuffers as dtype;
         }
@@ -27,6 +28,7 @@ pub mod iter;
 mod messages;
 pub mod reader;
 pub mod writer;
+mod read_ext;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
     move || vortex_err!(InvalidSerde: "missing field: {}", field)
@@ -36,18 +38,18 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 mod tests {
     use std::io::{Cursor, Write};
 
+    use vortex::{IntoArray, IntoArrayData};
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::r#struct::StructArray;
     use vortex::validity::Validity;
     use vortex::Context;
-    use vortex::{IntoArray, IntoArrayData};
 
     use crate::iter::FallibleLendingIterator;
     use crate::reader::StreamReader;
     use crate::writer::StreamWriter;
 
-    #[test]
-    fn test_write_flatbuffer() {
+    #[monoio::test_all]
+    async fn test_write_flatbuffer() {
         let col = PrimitiveArray::from(vec![0, 1, 2]).into_array();
         let nested_struct = StructArray::try_new(
             ["x".into(), "y".into()].into(),
@@ -55,7 +57,7 @@ mod tests {
             3,
             Validity::AllValid,
         )
-        .unwrap();
+            .unwrap();
 
         let arr = StructArray::try_new(
             ["a".into(), "b".into()].into(),
@@ -63,12 +65,12 @@ mod tests {
             3,
             Validity::AllValid,
         )
-        .unwrap()
-        .into_array();
+            .unwrap()
+            .into_array();
 
-        // let batch = ColumnBatch::from(&arr.to_array());
         let ctx = Context::default();
-        let mut cursor = Cursor::new(Vec::new());
+        let mut buf = Vec::new();
+        let mut cursor = Cursor::new(&mut buf);
         {
             let mut writer = StreamWriter::try_new_unbuffered(&mut cursor, &ctx).unwrap();
             writer.write_array(&arr).unwrap();
@@ -76,14 +78,14 @@ mod tests {
         cursor.flush().unwrap();
         cursor.set_position(0);
 
-        let mut ipc_reader = StreamReader::try_new_unbuffered(cursor, &ctx).unwrap();
+        let mut ipc_reader = StreamReader::try_new_unbuffered(buf.as_slice(), &ctx).await.unwrap();
 
         // Read some number of arrays off the stream.
-        while let Some(array_reader) = ipc_reader.next().unwrap() {
+        while let Some(array_reader) = ipc_reader.next().await.unwrap() {
             let mut array_reader = array_reader;
             println!("DType: {:?}", array_reader.dtype());
             // Read some number of chunks from the stream.
-            while let Some(chunk) = array_reader.next().unwrap() {
+            while let Some(chunk) = array_reader.next().await.unwrap() {
                 println!("VIEW: {:?}", &chunk);
                 let _data = chunk.into_array_data();
                 // let taken = take(&chunk, &PrimitiveArray::from(vec![0, 3, 0, 1])).unwrap();

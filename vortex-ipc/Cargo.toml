@@ -13,16 +13,18 @@ rust-version = { workspace = true }
 
 [dependencies]
 arrow-buffer = { workspace = true }
-fallible-iterator = { workspace = true }
+async-trait = { workspace = true }
 flatbuffers = { workspace = true }
+futures = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
-nougat = "0.2.4"
+monoio = { workspace = true }
+nougat = { workspace = true }
 vortex-array = { path = "../vortex-array" }
 vortex-buffer = { path = "../vortex-buffer" }
+vortex-dtype = { path = "../vortex-dtype" }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
-vortex-dtype = { path = "../vortex-dtype" }
 vortex-scalar = { path = "../vortex-scalar" }
 
 [build-dependencies]
