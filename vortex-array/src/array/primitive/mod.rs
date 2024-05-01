@@ -223,7 +223,7 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
 
         let result = if to_subtract.dtype().is_int() {
             match_each_integer_ptype!(self.ptype(), |$T| {
-                subtract_scalar_integer::<$T>(self, to_subtract.clone())?
+                subtract_scalar_integer::<$T>(self, to_subtract)?
             })
         } else {
             match_each_float_ptype!(self.ptype(), |$T| {
@@ -241,7 +241,7 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
 
 fn subtract_scalar_integer<'a, T: NativePType + OverflowingSub + PScalarType + TryFrom<Scalar>>(
     subtract_from: &PrimitiveArray<'a>,
-    to_subtract: PrimitiveScalar,
+    to_subtract: &PrimitiveScalar,
 ) -> VortexResult<PrimitiveArray<'a>> {
     let to_subtract: T = to_subtract
         .typed_value()
