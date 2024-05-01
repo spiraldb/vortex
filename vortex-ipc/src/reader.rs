@@ -136,6 +136,9 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
     }
 
     pub fn take(self, indices: &'a Array<'_>) -> VortexResult<TakeIterator<'a, R>> {
+        if indices.is_empty() {
+            vortex_bail!("Indices must not be empty");
+        }
         if !indices
             .statistics()
             .compute_as::<bool>(Stat::IsSorted)
@@ -187,7 +190,11 @@ pub struct TakeIterator<'a, R: Read> {
 /// For this reason, we force full consumption of the reader when it goes out of scope.
 impl<'a, R: Read> Drop for StreamArrayReader<'a, R> {
     fn drop(&mut self) {
-        while self.next().unwrap().is_some() {
+        while self
+            .next()
+            .expect("Unexpected failure consuming StreamArrayReader in destructor")
+            .is_some()
+        {
             // Continue until the reader is exhausted
         }
     }
@@ -222,10 +229,10 @@ impl<'a, R: Read> Iterator for TakeIterator<'a, R> {
                 .expect("Unexpected failure flattening indices for batch");
             let shifted_arr = match_each_integer_ptype!(indices_for_batch.ptype(), |$T| {
                 subtract_scalar(&indices_for_batch.into_array(), &Scalar::from(curr_offset as $T))
-                .expect("Unexpexted failure subtracting scalar from indices array")
+                .expect("Unexpected failure subtracting scalar from indices array")
             });
 
-            return Some(take(&batch, &shifted_arr).unwrap());
+            return Some(take(&batch, &shifted_arr).expect("Unexpected failure taking from batch"));
         }
         None
     }
@@ -452,6 +459,15 @@ mod tests {
             ],
             ALPEncoding.id(),
         );
+    }
+
+    #[test]
+    fn test_empty_index_fails() {
+        let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
+        let indices: Vec<i32> = vec![];
+        let indices = PrimitiveArray::from(indices).into_array();
+        test_read_write_single_chunk_array(&data, &indices)
+            .expect_err("Expected empty indices to fail");
     }
 
     #[test]
