@@ -1,76 +1,67 @@
+use std::sync::Arc;
+
 use arrow_array::{
     ArrayRef as ArrowArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray,
     TimestampNanosecondArray, TimestampSecondArray,
 };
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
-use vortex_dtype::{ExtDType, ExtID, Nullability, PType};
+use vortex_dtype::{DType, ExtDType, ExtID, PType};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::array::datetime::TimeUnit;
+use crate::array::extension::ExtensionArray;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::cast::cast;
-use crate::compute::ArrayCompute;
-use crate::stats::ArrayStatisticsCompute;
-use crate::validity::{ArrayValidity, LogicalValidity};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, FlattenedExtension, IntoArrayData};
-
-impl_encoding!("vortex.localdatetime", LocalDateTime);
+use crate::validity::ArrayValidity;
+use crate::{Array, ArrayDType, ArrayData, IntoArrayData};
 
 lazy_static! {
-    static ref ID: ExtID = ExtID::from("vortex.localdatetime");
+    static ref ID: ExtID = ExtID::from(LocalDateTimeArray::ID);
 }
 
-impl LocalDateTime {
-    pub fn dtype(time_unit: TimeUnit, nullability: Nullability) -> DType {
-        DType::Extension(
-            ExtDType::new(ID.clone(), Some(time_unit.metadata().clone())),
-            nullability,
-        )
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocalDateTimeMetadata {
-    timestamps_dtype: DType,
+pub struct LocalDateTimeArray<'a> {
+    ext: ExtensionArray<'a>,
+    time_unit: TimeUnit,
 }
 
 impl LocalDateTimeArray<'_> {
-    pub fn new(time_unit: TimeUnit, timestamps: Array) -> Self {
-        Self::try_from_parts(
-            LocalDateTime::dtype(time_unit, timestamps.dtype().nullability()),
-            LocalDateTimeMetadata {
-                timestamps_dtype: timestamps.dtype().clone(),
-            },
-            [timestamps.into_array_data()].into(),
-            Default::default(),
-        )
-        .expect("Invalid LocalDateTimeArray")
+    pub const ID: &'static str = "vortex.localdatetime";
+
+    pub fn try_new(time_unit: TimeUnit, timestamps: Array) -> VortexResult<Self> {
+        if !timestamps.dtype().is_int() {
+            vortex_bail!("Timestamps must be an integer array")
+        }
+        Ok(Self {
+            ext: ExtensionArray::new(LocalDateTimeArray::ext_dtype(time_unit), timestamps),
+            time_unit,
+        })
+    }
+
+    pub fn ext_dtype(time_unit: TimeUnit) -> ExtDType {
+        ExtDType::new(ID.clone(), Some(time_unit.metadata().clone()))
+    }
+
+    pub fn dtype(&self) -> &DType {
+        self.ext.dtype()
     }
 
     pub fn time_unit(&self) -> TimeUnit {
-        let DType::Extension(ext, _) = self.dtype() else {
-            unreachable!();
-        };
-        let byte: [u8; 1] = ext
-            .metadata()
-            .expect("Missing metadata")
-            .as_ref()
-            .try_into()
-            .expect("Invalid metadata");
-        TimeUnit::try_from(byte[0]).expect("Invalid time unit")
+        self.time_unit
     }
 
     pub fn timestamps(&self) -> Array {
-        self.array()
-            .child(0, &self.metadata().timestamps_dtype)
-            .expect("Missing timestamps array")
+        self.ext.storage()
     }
 }
 
-impl ArrayCompute for LocalDateTimeArray<'_> {
-    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        Some(self)
+impl<'a> TryFrom<&ExtensionArray<'a>> for LocalDateTimeArray<'a> {
+    type Error = VortexError;
+
+    fn try_from(value: &ExtensionArray<'a>) -> Result<Self, Self::Error> {
+        LocalDateTimeArray::try_new(
+            try_parse_time_unit(value.ext_dtype())?,
+            value.storage().clone(),
+        )
     }
 }
 
@@ -90,41 +81,26 @@ impl AsArrowArray for LocalDateTimeArray<'_> {
     }
 }
 
-impl ArrayFlatten for LocalDateTimeArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
-        Ok(Flattened::Extension(FlattenedExtension::try_new(
-            self.into_array(),
-        )?))
+impl<'a> TryFrom<&Array<'a>> for LocalDateTimeArray<'a> {
+    type Error = VortexError;
+
+    fn try_from(value: &Array<'a>) -> Result<Self, Self::Error> {
+        let ext = ExtensionArray::try_from(value)?;
+        LocalDateTimeArray::try_new(try_parse_time_unit(ext.ext_dtype())?, ext.storage())
     }
 }
 
-impl ArrayValidity for LocalDateTimeArray<'_> {
-    fn is_valid(&self, index: usize) -> bool {
-        self.timestamps().with_dyn(|a| a.is_valid(index))
-    }
-
-    fn logical_validity(&self) -> LogicalValidity {
-        self.timestamps().with_dyn(|a| a.logical_validity())
+impl IntoArrayData for LocalDateTimeArray<'_> {
+    fn into_array_data(self) -> ArrayData {
+        self.ext.into_array_data()
     }
 }
 
-impl AcceptArrayVisitor for LocalDateTimeArray<'_> {
-    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_child("timestamps", &self.timestamps())
-    }
+fn try_parse_time_unit(ext_dtype: &ExtDType) -> VortexResult<TimeUnit> {
+    let byte: [u8; 1] = ext_dtype
+        .metadata()
+        .ok_or_else(|| vortex_err!("Missing metadata"))?
+        .as_ref()
+        .try_into()?;
+    TimeUnit::try_from(byte[0]).map_err(|_| vortex_err!("Invalid time unit in metadata"))
 }
-
-impl ArrayStatisticsCompute for LocalDateTimeArray<'_> {
-    // TODO(ngates): delegate all stats compute to timestamp array, then wrap in ext dtype.
-}
-
-impl ArrayTrait for LocalDateTimeArray<'_> {
-    fn len(&self) -> usize {
-        self.timestamps().len()
-    }
-}
-
-impl EncodingCompression for LocalDateTimeEncoding {}

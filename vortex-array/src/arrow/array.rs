@@ -101,9 +101,9 @@ where
             DataType::Timestamp(time_unit, tz) => match tz {
                 // A timestamp with no timezone is the equivalent of an "unknown" timezone.
                 // Therefore, we must treat it as a LocalDateTime and not an Instant.
-                None => {
-                    LocalDateTimeArray::new((&time_unit).into(), arr.into_array()).into_array_data()
-                }
+                None => LocalDateTimeArray::try_new((&time_unit).into(), arr.into_array())
+                    .expect("Invalid LocalDateTimeArray")
+                    .into_array_data(),
                 Some(_tz) => todo!(),
             },
             DataType::Date32 => todo!(),

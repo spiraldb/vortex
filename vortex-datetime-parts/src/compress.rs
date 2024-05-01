@@ -2,7 +2,7 @@ use vortex::array::datetime::{LocalDateTimeArray, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
-use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use vortex::{Array, ArrayTrait, IntoArray, OwnedArray};
 use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
