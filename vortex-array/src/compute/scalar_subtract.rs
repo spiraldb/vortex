@@ -8,14 +8,6 @@ pub trait SubtractScalarFn {
     fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray>;
 }
 
-pub fn subtract_scalar2<T: Into<Scalar>>(
-    array: &Array,
-    to_subtract: T,
-) -> VortexResult<OwnedArray> {
-    let to_subtract = to_subtract.into().cast(array.dtype())?;
-    subtract_scalar(array, &to_subtract)
-}
-
 pub fn subtract_scalar(array: &Array, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
     if let Some(subtraction_result) =
         array.with_dyn(|c| c.subtract_scalar().map(|t| t.subtract_scalar(to_subtract)))
