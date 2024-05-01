@@ -16,7 +16,6 @@ arrow-buffer = { workspace = true }
 fallible-iterator = { workspace = true }
 flatbuffers = { workspace = true }
 itertools = { workspace = true }
-lending-iterator = "0.1.7"
 log = { workspace = true }
 nougat = "0.2.4"
 vortex-array = { path = "../vortex-array" }
