@@ -977,6 +977,7 @@ dependencies = [
  "uuid",
  "vortex-alp",
  "vortex-array",
+ "vortex-datetime-parts",
  "vortex-dict",
  "vortex-dtype",
  "vortex-error",
@@ -5204,6 +5205,19 @@ dependencies = [
  "vortex-flatbuffers",
  "vortex-scalar",
  "walkdir",
+]
+
+[[package]]
+name = "vortex-datetime-parts"
+version = "0.1.0"
+dependencies = [
+ "linkme",
+ "log",
+ "serde",
+ "vortex-array",
+ "vortex-dtype",
+ "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]

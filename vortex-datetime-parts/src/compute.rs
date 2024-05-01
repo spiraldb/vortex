@@ -23,7 +23,6 @@ impl TakeFn for DateTimePartsArray<'_> {
             take(&self.days(), indices)?,
             take(&self.seconds(), indices)?,
             take(&self.subsecond(), indices)?,
-            self.validity(),
         )?
         .into_array())
     }
@@ -36,7 +35,6 @@ impl SliceFn for DateTimePartsArray<'_> {
             slice(&self.days(), start, stop)?,
             slice(&self.seconds(), start, stop)?,
             slice(&self.subsecond(), start, stop)?,
-            self.validity().slice(start, stop)?,
         )?
         .into_array())
     }

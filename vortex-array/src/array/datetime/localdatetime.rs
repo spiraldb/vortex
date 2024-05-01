@@ -32,7 +32,7 @@ impl LocalDateTime {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalDateTimeMetadata {
-    timestamp_dtype: DType,
+    timestamps_dtype: DType,
 }
 
 impl LocalDateTimeArray<'_> {
@@ -40,7 +40,7 @@ impl LocalDateTimeArray<'_> {
         Self::try_from_parts(
             LocalDateTime::dtype(time_unit, timestamps.dtype().nullability()),
             LocalDateTimeMetadata {
-                timestamp_dtype: timestamps.dtype().clone(),
+                timestamps_dtype: timestamps.dtype().clone(),
             },
             [timestamps.into_array_data()].into(),
             Default::default(),
@@ -61,10 +61,10 @@ impl LocalDateTimeArray<'_> {
         TimeUnit::try_from(byte[0]).expect("Invalid time unit")
     }
 
-    pub fn timestamp(&self) -> Array {
+    pub fn timestamps(&self) -> Array {
         self.array()
-            .child(0, &self.metadata().timestamp_dtype)
-            .expect("Missing timestamp array")
+            .child(0, &self.metadata().timestamps_dtype)
+            .expect("Missing timestamps array")
     }
 }
 
@@ -77,7 +77,7 @@ impl ArrayCompute for LocalDateTimeArray<'_> {
 impl AsArrowArray for LocalDateTimeArray<'_> {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         // A LocalDateTime maps to an Arrow Timestamp array with no timezone.
-        let timestamps = cast(&self.timestamp(), PType::I64.into())?.flatten_primitive()?;
+        let timestamps = cast(&self.timestamps(), PType::I64.into())?.flatten_primitive()?;
         let validity = timestamps.logical_validity().to_null_buffer()?;
         let buffer = timestamps.scalar_buffer::<i64>();
 
@@ -103,17 +103,17 @@ impl ArrayFlatten for LocalDateTimeArray<'_> {
 
 impl ArrayValidity for LocalDateTimeArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
-        self.timestamp().with_dyn(|a| a.is_valid(index))
+        self.timestamps().with_dyn(|a| a.is_valid(index))
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        self.timestamp().with_dyn(|a| a.logical_validity())
+        self.timestamps().with_dyn(|a| a.logical_validity())
     }
 }
 
 impl AcceptArrayVisitor for LocalDateTimeArray<'_> {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_child("timestamp", &self.timestamp())
+        visitor.visit_child("timestamps", &self.timestamps())
     }
 }
 
@@ -123,7 +123,7 @@ impl ArrayStatisticsCompute for LocalDateTimeArray<'_> {
 
 impl ArrayTrait for LocalDateTimeArray<'_> {
     fn len(&self) -> usize {
-        self.timestamp().len()
+        self.timestamps().len()
     }
 }
 
