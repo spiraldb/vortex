@@ -200,6 +200,12 @@ impl<'a, R: Read> Drop for StreamArrayReader<'a, R> {
     }
 }
 
+/// NB: if the TakeIterator expires without being fully-consumed by the underlying iterator,
+/// it will trigger the Drop impl on the StreamArrayReader, which will consume the rest of the
+/// messages for that array. This is necessary to ensure that the underlying stream is in a
+/// consistent state when the StreamArrayReader is dropped, but it also is not free. If users wish
+/// to avoid this work happening at exipry, users can just consume the rest of the iterator
+/// themselves when they see fit.
 impl<'a, R: Read> Iterator for TakeIterator<'a, R> {
     type Item = OwnedArray;
 
