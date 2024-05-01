@@ -3,8 +3,8 @@ use std::sync::Arc;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 
-use crate::DType;
 use crate::{flatbuffers as fb, ExtDType, ExtID, ExtMetadata, Nullability};
+use crate::{DType, StructDType};
 
 impl ReadFlatBuffer for DType {
     type Source<'a> = fb::DType<'a>;
@@ -51,7 +51,10 @@ impl ReadFlatBuffer for DType {
                     .iter()
                     .map(|f| DType::read_flatbuffer(&f))
                     .collect::<VortexResult<Vec<_>>>()?;
-                Ok(DType::Struct(names, fields))
+                Ok(DType::Struct(
+                    StructDType::new(names, fields),
+                    fb_struct.nullability().try_into()?,
+                ))
             }
             fb::Type::Extension => {
                 let fb_ext = fb.type__as_extension().unwrap();

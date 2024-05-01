@@ -50,6 +50,7 @@ table Binary {
 table Struct_ {
     names: [string];
     fields: [DType];
+    nullability: Nullability;
 }
 
 table List {

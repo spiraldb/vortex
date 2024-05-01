@@ -43,6 +43,7 @@ impl Display for Nullability {
     }
 }
 
+// TODO(ngates): Arc<[Arc<str>]>
 pub type FieldNames = Vec<Arc<String>>;
 
 pub type Metadata = Vec<u8>;
@@ -55,7 +56,7 @@ pub enum DType {
     Primitive(PType, Nullability),
     Utf8(Nullability),
     Binary(Nullability),
-    Struct(FieldNames, Vec<DType>),
+    Struct(StructDType, Nullability),
     List(Box<DType>, Nullability),
     Extension(ExtDType, Nullability),
 }
@@ -79,7 +80,7 @@ impl DType {
             Primitive(_, n) => matches!(n, Nullable),
             Utf8(n) => matches!(n, Nullable),
             Binary(n) => matches!(n, Nullable),
-            Struct(_, fs) => fs.iter().all(|f| f.is_nullable()),
+            Struct(st, _) => st.dtypes().iter().all(|f| f.is_nullable()),
             List(_, n) => matches!(n, Nullable),
             Extension(_, n) => matches!(n, Nullable),
         }
@@ -100,10 +101,7 @@ impl DType {
             Primitive(p, _) => Primitive(*p, nullability),
             Utf8(_) => Utf8(nullability),
             Binary(_) => Binary(nullability),
-            Struct(n, fs) => Struct(
-                n.clone(),
-                fs.iter().map(|f| f.with_nullability(nullability)).collect(),
-            ),
+            Struct(st, _) => Struct(st.clone(), nullability),
             List(c, _) => List(c.clone(), nullability),
             Extension(ext, _) => Extension(ext.clone(), nullability),
         }
@@ -122,13 +120,15 @@ impl Display for DType {
             Primitive(p, n) => write!(f, "{}{}", p, n),
             Utf8(n) => write!(f, "utf8{}", n),
             Binary(n) => write!(f, "binary{}", n),
-            Struct(n, dt) => write!(
+            Struct(st, n) => write!(
                 f,
-                "{{{}}}",
-                n.iter()
-                    .zip(dt.iter())
+                "{{{}}}{}",
+                st.names()
+                    .iter()
+                    .zip(st.dtypes().iter())
                     .map(|(n, dt)| format!("{}={}", n, dt))
-                    .join(", ")
+                    .join(", "),
+                n
             ),
             List(c, n) => write!(f, "list({}){}", c, n),
             Extension(ext, n) => write!(
@@ -141,6 +141,30 @@ impl Display for DType {
                 n
             ),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct StructDType {
+    names: FieldNames,
+    dtypes: Arc<[DType]>,
+}
+
+impl StructDType {
+    pub fn new(names: FieldNames, dtypes: Vec<DType>) -> Self {
+        Self {
+            names,
+            dtypes: dtypes.into(),
+        }
+    }
+
+    pub fn names(&self) -> &FieldNames {
+        &self.names
+    }
+
+    pub fn dtypes(&self) -> &Arc<[DType]> {
+        &self.dtypes
     }
 }
 

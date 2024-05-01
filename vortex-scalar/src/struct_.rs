@@ -1,9 +1,8 @@
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
-use std::sync::Arc;
 
 use itertools::Itertools;
-use vortex_dtype::DType;
+use vortex_dtype::{DType, FieldNames, Nullability, StructDType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::Scalar;
@@ -30,17 +29,20 @@ impl StructScalar {
         &self.dtype
     }
 
-    pub fn names(&self) -> &[Arc<String>] {
-        let DType::Struct(ns, _) = self.dtype() else {
+    pub fn names(&self) -> &FieldNames {
+        let DType::Struct(st, _) = self.dtype() else {
             unreachable!("Not a scalar dtype");
         };
-        ns.as_slice()
+        st.names()
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
         match dtype {
-            DType::Struct(names, field_dtypes) => {
-                if field_dtypes.len() != self.values.len() {
+            DType::Struct(st, n) => {
+                // TODO(ngates): check nullability.
+                assert_eq!(Nullability::NonNullable, *n);
+
+                if st.dtypes().len() != self.values.len() {
                     vortex_bail!(
                         MismatchedTypes: format!("Struct with {} fields", self.values.len()),
                         dtype
@@ -50,13 +52,16 @@ impl StructScalar {
                 let new_fields: Vec<Scalar> = self
                     .values
                     .iter()
-                    .zip_eq(field_dtypes.iter())
+                    .zip_eq(st.dtypes().iter())
                     .map(|(field, field_dtype)| field.cast(field_dtype))
                     .try_collect()?;
 
                 let new_type = DType::Struct(
-                    names.clone(),
-                    new_fields.iter().map(|x| x.dtype().clone()).collect(),
+                    StructDType::new(
+                        st.names().clone(),
+                        new_fields.iter().map(|x| x.dtype().clone()).collect(),
+                    ),
+                    dtype.nullability(),
                 );
                 Ok(StructScalar::new(new_type, new_fields).into())
             }
@@ -81,10 +86,10 @@ impl PartialOrd for StructScalar {
 
 impl Display for StructScalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let DType::Struct(names, _) = self.dtype() else {
+        let DType::Struct(st, _) = self.dtype() else {
             unreachable!()
         };
-        for (n, v) in names.iter().zip(self.values.iter()) {
+        for (n, v) in st.names().iter().zip(self.values.iter()) {
             write!(f, "{} = {}", n, v)?;
         }
         Ok(())

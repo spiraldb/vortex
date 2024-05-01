@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use vortex_dtype::FieldNames;
+use vortex_dtype::{FieldNames, Nullability, StructDType};
 use vortex_error::vortex_bail;
 
 use crate::stats::ArrayStatisticsCompute;
@@ -19,25 +19,25 @@ pub struct StructMetadata {
 
 impl StructArray<'_> {
     pub fn child(&self, idx: usize) -> Option<Array> {
-        let DType::Struct(_, fields) = self.dtype() else {
+        let DType::Struct(st, _) = self.dtype() else {
             unreachable!()
         };
-        let dtype = fields.get(idx)?;
+        let dtype = st.dtypes().get(idx)?;
         self.array().child(idx, dtype)
     }
 
     pub fn names(&self) -> &FieldNames {
-        let DType::Struct(names, _fields) = self.dtype() else {
+        let DType::Struct(st, _) = self.dtype() else {
             unreachable!()
         };
-        names
+        st.names()
     }
 
     pub fn fields(&self) -> &[DType] {
-        let DType::Struct(_names, fields) = self.dtype() else {
+        let DType::Struct(st, _) = self.dtype() else {
             unreachable!()
         };
-        fields.as_slice()
+        st.dtypes()
     }
 
     pub fn nfields(&self) -> usize {
@@ -63,7 +63,10 @@ impl StructArray<'_> {
 
         let field_dtypes: Vec<_> = fields.iter().map(|d| d.dtype()).cloned().collect();
         Self::try_from_parts(
-            DType::Struct(names, field_dtypes),
+            DType::Struct(
+                StructDType::new(names, field_dtypes),
+                Nullability::NonNullable,
+            ),
             StructMetadata { length },
             fields.into_iter().map(|a| a.into_array_data()).collect(),
             StatsSet::new(),
