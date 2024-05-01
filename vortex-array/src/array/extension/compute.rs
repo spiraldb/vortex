@@ -2,6 +2,7 @@ use arrow_array::ArrayRef as ArrowArrayRef;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{ExtScalar, Scalar};
 
+use crate::array::datetime::LocalDateTimeArray;
 use crate::array::extension::ExtensionArray;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
@@ -53,7 +54,10 @@ impl AsArrowArray for ExtensionArray<'_> {
     /// arrays to Arrow's Timestamp arrays here. For all other extension arrays, we return an
     /// Arrow extension array with the same definition.
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
-        todo!()
+        match self.id().as_ref() {
+            "vortex.localdatetime" => LocalDateTimeArray::try_from(self)?.as_arrow(),
+            _ => vortex_bail!("Arrow extension arrays not yet supported"),
+        }
     }
 }
 

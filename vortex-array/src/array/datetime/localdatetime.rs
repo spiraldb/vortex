@@ -16,7 +16,7 @@ use crate::validity::ArrayValidity;
 use crate::{Array, ArrayDType, ArrayData, IntoArrayData};
 
 lazy_static! {
-    static ref ID: ExtID = ExtID::from("vortex.localdatetime");
+    static ref ID: ExtID = ExtID::from(LocalDateTimeArray::ID);
 }
 
 pub struct LocalDateTimeArray<'a> {
@@ -25,18 +25,20 @@ pub struct LocalDateTimeArray<'a> {
 }
 
 impl LocalDateTimeArray<'_> {
-    pub fn ext_dtype(time_unit: TimeUnit) -> ExtDType {
-        ExtDType::new(ID.clone(), Some(time_unit.metadata().clone()))
-    }
+    pub const ID: &'static str = "vortex.localdatetime";
 
     pub fn try_new(time_unit: TimeUnit, timestamps: Array) -> VortexResult<Self> {
         if !timestamps.dtype().is_int() {
             vortex_bail!("Timestamps must be an integer array")
         }
         Ok(Self {
-            ext: ExtensionArray::new(Self::ext_dtype(time_unit), timestamps),
+            ext: ExtensionArray::new(LocalDateTimeArray::ext_dtype(time_unit), timestamps),
             time_unit,
         })
+    }
+
+    pub fn ext_dtype(time_unit: TimeUnit) -> ExtDType {
+        ExtDType::new(ID.clone(), Some(time_unit.metadata().clone()))
     }
 
     pub fn dtype(&self) -> &DType {
@@ -52,10 +54,10 @@ impl LocalDateTimeArray<'_> {
     }
 }
 
-impl<'a> TryFrom<ExtensionArray<'a>> for LocalDateTimeArray<'a> {
+impl<'a> TryFrom<&ExtensionArray<'a>> for LocalDateTimeArray<'a> {
     type Error = VortexError;
 
-    fn try_from(value: ExtensionArray<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: &ExtensionArray<'a>) -> Result<Self, Self::Error> {
         LocalDateTimeArray::try_new(
             try_parse_time_unit(value.ext_dtype())?,
             value.storage().clone(),
@@ -79,10 +81,10 @@ impl AsArrowArray for LocalDateTimeArray<'_> {
     }
 }
 
-impl<'a> TryFrom<&'a Array<'a>> for LocalDateTimeArray<'a> {
+impl<'a> TryFrom<&Array<'a>> for LocalDateTimeArray<'a> {
     type Error = VortexError;
 
-    fn try_from(value: &'a Array<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: &Array<'a>) -> Result<Self, Self::Error> {
         let ext = ExtensionArray::try_from(value)?;
         LocalDateTimeArray::try_new(try_parse_time_unit(ext.ext_dtype())?, ext.storage())
     }
