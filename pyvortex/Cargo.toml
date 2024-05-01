@@ -29,7 +29,6 @@ vortex-ree = { path = "../vortex-ree" }
 vortex-roaring = { path = "../vortex-roaring" }
 vortex-dtype = { path = "../vortex-dtype" }
 vortex-zigzag = { path = "../vortex-zigzag" }
-itertools = { workspace = true }
 log = { workspace = true }
 paste = { workspace = true }
 pyo3 = { workspace = true }
