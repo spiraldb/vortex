@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use num_traits::ops::overflowing::OverflowingSub;
+use num_traits::SaturatingSub;
 use vortex_dtype::{match_each_float_ptype, match_each_integer_ptype, NativePType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::{PScalarType, PrimitiveScalar, Scalar};
@@ -45,7 +46,10 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
     }
 }
 
-fn subtract_scalar_integer<'a, T: NativePType + OverflowingSub + PScalarType + TryFrom<Scalar>>(
+fn subtract_scalar_integer<
+    'a,
+    T: NativePType + OverflowingSub + SaturatingSub + PScalarType + TryFrom<Scalar>,
+>(
     subtract_from: &PrimitiveArray<'a>,
     to_subtract: &PrimitiveScalar,
 ) -> VortexResult<PrimitiveArray<'a>> {
@@ -81,23 +85,12 @@ fn subtract_scalar_integer<'a, T: NativePType + OverflowingSub + PScalarType + T
 
     let contains_nulls = !subtract_from.logical_validity().all_valid();
     let subtraction_result = if contains_nulls {
-        let validity = subtract_from
-            .logical_validity()
-            .to_null_buffer()?
-            .expect("should_wrap only true if there are nulls");
         let sub_vec = subtract_from
             .typed_data()
             .iter()
-            .zip(validity.iter())
-            .map(|(&v, is_valid): (&T, bool)| {
-                if is_valid {
-                    Some(v - to_subtract)
-                } else {
-                    None
-                }
-            })
+            .map(|&v: &T| v.saturating_sub(&to_subtract))
             .collect_vec();
-        PrimitiveArray::from_nullable_vec(sub_vec)
+        PrimitiveArray::from_vec(sub_vec, subtract_from.validity())
     } else {
         PrimitiveArray::from(
             subtract_from
