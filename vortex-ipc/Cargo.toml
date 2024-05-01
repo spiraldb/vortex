@@ -19,7 +19,6 @@ itertools = { workspace = true }
 lending-iterator = "0.1.7"
 log = { workspace = true }
 nougat = "0.2.4"
-streaming-iterator = "0.1.9"
 vortex-array = { path = "../vortex-array" }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }

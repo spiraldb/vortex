@@ -16,11 +16,17 @@ impl ExtScalar {
     pub fn try_new(
         ext: ExtDType,
         nullability: Nullability,
-        value: Option<Arc<Scalar>>,
+        value: Option<Scalar>,
     ) -> VortexResult<Self> {
         if value.is_none() && nullability == Nullability::NonNullable {
             vortex_bail!("Value cannot be None for NonNullable Scalar");
         }
+
+        // Throw away the inner scalar if it is null.
+        let value = value
+            .and_then(|scalar| if scalar.is_null() { None } else { Some(scalar) })
+            .map(Arc::new);
+
         Ok(Self {
             dtype: DType::Extension(ext, nullability),
             value,

@@ -22,7 +22,6 @@ croaring = { workspace = true }
 num-traits = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true }
-paste = { workspace = true }
 
 [lints]
 workspace = true

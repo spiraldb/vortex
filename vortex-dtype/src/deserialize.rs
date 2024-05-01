@@ -23,14 +23,6 @@ impl ReadFlatBuffer for DType {
                     fb_primitive.nullability().try_into()?,
                 ))
             }
-            fb::Type::Decimal => {
-                let fb_decimal = fb.type__as_decimal().unwrap();
-                Ok(DType::Decimal(
-                    fb_decimal.precision(),
-                    fb_decimal.scale(),
-                    fb_decimal.nullability().try_into()?,
-                ))
-            }
             fb::Type::Binary => Ok(DType::Binary(
                 fb.type__as_binary().unwrap().nullability().try_into()?,
             )),

@@ -19,23 +19,21 @@ path = "src/lib.rs"
 workspace = true
 
 [dependencies]
-allocator-api2 = { workspace = true }
 arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
 arrow-schema = { workspace = true }
+enum-iterator = { workspace = true }
 flatbuffers = { workspace = true }
 flexbuffers = { workspace = true }
 humansize = { workspace = true }
 itertools = { workspace = true }
-leb128 = { workspace = true }
+lazy_static = { workspace = true }
 linkme = { workspace = true }
 log = { workspace = true }
 num-traits = { workspace = true }
 num_enum = { workspace = true }
 paste = { workspace = true }
 rand = { workspace = true }
-thiserror = { workspace = true }
-vortex-alloc = { path = "../vortex-alloc" }
 vortex-dtype = { path = "../vortex-dtype", features = ["serde"] }
 vortex-error = { path = "../vortex-error", features = ["flexbuffers"] }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }

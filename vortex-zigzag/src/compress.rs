@@ -3,7 +3,6 @@ use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray, OwnedArray};
-use vortex_alloc::{AlignedVec, ALIGNED_ALLOCATOR};
 use vortex_dtype::{NativePType, PType};
 use vortex_error::VortexResult;
 use zigzag::ZigZag as ExternalZigZag;
@@ -29,6 +28,7 @@ impl EncodingCompression for ZigZagEncoding {
         parray
             .statistics()
             .compute_as_cast::<i64>(Stat::Min)
+            .ok()
             .filter(|&min| min < 0)
             .map(|_| self as &dyn EncodingCompression)
     }
@@ -98,9 +98,9 @@ fn zigzag_decode_primitive<'a, T: ExternalZigZag + NativePType>(
 where
     <T as ExternalZigZag>::UInt: NativePType,
 {
-    let mut encoded: AlignedVec<T> = AlignedVec::with_capacity_in(values.len(), ALIGNED_ALLOCATOR);
+    let mut encoded = Vec::with_capacity(values.len());
     encoded.extend(values.iter().map(|v| T::decode(*v)));
-    PrimitiveArray::from_vec(encoded.to_vec(), validity)
+    PrimitiveArray::from_vec(encoded, validity)
 }
 
 #[cfg(test)]

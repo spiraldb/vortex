@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display, Formatter};
 
 pub use binary::*;
 pub use bool::*;
-pub use composite::*;
+pub use extension::*;
 pub use list::*;
 pub use null::*;
 pub use primitive::*;
@@ -12,11 +12,8 @@ use vortex_dtype::NativePType;
 use vortex_dtype::{DType, Nullability};
 use vortex_error::VortexResult;
 
-use crate::extension::ExtScalar;
-
 mod binary;
 mod bool;
-mod composite;
 mod extension;
 mod list;
 mod null;
@@ -55,7 +52,6 @@ pub enum Scalar {
     Struct(StructScalar),
     Utf8(Utf8Scalar),
     Extension(ExtScalar),
-    Composite(CompositeScalar),
 }
 
 macro_rules! impls_for_scalars {
@@ -76,7 +72,6 @@ impls_for_scalars!(Primitive, PrimitiveScalar);
 impls_for_scalars!(Struct, StructScalar);
 impls_for_scalars!(Utf8, Utf8Scalar);
 impls_for_scalars!(Extension, ExtScalar);
-impls_for_scalars!(Composite, CompositeScalar);
 
 macro_rules! match_each_scalar {
     ($self:expr, | $_:tt $scalar:ident | $($body:tt)*) => ({
@@ -90,7 +85,6 @@ macro_rules! match_each_scalar {
             Scalar::Struct(s) => __with_scalar__! { s },
             Scalar::Utf8(s) => __with_scalar__! { s },
             Scalar::Extension(s) => __with_scalar__! { s },
-            Scalar::Composite(s) => __with_scalar__! { s },
         }
     })
 }
@@ -123,7 +117,6 @@ impl Scalar {
             Scalar::Struct(_) => false,
             Scalar::Utf8(u) => u.value().is_none(),
             Scalar::Extension(e) => e.value().is_none(),
-            Scalar::Composite(c) => c.scalar().is_null(),
         }
     }
 
@@ -133,13 +126,11 @@ impl Scalar {
             DType::Null => NullScalar::new().into(),
             DType::Bool(_) => BoolScalar::none().into(),
             DType::Primitive(p, _) => PrimitiveScalar::none_from_ptype(*p).into(),
-            DType::Decimal(..) => unimplemented!("DecimalScalar"),
             DType::Utf8(_) => Utf8Scalar::none().into(),
             DType::Binary(_) => BinaryScalar::none().into(),
             DType::Struct(..) => StructScalar::new(dtype.clone(), vec![]).into(),
             DType::List(..) => ListScalar::new(dtype.clone(), None).into(),
             DType::Extension(ext, _) => ExtScalar::null(ext.clone()).into(),
-            DType::Composite(..) => unimplemented!(),
         }
     }
 }

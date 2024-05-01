@@ -5,6 +5,12 @@ use std::sync::Arc;
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct ExtID(Arc<str>);
 
+impl ExtID {
+    pub fn new(value: Arc<str>) -> Self {
+        Self(value)
+    }
+}
+
 impl Display for ExtID {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -23,19 +29,19 @@ impl From<&str> for ExtID {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ExtMetadata(Arc<[u8]>);
+
+impl ExtMetadata {
+    pub fn new(value: Arc<[u8]>) -> Self {
+        Self(value)
+    }
+}
 
 impl AsRef<[u8]> for ExtMetadata {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
-    }
-}
-
-impl From<Arc<[u8]>> for ExtMetadata {
-    fn from(value: Arc<[u8]>) -> Self {
-        ExtMetadata(value)
     }
 }
 
@@ -45,7 +51,7 @@ impl From<&[u8]> for ExtMetadata {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ExtDType {
     id: ExtID,
