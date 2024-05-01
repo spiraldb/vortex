@@ -3,7 +3,7 @@ use num_traits::ops::overflowing::OverflowingSub;
 use num_traits::SaturatingSub;
 use vortex_dtype::{match_each_float_ptype, match_each_integer_ptype, NativePType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_scalar::{PScalarType, PrimitiveScalar, Scalar};
+use vortex_scalar::{PScalarType, Scalar};
 
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
@@ -30,6 +30,9 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
 
         let result = if to_subtract.dtype().is_int() {
             match_each_integer_ptype!(self.ptype(), |$T| {
+                let to_subtract: $T = to_subtract
+                    .typed_value()
+                    .ok_or_else(|| vortex_err!("expected primitive"))?;
                 subtract_scalar_integer::<$T>(self, to_subtract)?
             })
         } else {
@@ -51,35 +54,31 @@ fn subtract_scalar_integer<
     T: NativePType + OverflowingSub + SaturatingSub + PScalarType + TryFrom<Scalar>,
 >(
     subtract_from: &PrimitiveArray<'a>,
-    to_subtract: &PrimitiveScalar,
+    to_subtract: T,
 ) -> VortexResult<PrimitiveArray<'a>> {
-    let to_subtract: T = to_subtract
-        .typed_value()
-        .ok_or_else(|| vortex_err!("expected primitive"))?;
-
     if to_subtract.is_zero() {
         // if to_subtract is zero, skip operation
         return Ok(subtract_from.clone());
-    } else {
-        if let Some(min) = subtract_from.statistics().compute_as_cast(Stat::Min) {
-            let min: T = min;
-            if let (_, true) = min.overflowing_sub(&to_subtract) {
-                vortex_bail!(
-                    "Integer subtraction over/underflow: {}, {}",
-                    min,
-                    to_subtract
-                )
-            }
+    }
+
+    if let Some(min) = subtract_from.statistics().compute_as_cast(Stat::Min) {
+        let min: T = min;
+        if let (_, true) = min.overflowing_sub(&to_subtract) {
+            vortex_bail!(
+                "Integer subtraction over/underflow: {}, {}",
+                min,
+                to_subtract
+            )
         }
-        if let Some(max) = subtract_from.statistics().compute_as_cast(Stat::Max) {
-            let max: T = max;
-            if let (_, true) = max.overflowing_sub(&to_subtract) {
-                vortex_bail!(
-                    "Integer subtraction over/underflow: {}, {}",
-                    max,
-                    to_subtract
-                )
-            }
+    }
+    if let Some(max) = subtract_from.statistics().compute_as_cast(Stat::Max) {
+        let max: T = max;
+        if let (_, true) = max.overflowing_sub(&to_subtract) {
+            vortex_bail!(
+                "Integer subtraction over/underflow: {}, {}",
+                max,
+                to_subtract
+            )
         }
     }
 

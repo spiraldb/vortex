@@ -204,6 +204,7 @@ impl PScalar {
             PScalar::F64(v) => from_floating!(ptype, v),
         }
     }
+
     pub fn is_positive(&self) -> bool {
         match self {
             PScalar::U8(v) => *v > 0,
