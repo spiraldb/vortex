@@ -18,6 +18,8 @@ pub fn subtract_scalar(array: &Array, to_subtract: &Scalar) -> VortexResult<Owne
     // DType, we can flatten the array and apply subtraction to the flattened primitive array
     match array.dtype() {
         DType::Primitive(..) => {
+            // TODO(@jcasale): pass array instead of ref to get rid of clone?
+            // downside is that subtract_scalar then consumes the array, which is not great
             let flat = array.clone().flatten_primitive()?;
             flat.subtract_scalar(to_subtract)
         }
