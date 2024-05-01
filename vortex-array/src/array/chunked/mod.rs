@@ -2,9 +2,11 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{Nullability, PType};
 use vortex_error::vortex_bail;
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
@@ -44,7 +46,7 @@ impl ChunkedArray<'_> {
         let mut children = vec![chunk_ends.into_array_data()];
         children.extend(chunks.iter().map(|a| a.to_array_data()));
 
-        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), HashMap::default())
+        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), StatsSet::new())
     }
 
     #[inline]
@@ -139,14 +141,28 @@ impl ArrayValidity for ChunkedArray<'_> {
 
 impl EncodingCompression for ChunkedEncoding {}
 
+impl SubtractScalarFn for ChunkedArray<'_> {
+    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
+        self.chunks()
+            .map(|chunk| subtract_scalar(&chunk, to_subtract))
+            .collect::<VortexResult<Vec<_>>>()
+            .map(|chunks| {
+                ChunkedArray::try_new(chunks, self.dtype().clone())
+                    .expect("Subtraction on chunked array changed dtype")
+                    .into_array()
+            })
+    }
+}
+
 #[cfg(test)]
 mod test {
     use vortex_dtype::{DType, Nullability};
     use vortex_dtype::{NativePType, PType};
 
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
+    use crate::compute::scalar_subtract::subtract_scalar;
     use crate::compute::slice::slice;
-    use crate::{Array, IntoArray};
+    use crate::{Array, IntoArray, ToArray};
 
     fn chunked_array() -> OwnedChunkedArray {
         ChunkedArray::try_new(
@@ -196,5 +212,40 @@ mod test {
     #[test]
     pub fn slice_end() {
         assert_equal_slices(slice(chunked_array().array(), 7, 8).unwrap(), &[8u64]);
+    }
+
+    #[test]
+    fn test_scalar_subtract() {
+        let chunked = chunked_array();
+        let to_subtract = 1u64;
+        let array = subtract_scalar(&chunked.to_array(), &to_subtract.into()).unwrap();
+
+        let chunked = ChunkedArray::try_from(array).unwrap();
+        let mut chunks_out = chunked.chunks();
+
+        let results = chunks_out
+            .next()
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, &[0u64, 1, 2]);
+        let results = chunks_out
+            .next()
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, &[3u64, 4, 5]);
+        let results = chunks_out
+            .next()
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, &[6u64, 7, 8]);
     }
 }

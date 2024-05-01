@@ -66,7 +66,7 @@ impl StructArray<'_> {
             DType::Struct(names, field_dtypes),
             StructMetadata { length },
             fields.into_iter().map(|a| a.into_array_data()).collect(),
-            HashMap::default(),
+            StatsSet::new(),
         )
     }
 }

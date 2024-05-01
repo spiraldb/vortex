@@ -43,7 +43,7 @@ impl LocalDateTimeArray<'_> {
                 timestamp_dtype: timestamps.dtype().clone(),
             },
             [timestamps.into_array_data()].into(),
-            HashMap::default(),
+            Default::default(),
         )
         .expect("Invalid LocalDateTimeArray")
     }

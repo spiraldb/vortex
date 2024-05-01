@@ -35,7 +35,7 @@ impl RoaringBoolArray<'_> {
                     RoaringBoolMetadata { length },
                     Some(Buffer::Owned(bitmap.serialize::<Portable>().into())),
                     vec![].into(),
-                    HashMap::default(),
+                    StatsSet::new(),
                 )?,
             })
         }

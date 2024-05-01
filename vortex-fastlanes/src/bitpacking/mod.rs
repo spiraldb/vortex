@@ -79,7 +79,7 @@ impl BitPackedArray<'_> {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, metadata, children.into(), HashMap::new())
+        Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
     }
 
     #[inline]

@@ -4,6 +4,7 @@ use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
 use vortex_error::vortex_bail;
+use vortex_scalar::Scalar;
 
 use crate::r#for::compress::decompress;
 
@@ -28,7 +29,7 @@ impl FoRArray<'_> {
             child.dtype().clone(),
             FoRMetadata { reference, shift },
             vec![child.to_array_data()].into(),
-            HashMap::new(),
+            StatsSet::new(),
         )
     }
 

@@ -63,7 +63,7 @@ impl DateTimePartsArray<'_> {
                 validity: validity_metadata,
             },
             children.into(),
-            HashMap::new(),
+            StatsSet::new(),
         )
     }
 

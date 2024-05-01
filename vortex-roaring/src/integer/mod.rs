@@ -42,7 +42,7 @@ impl RoaringIntArray<'_> {
                 },
                 Some(Buffer::Owned(bitmap.serialize::<Portable>().into())),
                 vec![].into(),
-                HashMap::default(),
+                StatsSet::new(),
             )?,
         })
     }

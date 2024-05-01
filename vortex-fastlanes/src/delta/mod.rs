@@ -49,7 +49,7 @@ impl DeltaArray<'_> {
                 len,
             },
             vec![bases.into_array_data(), deltas.into_array_data()].into(),
-            HashMap::new(),
+            StatsSet::new(),
         )?;
 
         let expected_bases_len = {
