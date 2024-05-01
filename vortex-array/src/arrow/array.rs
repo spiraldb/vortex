@@ -188,6 +188,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
                 })
                 .collect(),
             value.len(),
+            nulls(value.nulls(), nullable),
         )
         .unwrap()
         .into_array_data()

@@ -41,6 +41,7 @@ mod tests {
 
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::r#struct::StructArray;
+    use vortex::validity::Validity;
     use vortex::SerdeContext;
     use vortex::{IntoArray, IntoArrayData};
 
@@ -55,6 +56,7 @@ mod tests {
             vec![Arc::new("x".into()), Arc::new("y".into())],
             vec![col.clone(), col.clone()],
             3,
+            Validity::AllValid,
         )
         .unwrap();
 
@@ -62,6 +64,7 @@ mod tests {
             vec![Arc::new("a".into()), Arc::new("b".into())],
             vec![col.clone(), nested_struct.into_array()],
             3,
+            Validity::AllValid,
         )
         .unwrap()
         .into_array();

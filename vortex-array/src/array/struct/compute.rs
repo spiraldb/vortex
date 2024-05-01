@@ -15,6 +15,7 @@ use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
+use crate::validity::Validity;
 use crate::ArrayTrait;
 use crate::{Array, ArrayDType, IntoArray, OwnedArray};
 
@@ -49,7 +50,7 @@ impl AsArrowArray for StructArray<'_> {
             .names()
             .iter()
             .zip(field_arrays.iter())
-            .zip(self.fields().iter())
+            .zip(self.dtypes().iter())
             .map(|((name, arrow_field), vortex_field)| {
                 Field::new(
                     name.as_str(),
@@ -74,12 +75,18 @@ impl AsContiguousFn for StructArray<'_> {
             .iter()
             .map(StructArray::try_from)
             .collect::<VortexResult<Vec<_>>>()?;
-        let mut fields = vec![Vec::new(); self.fields().len()];
+        let mut fields = vec![Vec::new(); self.dtypes().len()];
         for array in struct_arrays.iter() {
-            for f in 0..self.fields().len() {
-                fields[f].push(array.child(f).unwrap())
+            for (f, field) in fields.iter_mut().enumerate() {
+                field.push(array.field(f).unwrap());
             }
         }
+
+        let validity = if self.dtype().is_nullable() {
+            Validity::from_iter(arrays.iter().map(|a| a.with_dyn(|a| a.logical_validity())))
+        } else {
+            Validity::NonNullable
+        };
 
         StructArray::try_new(
             self.names().clone(),
@@ -88,6 +95,7 @@ impl AsContiguousFn for StructArray<'_> {
                 .map(|field_arrays| as_contiguous(field_arrays))
                 .try_collect()?,
             self.len(),
+            validity,
         )
         .map(|a| a.into_array())
     }
@@ -113,6 +121,7 @@ impl TakeFn for StructArray<'_> {
                 .map(|field| take(&field, indices))
                 .try_collect()?,
             indices.len(),
+            self.validity().take(indices)?,
         )
         .map(|a| a.into_array())
     }
@@ -124,6 +133,12 @@ impl SliceFn for StructArray<'_> {
             .children()
             .map(|field| slice(&field, start, stop))
             .try_collect()?;
-        StructArray::try_new(self.names().clone(), fields, stop - start).map(|a| a.into_array())
+        StructArray::try_new(
+            self.names().clone(),
+            fields,
+            stop - start,
+            self.validity().slice(start, stop)?,
+        )
+        .map(|a| a.into_array())
     }
 }

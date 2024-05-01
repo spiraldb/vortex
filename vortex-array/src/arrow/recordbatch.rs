@@ -4,6 +4,7 @@ use arrow_array::RecordBatch;
 
 use crate::array::r#struct::StructArray;
 use crate::arrow::FromArrowArray;
+use crate::validity::Validity;
 use crate::{ArrayData, IntoArray, IntoArrayData, ToArrayData};
 
 impl ToArrayData for RecordBatch {
@@ -24,6 +25,7 @@ impl ToArrayData for RecordBatch {
                 })
                 .collect(),
             self.num_rows(),
+            Validity::AllValid,
         )
         .unwrap()
         .into_array_data()

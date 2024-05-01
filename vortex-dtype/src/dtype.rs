@@ -176,6 +176,6 @@ mod test {
 
     #[test]
     fn size_of() {
-        assert_eq!(mem::size_of::<DType>(), 56);
+        assert_eq!(mem::size_of::<DType>(), 48);
     }
 }

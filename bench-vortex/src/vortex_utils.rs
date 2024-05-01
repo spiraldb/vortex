@@ -24,7 +24,7 @@ pub fn vortex_chunk_sizes(path: &Path) -> VortexResult<CompressionRunStats> {
     let chunked_array = ChunkedArray::try_from(vortex).unwrap();
     for chunk in chunked_array.chunks() {
         let struct_arr = StructArray::try_from(chunk).unwrap();
-        for (i, f) in (0..struct_arr.nfields()).map(|i| (i, struct_arr.child(i).unwrap())) {
+        for (i, f) in (0..struct_arr.nfields()).map(|i| (i, struct_arr.field(i).unwrap())) {
             compressed_sizes[i] += f.nbytes() as u64;
         }
     }
