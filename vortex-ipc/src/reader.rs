@@ -6,7 +6,6 @@ use arrow_buffer::Buffer as ArrowBuffer;
 use flatbuffers::{root, root_unchecked};
 use nougat::gat;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::composite::VORTEX_COMPOSITE_EXTENSIONS;
 use vortex::buffer::Buffer;
 use vortex::compute::scalar_subtract::subtract_scalar;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
@@ -16,7 +15,7 @@ use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{
     Array, ArrayDType, ArrayView, IntoArray, OwnedArray, SerdeContext, ToArray, ToStatic,
 };
-use vortex_dtype::{match_each_integer_ptype, DType, DTypeSerdeContext};
+use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 use vortex_scalar::Scalar;
@@ -103,11 +102,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
             .header_as_schema()
             .unwrap();
 
-        // TODO(ngates): construct this from the SerdeContext.
-        let dtype_ctx =
-            DTypeSerdeContext::new(VORTEX_COMPOSITE_EXTENSIONS.iter().map(|e| e.id()).collect());
         let dtype = DType::read_flatbuffer(
-            &dtype_ctx,
             &schema_msg
                 .dtype()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,

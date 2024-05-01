@@ -9,8 +9,8 @@ use crate::DType;
 use crate::DType::*;
 use crate::Nullability::NonNullable;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PType {
     U8,
     U16,
