@@ -4,11 +4,10 @@ use std::marker::PhantomData;
 
 use arrow_buffer::Buffer as ArrowBuffer;
 use flatbuffers::{root, root_unchecked};
-use itertools::Itertools;
 use nougat::gat;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::primitive::PrimitiveArray;
 use vortex::buffer::Buffer;
+use vortex::compute::scalar_subtract::subtract_scalar;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
 use vortex::compute::take::take;
@@ -19,6 +18,7 @@ use vortex::{
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
+use vortex_scalar::Scalar;
 
 use crate::flatbuffers::ipc::Message;
 use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
@@ -193,19 +193,10 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
                 continue;
             }
 
-            // TODO(@jdcasale): replace this with compute scalar_sum when we've added it
             let indices_for_batch = slice(indices, left, right)?.flatten_primitive()?;
-            let shifted = match_each_integer_ptype!(indices_for_batch.ptype(), |$P| {
-                let shifted = indices_for_batch
-                    .typed_data::<$P>()
-                    .iter()
-                    .map(|&idx| {
-                        idx as u64 - row_offset as u64
-                    })
-                    .collect_vec();
-                PrimitiveArray::from(shifted)
+            let shifted_arr = match_each_integer_ptype!(indices_for_batch.ptype(), |$T| {
+                subtract_scalar(&indices_for_batch.into_array(), &Scalar::from(row_offset as $T))?
             });
-            let shifted_arr = shifted.to_array();
 
             let from_current_batch = take(&batch, &shifted_arr)?;
             chunks.push(from_current_batch);

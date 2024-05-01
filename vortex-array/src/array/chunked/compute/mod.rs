@@ -4,6 +4,7 @@ use vortex_scalar::Scalar;
 use crate::array::chunked::ChunkedArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
+use crate::compute::scalar_subtract::SubtractScalarFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
@@ -26,6 +27,10 @@ impl ArrayCompute for ChunkedArray<'_> {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn subtract_scalar(&self) -> Option<&dyn SubtractScalarFn> {
         Some(self)
     }
 }
