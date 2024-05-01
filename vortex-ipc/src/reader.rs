@@ -107,7 +107,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
                 .dtype()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
         )
-            .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
+        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
         Ok(Some(StreamArrayReader {
             ctx: &self.ctx,
@@ -160,11 +160,11 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
         }
         if indices.dtype().is_signed_int()
             && indices
-            .statistics()
-            // min cast should be safe
-            .compute_as_cast::<i64>(Stat::Min)
-            .unwrap()
-            < 0
+                .statistics()
+                // min cast should be safe
+                .compute_as_cast::<i64>(Stat::Min)
+                .unwrap()
+                < 0
         {
             vortex_bail!("Indices must be positive")
         }
@@ -187,19 +187,18 @@ impl<'a, R: Read> IntoIterator for StreamArrayReader<'a, R> {
     }
 }
 
-// TODO@(jdcasale): this is weird -- I don't think this is quite right
 pub struct TakeIterator<'a, R: Read> {
     reader: StreamArrayReader<'a, R>,
 }
 
-/// NB: if the TakeIterator expires without being fully-consumed, it will leave the underlying
-/// messages stream in an unreadable state and free up a mutable ref to that stream, allowing
-/// someone else to try to issue a read that will inevitably fail. For this reason, we force
-/// full consumption of the iterator when it goes out of scope.
-impl<'a, R: Read> Drop for TakeIterator<'a, R> {
+/// NB: if the StreamArrayReader expires without being fully-consumed by the underlying iterator,
+/// it will leave the underlying messages stream in an unreadable state and free up a mutable ref
+/// to that stream, allowing someone else to try to issue a read that will inevitably fail.
+/// For this reason, we force full consumption of the reader when it goes out of scope.
+impl<'a, R: Read> Drop for StreamArrayReader<'a, R> {
     fn drop(&mut self) {
-        for _ in self.by_ref() {
-            // Continue until the iterator is exhausted
+        while self.next().unwrap().is_some() {
+            // Continue until the reader is exhausted
         }
     }
 }
@@ -456,7 +455,7 @@ mod tests {
                 .map(|v| v as f64 + 0.5)
                 .collect_vec(),
         )
-            .into_array();
+        .into_array();
         let alp_encoded = ALPArray::encode(pdata).unwrap();
         assert_eq!(alp_encoded.encoding().id(), ALPEncoding.id());
         test_base_case(
@@ -512,7 +511,8 @@ mod tests {
     fn test_write_read_chunked() {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
-        ]).into_array();
+        ])
+        .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
@@ -570,13 +570,13 @@ mod tests {
             vec![data.clone(), data2.clone(), data2],
             data.dtype().clone(),
         )
-            .unwrap()
-            .into_array();
+        .unwrap()
+        .into_array();
 
         let indices = PrimitiveArray::from(vec![
             10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 4_000_000,
         ])
-            .into_array();
+        .into_array();
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
@@ -621,7 +621,7 @@ mod tests {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
-            .into_array();
+        .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
@@ -703,8 +703,7 @@ mod tests {
         let mut cursor = Cursor::new(&buffer);
         let mut reader = StreamReader::try_new(&mut cursor).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
-        let mut result_iter = array_reader
-            .take(indices)?;
+        let mut result_iter = array_reader.take(indices)?;
         let result = result_iter.next().unwrap();
         assert!(result_iter.next().is_none());
         Ok(result)
