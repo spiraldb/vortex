@@ -107,7 +107,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
                 .dtype()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
         )
-        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
+            .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
         Ok(Some(StreamArrayReader {
             ctx: &self.ctx,
@@ -160,11 +160,11 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
         }
         if indices.dtype().is_signed_int()
             && indices
-                .statistics()
-                // min cast should be safe
-                .compute_as_cast::<i64>(Stat::Min)
-                .unwrap()
-                < 0
+            .statistics()
+            // min cast should be safe
+            .compute_as_cast::<i64>(Stat::Min)
+            .unwrap()
+            < 0
         {
             vortex_bail!("Indices must be positive")
         }
@@ -236,7 +236,6 @@ impl<'a, R: Read> Iterator for TakeIterator<'a, R> {
                 continue;
             }
 
-            // TODO(@jdcasale): replace this with compute scalar_sum when we've added it
             let indices_for_batch = slice(indices, left, right)
                 .expect("Unexpexted failure slicing indices for batch")
                 .flatten_primitive()
@@ -457,7 +456,7 @@ mod tests {
                 .map(|v| v as f64 + 0.5)
                 .collect_vec(),
         )
-        .into_array();
+            .into_array();
         let alp_encoded = ALPArray::encode(pdata).unwrap();
         assert_eq!(alp_encoded.encoding().id(), ALPEncoding.id());
         test_base_case(
@@ -504,39 +503,16 @@ mod tests {
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let uncompressed = PrimitiveArray::from((0i64..3_000).rev().collect_vec());
         let packed = BitPackedArray::encode(uncompressed.into_array(), 5).unwrap();
-        let indices = PrimitiveArray::from(vec![1i32, 2, 3, 4, 5, 6, 7, 7, 7, 8]).into_array();
 
-        let mut buffer = vec![];
-        {
-            let mut cursor = Cursor::new(&mut buffer);
-            {
-                let mut writer =
-                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
-                writer.write_array(&packed.into_array()).unwrap();
-            }
-        }
-
-        let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
-        let array_reader = reader.next().unwrap().unwrap();
-        let mut take_iter = array_reader.take(&indices).unwrap();
-
-        let array = take_iter.next().unwrap();
-        let expected = &[2998, 2997, 2996, 2995, 2994, 2993, 2992, 2992, 2992, 2991];
-        let results = array
-            .flatten_primitive()
-            .unwrap()
-            .typed_data::<i64>()
-            .to_vec();
-        assert_eq!(results, expected);
+        let expected = &[2989i64, 2988, 2987, 2986];
+        test_base_case(&packed.into_array(), expected, PrimitiveEncoding.id());
     }
 
     #[test]
     fn test_write_read_chunked() {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
-        ])
-        .into_array();
+        ]).into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
@@ -594,13 +570,13 @@ mod tests {
             vec![data.clone(), data2.clone(), data2],
             data.dtype().clone(),
         )
-        .unwrap()
-        .into_array();
+            .unwrap()
+            .into_array();
 
         let indices = PrimitiveArray::from(vec![
             10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 4_000_000,
         ])
-        .into_array();
+            .into_array();
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
@@ -645,7 +621,7 @@ mod tests {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
-        .into_array();
+            .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
@@ -702,7 +678,6 @@ mod tests {
         let array_reader = reader.next().unwrap().unwrap();
         let mut take_iter = array_reader.take(&indices).unwrap();
 
-        // let mut take_iter = test_read_write_inner(&data, &indices).unwrap();
         let array = take_iter.next().unwrap();
         assert_eq!(array.encoding().id(), expected_encoding_id);
 
@@ -728,8 +703,10 @@ mod tests {
         let mut cursor = Cursor::new(&buffer);
         let mut reader = StreamReader::try_new(&mut cursor).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
-        array_reader
-            .take(indices)
-            .map(|mut iter| iter.next().unwrap())
+        let mut result_iter = array_reader
+            .take(indices)?;
+        let result = result_iter.next().unwrap();
+        assert!(result_iter.next().is_none());
+        Ok(result)
     }
 }
