@@ -139,20 +139,11 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
 
     pub fn take(self, indices: &'a Array<'_>) -> VortexResult<TakeIterator<'a, R>> {
         if !indices.is_empty() {
-            if !indices
-                .statistics()
-                .compute_as::<bool>(Stat::IsSorted)
-                .unwrap_or_default()
-            {
+            if !indices.statistics().compute_is_sorted()? {
                 vortex_bail!("Indices must be sorted to take from IPC stream")
             }
 
-            if indices
-                .statistics()
-                .compute_as_cast::<u64>(Stat::NullCount)
-                .unwrap_or_default()
-                > 0
-            {
+            if indices.statistics().compute_null_count()? > 0 {
                 vortex_bail!("Indices must not contain nulls")
             }
 
