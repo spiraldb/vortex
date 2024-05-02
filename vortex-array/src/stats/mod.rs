@@ -66,6 +66,7 @@ pub trait Statistics {
 }
 
 pub struct EmptyStatistics;
+
 impl Statistics for EmptyStatistics {
     fn get(&self, _stat: Stat) -> Option<Scalar> {
         None

@@ -159,13 +159,9 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
             if !indices.dtype().is_int() {
                 vortex_bail!("Indices must be integers")
             }
+
             if indices.dtype().is_signed_int()
-                && indices
-                    .statistics()
-                    // min cast should be safe
-                    .compute_as_cast::<i64>(Stat::Min)
-                    .unwrap()
-                    < 0
+                && indices.statistics().compute_as_cast::<i64>(Stat::Min)? < 0
             {
                 vortex_bail!("Indices must be positive")
             }
@@ -227,7 +223,7 @@ impl<'a, R: Read> FallibleIterator for TakeIterator<'a, R> {
         if self.indices.is_empty() {
             return Ok(None);
         }
-        while let Some(batch) = self.reader.next().unwrap() {
+        while let Some(batch) = self.reader.next()? {
             let curr_offset = self.row_offset;
             let left = search_sorted::<usize>(self.indices, curr_offset, SearchSortedSide::Left)?
                 .to_index();
@@ -633,6 +629,10 @@ mod tests {
             while iter.next().unwrap().is_some() {
                 // Consume the iterator
             }
+            // verify that if we continue to call next on the iterator, we get none and
+            // nothing happens to the underlying stream
+            assert!(iter.next().unwrap().is_none());
+            assert!(iter.next().unwrap().is_none());
         }
 
         let indices = PrimitiveArray::from(vec![10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
