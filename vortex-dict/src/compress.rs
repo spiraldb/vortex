@@ -51,7 +51,7 @@ impl EncodingCompression for DictEncoding {
         let dict_like = like.map(|like_arr| DictArray::try_from(like_arr).unwrap());
         let dict_like_ref = dict_like.as_ref();
 
-        if let Some(p) = PrimitiveArray::try_from(array).ok() {
+        if let Ok(p) = PrimitiveArray::try_from(array) {
             let (codes, dict) = match_each_native_ptype!(p.ptype(), |$P| {
                 dict_encode_typed_primitive::<$P>(&p)
             });
@@ -69,7 +69,7 @@ impl EncodingCompression for DictEncoding {
             .map(|a| a.into_array());
         }
 
-        if let Some(vb) = VarBinArray::try_from(array).ok() {
+        if let Ok(vb) = VarBinArray::try_from(array) {
             let (codes, dict) = dict_encode_varbin(&vb);
 
             return DictArray::try_new(

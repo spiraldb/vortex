@@ -135,7 +135,7 @@ fn patch_decoded<'a>(
     array: PrimitiveArray<'a>,
     patches: &Array,
 ) -> VortexResult<PrimitiveArray<'a>> {
-    if let Some(sparse_patches) = SparseArray::try_from(patches).ok() {
+    if let Ok(sparse_patches) = SparseArray::try_from(patches) {
         match_each_alp_float_ptype!(array.ptype(), |$T| {
             array.patch(
                 &sparse_patches.resolved_indices(),
