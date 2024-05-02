@@ -1,9 +1,9 @@
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::sparse::{Sparse, SparseArray};
+use vortex::array::sparse::SparseArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, AsArray, IntoArray, OwnedArray};
 use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
@@ -135,16 +135,14 @@ fn patch_decoded<'a>(
     array: PrimitiveArray<'a>,
     patches: &Array,
 ) -> VortexResult<PrimitiveArray<'a>> {
-    match patches.encoding().id() {
-        Sparse::ID => {
-            match_each_alp_float_ptype!(array.ptype(), |$T| {
-                let typed_patches = SparseArray::try_from(patches).unwrap();
-                array.patch(
-                    &typed_patches.resolved_indices(),
-                    typed_patches.values().flatten_primitive()?.typed_data::<$T>())?
-            })
-        }
-        _ => panic!("can't patch ALP array with {}", patches),
+    if let Some(sparse_patches) = SparseArray::try_from(patches).ok() {
+        match_each_alp_float_ptype!(array.ptype(), |$T| {
+            array.patch(
+                &sparse_patches.resolved_indices(),
+                sparse_patches.values().flatten_primitive()?.typed_data::<$T>())?
+        })
+    } else {
+        panic!("can't patch ALP array with {}", patches);
     }
 }
 

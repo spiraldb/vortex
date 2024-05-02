@@ -25,7 +25,7 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
 
     if obj.is_instance(pa_array)? {
         let arrow_array = ArrowArrayData::from_pyarrow(obj).map(make_array)?;
-        let enc_array = ArrayData::from_arrow(arrow_array, false);
+        let enc_array = ArrayData::from_arrow(arrow_array, false).into_array();
         PyArray::wrap(obj.py(), enc_array)
     } else if obj.is_instance(chunked_array)? {
         let chunks: Vec<&PyAny> = obj.getattr("chunks")?.extract()?;
@@ -45,7 +45,7 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
             obj.py(),
             ChunkedArray::try_new(encoded_chunks, dtype)
                 .map_err(PyVortexError::map_err)?
-                .to_array_data(),
+                .into_array(),
         )
     } else if obj.is_instance(table)? {
         let array_stream = ArrowArrayStreamReader::from_pyarrow(obj)?;
@@ -61,7 +61,7 @@ pub fn encode(obj: &PyAny) -> PyResult<Py<PyArray>> {
             obj.py(),
             ChunkedArray::try_new(chunks, dtype)
                 .map_err(PyVortexError::map_err)?
-                .to_array_data(),
+                .into_array(),
         )
     } else {
         Err(PyValueError::new_err("Cannot convert object to enc array"))

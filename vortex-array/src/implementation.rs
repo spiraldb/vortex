@@ -16,6 +16,7 @@ use crate::{ArrayTrait, TryDeserializeArrayMetadata};
 /// Because it has associated types it can't be used as a trait object.
 pub trait ArrayDef {
     const ID: EncodingId;
+    const ID_STR: &'static str;
     const ENCODING: EncodingRef;
 
     type Array<'a>: ArrayTrait + TryFrom<Array<'a>, Error = VortexError> + 'a;
@@ -63,6 +64,7 @@ macro_rules! impl_encoding {
             pub struct $Name;
             impl ArrayDef for $Name {
                 const ID: EncodingId = EncodingId::new($id);
+                const ID_STR: &'static str = $id;
                 const ENCODING: EncodingRef = &[<$Name Encoding>];
                 type Array<'a> = [<$Name Array>]<'a>;
                 type Metadata = [<$Name Metadata>];

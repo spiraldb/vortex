@@ -1,12 +1,12 @@
 use arrayref::array_ref;
 use fastlanez::TryBitPack;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::sparse::{Sparse, SparseArray};
+use vortex::array::sparse::SparseArray;
 use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray, ToStatic};
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray, ToStatic};
 use vortex_dtype::PType::U8;
 use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -208,16 +208,14 @@ fn patch_unpacked<'a>(
     array: PrimitiveArray<'a>,
     patches: &Array,
 ) -> VortexResult<PrimitiveArray<'a>> {
-    match patches.encoding().id() {
-        Sparse::ID => {
-            match_each_integer_ptype!(array.ptype(), |$T| {
-                let typed_patches = SparseArray::try_from(patches).unwrap();
-                array.patch(
-                    &typed_patches.resolved_indices(),
-                    typed_patches.values().flatten_primitive()?.typed_data::<$T>())
-            })
-        }
-        _ => panic!("can't patch bitpacked array with {}", patches),
+    if let Some(sparse_patches) = SparseArray::try_from(patches).ok() {
+        match_each_integer_ptype!(array.ptype(), |$T| {
+            array.patch(
+                &sparse_patches.resolved_indices(),
+                sparse_patches.values().flatten_primitive()?.typed_data::<$T>())
+        })
+    } else {
+        panic!("can't patch bitpacked array with {}", patches);
     }
 }
 

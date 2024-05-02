@@ -218,45 +218,43 @@ impl CompressCtx {
     }
 
     fn compress_array(&self, arr: &Array) -> VortexResult<OwnedArray> {
-        match arr.encoding().id() {
-            Chunked::ID => {
-                // For chunked arrays, we compress each chunk individually
-                let chunked = ChunkedArray::try_from(arr)?;
-                let compressed_chunks: VortexResult<Vec<OwnedArray>> = chunked
-                    .chunks()
-                    .map(|chunk| self.compress_array(&chunk))
-                    .collect();
-                Ok(
-                    ChunkedArray::try_new(compressed_chunks?, chunked.dtype().clone())?
-                        .into_array(),
-                )
-            }
-            Constant::ID => {
-                // Not much better we can do than constant!
-                Ok(arr.to_static())
-            }
-            Struct::ID => {
-                // For struct arrays, we compress each field individually
-                let strct = StructArray::try_from(arr)?;
-                let compressed_fields = strct
-                    .children()
-                    .map(|field| self.compress_array(&field))
-                    .collect::<VortexResult<Vec<_>>>()?;
-                let validity = self.compress_validity(strct.validity())?;
-                Ok(StructArray::try_new(
-                    strct.names().clone(),
-                    compressed_fields,
-                    strct.len(),
-                    validity,
-                )?
-                .into_array())
-            }
-            _ => {
-                // Otherwise, we run sampled compression over pluggable encodings
-                let sampled = sampled_compression(arr, self)?;
-                Ok(sampled.unwrap_or_else(|| arr.to_static()))
-            }
+        if arr.encoding().id() == Chunked::ID {
+            // For chunked arrays, we compress each chunk individually
+            let chunked = ChunkedArray::try_from(arr)?;
+            let compressed_chunks: VortexResult<Vec<OwnedArray>> = chunked
+                .chunks()
+                .map(|chunk| self.compress_array(&chunk))
+                .collect();
+            return Ok(
+                ChunkedArray::try_new(compressed_chunks?, chunked.dtype().clone())?.into_array(),
+            );
         }
+
+        if arr.encoding().id() == Constant::ID {
+            // Not much better we can do than constant!
+            return Ok(arr.to_static());
+        }
+
+        if arr.encoding().id() == Struct::ID {
+            // For struct arrays, we compress each field individually
+            let strct = StructArray::try_from(arr)?;
+            let compressed_fields = strct
+                .children()
+                .map(|field| self.compress_array(&field))
+                .collect::<VortexResult<Vec<_>>>()?;
+            let validity = self.compress_validity(strct.validity())?;
+            return Ok(StructArray::try_new(
+                strct.names().clone(),
+                compressed_fields,
+                strct.len(),
+                validity,
+            )?
+            .into_array());
+        }
+
+        // Otherwise, we run sampled compression over pluggable encodings
+        let sampled = sampled_compression(arr, self)?;
+        Ok(sampled.unwrap_or_else(|| arr.to_static()))
     }
 }
 

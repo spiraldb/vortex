@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
@@ -10,24 +11,30 @@ use crate::flatten::{ArrayFlatten, Flattened};
 use crate::ArrayDef;
 use crate::{Array, ArrayTrait};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub struct EncodingId(&'static str);
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct EncodingId(Cow<'static, str>);
 
 impl EncodingId {
     pub const fn new(id: &'static str) -> Self {
-        Self(id)
+        Self(Cow::Borrowed(id))
+    }
+}
+
+impl From<Cow<'static, str>> for EncodingId {
+    fn from(value: Cow<'static, str>) -> Self {
+        Self(value)
     }
 }
 
 impl Display for EncodingId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(self.0, f)
+        Display::fmt(self.0.as_ref(), f)
     }
 }
 
 impl AsRef<str> for EncodingId {
     fn as_ref(&self) -> &str {
-        self.0
+        self.0.as_ref()
     }
 }
 

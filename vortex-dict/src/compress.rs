@@ -51,42 +51,41 @@ impl EncodingCompression for DictEncoding {
         let dict_like = like.map(|like_arr| DictArray::try_from(like_arr).unwrap());
         let dict_like_ref = dict_like.as_ref();
 
-        let (codes, dict) = match array.encoding().id() {
-            Primitive::ID => {
-                let p = PrimitiveArray::try_from(array)?;
-                let (codes, dict) = match_each_native_ptype!(p.ptype(), |$P| {
-                    dict_encode_typed_primitive::<$P>(&p)
-                });
-                (
-                    ctx.auxiliary("codes").excluding(&DictEncoding).compress(
-                        &codes.to_array(),
-                        dict_like_ref.map(|dict| dict.codes()).as_ref(),
-                    )?,
-                    ctx.named("values").excluding(&DictEncoding).compress(
-                        &dict.to_array(),
-                        dict_like_ref.map(|dict| dict.values()).as_ref(),
-                    )?,
-                )
-            }
-            VarBin::ID => {
-                let vb = VarBinArray::try_from(array).unwrap();
-                let (codes, dict) = dict_encode_varbin(&vb);
-                (
-                    ctx.auxiliary("codes").excluding(&DictEncoding).compress(
-                        &codes.to_array(),
-                        dict_like_ref.map(|dict| dict.codes()).as_ref(),
-                    )?,
-                    ctx.named("values").excluding(&DictEncoding).compress(
-                        &dict.to_array(),
-                        dict_like_ref.map(|dict| dict.values()).as_ref(),
-                    )?,
-                )
-            }
+        if let Some(p) = PrimitiveArray::try_from(array).ok() {
+            let (codes, dict) = match_each_native_ptype!(p.ptype(), |$P| {
+                dict_encode_typed_primitive::<$P>(&p)
+            });
 
-            _ => unreachable!("This array kind should have been filtered out"),
-        };
+            return DictArray::try_new(
+                ctx.auxiliary("codes").excluding(&DictEncoding).compress(
+                    &codes.to_array(),
+                    dict_like_ref.map(|dict| dict.codes()).as_ref(),
+                )?,
+                ctx.named("values").excluding(&DictEncoding).compress(
+                    &dict.to_array(),
+                    dict_like_ref.map(|dict| dict.values()).as_ref(),
+                )?,
+            )
+            .map(|a| a.into_array());
+        }
 
-        DictArray::try_new(codes, dict).map(|a| a.into_array())
+        if let Some(vb) = VarBinArray::try_from(array).ok() {
+            let (codes, dict) = dict_encode_varbin(&vb);
+
+            return DictArray::try_new(
+                ctx.auxiliary("codes").excluding(&DictEncoding).compress(
+                    &codes.to_array(),
+                    dict_like_ref.map(|dict| dict.codes()).as_ref(),
+                )?,
+                ctx.named("values").excluding(&DictEncoding).compress(
+                    &dict.to_array(),
+                    dict_like_ref.map(|dict| dict.values()).as_ref(),
+                )?,
+            )
+            .map(|a| a.into_array());
+        }
+
+        unreachable!("This array kind should have been filtered out");
     }
 }
 
