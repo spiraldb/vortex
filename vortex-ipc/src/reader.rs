@@ -3,7 +3,9 @@ use std::io::{BufReader, Read};
 use std::marker::PhantomData;
 
 use arrow_buffer::Buffer as ArrowBuffer;
+use fallible_iterator::FallibleIterator;
 use flatbuffers::{root, root_unchecked};
+use log::error;
 use nougat::gat;
 use vortex::array::chunked::ChunkedArray;
 use vortex::buffer::Buffer;
@@ -135,84 +137,108 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
         &self.dtype
     }
 
-    // TODO(@jdcasale) return iterator over owned array instead of array
-    pub fn take(mut self, indices: &Array<'_>) -> VortexResult<OwnedArray> {
-        if !indices
-            .statistics()
-            .compute_as::<bool>(Stat::IsSorted)
-            .unwrap_or_default()
-        {
-            vortex_bail!("Indices must be sorted to take from IPC stream")
-        }
+    pub fn take(self, indices: &'a Array<'_>) -> VortexResult<TakeIterator<'a, R>> {
+        if !indices.is_empty() {
+            if !indices.statistics().compute_is_sorted()? {
+                vortex_bail!("Indices must be sorted to take from IPC stream")
+            }
 
-        if indices
-            .statistics()
-            .compute_as_cast::<u64>(Stat::NullCount)
-            .unwrap_or_default()
-            > 0
-        {
-            vortex_bail!("Indices must not contain nulls")
-        }
+            if indices.statistics().compute_null_count()? > 0 {
+                vortex_bail!("Indices must not contain nulls")
+            }
 
-        if !indices.dtype().is_int() {
-            vortex_bail!("Indices must be integers")
-        }
-        if indices.dtype().is_signed_int()
-            && indices
-                .statistics()
-                // min cast should be safe
-                .compute_as_cast::<i64>(Stat::Min)
-                .unwrap()
-                < 0
-        {
-            vortex_bail!("Indices must be positive")
+            if !indices.dtype().is_int() {
+                vortex_bail!("Indices must be integers")
+            }
+
+            if indices.dtype().is_signed_int()
+                && indices.statistics().compute_as_cast::<i64>(Stat::Min)? < 0
+            {
+                vortex_bail!("Indices must be positive")
+            }
         }
 
         if self.row_offset != 0 {
             vortex_bail!("Stream has already been (at least partially) consumed")
         }
 
-        let mut chunks = Vec::new();
+        Ok(TakeIterator {
+            reader: self,
+            indices,
+            row_offset: 0,
+        })
+    }
+}
 
-        let mut row_offset = self.row_offset;
+pub struct TakeIterator<'a, R: Read> {
+    reader: StreamArrayReader<'a, R>,
+    indices: &'a Array<'a>,
+    row_offset: usize,
+}
 
-        // Continue reading batches from the stream until we run out
-        while let Some(batch) = self.next()? {
-            let left =
-                search_sorted::<usize>(indices, row_offset, SearchSortedSide::Left)?.to_index();
-            let right =
-                search_sorted::<usize>(indices, row_offset + batch.len(), SearchSortedSide::Left)?
-                    .to_index();
-            // NB: if we're done, make sure to consume the rest of the
-            //  array to leave the iterator in a good state
-            if left == indices.len() {
-                continue;
+/// NB: if the StreamArrayReader expires without being fully-consumed by the underlying iterator,
+/// it will leave the underlying messages stream in an unreadable state and free up a mutable ref
+/// to that stream, allowing someone else to try to issue a read that will inevitably fail.
+/// For this reason, we force full consumption of the reader when it goes out of scope.
+impl<'a, R: Read> Drop for StreamArrayReader<'a, R> {
+    fn drop(&mut self) {
+        // NB: can't catch_unwind/unwrap here because &mut self can't be made UnwindSafe
+        loop {
+            let next = self.next();
+            match next {
+                Ok(result) => {
+                    if result.is_none() {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    error!("Error consuming StreamArrayReader in destructor: {:?}", err);
+                    break;
+                }
             }
+        }
+    }
+}
+
+/// NB: if the TakeIterator expires without being fully-consumed by the underlying iterator,
+/// it will trigger the Drop impl on the StreamArrayReader, which will consume the rest of the
+/// messages for that array. This is necessary to ensure that the underlying stream is in a
+/// consistent state when the StreamArrayReader is dropped, but it also is not free. If users wish
+/// to avoid this work happening at exipry, users can just consume the rest of the iterator
+/// themselves when they see fit.
+impl<'a, R: Read> FallibleIterator for TakeIterator<'a, R> {
+    type Item = OwnedArray;
+    type Error = VortexError;
+
+    fn next(&mut self) -> VortexResult<Option<Self::Item>> {
+        if self.indices.is_empty() {
+            return Ok(None);
+        }
+        while let Some(batch) = self.reader.next()? {
+            let curr_offset = self.row_offset;
+            let left = search_sorted::<usize>(self.indices, curr_offset, SearchSortedSide::Left)?
+                .to_index();
+            let right = search_sorted::<usize>(
+                self.indices,
+                curr_offset + batch.len(),
+                SearchSortedSide::Left,
+            )?
+            .to_index();
+
+            self.row_offset += batch.len();
+
             if left == right {
-                row_offset += batch.len();
                 continue;
             }
 
-            let indices_for_batch = slice(indices, left, right)?.flatten_primitive()?;
+            let indices_for_batch = slice(self.indices, left, right)?.flatten_primitive()?;
             let shifted_arr = match_each_integer_ptype!(indices_for_batch.ptype(), |$T| {
-                subtract_scalar(&indices_for_batch.into_array(), &Scalar::from(row_offset as $T))?
+                subtract_scalar(&indices_for_batch.into_array(), &Scalar::from(curr_offset as $T))?
             });
 
-            let from_current_batch = take(&batch, &shifted_arr)?;
-            chunks.push(from_current_batch);
-            row_offset += batch.len();
+            return take(&batch, &shifted_arr).map(Some);
         }
-
-        let total_rows: usize = chunks.iter().map(|c| c.len()).sum();
-        if total_rows < indices.len() {
-            vortex_bail!("EOF encountered before finding all indices")
-        }
-
-        if chunks.len() == 1 {
-            Ok(chunks[0].clone())
-        } else {
-            ChunkedArray::try_new(chunks, self.dtype.clone()).map(|arr| arr.into_array())
-        }
+        Ok(None)
     }
 }
 
@@ -354,8 +380,9 @@ impl<R: Read> StreamMessageReader<R> {
 mod tests {
     use std::io::{Cursor, Read, Write};
 
+    use fallible_iterator::FallibleIterator;
     use itertools::Itertools;
-    use vortex::array::chunked::{Chunked, ChunkedArray, ChunkedEncoding};
+    use vortex::array::chunked::{Chunked, ChunkedArray};
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId};
     use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, SerdeContext};
@@ -440,19 +467,44 @@ mod tests {
     }
 
     #[test]
+    fn test_empty_index() {
+        let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
+        let indices: Vec<i32> = vec![];
+        let indices = PrimitiveArray::from(indices).into_array();
+        let mut buffer = vec![];
+        {
+            let mut cursor = Cursor::new(&mut buffer);
+            {
+                let mut writer =
+                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+                writer.write_array(&data).unwrap();
+            }
+        }
+
+        let mut cursor = Cursor::new(&buffer);
+        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+        let array_reader = reader.next().unwrap().unwrap();
+        let mut result_iter = array_reader.take(&indices).unwrap();
+        let result = result_iter.next().unwrap();
+        assert!(result.is_none())
+    }
+
+    #[test]
     fn test_negative_index_fails() {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices =
             PrimitiveArray::from(vec![-1i32, 10, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
                 .into_array();
-        test_read_write_inner(&data, &indices).expect_err("Expected negative index to fail");
+        test_read_write_single_chunk_array(&data, &indices)
+            .expect_err("Expected negative index to fail");
     }
 
     #[test]
     fn test_noninteger_index_fails() {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices = PrimitiveArray::from(vec![1f32, 10.0, 11.0, 12.0]).into_array();
-        test_read_write_inner(&data, &indices).expect_err("Expected float index to fail");
+        test_read_write_single_chunk_array(&data, &indices)
+            .expect_err("Expected float index to fail");
     }
 
     #[test]
@@ -460,7 +512,8 @@ mod tests {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices = PrimitiveArray::from_nullable_vec(vec![None, Some(1i32), Some(10), Some(11)])
             .into_array();
-        test_read_write_inner(&data, &indices).expect_err("Expected float index to fail");
+        test_read_write_single_chunk_array(&data, &indices)
+            .expect_err("Expected float index to fail");
     }
 
     #[test]
@@ -468,15 +521,9 @@ mod tests {
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let uncompressed = PrimitiveArray::from((0i64..3_000).rev().collect_vec());
         let packed = BitPackedArray::encode(uncompressed.into_array(), 5).unwrap();
-        let indices = PrimitiveArray::from(vec![1i32, 2, 3, 4, 5, 6, 7, 7, 7, 8]).into_array();
-        let array = test_read_write_inner(&packed.into_array(), &indices).unwrap();
-        let expected = &[2998, 2997, 2996, 2995, 2994, 2993, 2992, 2992, 2992, 2991];
-        let results = array
-            .flatten_primitive()
-            .unwrap()
-            .typed_data::<i64>()
-            .to_vec();
-        assert_eq!(results, expected);
+
+        let expected = &[2989i64, 2988, 2987, 2986];
+        test_base_case(&packed.into_array(), expected, PrimitiveEncoding.id());
     }
 
     #[test]
@@ -506,16 +553,21 @@ mod tests {
         let mut cursor = Cursor::new(&buffer);
         let mut reader = StreamReader::try_new(&mut cursor).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
-        let array = array_reader.take(&indices).unwrap();
-        assert_eq!(array.encoding().id(), ChunkedEncoding.id());
-        let chunked = ChunkedArray::try_from(array).unwrap();
-        let mut chunks = chunked.chunks();
+        let mut take_iter = array_reader.take(&indices).unwrap();
+        let next = take_iter.next().unwrap().unwrap();
+        assert_eq!(next.encoding().id(), PrimitiveEncoding.id());
+
         assert_eq!(
-            chunks.next().unwrap().into_primitive().typed_data::<i32>(),
+            next.into_primitive().typed_data::<i32>(),
             vec![2999989, 2999988, 2999987, 2999986, 2899999, 0, 0]
         );
         assert_eq!(
-            chunks.next().unwrap().into_primitive().typed_data::<i32>(),
+            take_iter
+                .next()
+                .unwrap()
+                .unwrap()
+                .into_primitive()
+                .typed_data::<i32>(),
             vec![5999999]
         );
     }
@@ -541,8 +593,10 @@ mod tests {
         .unwrap()
         .into_array();
 
-        let indices = PrimitiveArray::from(vec![10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
-            .into_array();
+        let indices = PrimitiveArray::from(vec![
+            10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 4_000_000,
+        ])
+        .into_array();
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
@@ -558,13 +612,26 @@ mod tests {
         let mut reader = StreamReader::try_new(&mut cursor).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
 
-        let _array = array_reader.take(&indices).unwrap();
+        {
+            let mut iter = array_reader.take(&indices).unwrap();
+
+            // verify that for a fully-consumed iterator, the destructor does not advance the
+            // underlying message stream to the next message, which would be very bad
+            while iter.next().unwrap().is_some() {
+                // Consume the iterator
+            }
+            // verify that if we continue to call next on the iterator, we get none and
+            // nothing happens to the underlying stream
+            assert!(iter.next().unwrap().is_none());
+            assert!(iter.next().unwrap().is_none());
+        }
 
         let indices = PrimitiveArray::from(vec![10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
             .into_array();
         let array_reader = reader.next().unwrap().unwrap();
 
-        let array = array_reader.take(&indices).unwrap();
+        let mut take_iter = array_reader.take(&indices).unwrap();
+        let array = take_iter.next().unwrap().unwrap();
         assert_eq!(array.encoding().id(), PrimitiveEncoding.id());
 
         let results = array
@@ -578,6 +645,46 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_take_iter() {
+        let indices = PrimitiveArray::from(vec![
+            10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
+        ])
+        .into_array();
+
+        // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
+        let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
+        let data2 =
+            PrimitiveArray::from((3_000_000i32..6_000_000).rev().collect_vec()).into_array();
+        let chunked = ChunkedArray::try_new(vec![data.clone(), data2], data.dtype().clone())
+            .unwrap()
+            .into_array();
+        let mut buffer = vec![];
+        {
+            let mut cursor = Cursor::new(&mut buffer);
+            {
+                let mut writer =
+                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+                writer.write_array(&chunked).unwrap();
+            }
+        }
+
+        let mut cursor = Cursor::new(&buffer);
+        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+        let array_reader = reader.next().unwrap().unwrap();
+
+        let mut iter = array_reader.take(&indices).unwrap();
+
+        let chunk = iter.next().unwrap().unwrap();
+        assert_eq!(chunk.encoding().id(), PrimitiveEncoding.id());
+        assert_eq!(
+            chunk.into_primitive().typed_data::<i32>(),
+            vec![2999989, 2999988, 2999987, 2999986, 2899999, 0, 0]
+        );
+        let chunk = iter.next().unwrap().unwrap();
+        assert_eq!(chunk.into_primitive().typed_data::<i32>(), vec![5999999]);
+    }
+
     fn test_base_case<T: NativePType>(
         data: &Array,
         expected: &[T],
@@ -585,18 +692,6 @@ mod tests {
     ) {
         let indices = PrimitiveArray::from(vec![10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
             .into_array();
-        let array = test_read_write_inner(data, &indices).unwrap();
-        assert_eq!(array.encoding().id(), expected_encoding_id);
-
-        let results = array
-            .flatten_primitive()
-            .unwrap()
-            .typed_data::<T>()
-            .to_vec();
-        assert_eq!(results, expected);
-    }
-
-    fn test_read_write_inner(data: &Array, indices: &Array) -> VortexResult<OwnedArray> {
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
@@ -610,6 +705,39 @@ mod tests {
         let mut cursor = Cursor::new(&buffer);
         let mut reader = StreamReader::try_new(&mut cursor).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
-        array_reader.take(indices)
+        let mut take_iter = array_reader.take(&indices).unwrap();
+
+        let array = take_iter.next().unwrap().unwrap();
+        assert_eq!(array.encoding().id(), expected_encoding_id);
+
+        let results = array
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<T>()
+            .to_vec();
+        assert_eq!(results, expected);
+    }
+
+    fn test_read_write_single_chunk_array<'a>(
+        data: &'a Array,
+        indices: &'a Array,
+    ) -> VortexResult<OwnedArray> {
+        let mut buffer = vec![];
+        {
+            let mut cursor = Cursor::new(&mut buffer);
+            {
+                let mut writer =
+                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+                writer.write_array(data).unwrap();
+            }
+        }
+
+        let mut cursor = Cursor::new(&buffer);
+        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+        let array_reader = reader.next().unwrap().unwrap();
+        let mut result_iter = array_reader.take(indices)?;
+        let result = result_iter.next().unwrap();
+        assert!(result_iter.next().unwrap().is_none());
+        Ok(result.unwrap())
     }
 }

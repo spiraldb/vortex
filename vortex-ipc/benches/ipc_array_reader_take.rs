@@ -1,6 +1,7 @@
 use std::io::Cursor;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use fallible_iterator::FallibleIterator;
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::{IntoArray, SerdeContext};
@@ -38,7 +39,10 @@ fn ipc_array_reader_take(c: &mut Criterion) {
             let mut cursor = Cursor::new(&buffer);
             let mut reader = StreamReader::try_new(&mut cursor).unwrap();
             let array_reader = reader.next().unwrap().unwrap();
-            black_box(array_reader.take(&indices))
+            let mut iterator = array_reader.take(&indices).unwrap();
+            while let Some(arr) = iterator.next().unwrap() {
+                black_box(arr);
+            }
         });
     });
 }

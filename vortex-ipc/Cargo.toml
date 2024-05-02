@@ -13,8 +13,10 @@ rust-version = { workspace = true }
 
 [dependencies]
 arrow-buffer = { workspace = true }
+fallible-iterator = { workspace = true }
 flatbuffers = { workspace = true }
 itertools = { workspace = true }
+log = { workspace = true }
 nougat = "0.2.4"
 vortex-array = { path = "../vortex-array" }
 vortex-error = { path = "../vortex-error" }
