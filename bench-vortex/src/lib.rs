@@ -184,19 +184,19 @@ pub struct CompressionRunStats {
 
 impl CompressionRunStats {
     pub fn to_results(&self, dataset_name: String) -> Vec<CompressionRunResults> {
-        let DType::Struct(ns, fs) = &self.schema else {
+        let DType::Struct(st, _) = &self.schema else {
             unreachable!()
         };
 
         self.compressed_sizes
             .iter()
-            .zip_eq(ns.iter().zip_eq(fs))
+            .zip_eq(st.names().iter().zip_eq(st.dtypes().iter()))
             .map(
                 |(&size, (column_name, column_type))| CompressionRunResults {
                     dataset_name: dataset_name.clone(),
                     file_name: self.file_name.clone(),
                     file_type: self.file_type.to_string(),
-                    column_name: (**column_name).clone(),
+                    column_name: (**column_name).to_string(),
                     column_type: column_type.to_string(),
                     compressed_size: size,
                     total_compressed_size: self.total_compressed_size,

@@ -45,20 +45,30 @@ impl WriteFlatBuffer for DType {
                 },
             )
             .as_union_value(),
-            DType::Struct(names, dtypes) => {
-                let names = names
+            DType::Struct(st, n) => {
+                let names = st
+                    .names()
                     .iter()
-                    .map(|n| fbb.create_string(n.as_str()))
+                    .map(|n| fbb.create_string(n.as_ref()))
                     .collect_vec();
                 let names = Some(fbb.create_vector(&names));
 
-                let dtypes = dtypes
+                let dtypes = st
+                    .dtypes()
                     .iter()
                     .map(|dtype| dtype.write_flatbuffer(fbb))
                     .collect_vec();
                 let fields = Some(fbb.create_vector(&dtypes));
 
-                fb::Struct_::create(fbb, &fb::Struct_Args { names, fields }).as_union_value()
+                fb::Struct_::create(
+                    fbb,
+                    &fb::Struct_Args {
+                        names,
+                        fields,
+                        nullability: n.into(),
+                    },
+                )
+                .as_union_value()
             }
             DType::List(e, n) => {
                 let element_type = Some(e.as_ref().write_flatbuffer(fbb));
@@ -166,12 +176,11 @@ impl TryFrom<fb::PType> for PType {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
 
     use flatbuffers::root;
     use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
 
-    use crate::{flatbuffers as fb, PType};
+    use crate::{flatbuffers as fb, PType, StructDType};
     use crate::{DType, Nullability};
 
     fn roundtrip_dtype(dtype: DType) {
@@ -192,11 +201,14 @@ mod test {
             Nullability::NonNullable,
         ));
         roundtrip_dtype(DType::Struct(
-            vec![Arc::new("strings".into()), Arc::new("ints".into())],
-            vec![
-                DType::Utf8(Nullability::NonNullable),
-                DType::Primitive(PType::U16, Nullability::Nullable),
-            ],
+            StructDType::new(
+                ["strings".into(), "ints".into()].into(),
+                vec![
+                    DType::Utf8(Nullability::NonNullable),
+                    DType::Primitive(PType::U16, Nullability::Nullable),
+                ],
+            ),
+            Nullability::NonNullable,
         ))
     }
 }

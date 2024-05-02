@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::{DataType, Field, SchemaRef};
 use itertools::Itertools;
-use vortex_dtype::PType;
 use vortex_dtype::{DType, Nullability};
+use vortex_dtype::{PType, StructDType};
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::datetime::{LocalDateTimeArray, TimeUnit};
@@ -41,16 +39,20 @@ impl TryFromArrowType<&DataType> for PType {
 impl FromArrowType<SchemaRef> for DType {
     fn from_arrow(value: SchemaRef) -> Self {
         DType::Struct(
-            value
-                .fields()
-                .iter()
-                .map(|f| Arc::new(f.name().clone()))
-                .collect(),
-            value
-                .fields()
-                .iter()
-                .map(|f| DType::from_arrow(f.as_ref()))
-                .collect_vec(),
+            StructDType::new(
+                value
+                    .fields()
+                    .iter()
+                    .map(|f| f.name().as_str().into())
+                    .collect_vec()
+                    .into(),
+                value
+                    .fields()
+                    .iter()
+                    .map(|f| DType::from_arrow(f.as_ref()))
+                    .collect_vec(),
+            ),
+            Nullability::NonNullable,
         )
     }
 }
@@ -82,10 +84,16 @@ impl FromArrowType<&Field> for DType {
                 List(Box::new(DType::from_arrow(e.as_ref())), nullability)
             }
             DataType::Struct(f) => Struct(
-                f.iter().map(|f| Arc::new(f.name().clone())).collect(),
-                f.iter()
-                    .map(|f| DType::from_arrow(f.as_ref()))
-                    .collect_vec(),
+                StructDType::new(
+                    f.iter()
+                        .map(|f| f.name().as_str().into())
+                        .collect_vec()
+                        .into(),
+                    f.iter()
+                        .map(|f| DType::from_arrow(f.as_ref()))
+                        .collect_vec(),
+                ),
+                nullability,
             ),
             _ => unimplemented!("Arrow data type not yet supported: {:?}", field.data_type()),
         }

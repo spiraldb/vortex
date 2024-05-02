@@ -242,10 +242,14 @@ impl CompressCtx {
                     .children()
                     .map(|field| self.compress_array(&field))
                     .collect::<VortexResult<Vec<_>>>()?;
-                Ok(
-                    StructArray::try_new(strct.names().clone(), compressed_fields, strct.len())?
-                        .into_array(),
-                )
+                let validity = self.compress_validity(strct.validity())?;
+                Ok(StructArray::try_new(
+                    strct.names().clone(),
+                    compressed_fields,
+                    strct.len(),
+                    validity,
+                )?
+                .into_array())
             }
             _ => {
                 // Otherwise, we run sampled compression over pluggable encodings
