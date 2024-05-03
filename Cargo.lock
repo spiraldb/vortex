@@ -5116,7 +5116,6 @@ dependencies = [
  "arrow-ipc",
  "arrow-schema",
  "arrow-select",
- "async-trait",
  "criterion",
  "flatbuffers",
  "flatc",

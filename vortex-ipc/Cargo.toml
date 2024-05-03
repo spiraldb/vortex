@@ -13,7 +13,6 @@ rust-version = { workspace = true }
 
 [dependencies]
 arrow-buffer = { workspace = true }
-async-trait = { workspace = true }
 flatbuffers = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }
