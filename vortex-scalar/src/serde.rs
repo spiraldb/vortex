@@ -8,7 +8,7 @@ use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, ReadFlatBuffer, WriteFlatBuffer};
 
-use crate::flatbuffers::scalar as fb;
+use crate::flatbuffers as fb;
 use crate::{PScalar, PrimitiveScalar, Scalar, Utf8Scalar};
 
 impl FlatBufferRoot for Scalar {}

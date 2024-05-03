@@ -1,3 +1,5 @@
+include "vortex-scalar/flatbuffers/scalar.fbs";
+
 namespace vortex.array;
 
 enum Version: uint8 {
@@ -9,7 +11,22 @@ table Array {
     has_buffer: bool;
     encoding: uint16;
     metadata: [ubyte];
+    stats: ArrayStats;
     children: [Array];
 }
+
+table ArrayStats {
+    min: vortex.scalar.Scalar;
+    max: vortex.scalar.Scalar;
+    is_sorted: vortex.scalar.Scalar;
+    is_strict_sorted: vortex.scalar.Scalar;
+    is_constant: vortex.scalar.Scalar;
+    run_count: vortex.scalar.Scalar;
+    true_count: vortex.scalar.Scalar;
+    null_count: vortex.scalar.Scalar;
+    bit_width_freq: [vortex.scalar.Scalar];
+    trailing_zero_freq: [vortex.scalar.Scalar];
+}
+
 
 root_type Array;

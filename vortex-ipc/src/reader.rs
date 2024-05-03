@@ -279,6 +279,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
             .unwrap()
             .array()
             .unwrap();
+
         let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
 
         // Validate it
@@ -385,6 +386,7 @@ mod tests {
     use vortex::array::chunked::{Chunked, ChunkedArray};
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId, EncodingRef};
+    use vortex::stats::ArrayStatistics;
     use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray, OwnedArray};
     use vortex_alp::{ALPArray, ALPEncoding};
     use vortex_dtype::NativePType;
@@ -392,6 +394,7 @@ mod tests {
     use vortex_fastlanes::{BitPackedArray, BitPackedEncoding};
 
     use crate::iter::FallibleLendingIterator;
+    // use crate::messages::IPCMessage::Context;
     use crate::reader::StreamReader;
     use crate::writer::StreamWriter;
 
@@ -468,6 +471,111 @@ mod tests {
             ],
             ALPEncoding.id(),
         );
+    }
+
+    #[test]
+    fn test_stats() {
+        let data = PrimitiveArray::from((0i32..3_000_000).collect_vec()).into_array();
+        let mut buffer = vec![];
+        let context = Context::default();
+        {
+            let mut cursor = Cursor::new(&mut buffer);
+            {
+                let context = Context::default();
+                let mut writer = StreamWriter::try_new(&mut cursor, &context).unwrap();
+                writer.write_array(&data).unwrap();
+            }
+        }
+
+        let mut cursor = Cursor::new(&buffer);
+        let mut reader = StreamReader::try_new(&mut cursor, &context).unwrap();
+        let data = reader.read_array().unwrap();
+
+        let min: i32 = data.statistics().compute_min().unwrap();
+        assert_eq!(min, 0);
+        let max: i32 = data.statistics().compute_max().unwrap();
+        assert_eq!(max, 2_999_999);
+        let is_sorted = data.statistics().compute_is_sorted().unwrap();
+        assert!(is_sorted);
+        let is_strict_sorted = data.statistics().compute_is_strict_sorted().unwrap();
+        assert!(is_strict_sorted);
+        let is_constant = data.statistics().compute_is_constant().unwrap();
+        assert!(!is_constant);
+        let run_count = data.statistics().compute_run_count().unwrap();
+        assert_eq!(run_count, 3000000);
+        let null_ct = data.statistics().compute_null_count().unwrap();
+        assert_eq!(null_ct, 0);
+        let bit_width_freq = data.statistics().compute_bit_width_freq().unwrap();
+        assert_eq!(
+            bit_width_freq,
+            vec![
+                1, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768,
+                65536, 131072, 262144, 524288, 1048576, 902848, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ]
+        );
+        let trailing_zero_freq = data.statistics().compute_trailing_zero_freq().unwrap();
+        assert_eq!(
+            trailing_zero_freq,
+            vec![
+                1500000, 750000, 375000, 187500, 93750, 46875, 23437, 11719, 5859, 2930, 1465, 732,
+                366, 183, 92, 46, 23, 11, 6, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+            ]
+        );
+        data.statistics()
+            .compute_true_count()
+            .expect_err("Should not be able to calculate true count for non-boolean array");
+    }
+
+    #[test]
+    fn test_stats_chunked() {
+        let array = PrimitiveArray::from((0i32..3_000_000).collect_vec()).into_array();
+        let chunked_array =
+            ChunkedArray::try_new(vec![array.clone(), array.clone()], array.dtype().clone())
+                .unwrap()
+                .into_array();
+        let context = Context::default();
+        let mut buffer = vec![];
+        {
+            let mut cursor = Cursor::new(&mut buffer);
+            {
+                let mut writer = StreamWriter::try_new(&mut cursor, &context).unwrap();
+                writer.write_array(&chunked_array).unwrap();
+            }
+        }
+
+        let mut cursor = Cursor::new(&buffer);
+        let mut reader = StreamReader::try_new(&mut cursor, &context).unwrap();
+        let data = reader.read_array().unwrap();
+
+        let min: i32 = data.statistics().compute_min().unwrap();
+        assert_eq!(min, 0);
+        let max: i32 = data.statistics().compute_max().unwrap();
+        assert_eq!(max, 2_999_999);
+        let is_constant = data.statistics().compute_is_constant().unwrap();
+        assert!(!is_constant);
+        let run_count = data.statistics().compute_run_count().unwrap();
+        assert_eq!(run_count, 6000001);
+        let null_ct = data.statistics().compute_null_count().unwrap();
+        assert_eq!(null_ct, 0);
+        let bit_width_freq = data.statistics().compute_bit_width_freq().unwrap();
+        assert_eq!(
+            bit_width_freq,
+            vec![
+                2, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536,
+                131072, 262144, 524288, 1048576, 2097152, 1805696, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ]
+        );
+        let trailing_zero_freq = data.statistics().compute_trailing_zero_freq().unwrap();
+        assert_eq!(
+            trailing_zero_freq,
+            vec![
+                3000000, 1500000, 750000, 375000, 187500, 93750, 46874, 23438, 11718, 5860, 2930,
+                1464, 732, 366, 184, 92, 46, 22, 12, 6, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
+            ]
+        );
+        data.statistics()
+            .compute_true_count()
+            .expect_err("Should not be able to calculate true count for non-boolean array");
     }
 
     #[test]

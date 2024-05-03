@@ -24,13 +24,13 @@ mod utf8;
 mod value;
 
 pub mod flatbuffers {
-    pub use gen_scalar::vortex::*;
+    pub use generated::vortex::scalar::*;
 
     #[allow(unused_imports)]
     #[allow(dead_code)]
     #[allow(non_camel_case_types)]
     #[allow(clippy::all)]
-    mod gen_scalar {
+    pub mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/scalar.rs"));
     }
 
