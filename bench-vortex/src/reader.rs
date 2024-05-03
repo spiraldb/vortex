@@ -21,21 +21,21 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
-use vortex::{Context, IntoArray, OwnedArray, ToArrayData, ToStatic};
+use vortex::{IntoArray, OwnedArray, ToArrayData, ToStatic};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
 
-use crate::ctx;
+use crate::CTX;
 
 pub const BATCH_SIZE: usize = 65_536;
 
 pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
     let mut file = File::open(path)?;
 
-    let mut reader = StreamReader::try_new(&mut file, &Context::default())?;
+    let mut reader = StreamReader::try_new(&mut file, &CTX)?;
     let mut reader = reader.next()?.unwrap();
     let dtype = reader.dtype().clone();
     let mut chunks = vec![];
@@ -51,7 +51,7 @@ pub fn rewrite_parquet_as_vortex<W: Write>(
 ) -> VortexResult<()> {
     let chunked = compress_parquet_to_vortex(parquet_path.as_path())?;
 
-    let mut writer = StreamWriter::try_new(write, &Context::default()).unwrap();
+    let mut writer = StreamWriter::try_new(write, &CTX).unwrap();
     writer.write_array(&chunked.into_array()).unwrap();
     Ok(())
 }
@@ -69,7 +69,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
             let vortex_array = record_batch.to_array_data().into_array();
-            Compressor::new(&ctx(), &Default::default())
+            Compressor::new(&CTX, &Default::default())
                 .compress(&vortex_array, None)
                 .unwrap()
         })
