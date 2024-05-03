@@ -45,10 +45,12 @@ pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
 struct MonoioFile(pub monoio::fs::File, pub u64);
 
 impl AsyncReadRent for MonoioFile {
-    async fn read<T: IoBufMut>(&mut self, mut buf: T) -> BufResult<usize, T> {
-        let buf_len = buf.bytes_total();
-        let (len_res, buf) = self.0.read_exact_at(buf, self.1).await;
-        (len_res.map(|_| buf_len), buf)
+    async fn read<T: IoBufMut>(&mut self, buf: T) -> BufResult<usize, T> {
+        let (len_res, buf) = self.0.read_at(buf, self.1).await;
+        if let Ok(n) = len_res {
+            self.1 += n as u64;
+        }
+        (len_res, buf)
     }
 
     async fn readv<T: IoVecBufMut>(&mut self, _buf: T) -> BufResult<usize, T> {
