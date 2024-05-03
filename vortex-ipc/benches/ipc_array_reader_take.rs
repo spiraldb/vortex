@@ -2,13 +2,12 @@ use std::cell::RefCell;
 use std::future::Future;
 use std::io::Cursor;
 
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
 use criterion::async_executor::AsyncExecutor;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
 use monoio::{Driver, FusionDriver, FusionRuntime, RuntimeBuilder};
-
-use vortex::{Array, Context, IntoArray};
 use vortex::array::primitive::PrimitiveArray;
+use vortex::{Array, Context, IntoArray};
 use vortex_dtype::{DType, Nullability, PType};
 use vortex_ipc::iter::{FallibleIterator, FallibleLendingIterator};
 use vortex_ipc::reader::StreamReader;
@@ -17,7 +16,7 @@ use vortex_ipc::writer::StreamWriter;
 pub struct MonoioExecutor<D: Driver>(pub RefCell<FusionRuntime<D>>);
 
 impl<D: Driver> AsyncExecutor for MonoioExecutor<D> {
-    fn block_on<T>(&self, future: impl Future<Output=T>) -> T {
+    fn block_on<T>(&self, future: impl Future<Output = T>) -> T {
         self.0.borrow_mut().block_on(future)
     }
 }
@@ -48,13 +47,13 @@ fn ipc_array_reader_take(c: &mut Criterion) {
             });
         }
         let indices = indices.clone().into_array();
-        let rt = RuntimeBuilder::<FusionDriver>::new().build()
+        let rt = RuntimeBuilder::<FusionDriver>::new()
+            .build()
             .expect("Unable to build runtime");
         let executor = MonoioExecutor(RefCell::new(rt));
 
-        b.to_async(executor).iter(|| {
-            bench_array_reader_take(&buffer, &indices, &ctx)
-        });
+        b.to_async(executor)
+            .iter(|| bench_array_reader_take(&buffer, &indices, &ctx));
     });
 }
 

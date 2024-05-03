@@ -1,4 +1,5 @@
 use std::future::Future;
+
 use nougat::gat;
 
 #[gat]
@@ -10,7 +11,6 @@ pub trait FallibleLendingIterator {
 
     fn next(&mut self) -> impl Future<Output = Result<Option<Self::Item<'_>>, Self::Error>>;
 }
-
 
 pub trait FallibleIterator {
     type Error;

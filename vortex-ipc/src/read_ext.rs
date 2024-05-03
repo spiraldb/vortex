@@ -16,7 +16,7 @@ impl<R: AsyncReadRent> AsyncReadRentSkip for R {
         if nbytes < BUF_SIZE {
             let buf = Vec::with_capacity(nbytes);
             let (res_len, _) = self.read(buf).await;
-            return res_len.map(|_| ()).map_err(|e| vortex_err!(IOError: e))
+            return res_len.map(|_| ()).map_err(|e| vortex_err!(IOError: e));
         }
 
         let mut buf: Vec<u8> = Vec::with_capacity(BUF_SIZE);
@@ -45,7 +45,7 @@ impl<R: AsyncReadRent> AsyncReadRentSkip for R {
         if remaining > 0 {
             let buf = Vec::with_capacity(remaining);
             let (res_len, _) = self.read(buf).await;
-            return res_len.map(|_| ()).map_err(|e| vortex_err!(IOError: e))
+            return res_len.map(|_| ()).map_err(|e| vortex_err!(IOError: e));
         }
 
         Ok(())

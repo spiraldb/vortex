@@ -26,9 +26,9 @@ pub mod flatbuffers {
 
 pub mod iter;
 mod messages;
+mod read_ext;
 pub mod reader;
 pub mod writer;
-mod read_ext;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
     move || vortex_err!(InvalidSerde: "missing field: {}", field)
@@ -38,11 +38,11 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 mod tests {
     use std::io::{Cursor, Write};
 
-    use vortex::{IntoArray, IntoArrayData};
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::r#struct::StructArray;
     use vortex::validity::Validity;
     use vortex::Context;
+    use vortex::{IntoArray, IntoArrayData};
 
     use crate::iter::FallibleLendingIterator;
     use crate::reader::StreamReader;
@@ -57,7 +57,7 @@ mod tests {
             3,
             Validity::AllValid,
         )
-            .unwrap();
+        .unwrap();
 
         let arr = StructArray::try_new(
             ["a".into(), "b".into()].into(),
@@ -65,8 +65,8 @@ mod tests {
             3,
             Validity::AllValid,
         )
-            .unwrap()
-            .into_array();
+        .unwrap()
+        .into_array();
 
         let ctx = Context::default();
         let mut buf = Vec::new();
@@ -78,7 +78,9 @@ mod tests {
         cursor.flush().unwrap();
         cursor.set_position(0);
 
-        let mut ipc_reader = StreamReader::try_new_unbuffered(buf.as_slice(), &ctx).await.unwrap();
+        let mut ipc_reader = StreamReader::try_new_unbuffered(buf.as_slice(), &ctx)
+            .await
+            .unwrap();
 
         // Read some number of arrays off the stream.
         while let Some(array_reader) = ipc_reader.next().await.unwrap() {

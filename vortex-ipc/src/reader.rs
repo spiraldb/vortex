@@ -1,5 +1,5 @@
-use std::{io, mem};
 use std::marker::PhantomData;
+use std::{io, mem};
 
 use arrow_buffer::Buffer as ArrowBuffer;
 use flatbuffers::{root, root_unchecked};
@@ -8,16 +8,17 @@ use log::error;
 use monoio::buf::SliceMut;
 use monoio::io::{AsyncReadRent, AsyncReadRentExt, BufReader};
 use nougat::gat;
-
-use vortex::{Array, ArrayDType, ArrayView, Context, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext};
 use vortex::array::chunked::ChunkedArray;
 use vortex::compute::scalar_subtract::subtract_scalar;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
 use vortex::compute::take::take;
 use vortex::stats::{ArrayStatistics, Stat};
+use vortex::{
+    Array, ArrayDType, ArrayView, Context, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext,
+};
 use vortex_buffer::Buffer;
-use vortex_dtype::{DType, match_each_integer_ptype};
+use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 use vortex_scalar::Scalar;
@@ -55,7 +56,7 @@ impl<R: AsyncReadRent> StreamReader<R> {
             fb: messages.next(&mut read).await?.header_as_context().unwrap(),
             ctx,
         }
-            .try_into()?;
+        .try_into()?;
 
         Ok(Self {
             read,
@@ -67,7 +68,8 @@ impl<R: AsyncReadRent> StreamReader<R> {
     /// Read a single array from the IPC stream.
     pub async fn read_array(&mut self) -> VortexResult<Array> {
         let mut array_reader = self
-            .next().await?
+            .next()
+            .await?
             .ok_or_else(|| vortex_err!(InvalidSerde: "Unexpected EOF"))?;
 
         let mut chunks = vec![];
@@ -101,7 +103,8 @@ impl<R: AsyncReadRent> FallibleLendingIterator for StreamReader<R> {
 
         let schema_msg = self
             .messages
-            .next(&mut self.read).await?
+            .next(&mut self.read)
+            .await?
             .header_as_schema()
             .unwrap();
 
@@ -110,7 +113,7 @@ impl<R: AsyncReadRent> FallibleLendingIterator for StreamReader<R> {
                 .dtype()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
         )
-            .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
+        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
         Ok(Some(StreamArrayReader {
             ctx: &self.ctx,
@@ -224,7 +227,7 @@ impl<'a, R: AsyncReadRent> FallibleIterator for TakeIterator<'a, R> {
                 curr_offset + batch.len(),
                 SearchSortedSide::Left,
             )?
-                .to_index();
+            .to_index();
 
             self.row_offset += batch.len();
 
@@ -273,12 +276,15 @@ impl<'iter, R: AsyncReadRent> FallibleLendingIterator for StreamArrayReader<'ite
         }
 
         // Consume any remaining padding after the final buffer.
-        self.read.skip(chunk_msg.buffer_size() as usize - offset).await?;
+        self.read
+            .skip(chunk_msg.buffer_size() as usize - offset)
+            .await?;
 
         // After reading the buffers we're now able to load the next message.
         let col_array = self
             .messages
-            .next(self.read).await?
+            .next(self.read)
+            .await?
             .header_as_chunk()
             .unwrap()
             .array()
@@ -353,7 +359,9 @@ impl<R: AsyncReadRent> StreamMessageReader<R> {
 
         self.message.clear();
         self.message.reserve(len as usize);
-        let (len_res, read_buf) = read.read_exact(SliceMut::new(mem::take(&mut self.message), 0, len as usize)).await;
+        let (len_res, read_buf) = read
+            .read_exact(SliceMut::new(mem::take(&mut self.message), 0, len as usize))
+            .await;
         if len_res? != len as usize {
             vortex_bail!(InvalidSerde: "Failed to read all bytes")
         }
@@ -369,11 +377,10 @@ mod tests {
     use std::io::Cursor;
 
     use itertools::Itertools;
-
-    use vortex::{Array, ArrayDef, ArrayDType, IntoArray, OwnedArray};
     use vortex::array::chunked::{Chunked, ChunkedArray};
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId, EncodingRef};
+    use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray};
     use vortex_alp::{ALPArray, ALPEncoding};
     use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
@@ -409,7 +416,9 @@ mod tests {
         let mut read_buf = buffer.as_slice();
 
         {
-            let mut reader = StreamReader::try_new_unbuffered(&mut read_buf, &ctx).await.unwrap();
+            let mut reader = StreamReader::try_new_unbuffered(&mut read_buf, &ctx)
+                .await
+                .unwrap();
             let first = reader.read_array().await.unwrap();
             assert_eq!(first.encoding().id(), Primitive::ID);
             let second = reader.read_array().await.unwrap();
@@ -427,7 +436,8 @@ mod tests {
             &data,
             &[2999989i32, 2999988, 2999987, 2999986, 2899999, 0, 0],
             PrimitiveEncoding.id(),
-        ).await;
+        )
+        .await;
     }
 
     #[monoio::test_all]
@@ -438,7 +448,7 @@ mod tests {
                 .map(|v| v as f64 + 0.5)
                 .collect_vec(),
         )
-            .into_array();
+        .into_array();
         let alp_encoded = ALPArray::encode(pdata).unwrap();
         assert_eq!(alp_encoded.encoding().id(), ALPEncoding.id());
         test_base_case(
@@ -453,7 +463,8 @@ mod tests {
                 0.5,
             ],
             ALPEncoding.id(),
-        ).await;
+        )
+        .await;
     }
 
     #[monoio::test_all]
@@ -470,7 +481,9 @@ mod tests {
             }
         }
 
-        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default()).await.unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default())
+            .await
+            .unwrap();
         let array_reader = reader.next().await.unwrap().unwrap();
         let mut result_iter = array_reader.take(&indices).unwrap();
         let result = result_iter.next().await.unwrap();
@@ -483,7 +496,8 @@ mod tests {
         let indices =
             PrimitiveArray::from(vec![-1i32, 10, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
                 .into_array();
-        test_read_write_single_chunk_array(&data, &indices).await
+        test_read_write_single_chunk_array(&data, &indices)
+            .await
             .expect_err("Expected negative index to fail");
     }
 
@@ -492,7 +506,8 @@ mod tests {
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let indices = PrimitiveArray::from(vec![1f32, 10.0, 11.0, 12.0]).into_array();
         test_read_write_single_chunk_array(&data, &indices)
-            .await.expect_err("Expected float index to fail");
+            .await
+            .expect_err("Expected float index to fail");
     }
 
     #[monoio::test_all]
@@ -501,7 +516,8 @@ mod tests {
         let indices = PrimitiveArray::from_nullable_vec(vec![None, Some(1i32), Some(10), Some(11)])
             .into_array();
         test_read_write_single_chunk_array(&data, &indices)
-            .await.expect_err("Expected float index to fail");
+            .await
+            .expect_err("Expected float index to fail");
     }
 
     #[monoio::test_all]
@@ -519,7 +535,7 @@ mod tests {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
-            .into_array();
+        .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
@@ -537,7 +553,9 @@ mod tests {
             }
         }
 
-        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default()).await.unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default())
+            .await
+            .unwrap();
         let array_reader = reader.next().await.unwrap().unwrap();
         let mut take_iter = array_reader.take(&indices).unwrap();
         let next = take_iter.next().await.unwrap().unwrap();
@@ -550,7 +568,8 @@ mod tests {
         assert_eq!(
             take_iter
                 .next()
-                .await.unwrap()
+                .await
+                .unwrap()
                 .unwrap()
                 .into_primitive()
                 .typed_data::<i32>(),
@@ -576,13 +595,13 @@ mod tests {
             vec![data.clone(), data2.clone(), data2],
             data.dtype().clone(),
         )
-            .unwrap()
-            .into_array();
+        .unwrap()
+        .into_array();
 
         let indices = PrimitiveArray::from(vec![
             10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 4_000_000,
         ])
-            .into_array();
+        .into_array();
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
@@ -593,7 +612,9 @@ mod tests {
             }
         }
 
-        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default()).await.unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default())
+            .await
+            .unwrap();
         let array_reader = reader.next().await.unwrap().unwrap();
 
         {
@@ -634,7 +655,7 @@ mod tests {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
-            .into_array();
+        .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
@@ -652,7 +673,9 @@ mod tests {
             }
         }
 
-        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default()).await.unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &Context::default())
+            .await
+            .unwrap();
         let array_reader = reader.next().await.unwrap().unwrap();
 
         let mut iter = array_reader.take(&indices).unwrap();
@@ -686,7 +709,9 @@ mod tests {
             }
         }
 
-        let mut reader = StreamReader::try_new(buffer.as_slice(), &ctx).await.unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &ctx)
+            .await
+            .unwrap();
         let array_reader = reader.next().await.unwrap().unwrap();
         let mut take_iter = array_reader.take(&indices).unwrap();
 
@@ -717,7 +742,9 @@ mod tests {
             }
         }
 
-        let mut reader = StreamReader::try_new(buffer.as_slice(), &ctx).await.unwrap();
+        let mut reader = StreamReader::try_new(buffer.as_slice(), &ctx)
+            .await
+            .unwrap();
         let array_reader = reader.next().await.unwrap().unwrap();
         let mut result_iter = array_reader.take(indices)?;
         let result = result_iter.next().await.unwrap();

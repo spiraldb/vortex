@@ -11,8 +11,7 @@ use lazy_static::lazy_static;
 use log::{info, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
-use simplelog::{ColorChoice, Config, TerminalMode, TermLogger};
-
+use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
@@ -215,11 +214,10 @@ mod test {
     use arrow_array::{ArrayRef as ArrowArrayRef, StructArray as ArrowStructArray};
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-
-    use vortex::{ArrayData, IntoArray};
     use vortex::arrow::FromArrowArray;
     use vortex::compress::Compressor;
     use vortex::compute::as_arrow::as_arrow;
+    use vortex::{ArrayData, IntoArray};
     use vortex_ipc::reader::StreamReader;
     use vortex_ipc::writer::StreamWriter;
 

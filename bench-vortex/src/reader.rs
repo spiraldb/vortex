@@ -5,27 +5,26 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
+use arrow_array::types::Int64Type;
 use arrow_array::{
     ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray, RecordBatch,
     RecordBatchReader,
 };
-use arrow_array::types::Int64Type;
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
 use itertools::Itertools;
 use lance::Dataset;
 use log::info;
-use monoio::{BufResult, FusionDriver, RuntimeBuilder};
 use monoio::buf::{IoBufMut, IoVecBufMut};
 use monoio::io::AsyncReadRent;
+use monoio::{BufResult, FusionDriver, RuntimeBuilder};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
-
-use vortex::{IntoArray, OwnedArray, ToArrayData, ToStatic};
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
+use vortex::{IntoArray, OwnedArray, ToArrayData, ToStatic};
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_ipc::iter::FallibleLendingIterator;
@@ -37,7 +36,8 @@ use crate::CTX;
 pub const BATCH_SIZE: usize = 65_536;
 
 pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
-    let mut rt = RuntimeBuilder::<FusionDriver>::new().build()
+    let mut rt = RuntimeBuilder::<FusionDriver>::new()
+        .build()
         .expect("Unable to build runtime");
     rt.block_on(async_open_vortex(path))
 }
@@ -57,7 +57,12 @@ impl AsyncReadRent for MonoioFile {
 }
 
 pub async fn async_open_vortex(path: &Path) -> VortexResult<OwnedArray> {
-    let file = MonoioFile(monoio::fs::File::open(path).await.map_err(|e| vortex_err!(IOError: e))?, 0);
+    let file = MonoioFile(
+        monoio::fs::File::open(path)
+            .await
+            .map_err(|e| vortex_err!(IOError: e))?,
+        0,
+    );
 
     let mut reader = StreamReader::try_new(file, &CTX).await?;
     let mut reader = reader.next().await?.unwrap();
