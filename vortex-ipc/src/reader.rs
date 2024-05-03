@@ -384,12 +384,12 @@ mod tests {
     use itertools::Itertools;
     use vortex::array::chunked::{Chunked, ChunkedArray};
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
-    use vortex::encoding::{ArrayEncoding, EncodingId};
+    use vortex::encoding::{ArrayEncoding, EncodingId, EncodingRef};
     use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray, OwnedArray};
     use vortex_alp::{ALPArray, ALPEncoding};
     use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
-    use vortex_fastlanes::BitPackedArray;
+    use vortex_fastlanes::{BitPackedArray, BitPackedEncoding};
 
     use crate::iter::FallibleLendingIterator;
     use crate::reader::StreamReader;
@@ -397,7 +397,10 @@ mod tests {
 
     #[test]
     fn test_read_write() {
-        let ctx = Context::default();
+        let ctx = Context::default().with_encodings([
+            &ALPEncoding as EncodingRef,
+            &BitPackedEncoding as EncodingRef,
+        ]);
         let array = PrimitiveArray::from(vec![0, 1, 2]).into_array();
         let chunked_array =
             ChunkedArray::try_new(vec![array.clone(), array.clone()], array.dtype().clone())
@@ -687,19 +690,22 @@ mod tests {
         expected: &[T],
         expected_encoding_id: EncodingId,
     ) {
+        let ctx =
+            Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
+
         let indices = PrimitiveArray::from(vec![10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999])
             .into_array();
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
             {
-                let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
+                let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
                 writer.write_array(data).unwrap();
             }
         }
 
         let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
+        let mut reader = StreamReader::try_new(&mut cursor, &ctx).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
         let mut take_iter = array_reader.take(&indices).unwrap();
 
@@ -718,17 +724,20 @@ mod tests {
         data: &'a Array,
         indices: &'a Array,
     ) -> VortexResult<OwnedArray> {
+        let ctx =
+            Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
+
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
             {
-                let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
+                let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
                 writer.write_array(data).unwrap();
             }
         }
 
         let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
+        let mut reader = StreamReader::try_new(&mut cursor, &ctx).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
         let mut result_iter = array_reader.take(indices)?;
         let result = result_iter.next().unwrap();

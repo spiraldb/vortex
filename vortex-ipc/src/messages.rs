@@ -165,7 +165,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
 
         let encoding = ctx
             .encoding_idx(column_data.encoding().id())
-            // TODO(ngates): return result from this writer?
+            // FIXME(ngates): return result from this writer?
             .unwrap_or_else(|| panic!("Encoding not found: {:?}", column_data.encoding()));
 
         let metadata = Some(

@@ -1,5 +1,3 @@
-extern crate core;
-
 use vortex_error::{vortex_err, VortexError};
 
 pub const ALIGNMENT: usize = 64;

@@ -203,7 +203,7 @@ mod test {
     fn slice_within_block() {
         let packed = BitPackedArray::encode(
             &PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).array(),
-            16,
+            7,
         )
         .unwrap();
 
@@ -222,7 +222,7 @@ mod test {
     fn slice_block_boundary() {
         let packed = BitPackedArray::encode(
             &PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).array(),
-            16,
+            7,
         )
         .unwrap();
 
