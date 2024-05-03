@@ -19,22 +19,23 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
+use vortex::compress::Compressor;
 use vortex::compute::take::take;
-use vortex::{IntoArray, OwnedArray, SerdeContext, ToArrayData, ToStatic};
+use vortex::{IntoArray, OwnedArray, ToArrayData, ToStatic};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
 
-use crate::compress_ctx;
+use crate::CTX;
 
 pub const BATCH_SIZE: usize = 65_536;
 
 pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
     let mut file = File::open(path)?;
 
-    let mut reader = StreamReader::try_new(&mut file)?;
+    let mut reader = StreamReader::try_new(&mut file, &CTX)?;
     let mut reader = reader.next()?.unwrap();
     let dtype = reader.dtype().clone();
     let mut chunks = vec![];
@@ -50,12 +51,12 @@ pub fn rewrite_parquet_as_vortex<W: Write>(
 ) -> VortexResult<()> {
     let chunked = compress_parquet_to_vortex(parquet_path.as_path())?;
 
-    let mut writer = StreamWriter::try_new(write, SerdeContext::default()).unwrap();
+    let mut writer = StreamWriter::try_new(write, &CTX).unwrap();
     writer.write_array(&chunked.into_array()).unwrap();
     Ok(())
 }
 
-pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedArray> {
+pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedArray<'static>> {
     let taxi_pq = File::open(parquet_path)?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq)?;
 
@@ -63,13 +64,12 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
     let reader = builder.with_batch_size(BATCH_SIZE).build()?;
 
     let dtype = DType::from_arrow(reader.schema());
-    let ctx = compress_ctx();
 
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
             let vortex_array = record_batch.to_array_data().into_array();
-            ctx.compress(&vortex_array, None).unwrap()
+            Compressor::new(&CTX).compress(&vortex_array, None).unwrap()
         })
         .collect_vec();
     ChunkedArray::try_new(chunks, dtype.clone())

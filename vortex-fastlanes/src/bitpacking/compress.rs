@@ -2,7 +2,7 @@ use arrayref::array_ref;
 use fastlanez::TryBitPack;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
@@ -12,7 +12,7 @@ use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::{match_integers_by_width, BitPackedArray, BitPackedEncoding};
+use crate::{match_integers_by_width, BitPackedArray, BitPackedEncoding, OwnedBitPackedArray};
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -48,7 +48,7 @@ impl EncodingCompression for BitPackedEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
+        ctx: Compressor,
     ) -> VortexResult<OwnedArray> {
         let parray = array.as_primitive();
         let bit_width_freq = parray.statistics().compute_bit_width_freq()?;
@@ -88,7 +88,7 @@ impl EncodingCompression for BitPackedEncoding {
 pub(crate) fn bitpack_encode(
     array: PrimitiveArray<'_>,
     bit_width: usize,
-) -> VortexResult<BitPackedArray> {
+) -> VortexResult<OwnedBitPackedArray> {
     let bit_width_freq = array.statistics().compute_bit_width_freq()?;
     let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
@@ -356,12 +356,14 @@ fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-
-    use vortex::encoding::{ArrayEncoding, EncodingRef};
-    use vortex::ToArray;
+    use vortex::encoding::ArrayEncoding;
+    use vortex::{Context, ToArray};
 
     use super::*;
+
+    fn ctx() -> Context {
+        Context::default().with_encoding(&BitPackedEncoding)
+    }
 
     #[test]
     fn test_best_bit_width() {
@@ -373,10 +375,7 @@ mod test {
 
     #[test]
     fn test_compress() {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
-        let compressed = ctx
+        let compressed = Compressor::new(&ctx())
             .compress(
                 PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))).array(),
                 None,
@@ -395,11 +394,10 @@ mod test {
     }
 
     fn compression_roundtrip(n: usize) {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
         let values = PrimitiveArray::from(Vec::from_iter((0..n).map(|i| (i % 2047) as u16)));
-        let compressed = ctx.compress(values.array(), None).unwrap();
+        let compressed = Compressor::new(&ctx())
+            .compress(values.array(), None)
+            .unwrap();
         let compressed = BitPackedArray::try_from(compressed).unwrap();
         let decompressed = compressed.to_array().flatten_primitive().unwrap();
         assert_eq!(decompressed.typed_data::<u16>(), values.typed_data::<u16>());

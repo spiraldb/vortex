@@ -2,7 +2,6 @@ use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
-use linkme::distributed_slice;
 use vortex_error::VortexResult;
 
 use crate::compress::EncodingCompression;
@@ -31,17 +30,7 @@ impl AsRef<str> for EncodingId {
     }
 }
 
-#[distributed_slice]
-pub static VORTEX_ENCODINGS: [EncodingRef] = [..];
-
 pub type EncodingRef = &'static dyn ArrayEncoding;
-
-pub fn find_encoding(id: &str) -> Option<EncodingRef> {
-    VORTEX_ENCODINGS
-        .iter()
-        .find(|&x| x.id().as_ref() == id)
-        .cloned()
-}
 
 /// Object-safe encoding trait for an array.
 pub trait ArrayEncoding: 'static + Sync + Send + Debug {

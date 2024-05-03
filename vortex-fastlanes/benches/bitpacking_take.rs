@@ -1,14 +1,12 @@
-use std::sync::Arc;
-
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
 use rand::distributions::Uniform;
 use rand::{thread_rng, Rng};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{Compressor, EncodingCompression};
 use vortex::compute::take::take;
-use vortex::encoding::EncodingRef;
+use vortex::Context;
 use vortex_fastlanes::{BitPackedArray, BitPackedEncoding};
 
 fn values(len: usize, bits: usize) -> Vec<u32> {
@@ -18,13 +16,12 @@ fn values(len: usize, bits: usize) -> Vec<u32> {
 }
 
 fn bench_take(c: &mut Criterion) {
-    let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-    let ctx = CompressCtx::new(Arc::new(cfg));
+    let ctx = Context::default().with_encoding(&BitPackedEncoding);
 
     let values = values(1_000_000, 8);
     let uncompressed = PrimitiveArray::from(values.clone());
     let packed = BitPackedEncoding {}
-        .compress(uncompressed.array(), None, ctx)
+        .compress(uncompressed.array(), None, Compressor::new(&ctx))
         .unwrap();
 
     let stratified_indices: PrimitiveArray = (0..10).map(|i| i * 10_000).collect::<Vec<_>>().into();
@@ -56,8 +53,7 @@ fn bench_take(c: &mut Criterion) {
 }
 
 fn bench_patched_take(c: &mut Criterion) {
-    let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-    let ctx = CompressCtx::new(Arc::new(cfg));
+    let ctx = Context::default().with_encoding(&BitPackedEncoding);
 
     let big_base2 = 1048576;
     let num_exceptions = 10000;
@@ -65,7 +61,7 @@ fn bench_patched_take(c: &mut Criterion) {
 
     let uncompressed = PrimitiveArray::from(values.clone());
     let packed = BitPackedEncoding {}
-        .compress(uncompressed.array(), None, ctx)
+        .compress(uncompressed.array(), None, Compressor::new(&ctx))
         .unwrap();
     let packed = BitPackedArray::try_from(packed).unwrap();
     assert!(packed.patches().is_some());

@@ -7,7 +7,7 @@ use num_traits::AsPrimitive;
 use vortex::accessor::ArrayAccessor;
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::array::varbin::{VarBin, VarBinArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray};
@@ -46,7 +46,7 @@ impl EncodingCompression for DictEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
+        ctx: Compressor,
     ) -> VortexResult<OwnedArray> {
         let dict_like = like.map(|like_arr| DictArray::try_from(like_arr).unwrap());
         let dict_like_ref = dict_like.as_ref();
@@ -254,6 +254,7 @@ mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
+    use vortex::ToArray;
     use vortex_scalar::PrimitiveScalar;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
@@ -284,15 +285,15 @@ mod test {
             &[1, 1, 0, 2, 2, 0, 2, 0]
         );
         assert_eq!(
-            scalar_at(values.array(), 0).unwrap(),
+            scalar_at(&values.to_array(), 0).unwrap(),
             PrimitiveScalar::nullable::<i32>(None).into()
         );
         assert_eq!(
-            scalar_at(values.array(), 1).unwrap(),
+            scalar_at(&values.to_array(), 1).unwrap(),
             PrimitiveScalar::nullable(Some(1)).into()
         );
         assert_eq!(
-            scalar_at(values.array(), 2).unwrap(),
+            scalar_at(&values.to_array(), 2).unwrap(),
             PrimitiveScalar::nullable(Some(3)).into()
         );
     }

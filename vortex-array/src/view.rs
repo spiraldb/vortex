@@ -1,13 +1,14 @@
 use std::fmt::{Debug, Formatter};
 
+use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::buffer::Buffer;
-use crate::encoding::EncodingRef;
+use crate::encoding::{EncodingId, EncodingRef};
 use crate::flatbuffers::array as fb;
 use crate::stats::{EmptyStatistics, Statistics};
-use crate::SerdeContext;
+use crate::Context;
 use crate::{Array, IntoArray, ToArray};
 
 #[derive(Clone)]
@@ -16,7 +17,7 @@ pub struct ArrayView<'v> {
     dtype: &'v DType,
     array: fb::Array<'v>,
     buffers: &'v [Buffer<'v>],
-    ctx: &'v SerdeContext,
+    ctx: &'v ViewContext,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
     //  which fb:Array children to skip when calculating how to slice into buffers.
@@ -36,7 +37,7 @@ impl<'a> Debug for ArrayView<'a> {
 
 impl<'v> ArrayView<'v> {
     pub fn try_new(
-        ctx: &'v SerdeContext,
+        ctx: &'v ViewContext,
         dtype: &'v DType,
         array: fb::Array<'v>,
         buffers: &'v [Buffer],
@@ -149,5 +150,43 @@ impl ToArray for ArrayView<'_> {
 impl<'v> IntoArray<'v> for ArrayView<'v> {
     fn into_array(self) -> Array<'v> {
         Array::View(self)
+    }
+}
+
+#[derive(Debug)]
+pub struct ViewContext {
+    encodings: Vec<EncodingRef>,
+}
+
+impl ViewContext {
+    pub fn new(encodings: Vec<EncodingRef>) -> Self {
+        Self { encodings }
+    }
+
+    pub fn encodings(&self) -> &[EncodingRef] {
+        self.encodings.as_ref()
+    }
+
+    pub fn find_encoding(&self, encoding_id: u16) -> Option<EncodingRef> {
+        self.encodings.get(encoding_id as usize).cloned()
+    }
+
+    pub fn encoding_idx(&self, encoding_id: EncodingId) -> Option<u16> {
+        self.encodings
+            .iter()
+            .position(|e| e.id() == encoding_id)
+            .map(|i| i as u16)
+    }
+}
+
+impl Default for ViewContext {
+    fn default() -> Self {
+        todo!("FIXME(ngates): which encodings to enable?")
+    }
+}
+
+impl From<&Context> for ViewContext {
+    fn from(value: &Context) -> Self {
+        ViewContext::new(value.encodings().collect_vec())
     }
 }

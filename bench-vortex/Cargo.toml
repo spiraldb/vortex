@@ -48,7 +48,6 @@ vortex-roaring = { path = "../vortex-roaring" }
 [dev-dependencies]
 criterion = { workspace = true }
 
-
 [[bench]]
 name = "compress_benchmark"
 harness = false

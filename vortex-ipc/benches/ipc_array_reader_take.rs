@@ -4,7 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fallible_iterator::FallibleIterator;
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::{IntoArray, SerdeContext};
+use vortex::{Context, IntoArray};
 use vortex_dtype::{DType, Nullability, PType};
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
@@ -14,6 +14,8 @@ use vortex_ipc::writer::StreamWriter;
 // take from the first 20 batches and last batch
 // compare with arrow
 fn ipc_array_reader_take(c: &mut Criterion) {
+    let ctx = Context::default();
+
     let indices = (0..20)
         .map(|i| i * 100_000 + 1)
         .chain([98 * 100_000 + 1])
@@ -24,7 +26,7 @@ fn ipc_array_reader_take(c: &mut Criterion) {
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
-            let mut writer = StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+            let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
             writer
                 .write_schema(&DType::Primitive(PType::I32, Nullability::Nullable))
                 .unwrap();
@@ -37,7 +39,7 @@ fn ipc_array_reader_take(c: &mut Criterion) {
 
         b.iter(|| {
             let mut cursor = Cursor::new(&buffer);
-            let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+            let mut reader = StreamReader::try_new(&mut cursor, &ctx).unwrap();
             let array_reader = reader.next().unwrap().unwrap();
             let mut iterator = array_reader.take(&indices).unwrap();
             while let Some(arr) = iterator.next().unwrap() {

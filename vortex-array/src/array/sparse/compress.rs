@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::sparse::{Sparse, SparseArray, SparseEncoding};
-use crate::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use crate::compress::{CompressConfig, Compressor, EncodingCompression};
 use crate::{Array, ArrayDef, ArrayTrait, IntoArray, OwnedArray};
 
 impl EncodingCompression for SparseEncoding {
@@ -21,7 +21,7 @@ impl EncodingCompression for SparseEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
+        ctx: Compressor,
     ) -> VortexResult<OwnedArray> {
         let sparse_array = SparseArray::try_from(array)?;
         let sparse_like = like.map(|la| SparseArray::try_from(la).unwrap());

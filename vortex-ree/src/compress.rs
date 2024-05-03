@@ -3,7 +3,7 @@ use std::cmp::min;
 use itertools::Itertools;
 use num_traits::{AsPrimitive, FromPrimitive};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray};
@@ -39,18 +39,19 @@ impl EncodingCompression for REEEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
+        ctx: Compressor,
     ) -> VortexResult<OwnedArray> {
         let ree_like = like.map(|like_arr| REEArray::try_from(like_arr).unwrap());
         let ree_like_ref = ree_like.as_ref();
         let primitive_array = array.as_primitive();
 
         let (ends, values) = ree_encode(&primitive_array);
-        let compressed_ends = ctx
-            .auxiliary("ends")
-            .compress(ends.array(), ree_like_ref.map(|ree| ree.ends()).as_ref())?;
+        let compressed_ends = ctx.auxiliary("ends").compress(
+            &ends.into_array(),
+            ree_like_ref.map(|ree| ree.ends()).as_ref(),
+        )?;
         let compressed_values = ctx.named("values").excluding(&REEEncoding).compress(
-            values.array(),
+            &values.into_array(),
             ree_like_ref.map(|ree| ree.values()).as_ref(),
         )?;
 

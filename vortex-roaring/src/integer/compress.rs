@@ -2,7 +2,7 @@ use croaring::Bitmap;
 use log::debug;
 use num_traits::NumCast;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToStatic};
 use vortex_dtype::{NativePType, PType};
@@ -50,7 +50,7 @@ impl EncodingCompression for RoaringIntEncoding {
         &self,
         array: &Array,
         _like: Option<&Array>,
-        _ctx: CompressCtx,
+        _ctx: Compressor,
     ) -> VortexResult<OwnedArray> {
         let parray = array.clone().flatten_primitive()?;
         Ok(roaring_encode(parray).into_array().to_static())
