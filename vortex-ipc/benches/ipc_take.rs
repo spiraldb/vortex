@@ -55,9 +55,7 @@ fn ipc_take(c: &mut Criterion) {
         let indices = PrimitiveArray::from(vec![10, 11, 12, 13, 100_000, 2_999_999]).into_array();
         let uncompressed = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
         let ctx = Context::default();
-        let compressed = Compressor::new(&ctx, &Default::default())
-            .compress(&uncompressed, None)
-            .unwrap();
+        let compressed = Compressor::new(&ctx).compress(&uncompressed, None).unwrap();
 
         // Try running take over an ArrayView.
         let mut buffer = vec![];

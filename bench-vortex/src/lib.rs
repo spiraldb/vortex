@@ -145,9 +145,7 @@ pub fn compress_taxi_data() -> OwnedArray {
         .map(|batch| batch.to_array_data().into_array())
         .map(|array| {
             uncompressed_size += array.nbytes();
-            Compressor::new(&CTX, &Default::default())
-                .compress(&array, None)
-                .unwrap()
+            Compressor::new(&CTX).compress(&array, None).unwrap()
         })
         .collect_vec();
 
@@ -287,9 +285,7 @@ mod test {
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
             let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
 
-            let compressed = Compressor::new(&CTX, &Default::default())
-                .compress(&vortex_array, None)
-                .unwrap();
+            let compressed = Compressor::new(&CTX).compress(&vortex_array, None).unwrap();
             let compressed_as_arrow = as_arrow(&compressed).unwrap();
             assert_eq!(compressed_as_arrow.deref(), arrow_array.deref());
         }

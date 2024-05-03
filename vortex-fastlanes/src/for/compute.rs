@@ -80,7 +80,7 @@ mod test {
             .compress(
                 PrimitiveArray::from(vec![11, 15, 19]).array(),
                 None,
-                Compressor::new(&Context::default(), &Default::default()),
+                Compressor::new(&Context::default()),
             )
             .unwrap();
         assert_eq!(scalar_at(&forarr, 0).unwrap(), 11.into());

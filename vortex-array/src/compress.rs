@@ -73,7 +73,7 @@ impl Default for CompressConfig {
 #[derive(Debug, Clone)]
 pub struct Compressor<'a> {
     ctx: &'a Context,
-    options: &'a CompressConfig,
+    options: CompressConfig,
 
     path: Vec<String>,
     depth: u8,
@@ -88,7 +88,11 @@ impl Display for Compressor<'_> {
 }
 
 impl<'a> Compressor<'a> {
-    pub fn new(ctx: &'a Context, options: &'a CompressConfig) -> Self {
+    pub fn new(ctx: &'a Context) -> Self {
+        Self::new_with_options(ctx, Default::default())
+    }
+
+    pub fn new_with_options(ctx: &'a Context, options: CompressConfig) -> Self {
         Self {
             ctx,
             options,
@@ -121,7 +125,7 @@ impl<'a> Compressor<'a> {
 
     #[inline]
     pub fn options(&self) -> &CompressConfig {
-        self.options
+        &self.options
     }
 
     pub fn excluding(&self, encoding: EncodingRef) -> Self {

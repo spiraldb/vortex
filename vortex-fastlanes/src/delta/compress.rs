@@ -217,7 +217,7 @@ mod test {
             .compress(
                 PrimitiveArray::from(input.clone()).array(),
                 None,
-                Compressor::new(&ctx(), &Default::default()),
+                Compressor::new(&ctx()),
             )
             .unwrap();
 

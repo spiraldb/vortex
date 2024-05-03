@@ -21,11 +21,7 @@ fn bench_take(c: &mut Criterion) {
     let values = values(1_000_000, 8);
     let uncompressed = PrimitiveArray::from(values.clone());
     let packed = BitPackedEncoding {}
-        .compress(
-            uncompressed.array(),
-            None,
-            Compressor::new(&ctx, &Default::default()),
-        )
+        .compress(uncompressed.array(), None, Compressor::new(&ctx))
         .unwrap();
 
     let stratified_indices: PrimitiveArray = (0..10).map(|i| i * 10_000).collect::<Vec<_>>().into();
@@ -65,11 +61,7 @@ fn bench_patched_take(c: &mut Criterion) {
 
     let uncompressed = PrimitiveArray::from(values.clone());
     let packed = BitPackedEncoding {}
-        .compress(
-            uncompressed.array(),
-            None,
-            Compressor::new(&ctx, &Default::default()),
-        )
+        .compress(uncompressed.array(), None, Compressor::new(&ctx))
         .unwrap();
     let packed = BitPackedArray::try_from(packed).unwrap();
     assert!(packed.patches().is_some());

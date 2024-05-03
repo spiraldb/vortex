@@ -69,9 +69,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
             let vortex_array = record_batch.to_array_data().into_array();
-            Compressor::new(&CTX, &Default::default())
-                .compress(&vortex_array, None)
-                .unwrap()
+            Compressor::new(&CTX).compress(&vortex_array, None).unwrap()
         })
         .collect_vec();
     ChunkedArray::try_new(chunks, dtype.clone())

@@ -159,7 +159,7 @@ mod test {
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
 
-        let compressed = Compressor::new(&ctx(), &Default::default())
+        let compressed = Compressor::new(&ctx())
             .compress(array.array(), None)
             .unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
@@ -173,7 +173,7 @@ mod test {
     fn test_decompress() {
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
-        let compressed = Compressor::new(&ctx(), &Default::default())
+        let compressed = Compressor::new(&ctx())
             .compress(array.array(), None)
             .unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
@@ -187,11 +187,7 @@ mod test {
         // Create a range offset by a million
         let array = PrimitiveArray::from((i8::MIN..i8::MAX).collect_vec());
         let compressed = FoREncoding {}
-            .compress(
-                array.array(),
-                None,
-                Compressor::new(&ctx(), &Default::default()),
-            )
+            .compress(array.array(), None, Compressor::new(&ctx()))
             .unwrap();
         let compressed = FoRArray::try_from(compressed).unwrap();
         assert_eq!(i8::MIN, compressed.reference().try_into().unwrap());

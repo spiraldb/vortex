@@ -195,7 +195,7 @@ mod test {
     fn take_indices() {
         let indices = PrimitiveArray::from(vec![0, 125, 2047, 2049, 2151, 2790]);
         let unpacked = PrimitiveArray::from((0..4096).map(|i| (i % 63) as u8).collect::<Vec<_>>());
-        let bitpacked = Compressor::new(&ctx(), &Default::default())
+        let bitpacked = Compressor::new(&ctx())
             .compress(unpacked.array(), None)
             .unwrap();
         let result = take(&bitpacked, indices.array()).unwrap();

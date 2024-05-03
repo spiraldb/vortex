@@ -375,7 +375,7 @@ mod test {
 
     #[test]
     fn test_compress() {
-        let compressed = Compressor::new(&ctx(), &Default::default())
+        let compressed = Compressor::new(&ctx())
             .compress(
                 PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))).array(),
                 None,
@@ -395,12 +395,9 @@ mod test {
 
     fn compression_roundtrip(n: usize) {
         let values = PrimitiveArray::from(Vec::from_iter((0..n).map(|i| (i % 2047) as u16)));
-        let compressed = Compressor::new(
-            &crate::bitpacking::compress::test::ctx(),
-            &Default::default(),
-        )
-        .compress(values.array(), None)
-        .unwrap();
+        let compressed = Compressor::new(&ctx())
+            .compress(values.array(), None)
+            .unwrap();
         let compressed = BitPackedArray::try_from(compressed).unwrap();
         let decompressed = compressed.to_array().flatten_primitive().unwrap();
         assert_eq!(decompressed.typed_data::<u16>(), values.typed_data::<u16>());

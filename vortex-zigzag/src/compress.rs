@@ -115,7 +115,7 @@ mod test {
     fn test_compress() {
         let ctx =
             Context::default().with_encodings([&ZigZagEncoding as EncodingRef, &BitPackedEncoding]);
-        let compressed = Compressor::new(&ctx, &Default::default())
+        let compressed = Compressor::new(&ctx)
             .compress(
                 PrimitiveArray::from(Vec::from_iter((-10_000..10_000).map(|i| i as i64))).array(),
                 None,
