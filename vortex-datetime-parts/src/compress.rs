@@ -1,6 +1,6 @@
 use vortex::array::datetime::{LocalDateTimeArray, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::{Array, ArrayTrait, IntoArray, OwnedArray};
 use vortex_dtype::PType;
@@ -24,7 +24,7 @@ impl EncodingCompression for DateTimePartsEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
+        ctx: Compressor,
     ) -> VortexResult<OwnedArray> {
         compress_localdatetime(
             LocalDateTimeArray::try_from(array)?,
@@ -37,7 +37,7 @@ impl EncodingCompression for DateTimePartsEncoding {
 fn compress_localdatetime(
     array: LocalDateTimeArray,
     like: Option<DateTimePartsArray>,
-    ctx: CompressCtx,
+    ctx: Compressor,
 ) -> VortexResult<OwnedArray> {
     let timestamps = cast(&array.timestamps(), PType::I64.into())?.flatten_primitive()?;
 

@@ -1,5 +1,5 @@
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray, OwnedArray};
@@ -37,7 +37,7 @@ impl EncodingCompression for ZigZagEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
+        ctx: Compressor,
     ) -> VortexResult<OwnedArray> {
         let zigzag_like = like.map(|like_arr| ZigZagArray::try_from(like_arr).unwrap());
         let encoded = zigzag_encode(&array.as_primitive())?;
@@ -105,20 +105,17 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-
     use vortex::encoding::{ArrayEncoding, EncodingRef};
+    use vortex::Context;
     use vortex_fastlanes::BitPackedEncoding;
 
     use super::*;
 
     #[test]
     fn test_compress() {
-        let cfg = CompressConfig::new()
-            .with_enabled([&ZigZagEncoding as EncodingRef, &BitPackedEncoding]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
-        let compressed = ctx
+        let ctx =
+            Context::default().with_encodings([&ZigZagEncoding as EncodingRef, &BitPackedEncoding]);
+        let compressed = Compressor::new(&ctx, &Default::default())
             .compress(
                 PrimitiveArray::from(Vec::from_iter((-10_000..10_000).map(|i| i as i64))).array(),
                 None,

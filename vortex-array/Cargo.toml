@@ -16,7 +16,7 @@ name = "vortex"
 path = "src/lib.rs"
 
 [lints]
-workspace = true
+# workspace = true
 
 [dependencies]
 arrow-array = { workspace = true }

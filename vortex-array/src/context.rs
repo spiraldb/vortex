@@ -22,6 +22,12 @@ impl Context {
         self
     }
 
+    pub fn with_encodings<E: IntoIterator<Item = EncodingRef>>(mut self, encodings: E) -> Self {
+        self.encodings
+            .extend(encodings.into_iter().map(|e| (e.id().to_string(), e)));
+        self
+    }
+
     pub fn encodings(&self) -> impl Iterator<Item = EncodingRef> + '_ {
         self.encodings.values().cloned()
     }

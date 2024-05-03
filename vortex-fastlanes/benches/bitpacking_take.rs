@@ -6,7 +6,7 @@ use rand::distributions::Uniform;
 use rand::{thread_rng, Rng};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::compute::take::take;
 use vortex::encoding::EncodingRef;
 use vortex_fastlanes::{BitPackedArray, BitPackedEncoding};
@@ -19,7 +19,7 @@ fn values(len: usize, bits: usize) -> Vec<u32> {
 
 fn bench_take(c: &mut Criterion) {
     let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-    let ctx = CompressCtx::new(Arc::new(cfg));
+    let ctx = Compressor::new(Arc::new(cfg));
 
     let values = values(1_000_000, 8);
     let uncompressed = PrimitiveArray::from(values.clone());
@@ -57,7 +57,7 @@ fn bench_take(c: &mut Criterion) {
 
 fn bench_patched_take(c: &mut Criterion) {
     let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-    let ctx = CompressCtx::new(Arc::new(cfg));
+    let ctx = Compressor::new(Arc::new(cfg));
 
     let big_base2 = 1048576;
     let num_exceptions = 10000;

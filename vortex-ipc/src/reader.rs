@@ -52,7 +52,7 @@ impl<R: Read> StreamReader<R> {
 
         let view_ctx: ViewContext = SerdeContextDeserializer {
             fb: messages.next(&mut read)?.header_as_context().unwrap(),
-            ctx: &ctx,
+            ctx,
         }
         .try_into()?;
 
@@ -520,7 +520,7 @@ mod tests {
     fn test_write_read_bitpacked() {
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let uncompressed = PrimitiveArray::from((0i64..3_000).rev().collect_vec());
-        let packed = BitPackedArray::encode(uncompressed.into_array(), 5).unwrap();
+        let packed = BitPackedArray::encode(uncompressed.array(), 5).unwrap();
 
         let expected = &[2989i64, 2988, 2987, 2986];
         test_base_case(&packed.into_array(), expected, PrimitiveEncoding.id());

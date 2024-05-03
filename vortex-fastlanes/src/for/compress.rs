@@ -2,7 +2,7 @@ use itertools::Itertools;
 use num_traits::{PrimInt, WrappingAdd, WrappingSub};
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
 use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
@@ -42,7 +42,7 @@ impl EncodingCompression for FoREncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
+        ctx: Compressor,
     ) -> VortexResult<OwnedArray> {
         let parray = PrimitiveArray::try_from(array)?;
         let shift = trailing_zeros(array);
@@ -141,29 +141,27 @@ fn trailing_zeros(array: &Array) -> u8 {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
 
     use vortex::compute::scalar_at::ScalarAtFn;
     use vortex::encoding::{ArrayEncoding, EncodingRef};
+    use vortex::Context;
 
     use super::*;
     use crate::BitPackedEncoding;
 
-    fn compress_ctx() -> CompressCtx {
-        let cfg = CompressConfig::new()
-            // We need some BitPacking else we will need choose FoR.
-            .with_enabled([&FoREncoding as EncodingRef, &BitPackedEncoding]);
-        CompressCtx::new(Arc::new(cfg))
+    fn ctx() -> Context {
+        // We need some BitPacking else we will need choose FoR.
+        Context::default().with_encodings([&FoREncoding as EncodingRef, &BitPackedEncoding])
     }
 
     #[test]
     fn test_compress() {
-        let ctx = compress_ctx();
-
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
 
-        let compressed = ctx.compress(array.array(), None).unwrap();
+        let compressed = Compressor::new(&ctx(), &Default::default())
+            .compress(array.array(), None)
+            .unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
         assert_eq!(
             u32::try_from(FoRArray::try_from(compressed).unwrap().reference()).unwrap(),
@@ -173,11 +171,11 @@ mod test {
 
     #[test]
     fn test_decompress() {
-        let ctx = compress_ctx();
-
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
-        let compressed = ctx.compress(array.array(), None).unwrap();
+        let compressed = Compressor::new(&ctx(), &Default::default())
+            .compress(array.array(), None)
+            .unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
 
         let decompressed = compressed.flatten_primitive().unwrap();
@@ -186,11 +184,15 @@ mod test {
 
     #[test]
     fn test_overflow() {
-        let ctx = compress_ctx();
-
         // Create a range offset by a million
         let array = PrimitiveArray::from((i8::MIN..i8::MAX).collect_vec());
-        let compressed = FoREncoding {}.compress(array.array(), None, ctx).unwrap();
+        let compressed = FoREncoding {}
+            .compress(
+                array.array(),
+                None,
+                Compressor::new(&ctx(), &Default::default()),
+            )
+            .unwrap();
         let compressed = FoRArray::try_from(compressed).unwrap();
         assert_eq!(i8::MIN, compressed.reference().try_into().unwrap());
 

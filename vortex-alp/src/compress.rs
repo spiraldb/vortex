@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray, OwnedArray};
 use vortex_dtype::{NativePType, PType};
@@ -48,7 +48,7 @@ impl EncodingCompression for ALPEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
+        ctx: Compressor,
     ) -> VortexResult<Array<'static>> {
         let like_alp = like.map(|like_array| like_array.as_array_ref());
         let like_exponents = like

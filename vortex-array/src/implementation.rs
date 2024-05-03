@@ -78,7 +78,7 @@ macro_rules! impl_encoding {
                 pub fn array(&'a self) -> &'a Array<'a> {
                     self.typed.array()
                 }
-                pub fn metadata(&'a self) -> &'a [<$Name Metadata>] {
+                fn metadata(&'a self) -> &'a [<$Name Metadata>] {
                     self.typed.metadata()
                 }
 

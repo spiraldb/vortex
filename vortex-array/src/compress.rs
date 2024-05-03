@@ -1,22 +1,21 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
-use std::sync::Arc;
 
 use log::{debug, info, warn};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::array::chunked::{Chunked, ChunkedArray, ChunkedEncoding};
+use crate::array::chunked::{Chunked, ChunkedArray};
 use crate::array::constant::{Constant, ConstantArray};
-use crate::array::r#struct::{Struct, StructArray, StructEncoding};
-use crate::array::sparse::SparseEncoding;
-use crate::array::varbin::VarBinEncoding;
+use crate::array::r#struct::{Struct, StructArray};
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::sampling::stratified_slices;
 use crate::stats::ArrayStatistics;
 use crate::validity::Validity;
-use crate::{compute, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray, ToStatic};
+use crate::{
+    compute, Array, ArrayDType, ArrayDef, ArrayTrait, Context, IntoArray, OwnedArray, ToStatic,
+};
 
 pub trait EncodingCompression: ArrayEncoding {
     fn cost(&self) -> u8 {
@@ -35,7 +34,7 @@ pub trait EncodingCompression: ArrayEncoding {
         &self,
         _array: &Array,
         _like: Option<&Array>,
-        _ctx: CompressCtx,
+        _ctx: Compressor,
     ) -> VortexResult<OwnedArray> {
         vortex_bail!(NotImplemented: "compress", self.id())
     }
@@ -55,7 +54,6 @@ pub struct CompressConfig {
     max_depth: u8,
     // TODO(ngates): can each encoding define their own configs?
     pub ree_average_run_threshold: f32,
-    encodings: HashSet<EncodingRef>,
 }
 
 impl Default for CompressConfig {
@@ -68,63 +66,33 @@ impl Default for CompressConfig {
             sample_count: 8,
             max_depth: 3,
             ree_average_run_threshold: 2.0,
-            encodings: HashSet::from([
-                &ChunkedEncoding as EncodingRef,
-                &SparseEncoding,
-                &StructEncoding,
-                &VarBinEncoding,
-            ]),
         }
     }
 }
 
-impl CompressConfig {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_enabled<E: IntoIterator<Item = EncodingRef>>(self, encodings: E) -> Self {
-        let mut new_self = self.clone();
-        encodings.into_iter().for_each(|e| {
-            new_self.encodings.insert(e);
-        });
-        new_self
-    }
-
-    pub fn with_disabled<E: IntoIterator<Item = EncodingRef>>(self, disabled_encodings: E) -> Self {
-        let mut new_self = self.clone();
-        disabled_encodings.into_iter().for_each(|e| {
-            new_self.encodings.remove(e);
-        });
-        new_self
-    }
-
-    pub fn is_enabled(&self, encoding: EncodingRef) -> bool {
-        self.encodings.contains(&encoding)
-    }
-}
-
 #[derive(Debug, Clone)]
-pub struct CompressCtx {
+pub struct Compressor<'a> {
+    ctx: &'a Context,
+    options: &'a CompressConfig,
+
     path: Vec<String>,
-    // TODO(ngates): put this back to a reference
-    options: Arc<CompressConfig>,
     depth: u8,
     /// A set of encodings disabled for this ctx.
     disabled_encodings: HashSet<EncodingRef>,
 }
 
-impl Display for CompressCtx {
+impl Display for Compressor<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{}|{}]", self.depth, self.path.join("."))
     }
 }
 
-impl CompressCtx {
-    pub fn new(options: Arc<CompressConfig>) -> Self {
+impl<'a> Compressor<'a> {
+    pub fn new(ctx: &'a Context, options: &'a CompressConfig) -> Self {
         Self {
-            path: Vec::new(),
+            ctx,
             options,
+            path: Vec::new(),
             depth: 0,
             disabled_encodings: HashSet::new(),
         }
@@ -152,8 +120,8 @@ impl CompressCtx {
     }
 
     #[inline]
-    pub fn options(&self) -> Arc<CompressConfig> {
-        self.options.clone()
+    pub fn options(&self) -> &CompressConfig {
+        &self.options
     }
 
     pub fn excluding(&self, encoding: EncodingRef) -> Self {
@@ -162,8 +130,6 @@ impl CompressCtx {
         cloned
     }
 
-    // We don't take a reference to self to force the caller to think about whether to use
-    // an auxilliary ctx.
     pub fn compress(&self, arr: &Array, like: Option<&Array>) -> VortexResult<OwnedArray> {
         if arr.is_empty() {
             return Ok(arr.to_static());
@@ -174,7 +140,7 @@ impl CompressCtx {
             if let Some(compressed) = l
                 .encoding()
                 .compression()
-                .can_compress(arr, self.options().as_ref())
+                .can_compress(arr, self.options())
                 .map(|c| c.compress(arr, Some(l), self.for_encoding(l.encoding().compression())))
             {
                 let compressed = compressed?;
@@ -208,7 +174,7 @@ impl CompressCtx {
         Ok(compressed)
     }
 
-    pub fn compress_validity<'a>(&self, validity: Validity<'a>) -> VortexResult<Validity<'a>> {
+    pub fn compress_validity<'v>(&self, validity: Validity<'v>) -> VortexResult<Validity<'v>> {
         match validity {
             Validity::Array(a) => Ok(Validity::Array(self.compress(&a, None)?)),
             a => Ok(a),
@@ -258,13 +224,10 @@ impl CompressCtx {
     }
 }
 
-impl Default for CompressCtx {
-    fn default() -> Self {
-        Self::new(Arc::new(CompressConfig::default()))
-    }
-}
-
-pub fn sampled_compression(array: &Array, ctx: &CompressCtx) -> VortexResult<Option<OwnedArray>> {
+pub fn sampled_compression(
+    array: &Array,
+    compressor: &Compressor,
+) -> VortexResult<Option<OwnedArray>> {
     // First, we try constant compression and shortcut any sampling.
     if !array.is_empty() && array.statistics().compute_is_constant().unwrap_or(false) {
         return Ok(Some(
@@ -272,21 +235,20 @@ pub fn sampled_compression(array: &Array, ctx: &CompressCtx) -> VortexResult<Opt
         ));
     }
 
-    let mut candidates: Vec<&dyn EncodingCompression> = ctx
-        .options
-        .encodings
-        .iter()
-        .filter(|&encoding| !ctx.disabled_encodings.contains(encoding))
+    let mut candidates: Vec<&dyn EncodingCompression> = compressor
+        .ctx
+        .encodings()
+        .filter(|&encoding| !compressor.disabled_encodings.contains(encoding))
         .map(|encoding| encoding.compression())
         .filter(|compression| {
             if compression
-                .can_compress(array, ctx.options().as_ref())
+                .can_compress(array, compressor.options())
                 .is_some()
             {
-                if ctx.depth + compression.cost() > ctx.options.max_depth {
+                if compressor.depth + compression.cost() > compressor.options.max_depth {
                     debug!(
                         "{} skipping encoding {} due to depth",
-                        ctx,
+                        compressor,
                         compression.id()
                     );
                     return false;
@@ -297,12 +259,12 @@ pub fn sampled_compression(array: &Array, ctx: &CompressCtx) -> VortexResult<Opt
             }
         })
         .collect();
-    debug!("{} candidates for {}: {:?}", ctx, array, candidates);
+    debug!("{} candidates for {}: {:?}", compressor, array, candidates);
 
     if candidates.is_empty() {
         debug!(
             "{} no compressors for array with dtype: {} and encoding: {}",
-            ctx,
+            compressor,
             array.dtype(),
             array.encoding().id(),
         );
@@ -320,9 +282,11 @@ pub fn sampled_compression(array: &Array, ctx: &CompressCtx) -> VortexResult<Opt
         candidates.retain(|&compression| compression.id() != array.encoding().id());
     }
 
-    if array.len() <= (ctx.options.sample_size as usize * ctx.options.sample_count as usize) {
+    if array.len()
+        <= (compressor.options.sample_size as usize * compressor.options.sample_count as usize)
+    {
         // We're either already within a sample, or we're operating over a sufficiently small array.
-        return find_best_compression(candidates, array, ctx)
+        return find_best_compression(candidates, array, compressor)
             .map(|best| best.map(|(_compression, best)| best));
     }
 
@@ -330,18 +294,20 @@ pub fn sampled_compression(array: &Array, ctx: &CompressCtx) -> VortexResult<Opt
     let sample = compute::as_contiguous::as_contiguous(
         &stratified_slices(
             array.len(),
-            ctx.options.sample_size,
-            ctx.options.sample_count,
+            compressor.options.sample_size,
+            compressor.options.sample_count,
         )
         .into_iter()
         .map(|(start, stop)| slice(array, start, stop).unwrap())
         .collect::<Vec<_>>(),
     )?;
 
-    find_best_compression(candidates, &sample, ctx)?
+    find_best_compression(candidates, &sample, compressor)?
         .map(|(compression, best)| {
-            info!("{} compressing array {} like {}", ctx, array, best);
-            ctx.for_encoding(compression).compress(array, Some(&best))
+            info!("{} compressing array {} like {}", compressor, array, best);
+            compressor
+                .for_encoding(compression)
+                .compress(array, Some(&best))
         })
         .transpose()
 }
@@ -349,7 +315,7 @@ pub fn sampled_compression(array: &Array, ctx: &CompressCtx) -> VortexResult<Opt
 fn find_best_compression<'a>(
     candidates: Vec<&'a dyn EncodingCompression>,
     sample: &Array,
-    ctx: &CompressCtx,
+    ctx: &Compressor,
 ) -> VortexResult<Option<(&'a dyn EncodingCompression, OwnedArray)>> {
     let mut best = None;
     let mut best_ratio = 1.0;
@@ -360,10 +326,7 @@ fn find_best_compression<'a>(
             compression.id(),
             sample
         );
-        if compression
-            .can_compress(sample, ctx.options.as_ref())
-            .is_none()
-        {
+        if compression.can_compress(sample, ctx.options()).is_none() {
             continue;
         }
         let compressed_sample =

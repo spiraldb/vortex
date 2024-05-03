@@ -175,29 +175,29 @@ fn do_patch_for_take_primitive<T: NativePType + TryBitPack>(
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-
     use itertools::Itertools;
     use rand::distributions::Uniform;
     use rand::{thread_rng, Rng};
     use vortex::array::primitive::{Primitive, PrimitiveArray};
     use vortex::array::sparse::SparseArray;
-    use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+    use vortex::compress::Compressor;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::take::take;
-    use vortex::encoding::EncodingRef;
-    use vortex::{ArrayDef, IntoArray};
+    use vortex::{ArrayDef, Context, IntoArray};
 
     use crate::{BitPackedArray, BitPackedEncoding};
 
+    fn ctx() -> Context {
+        Context::default().with_encoding(&BitPackedEncoding)
+    }
+
     #[test]
     fn take_indices() {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
         let indices = PrimitiveArray::from(vec![0, 125, 2047, 2049, 2151, 2790]);
         let unpacked = PrimitiveArray::from((0..4096).map(|i| (i % 63) as u8).collect::<Vec<_>>());
-        let bitpacked = ctx.compress(unpacked.array(), None).unwrap();
+        let bitpacked = Compressor::new(&ctx(), &Default::default())
+            .compress(unpacked.array(), None)
+            .unwrap();
         let result = take(&bitpacked, indices.array()).unwrap();
         assert_eq!(result.encoding().id(), Primitive::ID);
         let primitive_result = result.flatten_primitive().unwrap();
@@ -207,16 +207,10 @@ mod test {
 
     #[test]
     fn take_random_indices() {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
         let num_patches: usize = 128;
         let values = (0..u16::MAX as u32 + num_patches as u32).collect::<Vec<_>>();
         let uncompressed = PrimitiveArray::from(values.clone());
-        let packed = BitPackedEncoding {}
-            .compress(uncompressed.array(), None, ctx)
-            .unwrap();
-        let packed = BitPackedArray::try_from(packed).unwrap();
+        let packed = BitPackedArray::encode(uncompressed.array(), 16).unwrap();
         assert!(packed.patches().is_some());
 
         let patches = SparseArray::try_from(packed.patches().unwrap()).unwrap();
@@ -254,15 +248,9 @@ mod test {
 
     #[test]
     fn test_scalar_at() {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
         let values = (0u32..257).collect_vec();
         let uncompressed = PrimitiveArray::from(values.clone()).into_array();
-        let packed = BitPackedEncoding
-            .compress(&uncompressed, None, ctx)
-            .unwrap();
-        let packed = BitPackedArray::try_from(packed).unwrap();
+        let packed = BitPackedArray::encode(&uncompressed, 8).unwrap();
         assert!(packed.patches().is_some());
 
         let patches = SparseArray::try_from(packed.patches().unwrap()).unwrap();

@@ -100,7 +100,7 @@ impl<'a> TryFrom<SerdeContextDeserializer<'a>> for ViewContext {
                     .ok_or_else(|| vortex_err!("Stream uses unknown encoding {}", encoding_id))?,
             );
         }
-        Ok(Self::new(encodings.into()))
+        Ok(Self::new(encodings))
     }
 }
 

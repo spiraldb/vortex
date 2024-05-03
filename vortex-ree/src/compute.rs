@@ -45,7 +45,7 @@ impl TakeFn for REEArray<'_> {
         });
         take(
             &self.values(),
-            PrimitiveArray::from(physical_indices).array(),
+            &PrimitiveArray::from(physical_indices).into_array(),
         )
     }
 }

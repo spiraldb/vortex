@@ -119,7 +119,7 @@ impl BitPackedArray<'_> {
         ))
     }
 
-    pub fn encode(array: Array<'_>, bit_width: usize) -> VortexResult<BitPackedArray> {
+    pub fn encode(array: &Array<'_>, bit_width: usize) -> VortexResult<OwnedBitPackedArray> {
         if let Ok(parray) = PrimitiveArray::try_from(array) {
             Ok(bitpack_encode(parray, bit_width)?)
         } else {
@@ -192,33 +192,22 @@ macro_rules! match_integers_by_width {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compress::{CompressConfig, CompressCtx};
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::slice::slice;
-    use vortex::encoding::EncodingRef;
     use vortex::IntoArray;
 
-    use crate::{BitPackedArray, BitPackedEncoding};
+    use crate::BitPackedArray;
 
     #[test]
     fn slice_within_block() {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
-        let compressed = slice(
-            &ctx.compress(
-                PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>())
-                    .array(),
-                None,
-            )
-            .unwrap(),
-            768,
-            9999,
+        let packed = BitPackedArray::encode(
+            &PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).array(),
+            16,
         )
         .unwrap();
+
+        let compressed = slice(packed.array(), 768, 9999).unwrap();
         assert_eq!(
             scalar_at(&compressed, 0).unwrap(),
             ((768 % 63) as u8).into()
@@ -231,20 +220,13 @@ mod test {
 
     #[test]
     fn slice_block_boundary() {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
-        let compressed = slice(
-            &ctx.compress(
-                PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>())
-                    .array(),
-                None,
-            )
-            .unwrap(),
-            7168,
-            9216,
+        let packed = BitPackedArray::encode(
+            &PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).array(),
+            16,
         )
         .unwrap();
+
+        let compressed = slice(packed.array(), 7168, 9216).unwrap();
         assert_eq!(
             scalar_at(&compressed, 0).unwrap(),
             ((7168 % 63) as u8).into()
@@ -259,7 +241,7 @@ mod test {
     fn test_encode() {
         let values = vec![Some(1), None, Some(1), None, Some(1), None, Some(u64::MAX)];
         let uncompressed = PrimitiveArray::from_nullable_vec(values);
-        let packed = BitPackedArray::encode(uncompressed.into_array(), 1).unwrap();
+        let packed = BitPackedArray::encode(uncompressed.array(), 1).unwrap();
         let expected = &[1, 0, 1, 0, 1, 0, u64::MAX];
         let results = packed
             .into_array()
@@ -274,9 +256,9 @@ mod test {
     fn test_encode_too_wide() {
         let values = vec![Some(1u8), None, Some(1), None, Some(1), None];
         let uncompressed = PrimitiveArray::from_nullable_vec(values);
-        let _packed = BitPackedArray::encode(uncompressed.clone().into_array(), 8)
+        let _packed = BitPackedArray::encode(uncompressed.array(), 8)
             .expect_err("Cannot pack value into the same width");
-        let _packed = BitPackedArray::encode(uncompressed.into_array(), 9)
+        let _packed = BitPackedArray::encode(uncompressed.array(), 9)
             .expect_err("Cannot pack value into larger width");
     }
 }

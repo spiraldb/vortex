@@ -68,8 +68,9 @@ impl SliceFn for FoRArray<'_> {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compress::{CompressCtx, EncodingCompression};
+    use vortex::compress::{Compressor, EncodingCompression};
     use vortex::compute::scalar_at::scalar_at;
+    use vortex::Context;
 
     use crate::FoREncoding;
 
@@ -79,7 +80,7 @@ mod test {
             .compress(
                 PrimitiveArray::from(vec![11, 15, 19]).array(),
                 None,
-                CompressCtx::default(),
+                Compressor::new(&Context::default(), &Default::default()),
             )
             .unwrap();
         assert_eq!(scalar_at(&forarr, 0).unwrap(), 11.into());

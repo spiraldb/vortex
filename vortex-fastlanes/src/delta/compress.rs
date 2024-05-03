@@ -4,7 +4,7 @@ use arrayref::array_ref;
 use fastlanez::{transpose, untranspose_into, Delta};
 use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray, OwnedArray};
@@ -35,7 +35,7 @@ impl EncodingCompression for DeltaEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
+        ctx: Compressor,
     ) -> VortexResult<OwnedArray> {
         let parray = PrimitiveArray::try_from(array)?;
         let like_delta = like.map(|l| DeltaArray::try_from(l).unwrap());
@@ -191,15 +191,13 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-
-    use vortex::encoding::{ArrayEncoding, EncodingRef};
+    use vortex::encoding::ArrayEncoding;
+    use vortex::Context;
 
     use super::*;
 
-    fn compress_ctx() -> CompressCtx {
-        let cfg = CompressConfig::new().with_enabled([&DeltaEncoding as EncodingRef]);
-        CompressCtx::new(Arc::new(cfg))
+    fn ctx() -> Context {
+        Context::default().with_encoding(&DeltaEncoding)
     }
 
     #[test]
@@ -215,9 +213,12 @@ mod test {
     }
 
     fn do_roundtrip_test<T: NativePType>(input: Vec<T>) {
-        let ctx = compress_ctx();
-        let compressed = DeltaEncoding {}
-            .compress(PrimitiveArray::from(input.clone()).array(), None, ctx)
+        let compressed = DeltaEncoding
+            .compress(
+                PrimitiveArray::from(input.clone()).array(),
+                None,
+                Compressor::new(&ctx(), &Default::default()),
+            )
             .unwrap();
 
         assert_eq!(compressed.encoding().id(), DeltaEncoding.id());

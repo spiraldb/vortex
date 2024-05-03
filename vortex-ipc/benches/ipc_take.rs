@@ -9,9 +9,9 @@ use arrow_schema::{DataType, Field, Schema};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compress::CompressCtx;
+use vortex::compress::Compressor;
 use vortex::compute::take::take;
-use vortex::{IntoArray, ViewContext};
+use vortex::{Context, IntoArray, ViewContext};
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
@@ -52,14 +52,14 @@ fn ipc_take(c: &mut Criterion) {
     group.bench_function("vortex", |b| {
         let indices = PrimitiveArray::from(vec![10, 11, 12, 13, 100_000, 2_999_999]).into_array();
         let uncompressed = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
-        let ctx = CompressCtx::default();
+        let ctx = Compressor::default();
         let compressed = ctx.compress(&uncompressed, None).unwrap();
 
         // Try running take over an ArrayView.
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
-            let mut writer = StreamWriter::try_new(&mut cursor, ViewContext::default()).unwrap();
+            let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
             writer.write_array(&compressed).unwrap();
         }
         b.iter(|| {
