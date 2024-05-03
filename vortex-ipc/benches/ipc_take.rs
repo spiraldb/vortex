@@ -5,23 +5,41 @@ use std::sync::Arc;
 
 use arrow::ipc::reader::StreamReader as ArrowStreamReader;
 use arrow_array::{Int32Array, RecordBatch};
-use arrow_ipc::{CompressionType, MetadataVersion};
 use arrow_ipc::writer::{IpcWriteOptions, StreamWriter as ArrowStreamWriter};
+use arrow_ipc::{CompressionType, MetadataVersion};
 use arrow_schema::{DataType, Field, Schema};
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
 use criterion::async_executor::AsyncExecutor;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
 use monoio::{Driver, FusionDriver, FusionRuntime, RuntimeBuilder};
-
-use vortex::{Array, Context, IntoArray, OwnedArray};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
+use vortex::{Array, Context, IntoArray, OwnedArray};
 use vortex_error::VortexResult;
 use vortex_ipc::iter::FallibleLendingIterator;
-use vortex_ipc::MonoioExecutor;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
+
+#[cfg(target_os = "linux")]
+pub struct MonoioExecutor<L: Driver, R: Driver>(pub RefCell<FusionRuntime<L, R>>);
+
+#[cfg(target_os = "linux")]
+impl<L: Driver, R: Driver> AsyncExecutor for MonoioExecutor<L, R> {
+    fn block_on<T>(&self, future: impl Future<Output = T>) -> T {
+        self.0.borrow_mut().block_on(future)
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub struct MonoioExecutor<R: Driver>(pub RefCell<FusionRuntime<R>>);
+
+#[cfg(not(target_os = "linux"))]
+impl<R: Driver> AsyncExecutor for MonoioExecutor<R> {
+    fn block_on<T>(&self, future: impl Future<Output = T>) -> T {
+        self.0.borrow_mut().block_on(future)
+    }
+}
 
 fn ipc_take(c: &mut Criterion) {
     let mut group = c.benchmark_group("ipc_take");

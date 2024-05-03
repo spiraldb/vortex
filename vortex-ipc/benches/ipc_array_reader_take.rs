@@ -1,17 +1,37 @@
 use std::cell::RefCell;
+use std::future::Future;
 use std::io::Cursor;
 
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use criterion::async_executor::AsyncExecutor;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
-use monoio::{FusionDriver, RuntimeBuilder};
-
-use vortex::{Array, Context, IntoArray};
+use monoio::{Driver, FusionDriver, FusionRuntime, RuntimeBuilder};
 use vortex::array::primitive::PrimitiveArray;
+use vortex::{Array, Context, IntoArray};
 use vortex_dtype::{DType, Nullability, PType};
 use vortex_ipc::iter::{FallibleIterator, FallibleLendingIterator};
-use vortex_ipc::MonoioExecutor;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
+
+#[cfg(target_os = "linux")]
+pub struct MonoioExecutor<L: Driver, R: Driver>(pub RefCell<FusionRuntime<L, R>>);
+
+#[cfg(target_os = "linux")]
+impl<L: Driver, R: Driver> AsyncExecutor for MonoioExecutor<L, R> {
+    fn block_on<T>(&self, future: impl Future<Output = T>) -> T {
+        self.0.borrow_mut().block_on(future)
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub struct MonoioExecutor<R: Driver>(pub RefCell<FusionRuntime<R>>);
+
+#[cfg(not(target_os = "linux"))]
+impl<R: Driver> AsyncExecutor for MonoioExecutor<R> {
+    fn block_on<T>(&self, future: impl Future<Output = T>) -> T {
+        self.0.borrow_mut().block_on(future)
+    }
+}
 
 // 100 record batches, 100k rows each
 // take from the first 20 batches and last batch
