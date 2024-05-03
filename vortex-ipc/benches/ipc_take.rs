@@ -1,3 +1,5 @@
+extern crate core;
+
 use std::io::Cursor;
 use std::sync::Arc;
 
@@ -11,7 +13,7 @@ use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
-use vortex::{Context, IntoArray, ViewContext};
+use vortex::{Context, IntoArray};
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
@@ -52,19 +54,21 @@ fn ipc_take(c: &mut Criterion) {
     group.bench_function("vortex", |b| {
         let indices = PrimitiveArray::from(vec![10, 11, 12, 13, 100_000, 2_999_999]).into_array();
         let uncompressed = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
-        let ctx = Compressor::default();
-        let compressed = ctx.compress(&uncompressed, None).unwrap();
+        let ctx = Context::default();
+        let compressed = Compressor::new(&ctx, &Default::default())
+            .compress(&uncompressed, None)
+            .unwrap();
 
         // Try running take over an ArrayView.
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
-            let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
+            let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
             writer.write_array(&compressed).unwrap();
         }
         b.iter(|| {
             let mut cursor = Cursor::new(&buffer);
-            let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+            let mut reader = StreamReader::try_new(&mut cursor, &ctx).unwrap();
             let mut array_reader = reader.next().unwrap().unwrap();
             let array_view = array_reader.next().unwrap().unwrap();
             black_box(take(&array_view, &indices))
