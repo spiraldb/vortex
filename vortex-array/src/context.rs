@@ -1,40 +1,54 @@
-use std::sync::Arc;
+use std::collections::HashMap;
 
-use crate::encoding::EncodingId;
-use crate::encoding::{EncodingRef, VORTEX_ENCODINGS};
+use crate::array::bool::BoolEncoding;
+use crate::array::chunked::ChunkedEncoding;
+use crate::array::constant::ConstantEncoding;
+use crate::array::extension::ExtensionEncoding;
+use crate::array::primitive::PrimitiveEncoding;
+use crate::array::r#struct::StructEncoding;
+use crate::array::sparse::SparseEncoding;
+use crate::array::varbin::VarBinEncoding;
+use crate::array::varbinview::VarBinViewEncoding;
+use crate::encoding::EncodingRef;
 
-/// TODO(ngates): I'm not too sure about this construct. Where it should live, or what scope it
-///  should have.
-#[derive(Debug)]
-pub struct SerdeContext {
-    encodings: Arc<[EncodingRef]>,
+#[derive(Debug, Clone)]
+pub struct Context {
+    encodings: HashMap<String, EncodingRef>,
 }
 
-impl SerdeContext {
-    pub fn new(encodings: Arc<[EncodingRef]>) -> Self {
-        Self { encodings }
+impl Context {
+    pub fn with_encoding(mut self, encoding: EncodingRef) -> Self {
+        self.encodings.insert(encoding.id().to_string(), encoding);
+        self
     }
 
-    pub fn encodings(&self) -> &[EncodingRef] {
-        self.encodings.as_ref()
+    pub fn encodings(&self) -> impl Iterator<Item = EncodingRef> + '_ {
+        self.encodings.iter().map(|(_, encoding)| encoding).cloned()
     }
 
-    pub fn find_encoding(&self, encoding_id: u16) -> Option<EncodingRef> {
-        self.encodings.get(encoding_id as usize).cloned()
-    }
-
-    pub fn encoding_idx(&self, encoding_id: EncodingId) -> Option<u16> {
-        self.encodings
-            .iter()
-            .position(|e| e.id() == encoding_id)
-            .map(|i| i as u16)
+    pub fn lookup_encoding(&self, encoding_id: &str) -> Option<EncodingRef> {
+        self.encodings.get(encoding_id).cloned()
     }
 }
 
-impl Default for SerdeContext {
+impl Default for Context {
     fn default() -> Self {
-        Self {
-            encodings: VORTEX_ENCODINGS.iter().cloned().collect::<Vec<_>>().into(),
+        Context {
+            encodings: HashMap::from_iter(
+                [
+                    &BoolEncoding as EncodingRef,
+                    &ChunkedEncoding,
+                    &ConstantEncoding,
+                    &ExtensionEncoding,
+                    &PrimitiveEncoding,
+                    &SparseEncoding,
+                    &StructEncoding,
+                    &VarBinEncoding,
+                    &VarBinViewEncoding,
+                ]
+                .iter()
+                .map(|e| (e.id().to_string(), *e)),
+            ),
         }
     }
 }

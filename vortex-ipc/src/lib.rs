@@ -41,7 +41,7 @@ mod tests {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::r#struct::StructArray;
     use vortex::validity::Validity;
-    use vortex::SerdeContext;
+    use vortex::Context;
     use vortex::{IntoArray, IntoArrayData};
 
     use crate::iter::FallibleLendingIterator;
@@ -69,17 +69,16 @@ mod tests {
         .into_array();
 
         // let batch = ColumnBatch::from(&arr.to_array());
-
+        let ctx = Context::default();
         let mut cursor = Cursor::new(Vec::new());
-        let ctx = SerdeContext::default();
         {
-            let mut writer = StreamWriter::try_new_unbuffered(&mut cursor, ctx).unwrap();
+            let mut writer = StreamWriter::try_new_unbuffered(&mut cursor, &ctx).unwrap();
             writer.write_array(&arr).unwrap();
         }
         cursor.flush().unwrap();
         cursor.set_position(0);
 
-        let mut ipc_reader = StreamReader::try_new_unbuffered(cursor).unwrap();
+        let mut ipc_reader = StreamReader::try_new_unbuffered(cursor, &ctx).unwrap();
 
         // Read some number of arrays off the stream.
         while let Some(array_reader) = ipc_reader.next().unwrap() {

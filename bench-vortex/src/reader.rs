@@ -20,7 +20,7 @@ use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compute::take::take;
-use vortex::{IntoArray, OwnedArray, SerdeContext, ToArrayData, ToStatic};
+use vortex::{Context, IntoArray, OwnedArray, ToArrayData, ToStatic};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_ipc::iter::FallibleLendingIterator;
@@ -34,7 +34,7 @@ pub const BATCH_SIZE: usize = 65_536;
 pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
     let mut file = File::open(path)?;
 
-    let mut reader = StreamReader::try_new(&mut file)?;
+    let mut reader = StreamReader::try_new(&mut file, &Context::default())?;
     let mut reader = reader.next()?.unwrap();
     let dtype = reader.dtype().clone();
     let mut chunks = vec![];
@@ -50,7 +50,7 @@ pub fn rewrite_parquet_as_vortex<W: Write>(
 ) -> VortexResult<()> {
     let chunked = compress_parquet_to_vortex(parquet_path.as_path())?;
 
-    let mut writer = StreamWriter::try_new(write, SerdeContext::default()).unwrap();
+    let mut writer = StreamWriter::try_new(write, &Context::default()).unwrap();
     writer.write_array(&chunked.into_array()).unwrap();
     Ok(())
 }

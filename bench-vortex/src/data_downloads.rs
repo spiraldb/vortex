@@ -11,7 +11,7 @@ use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::arrow::FromArrowType;
-use vortex::{IntoArray, SerdeContext, ToArrayData};
+use vortex::{Context, IntoArray, ToArrayData};
 use vortex_dtype::DType;
 use vortex_error::{VortexError, VortexResult};
 use vortex_ipc::writer::StreamWriter;
@@ -59,9 +59,8 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
         // FIXME(ngates): #157 the compressor should handle batch size.
         let reader = builder.with_batch_size(BATCH_SIZE).build().unwrap();
 
-        let ctx = SerdeContext::default();
         let mut write = File::create(path).unwrap();
-        let mut writer = StreamWriter::try_new(&mut write, ctx).unwrap();
+        let mut writer = StreamWriter::try_new(&mut write, &Context::default()).unwrap();
 
         let dtype = DType::from_arrow(reader.schema());
         writer.write_schema(&dtype).unwrap();

@@ -1,8 +1,6 @@
 use dtype::PyDType;
-use log::debug;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use vortex::encoding::VORTEX_ENCODINGS;
 use vortex_dtype::{DType, PType};
 
 use crate::array::*;
@@ -17,14 +15,6 @@ mod vortex_arrow;
 #[pymodule]
 fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
-
-    debug!(
-        "Discovered encodings: {:?}",
-        VORTEX_ENCODINGS
-            .iter()
-            .map(|e| e.id().to_string())
-            .collect::<Vec<String>>()
-    );
 
     m.add_function(wrap_pyfunction!(encode::encode, m)?)?;
     // m.add_function(wrap_pyfunction!(compress::compress, m)?)?;

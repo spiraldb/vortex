@@ -11,7 +11,7 @@ use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::CompressCtx;
 use vortex::compute::take::take;
-use vortex::{IntoArray, SerdeContext};
+use vortex::{IntoArray, ViewContext};
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
@@ -59,7 +59,7 @@ fn ipc_take(c: &mut Criterion) {
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
-            let mut writer = StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+            let mut writer = StreamWriter::try_new(&mut cursor, ViewContext::default()).unwrap();
             writer.write_array(&compressed).unwrap();
         }
         b.iter(|| {

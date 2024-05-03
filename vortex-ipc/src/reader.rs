@@ -15,7 +15,7 @@ use vortex::compute::slice::slice;
 use vortex::compute::take::take;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{
-    Array, ArrayDType, ArrayView, IntoArray, OwnedArray, SerdeContext, ToArray, ToStatic,
+    Array, ArrayDType, ArrayView, Context, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext,
 };
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -24,22 +24,22 @@ use vortex_scalar::Scalar;
 
 use crate::flatbuffers::ipc::Message;
 use crate::iter::{FallibleLendingIterator, FallibleLendingIteratorඞItem};
+use crate::messages::SerdeContextDeserializer;
 
-#[allow(dead_code)]
 pub struct StreamReader<R: Read> {
     read: R,
     messages: StreamMessageReader<R>,
-    ctx: SerdeContext,
+    ctx: ViewContext,
 }
 
 impl<R: Read> StreamReader<BufReader<R>> {
-    pub fn try_new(read: R) -> VortexResult<Self> {
-        Self::try_new_unbuffered(BufReader::new(read))
+    pub fn try_new(read: R, ctx: &Context) -> VortexResult<Self> {
+        Self::try_new_unbuffered(BufReader::new(read), ctx)
     }
 }
 
 impl<R: Read> StreamReader<R> {
-    pub fn try_new_unbuffered(mut read: R) -> VortexResult<Self> {
+    pub fn try_new_unbuffered(mut read: R, ctx: &Context) -> VortexResult<Self> {
         let mut messages = StreamMessageReader::try_new(&mut read)?;
         match messages.peek() {
             None => vortex_bail!("IPC stream is empty"),
@@ -50,16 +50,16 @@ impl<R: Read> StreamReader<R> {
             }
         }
 
-        let ctx: SerdeContext = messages
-            .next(&mut read)?
-            .header_as_context()
-            .unwrap()
-            .try_into()?;
+        let view_ctx: ViewContext = SerdeContextDeserializer {
+            fb: messages.next(&mut read)?.header_as_context().unwrap(),
+            ctx: &ctx,
+        }
+        .try_into()?;
 
         Ok(Self {
             read,
             messages,
-            ctx,
+            ctx: view_ctx,
         })
     }
 
@@ -124,7 +124,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
 
 #[allow(dead_code)]
 pub struct StreamArrayReader<'a, R: Read> {
-    ctx: &'a SerdeContext,
+    ctx: &'a ViewContext,
     read: &'a mut R,
     messages: &'a mut StreamMessageReader<R>,
     dtype: DType,
@@ -385,7 +385,7 @@ mod tests {
     use vortex::array::chunked::{Chunked, ChunkedArray};
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId};
-    use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, SerdeContext};
+    use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray, OwnedArray};
     use vortex_alp::{ALPArray, ALPEncoding};
     use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
@@ -397,6 +397,7 @@ mod tests {
 
     #[test]
     fn test_read_write() {
+        let ctx = Context::default();
         let array = PrimitiveArray::from(vec![0, 1, 2]).into_array();
         let chunked_array =
             ChunkedArray::try_new(vec![array.clone(), array.clone()], array.dtype().clone())
@@ -406,7 +407,7 @@ mod tests {
         let mut buffer = vec![];
         let mut cursor = Cursor::new(&mut buffer);
         {
-            let mut writer = StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+            let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
             writer.write_array(&array).unwrap();
             writer.write_array(&chunked_array).unwrap();
         }
@@ -416,7 +417,7 @@ mod tests {
 
         cursor.set_position(0);
         {
-            let mut reader = StreamReader::try_new_unbuffered(&mut cursor).unwrap();
+            let mut reader = StreamReader::try_new_unbuffered(&mut cursor, &ctx).unwrap();
             let first = reader.read_array().unwrap();
             assert_eq!(first.encoding().id(), Primitive::ID);
             let second = reader.read_array().unwrap();
@@ -475,14 +476,13 @@ mod tests {
         {
             let mut cursor = Cursor::new(&mut buffer);
             {
-                let mut writer =
-                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+                let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
                 writer.write_array(&data).unwrap();
             }
         }
 
         let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
         let mut result_iter = array_reader.take(&indices).unwrap();
         let result = result_iter.next().unwrap();
@@ -544,14 +544,13 @@ mod tests {
         {
             let mut cursor = Cursor::new(&mut buffer);
             {
-                let mut writer =
-                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+                let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
                 writer.write_array(&chunked).unwrap();
             }
         }
 
         let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
         let mut take_iter = array_reader.take(&indices).unwrap();
         let next = take_iter.next().unwrap().unwrap();
@@ -601,15 +600,14 @@ mod tests {
         {
             let mut cursor = Cursor::new(&mut buffer);
             {
-                let mut writer =
-                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+                let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
                 writer.write_array(&chunked).unwrap();
                 writer.write_array(&data).unwrap();
             }
         }
 
         let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
 
         {
@@ -663,14 +661,13 @@ mod tests {
         {
             let mut cursor = Cursor::new(&mut buffer);
             {
-                let mut writer =
-                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+                let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
                 writer.write_array(&chunked).unwrap();
             }
         }
 
         let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
 
         let mut iter = array_reader.take(&indices).unwrap();
@@ -696,14 +693,13 @@ mod tests {
         {
             let mut cursor = Cursor::new(&mut buffer);
             {
-                let mut writer =
-                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+                let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
                 writer.write_array(data).unwrap();
             }
         }
 
         let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
         let mut take_iter = array_reader.take(&indices).unwrap();
 
@@ -726,14 +722,13 @@ mod tests {
         {
             let mut cursor = Cursor::new(&mut buffer);
             {
-                let mut writer =
-                    StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+                let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
                 writer.write_array(data).unwrap();
             }
         }
 
         let mut cursor = Cursor::new(&buffer);
-        let mut reader = StreamReader::try_new(&mut cursor).unwrap();
+        let mut reader = StreamReader::try_new(&mut cursor, &Context::default()).unwrap();
         let array_reader = reader.next().unwrap().unwrap();
         let mut result_iter = array_reader.take(indices)?;
         let result = result_iter.next().unwrap();

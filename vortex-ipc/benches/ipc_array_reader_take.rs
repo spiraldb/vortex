@@ -4,7 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fallible_iterator::FallibleIterator;
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::{IntoArray, SerdeContext};
+use vortex::{IntoArray, ViewContext};
 use vortex_dtype::{DType, Nullability, PType};
 use vortex_ipc::iter::FallibleLendingIterator;
 use vortex_ipc::reader::StreamReader;
@@ -24,7 +24,7 @@ fn ipc_array_reader_take(c: &mut Criterion) {
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
-            let mut writer = StreamWriter::try_new(&mut cursor, SerdeContext::default()).unwrap();
+            let mut writer = StreamWriter::try_new(&mut cursor, ViewContext::default()).unwrap();
             writer
                 .write_schema(&DType::Primitive(PType::I32, Nullability::Nullable))
                 .unwrap();

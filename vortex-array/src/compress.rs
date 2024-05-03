@@ -12,7 +12,7 @@ use crate::array::sparse::SparseEncoding;
 use crate::array::varbin::VarBinEncoding;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
-use crate::encoding::{ArrayEncoding, EncodingRef, VORTEX_ENCODINGS};
+use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::sampling::stratified_slices;
 use crate::stats::ArrayStatistics;
 use crate::validity::Validity;
@@ -56,7 +56,6 @@ pub struct CompressConfig {
     // TODO(ngates): can each encoding define their own configs?
     pub ree_average_run_threshold: f32,
     encodings: HashSet<EncodingRef>,
-    disabled_encodings: HashSet<EncodingRef>,
 }
 
 impl Default for CompressConfig {
@@ -75,7 +74,6 @@ impl Default for CompressConfig {
                 &StructEncoding,
                 &VarBinEncoding,
             ]),
-            disabled_encodings: HashSet::new(),
         }
     }
 }
@@ -96,14 +94,13 @@ impl CompressConfig {
     pub fn with_disabled<E: IntoIterator<Item = EncodingRef>>(self, disabled_encodings: E) -> Self {
         let mut new_self = self.clone();
         disabled_encodings.into_iter().for_each(|e| {
-            new_self.disabled_encodings.insert(e);
+            new_self.encodings.remove(e);
         });
         new_self
     }
 
-    pub fn is_enabled(&self, kind: EncodingRef) -> bool {
-        (self.encodings.is_empty() || self.encodings.contains(&kind))
-            && !self.disabled_encodings.contains(&kind)
+    pub fn is_enabled(&self, encoding: EncodingRef) -> bool {
+        self.encodings.contains(&encoding)
     }
 }
 
@@ -113,6 +110,7 @@ pub struct CompressCtx {
     // TODO(ngates): put this back to a reference
     options: Arc<CompressConfig>,
     depth: u8,
+    /// A set of encodings disabled for this ctx.
     disabled_encodings: HashSet<EncodingRef>,
 }
 
@@ -274,9 +272,10 @@ pub fn sampled_compression(array: &Array, ctx: &CompressCtx) -> VortexResult<Opt
         ));
     }
 
-    let mut candidates: Vec<&dyn EncodingCompression> = VORTEX_ENCODINGS
+    let mut candidates: Vec<&dyn EncodingCompression> = ctx
+        .options
+        .encodings
         .iter()
-        .filter(|&encoding| ctx.options().is_enabled(*encoding))
         .filter(|&encoding| !ctx.disabled_encodings.contains(encoding))
         .map(|encoding| encoding.compression())
         .filter(|compression| {

@@ -15,7 +15,7 @@ use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::{CompressConfig, CompressCtx};
-use vortex::encoding::{EncodingRef, VORTEX_ENCODINGS};
+use vortex::encoding::EncodingRef;
 use vortex::{IntoArray, OwnedArray, ToArrayData};
 use vortex_alp::ALPEncoding;
 use vortex_datetime_parts::DateTimePartsEncoding;
@@ -105,10 +105,6 @@ pub fn setup_logger(level: LevelFilter) {
 }
 
 pub fn enumerate_arrays() -> Vec<EncodingRef> {
-    println!(
-        "FOUND {:?}",
-        VORTEX_ENCODINGS.iter().map(|e| e.id()).collect_vec()
-    );
     vec![
         &ALPEncoding,
         &DictEncoding,
@@ -227,7 +223,7 @@ mod test {
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use vortex::arrow::FromArrowArray;
     use vortex::compute::as_arrow::as_arrow;
-    use vortex::{ArrayData, IntoArray};
+    use vortex::{ArrayData, Context, IntoArray};
     use vortex_ipc::reader::StreamReader;
     use vortex_ipc::writer::StreamWriter;
 
@@ -255,12 +251,12 @@ mod test {
 
             let mut buf = Vec::<u8>::new();
             {
-                let mut writer = StreamWriter::try_new(&mut buf, Default::default()).unwrap();
+                let mut writer = StreamWriter::try_new(&mut buf, &Context::default()).unwrap();
                 writer.write_array(&vortex_array).unwrap();
             }
 
             let mut read = buf.as_slice();
-            let mut reader = StreamReader::try_new(&mut read).unwrap();
+            let mut reader = StreamReader::try_new(&mut read, &Context::default()).unwrap();
             reader.read_array().unwrap();
         }
     }
