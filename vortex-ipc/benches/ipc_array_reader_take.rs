@@ -1,25 +1,17 @@
 use std::cell::RefCell;
-use std::future::Future;
 use std::io::Cursor;
 
-use criterion::async_executor::AsyncExecutor;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, Criterion, criterion_group, criterion_main};
 use itertools::Itertools;
-use monoio::{Driver, FusionDriver, FusionRuntime, RuntimeBuilder};
-use vortex::array::primitive::PrimitiveArray;
+use monoio::{FusionDriver, RuntimeBuilder};
+
 use vortex::{Array, Context, IntoArray};
+use vortex::array::primitive::PrimitiveArray;
 use vortex_dtype::{DType, Nullability, PType};
 use vortex_ipc::iter::{FallibleIterator, FallibleLendingIterator};
+use vortex_ipc::MonoioExecutor;
 use vortex_ipc::reader::StreamReader;
 use vortex_ipc::writer::StreamWriter;
-
-pub struct MonoioExecutor<D: Driver>(pub RefCell<FusionRuntime<D>>);
-
-impl<D: Driver> AsyncExecutor for MonoioExecutor<D> {
-    fn block_on<T>(&self, future: impl Future<Output = T>) -> T {
-        self.0.borrow_mut().block_on(future)
-    }
-}
 
 // 100 record batches, 100k rows each
 // take from the first 20 batches and last batch

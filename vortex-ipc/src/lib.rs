@@ -1,3 +1,7 @@
+use std::cell::RefCell;
+use std::future::Future;
+use criterion::async_executor::AsyncExecutor;
+use monoio::{Driver, FusionRuntime};
 use vortex_error::{vortex_err, VortexError};
 
 pub const ALIGNMENT: usize = 64;
@@ -32,6 +36,27 @@ pub mod writer;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
     move || vortex_err!(InvalidSerde: "missing field: {}", field)
+}
+
+
+#[cfg(target_os = "linux")]
+pub struct MonoioExecutor<L: Driver, R: Driver>(pub RefCell<FusionRuntime<L, R>>);
+
+#[cfg(target_os = "linux")]
+impl<L: Driver, R: Driver> AsyncExecutor for MonoioExecutor<L, R> {
+    fn block_on<T>(&self, future: impl Future<Output=T>) -> T {
+        self.0.borrow_mut().block_on(future)
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub struct MonoioExecutor<R: Driver>(pub RefCell<FusionRuntime<R>>);
+
+#[cfg(not(target_os = "linux"))]
+impl<R: Driver> AsyncExecutor for MonoioExecutor<R> {
+    fn block_on<T>(&self, future: impl Future<Output=T>) -> T {
+        self.0.borrow_mut().block_on(future)
+    }
 }
 
 #[cfg(test)]
