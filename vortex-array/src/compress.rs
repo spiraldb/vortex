@@ -121,7 +121,7 @@ impl<'a> Compressor<'a> {
 
     #[inline]
     pub fn options(&self) -> &CompressConfig {
-        &self.options
+        self.options
     }
 
     pub fn excluding(&self, encoding: EncodingRef) -> Self {

@@ -9,6 +9,7 @@ use vortex::array::sparse::SparseArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::compute::take::take;
 use vortex::encoding::EncodingRef;
+use vortex::Context;
 use vortex_fastlanes::{BitPackedArray, BitPackedEncoding};
 
 fn values(len: usize, bits: usize) -> Vec<u32> {
@@ -18,13 +19,13 @@ fn values(len: usize, bits: usize) -> Vec<u32> {
 }
 
 fn bench_take(c: &mut Criterion) {
-    let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-    let ctx = Compressor::new(Arc::new(cfg));
+    let ctx = Context::default().with_encoding(&BitPackedEncoding);
+    let compressor = Compressor::new(&ctx, &Default::default());
 
     let values = values(1_000_000, 8);
     let uncompressed = PrimitiveArray::from(values.clone());
     let packed = BitPackedEncoding {}
-        .compress(uncompressed.array(), None, ctx)
+        .compress(uncompressed.array(), None, compressor)
         .unwrap();
 
     let stratified_indices: PrimitiveArray = (0..10).map(|i| i * 10_000).collect::<Vec<_>>().into();
