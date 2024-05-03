@@ -66,7 +66,6 @@ humansize = "2.1.3"
 itertools = "0.12.1"
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
-linkme = "0.3.25"
 log = "0.4.21"
 num-traits = "0.2.18"
 num_enum = "0.7.2"
@@ -91,7 +90,3 @@ warnings = "deny"
 
 [workspace.lints.clippy]
 all = "deny"
-
-[profile.dev]
-# Need this for linkme crate to work. See https://github.com/dtolnay/linkme/issues/61
-codegen-units = 1

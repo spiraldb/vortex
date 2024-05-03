@@ -23,7 +23,7 @@ impl Context {
     }
 
     pub fn encodings(&self) -> impl Iterator<Item = EncodingRef> + '_ {
-        self.encodings.iter().map(|(_, encoding)| encoding).cloned()
+        self.encodings.values().cloned()
     }
 
     pub fn lookup_encoding(&self, encoding_id: &str) -> Option<EncodingRef> {

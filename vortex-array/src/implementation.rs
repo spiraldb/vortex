@@ -48,7 +48,6 @@ macro_rules! impl_encoding {
                 ArrayEncodingExt,
                 EncodingId,
                 EncodingRef,
-                VORTEX_ENCODINGS,
             };
             use $crate::stats::StatsSet;
             use std::any::Any;
@@ -136,9 +135,6 @@ macro_rules! impl_encoding {
             /// The array encoding
             #[derive(Debug)]
             pub struct [<$Name Encoding>];
-            #[$crate::linkme::distributed_slice(VORTEX_ENCODINGS)]
-            #[allow(non_upper_case_globals)]
-            static [<ENCODINGS_ $Name>]: EncodingRef = &[<$Name Encoding>];
             impl ArrayEncoding for [<$Name Encoding>] {
                 fn as_any(&self) -> &dyn Any {
                     self

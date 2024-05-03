@@ -26,7 +26,6 @@ pub use context::*;
 pub use data::*;
 pub use flatten::*;
 pub use implementation::*;
-pub use linkme;
 pub use metadata::*;
 pub use typed::*;
 pub use view::*;
