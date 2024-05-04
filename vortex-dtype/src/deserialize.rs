@@ -2,16 +2,14 @@
 
 use itertools::Itertools;
 use vortex_error::{vortex_err, VortexError, VortexResult};
-use vortex_flatbuffers::ReadFlatBuffer;
 
 use crate::{flatbuffers as fb, ExtDType, ExtID, ExtMetadata, Nullability};
 use crate::{DType, StructDType};
 
-impl ReadFlatBuffer for DType {
-    type Source<'a> = fb::DType<'a>;
+impl TryFrom<fb::DType<'_>> for DType {
     type Error = VortexError;
 
-    fn read_flatbuffer(fb: &Self::Source<'_>) -> Result<Self, Self::Error> {
+    fn try_from(fb: fb::DType<'_>) -> Result<Self, Self::Error> {
         match fb.type_type() {
             fb::Type::Null => Ok(DType::Null),
             fb::Type::Bool => Ok(DType::Bool(
@@ -32,7 +30,7 @@ impl ReadFlatBuffer for DType {
             )),
             fb::Type::List => {
                 let fb_list = fb.type__as_list().unwrap();
-                let element_dtype = DType::read_flatbuffer(&fb_list.element_type().unwrap())?;
+                let element_dtype = DType::try_from(fb_list.element_type().unwrap())?;
                 Ok(DType::List(
                     Box::new(element_dtype),
                     fb_list.nullability().try_into()?,
@@ -51,7 +49,7 @@ impl ReadFlatBuffer for DType {
                     .fields()
                     .unwrap()
                     .iter()
-                    .map(|f| DType::read_flatbuffer(&f))
+                    .map(|f| DType::try_from(f))
                     .collect::<VortexResult<Vec<_>>>()?;
                 Ok(DType::Struct(
                     StructDType::new(names, fields),

@@ -19,7 +19,6 @@ use vortex::{
 };
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_flatbuffers::ReadFlatBuffer;
 use vortex_scalar::Scalar;
 
 use crate::flatbuffers::ipc::Message;
@@ -104,8 +103,8 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
             .header_as_schema()
             .unwrap();
 
-        let dtype = DType::read_flatbuffer(
-            &schema_msg
+        let dtype = DType::try_from(
+            schema_msg
                 .dtype()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
         )

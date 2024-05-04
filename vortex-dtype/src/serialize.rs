@@ -180,14 +180,14 @@ impl TryFrom<fb::PType> for PType {
 mod test {
 
     use flatbuffers::root;
-    use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
+    use vortex_flatbuffers::FlatBufferToBytes;
 
     use crate::{flatbuffers as fb, PType, StructDType};
     use crate::{DType, Nullability};
 
     fn roundtrip_dtype(dtype: DType) {
         let bytes = dtype.with_flatbuffer_bytes(|bytes| bytes.to_vec());
-        let deserialized = DType::read_flatbuffer(&root::<fb::DType>(&bytes).unwrap()).unwrap();
+        let deserialized = DType::try_from(root::<fb::DType>(&bytes).unwrap()).unwrap();
         assert_eq!(dtype, deserialized);
     }
 

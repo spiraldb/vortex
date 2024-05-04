@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use vortex_dtype::match_each_native_ptype;
 use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexError};
-use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, ReadFlatBuffer, WriteFlatBuffer};
+use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, WriteFlatBuffer};
 
 use crate::flatbuffers::scalar as fb;
 use crate::{PScalar, PrimitiveScalar, Scalar, Utf8Scalar};
@@ -109,11 +109,10 @@ impl WriteFlatBuffer for Scalar {
     }
 }
 
-impl ReadFlatBuffer for Scalar {
-    type Source<'a> = fb::Scalar<'a>;
+impl TryFrom<fb::Scalar<'_>> for Scalar {
     type Error = VortexError;
 
-    fn read_flatbuffer(fb: &Self::Source<'_>) -> Result<Self, Self::Error> {
+    fn try_from(fb: fb::Scalar<'_>) -> Result<Self, Self::Error> {
         let nullability = Nullability::from(fb.nullability());
         match fb.type_type() {
             fb::Type::Binary => {
@@ -180,7 +179,7 @@ impl<'de> Visitor<'de> for ScalarDeserializer {
         E: serde::de::Error,
     {
         let fb = root::<fb::Scalar>(v).map_err(E::custom)?;
-        Scalar::read_flatbuffer(&fb).map_err(E::custom)
+        Scalar::try_from(fb).map_err(E::custom)
     }
 }
 
