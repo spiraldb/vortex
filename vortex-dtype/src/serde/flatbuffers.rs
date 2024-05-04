@@ -2,11 +2,71 @@
 
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex_error::{vortex_bail, VortexError};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 
-use crate::{flatbuffers as fb, PType};
-use crate::{DType, Nullability};
+use crate::{flatbuffers as fb, ExtDType, ExtID, ExtMetadata, PType};
+use crate::{DType, StructDType};
+
+impl TryFrom<fb::DType<'_>> for DType {
+    type Error = VortexError;
+
+    fn try_from(fb: fb::DType<'_>) -> Result<Self, Self::Error> {
+        match fb.type_type() {
+            fb::Type::Null => Ok(DType::Null),
+            fb::Type::Bool => Ok(DType::Bool(fb.type__as_bool().unwrap().nullable().into())),
+            fb::Type::Primitive => {
+                let fb_primitive = fb.type__as_primitive().unwrap();
+                Ok(DType::Primitive(
+                    fb_primitive.ptype().try_into()?,
+                    fb_primitive.nullable().into(),
+                ))
+            }
+            fb::Type::Binary => Ok(DType::Binary(
+                fb.type__as_binary().unwrap().nullable().into(),
+            )),
+            fb::Type::Utf8 => Ok(DType::Utf8(fb.type__as_utf_8().unwrap().nullable().into())),
+            fb::Type::List => {
+                let fb_list = fb.type__as_list().unwrap();
+                let element_dtype = DType::try_from(fb_list.element_type().unwrap())?;
+                Ok(DType::List(
+                    Box::new(element_dtype),
+                    fb_list.nullable().into(),
+                ))
+            }
+            fb::Type::Struct_ => {
+                let fb_struct = fb.type__as_struct_().unwrap();
+                let names = fb_struct
+                    .names()
+                    .unwrap()
+                    .iter()
+                    .map(|n| (*n).into())
+                    .collect_vec()
+                    .into();
+                let fields: Vec<DType> = fb_struct
+                    .fields()
+                    .unwrap()
+                    .iter()
+                    .map(|f| DType::try_from(f))
+                    .collect::<VortexResult<Vec<_>>>()?;
+                Ok(DType::Struct(
+                    StructDType::new(names, fields),
+                    fb_struct.nullable().into(),
+                ))
+            }
+            fb::Type::Extension => {
+                let fb_ext = fb.type__as_extension().unwrap();
+                let id = ExtID::from(fb_ext.id().unwrap());
+                let metadata = fb_ext.metadata().map(|m| ExtMetadata::from(m.bytes()));
+                Ok(DType::Extension(
+                    ExtDType::new(id, metadata),
+                    fb_ext.nullable().into(),
+                ))
+            }
+            _ => Err(vortex_err!("Unknown DType variant")),
+        }
+    }
+}
 
 impl FlatBufferRoot for DType {}
 impl WriteFlatBuffer for DType {
@@ -21,7 +81,7 @@ impl WriteFlatBuffer for DType {
             DType::Bool(n) => fb::Bool::create(
                 fbb,
                 &fb::BoolArgs {
-                    nullability: n.into(),
+                    nullable: (*n).into(),
                 },
             )
             .as_union_value(),
@@ -29,21 +89,21 @@ impl WriteFlatBuffer for DType {
                 fbb,
                 &fb::PrimitiveArgs {
                     ptype: (*ptype).into(),
-                    nullability: n.into(),
+                    nullable: (*n).into(),
                 },
             )
             .as_union_value(),
             DType::Utf8(n) => fb::Utf8::create(
                 fbb,
                 &fb::Utf8Args {
-                    nullability: n.into(),
+                    nullable: (*n).into(),
                 },
             )
             .as_union_value(),
             DType::Binary(n) => fb::Binary::create(
                 fbb,
                 &fb::BinaryArgs {
-                    nullability: n.into(),
+                    nullable: (*n).into(),
                 },
             )
             .as_union_value(),
@@ -67,7 +127,7 @@ impl WriteFlatBuffer for DType {
                     &fb::Struct_Args {
                         names,
                         fields,
-                        nullability: n.into(),
+                        nullable: (*n).into(),
                     },
                 )
                 .as_union_value()
@@ -78,7 +138,7 @@ impl WriteFlatBuffer for DType {
                     fbb,
                     &fb::ListArgs {
                         element_type,
-                        nullability: n.into(),
+                        nullable: (*n).into(),
                     },
                 )
                 .as_union_value()
@@ -91,7 +151,7 @@ impl WriteFlatBuffer for DType {
                     &fb::ExtensionArgs {
                         id,
                         metadata,
-                        nullability: n.into(),
+                        nullable: (*n).into(),
                     },
                 )
                 .as_union_value()
@@ -116,24 +176,6 @@ impl WriteFlatBuffer for DType {
                 type_: Some(dtype_union),
             },
         )
-    }
-}
-
-impl From<Nullability> for fb::Nullability {
-    fn from(value: Nullability) -> Self {
-        match value {
-            Nullability::NonNullable => fb::Nullability::NonNullable,
-            Nullability::Nullable => fb::Nullability::Nullable,
-        }
-    }
-}
-
-impl From<&Nullability> for fb::Nullability {
-    fn from(value: &Nullability) -> Self {
-        match value {
-            Nullability::NonNullable => fb::Nullability::NonNullable,
-            Nullability::Nullable => fb::Nullability::Nullable,
-        }
     }
 }
 
@@ -182,8 +224,9 @@ mod test {
     use flatbuffers::root;
     use vortex_flatbuffers::FlatBufferToBytes;
 
+    use crate::nullability::Nullability;
+    use crate::DType;
     use crate::{flatbuffers as fb, PType, StructDType};
-    use crate::{DType, Nullability};
 
     fn roundtrip_dtype(dtype: DType) {
         let bytes = dtype.with_flatbuffer_bytes(|bytes| bytes.to_vec());

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use vortex_dtype::{FieldNames, Nullability, StructDType};
+use vortex_dtype::Nullability;
+use vortex_dtype::{FieldNames, StructDType};
 use vortex_error::vortex_bail;
 
 use crate::stats::ArrayStatisticsCompute;

@@ -1,4 +1,5 @@
-use vortex_dtype::{match_each_native_ptype, Nullability};
+use vortex_dtype::match_each_native_ptype;
+use vortex_dtype::Nullability;
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 

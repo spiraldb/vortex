@@ -20,9 +20,13 @@ flatbuffers = { workspace = true, optional = true }
 half = { workspace = true }
 itertools = { workspace = true }
 num-traits = { workspace = true }
-serde = { workspace = true, optional = true, features = ["rc"] }
+serde = { workspace = true, optional = true, features = ["rc", "derive"] }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+serde_test = { workspace = true }
 
 [build-dependencies]
 build-vortex = { path = "../build-vortex" }

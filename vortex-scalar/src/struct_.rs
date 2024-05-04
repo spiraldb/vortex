@@ -2,7 +2,8 @@ use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
-use vortex_dtype::{DType, FieldNames, Nullability, StructDType};
+use vortex_dtype::Nullability;
+use vortex_dtype::{DType, FieldNames, StructDType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::Scalar;

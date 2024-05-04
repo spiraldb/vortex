@@ -220,7 +220,8 @@ impl EncodingCompression for VarBinEncoding {}
 
 #[cfg(test)]
 mod test {
-    use vortex_dtype::{DType, Nullability};
+    use vortex_dtype::DType;
+    use vortex_dtype::Nullability;
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;

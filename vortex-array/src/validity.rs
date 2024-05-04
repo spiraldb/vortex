@@ -1,6 +1,7 @@
 use arrow_buffer::{BooleanBuffer, NullBuffer};
 use serde::{Deserialize, Serialize};
-use vortex_dtype::{DType, Nullability};
+use vortex_dtype::DType;
+use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::bool::BoolArray;

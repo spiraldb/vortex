@@ -1,13 +1,13 @@
 pub use dtype::*;
 pub use extension::*;
 pub use half;
+pub use nullability::*;
 pub use ptype::*;
-mod deserialize;
 mod dtype;
 mod extension;
+mod nullability;
 mod ptype;
 mod serde;
-mod serialize;
 
 #[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {

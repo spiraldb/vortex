@@ -4214,6 +4214,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_test"
+version = "1.0.176"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a2f49ace1498612d14f7e0b8245519584db8299541dfe31a06374a828d620ab"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4983,6 +4992,8 @@ dependencies = [
  "itertools 0.12.1",
  "num-traits",
  "serde",
+ "serde_json",
+ "serde_test",
  "vortex-error",
  "vortex-flatbuffers",
 ]

@@ -124,7 +124,8 @@ impl<'a> VarBinAccumulator<'a> {
 
 #[cfg(test)]
 mod test {
-    use vortex_dtype::{DType, Nullability};
+    use vortex_dtype::DType;
+    use vortex_dtype::Nullability;
 
     use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
     use crate::stats::{ArrayStatistics, Stat};

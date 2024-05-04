@@ -1,7 +1,8 @@
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-use vortex_dtype::{DType, ExtDType, ExtID, ExtMetadata, Nullability};
+use vortex_dtype::Nullability;
+use vortex_dtype::{DType, ExtDType, ExtID, ExtMetadata};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::Scalar;
