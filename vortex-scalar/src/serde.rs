@@ -1,12 +1,12 @@
 #![cfg(feature = "serde")]
-#![cfg(feature = "flatbuffers")]
+#[cfg(feature = "flatbuffers")]
 use flatbuffers::{root, FlatBufferBuilder, WIPOffset};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use vortex_dtype::match_each_native_ptype;
 use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexError};
-use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, WriteFlatBuffer};
+use vortex_flatbuffers::{FlatBufferRoot, FlatBufferToBytes, ReadFlatBuffer, WriteFlatBuffer};
 
 use crate::flatbuffers::scalar as fb;
 use crate::{PScalar, PrimitiveScalar, Scalar, Utf8Scalar};
@@ -109,10 +109,11 @@ impl WriteFlatBuffer for Scalar {
     }
 }
 
-impl TryFrom<fb::Scalar<'_>> for Scalar {
+impl ReadFlatBuffer for Scalar {
+    type Source<'a> = fb::Scalar<'a>;
     type Error = VortexError;
 
-    fn try_from(fb: fb::Scalar<'_>) -> Result<Self, Self::Error> {
+    fn read_flatbuffer(fb: &Self::Source<'_>) -> Result<Self, Self::Error> {
         let nullability = Nullability::from(fb.nullability());
         match fb.type_type() {
             fb::Type::Binary => {
@@ -179,7 +180,7 @@ impl<'de> Visitor<'de> for ScalarDeserializer {
         E: serde::de::Error,
     {
         let fb = root::<fb::Scalar>(v).map_err(E::custom)?;
-        Scalar::try_from(fb).map_err(E::custom)
+        Scalar::read_flatbuffer(&fb).map_err(E::custom)
     }
 }
 
@@ -192,3 +193,58 @@ impl<'de> Deserialize<'de> for Scalar {
         deserializer.deserialize_bytes(ScalarDeserializer)
     }
 }
+
+// impl<'a, 'b> ScalarReader<'a, 'b> {
+//     pub fn read(&mut self) -> VortexResult<Scalar> {
+//         let bytes = self.reader.read_slice()?;
+//         let scalar = root::<scalar::Scalar>(&bytes)
+//             .map_err(|_e| VortexError::InvalidArgument("Invalid FlatBuffer".into()))
+//             .unwrap();
+
+//     }
+//
+//     fn read_primitive_scalar(&mut self) -> VortexResult<PrimitiveScalar> {
+//         let ptype = self.reader.ptype()?;
+//         let is_present = self.reader.read_option_tag()?;
+//         if is_present {
+//             let pscalar = match ptype {
+//                 PType::U8 => PrimitiveScalar::some(PScalar::U8(u8::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::U16 => PrimitiveScalar::some(PScalar::U16(u16::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::U32 => PrimitiveScalar::some(PScalar::U32(u32::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::U64 => PrimitiveScalar::some(PScalar::U64(u64::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::I8 => PrimitiveScalar::some(PScalar::I8(i8::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::I16 => PrimitiveScalar::some(PScalar::I16(i16::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::I32 => PrimitiveScalar::some(PScalar::I32(i32::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::I64 => PrimitiveScalar::some(PScalar::I64(i64::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::F16 => PrimitiveScalar::some(PScalar::F16(f16::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::F32 => PrimitiveScalar::some(PScalar::F32(f32::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//                 PType::F64 => PrimitiveScalar::some(PScalar::F64(f64::from_le_bytes(
+//                     self.reader.read_nbytes()?,
+//                 ))),
+//             };
+//             Ok(pscalar)
+//         } else {
+//             Ok(PrimitiveScalar::none(ptype))
+//         }
+//     }
+// }

@@ -5,9 +5,8 @@ use std::mem::size_of;
 
 use num_traits::identities::Zero;
 use vortex_dtype::half::f16;
-use vortex_dtype::DType;
-use vortex_dtype::Nullability;
 use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype};
+use vortex_dtype::{DType, Nullability};
 use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
@@ -411,9 +410,8 @@ impl Display for PScalar {
 
 #[cfg(test)]
 mod test {
-    use vortex_dtype::DType;
-    use vortex_dtype::Nullability;
     use vortex_dtype::PType;
+    use vortex_dtype::{DType, Nullability};
     use vortex_error::VortexError;
 
     use crate::Scalar;

@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use vortex_dtype::DType;
-use vortex_dtype::Nullability::{NonNullable, Nullable};
+use vortex_dtype::{DType, Nullability::NonNullable, Nullability::Nullable};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::value::ScalarValue;
