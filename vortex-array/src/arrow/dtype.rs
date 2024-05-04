@@ -1,8 +1,7 @@
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::{DataType, Field, SchemaRef};
 use itertools::Itertools;
-use vortex_dtype::DType;
-use vortex_dtype::Nullability;
+use vortex_dtype::{DType, Nullability};
 use vortex_dtype::{PType, StructDType};
 use vortex_error::{vortex_err, VortexResult};
 

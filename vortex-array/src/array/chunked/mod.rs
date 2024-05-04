@@ -1,7 +1,6 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use vortex_dtype::Nullability;
-use vortex_dtype::PType;
+use vortex_dtype::{Nullability, PType};
 use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
@@ -157,8 +156,7 @@ impl SubtractScalarFn for ChunkedArray<'_> {
 
 #[cfg(test)]
 mod test {
-    use vortex_dtype::DType;
-    use vortex_dtype::Nullability;
+    use vortex_dtype::{DType, Nullability};
     use vortex_dtype::{NativePType, PType};
 
     use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
