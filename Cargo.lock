@@ -854,6 +854,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "build-vortex"
+version = "0.1.0"
+dependencies = [
+ "flatc",
+ "walkdir",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5077,15 +5085,14 @@ dependencies = [
 name = "vortex-scalar"
 version = "0.1.0"
 dependencies = [
+ "build-vortex",
  "flatbuffers",
- "flatc",
  "itertools 0.12.1",
  "num-traits",
  "serde",
  "vortex-dtype",
  "vortex-error",
  "vortex-flatbuffers",
- "walkdir",
 ]
 
 [[package]]

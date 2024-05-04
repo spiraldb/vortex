@@ -20,10 +20,8 @@ vortex-dtype = { path = "../vortex-dtype" }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 
-
 [build-dependencies]
-flatc = { workspace = true }
-walkdir = { workspace = true }
+build-vortex = { path = "../build-vortex" }
 
 [lints]
 workspace = true
