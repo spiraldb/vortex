@@ -1,4 +1,5 @@
 mod flatbuffers;
+#[allow(clippy::module_inception)]
 mod serde;
 
 #[cfg(test)]
