@@ -47,7 +47,7 @@ impl TryFrom<fb::DType<'_>> for DType {
                     .dtypes()
                     .unwrap()
                     .iter()
-                    .map(|f| DType::try_from(f))
+                    .map(DType::try_from)
                     .collect::<VortexResult<Vec<_>>>()?;
                 Ok(DType::Struct(
                     StructDType::new(names, dtypes),
