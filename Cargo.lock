@@ -858,6 +858,7 @@ name = "build-vortex"
 version = "0.1.0"
 dependencies = [
  "flatc",
+ "prost-build",
  "walkdir",
 ]
 
@@ -4991,6 +4992,7 @@ dependencies = [
  "half",
  "itertools 0.12.1",
  "num-traits",
+ "prost",
  "serde",
  "serde_json",
  "serde_test",

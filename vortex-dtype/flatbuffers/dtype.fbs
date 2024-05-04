@@ -28,9 +28,8 @@ table Primitive {
 table Decimal {
     /// Total number of decimal digits
     precision: uint8;
-
     /// Number of digits after the decimal point "."
-    scale: int8;
+    scale: uint8;
     nullable: bool;
 }
 
@@ -44,7 +43,7 @@ table Binary {
 
 table Struct_ {
     names: [string];
-    fields: [DType];
+    dtypes: [DType];
     nullable: bool;
 }
 

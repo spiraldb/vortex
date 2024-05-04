@@ -43,14 +43,14 @@ impl TryFrom<fb::DType<'_>> for DType {
                     .map(|n| (*n).into())
                     .collect_vec()
                     .into();
-                let fields: Vec<DType> = fb_struct
-                    .fields()
+                let dtypes: Vec<DType> = fb_struct
+                    .dtypes()
                     .unwrap()
                     .iter()
                     .map(|f| DType::try_from(f))
                     .collect::<VortexResult<Vec<_>>>()?;
                 Ok(DType::Struct(
-                    StructDType::new(names, fields),
+                    StructDType::new(names, dtypes),
                     fb_struct.nullable().into(),
                 ))
             }
@@ -120,13 +120,13 @@ impl WriteFlatBuffer for DType {
                     .iter()
                     .map(|dtype| dtype.write_flatbuffer(fbb))
                     .collect_vec();
-                let fields = Some(fbb.create_vector(&dtypes));
+                let dtypes = Some(fbb.create_vector(&dtypes));
 
                 fb::Struct_::create(
                     fbb,
                     &fb::Struct_Args {
                         names,
-                        fields,
+                        dtypes,
                         nullable: (*n).into(),
                     },
                 )

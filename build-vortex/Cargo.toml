@@ -12,6 +12,7 @@ rust-version.workspace = true
 
 [dependencies]
 flatc = { workspace = true }
+prost-build = { workspace = true }
 walkdir = { workspace = true }
 
 [lints]

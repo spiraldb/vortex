@@ -1,5 +1,6 @@
 use std::env;
 use std::ffi::OsStr;
+use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -23,6 +24,24 @@ pub fn build() {
     if env::var("CARGO_FEATURE_FLATBUFFERS").ok().is_some() {
         build_flatbuffers();
     }
+
+    // Proto (prost)
+    if env::var("CARGO_FEATURE_PROST").ok().is_some() {
+        build_proto();
+    }
+}
+
+pub fn build_proto() {
+    let proto_dir = manifest_dir().join("proto");
+    let proto_files = walk_files(&proto_dir, "proto");
+    let proto_out = out_dir().join("proto");
+
+    create_dir_all(&proto_out).expect("Failed to create proto output directory");
+
+    prost_build::Config::new()
+        .out_dir(&proto_out)
+        .compile_protos(&proto_files, &[&proto_dir, &proto_dir.join("../../")])
+        .expect("Failed to compile protos");
 }
 
 pub fn build_flatbuffers() {
