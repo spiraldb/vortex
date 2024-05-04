@@ -11,11 +11,7 @@ mod serde;
 
 #[cfg(feature = "prost")]
 pub mod proto {
-    pub mod vortex {
-        pub mod dtype {
-            include!(concat!(env!("OUT_DIR"), "/proto/vortex.dtype.rs"));
-        }
-    }
+    include!(concat!(env!("OUT_DIR"), "/proto/vortex.dtype.rs"));
 }
 
 #[cfg(feature = "flatbuffers")]

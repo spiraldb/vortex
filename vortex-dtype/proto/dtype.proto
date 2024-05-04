@@ -54,7 +54,7 @@ message List {
 
 message Extension {
   string id = 1;
-  bytes metadata = 2;
+  optional bytes metadata = 2;
   bool nullable = 3;
 }
 
