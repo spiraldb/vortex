@@ -9,6 +9,7 @@ mod ptype;
 mod serde;
 mod serialize;
 
+#[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
     #[allow(unused_imports)]
     #[allow(dead_code)]

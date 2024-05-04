@@ -1,3 +1,5 @@
+#![cfg(feature = "flatbuffers")]
+
 use itertools::Itertools;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;

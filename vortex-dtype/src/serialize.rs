@@ -1,3 +1,5 @@
+#![cfg(feature = "flatbuffers")]
+
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex_error::{vortex_bail, VortexError};

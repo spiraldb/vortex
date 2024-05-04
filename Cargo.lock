@@ -4977,15 +4977,14 @@ dependencies = [
 name = "vortex-dtype"
 version = "0.1.0"
 dependencies = [
+ "build-vortex",
  "flatbuffers",
- "flatc",
  "half",
  "itertools 0.12.1",
  "num-traits",
  "serde",
  "vortex-error",
  "vortex-flatbuffers",
- "walkdir",
 ]
 
 [[package]]
