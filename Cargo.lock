@@ -5094,6 +5094,7 @@ dependencies = [
  "flexbuffers",
  "itertools 0.12.1",
  "num-traits",
+ "paste",
  "serde",
  "vortex-buffer",
  "vortex-dtype",

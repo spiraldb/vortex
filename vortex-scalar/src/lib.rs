@@ -22,6 +22,7 @@ mod serde;
 mod struct_;
 mod utf8;
 mod value;
+mod view;
 
 pub mod flatbuffers {
     pub use gen_scalar::vortex::*;
