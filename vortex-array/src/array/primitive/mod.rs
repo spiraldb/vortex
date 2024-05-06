@@ -136,7 +136,9 @@ impl PrimitiveArray<'_> {
     }
 
     pub fn into_buffer(self) -> Buffer {
-        self.into_array().into_buffer().unwrap()
+        self.into_array()
+            .into_buffer()
+            .expect("PrimitiveArray must have a buffer")
     }
 }
 
