@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use arrow_buffer::Buffer as ArrowBuffer;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 
@@ -52,6 +54,17 @@ impl Buffer {
             }),
             // Cannot always convert bytes into a mutable vec
             Buffer::Bytes(_) => Err(self),
+        }
+    }
+}
+
+impl Deref for Buffer {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Buffer::Arrow(b) => b.deref(),
+            Buffer::Bytes(b) => b.deref(),
         }
     }
 }

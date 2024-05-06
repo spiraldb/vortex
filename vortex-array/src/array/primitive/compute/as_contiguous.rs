@@ -20,7 +20,7 @@ impl AsContiguousFn for PrimitiveArray<'_> {
             arrays.iter().map(|a| a.len()).sum::<usize>() * self.ptype().byte_width(),
         );
         for array in arrays {
-            buffer.extend_from_slice(array.as_primitive().buffer().as_ref())
+            buffer.extend_from_slice(array.as_primitive().buffer())
         }
         match_each_native_ptype!(self.ptype(), |$T| {
             Ok(PrimitiveArray::try_new(ScalarBuffer::<$T>::from(buffer), validity)

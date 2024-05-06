@@ -334,10 +334,7 @@ mod test {
             codes.buffer().typed_data::<u64>(),
             &[1, 0, 2, 1, 0, 3, 2, 0]
         );
-        assert_eq!(
-            str::from_utf8(values.bytes_at(0).unwrap().as_ref()).unwrap(),
-            ""
-        );
+        assert_eq!(str::from_utf8(&values.bytes_at(0).unwrap()).unwrap(), "");
         values
             .with_iterator(|iter| {
                 assert_eq!(
