@@ -1,100 +1,100 @@
+use std::ops::Deref;
+
 use arrow_buffer::Buffer as ArrowBuffer;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 
 #[derive(Debug, Clone)]
-pub enum Buffer<'a> {
-    Owned(ArrowBuffer),
-    View(&'a [u8]),
+pub enum Buffer {
+    // TODO(ngates): we could add Aligned(Arc<AVec>) from aligned-vec package
+    Arrow(ArrowBuffer),
+    Bytes(bytes::Bytes),
 }
 
-pub type OwnedBuffer = Buffer<'static>;
+unsafe impl Send for Buffer {}
+unsafe impl Sync for Buffer {}
 
-impl Buffer<'_> {
+impl Buffer {
     pub fn len(&self) -> usize {
         match self {
-            Buffer::Owned(buffer) => buffer.len(),
-            Buffer::View(slice) => slice.len(),
+            Buffer::Arrow(b) => b.len(),
+            Buffer::Bytes(b) => b.len(),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
         match self {
-            Buffer::Owned(buffer) => buffer.as_slice(),
-            Buffer::View(slice) => slice,
+            Buffer::Arrow(b) => b.is_empty(),
+            Buffer::Bytes(b) => b.is_empty(),
         }
     }
 
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
         match self {
-            Buffer::Owned(buffer) => unsafe {
+            Buffer::Arrow(buffer) => unsafe {
                 match_each_native_ptype!(T::PTYPE, |$T| {
                     std::mem::transmute(buffer.typed_data::<$T>())
                 })
             },
-            Buffer::View(slice) => {
+            Buffer::Bytes(bytes) => {
                 // From ArrowBuffer::typed_data
-                let (prefix, offsets, suffix) = unsafe { slice.align_to::<T>() };
+                let (prefix, offsets, suffix) = unsafe { bytes.align_to::<T>() };
                 assert!(prefix.is_empty() && suffix.is_empty());
                 offsets
             }
         }
     }
 
-    pub fn to_static(&self) -> OwnedBuffer {
+    pub fn into_vec<T: NativePType>(self) -> Result<Vec<T>, Buffer> {
         match self {
-            Buffer::Owned(d) => Buffer::Owned(d.clone()),
-            Buffer::View(_) => Buffer::Owned(self.into()),
-        }
-    }
-}
-
-impl<'a> Buffer<'a> {
-    pub fn into_vec<T: NativePType>(self) -> Result<Vec<T>, Buffer<'a>> {
-        match self {
-            Buffer::Owned(buffer) => match_each_native_ptype!(T::PTYPE, |$T| {
+            Buffer::Arrow(buffer) => match_each_native_ptype!(T::PTYPE, |$T| {
                 buffer
                     .into_vec()
                     .map(|vec| unsafe { std::mem::transmute::<Vec<$T>, Vec<T>>(vec) })
-                    .map_err(Buffer::Owned)
+                    .map_err(Buffer::Arrow)
             }),
-            Buffer::View(_) => Err(self),
+            // Cannot always convert bytes into a mutable vec
+            Buffer::Bytes(_) => Err(self),
         }
     }
 }
 
-impl From<ArrowBuffer> for OwnedBuffer {
+impl Deref for Buffer {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Buffer::Arrow(b) => b.deref(),
+            Buffer::Bytes(b) => b.deref(),
+        }
+    }
+}
+
+impl AsRef<[u8]> for Buffer {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Buffer::Arrow(b) => b.as_ref(),
+            Buffer::Bytes(b) => b.as_ref(),
+        }
+    }
+}
+
+impl From<Vec<u8>> for Buffer {
+    fn from(value: Vec<u8>) -> Self {
+        // We prefer Arrow since it retains mutability
+        Buffer::Arrow(ArrowBuffer::from_vec(value))
+    }
+}
+
+impl From<ArrowBuffer> for Buffer {
     fn from(value: ArrowBuffer) -> Self {
-        Buffer::Owned(value)
+        Buffer::Arrow(value)
     }
 }
 
-impl From<Buffer<'_>> for ArrowBuffer {
-    fn from(value: Buffer<'_>) -> Self {
-        match value {
-            Buffer::Owned(b) => b,
-            Buffer::View(_) => ArrowBuffer::from(&value),
-        }
-    }
-}
-
-impl From<&Buffer<'_>> for ArrowBuffer {
-    fn from(value: &Buffer<'_>) -> Self {
-        match value {
-            Buffer::Owned(b) => b.clone(),
-            // FIXME(ngates): this conversion loses alignment information since go via u8.
-            Buffer::View(v) => ArrowBuffer::from_vec(v.to_vec()),
-        }
-    }
-}
-
-impl PartialEq for Buffer<'_> {
+impl PartialEq for Buffer {
     fn eq(&self, other: &Self) -> bool {
-        self.as_slice().eq(other.as_slice())
+        self.as_ref().eq(other.as_ref())
     }
 }
 
-impl Eq for Buffer<'_> {}
+impl Eq for Buffer {}

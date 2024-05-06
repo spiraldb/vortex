@@ -40,7 +40,7 @@ impl RoaringIntArray<'_> {
                     ptype,
                     length: bitmap.statistics().cardinality as usize,
                 },
-                Some(Buffer::Owned(bitmap.serialize::<Portable>().into())),
+                Some(Buffer::from(bitmap.serialize::<Portable>())),
                 vec![].into(),
                 StatsSet::new(),
             )?,
@@ -53,7 +53,7 @@ impl RoaringIntArray<'_> {
             self.array()
                 .buffer()
                 .expect("RoaringBoolArray buffer is missing")
-                .as_slice(),
+                .as_ref(),
         )
     }
 

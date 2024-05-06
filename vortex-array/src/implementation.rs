@@ -1,4 +1,4 @@
-use vortex_buffer::{Buffer, OwnedBuffer};
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
@@ -221,7 +221,7 @@ impl<'a, T: IntoArray<'a> + ArrayEncodingRef + ArrayStatistics + GetArrayMetadat
             Array::Data(d) => d,
             Array::View(_) => {
                 struct Visitor {
-                    buffer: Option<OwnedBuffer>,
+                    buffer: Option<Buffer>,
                     children: Vec<ArrayData>,
                 }
                 impl ArrayVisitor for Visitor {
@@ -234,7 +234,7 @@ impl<'a, T: IntoArray<'a> + ArrayEncodingRef + ArrayStatistics + GetArrayMetadat
                         if self.buffer.is_some() {
                             vortex_bail!("Multiple buffers found in view")
                         }
-                        self.buffer = Some(buffer.to_static());
+                        self.buffer = Some(buffer.clone());
                         Ok(())
                     }
                 }

@@ -16,7 +16,7 @@ pub struct ArrayView<'v> {
     encoding: EncodingRef,
     dtype: &'v DType,
     array: fb::Array<'v>,
-    buffers: &'v [Buffer<'v>],
+    buffers: &'v [Buffer],
     ctx: &'v ViewContext,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
@@ -131,7 +131,7 @@ impl<'v> ArrayView<'v> {
         nbuffers
     }
 
-    pub fn buffer(&self) -> Option<&'v Buffer<'v>> {
+    pub fn buffer(&self) -> Option<&'v Buffer> {
         self.has_buffer().then(|| &self.buffers[0])
     }
 

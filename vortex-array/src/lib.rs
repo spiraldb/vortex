@@ -105,10 +105,10 @@ impl Array<'_> {
 }
 
 impl<'a> Array<'a> {
-    pub fn into_buffer(self) -> Option<Buffer<'a>> {
+    pub fn into_buffer(self) -> Option<Buffer> {
         match self {
             Array::Data(d) => d.into_buffer(),
-            Array::View(v) => v.buffer().map(|b| b.to_static()),
+            Array::View(v) => v.buffer().cloned(),
         }
     }
 }

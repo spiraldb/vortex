@@ -33,7 +33,7 @@ impl RoaringBoolArray<'_> {
                 typed: TypedArray::try_from_parts(
                     DType::Bool(NonNullable),
                     RoaringBoolMetadata { length },
-                    Some(Buffer::Owned(bitmap.serialize::<Portable>().into())),
+                    Some(Buffer::from(bitmap.serialize::<Portable>())),
                     vec![].into(),
                     StatsSet::new(),
                 )?,
@@ -47,7 +47,7 @@ impl RoaringBoolArray<'_> {
             self.array()
                 .buffer()
                 .expect("RoaringBoolArray buffer is missing")
-                .as_slice(),
+                .as_ref(),
         )
     }
 

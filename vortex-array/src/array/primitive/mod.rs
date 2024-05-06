@@ -34,7 +34,7 @@ impl PrimitiveArray<'_> {
                 PrimitiveMetadata {
                     validity: validity.to_metadata(buffer.len())?,
                 },
-                Some(Buffer::Owned(buffer.into_inner())),
+                Some(Buffer::from(buffer.into_inner())),
                 validity.into_array_data().into_iter().collect_vec().into(),
                 StatsSet::new(),
             )?,
@@ -134,11 +134,11 @@ impl PrimitiveArray<'_> {
         }
         Ok(Self::from_vec(own_values, validity))
     }
-}
 
-impl<'a> PrimitiveArray<'a> {
-    pub fn into_buffer(self) -> Buffer<'a> {
-        self.into_array().into_buffer().unwrap()
+    pub fn into_buffer(self) -> Buffer {
+        self.into_array()
+            .into_buffer()
+            .expect("PrimitiveArray must have a buffer")
     }
 }
 
