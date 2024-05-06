@@ -1,0 +1,18 @@
+[package]
+name = "vortex-buffer"
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+include.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+arrow-buffer = { workspace = true }
+vortex-dtype = { path = "../vortex-dtype" }
+
+[lints]
+workspace = true

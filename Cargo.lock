@@ -4928,11 +4928,20 @@ dependencies = [
  "paste",
  "rand",
  "serde",
+ "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
  "vortex-flatbuffers",
  "vortex-scalar",
  "walkdir",
+]
+
+[[package]]
+name = "vortex-buffer"
+version = "0.1.0"
+dependencies = [
+ "arrow-buffer",
+ "vortex-dtype",
 ]
 
 [[package]]
@@ -5037,6 +5046,7 @@ dependencies = [
  "simplelog",
  "vortex-alp",
  "vortex-array",
+ "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
  "vortex-fastlanes",
@@ -5068,6 +5078,7 @@ dependencies = [
  "num-traits",
  "serde",
  "vortex-array",
+ "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
  "vortex-scalar",

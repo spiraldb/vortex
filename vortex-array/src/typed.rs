@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
+use vortex_buffer::OwnedBuffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
-use crate::buffer::OwnedBuffer;
 use crate::stats::StatsSet;
 use crate::{Array, ArrayData, ArrayDef, AsArray, IntoArray, ToArray, TryDeserializeArrayMetadata};
 

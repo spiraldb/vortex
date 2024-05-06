@@ -1,14 +1,14 @@
+use vortex_buffer::{Buffer, OwnedBuffer};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
-use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::{ArrayEncoding, ArrayEncodingRef, EncodingRef};
 use crate::encoding::{ArrayEncodingExt, EncodingId};
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
     Array, ArrayDType, ArrayData, ArrayMetadata, AsArray, GetArrayMetadata, IntoArray,
-    IntoArrayData, ToArrayData, ToStatic,
+    IntoArrayData, ToArrayData,
 };
 use crate::{ArrayTrait, TryDeserializeArrayMetadata};
 
