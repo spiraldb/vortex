@@ -26,7 +26,6 @@ pub mod flatbuffers {
 
 pub mod iter;
 mod messages;
-mod read_ext;
 pub mod reader;
 pub mod writer;
 
