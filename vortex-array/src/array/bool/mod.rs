@@ -1,8 +1,8 @@
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use vortex_buffer::Buffer;
 
-use crate::buffer::Buffer;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};

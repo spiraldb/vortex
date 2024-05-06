@@ -8,7 +8,6 @@ use flatbuffers::{root, root_unchecked};
 use log::error;
 use nougat::gat;
 use vortex::array::chunked::ChunkedArray;
-use vortex::buffer::Buffer;
 use vortex::compute::scalar_subtract::subtract_scalar;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
@@ -17,6 +16,7 @@ use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{
     Array, ArrayDType, ArrayView, Context, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext,
 };
+use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;

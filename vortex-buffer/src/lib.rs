@@ -1,8 +1,6 @@
 use arrow_buffer::Buffer as ArrowBuffer;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 
-use crate::ToStatic;
-
 #[derive(Debug, Clone)]
 pub enum Buffer<'a> {
     Owned(ArrowBuffer),
@@ -45,6 +43,13 @@ impl Buffer<'_> {
             }
         }
     }
+
+    pub fn to_static(&self) -> OwnedBuffer {
+        match self {
+            Buffer::Owned(d) => Buffer::Owned(d.clone()),
+            Buffer::View(_) => Buffer::Owned(self.into()),
+        }
+    }
 }
 
 impl<'a> Buffer<'a> {
@@ -57,17 +62,6 @@ impl<'a> Buffer<'a> {
                     .map_err(Buffer::Owned)
             }),
             Buffer::View(_) => Err(self),
-        }
-    }
-}
-
-impl ToStatic for Buffer<'_> {
-    type Static = Buffer<'static>;
-
-    fn to_static(&self) -> Self::Static {
-        match self {
-            Buffer::Owned(d) => Buffer::Owned(d.clone()),
-            Buffer::View(_) => Buffer::Owned(self.into()),
         }
     }
 }

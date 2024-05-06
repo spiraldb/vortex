@@ -1,10 +1,10 @@
 use std::fmt::{Debug, Formatter};
 
 use itertools::Itertools;
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::buffer::Buffer;
 use crate::encoding::{EncodingId, EncodingRef};
 use crate::flatbuffers::array as fb;
 use crate::stats::{EmptyStatistics, Statistics};

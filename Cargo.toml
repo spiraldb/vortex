@@ -15,7 +15,7 @@ members = [
     "vortex-ree",
     "vortex-roaring",
     "vortex-dtype",
-    "vortex-zigzag",
+    "vortex-zigzag", "vortex-buffer",
 ]
 resolver = "2"
 
