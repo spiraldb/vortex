@@ -5091,9 +5091,11 @@ version = "0.1.0"
 dependencies = [
  "flatbuffers",
  "flatc",
+ "flexbuffers",
  "itertools 0.12.1",
  "num-traits",
  "serde",
+ "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
  "vortex-flatbuffers",

@@ -44,7 +44,7 @@ impl BoolArray<'_> {
                     validity: validity.to_metadata(buffer.len())?,
                     length: buffer.len(),
                 },
-                Some(Buffer::Owned(buffer.into_inner())),
+                Some(Buffer::from(buffer.into_inner())),
                 validity.into_array_data().into_iter().collect_vec().into(),
                 StatsSet::new(),
             )?,

@@ -128,7 +128,7 @@ pub struct StreamArrayReader<'a, R: Read> {
     read: &'a mut R,
     messages: &'a mut StreamMessageReader<R>,
     dtype: DType,
-    buffers: Vec<Buffer<'a>>,
+    buffers: Vec<Buffer>,
     row_offset: usize,
 }
 
@@ -263,7 +263,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
             let mut bytes = Vec::with_capacity(buffer.length() as usize);
             self.read.read_into(buffer.length(), &mut bytes)?;
             let arrow_buffer = ArrowBuffer::from_vec(bytes);
-            self.buffers.push(Buffer::Owned(arrow_buffer));
+            self.buffers.push(Buffer::from(arrow_buffer));
 
             offset = buffer.offset() + buffer.length();
         }
