@@ -257,7 +257,6 @@ impl<'iter, R: AsyncReadRent> FallibleLendingIterator for StreamArrayReader<'ite
 
         // Read all the column's buffers
         self.buffers.clear();
-        let mut offset: usize = 0;
         let buffers = chunk_msg.buffers().unwrap_or_default();
         for i in 0..buffers.len() {
             let buffer = buffers.get(i);
@@ -267,7 +266,7 @@ impl<'iter, R: AsyncReadRent> FallibleLendingIterator for StreamArrayReader<'ite
                 buffers.get(i + 1).offset() as usize
             };
             let buf_len = buffer.length() as usize;
-            let padding = next_offset - offset - buf_len;
+            let padding = next_offset - buffer.offset() as usize - buf_len;
 
             // TODO(ngates): read into a single buffer, then Arc::clone and slice
             let bytes = Vec::with_capacity(buf_len + padding);
@@ -278,8 +277,6 @@ impl<'iter, R: AsyncReadRent> FallibleLendingIterator for StreamArrayReader<'ite
             bytes_read.truncate(buf_len);
             let arrow_buffer = ArrowBuffer::from_vec(bytes_read);
             self.buffers.push(Buffer::from(arrow_buffer));
-
-            offset = next_offset;
         }
 
         // After reading the buffers we're now able to load the next message.
