@@ -136,8 +136,13 @@ impl AsArrowArray for VarBinArray<'_> {
 impl ScalarAtFn for VarBinArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
-            self.bytes_at(index)
-                .map(|bytes| varbin_scalar(bytes, self.dtype()))
+            Ok(varbin_scalar(
+                self.bytes_at(index)?
+                    // TODO(ngates): update to use buffer when we refactor scalars.
+                    .into_vec::<u8>()
+                    .unwrap_or_else(|b| b.as_ref().to_vec()),
+                self.dtype(),
+            ))
         } else {
             Ok(Scalar::null(self.dtype()))
         }

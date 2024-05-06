@@ -19,6 +19,7 @@ mod flatten;
 mod stats;
 
 pub use stats::compute_stats;
+use vortex_buffer::Buffer;
 
 use crate::array::primitive::PrimitiveArray;
 
@@ -147,11 +148,11 @@ impl VarBinArray<'_> {
             })
     }
 
-    pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
+    pub fn bytes_at(&self, index: usize) -> VortexResult<Buffer> {
         let start = self.offset_at(index);
         let end = self.offset_at(index + 1);
         let sliced = slice(&self.bytes(), start, end)?;
-        Ok(sliced.flatten_primitive()?.buffer().as_ref().to_vec())
+        Ok(sliced.flatten_primitive()?.buffer().clone())
     }
 }
 
