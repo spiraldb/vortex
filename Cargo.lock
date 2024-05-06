@@ -4941,6 +4941,7 @@ name = "vortex-buffer"
 version = "0.1.0"
 dependencies = [
  "arrow-buffer",
+ "bytes",
  "vortex-dtype",
 ]
 

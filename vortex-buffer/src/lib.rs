@@ -1,59 +1,31 @@
-use arrow_buffer::Buffer as ArrowBuffer;
+use bytes::Bytes;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 
 #[derive(Debug, Clone)]
-pub enum Buffer<'a> {
-    Owned(ArrowBuffer),
-    View(&'a [u8]),
-}
+pub struct Buffer(Bytes);
 
-pub type OwnedBuffer = Buffer<'static>;
+unsafe impl Send for Buffer {}
+unsafe impl Sync for Buffer {}
 
-impl Buffer<'_> {
+impl Buffer {
+    #[inline]
     pub fn len(&self) -> usize {
-        match self {
-            Buffer::Owned(buffer) => buffer.len(),
-            Buffer::View(slice) => slice.len(),
-        }
+        self.0.len()
     }
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    pub fn as_slice(&self) -> &[u8] {
-        match self {
-            Buffer::Owned(buffer) => buffer.as_slice(),
-            Buffer::View(slice) => slice,
-        }
-    }
-
     pub fn typed_data<T: NativePType>(&self) -> &[T] {
-        match self {
-            Buffer::Owned(buffer) => unsafe {
-                match_each_native_ptype!(T::PTYPE, |$T| {
-                    std::mem::transmute(buffer.typed_data::<$T>())
-                })
-            },
-            Buffer::View(slice) => {
-                // From ArrowBuffer::typed_data
-                let (prefix, offsets, suffix) = unsafe { slice.align_to::<T>() };
-                assert!(prefix.is_empty() && suffix.is_empty());
-                offsets
-            }
-        }
+        // Based on ArrowBuffer::typed_data
+        let (prefix, offsets, suffix) = unsafe { self.0.align_to::<T>() };
+        assert!(prefix.is_empty() && suffix.is_empty());
+        offsets
     }
 
-    pub fn to_static(&self) -> OwnedBuffer {
-        match self {
-            Buffer::Owned(d) => Buffer::Owned(d.clone()),
-            Buffer::View(_) => Buffer::Owned(self.into()),
-        }
-    }
-}
-
-impl<'a> Buffer<'a> {
-    pub fn into_vec<T: NativePType>(self) -> Result<Vec<T>, Buffer<'a>> {
+    pub fn into_vec<T: NativePType>(self) -> Result<Vec<T>, Buffer> {
+        let mut bytes: Bytes = self.0;
         match self {
             Buffer::Owned(buffer) => match_each_native_ptype!(T::PTYPE, |$T| {
                 buffer

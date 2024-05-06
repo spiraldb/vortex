@@ -18,6 +18,7 @@ mod extension;
 mod list;
 mod null;
 mod primitive;
+mod scalar2;
 mod serde;
 mod struct_;
 mod utf8;

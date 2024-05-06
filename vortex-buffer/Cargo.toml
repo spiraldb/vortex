@@ -11,8 +11,12 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-arrow-buffer = { workspace = true }
+arrow-buffer = { workspace = true, optional = true }
+bytes = { workspace = true }
 vortex-dtype = { path = "../vortex-dtype" }
 
 [lints]
 workspace = true
+
+[features]
+arrow = ['arrow-buffer']
