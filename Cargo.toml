@@ -6,6 +6,7 @@ members = [
     "pyvortex",
     "vortex-alp",
     "vortex-array",
+    "vortex-buffer",
     "vortex-datetime-parts",
     "vortex-dict",
     "vortex-error",
@@ -15,7 +16,7 @@ members = [
     "vortex-ree",
     "vortex-roaring",
     "vortex-dtype",
-    "vortex-zigzag", "vortex-buffer",
+    "vortex-zigzag",
 ]
 resolver = "2"
 
