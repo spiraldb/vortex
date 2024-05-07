@@ -1,7 +1,6 @@
 pub mod accessor;
 pub mod array;
 pub mod arrow;
-pub mod buffer;
 pub mod compress;
 pub mod compute;
 mod context;
@@ -29,10 +28,10 @@ pub use implementation::*;
 pub use metadata::*;
 pub use typed::*;
 pub use view::*;
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
-use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
@@ -106,10 +105,10 @@ impl Array<'_> {
 }
 
 impl<'a> Array<'a> {
-    pub fn into_buffer(self) -> Option<Buffer<'a>> {
+    pub fn into_buffer(self) -> Option<Buffer> {
         match self {
             Array::Data(d) => d.into_buffer(),
-            Array::View(v) => v.buffer().map(|b| b.to_static()),
+            Array::View(v) => v.buffer().cloned(),
         }
     }
 }

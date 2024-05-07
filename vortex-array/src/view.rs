@@ -1,10 +1,10 @@
 use std::fmt::{Debug, Formatter};
 
 use itertools::Itertools;
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::buffer::Buffer;
 use crate::encoding::{EncodingId, EncodingRef};
 use crate::flatbuffers::array as fb;
 use crate::stats::{EmptyStatistics, Statistics};
@@ -16,7 +16,7 @@ pub struct ArrayView<'v> {
     encoding: EncodingRef,
     dtype: &'v DType,
     array: fb::Array<'v>,
-    buffers: &'v [Buffer<'v>],
+    buffers: &'v [Buffer],
     ctx: &'v ViewContext,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
@@ -131,7 +131,7 @@ impl<'v> ArrayView<'v> {
         nbuffers
     }
 
-    pub fn buffer(&self) -> Option<&'v Buffer<'v>> {
+    pub fn buffer(&self) -> Option<&'v Buffer> {
         self.has_buffer().then(|| &self.buffers[0])
     }
 

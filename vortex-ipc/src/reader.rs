@@ -8,7 +8,6 @@ use flatbuffers::{root, root_unchecked};
 use log::error;
 use nougat::gat;
 use vortex::array::chunked::ChunkedArray;
-use vortex::buffer::Buffer;
 use vortex::compute::scalar_subtract::subtract_scalar;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
@@ -17,6 +16,7 @@ use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{
     Array, ArrayDType, ArrayView, Context, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext,
 };
+use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_scalar::Scalar;
@@ -127,7 +127,7 @@ pub struct StreamArrayReader<'a, R: Read> {
     read: &'a mut R,
     messages: &'a mut StreamMessageReader<R>,
     dtype: DType,
-    buffers: Vec<Buffer<'a>>,
+    buffers: Vec<Buffer>,
     row_offset: usize,
 }
 
@@ -262,7 +262,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
             let mut bytes = Vec::with_capacity(buffer.length() as usize);
             self.read.read_into(buffer.length(), &mut bytes)?;
             let arrow_buffer = ArrowBuffer::from_vec(bytes);
-            self.buffers.push(Buffer::Owned(arrow_buffer));
+            self.buffers.push(Buffer::from(arrow_buffer));
 
             offset = buffer.offset() + buffer.length();
         }

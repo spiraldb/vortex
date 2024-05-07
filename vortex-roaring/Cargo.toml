@@ -14,6 +14,7 @@ rust-version = { workspace = true }
 [dependencies]
 arrow-buffer = { workspace = true }
 vortex-array = { path = "../vortex-array" }
+vortex-buffer = { path = "../vortex-buffer" }
 vortex-error = { path = "../vortex-error" }
 vortex-dtype = { path = "../vortex-dtype" }
 vortex-scalar = { path = "../vortex-scalar" }

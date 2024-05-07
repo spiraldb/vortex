@@ -1,8 +1,8 @@
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use vortex_buffer::Buffer;
 
-use crate::buffer::Buffer;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -44,7 +44,7 @@ impl BoolArray<'_> {
                     validity: validity.to_metadata(buffer.len())?,
                     length: buffer.len(),
                 },
-                Some(Buffer::Owned(buffer.into_inner())),
+                Some(Buffer::from(buffer.into_inner())),
                 validity.into_array_data().into_iter().collect_vec().into(),
                 StatsSet::new(),
             )?,

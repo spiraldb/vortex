@@ -70,7 +70,7 @@ impl<W: Write> StreamWriter<W> {
             .zip_eq(buffer_offsets.iter().skip(1))
         {
             let buffer_len = buffer.len();
-            self.write.write_all(buffer.as_slice())?;
+            self.write.write_all(buffer.as_ref())?;
             let padding = (buffer_end as usize) - current_offset - buffer_len;
             self.write.write_all(&vec![0; padding])?;
             current_offset = buffer_end as usize;

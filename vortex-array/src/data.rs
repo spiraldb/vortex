@@ -1,10 +1,10 @@
 use std::sync::{Arc, RwLock};
 
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::EncodingRef;
 use crate::stats::{Stat, Statistics, StatsSet};
 use crate::{Array, ArrayMetadata, IntoArray, OwnedArray, ToArray};
@@ -14,7 +14,7 @@ pub struct ArrayData {
     encoding: EncodingRef,
     dtype: DType, // FIXME(ngates): Arc?
     metadata: Arc<dyn ArrayMetadata>,
-    buffer: Option<OwnedBuffer>,
+    buffer: Option<Buffer>,
     children: Arc<[ArrayData]>,
     stats_map: Arc<RwLock<StatsSet>>,
 }
@@ -24,7 +24,7 @@ impl ArrayData {
         encoding: EncodingRef,
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
-        buffer: Option<OwnedBuffer>,
+        buffer: Option<Buffer>,
         children: Arc<[ArrayData]>,
         statistics: StatsSet,
     ) -> VortexResult<Self> {
@@ -61,7 +61,7 @@ impl ArrayData {
         self.buffer.as_ref()
     }
 
-    pub fn into_buffer(self) -> Option<OwnedBuffer> {
+    pub fn into_buffer(self) -> Option<Buffer> {
         self.buffer
     }
 

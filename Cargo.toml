@@ -7,6 +7,7 @@ members = [
     "pyvortex",
     "vortex-alp",
     "vortex-array",
+    "vortex-buffer",
     "vortex-datetime-parts",
     "vortex-dict",
     "vortex-error",
@@ -48,7 +49,7 @@ arrow-ipc = "51.0.0"
 arrow-schema = "51.0.0"
 arrow-select = "51.0.0"
 bindgen = "0.69.4"
-bytes = "1.0.1"
+bytes = "1.6.0"
 bzip2 = "0.4.4"
 criterion = { version = "0.5.1", features = ["html_reports"] }
 croaring = "1.0.1"

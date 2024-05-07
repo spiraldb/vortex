@@ -4,11 +4,11 @@ use compress::roaring_encode;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::bool::{Bool, BoolArray};
-use vortex::buffer::Buffer;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, OwnedArray};
+use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::Nullability::Nullable;
 use vortex_error::{vortex_bail, vortex_err};
@@ -32,7 +32,7 @@ impl RoaringBoolArray<'_> {
                 typed: TypedArray::try_from_parts(
                     DType::Bool(NonNullable),
                     RoaringBoolMetadata { length },
-                    Some(Buffer::Owned(bitmap.serialize::<Portable>().into())),
+                    Some(Buffer::from(bitmap.serialize::<Portable>())),
                     vec![].into(),
                     StatsSet::new(),
                 )?,
@@ -46,7 +46,7 @@ impl RoaringBoolArray<'_> {
             self.array()
                 .buffer()
                 .expect("RoaringBoolArray buffer is missing")
-                .as_slice(),
+                .as_ref(),
         )
     }
 

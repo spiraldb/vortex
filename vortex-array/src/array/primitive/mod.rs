@@ -2,10 +2,10 @@ use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
+use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, NativePType, PType};
 use vortex_error::vortex_bail;
 
-use crate::buffer::Buffer;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayFlatten;
@@ -34,7 +34,7 @@ impl PrimitiveArray<'_> {
                 PrimitiveMetadata {
                     validity: validity.to_metadata(buffer.len())?,
                 },
-                Some(Buffer::Owned(buffer.into_inner())),
+                Some(Buffer::from(buffer.into_inner())),
                 validity.into_array_data().into_iter().collect_vec().into(),
                 StatsSet::new(),
             )?,
@@ -134,11 +134,11 @@ impl PrimitiveArray<'_> {
         }
         Ok(Self::from_vec(own_values, validity))
     }
-}
 
-impl<'a> PrimitiveArray<'a> {
-    pub fn into_buffer(self) -> Buffer<'a> {
-        self.into_array().into_buffer().unwrap()
+    pub fn into_buffer(self) -> Buffer {
+        self.into_array()
+            .into_buffer()
+            .expect("PrimitiveArray must have a buffer")
     }
 }
 
