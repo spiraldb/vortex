@@ -161,9 +161,8 @@ impl StatsSet {
                     let self_value: Vec<u64> = e.get().try_into().unwrap();
                     e.insert(
                         self_value
-                            .0
                             .iter()
-                            .zip_eq(other_value.0.iter())
+                            .zip_eq(other_value.iter())
                             .map(|(s, o)| *s + *o)
                             .collect::<Vec<_>>()
                             .into(),
