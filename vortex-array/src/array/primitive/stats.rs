@@ -101,19 +101,19 @@ impl<'a, T: PStatsType> ArrayStatisticsCompute for NullableValues<'a, T> {
 }
 
 trait BitWidth {
-    fn bit_width(self) -> usize;
-    fn trailing_zeros(self) -> usize;
+    fn bit_width(self) -> u32;
+    fn trailing_zeros(self) -> u32;
 }
 
 macro_rules! int_bit_width {
     ($T:ty) => {
         impl BitWidth for $T {
-            fn bit_width(self) -> usize {
-                size_of::<Self>() * 8 - (PrimInt::leading_zeros(self) as usize)
+            fn bit_width(self) -> u32 {
+                Self::BITS - PrimInt::leading_zeros(self)
             }
 
-            fn trailing_zeros(self) -> usize {
-                PrimInt::trailing_zeros(self) as usize
+            fn trailing_zeros(self) -> u32 {
+                PrimInt::trailing_zeros(self)
             }
         }
     };
@@ -132,11 +132,11 @@ int_bit_width!(i64);
 macro_rules! float_bit_width {
     ($T:ty) => {
         impl BitWidth for $T {
-            fn bit_width(self) -> usize {
-                size_of::<Self>() * 8
+            fn bit_width(self) -> u32 {
+                (size_of::<Self>() * 8) as u32
             }
 
-            fn trailing_zeros(self) -> usize {
+            fn trailing_zeros(self) -> u32 {
                 0
             }
         }
@@ -172,8 +172,8 @@ impl<T: PStatsType> StatsAccumulator<T> {
             bit_widths: vec![0; size_of::<T>() * 8 + 1],
             trailing_zeros: vec![0; size_of::<T>() * 8 + 1],
         };
-        stats.bit_widths[first_value.bit_width()] += 1;
-        stats.trailing_zeros[first_value.trailing_zeros()] += 1;
+        stats.bit_widths[first_value.bit_width() as usize] += 1;
+        stats.trailing_zeros[first_value.trailing_zeros() as usize] += 1;
         stats
     }
 
@@ -197,8 +197,8 @@ impl<T: PStatsType> StatsAccumulator<T> {
     }
 
     pub fn next(&mut self, next: T) {
-        self.bit_widths[next.bit_width()] += 1;
-        self.trailing_zeros[next.trailing_zeros()] += 1;
+        self.bit_widths[next.bit_width() as usize] += 1;
+        self.trailing_zeros[next.trailing_zeros() as usize] += 1;
 
         if self.prev == next {
             self.is_strict_sorted = false;
