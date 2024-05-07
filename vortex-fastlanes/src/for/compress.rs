@@ -55,7 +55,7 @@ impl EncodingCompression for FoREncoding {
             if shift == <$T>::PTYPE.bit_width() as u8 {
                 ConstantArray::new($T::default(), parray.len()).into_array()
             } else {
-                compress_primitive::<$T>(parray, shift, $T::try_from(min.clone())?).into_array()
+                compress_primitive::<$T>(parray, shift, $T::try_from(&min)?).into_array()
             }
         });
         let for_like = like.map(|like_arr| FoRArray::try_from(like_arr).unwrap());
@@ -204,7 +204,15 @@ mod test {
             .iter()
             .enumerate()
             .for_each(|(i, v)| {
-                assert_eq!(*v, compressed.scalar_at(i).unwrap().try_into().unwrap());
+                assert_eq!(
+                    *v,
+                    compressed
+                        .scalar_at(i)
+                        .unwrap()
+                        .as_ref()
+                        .try_into()
+                        .unwrap()
+                );
             });
     }
 }

@@ -59,7 +59,7 @@ impl TakeFn for BitPackedArray<'_> {
                 Ok(primitive_patches.into_array())
             } else {
                 Ok(
-                    ConstantArray::new(Scalar::null(&self.dtype().as_nullable()), indices.len())
+                    ConstantArray::new(Scalar::null(self.dtype().as_nullable()), indices.len())
                         .into_array(),
                 )
             };
@@ -259,7 +259,7 @@ mod test {
 
         values.iter().enumerate().for_each(|(i, v)| {
             assert_eq!(
-                u32::try_from(scalar_at(packed.array(), i).unwrap()).unwrap(),
+                u32::try_from(scalar_at(packed.array(), i).unwrap().as_ref()).unwrap(),
                 *v
             );
         });

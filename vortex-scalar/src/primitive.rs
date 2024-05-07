@@ -41,15 +41,10 @@ impl<'a> TryFrom<&'a Scalar> for PrimitiveScalar<'a> {
 }
 
 impl Scalar {
-    pub fn primitive<T: NativePType>(value: Option<T>, nullability: Nullability) -> Scalar {
-        if value.is_none() && nullability == Nullability::NonNullable {
-            panic!("Can't create non-nullable scalar with null value")
-        }
+    pub fn primitive<T: NativePType>(value: T, nullability: Nullability) -> Scalar {
         Scalar {
             dtype: DType::Primitive(T::PTYPE, nullability),
-            value: value
-                .map(|v| ScalarValue::Data(ScalarData::Buffer(v.to_le_bytes().into())))
-                .unwrap_or_else(|| ScalarValue::Data(ScalarData::None)),
+            value: ScalarValue::Data(ScalarData::Buffer(value.to_le_bytes().into())),
         }
     }
 }

@@ -254,8 +254,9 @@ mod test {
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::ToArray;
+    use vortex_dtype::Nullability::Nullable;
     use vortex_dtype::PType;
-    use vortex_scalar::{PrimitiveScalar, Scalar};
+    use vortex_scalar::Scalar;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
 
@@ -290,11 +291,11 @@ mod test {
         );
         assert_eq!(
             scalar_at(&values.to_array(), 1).unwrap(),
-            PrimitiveScalar::nullable(Some(1)).into()
+            Scalar::primitive(1, Nullable).into()
         );
         assert_eq!(
             scalar_at(&values.to_array(), 2).unwrap(),
-            PrimitiveScalar::nullable(Some(3)).into()
+            Scalar::primitive(3, Nullable).into()
         );
     }
 
