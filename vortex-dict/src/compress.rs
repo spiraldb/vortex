@@ -291,11 +291,11 @@ mod test {
         );
         assert_eq!(
             scalar_at(&values.to_array(), 1).unwrap(),
-            Scalar::primitive(1, Nullable).into()
+            Scalar::primitive(1, Nullable)
         );
         assert_eq!(
             scalar_at(&values.to_array(), 2).unwrap(),
-            Scalar::primitive(3, Nullable).into()
+            Scalar::primitive(3, Nullable)
         );
     }
 

@@ -44,13 +44,13 @@ impl ScalarAtFn for FoRArray<'_> {
             vortex_bail!("Reference and encoded values had different dtypes");
         }
 
-        return match_each_integer_ptype!(encoded.ptype(), |$P| {
+        match_each_integer_ptype!(encoded.ptype(), |$P| {
             use num_traits::WrappingAdd;
             Ok(Scalar::primitive::<$P>(
                 (encoded.typed_value::<$P>().unwrap() << self.shift()).wrapping_add(reference.typed_value::<$P>().unwrap()),
                 encoded.dtype().nullability()
             ))
-        });
+        })
     }
 }
 

@@ -24,10 +24,10 @@ impl ScalarAtFn for ZigZagArray<'_> {
         let scalar = scalar_at(&self.encoded(), index)?;
         let pscalar = PrimitiveScalar::try_from(&scalar)?;
         match pscalar.ptype() {
-            PType::U8 => return Ok(i8::decode(pscalar.typed_value::<u8>().unwrap()).into()),
-            PType::U16 => return Ok(i16::decode(pscalar.typed_value::<u16>().unwrap()).into()),
-            PType::U32 => return Ok(i32::decode(pscalar.typed_value::<u32>().unwrap()).into()),
-            PType::U64 => return Ok(i64::decode(pscalar.typed_value::<u64>().unwrap()).into()),
+            PType::U8 => Ok(i8::decode(pscalar.typed_value::<u8>().unwrap()).into()),
+            PType::U16 => Ok(i16::decode(pscalar.typed_value::<u16>().unwrap()).into()),
+            PType::U32 => Ok(i32::decode(pscalar.typed_value::<u32>().unwrap()).into()),
+            PType::U64 => Ok(i64::decode(pscalar.typed_value::<u64>().unwrap()).into()),
             _ => unreachable!(),
         }
     }

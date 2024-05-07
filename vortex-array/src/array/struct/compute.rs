@@ -108,8 +108,7 @@ impl ScalarAtFn for StructArray<'_> {
             self.children()
                 .map(|field| scalar_at(&field, index).map(|s| s.into_data().unwrap()))
                 .try_collect()?,
-        )
-        .into())
+        ))
     }
 }
 
