@@ -17,10 +17,10 @@ flexbuffers = { workspace = true, optional = true }
 itertools = { workspace = true }
 paste = { workspace = true }
 num-traits = { workspace = true }
-serde = { workspace = true, optional = true, features = ["derive", "rc"] }
-vortex-buffer = { path = "../vortex-buffer", features = ["flexbuffers"] }
+serde = { workspace = true, optional = true, features = ["rc"] }
+vortex-buffer = { path = "../vortex-buffer" }
 vortex-dtype = { path = "../vortex-dtype" }
-vortex-error = { path = "../vortex-error", features = ["flexbuffers"] }
+vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 
 [build-dependencies]
@@ -30,5 +30,11 @@ build-vortex = { path = "../build-vortex" }
 workspace = true
 
 [features]
-flatbuffers = ["dep:flatbuffers", "dep:flexbuffers", "dep:serde", "vortex-error/flexbuffers"]
-serde = ["dep:serde"]
+flatbuffers = [
+    "dep:flatbuffers",
+    "dep:flexbuffers",
+    "dep:serde",
+    "vortex-buffer/flexbuffers",
+    "vortex-error/flexbuffers",
+]
+serde = ["dep:serde", "serde/derive"]
