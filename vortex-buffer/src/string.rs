@@ -4,11 +4,24 @@ use std::str::Utf8Error;
 use crate::Buffer;
 
 /// A wrapper around a `Buffer` that guarantees that the buffer contains valid UTF-8.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
 pub struct BufferString(Buffer);
 
 impl BufferString {
     pub unsafe fn new_unchecked(buffer: Buffer) -> Self {
         Self(buffer)
+    }
+}
+
+impl From<BufferString> for Buffer {
+    fn from(value: BufferString) -> Self {
+        value.0
+    }
+}
+
+impl From<&str> for BufferString {
+    fn from(value: &str) -> Self {
+        BufferString(Buffer::from(value.as_bytes()))
     }
 }
 

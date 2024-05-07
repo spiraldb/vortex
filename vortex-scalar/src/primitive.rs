@@ -1,19 +1,14 @@
-use std::marker::PhantomData;
-
 use vortex_buffer::Buffer;
 use vortex_dtype::half::f16;
 use vortex_dtype::{DType, NativePType, Nullability, PType};
-use vortex_error::{vortex_bail, vortex_err, VortexError};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::value::{ScalarData, ScalarValue, ScalarView};
 use crate::Scalar;
 
-pub struct PrimitiveScalar<'a, T: NativePType + for<'b> From<&'b ScalarView>>(
-    &'a Scalar,
-    PhantomData<T>,
-);
+pub struct PrimitiveScalar<'a>(&'a Scalar);
 
-impl<'a, T: NativePType + for<'b> From<&'b ScalarView>> PrimitiveScalar<'a, T> {
+impl<'a> PrimitiveScalar<'a> {
     #[inline]
     pub fn dtype(&self) -> &'a DType {
         self.0.dtype()
@@ -21,28 +16,26 @@ impl<'a, T: NativePType + for<'b> From<&'b ScalarView>> PrimitiveScalar<'a, T> {
 
     #[inline]
     pub fn ptype(&self) -> PType {
-        T::PTYPE
+        PType::try_from(self.dtype()).expect("Invalid primitive scalar dtype")
     }
 
-    pub fn value(&self) -> Option<T> {
+    pub fn typed_value<T: NativePType + for<'b> From<&'b ScalarView>>(&self) -> Option<T> {
         self.0.value.as_primitive::<T>()
+    }
+
+    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
+        todo!()
     }
 }
 
-impl<'a, T: NativePType + for<'b> From<&'b ScalarView>> TryFrom<&'a Scalar>
-    for PrimitiveScalar<'a, T>
-{
+impl<'a> TryFrom<&'a Scalar> for PrimitiveScalar<'a> {
     type Error = VortexError;
 
     fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
-        if matches!(value.dtype(), DType::Primitive(p, _) if p == &T::PTYPE) {
-            Ok(Self(value, Default::default()))
+        if matches!(value.dtype(), DType::Primitive(..)) {
+            Ok(Self(value))
         } else {
-            vortex_bail!(
-                "Expected scalar of type {}, found {}",
-                T::PTYPE,
-                value.dtype()
-            )
+            vortex_bail!("Expected primitive scalar, found {}", value.dtype())
         }
     }
 }
@@ -57,13 +50,6 @@ impl Scalar {
             value: value
                 .map(|v| ScalarValue::Data(ScalarData::Buffer(v.to_le_bytes().into())))
                 .unwrap_or_else(|| ScalarValue::Data(ScalarData::None)),
-        }
-    }
-
-    pub fn primitive_null<T: NativePType>() -> Scalar {
-        Scalar {
-            dtype: DType::Primitive(T::PTYPE, Nullability::Nullable),
-            value: ScalarValue::Data(ScalarData::None),
         }
     }
 }
@@ -108,8 +94,8 @@ macro_rules! primitive_scalar {
             type Error = VortexError;
 
             fn try_from(value: &Scalar) -> Result<Self, Self::Error> {
-                PrimitiveScalar::<$T>::try_from(value)?
-                    .value()
+                PrimitiveScalar::try_from(value)?
+                    .typed_value::<$T>()
                     .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
             }
         }
@@ -142,8 +128,8 @@ impl TryFrom<&Scalar> for f16 {
     type Error = VortexError;
 
     fn try_from(value: &Scalar) -> Result<Self, Self::Error> {
-        PrimitiveScalar::<f16>::try_from(value)?
-            .value()
+        PrimitiveScalar::try_from(value)?
+            .typed_value::<f16>()
             .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
     }
 }

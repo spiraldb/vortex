@@ -28,15 +28,15 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
 
         let result = if to_subtract.dtype().is_int() {
             match_each_integer_ptype!(self.ptype(), |$T| {
-                let to_subtract: $T = PrimitiveScalar::<$T>::try_from(to_subtract)?
-                    .value()
+                let to_subtract: $T = PrimitiveScalar::try_from(to_subtract)?
+                    .typed_value::<$T>()
                     .ok_or_else(|| vortex_err!("expected primitive"))?;
                 subtract_scalar_integer::<$T>(self, to_subtract)?
             })
         } else {
             match_each_float_ptype!(self.ptype(), |$T| {
-                let to_subtract: $T = PrimitiveScalar::<$T>::try_from(to_subtract)?
-                    .value()
+                let to_subtract: $T = PrimitiveScalar::try_from(to_subtract)?
+                    .typed_value::<$T>()
                     .ok_or_else(|| vortex_err!("expected primitive"))?;
                 let sub_vec : Vec<$T> = self.typed_data::<$T>()
                 .iter()

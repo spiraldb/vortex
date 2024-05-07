@@ -1,5 +1,6 @@
 use vortex_buffer::BufferString;
 use vortex_dtype::DType;
+use vortex_dtype::Nullability;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
@@ -19,6 +20,22 @@ impl<'a> Utf8Scalar<'a> {
             .as_bytes()
             // Checked on construction that the buffer is valid UTF-8
             .map(|buffer| unsafe { BufferString::new_unchecked(buffer) })
+    }
+
+    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
+        todo!()
+    }
+}
+
+impl Scalar {
+    pub fn utf8<B>(str: B, nullability: Nullability) -> Self
+    where
+        BufferString: From<B>,
+    {
+        Scalar {
+            dtype: DType::Utf8(nullability),
+            value: ScalarValue::Data(ScalarData::Buffer(BufferString::from(str).into())),
+        }
     }
 }
 

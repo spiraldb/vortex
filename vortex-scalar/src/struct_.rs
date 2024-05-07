@@ -1,6 +1,7 @@
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexError};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
+use crate::value::{ScalarData, ScalarValue};
 use crate::Scalar;
 
 pub struct StructScalar<'a>(&'a Scalar);
@@ -21,6 +22,19 @@ impl<'a> StructScalar<'a> {
         struct_dtype
             .find_name(name)
             .and_then(|idx| self.field_by_idx(idx, dtype))
+    }
+
+    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
+        todo!()
+    }
+}
+
+impl Scalar {
+    pub fn r#struct(dtype: DType, children: Vec<ScalarData>) -> Scalar {
+        Scalar {
+            dtype,
+            value: ScalarValue::Data(ScalarData::List(children.into())),
+        }
     }
 }
 

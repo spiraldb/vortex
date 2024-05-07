@@ -1,5 +1,5 @@
 use vortex_dtype::{DType, ExtDType};
-use vortex_error::{vortex_bail, VortexError};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::value::ScalarValue;
 use crate::Scalar;
@@ -14,6 +14,10 @@ impl<'a> ExtScalar<'a> {
     /// Returns the stored value of the extension scalar.
     pub fn value(&self) -> &ScalarValue {
         &self.0.value
+    }
+
+    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
+        todo!()
     }
 }
 

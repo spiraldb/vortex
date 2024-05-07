@@ -143,7 +143,7 @@ impl dyn Statistics + '_ {
     ) -> VortexResult<U> {
         let mut res: Option<U> = None;
         self.with_computed_stat_value(stat, &mut |s| {
-            res = Some(U::try_from(s.cast(&DType::from(U::PTYPE))?)?);
+            res = Some(U::try_from(s.cast(&DType::from(U::PTYPE))?.as_ref())?);
             Ok(())
         })?;
         Ok(res.expect("Result should have been populated by previous call"))

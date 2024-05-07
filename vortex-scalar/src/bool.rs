@@ -15,6 +15,10 @@ impl<'a> BoolScalar<'a> {
     pub fn value(&self) -> Option<bool> {
         self.0.value.as_bool()
     }
+
+    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
+        todo!()
+    }
 }
 
 impl<'a> TryFrom<&'a Scalar> for BoolScalar<'a> {

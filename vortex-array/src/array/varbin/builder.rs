@@ -69,7 +69,7 @@ impl<O: NativePType> VarBinBuilder<O> {
 mod test {
     use vortex_dtype::DType;
     use vortex_dtype::Nullability::Nullable;
-    use vortex_scalar::Utf8Scalar;
+    use vortex_scalar::Scalar;
 
     use crate::array::varbin::builder::VarBinBuilder;
     use crate::compute::scalar_at::scalar_at;
@@ -87,7 +87,7 @@ mod test {
         assert_eq!(array.dtype().nullability(), Nullable);
         assert_eq!(
             scalar_at(&array, 0).unwrap(),
-            Utf8Scalar::nullable("hello".to_owned()).into()
+            Scalar::utf8("hello", Nullable).into()
         );
         assert!(scalar_at(&array, 1).unwrap().is_null());
     }

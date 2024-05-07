@@ -15,7 +15,7 @@ impl Display for Scalar {
                 Some(b) => write!(f, "{}", b),
             },
             DType::Primitive(ptype, _) => match_each_native_ptype!(ptype, |$T| {
-                match PrimitiveScalar::<$T>::try_from(self).expect("primitive").value() {
+                match PrimitiveScalar::try_from(self).expect("primitive").typed_value::<$T>() {
                     None => write!(f, "null"),
                     Some(v) => write!(f, "{}", v),
                 }

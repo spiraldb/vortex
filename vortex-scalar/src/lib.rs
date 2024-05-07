@@ -21,6 +21,7 @@ pub use list::*;
 pub use primitive::*;
 pub use struct_::*;
 pub use utf8::*;
+use vortex_error::{vortex_bail, VortexResult};
 
 pub mod flatbuffers {
     pub use gen_scalar::vortex::*;
@@ -62,6 +63,27 @@ impl Scalar {
         Self {
             dtype,
             value: ScalarValue::Data(ScalarData::None),
+        }
+    }
+
+    pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
+        if self.dtype() == dtype {
+            return Ok(self.clone());
+        }
+
+        if self.is_null() && !dtype.is_nullable() {
+            vortex_bail!("Can't cast null scalar to non-nullable type")
+        }
+
+        match dtype {
+            DType::Null => vortex_bail!("Can't cast non-null to null"),
+            DType::Bool(_) => BoolScalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::Primitive(..) => PrimitiveScalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::Utf8(_) => Utf8Scalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::Binary(_) => BinaryScalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::Struct(..) => StructScalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::List(..) => ListScalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::Extension(..) => ExtScalar::try_from(self).and_then(|s| s.cast(dtype)),
         }
     }
 

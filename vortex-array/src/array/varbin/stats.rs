@@ -124,6 +124,7 @@ impl<'a> VarBinAccumulator<'a> {
 
 #[cfg(test)]
 mod test {
+    use vortex_buffer::BufferString;
     use vortex_dtype::{DType, Nullability};
 
     use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
@@ -140,12 +141,12 @@ mod test {
     fn utf8_stats() {
         let arr = array(DType::Utf8(Nullability::NonNullable));
         assert_eq!(
-            arr.statistics().compute_min::<String>().unwrap(),
-            "hello world".to_owned()
+            arr.statistics().compute_min::<BufferString>().unwrap(),
+            BufferString::from("hello world")
         );
         assert_eq!(
-            arr.statistics().compute_max::<String>().unwrap(),
-            "hello world this is a long string".to_owned()
+            arr.statistics().compute_max::<BufferString>().unwrap(),
+            BufferString::from("hello world this is a long string")
         );
         assert_eq!(arr.statistics().compute_run_count().unwrap(), 2);
         assert!(!arr.statistics().compute_is_constant().unwrap());
@@ -180,12 +181,12 @@ mod test {
             DType::Utf8(Nullability::Nullable),
         );
         assert_eq!(
-            array.statistics().compute_min::<String>().unwrap(),
-            "hello world".to_owned()
+            array.statistics().compute_min::<BufferString>().unwrap(),
+            BufferString::from("hello world")
         );
         assert_eq!(
-            array.statistics().compute_max::<String>().unwrap(),
-            "hello world this is a long string".to_owned()
+            array.statistics().compute_max::<BufferString>().unwrap(),
+            BufferString::from("hello world this is a long string")
         );
     }
 

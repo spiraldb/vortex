@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use vortex_dtype::Nullability;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::vortex_bail;
-use vortex_scalar::{BinaryScalar, Scalar, Utf8Scalar};
+use vortex_scalar::Scalar;
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
@@ -78,6 +78,7 @@ impl VarBinArray<'_> {
     ) -> VortexResult<T> {
         scalar_at(&self.offsets(), 0)?
             .cast(&DType::from(T::PTYPE))?
+            .as_ref()
             .try_into()
     }
 
@@ -209,13 +210,9 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray<'_> {
 pub fn varbin_scalar(value: Vec<u8>, dtype: &DType) -> Scalar {
     if matches!(dtype, DType::Utf8(_)) {
         let str = unsafe { String::from_utf8_unchecked(value) };
-        Utf8Scalar::try_new(Some(str), dtype.nullability())
-            .unwrap()
-            .into()
+        Scalar::utf8(str.as_ref(), dtype.nullability())
     } else {
-        BinaryScalar::try_new(Some(value), dtype.nullability())
-            .unwrap()
-            .into()
+        Scalar::binary(value.into(), dtype.nullability())
     }
 }
 

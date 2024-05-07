@@ -4,7 +4,8 @@ use std::mem::size_of;
 use arrow_buffer::buffer::BooleanBuffer;
 use num_traits::PrimInt;
 use vortex_dtype::half::f16;
-use vortex_dtype::{match_each_native_ptype, NativePType};
+use vortex_dtype::Nullability::Nullable;
+use vortex_dtype::{match_each_native_ptype, DType, NativePType};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -46,8 +47,14 @@ impl<T: PStatsType> ArrayStatisticsCompute for &[T] {
 
 fn all_null_stats<T: PStatsType>(len: usize) -> VortexResult<StatsSet> {
     Ok(StatsSet::from(HashMap::from([
-        (Stat::Min, Scalar::primitive_null::<T>()),
-        (Stat::Max, Scalar::primitive_null::<T>()),
+        (
+            Stat::Min,
+            Scalar::null(DType::Primitive(T::PTYPE, Nullable)),
+        ),
+        (
+            Stat::Max,
+            Scalar::null(DType::Primitive(T::PTYPE, Nullable)),
+        ),
         (Stat::IsConstant, true.into()),
         (Stat::IsSorted, true.into()),
         (Stat::IsStrictSorted, (len < 2).into()),

@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexError};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::value::{ScalarData, ScalarValue};
 use crate::Scalar;
@@ -28,6 +28,10 @@ impl<'a> ListScalar<'a> {
 
     pub fn elements(&self) -> impl Iterator<Item = Scalar> + '_ {
         (0..self.len()).map(move |idx| self.element(idx).expect("incorrect length"))
+    }
+
+    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
+        todo!()
     }
 }
 

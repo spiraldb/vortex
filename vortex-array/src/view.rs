@@ -14,9 +14,9 @@ use crate::{Array, IntoArray, ToArray};
 #[derive(Clone)]
 pub struct ArrayView<'v> {
     encoding: EncodingRef,
-    dtype: DType,
+    dtype: &'v DType,
     array: fb::Array<'v>,
-    buffers: [Buffer],
+    buffers: &'v [Buffer],
     ctx: &'v ViewContext,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know

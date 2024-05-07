@@ -14,7 +14,6 @@ use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray};
 use vortex_dtype::NativePType;
 use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_error::VortexResult;
-use vortex_scalar::AsBytes;
 
 use crate::dict::{DictArray, DictEncoding};
 
