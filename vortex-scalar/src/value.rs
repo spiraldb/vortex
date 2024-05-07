@@ -7,25 +7,21 @@ use vortex_buffer::Buffer;
 use vortex_dtype::half::f16;
 use vortex_dtype::NativePType;
 use vortex_error::VortexResult;
-use ScalarValue::{Data, View};
 
-// Internal enum to hide implementation from consumers.
+/// Represents the internal data of a scalar value. Can only be interpreted by wrapping
+/// up with a DType to make a Scalar.
+///
+/// This is similar to serde_json::Value, but uses our own Buffer implementation for bytes,
+/// an Arc<[]> for list elements, and structs are modelled as lists.
+///
+/// TODO(ngates): we could support reading structs from both structs and lists in the future since
+///  storing sparse structs dense with null scalars may be inefficient.
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ScalarValue {
-    Data(ScalarData),
-    // A lazily deserialized view over a flexbuffer.
-    #[allow(dead_code)]
-    View(ScalarView),
-}
-
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum ScalarData {
     None,
     Bool(bool),
-    #[allow(dead_code)]
     Buffer(Buffer),
-    #[allow(dead_code)]
-    List(Arc<[ScalarData]>),
+    List(Arc<[ScalarValue]>),
 }
 
 #[derive(Debug, Clone)]
