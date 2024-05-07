@@ -5,15 +5,19 @@ use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use crate::value::ScalarValue;
 use crate::Scalar;
 
-pub struct BoolScalar<'a>(&'a Scalar);
+pub struct BoolScalar<'a> {
+    dtype: &'a DType,
+    value: Option<bool>,
+}
+
 impl<'a> BoolScalar<'a> {
     #[inline]
     pub fn dtype(&self) -> &'a DType {
-        self.0.dtype()
+        self.dtype
     }
 
     pub fn value(&self) -> Option<bool> {
-        self.0.value.as_bool()
+        self.value
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
@@ -43,7 +47,10 @@ impl<'a> TryFrom<&'a Scalar> for BoolScalar<'a> {
         if !matches!(value.dtype(), DType::Bool(_)) {
             vortex_bail!("Expected bool scalar, found {}", value.dtype())
         }
-        Ok(Self(value))
+        Ok(Self {
+            dtype: value.dtype(),
+            value: value.value.as_bool()?,
+        })
     }
 }
 

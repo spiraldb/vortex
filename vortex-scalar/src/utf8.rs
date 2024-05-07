@@ -7,19 +7,19 @@ use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use crate::value::ScalarValue;
 use crate::Scalar;
 
-pub struct Utf8Scalar<'a>(&'a Scalar);
+pub struct Utf8Scalar<'a> {
+    dtype: &'a DType,
+    value: Option<BufferString>,
+}
+
 impl<'a> Utf8Scalar<'a> {
     #[inline]
     pub fn dtype(&self) -> &'a DType {
-        self.0.dtype()
+        self.dtype
     }
 
     pub fn value(&self) -> Option<BufferString> {
-        self.0
-            .value
-            .as_bytes()
-            // Checked on construction that the buffer is valid UTF-8
-            .map(|buffer| unsafe { BufferString::new_unchecked(buffer) })
+        self.value.as_ref().cloned()
     }
 
     pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
@@ -43,15 +43,17 @@ impl<'a> TryFrom<&'a Scalar> for Utf8Scalar<'a> {
     type Error = VortexError;
 
     fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
-        if matches!(value.dtype(), DType::Utf8(_)) {
-            // Validate here that the buffer is indeed UTF-8
-            if let Some(buffer) = value.value.as_bytes() {
-                let _ = std::str::from_utf8(buffer.as_ref())?;
-            }
-            Ok(Self(value))
-        } else {
+        if !matches!(value.dtype(), DType::Utf8(_)) {
             vortex_bail!("Expected utf8 scalar, found {}", value.dtype())
         }
+        Ok(Self {
+            dtype: value.dtype(),
+            value: value
+                .value
+                .as_bytes()?
+                .map(|b| BufferString::try_from(b))
+                .transpose()?,
+        })
     }
 }
 

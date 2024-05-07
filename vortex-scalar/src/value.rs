@@ -4,6 +4,7 @@ use paste::paste;
 use vortex_buffer::Buffer;
 use vortex_dtype::half::f16;
 use vortex_dtype::NativePType;
+use vortex_error::{vortex_err, VortexResult};
 
 /// Represents the internal data of a scalar value. Can only be interpreted by wrapping
 /// up with a DType to make a Scalar.
@@ -26,10 +27,11 @@ impl ScalarValue {
         matches!(self, ScalarValue::Null)
     }
 
-    pub fn as_bool(&self) -> Option<bool> {
+    pub fn as_bool(&self) -> VortexResult<Option<bool>> {
         match self {
-            ScalarValue::Bool(b) => Some(*b),
-            _ => None,
+            ScalarValue::Null => Ok(None),
+            ScalarValue::Bool(b) => Ok(Some(*b)),
+            _ => Err(vortex_err!("Not a bool scalar")),
         }
     }
 
@@ -40,10 +42,11 @@ impl ScalarValue {
         }
     }
 
-    pub fn as_bytes(&self) -> Option<Buffer> {
+    pub fn as_bytes(&self) -> VortexResult<Option<Buffer>> {
         match self {
-            ScalarValue::Buffer(b) => Some(b.clone()),
-            _ => None,
+            ScalarValue::Null => Ok(None),
+            ScalarValue::Buffer(b) => Ok(Some(b.clone())),
+            _ => Err(vortex_err!("Not a binary scalar")),
         }
     }
 
