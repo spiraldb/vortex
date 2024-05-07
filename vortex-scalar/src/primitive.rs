@@ -12,6 +12,7 @@ pub struct PrimitiveScalar<'a, T: NativePType + for<'b> From<&'b ScalarView>>(
     &'a Scalar,
     PhantomData<T>,
 );
+
 impl<'a, T: NativePType + for<'b> From<&'b ScalarView>> PrimitiveScalar<'a, T> {
     #[inline]
     pub fn dtype(&self) -> &'a DType {
@@ -47,13 +48,22 @@ impl<'a, T: NativePType + for<'b> From<&'b ScalarView>> TryFrom<&'a Scalar>
 }
 
 impl Scalar {
-    pub fn primitive<T: NativePType>(value: T, nullability: Nullability) -> Scalar
-    where
-        ScalarData: From<T>,
-    {
+    pub fn primitive<T: NativePType>(value: Option<T>, nullability: Nullability) -> Scalar {
+        if value.is_none() && nullability == Nullability::NonNullable {
+            panic!("Can't create non-nullable scalar with null value")
+        }
         Scalar {
             dtype: DType::Primitive(T::PTYPE, nullability),
-            value: ScalarValue::Data(ScalarData::from(value)),
+            value: value
+                .map(|v| ScalarValue::Data(ScalarData::Buffer(v.to_le_bytes().into())))
+                .unwrap_or_else(|| ScalarValue::Data(ScalarData::None)),
+        }
+    }
+
+    pub fn primitive_null<T: NativePType>() -> Scalar {
+        Scalar {
+            dtype: DType::Primitive(T::PTYPE, Nullability::Nullable),
+            value: ScalarValue::Data(ScalarData::None),
         }
     }
 }
@@ -79,6 +89,17 @@ macro_rules! primitive_scalar {
                 Scalar {
                     dtype: DType::Primitive(<$T>::PTYPE, Nullability::NonNullable),
                     value: ScalarValue::Data(ScalarData::from(value)),
+                }
+            }
+        }
+
+        impl From<Option<$T>> for Scalar {
+            fn from(value: Option<$T>) -> Self {
+                Scalar {
+                    dtype: DType::Primitive(<$T>::PTYPE, Nullability::Nullable),
+                    value: value
+                        .map(|v| ScalarValue::Data(ScalarData::from(v)))
+                        .unwrap_or_else(|| ScalarValue::Data(ScalarData::None)),
                 }
             }
         }

@@ -4,7 +4,7 @@ use std::mem::size_of;
 use arrow_buffer::buffer::BooleanBuffer;
 use num_traits::PrimInt;
 use vortex_dtype::half::f16;
-use vortex_dtype::match_each_native_ptype;
+use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -14,8 +14,8 @@ use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
 use crate::IntoArray;
 
-trait PStatsType: Into<Scalar> + BitWidth {}
-impl<T: Into<Scalar> + BitWidth> PStatsType for T {}
+trait PStatsType: NativePType + Into<Scalar> + BitWidth {}
+impl<T: NativePType + Into<Scalar> + BitWidth> PStatsType for T {}
 
 impl ArrayStatisticsCompute for PrimitiveArray<'_> {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
@@ -46,8 +46,8 @@ impl<T: PStatsType> ArrayStatisticsCompute for &[T] {
 
 fn all_null_stats<T: PStatsType>(len: usize) -> VortexResult<StatsSet> {
     Ok(StatsSet::from(HashMap::from([
-        (Stat::Min, Option::<T>::None.into()),
-        (Stat::Max, Option::<T>::None.into()),
+        (Stat::Min, Scalar::primitive_null::<T>()),
+        (Stat::Max, Scalar::primitive_null::<T>()),
         (Stat::IsConstant, true.into()),
         (Stat::IsSorted, true.into()),
         (Stat::IsStrictSorted, (len < 2).into()),
@@ -215,11 +215,8 @@ impl<T: PStatsType> StatsAccumulator<T> {
             (Stat::Max, self.max.into()),
             (Stat::NullCount, self.null_count.into()),
             (Stat::IsConstant, (self.min == self.max).into()),
-            (Stat::BitWidthFreq, ListScalarVec(self.bit_widths).into()),
-            (
-                Stat::TrailingZeroFreq,
-                ListScalarVec(self.trailing_zeros).into(),
-            ),
+            (Stat::BitWidthFreq, self.bit_widths.into()),
+            (Stat::TrailingZeroFreq, self.trailing_zeros.into()),
             (Stat::IsSorted, self.is_sorted.into()),
             (
                 Stat::IsStrictSorted,

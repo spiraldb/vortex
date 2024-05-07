@@ -12,6 +12,10 @@ impl<'a> ListScalar<'a> {
         self.0.dtype()
     }
 
+    pub fn len(&self) -> usize {
+        self.0.value.len()
+    }
+
     pub fn element(&self, idx: usize) -> Option<Scalar> {
         let DType::List(element_type, _) = self.dtype() else {
             unreachable!();
@@ -20,6 +24,10 @@ impl<'a> ListScalar<'a> {
             dtype: element_type.as_ref().clone(),
             value,
         })
+    }
+
+    pub fn elements(&self) -> impl Iterator<Item = Scalar> + '_ {
+        (0..self.len()).map(move |idx| self.element(idx).expect("incorrect length"))
     }
 }
 
@@ -32,6 +40,19 @@ impl<'a> TryFrom<&'a Scalar> for ListScalar<'a> {
         } else {
             vortex_bail!("Expected list scalar, found {}", value.dtype())
         }
+    }
+}
+
+impl<'a, T: for<'b> TryFrom<&'b Scalar, Error = VortexError>> TryFrom<&'a Scalar> for Vec<T> {
+    type Error = VortexError;
+
+    fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
+        let value = ListScalar::try_from(value)?;
+        let mut elems = vec![];
+        for e in value.elements() {
+            elems.push(T::try_from(&e)?);
+        }
+        Ok(elems)
     }
 }
 

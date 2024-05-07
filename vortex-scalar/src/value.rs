@@ -88,6 +88,16 @@ impl ScalarValue {
         }
     }
 
+    pub fn len(&self) -> usize {
+        match self {
+            Data(d) => match d {
+                ScalarData::List(l) => l.len(),
+                _ => 0,
+            },
+            View(v) => v.0.as_vector().len(),
+        }
+    }
+
     pub fn child(&self, idx: usize) -> Option<ScalarValue> {
         match self {
             Data(d) => match d {
