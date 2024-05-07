@@ -5,7 +5,7 @@ use enum_iterator::Sequence;
 pub use statsset::*;
 use vortex_dtype::{DType, NativePType};
 use vortex_error::{VortexError, VortexResult};
-use vortex_scalar::{ListScalarVec, Scalar};
+use vortex_scalar::Scalar;
 
 mod statsset;
 

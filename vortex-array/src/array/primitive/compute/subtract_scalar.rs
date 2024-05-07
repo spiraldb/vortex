@@ -3,7 +3,7 @@ use num_traits::ops::overflowing::OverflowingSub;
 use num_traits::SaturatingSub;
 use vortex_dtype::{match_each_float_ptype, match_each_integer_ptype, NativePType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_scalar::{PScalarType, Scalar};
+use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
@@ -20,7 +20,9 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
 
         let validity = self.validity().to_logical(self.len());
         if validity.all_invalid() {
-            return Ok(ConstantArray::new(Scalar::null(self.dtype()), self.len()).into_array());
+            return Ok(
+                ConstantArray::new(Scalar::null(self.dtype().clone()), self.len()).into_array(),
+            );
         }
 
         let to_subtract = match to_subtract {
@@ -51,11 +53,7 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
 
 fn subtract_scalar_integer<
     'a,
-    T: NativePType
-        + OverflowingSub
-        + SaturatingSub
-        + PScalarType
-        + TryFrom<Scalar, Error = VortexError>,
+    T: NativePType + OverflowingSub + SaturatingSub + TryFrom<Scalar, Error = VortexError>,
 >(
     subtract_from: &PrimitiveArray<'a>,
     to_subtract: T,

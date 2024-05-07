@@ -22,7 +22,6 @@ use arrow_schema::{DataType, TimeUnit};
 use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_dtype::NativePType;
-use vortex_scalar::NullScalar;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;

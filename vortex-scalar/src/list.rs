@@ -40,18 +40,17 @@ where
     Scalar: From<T>,
 {
     fn from(value: Vec<T>) -> Self {
-        let datas = value
-            .into_iter()
-            .map(|v| {
-                Scalar::from(v)
-                    .into_data()
-                    .expect("shouldn't construct a view")
-            })
-            .collect_vec();
-
+        let scalars = value.into_iter().map(|v| Scalar::from(v)).collect_vec();
+        let dtype = scalars.first().expect("Empty list").dtype().clone();
         Scalar {
-            dtype: DType::new::<T>(),
-            value: ScalarValue::Data(ScalarData::List(datas.into())),
+            dtype,
+            value: ScalarValue::Data(ScalarData::List(
+                scalars
+                    .into_iter()
+                    .map(|s| s.into_data().expect("shouldn't be a scalar view"))
+                    .collect_vec()
+                    .into(),
+            )),
         }
     }
 }

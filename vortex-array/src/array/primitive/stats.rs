@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::mem::size_of;
 
 use arrow_buffer::buffer::BooleanBuffer;
+use num_traits::PrimInt;
 use vortex_dtype::match_each_native_ptype;
 use vortex_error::VortexResult;
-use vortex_scalar::{ListScalarVec, PScalar};
-use vortex_scalar::{PScalarType, Scalar};
+use vortex_scalar::{PrimitiveScalar, Scalar};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
@@ -13,8 +13,8 @@ use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
 use crate::IntoArray;
 
-trait PStatsType: PScalarType + Into<Scalar> {}
-impl<T: PScalarType + Into<Scalar>> PStatsType for T {}
+trait PStatsType: Into<Scalar> + BitWidth {}
+impl<T: Into<Scalar>> PStatsType for T {}
 
 impl ArrayStatisticsCompute for PrimitiveArray<'_> {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
@@ -52,13 +52,10 @@ fn all_null_stats<T: PStatsType>(len: usize) -> VortexResult<StatsSet> {
         (Stat::IsStrictSorted, (len < 2).into()),
         (Stat::RunCount, 1.into()),
         (Stat::NullCount, len.into()),
-        (
-            Stat::BitWidthFreq,
-            ListScalarVec(vec![0; size_of::<T>() * 8 + 1]).into(),
-        ),
+        (Stat::BitWidthFreq, vec![0; size_of::<T>() * 8 + 1].into()),
         (
             Stat::TrailingZeroFreq,
-            ListScalarVec(vec![size_of::<T>() * 8; size_of::<T>() * 8 + 1]).into(),
+            vec![size_of::<T>() * 8; size_of::<T>() * 8 + 1].into(),
         ),
     ])))
 }
@@ -100,42 +97,47 @@ trait BitWidth {
     fn trailing_zeros(self) -> usize;
 }
 
-impl<T: PStatsType> BitWidth for T {
-    fn bit_width(self) -> usize {
-        let bit_width = size_of::<T>() * 8;
-        let scalar: PScalar = self.into();
-        match scalar {
-            PScalar::U8(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::U16(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::U32(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::U64(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::I8(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::I16(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::I32(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::I64(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::F16(_) => bit_width,
-            PScalar::F32(_) => bit_width,
-            PScalar::F64(_) => bit_width,
-        }
-    }
+macro_rules! int_bit_width {
+    ($T:ty) => {
+        impl BitWidth for $T {
+            fn bit_width(self) -> usize {
+                size_of::<Self>() * 8 - (PrimInt::leading_zeros(self) as usize)
+            }
 
-    fn trailing_zeros(self) -> usize {
-        let scalar: PScalar = self.into();
-        match scalar {
-            PScalar::U8(i) => i.trailing_zeros() as usize,
-            PScalar::U16(i) => i.trailing_zeros() as usize,
-            PScalar::U32(i) => i.trailing_zeros() as usize,
-            PScalar::U64(i) => i.trailing_zeros() as usize,
-            PScalar::I8(i) => i.trailing_zeros() as usize,
-            PScalar::I16(i) => i.trailing_zeros() as usize,
-            PScalar::I32(i) => i.trailing_zeros() as usize,
-            PScalar::I64(i) => i.trailing_zeros() as usize,
-            PScalar::F16(_) => 0,
-            PScalar::F32(_) => 0,
-            PScalar::F64(_) => 0,
+            fn trailing_zeros(self) -> usize {
+                PrimInt::trailing_zeros(self) as usize
+            }
         }
-    }
+    };
 }
+
+int_bit_width!(u8);
+int_bit_width!(u16);
+int_bit_width!(u32);
+int_bit_width!(u64);
+int_bit_width!(i8);
+int_bit_width!(i16);
+int_bit_width!(i32);
+int_bit_width!(i64);
+
+// TODO(ngates): just skip counting this in the implementation.
+macro_rules! float_bit_width {
+    ($T:ty) => {
+        impl BitWidth for f32 {
+            fn bit_width(self) -> usize {
+                size_of::<Self>() * 8
+            }
+
+            fn trailing_zeros(self) -> usize {
+                0
+            }
+        }
+    };
+}
+
+float_bit_width!(f16);
+float_bit_width!(f32);
+float_bit_width!(f64);
 
 struct StatsAccumulator<T: PStatsType> {
     prev: T,

@@ -20,6 +20,25 @@ pub use primitive::*;
 pub use struct_::*;
 pub use utf8::*;
 
+pub mod flatbuffers {
+    pub use gen_scalar::vortex::*;
+
+    #[allow(unused_imports)]
+    #[allow(dead_code)]
+    #[allow(non_camel_case_types)]
+    #[allow(clippy::all)]
+    mod gen_scalar {
+        include!(concat!(env!("OUT_DIR"), "/flatbuffers/scalar.rs"));
+    }
+
+    mod deps {
+        pub mod dtype {
+            #[allow(unused_imports)]
+            pub use vortex_dtype::flatbuffers as dtype;
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Scalar {
     pub(crate) dtype: DType,
@@ -35,7 +54,7 @@ impl Scalar {
         self.value.is_null()
     }
 
-    pub fn null(&self, dtype: DType) -> Self {
+    pub fn null(dtype: DType) -> Self {
         assert!(dtype.is_nullable());
         Self {
             dtype,

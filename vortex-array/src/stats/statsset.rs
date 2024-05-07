@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use enum_iterator::all;
 use itertools::Itertools;
 use vortex_error::VortexError;
-use vortex_scalar::{ListScalarVec, Scalar};
+use vortex_scalar::Scalar;
 
 use crate::stats::Stat;
 
