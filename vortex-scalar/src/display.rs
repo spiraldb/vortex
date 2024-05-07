@@ -2,9 +2,9 @@ use std::fmt::{Display, Formatter};
 
 use vortex_dtype::{match_each_native_ptype, DType};
 
-use crate::scalar2::bool::BoolScalar;
-use crate::scalar2::primitive::PrimitiveScalar;
-use crate::scalar2::Scalar;
+use crate::bool::BoolScalar;
+use crate::primitive::PrimitiveScalar;
+use crate::Scalar;
 
 impl Display for Scalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -31,7 +31,7 @@ impl Display for Scalar {
 
 #[cfg(test)]
 mod tests {
-    use crate::scalar2::Scalar;
+    use crate::Scalar;
 
     #[test]
     fn display() {

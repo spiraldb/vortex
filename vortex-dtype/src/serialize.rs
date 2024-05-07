@@ -176,6 +176,7 @@ impl TryFrom<fb::PType> for PType {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
 
     use flatbuffers::root;
     use vortex_flatbuffers::{FlatBufferToBytes, ReadFlatBuffer};
@@ -197,7 +198,7 @@ mod test {
         roundtrip_dtype(DType::Binary(Nullability::NonNullable));
         roundtrip_dtype(DType::Utf8(Nullability::NonNullable));
         roundtrip_dtype(DType::List(
-            Box::new(DType::Primitive(PType::F32, Nullability::Nullable)),
+            Arc::new(DType::Primitive(PType::F32, Nullability::Nullable)),
             Nullability::NonNullable,
         ));
         roundtrip_dtype(DType::Struct(

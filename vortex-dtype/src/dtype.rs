@@ -56,7 +56,7 @@ pub enum DType {
     Utf8(Nullability),
     Binary(Nullability),
     Struct(StructDType, Nullability),
-    List(Box<DType>, Nullability),
+    List(Arc<DType>, Nullability),
     Extension(ExtDType, Nullability),
 }
 

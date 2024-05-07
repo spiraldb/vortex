@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use itertools::Itertools;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
@@ -32,7 +34,7 @@ impl ReadFlatBuffer for DType {
                 let fb_list = fb.type__as_list().unwrap();
                 let element_dtype = DType::read_flatbuffer(&fb_list.element_type().unwrap())?;
                 Ok(DType::List(
-                    Box::new(element_dtype),
+                    Arc::new(element_dtype),
                     fb_list.nullability().try_into()?,
                 ))
             }

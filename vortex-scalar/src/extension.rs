@@ -1,97 +1,37 @@
-use std::fmt::{Display, Formatter};
-use std::sync::Arc;
-
-use vortex_dtype::{DType, ExtDType, ExtID, ExtMetadata, Nullability};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_dtype::DType;
+use vortex_error::{vortex_bail, VortexError};
+use vortex_flatbuffers::ReadFlatBuffer;
 
 use crate::Scalar;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ExtScalar {
-    dtype: DType,
-    value: Option<Arc<Scalar>>,
-}
+pub struct ExtScalar<'a>(&'a Scalar);
+impl<'a> ExtScalar<'a> {
+    #[inline]
+    pub fn dtype(&self) -> &'a DType {
+        self.0.dtype()
+    }
 
-impl ExtScalar {
-    pub fn try_new(
-        ext: ExtDType,
-        nullability: Nullability,
-        value: Option<Scalar>,
-    ) -> VortexResult<Self> {
-        if value.is_none() && nullability == Nullability::NonNullable {
-            vortex_bail!("Value cannot be None for NonNullable Scalar");
-        }
-
-        // Throw away the inner scalar if it is null.
-        let value = value
-            .and_then(|scalar| if scalar.is_null() { None } else { Some(scalar) })
-            .map(Arc::new);
-
-        Ok(Self {
-            dtype: DType::Extension(ext, nullability),
-            value,
+    /// Returns the stored value of the extension scalar.
+    pub fn value(&self) -> Option<Scalar> {
+        // Need to extract the storage DType from the scalar value.
+        // This is stored as a tuple of (dtype, value) with dtype as a serialized.
+        let dtype =
+            DType::read_flatbuffer_bytes(self.0.value.child(0)?.as_bytes()?.as_ref()).ok()?;
+        Some(Scalar {
+            dtype,
+            value: self.0.value.child(1)?,
         })
     }
-
-    pub fn null(ext: ExtDType) -> Self {
-        Self::try_new(ext, Nullability::Nullable, None).expect("Incorrect nullability check")
-    }
-
-    #[inline]
-    pub fn id(&self) -> &ExtID {
-        self.ext_dtype().id()
-    }
-
-    #[inline]
-    pub fn metadata(&self) -> Option<&ExtMetadata> {
-        self.ext_dtype().metadata()
-    }
-
-    #[inline]
-    pub fn ext_dtype(&self) -> &ExtDType {
-        let DType::Extension(ext, _) = &self.dtype else {
-            unreachable!()
-        };
-        ext
-    }
-
-    #[inline]
-    pub fn dtype(&self) -> &DType {
-        &self.dtype
-    }
-
-    pub fn value(&self) -> Option<&Arc<Scalar>> {
-        self.value.as_ref()
-    }
-
-    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
-        todo!()
-    }
-
-    pub fn nbytes(&self) -> usize {
-        todo!()
-    }
 }
 
-impl PartialOrd for ExtScalar {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        if let (Some(s), Some(o)) = (self.value(), other.value()) {
-            s.partial_cmp(o)
+impl<'a> TryFrom<&'a Scalar> for ExtScalar<'a> {
+    type Error = VortexError;
+
+    fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
+        if matches!(value.dtype(), DType::Extension(..)) {
+            Ok(Self(value))
         } else {
-            None
+            vortex_bail!("Expected extension scalar, found {}", value.dtype())
         }
-    }
-}
-
-impl Display for ExtScalar {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} ({})",
-            self.value()
-                .map(|s| format!("{}", s))
-                .unwrap_or_else(|| "<null>".to_string()),
-            self.dtype
-        )
     }
 }
