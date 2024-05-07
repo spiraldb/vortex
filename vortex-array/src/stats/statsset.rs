@@ -3,7 +3,6 @@ use std::collections::HashMap;
 
 use enum_iterator::all;
 use itertools::Itertools;
-
 use vortex_error::VortexError;
 use vortex_scalar::{ListScalarVec, Scalar};
 
@@ -35,7 +34,7 @@ impl StatsSet {
         self.values.get(&stat)
     }
 
-    fn get_as<T: for<'a> TryFrom<&'a Scalar, Error=VortexError>>(&self, stat: Stat) -> Option<T> {
+    fn get_as<T: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(&self, stat: Stat) -> Option<T> {
         self.get(stat).map(|v| T::try_from(v).unwrap())
     }
 
@@ -71,17 +70,14 @@ impl StatsSet {
     }
 
     fn merge_ordered<F: Fn(&Scalar, &Scalar) -> bool>(&mut self, stat: Stat, other: &Self, cmp: F) {
-        match self.values.entry(stat) {
-            Entry::Occupied(mut e) => {
-                if let Some(ov) = other.get(stat) {
-                    if cmp(ov, e.get()) {
-                        e.insert(ov.clone());
-                    }
-                } else {
-                    e.remove();
+        if let Entry::Occupied(mut e) = self.values.entry(stat) {
+            if let Some(ov) = other.get(stat) {
+                if cmp(ov, e.get()) {
+                    e.insert(ov.clone());
                 }
+            } else {
+                e.remove();
             }
-            _ => {}
         }
     }
 
@@ -129,16 +125,13 @@ impl StatsSet {
     }
 
     fn merge_scalar_stat(&mut self, other: &Self, stat: Stat) {
-        match self.values.entry(stat) {
-            Entry::Occupied(mut e) => {
-                if let Some(other_value) = other.get_as::<usize>(stat) {
-                    let self_value: usize = e.get().try_into().unwrap();
-                    e.insert((self_value + other_value).into());
-                } else {
-                    e.remove();
-                }
+        if let Entry::Occupied(mut e) = self.values.entry(stat) {
+            if let Some(other_value) = other.get_as::<usize>(stat) {
+                let self_value: usize = e.get().try_into().unwrap();
+                e.insert((self_value + other_value).into());
+            } else {
+                e.remove();
             }
-            _ => {}
         }
     }
 
@@ -151,49 +144,43 @@ impl StatsSet {
     }
 
     fn merge_freq_stat(&mut self, other: &Self, stat: Stat) {
-        match self.values.entry(stat) {
-            Entry::Occupied(mut e) => {
-                if let Some(other_value) = other.get_as::<ListScalarVec<u64>>(stat) {
-                    // TODO(robert): Avoid the copy here. We could e.get_mut() but need to figure out casting
-                    let self_value: ListScalarVec<u64> = e.get().try_into().unwrap();
-                    e.insert(
-                        ListScalarVec(
-                            self_value
-                                .0
-                                .iter()
-                                .zip_eq(other_value.0.iter())
-                                .map(|(s, o)| *s + *o)
-                                .collect::<Vec<_>>(),
-                        )
-                            .into(),
-                    );
-                } else {
-                    e.remove();
-                }
+        if let Entry::Occupied(mut e) = self.values.entry(stat) {
+            if let Some(other_value) = other.get_as::<ListScalarVec<u64>>(stat) {
+                // TODO(robert): Avoid the copy here. We could e.get_mut() but need to figure out casting
+                let self_value: ListScalarVec<u64> = e.get().try_into().unwrap();
+                e.insert(
+                    ListScalarVec(
+                        self_value
+                            .0
+                            .iter()
+                            .zip_eq(other_value.0.iter())
+                            .map(|(s, o)| *s + *o)
+                            .collect::<Vec<_>>(),
+                    )
+                    .into(),
+                );
+            } else {
+                e.remove();
             }
-            _ => {}
         }
     }
 
     /// Merged run count is an upper bound where we assume run is interrupted at the boundary
     fn merge_run_count(&mut self, other: &Self) {
-        match self.values.entry(Stat::RunCount) {
-            Entry::Occupied(mut e) => {
-                if let Some(other_value) = other.get_as::<usize>(Stat::RunCount) {
-                    let self_value: usize = e.get().try_into().unwrap();
-                    e.insert((self_value + other_value + 1).into());
-                } else {
-                    e.remove();
-                }
+        if let Entry::Occupied(mut e) = self.values.entry(Stat::RunCount) {
+            if let Some(other_value) = other.get_as::<usize>(Stat::RunCount) {
+                let self_value: usize = e.get().try_into().unwrap();
+                e.insert((self_value + other_value + 1).into());
+            } else {
+                e.remove();
             }
-            _ => {}
         }
     }
 }
 
 impl Extend<(Stat, Scalar)> for StatsSet {
     #[inline]
-    fn extend<T: IntoIterator<Item=(Stat, Scalar)>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = (Stat, Scalar)>>(&mut self, iter: T) {
         self.values.extend(iter)
     }
 }
@@ -224,7 +211,6 @@ mod test {
         first.merge(&StatsSet::of(Stat::Min, 42.into()));
         assert_eq!(first.get(Stat::Min), None);
     }
-
 
     #[test]
     fn merge_mins() {

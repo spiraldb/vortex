@@ -1,8 +1,8 @@
 use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
-use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::stats::ArrayStatistics;
+use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 
 impl ArrayStatisticsCompute for ChunkedArray<'_> {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
@@ -17,6 +17,7 @@ impl ArrayStatisticsCompute for ChunkedArray<'_> {
             .reduce(|mut acc, x| {
                 acc.merge(&x);
                 acc
-            }).unwrap_or_default())
+            })
+            .unwrap_or_default())
     }
 }
