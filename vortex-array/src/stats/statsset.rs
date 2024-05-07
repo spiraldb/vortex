@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use enum_iterator::all;
 use itertools::Itertools;
+
 use vortex_error::VortexError;
 use vortex_scalar::{ListScalarVec, Scalar};
 
@@ -34,7 +35,7 @@ impl StatsSet {
         self.values.get(&stat)
     }
 
-    fn get_as<T: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(&self, stat: Stat) -> Option<T> {
+    fn get_as<T: for<'a> TryFrom<&'a Scalar, Error=VortexError>>(&self, stat: Stat) -> Option<T> {
         self.get(stat).map(|v| T::try_from(v).unwrap())
     }
 
@@ -62,27 +63,25 @@ impl StatsSet {
     }
 
     fn merge_min(&mut self, other: &Self) {
-        self.merge_ordered(other, |other, own| other < own);
+        self.merge_ordered(Stat::Min, other, |other, own| other < own);
     }
 
     fn merge_max(&mut self, other: &Self) {
-        self.merge_ordered(other, |other, own| other > own);
+        self.merge_ordered(Stat::Max, other, |other, own| other > own);
     }
 
-    fn merge_ordered<F: Fn(&Scalar, &Scalar) -> bool>(&mut self, other: &Self, cmp: F) {
-        match self.values.entry(Stat::Max) {
+    fn merge_ordered<F: Fn(&Scalar, &Scalar) -> bool>(&mut self, stat: Stat, other: &Self, cmp: F) {
+        match self.values.entry(stat) {
             Entry::Occupied(mut e) => {
-                if let Some(omin) = other.get(Stat::Max) {
-                    if cmp(omin, e.get()) {
-                        e.insert(omin.clone());
+                if let Some(ov) = other.get(stat) {
+                    if cmp(ov, e.get()) {
+                        e.insert(ov.clone());
                     }
+                } else {
+                    e.remove();
                 }
             }
-            Entry::Vacant(e) => {
-                if let Some(min) = other.get(Stat::Max) {
-                    e.insert(min.clone());
-                }
-            }
+            _ => {}
         }
     }
 
@@ -135,13 +134,11 @@ impl StatsSet {
                 if let Some(other_value) = other.get_as::<usize>(stat) {
                     let self_value: usize = e.get().try_into().unwrap();
                     e.insert((self_value + other_value).into());
+                } else {
+                    e.remove();
                 }
             }
-            Entry::Vacant(e) => {
-                if let Some(min) = other.get(stat) {
-                    e.insert(min.clone());
-                }
-            }
+            _ => {}
         }
     }
 
@@ -168,15 +165,13 @@ impl StatsSet {
                                 .map(|(s, o)| *s + *o)
                                 .collect::<Vec<_>>(),
                         )
-                        .into(),
+                            .into(),
                     );
+                } else {
+                    e.remove();
                 }
             }
-            Entry::Vacant(e) => {
-                if let Some(other_value) = other.get(stat) {
-                    e.insert(other_value.clone());
-                }
-            }
+            _ => {}
         }
     }
 
@@ -187,20 +182,18 @@ impl StatsSet {
                 if let Some(other_value) = other.get_as::<usize>(Stat::RunCount) {
                     let self_value: usize = e.get().try_into().unwrap();
                     e.insert((self_value + other_value + 1).into());
+                } else {
+                    e.remove();
                 }
             }
-            Entry::Vacant(e) => {
-                if let Some(min) = other.get(Stat::RunCount) {
-                    e.insert(min.clone());
-                }
-            }
+            _ => {}
         }
     }
 }
 
 impl Extend<(Stat, Scalar)> for StatsSet {
     #[inline]
-    fn extend<T: IntoIterator<Item = (Stat, Scalar)>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item=(Stat, Scalar)>>(&mut self, iter: T) {
         self.values.extend(iter)
     }
 }
@@ -211,5 +204,32 @@ impl IntoIterator for StatsSet {
 
     fn into_iter(self) -> IntoIter<Stat, Scalar> {
         self.values.into_iter()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::stats::{Stat, StatsSet};
+
+    #[test]
+    fn merge_into_min() {
+        let mut first = StatsSet::of(Stat::Min, 42.into());
+        first.merge(&StatsSet::new());
+        assert_eq!(first.get(Stat::Min), None);
+    }
+
+    #[test]
+    fn merge_from_min() {
+        let mut first = StatsSet::new();
+        first.merge(&StatsSet::of(Stat::Min, 42.into()));
+        assert_eq!(first.get(Stat::Min), None);
+    }
+
+
+    #[test]
+    fn merge_mins() {
+        let mut first = StatsSet::of(Stat::Min, 37.into());
+        first.merge(&StatsSet::of(Stat::Min, 42.into()));
+        assert_eq!(first.get(Stat::Min).cloned(), Some(37.into()));
     }
 }
