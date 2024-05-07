@@ -52,12 +52,14 @@ pub trait Statistics {
     /// Computes the value of the stat if it's not present
     fn compute(&self, stat: Stat) -> Option<Scalar>;
 
+    /// Applies the given function to the statistic if it's present
     fn with_stat_value<'a>(
         &self,
         stat: Stat,
         f: &'a mut dyn FnMut(&Scalar) -> VortexResult<()>,
     ) -> VortexResult<()>;
 
+    /// Applies the given function to the statistic, computing it if it's not already present
     fn with_computed_stat_value<'a>(
         &self,
         stat: Stat,
