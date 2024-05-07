@@ -90,3 +90,9 @@ impl PartialOrd for Scalar {
         }
     }
 }
+
+impl AsRef<Scalar> for Scalar {
+    fn as_ref(&self) -> &Scalar {
+        self
+    }
+}

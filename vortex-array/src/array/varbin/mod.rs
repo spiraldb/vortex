@@ -73,7 +73,7 @@ impl VarBinArray<'_> {
             .expect("missing offsets")
     }
 
-    pub fn first_offset<T: NativePType + TryFrom<Scalar, Error = VortexError>>(
+    pub fn first_offset<T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
     ) -> VortexResult<T> {
         scalar_at(&self.offsets(), 0)?
@@ -93,9 +93,10 @@ impl VarBinArray<'_> {
     }
 
     pub fn sliced_bytes(&self) -> VortexResult<OwnedArray> {
-        let first_offset: usize = scalar_at(&self.offsets(), 0)?.try_into()?;
-        let last_offset: usize =
-            scalar_at(&self.offsets(), self.offsets().len() - 1)?.try_into()?;
+        let first_offset: usize = scalar_at(&self.offsets(), 0)?.as_ref().try_into()?;
+        let last_offset: usize = scalar_at(&self.offsets(), self.offsets().len() - 1)?
+            .as_ref()
+            .try_into()?;
         slice(&self.bytes(), first_offset, last_offset)
     }
 
@@ -143,6 +144,7 @@ impl VarBinArray<'_> {
             .unwrap_or_else(|| {
                 scalar_at(&self.offsets(), index)
                     .unwrap()
+                    .as_ref()
                     .try_into()
                     .unwrap()
             })

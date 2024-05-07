@@ -144,7 +144,7 @@ impl ScalarAtFn for VarBinArray<'_> {
                 self.dtype(),
             ))
         } else {
-            Ok(Scalar::null(self.dtype()))
+            Ok(Scalar::null(self.dtype().clone()))
         }
     }
 }

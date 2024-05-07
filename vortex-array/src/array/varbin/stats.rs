@@ -43,8 +43,8 @@ pub fn compute_stats(iter: &mut dyn Iterator<Item = Option<&[u8]>>, dtype: &DTyp
 
 fn all_null_stats(len: usize, dtype: &DType) -> StatsSet {
     StatsSet::from(HashMap::from([
-        (Stat::Min, Scalar::null(dtype)),
-        (Stat::Max, Scalar::null(dtype)),
+        (Stat::Min, Scalar::null(dtype.clone())),
+        (Stat::Max, Scalar::null(dtype.clone())),
         (Stat::IsConstant, true.into()),
         (Stat::IsSorted, true.into()),
         (Stat::IsStrictSorted, (len < 2).into()),
