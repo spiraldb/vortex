@@ -5,8 +5,8 @@ use vortex::{ArrayData, Context, ViewContext};
 use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_error::{vortex_err, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
-use vortex_scalar::Scalar::{Bool, Primitive};
-use vortex_scalar::{BoolScalar, PrimitiveScalar};
+use vortex_scalar::PrimitiveScalar;
+use vortex_scalar::Scalar::Primitive;
 
 use crate::flatbuffers::ipc as fbi;
 use crate::flatbuffers::ipc::Compression;
@@ -233,64 +233,38 @@ fn compute_and_build_stats<'a>(
         })
     });
 
-    let is_constant = array
-        .statistics()
-        .compute_is_constant()
-        .ok()
-        .map(|v| Bool(BoolScalar::some(v)).write_flatbuffer(fbb));
-    let is_sorted = array
-        .statistics()
-        .compute_is_sorted()
-        .ok()
-        .map(|v| Bool(BoolScalar::some(v)).write_flatbuffer(fbb));
-    let is_strict_sorted = array
-        .statistics()
-        .compute_is_strict_sorted()
-        .ok()
-        .map(|v| Bool(BoolScalar::some(v)).write_flatbuffer(fbb));
+    let is_constant = array.statistics().compute_is_constant().ok();
+    let is_sorted = array.statistics().compute_is_sorted().ok();
+    let is_strict_sorted = array.statistics().compute_is_strict_sorted().ok();
 
     let run_count = array
         .statistics()
         .compute_run_count()
         .ok()
-        .map(|v| Primitive(PrimitiveScalar::some(v as u64)).write_flatbuffer(fbb));
+        .map(|v| v as u64);
     let true_count = array
         .statistics()
         .compute_true_count()
         .ok()
-        .map(|v| Primitive(PrimitiveScalar::some(v as u64)).write_flatbuffer(fbb));
+        .map(|v| v as u64);
     let null_count = array
         .statistics()
         .compute_null_count()
         .ok()
-        .map(|v| Primitive(PrimitiveScalar::some(v as u64)).write_flatbuffer(fbb));
+        .map(|v| v as u64);
 
     let bit_width_freq = array
         .statistics()
         .compute_bit_width_freq()
         .ok()
-        .map(|v| {
-            v.iter()
-                .map(|&inner| inner as u64)
-                .map(PrimitiveScalar::some)
-                .map(Primitive)
-                .map(|v| v.write_flatbuffer(fbb))
-                .collect_vec()
-        })
+        .map(|v| v.iter().map(|&inner| inner as u64).collect_vec())
         .map(|v| fbb.create_vector(v.as_slice()));
 
     let trailing_zero_freq = array
         .statistics()
         .compute_trailing_zero_freq()
         .ok()
-        .map(|v| {
-            v.iter()
-                .map(|&inner| inner as u64)
-                .map(PrimitiveScalar::some)
-                .map(Primitive)
-                .map(|v| v.write_flatbuffer(fbb))
-                .collect_vec()
-        })
+        .map(|v| v.iter().map(|&inner| inner as u64).collect_vec())
         .map(|v| fbb.create_vector(v.as_slice()));
 
     let stat_args = &fb::ArrayStatsArgs {

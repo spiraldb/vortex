@@ -18,14 +18,14 @@ table Array {
 table ArrayStats {
     min: vortex.scalar.Scalar;
     max: vortex.scalar.Scalar;
-    is_sorted: vortex.scalar.Scalar;
-    is_strict_sorted: vortex.scalar.Scalar;
-    is_constant: vortex.scalar.Scalar;
-    run_count: vortex.scalar.Scalar;
-    true_count: vortex.scalar.Scalar;
-    null_count: vortex.scalar.Scalar;
-    bit_width_freq: [vortex.scalar.Scalar];
-    trailing_zero_freq: [vortex.scalar.Scalar];
+    is_sorted: bool = null;
+    is_strict_sorted: bool = null;
+    is_constant: bool = null;
+    run_count: uint64 = null;
+    true_count: uint64 = null;
+    null_count: uint64 = null;
+    bit_width_freq: [uint64];
+    trailing_zero_freq: [uint64];
 }
 
 

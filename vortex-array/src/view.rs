@@ -8,9 +8,9 @@ use vortex_dtype::flatbuffers::PType;
 use vortex_dtype::half::f16;
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_scalar::flatbuffers as fbs;
+use vortex_scalar::Scalar;
 use vortex_scalar::Scalar::List;
-use vortex_scalar::{ListScalar, Scalar};
+use vortex_scalar::{flatbuffers as fbs, ListScalar};
 
 use crate::encoding::{EncodingId, EncodingRef};
 use crate::flatbuffers as fb;
@@ -149,24 +149,6 @@ impl<'v> ArrayView<'v> {
 impl Statistics for ArrayView<'_> {
     fn get(&self, stat: Stat) -> Option<Scalar> {
         match stat {
-            Stat::IsConstant => {
-                let is_constant = self.array.stats()?.is_constant();
-                is_constant
-                    .and_then(|v| v.type__as_bool())
-                    .map(|v| v.value().into())
-            }
-            Stat::IsSorted => self
-                .array
-                .stats()?
-                .is_sorted()
-                .and_then(|v| v.type__as_bool())
-                .map(|v| v.value().into()),
-            Stat::IsStrictSorted => self
-                .array
-                .stats()?
-                .is_strict_sorted()
-                .and_then(|v| v.type__as_bool())
-                .map(|v| v.value().into()),
             Stat::Max => {
                 let max = self.array.stats()?.max();
                 max.and_then(|v| v.type__as_primitive())
@@ -177,35 +159,17 @@ impl Statistics for ArrayView<'_> {
                 min.and_then(|v| v.type__as_primitive())
                     .and_then(primitive_to_scalar)
             }
-            Stat::RunCount => {
-                let rc = self.array.stats()?.run_count();
-                rc.and_then(|v| v.type__as_primitive())
-                    .and_then(primitive_to_scalar)
-            }
-            Stat::TrueCount => {
-                let tc = self.array.stats()?.true_count();
-                tc.and_then(|v| v.type__as_primitive())
-                    .and_then(primitive_to_scalar)
-            }
-            Stat::NullCount => {
-                let nc = self.array.stats()?.null_count();
-                nc.and_then(|v| v.type__as_primitive())
-                    .and_then(primitive_to_scalar)
-            }
+            Stat::IsConstant => self.array.stats()?.is_constant().map(bool::into),
+            Stat::IsSorted => self.array.stats()?.is_sorted().map(bool::into),
+            Stat::IsStrictSorted => self.array.stats()?.is_strict_sorted().map(bool::into),
+            Stat::RunCount => self.array.stats()?.run_count().map(u64::into),
+            Stat::TrueCount => self.array.stats()?.true_count().map(u64::into),
+            Stat::NullCount => self.array.stats()?.null_count().map(u64::into),
             Stat::BitWidthFreq => self
                 .array
                 .stats()?
                 .bit_width_freq()
-                .map(|v| {
-                    v.iter()
-                        .flat_map(|v| {
-                            primitive_to_scalar(
-                                v.type__as_primitive()
-                                    .expect("Should only ever produce primitives"),
-                            )
-                        })
-                        .collect_vec()
-                })
+                .map(|v| v.iter().map(u64::into).collect_vec())
                 .map(|v| {
                     List(ListScalar::new(
                         DType::Primitive(vortex_dtype::PType::U64, Nullability::NonNullable),
@@ -216,16 +180,7 @@ impl Statistics for ArrayView<'_> {
                 .array
                 .stats()?
                 .trailing_zero_freq()
-                .map(|v| {
-                    v.iter()
-                        .flat_map(|v| {
-                            primitive_to_scalar(
-                                v.type__as_primitive()
-                                    .expect("Should only ever produce primitives"),
-                            )
-                        })
-                        .collect_vec()
-                })
+                .map(|v| v.iter().map(u64::into).collect_vec())
                 .map(|v| {
                     List(ListScalar::new(
                         DType::Primitive(vortex_dtype::PType::U64, Nullability::NonNullable),
