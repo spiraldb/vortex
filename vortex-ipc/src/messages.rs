@@ -208,6 +208,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
     }
 }
 
+/// Computes all stats and uses the results to create an ArrayStats table for the flatbuffer message
 fn compute_and_build_stats<'a>(
     fbb: &'_ mut FlatBufferBuilder<'a>,
     array: &'_ ArrayData,

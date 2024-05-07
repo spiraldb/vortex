@@ -479,6 +479,12 @@ mod tests {
         let data = PrimitiveArray::from((0i32..3_000_000).collect_vec()).into_array();
         let data = round_trip(&data);
 
+        // NB: data is an ArrayData constructed from the result of calling read_array on an array
+        // reader. read_array calls to_static on the underlying chunks, which translates them
+        // from Array<ArrayView> to Array<ArrayData>, and in that translation, it calls to_set
+        // in the ArrayView's statistics. Thus, to check that we get correct behavior from
+        // ArrayView statistics get() and to_set() methods, we call get (but not compute!)
+        // on the result for each of the desired statistics
         verify_stats(&data);
 
         let run_count: u64 = data.statistics().get_as::<u64>(Stat::RunCount).unwrap();
