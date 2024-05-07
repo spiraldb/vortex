@@ -16,17 +16,21 @@ name = "vortex_dtype"
 path = "src/lib.rs"
 
 [dependencies]
-flatbuffers = { workspace = true }
+flatbuffers = { workspace = true, optional = true }
 half = { workspace = true }
 itertools = { workspace = true }
 num-traits = { workspace = true }
-serde = { workspace = true, optional = true, features = ["rc"] }
+prost = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["rc", "derive"] }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+serde_test = { workspace = true }
+
 [build-dependencies]
-flatc = { workspace = true }
-walkdir = { workspace = true }
+build-vortex = { path = "../build-vortex" }
 
 [lints]
 workspace = true

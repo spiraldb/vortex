@@ -5,12 +5,13 @@ use num_traits::{FromPrimitive, Num, NumCast};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
 use crate::half::f16;
+use crate::nullability::Nullability::NonNullable;
 use crate::DType;
 use crate::DType::*;
-use crate::Nullability::NonNullable;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 pub enum PType {
     U8,
     U16,

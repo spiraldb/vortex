@@ -23,6 +23,7 @@ mod struct_;
 mod utf8;
 mod value;
 
+#[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
     pub use gen_scalar::vortex::*;
 

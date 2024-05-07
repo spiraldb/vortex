@@ -1,5 +1,5 @@
 #![cfg(feature = "serde")]
-
+#![cfg(feature = "flatbuffers")]
 use flatbuffers::{root, FlatBufferBuilder, WIPOffset};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
