@@ -302,11 +302,36 @@ impl<'v> IntoArray<'v> for ArrayView<'v> {
 #[derive(Debug)]
 pub struct ViewContext {
     encodings: Vec<EncodingRef>,
+    stats: Vec<Stat>,
 }
 
 impl ViewContext {
-    pub fn new(encodings: Vec<EncodingRef>) -> Self {
-        Self { encodings }
+    pub fn new(encodings: Vec<EncodingRef>, stats: Vec<Stat>) -> Self {
+        Self { encodings, stats }
+    }
+
+    pub fn set_stats(&mut self, to_enable: &[Stat]) {
+        self.stats.clear();
+        self.stats.extend(to_enable)
+    }
+
+    pub fn stats(&self) -> &[Stat] {
+        self.stats.as_ref()
+    }
+
+    pub fn default_stats() -> Vec<Stat> {
+        vec![
+            Stat::Max,
+            Stat::Min,
+            Stat::IsSorted,
+            Stat::IsStrictSorted,
+            Stat::IsConstant,
+            Stat::BitWidthFreq,
+            Stat::TrailingZeroFreq,
+            Stat::NullCount,
+            Stat::RunCount,
+            Stat::TrueCount,
+        ]
     }
 
     pub fn encodings(&self) -> &[EncodingRef] {
@@ -333,6 +358,6 @@ impl Default for ViewContext {
 
 impl From<&Context> for ViewContext {
     fn from(value: &Context) -> Self {
-        ViewContext::new(value.encodings().collect_vec())
+        ViewContext::new(value.encodings().collect_vec(), Self::default_stats())
     }
 }

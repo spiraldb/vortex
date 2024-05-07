@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex::flatbuffers as fb;
+use vortex::stats::Stat;
 use vortex::{ArrayData, Context, ViewContext};
 use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_error::{vortex_err, VortexError};
@@ -106,7 +109,7 @@ impl<'a> TryFrom<SerdeContextDeserializer<'a>> for ViewContext {
                     .ok_or_else(|| vortex_err!("Stream uses unknown encoding {}", encoding_id))?,
             );
         }
-        Ok(Self::new(encodings))
+        Ok(Self::new(encodings, Self::default_stats()))
     }
 }
 
@@ -192,7 +195,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
             .collect_vec();
         let children = Some(fbb.create_vector(&children));
 
-        let stats = compute_and_build_stats(fbb, self.1);
+        let stats = compute_and_build_stats(fbb, self.1, self.0.stats());
 
         fb::Array::create(
             fbb,
@@ -212,61 +215,115 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
 fn compute_and_build_stats<'a>(
     fbb: &'_ mut FlatBufferBuilder<'a>,
     array: &'_ ArrayData,
+    to_compute: &[Stat],
 ) -> WIPOffset<fb::ArrayStats<'a>> {
     let primitive_ptype = match array.dtype() {
         DType::Primitive(ptype, _) => Some(ptype),
         _ => None,
     };
 
-    let min = primitive_ptype.and_then(|ptype| {
-        match_each_native_ptype!(ptype, |$T| {
-            array.statistics().compute_min::<$T>().ok().map(|min| {
-                Primitive(PrimitiveScalar::some(min)).write_flatbuffer(fbb)
+    let mut frequencies: HashMap<_, _> = to_compute
+        .iter()
+        .flat_map(|&stat| match stat {
+            Stat::BitWidthFreq => Some((
+                stat,
+                array
+                    .statistics()
+                    .compute_bit_width_freq()
+                    .ok()
+                    .map(|v| v.iter().map(|&inner| inner as u64).collect_vec())
+                    .map(|v| fbb.create_vector(v.as_slice())),
+            )),
+            Stat::TrailingZeroFreq => Some((
+                stat,
+                array
+                    .statistics()
+                    .compute_trailing_zero_freq()
+                    .ok()
+                    .map(|v| v.iter().map(|&inner| inner as u64).collect_vec())
+                    .map(|v| fbb.create_vector(v.as_slice())),
+            )),
+            _ => None,
+        })
+        .flat_map(|(stat, value)| value.map(|v| (stat, v)))
+        .collect();
+
+    let mut counts: HashMap<_, _> = to_compute
+        .iter()
+        .flat_map(|&stat| match stat {
+            Stat::RunCount => Some((
+                stat,
+                array
+                    .statistics()
+                    .compute_run_count()
+                    .ok()
+                    .map(|v| v as u64),
+            )),
+            Stat::TrueCount => Some((
+                stat,
+                array
+                    .statistics()
+                    .compute_true_count()
+                    .ok()
+                    .map(|v| v as u64),
+            )),
+            Stat::NullCount => Some((
+                stat,
+                array
+                    .statistics()
+                    .compute_null_count()
+                    .ok()
+                    .map(|v| v as u64),
+            )),
+            _ => None,
+        })
+        .flat_map(|(stat, value)| value.map(|v| (stat, v)))
+        .collect();
+
+    let mut bools: HashMap<_, _> = to_compute
+        .iter()
+        .flat_map(|&stat| match stat {
+            Stat::IsConstant => Some((stat, array.statistics().compute_is_constant().ok())),
+            Stat::IsSorted => Some((stat, array.statistics().compute_is_sorted().ok())),
+            Stat::IsStrictSorted => {
+                Some((stat, array.statistics().compute_is_strict_sorted().ok()))
+            }
+            _ => None,
+        })
+        .flat_map(|(stat, value)| value.map(|v| (stat, v)))
+        .collect();
+
+    let max = if to_compute.contains(&Stat::Max) {
+        primitive_ptype.and_then(|ptype| {
+            match_each_native_ptype!(ptype, |$T| {
+                array.statistics().compute_max::<$T>().ok().map(|max| {
+                    Primitive(PrimitiveScalar::some(max)).write_flatbuffer(fbb)
+                })
             })
         })
-    });
-    let max = primitive_ptype.and_then(|ptype| {
-        match_each_native_ptype!(ptype, |$T| {
-            array.statistics().compute_max::<$T>().ok().map(|max| {
-                Primitive(PrimitiveScalar::some(max)).write_flatbuffer(fbb)
+    } else {
+        None
+    };
+    let min = if to_compute.contains(&Stat::Min) {
+        primitive_ptype.and_then(|ptype| {
+            match_each_native_ptype!(ptype, |$T| {
+                array.statistics().compute_min::<$T>().ok().map(|min| {
+                    Primitive(PrimitiveScalar::some(min)).write_flatbuffer(fbb)
+                })
             })
         })
-    });
+    } else {
+        None
+    };
 
-    let is_constant = array.statistics().compute_is_constant().ok();
-    let is_sorted = array.statistics().compute_is_sorted().ok();
-    let is_strict_sorted = array.statistics().compute_is_strict_sorted().ok();
-
-    let run_count = array
-        .statistics()
-        .compute_run_count()
-        .ok()
-        .map(|v| v as u64);
-    let true_count = array
-        .statistics()
-        .compute_true_count()
-        .ok()
-        .map(|v| v as u64);
-    let null_count = array
-        .statistics()
-        .compute_null_count()
-        .ok()
-        .map(|v| v as u64);
-
-    let bit_width_freq = array
-        .statistics()
-        .compute_bit_width_freq()
-        .ok()
-        .map(|v| v.iter().map(|&inner| inner as u64).collect_vec())
-        .map(|v| fbb.create_vector(v.as_slice()));
-
-    let trailing_zero_freq = array
-        .statistics()
-        .compute_trailing_zero_freq()
-        .ok()
-        .map(|v| v.iter().map(|&inner| inner as u64).collect_vec())
-        .map(|v| fbb.create_vector(v.as_slice()));
-
+    let is_sorted = bools.remove(&Stat::IsSorted);
+    let is_strict_sorted = bools.remove(&Stat::IsStrictSorted);
+    let is_constant = bools.remove(&Stat::IsConstant);
+    let run_count = counts.remove(&Stat::RunCount);
+    let true_count = counts.remove(&Stat::TrueCount);
+    let null_count = counts.remove(&Stat::NullCount);
+    let bit_width_freq = frequencies.remove(&Stat::BitWidthFreq);
+    let trailing_zero_freq = frequencies.remove(&Stat::TrailingZeroFreq);
     let stat_args = &fb::ArrayStatsArgs {
         min,
         max,
