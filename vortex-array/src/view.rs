@@ -267,9 +267,9 @@ fn get_from_flatbuffer_array(array: fb::Array<'_>, stat: Stat) -> Option<Scalar>
             .and_then(|v| v.type__as_bool())
             .map(|v| v.value().into()),
         Stat::Max => {
-            // let max = array.stats()?.max();
-            // max.and_then(|v| v.type__as_primitive()).map(to_scalar)
-            None.and_then(primitive_to_scalar)
+            let max = array.stats()?.max();
+            max.and_then(|v| v.type__as_primitive())
+                .and_then(primitive_to_scalar)
         }
         Stat::Min => {
             let min = array.stats()?.min();
