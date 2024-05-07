@@ -46,6 +46,18 @@ impl<'a, T: NativePType + for<'b> From<&'b ScalarView>> TryFrom<&'a Scalar>
     }
 }
 
+impl Scalar {
+    pub fn primitive<T: NativePType>(value: T, nullability: Nullability) -> Scalar
+    where
+        ScalarData: From<T>,
+    {
+        Scalar {
+            dtype: DType::Primitive(T::PTYPE, nullability),
+            value: ScalarValue::Data(ScalarData::from(value)),
+        }
+    }
+}
+
 impl From<usize> for Scalar {
     fn from(value: usize) -> Self {
         Scalar::from(value as u64)

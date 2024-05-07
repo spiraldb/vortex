@@ -11,7 +11,7 @@ use ScalarValue::{Data, View};
 
 // Internal enum to hide implementation from consumers.
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub(crate) enum ScalarValue {
+pub enum ScalarValue {
     Data(ScalarData),
     // A lazily deserialized view over a flexbuffer.
     #[allow(dead_code)]
@@ -109,6 +109,12 @@ macro_rules! primitive_from_scalar_view {
                     value.0.[<as_ $T>]().into()
                 }
             }
+
+            impl From<$T> for ScalarData {
+                fn from(value: $T) -> Self {
+                    ScalarData::Buffer(Buffer::from(value.to_le_bytes().as_ref().to_vec()))
+                }
+            }
         }
     };
 }
@@ -130,8 +136,8 @@ impl<'a> From<&ScalarView> for f16 {
     }
 }
 
-impl<T: num_traits::ToBytes> From<T> for ScalarData {
-    fn from(value: T) -> Self {
+impl From<f16> for ScalarData {
+    fn from(value: f16) -> Self {
         ScalarData::Buffer(Buffer::from(value.to_le_bytes().as_ref().to_vec()))
     }
 }

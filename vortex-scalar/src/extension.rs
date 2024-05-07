@@ -1,7 +1,7 @@
-use vortex_dtype::DType;
+use vortex_dtype::{DType, ExtDType};
 use vortex_error::{vortex_bail, VortexError};
-use vortex_flatbuffers::ReadFlatBuffer;
 
+use crate::value::ScalarValue;
 use crate::Scalar;
 
 pub struct ExtScalar<'a>(&'a Scalar);
@@ -12,15 +12,8 @@ impl<'a> ExtScalar<'a> {
     }
 
     /// Returns the stored value of the extension scalar.
-    pub fn value(&self) -> Option<Scalar> {
-        // Need to extract the storage DType from the scalar value.
-        // This is stored as a tuple of (dtype, value) with dtype as a serialized.
-        let dtype =
-            DType::read_flatbuffer_bytes(self.0.value.child(0)?.as_bytes()?.as_ref()).ok()?;
-        Some(Scalar {
-            dtype,
-            value: self.0.value.child(1)?,
-        })
+    pub fn value(&self) -> &ScalarValue {
+        &self.0.value
     }
 }
 
@@ -32,6 +25,15 @@ impl<'a> TryFrom<&'a Scalar> for ExtScalar<'a> {
             Ok(Self(value))
         } else {
             vortex_bail!("Expected extension scalar, found {}", value.dtype())
+        }
+    }
+}
+
+impl Scalar {
+    pub fn extension(ext_dtype: ExtDType, storage: Scalar) -> Self {
+        Scalar {
+            dtype: DType::Extension(ext_dtype, storage.dtype().nullability()),
+            value: storage.value,
         }
     }
 }

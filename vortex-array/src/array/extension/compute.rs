@@ -1,6 +1,6 @@
 use arrow_array::ArrayRef as ArrowArrayRef;
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_scalar::{ExtScalar, Scalar};
+use vortex_scalar::Scalar;
 
 use crate::array::datetime::LocalDateTimeArray;
 use crate::array::extension::ExtensionArray;
@@ -8,13 +8,10 @@ use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::cast::CastFn;
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
-use crate::compute::search_sorted::{
-    search_sorted, SearchResult, SearchSortedFn, SearchSortedSide,
-};
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::{Array, ArrayDType, IntoArray, OwnedArray, ToStatic};
+use crate::{Array, IntoArray, OwnedArray, ToStatic};
 
 impl ArrayCompute for ExtensionArray<'_> {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -33,10 +30,6 @@ impl ArrayCompute for ExtensionArray<'_> {
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        Some(self)
-    }
-
-    fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
         Some(self)
     }
 
@@ -82,29 +75,10 @@ impl AsContiguousFn for ExtensionArray<'_> {
 
 impl ScalarAtFn for ExtensionArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        Ok(Scalar::Extension(ExtScalar::try_new(
+        Ok(Scalar::extension(
             self.ext_dtype().clone(),
-            self.dtype().nullability(),
-            Some(scalar_at(&self.storage(), index)?),
-        )?))
-    }
-}
-
-impl SearchSortedFn for ExtensionArray<'_> {
-    fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
-        if value.dtype() != self.dtype() {
-            vortex_bail!("Value dtype does not match array dtype");
-        }
-        let Scalar::Extension(ext) = value else {
-            unreachable!();
-        };
-
-        let storage_scalar = ext
-            .value()
-            .map(|v| (**v).clone())
-            .unwrap_or_else(|| Scalar::null(self.dtype()));
-
-        search_sorted(&self.storage(), storage_scalar, side)
+            scalar_at(&self.storage(), index)?,
+        ))
     }
 }
 

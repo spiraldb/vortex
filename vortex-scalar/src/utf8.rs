@@ -1,7 +1,9 @@
 use vortex_buffer::BufferString;
 use vortex_dtype::DType;
+use vortex_dtype::Nullability::NonNullable;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
+use crate::value::{ScalarData, ScalarValue};
 use crate::Scalar;
 
 pub struct Utf8Scalar<'a>(&'a Scalar);
@@ -43,5 +45,14 @@ impl<'a> TryFrom<&'a Scalar> for BufferString {
         Utf8Scalar::try_from(value)?
             .value()
             .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
+    }
+}
+
+impl From<&str> for Scalar {
+    fn from(value: &str) -> Self {
+        Scalar {
+            dtype: DType::Utf8(NonNullable),
+            value: ScalarValue::Data(ScalarData::Buffer(value.as_bytes().into())),
+        }
     }
 }

@@ -137,7 +137,7 @@ impl dyn Statistics + '_ {
         Ok(res.expect("Result should have been populated by previous call"))
     }
 
-    pub fn compute_as_cast<U: NativePType + TryFrom<Scalar, Error = VortexError>>(
+    pub fn compute_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
     ) -> VortexResult<U> {

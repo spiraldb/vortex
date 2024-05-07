@@ -92,6 +92,13 @@ impl AsRef<[u8]> for Buffer {
     }
 }
 
+impl From<&[u8]> for Buffer {
+    fn from(value: &[u8]) -> Self {
+        // We prefer Arrow since it retains mutability
+        Buffer::Arrow(ArrowBuffer::from(value))
+    }
+}
+
 impl From<Vec<u8>> for Buffer {
     fn from(value: Vec<u8>) -> Self {
         // We prefer Arrow since it retains mutability
