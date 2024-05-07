@@ -1,6 +1,8 @@
 use vortex_dtype::DType;
+use vortex_dtype::Nullability::NonNullable;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
+use crate::value::{ScalarData, ScalarValue};
 use crate::Scalar;
 
 pub struct BoolScalar<'a>(&'a Scalar);
@@ -34,6 +36,15 @@ impl TryFrom<&Scalar> for bool {
         BoolScalar::try_from(value)?
             .value()
             .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
+    }
+}
+
+impl From<bool> for Scalar {
+    fn from(value: bool) -> Self {
+        Scalar {
+            dtype: DType::Bool(NonNullable),
+            value: ScalarValue::Data(ScalarData::Bool(value)),
+        }
     }
 }
 

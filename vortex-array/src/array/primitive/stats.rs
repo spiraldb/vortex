@@ -3,9 +3,10 @@ use std::mem::size_of;
 
 use arrow_buffer::buffer::BooleanBuffer;
 use num_traits::PrimInt;
+use vortex_dtype::half::f16;
 use vortex_dtype::match_each_native_ptype;
 use vortex_error::VortexResult;
-use vortex_scalar::{PrimitiveScalar, Scalar};
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
@@ -14,7 +15,7 @@ use crate::validity::LogicalValidity;
 use crate::IntoArray;
 
 trait PStatsType: Into<Scalar> + BitWidth {}
-impl<T: Into<Scalar>> PStatsType for T {}
+impl<T: Into<Scalar> + BitWidth> PStatsType for T {}
 
 impl ArrayStatisticsCompute for PrimitiveArray<'_> {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
@@ -123,7 +124,7 @@ int_bit_width!(i64);
 // TODO(ngates): just skip counting this in the implementation.
 macro_rules! float_bit_width {
     ($T:ty) => {
-        impl BitWidth for f32 {
+        impl BitWidth for $T {
             fn bit_width(self) -> usize {
                 size_of::<Self>() * 8
             }

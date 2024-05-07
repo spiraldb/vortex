@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 use flexbuffers::{FlexBufferType, Reader};
@@ -9,7 +10,7 @@ use vortex_error::VortexResult;
 use ScalarValue::{Data, View};
 
 // Internal enum to hide implementation from consumers.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub(crate) enum ScalarValue {
     Data(ScalarData),
     // A lazily deserialized view over a flexbuffer.
@@ -17,7 +18,7 @@ pub(crate) enum ScalarValue {
     View(ScalarView),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ScalarData {
     None,
     Bool(bool),
@@ -28,12 +29,24 @@ pub enum ScalarData {
 }
 
 #[derive(Debug, Clone)]
-pub struct ScalarView(Reader<Buffer>);
+pub struct ScalarView(pub(crate) Reader<Buffer>);
 
 impl ScalarView {
     pub fn try_new(buffer: Buffer) -> VortexResult<Self> {
         // Verify that the buffer contains valid flexbuffer data
         Ok(Self(Reader::get_root(buffer)?))
+    }
+}
+
+impl PartialEq for ScalarView {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.buffer() == other.0.buffer()
+    }
+}
+
+impl PartialOrd for ScalarView {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.buffer().partial_cmp(&other.0.buffer())
     }
 }
 
@@ -114,5 +127,11 @@ primitive_from_scalar_view!(f64);
 impl<'a> From<&ScalarView> for f16 {
     fn from(value: &ScalarView) -> Self {
         f16::from_le_bytes(value.0.as_u16().to_le_bytes())
+    }
+}
+
+impl<T: num_traits::ToBytes> From<T> for ScalarData {
+    fn from(value: T) -> Self {
+        ScalarData::Buffer(Buffer::from(value.to_le_bytes().as_ref().to_vec()))
     }
 }

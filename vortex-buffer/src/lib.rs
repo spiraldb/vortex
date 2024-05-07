@@ -1,6 +1,7 @@
 mod flexbuffers;
 mod string;
 
+use std::cmp::Ordering;
 use std::ops::{Deref, Range};
 
 use arrow_buffer::Buffer as ArrowBuffer;
@@ -111,3 +112,9 @@ impl PartialEq for Buffer {
 }
 
 impl Eq for Buffer {}
+
+impl PartialOrd for Buffer {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.as_ref().partial_cmp(other.as_ref())
+    }
+}

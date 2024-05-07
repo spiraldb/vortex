@@ -186,12 +186,10 @@ impl dyn Statistics + '_ {
     }
 
     pub fn compute_bit_width_freq(&self) -> VortexResult<Vec<usize>> {
-        self.compute_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)
-            .map(|s| s.0)
+        self.compute_as::<Vec<usize>>(Stat::BitWidthFreq)
     }
 
     pub fn compute_trailing_zero_freq(&self) -> VortexResult<Vec<usize>> {
-        self.compute_as::<ListScalarVec<usize>>(Stat::TrailingZeroFreq)
-            .map(|s| s.0)
+        self.compute_as::<Vec<usize>>(Stat::TrailingZeroFreq)
     }
 }

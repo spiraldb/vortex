@@ -17,7 +17,7 @@ flexbuffers = { workspace = true }
 itertools = { workspace = true }
 paste = { workspace = true }
 num-traits = { workspace = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["derive", "rc"] }
 vortex-buffer = { path = "../vortex-buffer", features = ["flexbuffers"] }
 vortex-dtype = { path = "../vortex-dtype" }
 vortex-error = { path = "../vortex-error", features = ["flexbuffers"] }

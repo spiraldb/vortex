@@ -1,6 +1,7 @@
+use std::cmp::Ordering;
+
 use value::*;
 use vortex_dtype::DType;
-use vortex_dtype::Nullability::NonNullable;
 
 mod binary;
 mod bool;
@@ -8,6 +9,7 @@ mod display;
 mod extension;
 mod list;
 mod primitive;
+mod serde;
 mod struct_;
 mod utf8;
 mod value;
@@ -40,6 +42,7 @@ pub mod flatbuffers {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Scalar {
     pub(crate) dtype: DType,
     pub(crate) value: ScalarValue,
@@ -72,11 +75,18 @@ impl Scalar {
     }
 }
 
-impl From<bool> for Scalar {
-    fn from(value: bool) -> Self {
-        Scalar {
-            dtype: DType::Bool(NonNullable),
-            value: ScalarValue::Data(ScalarData::Bool(value)),
+impl PartialEq for Scalar {
+    fn eq(&self, other: &Self) -> bool {
+        self.dtype == other.dtype && self.value == other.value
+    }
+}
+
+impl PartialOrd for Scalar {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.dtype() == other.dtype() {
+            self.value.partial_cmp(&other.value)
+        } else {
+            None
         }
     }
 }
