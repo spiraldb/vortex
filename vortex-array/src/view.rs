@@ -2,12 +2,13 @@ use std::fmt::{Debug, Formatter};
 
 use enum_iterator::all;
 use itertools::Itertools;
+use log::info;
 use vortex_buffer::Buffer;
 use vortex_dtype::flatbuffers::PType;
 use vortex_dtype::half::f16;
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_scalar::flatbuffers::Primitive;
+use vortex_scalar::flatbuffers as fbs;
 use vortex_scalar::Scalar::List;
 use vortex_scalar::{ListScalar, Scalar};
 
@@ -147,12 +148,91 @@ impl<'v> ArrayView<'v> {
 
 impl Statistics for ArrayView<'_> {
     fn get(&self, stat: Stat) -> Option<Scalar> {
-        // fb fetch is just a pointer dereference, so we check that first
-        let from_fb = get_from_flatbuffer_array(self.array, stat);
-        if from_fb.is_some() {
-            return from_fb;
+        match stat {
+            Stat::IsConstant => {
+                let is_constant = self.array.stats()?.is_constant();
+                is_constant
+                    .and_then(|v| v.type__as_bool())
+                    .map(|v| v.value().into())
+            }
+            Stat::IsSorted => self
+                .array
+                .stats()?
+                .is_sorted()
+                .and_then(|v| v.type__as_bool())
+                .map(|v| v.value().into()),
+            Stat::IsStrictSorted => self
+                .array
+                .stats()?
+                .is_strict_sorted()
+                .and_then(|v| v.type__as_bool())
+                .map(|v| v.value().into()),
+            Stat::Max => {
+                let max = self.array.stats()?.max();
+                max.and_then(|v| v.type__as_primitive())
+                    .and_then(primitive_to_scalar)
+            }
+            Stat::Min => {
+                let min = self.array.stats()?.min();
+                min.and_then(|v| v.type__as_primitive())
+                    .and_then(primitive_to_scalar)
+            }
+            Stat::RunCount => {
+                let rc = self.array.stats()?.run_count();
+                rc.and_then(|v| v.type__as_primitive())
+                    .and_then(primitive_to_scalar)
+            }
+            Stat::TrueCount => {
+                let tc = self.array.stats()?.true_count();
+                tc.and_then(|v| v.type__as_primitive())
+                    .and_then(primitive_to_scalar)
+            }
+            Stat::NullCount => {
+                let nc = self.array.stats()?.null_count();
+                nc.and_then(|v| v.type__as_primitive())
+                    .and_then(primitive_to_scalar)
+            }
+            Stat::BitWidthFreq => self
+                .array
+                .stats()?
+                .bit_width_freq()
+                .map(|v| {
+                    v.iter()
+                        .flat_map(|v| {
+                            primitive_to_scalar(
+                                v.type__as_primitive()
+                                    .expect("Should only ever produce primitives"),
+                            )
+                        })
+                        .collect_vec()
+                })
+                .map(|v| {
+                    List(ListScalar::new(
+                        DType::Primitive(vortex_dtype::PType::U64, Nullability::NonNullable),
+                        Some(v),
+                    ))
+                }),
+            Stat::TrailingZeroFreq => self
+                .array
+                .stats()?
+                .trailing_zero_freq()
+                .map(|v| {
+                    v.iter()
+                        .flat_map(|v| {
+                            primitive_to_scalar(
+                                v.type__as_primitive()
+                                    .expect("Should only ever produce primitives"),
+                            )
+                        })
+                        .collect_vec()
+                })
+                .map(|v| {
+                    List(ListScalar::new(
+                        DType::Primitive(vortex_dtype::PType::U64, Nullability::NonNullable),
+                        Some(v),
+                    ))
+                }),
         }
-        None
     }
 
     /// NB: part of the contract for to_set is that it does not do any expensive computation.
@@ -172,7 +252,7 @@ impl Statistics for ArrayView<'_> {
     /// We want to avoid any sort of allocation on instantiation of the ArrayView, so we
     /// do not allocate a stats_set to cache values.
     fn set(&self, _stat: Stat, _value: Scalar) {
-        unimplemented!()
+        info!("Cannot write stats to a view")
     }
 
     fn compute(&self, stat: Stat) -> Option<Scalar> {
@@ -211,92 +291,8 @@ impl Statistics for ArrayView<'_> {
     }
 }
 
-fn get_from_flatbuffer_array(array: fb::Array<'_>, stat: Stat) -> Option<Scalar> {
-    match stat {
-        Stat::IsConstant => {
-            let is_constant = array.stats()?.is_constant();
-            is_constant
-                .and_then(|v| v.type__as_bool())
-                .map(|v| v.value().into())
-        }
-        Stat::IsSorted => array
-            .stats()?
-            .is_sorted()
-            .and_then(|v| v.type__as_bool())
-            .map(|v| v.value().into()),
-        Stat::IsStrictSorted => array
-            .stats()?
-            .is_strict_sorted()
-            .and_then(|v| v.type__as_bool())
-            .map(|v| v.value().into()),
-        Stat::Max => {
-            let max = array.stats()?.max();
-            max.and_then(|v| v.type__as_primitive())
-                .and_then(primitive_to_scalar)
-        }
-        Stat::Min => {
-            let min = array.stats()?.min();
-            min.and_then(|v| v.type__as_primitive())
-                .and_then(primitive_to_scalar)
-        }
-        Stat::RunCount => {
-            let rc = array.stats()?.run_count();
-            rc.and_then(|v| v.type__as_primitive())
-                .and_then(primitive_to_scalar)
-        }
-        Stat::TrueCount => {
-            let tc = array.stats()?.true_count();
-            tc.and_then(|v| v.type__as_primitive())
-                .and_then(primitive_to_scalar)
-        }
-        Stat::NullCount => {
-            let nc = array.stats()?.null_count();
-            nc.and_then(|v| v.type__as_primitive())
-                .and_then(primitive_to_scalar)
-        }
-        Stat::BitWidthFreq => array
-            .stats()?
-            .bit_width_freq()
-            .map(|v| {
-                v.iter()
-                    .flat_map(|v| {
-                        primitive_to_scalar(
-                            v.type__as_primitive()
-                                .expect("Should only ever produce primitives"),
-                        )
-                    })
-                    .collect_vec()
-            })
-            .map(|v| {
-                List(ListScalar::new(
-                    DType::Primitive(vortex_dtype::PType::U64, Nullability::NonNullable),
-                    Some(v),
-                ))
-            }),
-        Stat::TrailingZeroFreq => array
-            .stats()?
-            .trailing_zero_freq()
-            .map(|v| {
-                v.iter()
-                    .flat_map(|v| {
-                        primitive_to_scalar(
-                            v.type__as_primitive()
-                                .expect("Should only ever produce primitives"),
-                        )
-                    })
-                    .collect_vec()
-            })
-            .map(|v| {
-                List(ListScalar::new(
-                    DType::Primitive(vortex_dtype::PType::U64, Nullability::NonNullable),
-                    Some(v),
-                ))
-            }),
-    }
-}
-
 // TODO(@jcasale): move this to serde and make serde crate public?
-fn primitive_to_scalar(v: Primitive) -> Option<Scalar> {
+fn primitive_to_scalar(v: fbs::Primitive) -> Option<Scalar> {
     let err_msg = "failed to deserialize invalid primitive scalar";
     match v.ptype() {
         PType::U8 => v

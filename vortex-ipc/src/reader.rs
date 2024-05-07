@@ -395,7 +395,6 @@ mod tests {
     use vortex_scalar::ListScalarVec;
 
     use crate::iter::FallibleLendingIterator;
-    // use crate::messages::IPCMessage::Context;
     use crate::reader::StreamReader;
     use crate::writer::StreamWriter;
 

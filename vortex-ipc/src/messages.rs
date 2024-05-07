@@ -1,6 +1,6 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex::flatbuffers::{Array, ArrayArgs, ArrayStats, ArrayStatsArgs};
+use vortex::flatbuffers as fb;
 use vortex::{ArrayData, Context, ViewContext};
 use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_error::{vortex_err, VortexError};
@@ -8,7 +8,7 @@ use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 use vortex_scalar::Scalar::{Bool, Primitive};
 use vortex_scalar::{BoolScalar, PrimitiveScalar};
 
-use crate::flatbuffers::ipc as fb;
+use crate::flatbuffers::ipc as fbi;
 use crate::flatbuffers::ipc::Compression;
 use crate::{missing, ALIGNMENT};
 
@@ -29,7 +29,7 @@ pub(crate) struct IPCArray<'a>(pub &'a ViewContext, pub &'a ArrayData);
 impl FlatBufferRoot for IPCMessage<'_> {}
 
 impl WriteFlatBuffer for IPCMessage<'_> {
-    type Target<'a> = fb::Message<'a>;
+    type Target<'a> = fbi::Message<'a>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -41,12 +41,12 @@ impl WriteFlatBuffer for IPCMessage<'_> {
             Self::Chunk(f) => f.write_flatbuffer(fbb).as_union_value(),
         };
 
-        let mut msg = fb::MessageBuilder::new(fbb);
+        let mut msg = fbi::MessageBuilder::new(fbb);
         msg.add_version(Default::default());
         msg.add_header_type(match self {
-            Self::Context(_) => fb::MessageHeader::Context,
-            Self::Schema(_) => fb::MessageHeader::Schema,
-            Self::Chunk(_) => fb::MessageHeader::Chunk,
+            Self::Context(_) => fbi::MessageHeader::Context,
+            Self::Schema(_) => fbi::MessageHeader::Schema,
+            Self::Chunk(_) => fbi::MessageHeader::Chunk,
         });
         msg.add_header(header);
         msg.finish()
@@ -54,7 +54,7 @@ impl WriteFlatBuffer for IPCMessage<'_> {
 }
 
 impl<'a> WriteFlatBuffer for IPCContext<'a> {
-    type Target<'t> = fb::Context<'t>;
+    type Target<'t> = fbi::Context<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -67,9 +67,9 @@ impl<'a> WriteFlatBuffer for IPCContext<'a> {
             .map(|e| e.id())
             .map(|id| {
                 let encoding_id = fbb.create_string(id.as_ref());
-                fb::Encoding::create(
+                fbi::Encoding::create(
                     fbb,
-                    &fb::EncodingArgs {
+                    &fbi::EncodingArgs {
                         id: Some(encoding_id),
                     },
                 )
@@ -77,9 +77,9 @@ impl<'a> WriteFlatBuffer for IPCContext<'a> {
             .collect_vec();
         let fb_encodings = fbb.create_vector(fb_encodings.as_slice());
 
-        fb::Context::create(
+        fbi::Context::create(
             fbb,
-            &fb::ContextArgs {
+            &fbi::ContextArgs {
                 encodings: Some(fb_encodings),
             },
         )
@@ -87,7 +87,7 @@ impl<'a> WriteFlatBuffer for IPCContext<'a> {
 }
 
 pub struct SerdeContextDeserializer<'a> {
-    pub(crate) fb: fb::Context<'a>,
+    pub(crate) fb: fbi::Context<'a>,
     pub(crate) ctx: &'a Context,
 }
 
@@ -111,19 +111,19 @@ impl<'a> TryFrom<SerdeContextDeserializer<'a>> for ViewContext {
 }
 
 impl<'a> WriteFlatBuffer for IPCSchema<'a> {
-    type Target<'t> = fb::Schema<'t>;
+    type Target<'t> = fbi::Schema<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
         let dtype = Some(self.0.write_flatbuffer(fbb));
-        fb::Schema::create(fbb, &fb::SchemaArgs { dtype })
+        fbi::Schema::create(fbb, &fbi::SchemaArgs { dtype })
     }
 }
 
 impl<'a> WriteFlatBuffer for IPCChunk<'a> {
-    type Target<'t> = fb::Chunk<'t>;
+    type Target<'t> = fbi::Chunk<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -137,7 +137,7 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
         let mut offset = 0;
         for array_data in array_data.depth_first_traversal() {
             if let Some(buffer) = array_data.buffer() {
-                buffers.push(fb::Buffer::new(
+                buffers.push(fbi::Buffer::new(
                     offset as u64,
                     buffer.len() as u64,
                     Compression::None,
@@ -148,9 +148,9 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
         }
         let buffers = Some(fbb.create_vector(&buffers));
 
-        fb::Chunk::create(
+        fbi::Chunk::create(
             fbb,
-            &fb::ChunkArgs {
+            &fbi::ChunkArgs {
                 array,
                 buffers,
                 buffer_size: offset as u64,
@@ -160,7 +160,7 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
 }
 
 impl<'a> WriteFlatBuffer for IPCArray<'a> {
-    type Target<'t> = Array<'t>;
+    type Target<'t> = fb::Array<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -194,9 +194,9 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
 
         let stats = compute_and_build_stats(fbb, self.1);
 
-        Array::create(
+        fb::Array::create(
             fbb,
-            &ArrayArgs {
+            &fb::ArrayArgs {
                 version: Default::default(),
                 has_buffer: column_data.buffer().is_some(),
                 encoding,
@@ -212,7 +212,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
 fn compute_and_build_stats<'a>(
     fbb: &'_ mut FlatBufferBuilder<'a>,
     array: &'_ ArrayData,
-) -> WIPOffset<ArrayStats<'a>> {
+) -> WIPOffset<fb::ArrayStats<'a>> {
     let primitive_ptype = match array.dtype() {
         DType::Primitive(ptype, _) => Some(ptype),
         _ => None,
@@ -293,7 +293,7 @@ fn compute_and_build_stats<'a>(
         })
         .map(|v| fbb.create_vector(v.as_slice()));
 
-    let stat_args = &ArrayStatsArgs {
+    let stat_args = &fb::ArrayStatsArgs {
         min,
         max,
         is_sorted,
@@ -306,6 +306,5 @@ fn compute_and_build_stats<'a>(
         trailing_zero_freq,
     };
 
-    let stats = ArrayStats::create(fbb, stat_args);
-    stats
+    fb::ArrayStats::create(fbb, stat_args)
 }
