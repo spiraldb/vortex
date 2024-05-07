@@ -8,7 +8,6 @@ use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
-use crate::stats::ArrayStatistics;
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -47,18 +46,7 @@ impl ChunkedArray<'_> {
         let mut children = vec![chunk_ends.into_array_data()];
         children.extend(chunks.iter().map(|a| a.to_array_data()));
 
-        // NB: this reports whatever stats we can correctly deduce for the top-level logical array
-        // If we'd prefer not to report stats for non-primitive arrays we can remove this
-        let merged_stats = chunks
-            .iter()
-            .map(|chunk| chunk.statistics().to_set())
-            .reduce(|mut a, b| {
-                a.merge(&b);
-                a
-            })
-            .unwrap_or_else(StatsSet::new);
-
-        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), merged_stats)
+        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), StatsSet::new())
     }
 
     #[inline]

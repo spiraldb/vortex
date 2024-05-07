@@ -109,7 +109,7 @@ impl<'v> ArrayView<'v> {
                 child,
                 &self.buffers[buffer_offset..][0..buffer_count],
             )
-                .unwrap(),
+            .unwrap(),
         )
     }
 
