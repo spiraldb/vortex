@@ -2,7 +2,7 @@ use std::fmt::{Debug, Formatter};
 
 use enum_iterator::all;
 use itertools::Itertools;
-use log::info;
+use log::warn;
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -208,7 +208,7 @@ impl Statistics for ArrayView<'_> {
     /// We want to avoid any sort of allocation on instantiation of the ArrayView, so we
     /// do not allocate a stats_set to cache values.
     fn set(&self, _stat: Stat, _value: Scalar) {
-        info!("Cannot write stats to a view")
+        warn!("Cannot write stats to a view")
     }
 
     fn compute(&self, stat: Stat) -> Option<Scalar> {
@@ -216,12 +216,10 @@ impl Statistics for ArrayView<'_> {
             return Some(s);
         }
 
-        let calculated = self
-            .to_array()
+        self.to_array()
             .with_dyn(|a| a.compute_statistics(stat))
             .ok()?;
 
-        calculated.into_iter().for_each(|(k, v)| self.set(k, v));
         self.get(stat)
     }
 
@@ -262,36 +260,11 @@ impl<'v> IntoArray<'v> for ArrayView<'v> {
 #[derive(Debug)]
 pub struct ViewContext {
     encodings: Vec<EncodingRef>,
-    stats: Vec<Stat>,
 }
 
 impl ViewContext {
-    pub fn new(encodings: Vec<EncodingRef>, stats: Vec<Stat>) -> Self {
-        Self { encodings, stats }
-    }
-
-    pub fn set_stats(&mut self, to_enable: &[Stat]) {
-        self.stats.clear();
-        self.stats.extend(to_enable)
-    }
-
-    pub fn stats(&self) -> &[Stat] {
-        self.stats.as_ref()
-    }
-
-    pub fn default_stats() -> Vec<Stat> {
-        vec![
-            Stat::Max,
-            Stat::Min,
-            Stat::IsSorted,
-            Stat::IsStrictSorted,
-            Stat::IsConstant,
-            Stat::BitWidthFreq,
-            Stat::TrailingZeroFreq,
-            Stat::NullCount,
-            Stat::RunCount,
-            Stat::TrueCount,
-        ]
+    pub fn new(encodings: Vec<EncodingRef>) -> Self {
+        Self { encodings }
     }
 
     pub fn encodings(&self) -> &[EncodingRef] {
@@ -318,6 +291,6 @@ impl Default for ViewContext {
 
 impl From<&Context> for ViewContext {
     fn from(value: &Context) -> Self {
-        ViewContext::new(value.encodings().collect_vec(), Self::default_stats())
+        ViewContext::new(value.encodings().collect_vec())
     }
 }

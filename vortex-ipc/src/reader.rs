@@ -476,8 +476,10 @@ mod tests {
     #[test]
     fn test_stats() {
         let data = PrimitiveArray::from((0i32..3_000_000).collect_vec()).into_array();
-        let data = round_trip(&data);
+        // calculate stats on the input array so that the output array will also have stats
+        data.statistics().compute_min::<i32>().unwrap();
 
+        let data = round_trip(&data);
         verify_stats(&data);
 
         let run_count: u64 = data.statistics().get_as::<u64>(Stat::RunCount).unwrap();
@@ -488,6 +490,10 @@ mod tests {
     fn test_stats_chunked() {
         let array = PrimitiveArray::from((0i32..1_500_000).collect_vec()).into_array();
         let array2 = PrimitiveArray::from((1_500_000i32..3_000_000).collect_vec()).into_array();
+
+        // calculate stats on the input array so that the output array will also have stats
+        array.statistics().compute_min::<i32>().unwrap();
+        array2.statistics().compute_min::<i32>().unwrap();
         let chunked_array =
             ChunkedArray::try_new(vec![array.clone(), array2], array.dtype().clone())
                 .unwrap()

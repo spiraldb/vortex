@@ -1,17 +1,15 @@
-use std::collections::HashMap;
-
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex::flatbuffers as fb;
+use vortex::flatbuffers as vfb;
 use vortex::stats::Stat;
 use vortex::{ArrayData, Context, ViewContext};
 use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_error::{vortex_err, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
-use vortex_scalar::PrimitiveScalar;
 use vortex_scalar::Scalar::Primitive;
+use vortex_scalar::{ListScalarVec, PrimitiveScalar};
 
-use crate::flatbuffers::ipc as fbi;
+use crate::flatbuffers::ipc as fb;
 use crate::flatbuffers::ipc::Compression;
 use crate::{missing, ALIGNMENT};
 
@@ -32,7 +30,7 @@ pub(crate) struct IPCArray<'a>(pub &'a ViewContext, pub &'a ArrayData);
 impl FlatBufferRoot for IPCMessage<'_> {}
 
 impl WriteFlatBuffer for IPCMessage<'_> {
-    type Target<'a> = fbi::Message<'a>;
+    type Target<'a> = fb::Message<'a>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -44,12 +42,12 @@ impl WriteFlatBuffer for IPCMessage<'_> {
             Self::Chunk(f) => f.write_flatbuffer(fbb).as_union_value(),
         };
 
-        let mut msg = fbi::MessageBuilder::new(fbb);
+        let mut msg = fb::MessageBuilder::new(fbb);
         msg.add_version(Default::default());
         msg.add_header_type(match self {
-            Self::Context(_) => fbi::MessageHeader::Context,
-            Self::Schema(_) => fbi::MessageHeader::Schema,
-            Self::Chunk(_) => fbi::MessageHeader::Chunk,
+            Self::Context(_) => fb::MessageHeader::Context,
+            Self::Schema(_) => fb::MessageHeader::Schema,
+            Self::Chunk(_) => fb::MessageHeader::Chunk,
         });
         msg.add_header(header);
         msg.finish()
@@ -57,7 +55,7 @@ impl WriteFlatBuffer for IPCMessage<'_> {
 }
 
 impl<'a> WriteFlatBuffer for IPCContext<'a> {
-    type Target<'t> = fbi::Context<'t>;
+    type Target<'t> = fb::Context<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -70,9 +68,9 @@ impl<'a> WriteFlatBuffer for IPCContext<'a> {
             .map(|e| e.id())
             .map(|id| {
                 let encoding_id = fbb.create_string(id.as_ref());
-                fbi::Encoding::create(
+                fb::Encoding::create(
                     fbb,
-                    &fbi::EncodingArgs {
+                    &fb::EncodingArgs {
                         id: Some(encoding_id),
                     },
                 )
@@ -80,9 +78,9 @@ impl<'a> WriteFlatBuffer for IPCContext<'a> {
             .collect_vec();
         let fb_encodings = fbb.create_vector(fb_encodings.as_slice());
 
-        fbi::Context::create(
+        fb::Context::create(
             fbb,
-            &fbi::ContextArgs {
+            &fb::ContextArgs {
                 encodings: Some(fb_encodings),
             },
         )
@@ -90,7 +88,7 @@ impl<'a> WriteFlatBuffer for IPCContext<'a> {
 }
 
 pub struct SerdeContextDeserializer<'a> {
-    pub(crate) fb: fbi::Context<'a>,
+    pub(crate) fb: fb::Context<'a>,
     pub(crate) ctx: &'a Context,
 }
 
@@ -109,24 +107,24 @@ impl<'a> TryFrom<SerdeContextDeserializer<'a>> for ViewContext {
                     .ok_or_else(|| vortex_err!("Stream uses unknown encoding {}", encoding_id))?,
             );
         }
-        Ok(Self::new(encodings, Self::default_stats()))
+        Ok(Self::new(encodings))
     }
 }
 
 impl<'a> WriteFlatBuffer for IPCSchema<'a> {
-    type Target<'t> = fbi::Schema<'t>;
+    type Target<'t> = fb::Schema<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
         let dtype = Some(self.0.write_flatbuffer(fbb));
-        fbi::Schema::create(fbb, &fbi::SchemaArgs { dtype })
+        fb::Schema::create(fbb, &fb::SchemaArgs { dtype })
     }
 }
 
 impl<'a> WriteFlatBuffer for IPCChunk<'a> {
-    type Target<'t> = fbi::Chunk<'t>;
+    type Target<'t> = fb::Chunk<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -140,7 +138,7 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
         let mut offset = 0;
         for array_data in array_data.depth_first_traversal() {
             if let Some(buffer) = array_data.buffer() {
-                buffers.push(fbi::Buffer::new(
+                buffers.push(fb::Buffer::new(
                     offset as u64,
                     buffer.len() as u64,
                     Compression::None,
@@ -151,9 +149,9 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
         }
         let buffers = Some(fbb.create_vector(&buffers));
 
-        fbi::Chunk::create(
+        fb::Chunk::create(
             fbb,
-            &fbi::ChunkArgs {
+            &fb::ChunkArgs {
                 array,
                 buffers,
                 buffer_size: offset as u64,
@@ -163,7 +161,7 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
 }
 
 impl<'a> WriteFlatBuffer for IPCArray<'a> {
-    type Target<'t> = fb::Array<'t>;
+    type Target<'t> = vfb::Array<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -195,11 +193,11 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
             .collect_vec();
         let children = Some(fbb.create_vector(&children));
 
-        let stats = compute_and_build_stats(fbb, self.1, self.0.stats());
+        let stats = collect_array_stats(fbb, self.1);
 
-        fb::Array::create(
+        vfb::Array::create(
             fbb,
-            &fb::ArrayArgs {
+            &vfb::ArrayArgs {
                 version: Default::default(),
                 has_buffer: column_data.buffer().is_some(),
                 encoding,
@@ -212,130 +210,59 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
 }
 
 /// Computes all stats and uses the results to create an ArrayStats table for the flatbuffer message
-fn compute_and_build_stats<'a>(
+fn collect_array_stats<'a>(
     fbb: &'_ mut FlatBufferBuilder<'a>,
     array: &'_ ArrayData,
-    to_compute: &[Stat],
-) -> WIPOffset<fb::ArrayStats<'a>> {
+) -> WIPOffset<vfb::ArrayStats<'a>> {
     let primitive_ptype = match array.dtype() {
         DType::Primitive(ptype, _) => Some(ptype),
         _ => None,
     };
 
-    let mut frequencies: HashMap<_, _> = to_compute
-        .iter()
-        .flat_map(|&stat| match stat {
-            Stat::BitWidthFreq => Some((
-                stat,
-                array
-                    .statistics()
-                    .compute_bit_width_freq()
-                    .ok()
-                    .map(|v| v.iter().map(|&inner| inner as u64).collect_vec())
-                    .map(|v| fbb.create_vector(v.as_slice())),
-            )),
-            Stat::TrailingZeroFreq => Some((
-                stat,
-                array
-                    .statistics()
-                    .compute_trailing_zero_freq()
-                    .ok()
-                    .map(|v| v.iter().map(|&inner| inner as u64).collect_vec())
-                    .map(|v| fbb.create_vector(v.as_slice())),
-            )),
-            _ => None,
-        })
-        .flat_map(|(stat, value)| value.map(|v| (stat, v)))
-        .collect();
+    let trailing_zero_freq = array
+        .statistics()
+        .get_as::<ListScalarVec<u64>>(Stat::TrailingZeroFreq)
+        .map(|s| s.0)
+        .ok()
+        .map(|v| v.iter().copied().collect_vec())
+        .map(|v| fbb.create_vector(v.as_slice()));
 
-    let mut counts: HashMap<_, _> = to_compute
-        .iter()
-        .flat_map(|&stat| match stat {
-            Stat::RunCount => Some((
-                stat,
-                array
-                    .statistics()
-                    .compute_run_count()
-                    .ok()
-                    .map(|v| v as u64),
-            )),
-            Stat::TrueCount => Some((
-                stat,
-                array
-                    .statistics()
-                    .compute_true_count()
-                    .ok()
-                    .map(|v| v as u64),
-            )),
-            Stat::NullCount => Some((
-                stat,
-                array
-                    .statistics()
-                    .compute_null_count()
-                    .ok()
-                    .map(|v| v as u64),
-            )),
-            _ => None,
-        })
-        .flat_map(|(stat, value)| value.map(|v| (stat, v)))
-        .collect();
+    let bit_width_freq = array
+        .statistics()
+        .get_as::<ListScalarVec<u64>>(Stat::BitWidthFreq)
+        .map(|s| s.0)
+        .ok()
+        .map(|v| v.iter().copied().collect_vec())
+        .map(|v| fbb.create_vector(v.as_slice()));
 
-    let mut bools: HashMap<_, _> = to_compute
-        .iter()
-        .flat_map(|&stat| match stat {
-            Stat::IsConstant => Some((stat, array.statistics().compute_is_constant().ok())),
-            Stat::IsSorted => Some((stat, array.statistics().compute_is_sorted().ok())),
-            Stat::IsStrictSorted => {
-                Some((stat, array.statistics().compute_is_strict_sorted().ok()))
-            }
-            _ => None,
-        })
-        .flat_map(|(stat, value)| value.map(|v| (stat, v)))
-        .collect();
-
-    let max = if to_compute.contains(&Stat::Max) {
-        primitive_ptype.and_then(|ptype| {
-            match_each_native_ptype!(ptype, |$T| {
-                array.statistics().compute_max::<$T>().ok().map(|max| {
-                    Primitive(PrimitiveScalar::some(max)).write_flatbuffer(fbb)
-                })
+    let min = primitive_ptype.and_then(|ptype| {
+        match_each_native_ptype!(ptype, |$T| {
+            array.statistics().get_as::<$T>(Stat::Min).ok().map(|min| {
+                Primitive(PrimitiveScalar::some(min)).write_flatbuffer(fbb)
             })
         })
-    } else {
-        None
-    };
-    let min = if to_compute.contains(&Stat::Min) {
-        primitive_ptype.and_then(|ptype| {
-            match_each_native_ptype!(ptype, |$T| {
-                array.statistics().compute_min::<$T>().ok().map(|min| {
-                    Primitive(PrimitiveScalar::some(min)).write_flatbuffer(fbb)
-                })
+    });
+
+    let max = primitive_ptype.and_then(|ptype| {
+        match_each_native_ptype!(ptype, |$T| {
+            array.statistics().get_as::<$T>(Stat::Max).ok().map(|max| {
+                Primitive(PrimitiveScalar::some(max)).write_flatbuffer(fbb)
             })
         })
-    } else {
-        None
-    };
+    });
 
-    let is_sorted = bools.remove(&Stat::IsSorted);
-    let is_strict_sorted = bools.remove(&Stat::IsStrictSorted);
-    let is_constant = bools.remove(&Stat::IsConstant);
-    let run_count = counts.remove(&Stat::RunCount);
-    let true_count = counts.remove(&Stat::TrueCount);
-    let null_count = counts.remove(&Stat::NullCount);
-    let bit_width_freq = frequencies.remove(&Stat::BitWidthFreq);
-    let trailing_zero_freq = frequencies.remove(&Stat::TrailingZeroFreq);
-    let stat_args = &fb::ArrayStatsArgs {
+    let stat_args = &vfb::ArrayStatsArgs {
         min,
         max,
-        is_sorted,
-        is_strict_sorted,
-        is_constant,
-        run_count,
-        true_count,
-        null_count,
+        is_sorted: array.statistics().get_as::<bool>(Stat::IsSorted).ok(),
+        is_strict_sorted: array.statistics().get_as::<bool>(Stat::IsStrictSorted).ok(),
+        is_constant: array.statistics().get_as::<bool>(Stat::IsConstant).ok(),
+        run_count: array.statistics().get_as::<u64>(Stat::RunCount).ok(),
+        true_count: array.statistics().get_as::<u64>(Stat::TrueCount).ok(),
+        null_count: array.statistics().get_as::<u64>(Stat::NullCount).ok(),
         bit_width_freq,
         trailing_zero_freq,
     };
 
-    fb::ArrayStats::create(fbb, stat_args)
+    vfb::ArrayStats::create(fbb, stat_args)
 }
