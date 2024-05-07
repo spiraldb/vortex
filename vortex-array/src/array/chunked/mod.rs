@@ -47,6 +47,8 @@ impl ChunkedArray<'_> {
         let mut children = vec![chunk_ends.into_array_data()];
         children.extend(chunks.iter().map(|a| a.to_array_data()));
 
+        // NB: this reports whatever stats we can correctly deduce for the top-level logical array
+        // If we'd prefer not to report stats for non-primitive arrays we can remove this
         let merged_stats = chunks
             .iter()
             .map(|chunk| chunk.statistics().to_set())
