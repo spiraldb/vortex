@@ -11,8 +11,8 @@ use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray};
-use vortex_dtype::NativePType;
 use vortex_dtype::{match_each_native_ptype, DType};
+use vortex_dtype::{NativePType, ToBytes};
 use vortex_error::VortexResult;
 
 use crate::dict::{DictArray, DictEncoding};
@@ -92,19 +92,19 @@ impl EncodingCompression for DictEncoding {
 #[derive(Debug)]
 struct Value<T>(T);
 
-impl<T: AsBytes> Hash for Value<T> {
+impl<T: ToBytes> Hash for Value<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.as_bytes().hash(state)
+        self.0.to_le_bytes().hash(state)
     }
 }
 
-impl<T: AsBytes> PartialEq<Self> for Value<T> {
+impl<T: ToBytes> PartialEq<Self> for Value<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.0.as_bytes().eq(other.0.as_bytes())
+        self.0.to_le_bytes().eq(other.0.to_le_bytes())
     }
 }
 
-impl<T: AsBytes> Eq for Value<T> {}
+impl<T: ToBytes> Eq for Value<T> {}
 
 /// Dictionary encode primitive array with given PType.
 /// Null values in the original array are encoded in the dictionary.
@@ -254,7 +254,8 @@ mod test {
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::ToArray;
-    use vortex_scalar::PrimitiveScalar;
+    use vortex_dtype::PType;
+    use vortex_scalar::{PrimitiveScalar, Scalar};
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
 
@@ -285,7 +286,7 @@ mod test {
         );
         assert_eq!(
             scalar_at(&values.to_array(), 0).unwrap(),
-            PrimitiveScalar::nullable::<i32>(None).into()
+            Scalar::null(PType::I32.into())
         );
         assert_eq!(
             scalar_at(&values.to_array(), 1).unwrap(),

@@ -22,7 +22,7 @@ pub struct REEMetadata {
 
 impl REEArray<'_> {
     pub fn try_new(ends: Array, values: Array, validity: Validity) -> VortexResult<Self> {
-        let length: usize = scalar_at(&ends, ends.len() - 1)?.try_into()?;
+        let length: usize = scalar_at(&ends, ends.len() - 1)?.as_ref().try_into()?;
         Self::with_offset_and_size(ends, values, validity, length, 0)
     }
 

@@ -98,7 +98,7 @@ where
                 PrimitiveArray::from(exc_pos).into_array(),
                 PrimitiveArray::from_vec(exc, Validity::AllValid).into_array(),
                 len,
-                Scalar::null(&values.dtype().as_nullable()),
+                Scalar::null(values.dtype().as_nullable()),
             )
             .into_array()
         }),

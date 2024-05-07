@@ -236,11 +236,12 @@ mod test {
             .enumerate()
             .for_each(|(ti, i)| {
                 assert_eq!(
-                    u32::try_from(scalar_at(packed.array(), *i as usize).unwrap()).unwrap(),
+                    u32::try_from(scalar_at(packed.array(), *i as usize).unwrap().as_ref())
+                        .unwrap(),
                     values[*i as usize]
                 );
                 assert_eq!(
-                    u32::try_from(scalar_at(&taken, ti).unwrap()).unwrap(),
+                    u32::try_from(scalar_at(&taken, ti).unwrap().as_ref()).unwrap(),
                     values[*i as usize]
                 );
             });

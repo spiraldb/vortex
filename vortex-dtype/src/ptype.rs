@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 use std::panic::RefUnwindSafe;
 
 use num_traits::{FromPrimitive, Num, NumCast};
@@ -249,7 +250,7 @@ impl From<PType> for DType {
 }
 
 pub trait ToBytes: Sized {
-    fn to_le_bytes(&self) -> Vec<u8>;
+    fn to_le_bytes(&self) -> &[u8];
 }
 
 pub trait TryFromBytes: Sized {
@@ -259,8 +260,12 @@ pub trait TryFromBytes: Sized {
 macro_rules! try_from_bytes {
     ($T:ty) => {
         impl ToBytes for $T {
-            fn to_le_bytes(&self) -> Vec<u8> {
-                <$T>::to_le_bytes(*self).into()
+            #[inline]
+            fn to_le_bytes(&self) -> &[u8] {
+                // NOTE(ngates): this assumes the platform is little-endian. Currently enforced
+                //  with a flag cfg(target_endian = "little")
+                let raw_ptr = self as *const $T as *const u8;
+                unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of::<$T>()) }
             }
         }
 
