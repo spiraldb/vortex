@@ -42,6 +42,15 @@ impl Scalar {
             value: ScalarValue::Data(ScalarData::None),
         }
     }
+
+    // TODO(ngates): we could write a conversion function from view to data if needed.
+    pub fn into_data(self) -> Result<ScalarData, Self> {
+        if let ScalarValue::Data(d) = self.value {
+            Ok(d)
+        } else {
+            Err(self)
+        }
+    }
 }
 
 impl From<bool> for Scalar {

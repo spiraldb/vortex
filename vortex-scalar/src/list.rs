@@ -1,6 +1,8 @@
+use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError};
 
+use crate::value::{ScalarData, ScalarValue};
 use crate::Scalar;
 
 pub struct ListScalar<'a>(&'a Scalar);
@@ -29,6 +31,27 @@ impl<'a> TryFrom<&'a Scalar> for ListScalar<'a> {
             Ok(Self(value))
         } else {
             vortex_bail!("Expected list scalar, found {}", value.dtype())
+        }
+    }
+}
+
+impl<T> From<Vec<T>> for Scalar
+where
+    Scalar: From<T>,
+{
+    fn from(value: Vec<T>) -> Self {
+        let datas = value
+            .into_iter()
+            .map(|v| {
+                Scalar::from(v)
+                    .into_data()
+                    .expect("shouldn't construct a view")
+            })
+            .collect_vec();
+
+        Scalar {
+            dtype: DType::new::<T>(),
+            value: ScalarValue::Data(ScalarData::List(datas.into())),
         }
     }
 }
