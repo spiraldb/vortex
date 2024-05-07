@@ -4,13 +4,12 @@ use enum_iterator::all;
 use itertools::Itertools;
 use log::info;
 use vortex_buffer::Buffer;
-use vortex_dtype::flatbuffers::PType;
-use vortex_dtype::half::f16;
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_flatbuffers::ReadFlatBuffer;
+use vortex_scalar::ListScalar;
 use vortex_scalar::Scalar;
 use vortex_scalar::Scalar::List;
-use vortex_scalar::{flatbuffers as fbs, ListScalar};
 
 use crate::encoding::{EncodingId, EncodingRef};
 use crate::flatbuffers as fb;
@@ -110,7 +109,7 @@ impl<'v> ArrayView<'v> {
                 child,
                 &self.buffers[buffer_offset..][0..buffer_count],
             )
-            .unwrap(),
+                .unwrap(),
         )
     }
 
@@ -151,13 +150,15 @@ impl Statistics for ArrayView<'_> {
         match stat {
             Stat::Max => {
                 let max = self.array.stats()?.max();
-                max.and_then(|v| v.type__as_primitive())
-                    .and_then(primitive_to_scalar)
+                max.as_ref()
+                    .map(Scalar::read_flatbuffer)
+                    .and_then(Result::ok)
             }
             Stat::Min => {
                 let min = self.array.stats()?.min();
-                min.and_then(|v| v.type__as_primitive())
-                    .and_then(primitive_to_scalar)
+                min.as_ref()
+                    .map(Scalar::read_flatbuffer)
+                    .and_then(Result::ok)
             }
             Stat::IsConstant => self.array.stats()?.is_constant().map(bool::into),
             Stat::IsSorted => self.array.stats()?.is_sorted().map(bool::into),
@@ -243,47 +244,6 @@ impl Statistics for ArrayView<'_> {
         self.compute(stat)
             .map(|s| f(&s))
             .unwrap_or_else(|| vortex_bail!(ComputeError: "statistic {} missing", stat))
-    }
-}
-
-// TODO(@jcasale): move this to serde and make serde crate public?
-fn primitive_to_scalar(v: fbs::Primitive) -> Option<Scalar> {
-    let err_msg = "failed to deserialize invalid primitive scalar";
-    match v.ptype() {
-        PType::U8 => v
-            .bytes()
-            .map(|bytes| u8::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        PType::U16 => v
-            .bytes()
-            .map(|bytes| u16::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        PType::U32 => v
-            .bytes()
-            .map(|bytes| u32::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        PType::U64 => v
-            .bytes()
-            .map(|bytes| u64::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        PType::I8 => v
-            .bytes()
-            .map(|bytes| i8::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        PType::I16 => v
-            .bytes()
-            .map(|bytes| i16::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        PType::I32 => v
-            .bytes()
-            .map(|bytes| i32::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        PType::I64 => v
-            .bytes()
-            .map(|bytes| i64::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        PType::F16 => v
-            .bytes()
-            .map(|bytes| f16::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        PType::F32 => v
-            .bytes()
-            .map(|bytes| f32::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        PType::F64 => v
-            .bytes()
-            .map(|bytes| f64::from_le_bytes(bytes.bytes().try_into().expect(err_msg)).into()),
-        _ => unreachable!(),
     }
 }
 
