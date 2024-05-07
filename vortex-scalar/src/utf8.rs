@@ -4,7 +4,7 @@ use vortex_dtype::Nullability;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::value::{ScalarData, ScalarValue};
+use crate::value::ScalarValue;
 use crate::Scalar;
 
 pub struct Utf8Scalar<'a>(&'a Scalar);
@@ -34,7 +34,7 @@ impl Scalar {
     {
         Scalar {
             dtype: DType::Utf8(nullability),
-            value: ScalarValue::Data(ScalarData::Buffer(BufferString::from(str).into())),
+            value: ScalarValue::Buffer(BufferString::from(str).into()),
         }
     }
 }
@@ -69,7 +69,7 @@ impl From<&str> for Scalar {
     fn from(value: &str) -> Self {
         Scalar {
             dtype: DType::Utf8(NonNullable),
-            value: ScalarValue::Data(ScalarData::Buffer(value.as_bytes().into())),
+            value: ScalarValue::Buffer(value.as_bytes().into()),
         }
     }
 }

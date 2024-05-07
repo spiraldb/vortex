@@ -1,7 +1,7 @@
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
-use crate::value::{ScalarData, ScalarValue};
+use crate::value::ScalarValue;
 use crate::Scalar;
 
 pub struct StructScalar<'a>(&'a Scalar);
@@ -30,10 +30,10 @@ impl<'a> StructScalar<'a> {
 }
 
 impl Scalar {
-    pub fn r#struct(dtype: DType, children: Vec<ScalarData>) -> Scalar {
+    pub fn r#struct(dtype: DType, children: Vec<ScalarValue>) -> Scalar {
         Scalar {
             dtype,
-            value: ScalarValue::Data(ScalarData::List(children.into())),
+            value: ScalarValue::List(children.into()),
         }
     }
 }

@@ -1,6 +1,5 @@
 use std::cmp::Ordering;
 
-use value::*;
 use vortex_dtype::DType;
 
 mod binary;
@@ -9,6 +8,7 @@ mod display;
 mod extension;
 mod list;
 mod primitive;
+mod serde;
 mod struct_;
 mod utf8;
 mod value;
@@ -20,6 +20,7 @@ pub use list::*;
 pub use primitive::*;
 pub use struct_::*;
 pub use utf8::*;
+pub use value::*;
 use vortex_error::{vortex_bail, VortexResult};
 
 #[cfg(feature = "flatbuffers")]
@@ -54,6 +55,10 @@ impl Scalar {
         &self.dtype
     }
 
+    pub fn into_value(self) -> ScalarValue {
+        self.value
+    }
+
     pub fn is_null(&self) -> bool {
         self.value.is_null()
     }
@@ -62,7 +67,7 @@ impl Scalar {
         assert!(dtype.is_nullable());
         Self {
             dtype,
-            value: ScalarValue::Data(ScalarData::None),
+            value: ScalarValue::Null,
         }
     }
 
@@ -84,15 +89,6 @@ impl Scalar {
             DType::Struct(..) => StructScalar::try_from(self).and_then(|s| s.cast(dtype)),
             DType::List(..) => ListScalar::try_from(self).and_then(|s| s.cast(dtype)),
             DType::Extension(..) => ExtScalar::try_from(self).and_then(|s| s.cast(dtype)),
-        }
-    }
-
-    // TODO(ngates): we could write a conversion function from view to data if needed.
-    pub fn into_data(self) -> Result<ScalarData, Self> {
-        if let ScalarValue::Data(d) = self.value {
-            Ok(d)
-        } else {
-            Err(self)
         }
     }
 }

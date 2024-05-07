@@ -106,7 +106,7 @@ impl ScalarAtFn for StructArray<'_> {
         Ok(Scalar::r#struct(
             self.dtype().clone(),
             self.children()
-                .map(|field| scalar_at(&field, index).map(|s| s.into_data().unwrap()))
+                .map(|field| scalar_at(&field, index).map(|s| s.into_value()))
                 .try_collect()?,
         ))
     }

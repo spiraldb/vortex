@@ -1,5 +1,7 @@
 #![cfg(feature = "flatbuffers")]
 
+use std::sync::Arc;
+
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -30,7 +32,7 @@ impl TryFrom<fb::DType<'_>> for DType {
                 let fb_list = fb.type__as_list().unwrap();
                 let element_dtype = DType::try_from(fb_list.element_type().unwrap())?;
                 Ok(DType::List(
-                    Box::new(element_dtype),
+                    Arc::new(element_dtype),
                     fb_list.nullable().into(),
                 ))
             }

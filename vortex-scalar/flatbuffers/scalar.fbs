@@ -3,7 +3,7 @@ include "vortex-dtype/flatbuffers/dtype.fbs";
 namespace vortex.scalar;
 
 table Scalar {
-  dtype: vortex.dtype.DType;
+  dtype: vortex.dtype.DType (required);
   value: [ubyte] (flexbuffer);
 }
 

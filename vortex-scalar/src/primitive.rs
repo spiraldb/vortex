@@ -4,7 +4,7 @@ use vortex_dtype::half::f16;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, Nullability, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::value::{ScalarData, ScalarValue, ScalarView};
+use crate::value::ScalarValue;
 use crate::Scalar;
 
 pub struct PrimitiveScalar<'a>(&'a Scalar);
@@ -20,7 +20,7 @@ impl<'a> PrimitiveScalar<'a> {
         PType::try_from(self.dtype()).expect("Invalid primitive scalar dtype")
     }
 
-    pub fn typed_value<T: NativePType + for<'b> From<&'b ScalarView>>(&self) -> Option<T> {
+    pub fn typed_value<T: NativePType>(&self) -> Option<T> {
         self.0.value.as_primitive::<T>()
     }
 
@@ -54,7 +54,7 @@ impl Scalar {
     pub fn primitive<T: NativePType>(value: T, nullability: Nullability) -> Scalar {
         Scalar {
             dtype: DType::Primitive(T::PTYPE, nullability),
-            value: ScalarValue::Data(ScalarData::Buffer(value.to_le_bytes().into())),
+            value: ScalarValue::Buffer(value.to_le_bytes().into()),
         }
     }
 }
@@ -79,7 +79,7 @@ macro_rules! primitive_scalar {
             fn from(value: $T) -> Self {
                 Scalar {
                     dtype: DType::Primitive(<$T>::PTYPE, Nullability::NonNullable),
-                    value: ScalarValue::Data(ScalarData::from(value)),
+                    value: ScalarValue::from(value),
                 }
             }
         }
@@ -89,8 +89,8 @@ macro_rules! primitive_scalar {
                 Scalar {
                     dtype: DType::Primitive(<$T>::PTYPE, Nullability::Nullable),
                     value: value
-                        .map(|v| ScalarValue::Data(ScalarData::from(v)))
-                        .unwrap_or_else(|| ScalarValue::Data(ScalarData::None)),
+                        .map(|v| ScalarValue::from(v))
+                        .unwrap_or_else(|| ScalarValue::Null),
                 }
             }
         }
@@ -122,9 +122,7 @@ impl From<f16> for Scalar {
     fn from(value: f16) -> Self {
         Scalar {
             dtype: DType::Primitive(PType::F16, Nullability::NonNullable),
-            value: ScalarValue::Data(ScalarData::Buffer(Buffer::from(
-                value.to_le_bytes().to_vec(),
-            ))),
+            value: ScalarValue::Buffer(Buffer::from(value.to_le_bytes().to_vec())),
         }
     }
 }

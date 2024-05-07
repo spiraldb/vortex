@@ -2,7 +2,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::value::{ScalarData, ScalarValue};
+use crate::value::ScalarValue;
 use crate::Scalar;
 
 pub struct BinaryScalar<'a>(&'a Scalar);
@@ -25,7 +25,7 @@ impl Scalar {
     pub fn binary(buffer: Buffer, nullability: Nullability) -> Self {
         Scalar {
             dtype: DType::Binary(nullability),
-            value: ScalarValue::Data(ScalarData::Buffer(buffer)),
+            value: ScalarValue::Buffer(buffer),
         }
     }
 }

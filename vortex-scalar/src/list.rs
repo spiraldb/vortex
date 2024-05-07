@@ -2,7 +2,7 @@ use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
-use crate::value::{ScalarData, ScalarValue};
+use crate::value::ScalarValue;
 use crate::Scalar;
 
 pub struct ListScalar<'a>(&'a Scalar);
@@ -75,13 +75,7 @@ where
         let dtype = scalars.first().expect("Empty list").dtype().clone();
         Scalar {
             dtype,
-            value: ScalarValue::Data(ScalarData::List(
-                scalars
-                    .into_iter()
-                    .map(|s| s.into_data().expect("shouldn't be a scalar view"))
-                    .collect_vec()
-                    .into(),
-            )),
+            value: ScalarValue::List(scalars.into_iter().map(|s| s.value).collect_vec().into()),
         }
     }
 }
