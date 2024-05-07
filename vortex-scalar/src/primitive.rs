@@ -1,6 +1,7 @@
+use num_traits::NumCast;
 use vortex_buffer::Buffer;
 use vortex_dtype::half::f16;
-use vortex_dtype::{DType, NativePType, Nullability, PType};
+use vortex_dtype::{match_each_native_ptype, DType, NativePType, Nullability, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::value::{ScalarData, ScalarValue, ScalarView};
@@ -23,8 +24,17 @@ impl<'a> PrimitiveScalar<'a> {
         self.0.value.as_primitive::<T>()
     }
 
-    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
-        todo!()
+    pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
+        let ptype = PType::try_from(dtype)?;
+        match_each_native_ptype!(ptype, |$Q| {
+            match_each_native_ptype!(self.ptype(), |$T| {
+                Ok(Scalar::primitive::<$Q>(
+                    <$Q as NumCast>::from(self.typed_value::<$T>().expect("Invalid value"))
+                        .ok_or_else(|| vortex_err!("Can't cast scalar to {}", dtype))?,
+                    dtype.nullability(),
+                ))
+            })
+        })
     }
 }
 
