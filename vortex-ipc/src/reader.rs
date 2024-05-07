@@ -54,7 +54,7 @@ impl<R: Read> StreamReader<R> {
             fb: messages.next(&mut read)?.header_as_context().unwrap(),
             ctx,
         }
-            .try_into()?;
+        .try_into()?;
 
         Ok(Self {
             read,
@@ -109,7 +109,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
                 .dtype()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
         )
-            .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
+        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
         Ok(Some(StreamArrayReader {
             ctx: &self.ctx,
@@ -223,7 +223,7 @@ impl<'a, R: Read> FallibleIterator for TakeIterator<'a, R> {
                 curr_offset + batch.len(),
                 SearchSortedSide::Left,
             )?
-                .to_index();
+            .to_index();
 
             self.row_offset += batch.len();
 
@@ -456,7 +456,7 @@ mod tests {
                 .map(|v| v as f64 + 0.5)
                 .collect_vec(),
         )
-            .into_array();
+        .into_array();
         let alp_encoded = ALPArray::encode(pdata).unwrap();
         assert_eq!(alp_encoded.encoding().id(), ALPEncoding.id());
         test_base_case(
@@ -567,7 +567,7 @@ mod tests {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
-            .into_array();
+        .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
@@ -625,13 +625,13 @@ mod tests {
             vec![data.clone(), data2.clone(), data2],
             data.dtype().clone(),
         )
-            .unwrap()
-            .into_array();
+        .unwrap()
+        .into_array();
 
         let indices = PrimitiveArray::from(vec![
             10i32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 4_000_000,
         ])
-            .into_array();
+        .into_array();
         let mut buffer = vec![];
         {
             let mut cursor = Cursor::new(&mut buffer);
@@ -684,7 +684,7 @@ mod tests {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
-            .into_array();
+        .into_array();
 
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
         let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();

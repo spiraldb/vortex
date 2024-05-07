@@ -1,6 +1,4 @@
-use std::cell::OnceCell;
 use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, RwLock};
 
 use enum_iterator::all;
 use itertools::Itertools;
@@ -26,9 +24,6 @@ pub struct ArrayView<'v> {
     array: fb::Array<'v>,
     buffers: &'v [Buffer],
     ctx: &'v ViewContext,
-    // We store the stats in a OnceCell so that we can avoid allocating the stats map unless we
-    // actually need it.
-    stats_map: OnceCell<Arc<RwLock<StatsSet>>>,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
     //  which fb:Array children to skip when calculating how to slice into buffers.
@@ -70,7 +65,6 @@ impl<'v> ArrayView<'v> {
             array,
             buffers,
             ctx,
-            stats_map: OnceCell::new(),
         };
 
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
@@ -158,58 +152,27 @@ impl Statistics for ArrayView<'_> {
         if from_fb.is_some() {
             return from_fb;
         }
-
-        // otherwise check to see if we have previously computed/cached the value
-        if let Some(map) = self.stats_map.get() {
-            if let Some(cached) = map.read().expect("unexpected poisoned lock").get(stat) {
-                return Some(cached.clone());
-            }
-        }
         None
     }
 
     /// NB: part of the contract for to_set is that it does not do any expensive computation.
     /// In other implementations, this means returning the underlying stats map, but for the flatbuffer
     /// implemetation, we have 'precalculated' stats in the flatbuffer itself, so we need to
-    /// take those fields and populate the stats set before cloning it. Either way we need to do
-    /// a heap allocation, so we might as well populate the map with all preexisting values and
-    /// cache the result.
+    /// alllocate a stats map and populate it with those fields.
     fn to_set(&self) -> StatsSet {
+        let mut result = StatsSet::new();
         for stat in all::<Stat>() {
             if let Some(value) = self.get(stat) {
-                self.set(stat, value);
+                result.set(stat, value)
             }
         }
-
-        return self
-            .stats_map
-            .get()
-            .take()
-            .expect("map should have been populated")
-            .read()
-            .expect("unexpected poisoned lock")
-            .clone();
+        result
     }
 
     /// We want to avoid any sort of allocation on instantiation of the ArrayView, so we
-    /// use a OnceCell to ensure that we allocate only once, and only if we need to memoize
-    /// calculated stats.
-    fn set(&self, stat: Stat, value: Scalar) {
-        if self.stats_map.get().is_none() {
-            let mut stats = StatsSet::default();
-            stats.set(stat, value);
-            self.stats_map
-                .set(Arc::new(RwLock::new(stats)))
-                .expect("Should only be called once");
-        } else {
-            self.stats_map
-                .clone()
-                .get()
-                .expect("unexpected poisoned write lock")
-                .write()
-                .map(|mut stats| stats.set(stat, value))
-                .unwrap();
-        }
+    /// do not allocate a stats_set to cache values.
+    fn set(&self, _stat: Stat, _value: Scalar) {
+        unimplemented!()
     }
 
     fn compute(&self, stat: Stat) -> Option<Scalar> {
