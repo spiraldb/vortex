@@ -9,7 +9,6 @@ mod display;
 mod extension;
 mod list;
 mod primitive;
-mod serde;
 mod struct_;
 mod utf8;
 mod value;
@@ -23,6 +22,7 @@ pub use struct_::*;
 pub use utf8::*;
 use vortex_error::{vortex_bail, VortexResult};
 
+#[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
     pub use gen_scalar::vortex::*;
 

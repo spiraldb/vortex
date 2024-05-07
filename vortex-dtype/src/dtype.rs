@@ -5,43 +5,8 @@ use std::sync::Arc;
 use itertools::Itertools;
 use DType::*;
 
+use crate::nullability::Nullability;
 use crate::{ExtDType, PType};
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Ord, PartialOrd)]
-#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
-pub enum Nullability {
-    #[default]
-    NonNullable,
-    Nullable,
-}
-
-impl From<bool> for Nullability {
-    fn from(value: bool) -> Self {
-        if value {
-            Nullability::Nullable
-        } else {
-            Nullability::NonNullable
-        }
-    }
-}
-
-impl From<Nullability> for bool {
-    fn from(value: Nullability) -> Self {
-        match value {
-            Nullability::NonNullable => false,
-            Nullability::Nullable => true,
-        }
-    }
-}
-
-impl Display for Nullability {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Nullability::NonNullable => write!(f, ""),
-            Nullability::Nullable => write!(f, "?"),
-        }
-    }
-}
 
 pub type FieldNames = Arc<[Arc<str>]>;
 
@@ -71,7 +36,7 @@ impl DType {
     }
 
     pub fn is_nullable(&self) -> bool {
-        use Nullability::*;
+        use crate::nullability::Nullability::*;
 
         match self {
             Null => true,

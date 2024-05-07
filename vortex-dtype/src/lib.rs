@@ -3,14 +3,20 @@
 pub use dtype::*;
 pub use extension::*;
 pub use half;
+pub use nullability::*;
 pub use ptype::*;
-mod deserialize;
 mod dtype;
 mod extension;
+mod nullability;
 mod ptype;
 mod serde;
-mod serialize;
 
+#[cfg(feature = "prost")]
+pub mod proto {
+    include!(concat!(env!("OUT_DIR"), "/proto/vortex.dtype.rs"));
+}
+
+#[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
     #[allow(unused_imports)]
     #[allow(dead_code)]

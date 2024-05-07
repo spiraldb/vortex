@@ -1,10 +1,5 @@
 namespace vortex.dtype;
 
-enum Nullability: uint8 {
-    NonNullable,
-    Nullable,
-}
-
 enum PType: uint8 {
     U8,
     U16,
@@ -22,46 +17,45 @@ enum PType: uint8 {
 table Null {}
 
 table Bool {
-    nullability: Nullability;
+    nullable: bool;
 }
 
 table Primitive {
     ptype: PType;
-    nullability: Nullability;
+    nullable: bool;
 }
 
 table Decimal {
     /// Total number of decimal digits
     precision: uint8;
-
     /// Number of digits after the decimal point "."
-    scale: int8;
-    nullability: Nullability;
+    scale: uint8;
+    nullable: bool;
 }
 
 table Utf8 {
-    nullability: Nullability;
+    nullable: bool;
 }
 
 table Binary {
-    nullability: Nullability;
+    nullable: bool;
 }
 
 table Struct_ {
     names: [string];
-    fields: [DType];
-    nullability: Nullability;
+    dtypes: [DType];
+    nullable: bool;
 }
 
 table List {
     element_type: DType;
-    nullability: Nullability;
+    nullable: bool;
 }
 
 table Extension {
     id: string;
     metadata: [ubyte];
-    nullability: Nullability;
+    nullable: bool;
 }
 
 union Type {
