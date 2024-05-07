@@ -1,6 +1,10 @@
-use std::ops::Deref;
+mod flexbuffers;
+mod string;
+
+use std::ops::{Deref, Range};
 
 use arrow_buffer::Buffer as ArrowBuffer;
+pub use string::*;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 
 #[derive(Debug, Clone)]
@@ -25,6 +29,15 @@ impl Buffer {
         match self {
             Buffer::Arrow(b) => b.is_empty(),
             Buffer::Bytes(b) => b.is_empty(),
+        }
+    }
+
+    pub fn slice(&self, range: Range<usize>) -> Self {
+        match self {
+            Buffer::Arrow(b) => {
+                Buffer::Arrow(b.slice_with_length(range.start, range.end - range.start))
+            }
+            Buffer::Bytes(b) => Buffer::Bytes(b.slice(range)),
         }
     }
 

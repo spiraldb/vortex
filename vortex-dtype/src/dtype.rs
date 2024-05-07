@@ -162,6 +162,10 @@ impl StructDType {
         &self.names
     }
 
+    pub fn find_name(&self, name: &str) -> Option<usize> {
+        self.names.iter().position(|n| n.as_ref() == name)
+    }
+
     pub fn dtypes(&self) -> &Arc<[DType]> {
         &self.dtypes
     }

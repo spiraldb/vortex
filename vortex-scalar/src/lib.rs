@@ -18,11 +18,11 @@ mod extension;
 mod list;
 mod null;
 mod primitive;
+pub mod scalar2;
 mod serde;
 mod struct_;
 mod utf8;
 mod value;
-mod view;
 
 pub mod flatbuffers {
     pub use gen_scalar::vortex::*;

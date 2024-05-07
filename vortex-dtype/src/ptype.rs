@@ -40,6 +40,7 @@ pub trait NativePType:
     + Num
     + NumCast
     + FromPrimitive
+    + TryFromBytes
 {
     const PTYPE: PType;
 }
@@ -245,3 +246,29 @@ impl From<PType> for DType {
         Primitive(item, NonNullable)
     }
 }
+
+pub trait TryFromBytes: Sized {
+    fn try_from_le_bytes(bytes: &[u8]) -> VortexResult<Self>;
+}
+
+macro_rules! try_from_bytes {
+    ($T:ty) => {
+        impl TryFromBytes for $T {
+            fn try_from_le_bytes(bytes: &[u8]) -> VortexResult<Self> {
+                Ok(<$T>::from_le_bytes(bytes.try_into()?))
+            }
+        }
+    };
+}
+
+try_from_bytes!(u8);
+try_from_bytes!(u16);
+try_from_bytes!(u32);
+try_from_bytes!(u64);
+try_from_bytes!(i8);
+try_from_bytes!(i16);
+try_from_bytes!(i32);
+try_from_bytes!(i64);
+try_from_bytes!(f16);
+try_from_bytes!(f32);
+try_from_bytes!(f64);
