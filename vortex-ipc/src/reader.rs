@@ -478,12 +478,6 @@ mod tests {
         let data = PrimitiveArray::from((0i32..3_000_000).collect_vec()).into_array();
         let data = round_trip(&data);
 
-        // NB: data is an ArrayData constructed from the result of calling read_array on an array
-        // reader. read_array calls to_static on the underlying chunks, which translates them
-        // from Array<ArrayView> to Array<ArrayData>, and in that translation, it calls to_set
-        // in the ArrayView's statistics. Thus, to check that we get correct behavior from
-        // ArrayView statistics get() and to_set() methods, we call get (but not compute!)
-        // on the result for each of the desired statistics
         verify_stats(&data);
 
         let run_count: u64 = data.statistics().get_as::<u64>(Stat::RunCount).unwrap();
@@ -501,6 +495,11 @@ mod tests {
 
         let data = round_trip(&chunked_array);
 
+        // NB: data is an ArrayData constructed from the result of calling read_array on an array
+        // reader. compute on a ChunkedArray calls get_or_compute on the underlying chunks and
+        // merges the results, while get does not. Thus we need to compute a stat and force this
+        // merge computation before we can test get()
+        data.statistics().compute(Stat::Min).unwrap();
         verify_stats(&data);
 
         // TODO(@jcasale): run_count calculation is wrong for chunked arrays, this should be 3mm

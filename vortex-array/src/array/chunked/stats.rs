@@ -14,9 +14,10 @@ impl ArrayStatisticsCompute for ChunkedArray<'_> {
                 s.compute(stat);
                 s.to_set()
             })
-            .fold(StatsSet::new(), |mut acc, x| {
+            .reduce(|mut acc, x| {
                 acc.merge(&x);
                 acc
-            }))
+            })
+            .unwrap_or_else(StatsSet::new))
     }
 }
