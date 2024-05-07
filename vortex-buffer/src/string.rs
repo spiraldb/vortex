@@ -8,6 +8,10 @@ use crate::Buffer;
 pub struct BufferString(Buffer);
 
 impl BufferString {
+    /// Creates a new `BufferString` from a `Buffer`.
+    ///
+    /// # Safety
+    /// Assumes that the buffer contains valid UTF-8.
     pub unsafe fn new_unchecked(buffer: Buffer) -> Self {
         Self(buffer)
     }

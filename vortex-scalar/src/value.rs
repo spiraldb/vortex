@@ -140,7 +140,7 @@ primitive_from_scalar_view!(i64);
 primitive_from_scalar_view!(f32);
 primitive_from_scalar_view!(f64);
 
-impl<'a> From<&ScalarView> for f16 {
+impl From<&ScalarView> for f16 {
     fn from(value: &ScalarView) -> Self {
         f16::from_le_bytes(value.0.as_u16().to_le_bytes())
     }

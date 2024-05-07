@@ -12,8 +12,14 @@ impl<'a> ListScalar<'a> {
         self.0.dtype()
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.0.value.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn element(&self, idx: usize) -> Option<Scalar> {
