@@ -101,6 +101,12 @@ pub enum VortexError {
         #[backtrace]
         io::Error,
     ),
+    #[error(transparent)]
+    Utf8Error(
+        #[from]
+        #[backtrace]
+        std::str::Utf8Error,
+    ),
     #[cfg(feature = "parquet")]
     #[error(transparent)]
     ParquetError(

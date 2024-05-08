@@ -4958,6 +4958,7 @@ version = "0.1.0"
 dependencies = [
  "arrow-buffer",
  "bytes",
+ "flexbuffers",
  "vortex-dtype",
 ]
 
@@ -5112,6 +5113,9 @@ dependencies = [
  "flexbuffers",
  "itertools 0.12.1",
  "num-traits",
+ "paste",
+ "prost",
+ "prost-types",
  "serde",
  "vortex-buffer",
  "vortex-dtype",

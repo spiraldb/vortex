@@ -1,5 +1,7 @@
 #![cfg(feature = "flatbuffers")]
 
+use std::sync::Arc;
+
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -30,7 +32,7 @@ impl TryFrom<fb::DType<'_>> for DType {
                 let fb_list = fb.type__as_list().unwrap();
                 let element_dtype = DType::try_from(fb_list.element_type().unwrap())?;
                 Ok(DType::List(
-                    Box::new(element_dtype),
+                    Arc::new(element_dtype),
                     fb_list.nullable().into(),
                 ))
             }
@@ -220,6 +222,7 @@ impl TryFrom<fb::PType> for PType {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
 
     use flatbuffers::root;
     use vortex_flatbuffers::FlatBufferToBytes;
@@ -242,7 +245,7 @@ mod test {
         roundtrip_dtype(DType::Binary(Nullability::NonNullable));
         roundtrip_dtype(DType::Utf8(Nullability::NonNullable));
         roundtrip_dtype(DType::List(
-            Box::new(DType::Primitive(PType::F32, Nullability::Nullable)),
+            Arc::new(DType::Primitive(PType::F32, Nullability::Nullable)),
             Nullability::NonNullable,
         ));
         roundtrip_dtype(DType::Struct(

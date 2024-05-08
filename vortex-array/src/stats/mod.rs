@@ -5,7 +5,7 @@ use enum_iterator::Sequence;
 pub use statsset::*;
 use vortex_dtype::{DType, NativePType};
 use vortex_error::{VortexError, VortexResult};
-use vortex_scalar::{ListScalarVec, Scalar};
+use vortex_scalar::Scalar;
 
 mod statsset;
 
@@ -137,13 +137,13 @@ impl dyn Statistics + '_ {
         Ok(res.expect("Result should have been populated by previous call"))
     }
 
-    pub fn compute_as_cast<U: NativePType + TryFrom<Scalar, Error = VortexError>>(
+    pub fn compute_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
     ) -> VortexResult<U> {
         let mut res: Option<U> = None;
         self.with_computed_stat_value(stat, &mut |s| {
-            res = Some(U::try_from(s.cast(&DType::from(U::PTYPE))?)?);
+            res = Some(U::try_from(s.cast(&DType::from(U::PTYPE))?.as_ref())?);
             Ok(())
         })?;
         Ok(res.expect("Result should have been populated by previous call"))
@@ -186,12 +186,10 @@ impl dyn Statistics + '_ {
     }
 
     pub fn compute_bit_width_freq(&self) -> VortexResult<Vec<usize>> {
-        self.compute_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)
-            .map(|s| s.0)
+        self.compute_as::<Vec<usize>>(Stat::BitWidthFreq)
     }
 
     pub fn compute_trailing_zero_freq(&self) -> VortexResult<Vec<usize>> {
-        self.compute_as::<ListScalarVec<usize>>(Stat::TrailingZeroFreq)
-            .map(|s| s.0)
+        self.compute_as::<Vec<usize>>(Stat::TrailingZeroFreq)
     }
 }

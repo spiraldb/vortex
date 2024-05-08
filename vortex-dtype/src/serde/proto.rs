@@ -1,9 +1,11 @@
-#![cfg(feature = "prost")]
+#![cfg(feature = "proto")]
+
+use std::sync::Arc;
 
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
-use crate::proto::d_type::Type;
-use crate::{proto as pb, DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
+use crate::proto::dtype::d_type::Type;
+use crate::{proto::dtype as pb, DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
 
 impl TryFrom<&pb::DType> for DType {
     type Error = VortexError;
@@ -38,7 +40,7 @@ impl TryFrom<&pb::DType> for DType {
                         .ok_or_else(|| vortex_err!(InvalidSerde: "Invalid list element type"))?
                         .as_ref()
                         .try_into()
-                        .map(Box::new)?,
+                        .map(Arc::new)?,
                     nullable,
                 ))
             }

@@ -96,7 +96,7 @@ impl<'v> Validity<'v> {
         match self {
             Validity::NonNullable | Validity::AllValid => true,
             Validity::AllInvalid => false,
-            Validity::Array(a) => scalar_at(a, index).unwrap().try_into().unwrap(),
+            Validity::Array(a) => bool::try_from(&scalar_at(a, index).unwrap()).unwrap(),
         }
     }
 

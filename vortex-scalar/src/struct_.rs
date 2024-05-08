@@ -1,97 +1,65 @@
-use std::cmp::Ordering;
-use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
-use itertools::Itertools;
-use vortex_dtype::{DType, FieldNames, Nullability, StructDType};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_dtype::DType;
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
+use crate::value::ScalarValue;
 use crate::Scalar;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct StructScalar {
-    dtype: DType,
-    values: Vec<Scalar>,
+pub struct StructScalar<'a> {
+    dtype: &'a DType,
+    fields: Option<Arc<[ScalarValue]>>,
 }
 
-impl StructScalar {
+impl<'a> StructScalar<'a> {
     #[inline]
-    pub fn new(dtype: DType, values: Vec<Scalar>) -> Self {
-        Self { dtype, values }
+    pub fn dtype(&self) -> &'a DType {
+        self.dtype
     }
 
-    #[inline]
-    pub fn values(&self) -> &[Scalar] {
-        self.values.as_ref()
+    pub fn field_by_idx(&self, idx: usize, dtype: DType) -> Option<Scalar> {
+        self.fields
+            .as_ref()
+            .and_then(|fields| fields.get(idx))
+            .map(|field| Scalar {
+                dtype,
+                value: field.clone(),
+            })
     }
 
-    #[inline]
-    pub fn dtype(&self) -> &DType {
-        &self.dtype
-    }
-
-    pub fn names(&self) -> &FieldNames {
-        let DType::Struct(st, _) = self.dtype() else {
-            unreachable!("Not a scalar dtype");
-        };
-        st.names()
-    }
-
-    pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
-        match dtype {
-            DType::Struct(st, n) => {
-                // TODO(ngates): check nullability.
-                assert_eq!(Nullability::NonNullable, *n);
-
-                if st.dtypes().len() != self.values.len() {
-                    vortex_bail!(
-                        MismatchedTypes: format!("Struct with {} fields", self.values.len()),
-                        dtype
-                    );
-                }
-
-                let new_fields: Vec<Scalar> = self
-                    .values
-                    .iter()
-                    .zip_eq(st.dtypes().iter())
-                    .map(|(field, field_dtype)| field.cast(field_dtype))
-                    .try_collect()?;
-
-                let new_type = DType::Struct(
-                    StructDType::new(
-                        st.names().clone(),
-                        new_fields.iter().map(|x| x.dtype().clone()).collect(),
-                    ),
-                    dtype.nullability(),
-                );
-                Ok(StructScalar::new(new_type, new_fields).into())
-            }
-            _ => Err(vortex_err!(MismatchedTypes: "struct", dtype)),
-        }
-    }
-
-    pub fn nbytes(&self) -> usize {
-        self.values().iter().map(|s| s.nbytes()).sum()
-    }
-}
-
-impl PartialOrd for StructScalar {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.dtype != other.dtype {
-            None
-        } else {
-            self.values.partial_cmp(&other.values)
-        }
-    }
-}
-
-impl Display for StructScalar {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let DType::Struct(st, _) = self.dtype() else {
+    pub fn field(&self, name: &str, dtype: DType) -> Option<Scalar> {
+        let DType::Struct(struct_dtype, _) = self.dtype() else {
             unreachable!()
         };
-        for (n, v) in st.names().iter().zip(self.values.iter()) {
-            write!(f, "{} = {}", n, v)?;
+        struct_dtype
+            .find_name(name)
+            .and_then(|idx| self.field_by_idx(idx, dtype))
+    }
+
+    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
+        todo!()
+    }
+}
+
+impl Scalar {
+    pub fn r#struct(dtype: DType, children: Vec<ScalarValue>) -> Scalar {
+        Scalar {
+            dtype,
+            value: ScalarValue::List(children.into()),
         }
-        Ok(())
+    }
+}
+
+impl<'a> TryFrom<&'a Scalar> for StructScalar<'a> {
+    type Error = VortexError;
+
+    fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
+        if matches!(value.dtype(), DType::Struct(..)) {
+            vortex_bail!("Expected struct scalar, found {}", value.dtype())
+        }
+        Ok(Self {
+            dtype: value.dtype(),
+            fields: value.value.as_list()?.cloned(),
+        })
     }
 }

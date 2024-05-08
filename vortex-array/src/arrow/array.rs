@@ -22,7 +22,7 @@ use arrow_schema::{DataType, TimeUnit};
 use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_dtype::NativePType;
-use vortex_scalar::NullScalar;
+use vortex_scalar::Scalar;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
@@ -197,7 +197,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
 impl FromArrowArray<&ArrowNullArray> for ArrayData {
     fn from_arrow(value: &ArrowNullArray, nullable: bool) -> Self {
         assert!(nullable);
-        ConstantArray::new(NullScalar::new(), value.len()).into_array_data()
+        ConstantArray::new(Scalar::null(DType::Null), value.len()).into_array_data()
     }
 }
 

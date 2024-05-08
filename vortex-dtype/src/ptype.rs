@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 use std::panic::RefUnwindSafe;
 
 use num_traits::{FromPrimitive, Num, NumCast};
@@ -41,6 +42,8 @@ pub trait NativePType:
     + Num
     + NumCast
     + FromPrimitive
+    + ToBytes
+    + TryFromBytes
 {
     const PTYPE: PType;
 }
@@ -246,3 +249,44 @@ impl From<PType> for DType {
         Primitive(item, NonNullable)
     }
 }
+
+pub trait ToBytes: Sized {
+    fn to_le_bytes(&self) -> &[u8];
+}
+
+pub trait TryFromBytes: Sized {
+    fn try_from_le_bytes(bytes: &[u8]) -> VortexResult<Self>;
+}
+
+macro_rules! try_from_bytes {
+    ($T:ty) => {
+        impl ToBytes for $T {
+            #[inline]
+            #[allow(clippy::size_of_in_element_count)]
+            fn to_le_bytes(&self) -> &[u8] {
+                // NOTE(ngates): this assumes the platform is little-endian. Currently enforced
+                //  with a flag cfg(target_endian = "little")
+                let raw_ptr = self as *const $T as *const u8;
+                unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of::<$T>()) }
+            }
+        }
+
+        impl TryFromBytes for $T {
+            fn try_from_le_bytes(bytes: &[u8]) -> VortexResult<Self> {
+                Ok(<$T>::from_le_bytes(bytes.try_into()?))
+            }
+        }
+    };
+}
+
+try_from_bytes!(u8);
+try_from_bytes!(u16);
+try_from_bytes!(u32);
+try_from_bytes!(u64);
+try_from_bytes!(i8);
+try_from_bytes!(i16);
+try_from_bytes!(i32);
+try_from_bytes!(i64);
+try_from_bytes!(f16);
+try_from_bytes!(f32);
+try_from_bytes!(f64);

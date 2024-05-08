@@ -6,7 +6,7 @@ use arrow_array::{
 use arrow_schema::{Field, Fields};
 use itertools::Itertools;
 use vortex_error::VortexResult;
-use vortex_scalar::{Scalar, StructScalar};
+use vortex_scalar::Scalar;
 
 use crate::array::r#struct::StructArray;
 use crate::compute::as_arrow::{as_arrow, AsArrowArray};
@@ -103,13 +103,12 @@ impl AsContiguousFn for StructArray<'_> {
 
 impl ScalarAtFn for StructArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        Ok(StructScalar::new(
+        Ok(Scalar::r#struct(
             self.dtype().clone(),
             self.children()
-                .map(|field| scalar_at(&field, index))
+                .map(|field| scalar_at(&field, index).map(|s| s.into_value()))
                 .try_collect()?,
-        )
-        .into())
+        ))
     }
 }
 

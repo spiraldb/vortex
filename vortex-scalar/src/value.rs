@@ -1,45 +1,68 @@
-use vortex_dtype::Nullability;
-use vortex_error::{vortex_bail, VortexResult};
+use std::sync::Arc;
 
+use vortex_buffer::{Buffer, BufferString};
+use vortex_error::{vortex_err, VortexResult};
+
+use crate::pvalue::PValue;
+
+/// Represents the internal data of a scalar value. Must be interpreted by wrapping
+/// up with a DType to make a Scalar.
+///
+/// Note that these values can be deserialized from JSON or other formats. So a PValue may not
+/// have the correct width for what the DType expects. This means primitive values must be
+/// cast on-read.
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub struct ScalarValue<T> {
-    nullability: Nullability,
-    value: Option<T>,
+pub enum ScalarValue {
+    Null,
+    Bool(bool),
+    Primitive(PValue),
+    Buffer(Buffer),
+    BufferString(BufferString),
+    List(Arc<[ScalarValue]>),
 }
 
-impl<T> ScalarValue<T> {
-    pub fn try_new(value: Option<T>, nullability: Nullability) -> VortexResult<Self> {
-        if value.is_none() && nullability == Nullability::NonNullable {
-            vortex_bail!("Value cannot be None for NonNullable Scalar");
+impl ScalarValue {
+    pub fn is_null(&self) -> bool {
+        matches!(self, ScalarValue::Null)
+    }
+
+    pub fn as_bool(&self) -> VortexResult<Option<bool>> {
+        match self {
+            ScalarValue::Null => Ok(None),
+            ScalarValue::Bool(b) => Ok(Some(*b)),
+            _ => Err(vortex_err!("Expected a bool scalar, found {:?}", self)),
         }
-        Ok(Self { value, nullability })
     }
 
-    pub fn non_nullable(value: T) -> Self {
-        Self::try_new(Some(value), Nullability::NonNullable).unwrap()
+    pub fn as_pvalue(&self) -> VortexResult<Option<PValue>> {
+        match self {
+            ScalarValue::Null => Ok(None),
+            ScalarValue::Primitive(p) => Ok(Some(*p)),
+            _ => Err(vortex_err!("Expected a primitive scalar, found {:?}", self)),
+        }
     }
 
-    pub fn nullable(value: T) -> Self {
-        Self::try_new(Some(value), Nullability::Nullable).unwrap()
+    pub fn as_buffer(&self) -> VortexResult<Option<Buffer>> {
+        match self {
+            ScalarValue::Null => Ok(None),
+            ScalarValue::Buffer(b) => Ok(Some(b.clone())),
+            _ => Err(vortex_err!("Expected a binary scalar, found {:?}", self)),
+        }
     }
 
-    pub fn some(value: T) -> Self {
-        Self::try_new(Some(value), Nullability::default()).unwrap()
+    pub fn as_buffer_string(&self) -> VortexResult<Option<BufferString>> {
+        match self {
+            ScalarValue::Null => Ok(None),
+            ScalarValue::Buffer(b) => Ok(Some(BufferString::try_from(b.clone())?)),
+            ScalarValue::BufferString(b) => Ok(Some(b.clone())),
+            _ => Err(vortex_err!("Expected a string scalar, found {:?}", self)),
+        }
     }
 
-    pub fn none() -> Self {
-        Self::try_new(None, Nullability::Nullable).unwrap()
-    }
-
-    pub fn value(&self) -> Option<&T> {
-        self.value.as_ref()
-    }
-
-    pub fn into_value(self) -> Option<T> {
-        self.value
-    }
-
-    pub fn nullability(&self) -> Nullability {
-        self.nullability
+    pub fn as_list(&self) -> VortexResult<Option<&Arc<[ScalarValue]>>> {
+        match self {
+            ScalarValue::List(l) => Ok(Some(l)),
+            _ => Err(vortex_err!("Expected a list scalar, found {:?}", self)),
+        }
     }
 }

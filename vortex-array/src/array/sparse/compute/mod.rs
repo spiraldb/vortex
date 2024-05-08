@@ -156,7 +156,7 @@ mod test {
             PrimitiveArray::from_vec(vec![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid)
                 .into_array(),
             100,
-            Scalar::null(&DType::Primitive(PType::F64, Nullability::Nullable)),
+            Scalar::null(DType::Primitive(PType::F64, Nullability::Nullable)),
         )
         .into_array()
     }

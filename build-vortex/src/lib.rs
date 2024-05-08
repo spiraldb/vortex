@@ -26,7 +26,7 @@ pub fn build() {
     }
 
     // Proto (prost)
-    if env::var("CARGO_FEATURE_PROST").ok().is_some() {
+    if env::var("CARGO_FEATURE_PROTO").ok().is_some() {
         build_proto();
     }
 }
