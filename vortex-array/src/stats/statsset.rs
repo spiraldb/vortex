@@ -214,7 +214,7 @@ mod test {
     use crate::stats::{Stat, StatsSet};
 
     #[test]
-    fn merge_into_min_max() {
+    fn merge_into_min() {
         let mut first = StatsSet::of(Stat::Min, 42.into());
         first.merge(&StatsSet::new());
         assert_eq!(first.get(Stat::Min), None);
