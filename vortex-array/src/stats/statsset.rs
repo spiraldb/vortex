@@ -69,6 +69,10 @@ impl StatsSet {
         self.merge_ordered(Stat::Max, other, |other, own| other > own);
     }
 
+    /// Merges stats if both are present, if either stat is not present, drops the stat from the
+    /// result set. For example, if we know the minimums of two arrays, the minimum of their union
+    /// is the minimum-of-minimums, but if we only know the minimum of one of the two arrays, we
+    /// do not know the minimum of their union.
     fn merge_ordered<F: Fn(&Scalar, &Scalar) -> bool>(&mut self, stat: Stat, other: &Self, cmp: F) {
         if let Entry::Occupied(mut e) = self.values.entry(stat) {
             if let Some(ov) = other.get(stat) {
@@ -108,11 +112,19 @@ impl StatsSet {
     ) {
         if let Some(is_sorted) = self.get_as(stat) {
             if let Some(other_is_sorted) = other.get_as(stat) {
-                if is_sorted && other_is_sorted && cmp(self.get(Stat::Max), other.get(Stat::Min)) {
+                if !(self.get(Stat::Max).is_some() && other.get(Stat::Min).is_some()) {
+                    self.values.remove(&stat);
+                } else if is_sorted
+                    && other_is_sorted
+                    && cmp(self.get(Stat::Max), other.get(Stat::Min))
+                {
                     return;
+                } else {
+                    self.values.insert(stat, false.into());
                 }
+            } else {
+                self.values.remove(&stat);
             }
-            self.values.insert(stat, false.into());
         }
     }
 
@@ -196,6 +208,9 @@ impl IntoIterator for StatsSet {
 
 #[cfg(test)]
 mod test {
+    use itertools::Itertools;
+    use vortex_scalar::ListScalarVec;
+
     use crate::stats::{Stat, StatsSet};
 
     #[test]
@@ -217,5 +232,140 @@ mod test {
         let mut first = StatsSet::of(Stat::Min, 37.into());
         first.merge(&StatsSet::of(Stat::Min, 42.into()));
         assert_eq!(first.get(Stat::Min).cloned(), Some(37.into()));
+    }
+
+    #[test]
+    fn merge_into_max() {
+        let mut first = StatsSet::of(Stat::Max, 42.into());
+        first.merge(&StatsSet::new());
+        assert_eq!(first.get(Stat::Max), None);
+    }
+
+    #[test]
+    fn merge_from_max() {
+        let mut first = StatsSet::new();
+        first.merge(&StatsSet::of(Stat::Max, 42.into()));
+        assert_eq!(first.get(Stat::Max), None);
+    }
+
+    #[test]
+    fn merge_maxes() {
+        let mut first = StatsSet::of(Stat::Max, 37.into());
+        first.merge(&StatsSet::of(Stat::Max, 42.into()));
+        assert_eq!(first.get(Stat::Max).cloned(), Some(42.into()));
+    }
+
+    #[test]
+    fn merge_into_scalar() {
+        let mut first = StatsSet::of(Stat::TrueCount, 42.into());
+        first.merge(&StatsSet::new());
+        assert_eq!(first.get(Stat::TrueCount), None);
+    }
+
+    #[test]
+    fn merge_from_scalar() {
+        let mut first = StatsSet::new();
+        first.merge(&StatsSet::of(Stat::TrueCount, 42.into()));
+        assert_eq!(first.get(Stat::TrueCount), None);
+    }
+
+    #[test]
+    fn merge_scalars() {
+        let mut first = StatsSet::of(Stat::TrueCount, 37.into());
+        first.merge(&StatsSet::of(Stat::TrueCount, 42.into()));
+        assert_eq!(first.get(Stat::TrueCount).cloned(), Some(79u64.into()));
+    }
+
+    #[test]
+    fn merge_into_freq() {
+        let vec = (0..255).collect_vec();
+        let mut first = StatsSet::of(Stat::BitWidthFreq, ListScalarVec(vec.clone()).into());
+        first.merge(&StatsSet::new());
+        assert_eq!(first.get(Stat::BitWidthFreq), None);
+    }
+
+    #[test]
+    fn merge_from_freq() {
+        let vec = (0..255).collect_vec();
+        let mut first = StatsSet::new();
+        first.merge(&StatsSet::of(
+            Stat::BitWidthFreq,
+            ListScalarVec(vec.clone()).into(),
+        ));
+        assert_eq!(first.get(Stat::BitWidthFreq), None);
+    }
+
+    #[test]
+    fn merge_freqs() {
+        let vec_in = vec![5u64; 256];
+        let vec_out = vec![10u64; 256];
+        let mut first = StatsSet::of(Stat::BitWidthFreq, ListScalarVec(vec_in.clone()).into());
+        first.merge(&StatsSet::of(
+            Stat::BitWidthFreq,
+            ListScalarVec(vec_in.clone()).into(),
+        ));
+        assert_eq!(
+            first.get(Stat::BitWidthFreq).cloned(),
+            Some(ListScalarVec(vec_out.clone()).into())
+        );
+    }
+
+    #[test]
+    fn merge_into_sortedness() {
+        let mut first = StatsSet::of(Stat::IsStrictSorted, true.into());
+        first.merge(&StatsSet::new());
+        assert_eq!(first.get(Stat::IsStrictSorted), None);
+    }
+
+    #[test]
+    fn merge_from_sortedness() {
+        let mut first = StatsSet::new();
+        first.merge(&StatsSet::of(Stat::IsStrictSorted, true.into()));
+        assert_eq!(first.get(Stat::IsStrictSorted), None);
+    }
+
+    #[test]
+    fn merge_sortedness() {
+        let mut first = StatsSet::of(Stat::IsStrictSorted, true.into());
+        first.set(Stat::Max, 1.into());
+        let mut second = StatsSet::of(Stat::IsStrictSorted, true.into());
+        second.set(Stat::Min, 2.into());
+        first.merge(&second);
+        assert_eq!(first.get(Stat::IsStrictSorted).cloned(), Some(true.into()));
+    }
+
+    #[test]
+    fn merge_sortedness_out_of_order() {
+        let mut first = StatsSet::of(Stat::IsStrictSorted, true.into());
+        first.set(Stat::Min, 1.into());
+        let mut second = StatsSet::of(Stat::IsStrictSorted, true.into());
+        second.set(Stat::Max, 2.into());
+        second.merge(&first);
+        assert_eq!(
+            second.get(Stat::IsStrictSorted).cloned(),
+            Some(false.into())
+        );
+    }
+
+    #[test]
+    fn merge_sortedness_only_one_sorted() {
+        let mut first = StatsSet::of(Stat::IsStrictSorted, true.into());
+        first.set(Stat::Max, 1.into());
+        let mut second = StatsSet::of(Stat::IsStrictSorted, false.into());
+        second.set(Stat::Min, 2.into());
+        first.merge(&second);
+        assert_eq!(
+            second.get(Stat::IsStrictSorted).cloned(),
+            Some(false.into())
+        );
+    }
+
+    #[test]
+    fn merge_sortedness_missing_min() {
+        let mut first = StatsSet::of(Stat::IsStrictSorted, true.into());
+        first.set(Stat::Max, 1.into());
+        let second = StatsSet::of(Stat::IsStrictSorted, true.into());
+        first.merge(&second);
+        assert_eq!(first.get(Stat::IsStrictSorted).cloned(), None);
     }
 }
