@@ -94,6 +94,16 @@ impl dyn Statistics + '_ {
             .and_then(|s| U::try_from(&s))
     }
 
+    pub fn get_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
+        &self,
+        stat: Stat,
+    ) -> VortexResult<U> {
+        self.get(stat)
+            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
+            .and_then(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
+            .and_then(|s| U::try_from(&s))
+    }
+
     pub fn compute_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,

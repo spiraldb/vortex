@@ -37,9 +37,9 @@ impl WriteFlatBuffer for &dyn Statistics {
             is_sorted: self.get_as::<bool>(Stat::IsSorted).ok(),
             is_strict_sorted: self.get_as::<bool>(Stat::IsStrictSorted).ok(),
             is_constant: self.get_as::<bool>(Stat::IsConstant).ok(),
-            run_count: self.get_as::<u64>(Stat::RunCount).ok(),
-            true_count: self.get_as::<u64>(Stat::TrueCount).ok(),
-            null_count: self.get_as::<u64>(Stat::NullCount).ok(),
+            run_count: self.get_as_cast::<u64>(Stat::RunCount).ok(),
+            true_count: self.get_as_cast::<u64>(Stat::TrueCount).ok(),
+            null_count: self.get_as_cast::<u64>(Stat::NullCount).ok(),
             bit_width_freq,
             trailing_zero_freq,
         };
