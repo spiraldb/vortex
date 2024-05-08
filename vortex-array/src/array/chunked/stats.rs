@@ -18,6 +18,6 @@ impl ArrayStatisticsCompute for ChunkedArray<'_> {
                 acc.merge(&x);
                 acc
             })
-            .unwrap_or_else(StatsSet::new))
+            .unwrap_or_default())
     }
 }
