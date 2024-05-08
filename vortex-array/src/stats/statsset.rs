@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use enum_iterator::all;
 use itertools::Itertools;
 use vortex_error::VortexError;
-use vortex_scalar::{ListScalarVec, Scalar};
+use vortex_scalar::Scalar;
 
 use crate::stats::Stat;
 
@@ -156,23 +156,25 @@ impl StatsSet {
     }
 
     fn merge_freq_stat(&mut self, other: &Self, stat: Stat) {
-        if let Entry::Occupied(mut e) = self.values.entry(stat) {
-            if let Some(other_value) = other.get_as::<ListScalarVec<u64>>(stat) {
-                // TODO(robert): Avoid the copy here. We could e.get_mut() but need to figure out casting
-                let self_value: ListScalarVec<u64> = e.get().try_into().unwrap();
-                e.insert(
-                    ListScalarVec(
+        match self.values.entry(stat) {
+            Entry::Occupied(mut e) => {
+                if let Some(other_value) = other.get_as::<Vec<u64>>(stat) {
+                    // TODO(robert): Avoid the copy here. We could e.get_mut() but need to figure out casting
+                    let self_value: Vec<u64> = e.get().try_into().unwrap();
+                    e.insert(
                         self_value
-                            .0
                             .iter()
-                            .zip_eq(other_value.0.iter())
+                            .zip_eq(other_value.iter())
                             .map(|(s, o)| *s + *o)
-                            .collect::<Vec<_>>(),
-                    )
-                    .into(),
-                );
-            } else {
-                e.remove();
+                            .collect::<Vec<_>>()
+                            .into(),
+                    );
+                }
+            }
+            Entry::Vacant(e) => {
+                if let Some(other_value) = other.get(stat) {
+                    e.insert(other_value.clone());
+                }
             }
         }
     }

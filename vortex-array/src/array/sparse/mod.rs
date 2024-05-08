@@ -187,7 +187,7 @@ mod test {
     use crate::{Array, IntoArray, OwnedArray};
 
     fn nullable_fill() -> Scalar {
-        Scalar::null(&DType::Primitive(PType::I32, Nullable))
+        Scalar::null(DType::Primitive(PType::I32, Nullable))
     }
 
     #[allow(dead_code)]
@@ -233,7 +233,7 @@ mod test {
 
     #[test]
     pub fn iter_sliced() {
-        let p_fill_val = Some(non_nullable_fill().try_into().unwrap());
+        let p_fill_val = Some(non_nullable_fill().as_ref().try_into().unwrap());
         assert_sparse_array(
             &slice(&sparse_array(non_nullable_fill()), 2, 7).unwrap(),
             &[Some(100), p_fill_val, p_fill_val, Some(200), p_fill_val],
@@ -272,7 +272,7 @@ mod test {
     #[test]
     pub fn test_scalar_at() {
         assert_eq!(
-            usize::try_from(scalar_at(&sparse_array(nullable_fill()), 2).unwrap()).unwrap(),
+            usize::try_from(&scalar_at(&sparse_array(nullable_fill()), 2).unwrap()).unwrap(),
             100
         );
         let error = scalar_at(&sparse_array(nullable_fill()), 10).err().unwrap();
@@ -288,7 +288,7 @@ mod test {
     pub fn scalar_at_sliced() {
         let sliced = slice(&sparse_array(nullable_fill()), 2, 7).unwrap();
         assert_eq!(
-            usize::try_from(scalar_at(&sliced, 0).unwrap()).unwrap(),
+            usize::try_from(&scalar_at(&sliced, 0).unwrap()).unwrap(),
             100
         );
         let error = scalar_at(&sliced, 5).err().unwrap();
@@ -304,7 +304,7 @@ mod test {
     pub fn scalar_at_sliced_twice() {
         let sliced_once = slice(&sparse_array(nullable_fill()), 1, 8).unwrap();
         assert_eq!(
-            usize::try_from(scalar_at(&sliced_once, 1).unwrap()).unwrap(),
+            usize::try_from(&scalar_at(&sliced_once, 1).unwrap()).unwrap(),
             100
         );
         let error = scalar_at(&sliced_once, 7).err().unwrap();
@@ -317,7 +317,7 @@ mod test {
 
         let sliced_twice = slice(&sliced_once, 1, 6).unwrap();
         assert_eq!(
-            usize::try_from(scalar_at(&sliced_twice, 3).unwrap()).unwrap(),
+            usize::try_from(&scalar_at(&sliced_twice, 3).unwrap()).unwrap(),
             200
         );
         let error2 = scalar_at(&sliced_twice, 5).err().unwrap();

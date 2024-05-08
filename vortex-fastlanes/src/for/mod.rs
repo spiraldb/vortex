@@ -84,6 +84,6 @@ impl ArrayTrait for FoRArray<'_> {
     }
 
     fn nbytes(&self) -> usize {
-        self.reference().nbytes() + self.encoded().nbytes()
+        self.encoded().nbytes()
     }
 }

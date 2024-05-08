@@ -2,10 +2,12 @@ use std::collections::HashMap;
 use std::mem::size_of;
 
 use arrow_buffer::buffer::BooleanBuffer;
-use vortex_dtype::match_each_native_ptype;
+use num_traits::PrimInt;
+use vortex_dtype::half::f16;
+use vortex_dtype::Nullability::Nullable;
+use vortex_dtype::{match_each_native_ptype, DType, NativePType};
 use vortex_error::VortexResult;
-use vortex_scalar::{ListScalarVec, PScalar};
-use vortex_scalar::{PScalarType, Scalar};
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
@@ -13,8 +15,8 @@ use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
 use crate::IntoArray;
 
-trait PStatsType: PScalarType + Into<Scalar> {}
-impl<T: PScalarType + Into<Scalar>> PStatsType for T {}
+trait PStatsType: NativePType + Into<Scalar> + BitWidth {}
+impl<T: NativePType + Into<Scalar> + BitWidth> PStatsType for T {}
 
 impl ArrayStatisticsCompute for PrimitiveArray<'_> {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
@@ -45,20 +47,23 @@ impl<T: PStatsType> ArrayStatisticsCompute for &[T] {
 
 fn all_null_stats<T: PStatsType>(len: usize) -> VortexResult<StatsSet> {
     Ok(StatsSet::from(HashMap::from([
-        (Stat::Min, Option::<T>::None.into()),
-        (Stat::Max, Option::<T>::None.into()),
+        (
+            Stat::Min,
+            Scalar::null(DType::Primitive(T::PTYPE, Nullable)),
+        ),
+        (
+            Stat::Max,
+            Scalar::null(DType::Primitive(T::PTYPE, Nullable)),
+        ),
         (Stat::IsConstant, true.into()),
         (Stat::IsSorted, true.into()),
         (Stat::IsStrictSorted, (len < 2).into()),
         (Stat::RunCount, 1.into()),
         (Stat::NullCount, len.into()),
-        (
-            Stat::BitWidthFreq,
-            ListScalarVec(vec![0; size_of::<T>() * 8 + 1]).into(),
-        ),
+        (Stat::BitWidthFreq, vec![0; size_of::<T>() * 8 + 1].into()),
         (
             Stat::TrailingZeroFreq,
-            ListScalarVec(vec![size_of::<T>() * 8; size_of::<T>() * 8 + 1]).into(),
+            vec![size_of::<T>() * 8; size_of::<T>() * 8 + 1].into(),
         ),
     ])))
 }
@@ -96,46 +101,51 @@ impl<'a, T: PStatsType> ArrayStatisticsCompute for NullableValues<'a, T> {
 }
 
 trait BitWidth {
-    fn bit_width(self) -> usize;
-    fn trailing_zeros(self) -> usize;
+    fn bit_width(self) -> u32;
+    fn trailing_zeros(self) -> u32;
 }
 
-impl<T: PStatsType> BitWidth for T {
-    fn bit_width(self) -> usize {
-        let bit_width = size_of::<T>() * 8;
-        let scalar: PScalar = self.into();
-        match scalar {
-            PScalar::U8(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::U16(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::U32(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::U64(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::I8(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::I16(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::I32(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::I64(i) => bit_width - i.leading_zeros() as usize,
-            PScalar::F16(_) => bit_width,
-            PScalar::F32(_) => bit_width,
-            PScalar::F64(_) => bit_width,
-        }
-    }
+macro_rules! int_bit_width {
+    ($T:ty) => {
+        impl BitWidth for $T {
+            fn bit_width(self) -> u32 {
+                Self::BITS - PrimInt::leading_zeros(self)
+            }
 
-    fn trailing_zeros(self) -> usize {
-        let scalar: PScalar = self.into();
-        match scalar {
-            PScalar::U8(i) => i.trailing_zeros() as usize,
-            PScalar::U16(i) => i.trailing_zeros() as usize,
-            PScalar::U32(i) => i.trailing_zeros() as usize,
-            PScalar::U64(i) => i.trailing_zeros() as usize,
-            PScalar::I8(i) => i.trailing_zeros() as usize,
-            PScalar::I16(i) => i.trailing_zeros() as usize,
-            PScalar::I32(i) => i.trailing_zeros() as usize,
-            PScalar::I64(i) => i.trailing_zeros() as usize,
-            PScalar::F16(_) => 0,
-            PScalar::F32(_) => 0,
-            PScalar::F64(_) => 0,
+            fn trailing_zeros(self) -> u32 {
+                PrimInt::trailing_zeros(self)
+            }
         }
-    }
+    };
 }
+
+int_bit_width!(u8);
+int_bit_width!(u16);
+int_bit_width!(u32);
+int_bit_width!(u64);
+int_bit_width!(i8);
+int_bit_width!(i16);
+int_bit_width!(i32);
+int_bit_width!(i64);
+
+// TODO(ngates): just skip counting this in the implementation.
+macro_rules! float_bit_width {
+    ($T:ty) => {
+        impl BitWidth for $T {
+            fn bit_width(self) -> u32 {
+                (size_of::<Self>() * 8) as u32
+            }
+
+            fn trailing_zeros(self) -> u32 {
+                0
+            }
+        }
+    };
+}
+
+float_bit_width!(f16);
+float_bit_width!(f32);
+float_bit_width!(f64);
 
 struct StatsAccumulator<T: PStatsType> {
     prev: T,
@@ -162,8 +172,8 @@ impl<T: PStatsType> StatsAccumulator<T> {
             bit_widths: vec![0; size_of::<T>() * 8 + 1],
             trailing_zeros: vec![0; size_of::<T>() * 8 + 1],
         };
-        stats.bit_widths[first_value.bit_width()] += 1;
-        stats.trailing_zeros[first_value.trailing_zeros()] += 1;
+        stats.bit_widths[first_value.bit_width() as usize] += 1;
+        stats.trailing_zeros[first_value.trailing_zeros() as usize] += 1;
         stats
     }
 
@@ -187,8 +197,8 @@ impl<T: PStatsType> StatsAccumulator<T> {
     }
 
     pub fn next(&mut self, next: T) {
-        self.bit_widths[next.bit_width()] += 1;
-        self.trailing_zeros[next.trailing_zeros()] += 1;
+        self.bit_widths[next.bit_width() as usize] += 1;
+        self.trailing_zeros[next.trailing_zeros() as usize] += 1;
 
         if self.prev == next {
             self.is_strict_sorted = false;
@@ -212,11 +222,8 @@ impl<T: PStatsType> StatsAccumulator<T> {
             (Stat::Max, self.max.into()),
             (Stat::NullCount, self.null_count.into()),
             (Stat::IsConstant, (self.min == self.max).into()),
-            (Stat::BitWidthFreq, ListScalarVec(self.bit_widths).into()),
-            (
-                Stat::TrailingZeroFreq,
-                ListScalarVec(self.trailing_zeros).into(),
-            ),
+            (Stat::BitWidthFreq, self.bit_widths.into()),
+            (Stat::TrailingZeroFreq, self.trailing_zeros.into()),
             (Stat::IsSorted, self.is_sorted.into()),
             (
                 Stat::IsStrictSorted,

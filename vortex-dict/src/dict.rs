@@ -56,7 +56,11 @@ impl ArrayFlatten for DictArray<'_> {
 
 impl ArrayValidity for DictArray<'_> {
     fn is_valid(&self, index: usize) -> bool {
-        let values_index = scalar_at(&self.codes(), index).unwrap().try_into().unwrap();
+        let values_index = scalar_at(&self.codes(), index)
+            .unwrap()
+            .as_ref()
+            .try_into()
+            .unwrap();
         self.values().with_dyn(|a| a.is_valid(values_index))
     }
 

@@ -1,15 +1,25 @@
 use std::io;
 use std::io::Write;
 
-use flatbuffers::{FlatBufferBuilder, WIPOffset};
+use flatbuffers::{root, FlatBufferBuilder, Follow, InvalidFlatbuffer, Verifiable, WIPOffset};
 
 pub trait FlatBufferRoot {}
 
 pub trait ReadFlatBuffer: Sized {
-    type Source<'a>;
-    type Error;
+    type Source<'a>: Verifiable + Follow<'a>;
+    type Error: From<InvalidFlatbuffer>;
 
-    fn read_flatbuffer(fb: &Self::Source<'_>) -> Result<Self, Self::Error>;
+    fn read_flatbuffer<'buf>(
+        fb: &<Self::Source<'buf> as Follow<'buf>>::Inner,
+    ) -> Result<Self, Self::Error>;
+
+    fn read_flatbuffer_bytes<'buf>(bytes: &'buf [u8]) -> Result<Self, Self::Error>
+    where
+        <Self as ReadFlatBuffer>::Source<'buf>: 'buf,
+    {
+        let fb = root::<Self::Source<'buf>>(bytes)?;
+        Self::read_flatbuffer(&fb)
+    }
 }
 
 pub trait WriteFlatBuffer {

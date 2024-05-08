@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::{DataType, Field, SchemaRef};
 use itertools::Itertools;
@@ -81,7 +83,7 @@ impl FromArrowType<&Field> for DType {
             // DataType::Time32(u) => localtime(u.into(), IntWidth::_32, nullability),
             // DataType::Time64(u) => localtime(u.into(), IntWidth::_64, nullability),
             DataType::List(e) | DataType::LargeList(e) => {
-                List(Box::new(DType::from_arrow(e.as_ref())), nullability)
+                List(Arc::new(DType::from_arrow(e.as_ref())), nullability)
             }
             DataType::Struct(f) => Struct(
                 StructDType::new(

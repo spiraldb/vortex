@@ -1,6 +1,6 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex::flatbuffers::array as fba;
+use vortex::flatbuffers as fba;
 use vortex::{ArrayData, Context, ViewContext};
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};
@@ -17,11 +17,15 @@ pub(crate) enum IPCMessage<'a> {
 }
 
 pub(crate) struct IPCContext<'a>(pub &'a ViewContext);
+
 pub(crate) struct IPCSchema<'a>(pub &'a DType);
+
 pub(crate) struct IPCChunk<'a>(pub &'a ViewContext, pub &'a ArrayData);
+
 pub(crate) struct IPCArray<'a>(pub &'a ViewContext, pub &'a ArrayData);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
+
 impl WriteFlatBuffer for IPCMessage<'_> {
     type Target<'a> = fb::Message<'a>;
 
@@ -186,6 +190,8 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
             .collect_vec();
         let children = Some(fbb.create_vector(&children));
 
+        let stats = Some(self.1.statistics().write_flatbuffer(fbb));
+
         fba::Array::create(
             fbb,
             &fba::ArrayArgs {
@@ -193,6 +199,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
                 has_buffer: column_data.buffer().is_some(),
                 encoding,
                 metadata,
+                stats,
                 children,
             },
         )

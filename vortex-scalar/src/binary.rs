@@ -1,74 +1,59 @@
-use std::fmt::{Display, Formatter};
-
-use vortex_dtype::DType;
-use vortex_dtype::Nullability::{NonNullable, Nullable};
+use vortex_buffer::Buffer;
+use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::value::ScalarValue;
 use crate::Scalar;
 
-pub type BinaryScalar = ScalarValue<Vec<u8>>;
+pub struct BinaryScalar<'a> {
+    dtype: &'a DType,
+    value: Option<Buffer>,
+}
 
-impl BinaryScalar {
+impl<'a> BinaryScalar<'a> {
     #[inline]
-    pub fn dtype(&self) -> &DType {
-        match self.nullability() {
-            NonNullable => &DType::Binary(NonNullable),
-            Nullable => &DType::Binary(Nullable),
-        }
+    pub fn dtype(&self) -> &'a DType {
+        self.dtype
+    }
+
+    pub fn value(&self) -> Option<Buffer> {
+        self.value.as_ref().cloned()
     }
 
     pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
         todo!()
     }
-
-    pub fn nbytes(&self) -> usize {
-        self.value().map(|s| s.len()).unwrap_or(1)
-    }
 }
 
-impl From<Vec<u8>> for Scalar {
-    fn from(value: Vec<u8>) -> Self {
-        BinaryScalar::some(value).into()
-    }
-}
-
-impl From<&[u8]> for Scalar {
-    fn from(value: &[u8]) -> Self {
-        BinaryScalar::some(value.to_vec()).into()
-    }
-}
-
-impl TryFrom<Scalar> for Vec<u8> {
-    type Error = VortexError;
-
-    fn try_from(value: Scalar) -> VortexResult<Self> {
-        let Scalar::Binary(b) = value else {
-            vortex_bail!(MismatchedTypes: "binary", value.dtype());
-        };
-        b.into_value()
-            .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
-    }
-}
-
-impl TryFrom<&Scalar> for Vec<u8> {
-    type Error = VortexError;
-
-    fn try_from(value: &Scalar) -> VortexResult<Self> {
-        let Scalar::Binary(b) = value else {
-            vortex_bail!(MismatchedTypes: "binary", value.dtype());
-        };
-        b.value()
-            .cloned()
-            .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
-    }
-}
-
-impl Display for BinaryScalar {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self.value() {
-            None => write!(f, "bytes[none]"),
-            Some(b) => write!(f, "bytes[{}]", b.len()),
+impl Scalar {
+    pub fn binary(buffer: Buffer, nullability: Nullability) -> Self {
+        Scalar {
+            dtype: DType::Binary(nullability),
+            value: ScalarValue::Buffer(buffer),
         }
+    }
+}
+
+impl<'a> TryFrom<&'a Scalar> for BinaryScalar<'a> {
+    type Error = VortexError;
+
+    fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
+        if !matches!(value.dtype(), DType::Binary(_)) {
+            vortex_bail!("Expected binary scalar, found {}", value.dtype())
+        }
+        Ok(Self {
+            dtype: value.dtype(),
+            value: value.value.as_buffer()?,
+        })
+    }
+}
+
+impl<'a> TryFrom<&'a Scalar> for Buffer {
+    type Error = VortexError;
+
+    fn try_from(value: &'a Scalar) -> VortexResult<Self> {
+        BinaryScalar::try_from(value)?
+            .value()
+            .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
     }
 }

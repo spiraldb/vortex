@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use vortex_dtype::Nullability;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::vortex_bail;
-use vortex_scalar::{BinaryScalar, Scalar, Utf8Scalar};
+use vortex_scalar::Scalar;
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
@@ -73,11 +73,12 @@ impl VarBinArray<'_> {
             .expect("missing offsets")
     }
 
-    pub fn first_offset<T: NativePType + TryFrom<Scalar, Error = VortexError>>(
+    pub fn first_offset<T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
     ) -> VortexResult<T> {
         scalar_at(&self.offsets(), 0)?
             .cast(&DType::from(T::PTYPE))?
+            .as_ref()
             .try_into()
     }
 
@@ -93,9 +94,10 @@ impl VarBinArray<'_> {
     }
 
     pub fn sliced_bytes(&self) -> VortexResult<OwnedArray> {
-        let first_offset: usize = scalar_at(&self.offsets(), 0)?.try_into()?;
-        let last_offset: usize =
-            scalar_at(&self.offsets(), self.offsets().len() - 1)?.try_into()?;
+        let first_offset: usize = scalar_at(&self.offsets(), 0)?.as_ref().try_into()?;
+        let last_offset: usize = scalar_at(&self.offsets(), self.offsets().len() - 1)?
+            .as_ref()
+            .try_into()?;
         slice(&self.bytes(), first_offset, last_offset)
     }
 
@@ -143,6 +145,7 @@ impl VarBinArray<'_> {
             .unwrap_or_else(|| {
                 scalar_at(&self.offsets(), index)
                     .unwrap()
+                    .as_ref()
                     .try_into()
                     .unwrap()
             })
@@ -207,13 +210,9 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray<'_> {
 pub fn varbin_scalar(value: Vec<u8>, dtype: &DType) -> Scalar {
     if matches!(dtype, DType::Utf8(_)) {
         let str = unsafe { String::from_utf8_unchecked(value) };
-        Utf8Scalar::try_new(Some(str), dtype.nullability())
-            .unwrap()
-            .into()
+        Scalar::utf8(str, dtype.nullability())
     } else {
-        BinaryScalar::try_new(Some(value), dtype.nullability())
-            .unwrap()
-            .into()
+        Scalar::binary(value.into(), dtype.nullability())
     }
 }
 
