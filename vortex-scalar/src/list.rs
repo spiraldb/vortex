@@ -67,6 +67,15 @@ impl<'a> ListScalar<'a> {
     }
 }
 
+impl Scalar {
+    pub fn list(element_dtype: DType, children: Vec<ScalarValue>) -> Scalar {
+        Scalar {
+            dtype: DType::List(Arc::new(element_dtype), NonNullable),
+            value: ScalarValue::List(children.into()),
+        }
+    }
+}
+
 impl<'a> TryFrom<&'a Scalar> for ListScalar<'a> {
     type Error = VortexError;
 
