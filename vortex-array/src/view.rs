@@ -216,27 +216,6 @@ impl Statistics for ArrayView<'_> {
 
         self.get(stat)
     }
-
-    fn with_stat_value<'a>(
-        &self,
-        stat: Stat,
-        f: &'a mut dyn FnMut(&Scalar) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        if let Some(existing) = self.get(stat) {
-            return f(&existing);
-        }
-        vortex_bail!(ComputeError: "statistic {} missing", stat);
-    }
-
-    fn with_computed_stat_value<'a>(
-        &self,
-        stat: Stat,
-        f: &'a mut dyn FnMut(&Scalar) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        self.compute(stat)
-            .map(|s| f(&s))
-            .unwrap_or_else(|| vortex_bail!(ComputeError: "statistic {} missing", stat))
-    }
 }
 
 impl ToArray for ArrayView<'_> {

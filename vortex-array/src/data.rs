@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::encoding::EncodingRef;
@@ -161,36 +161,5 @@ impl Statistics for ArrayData {
                 .ok()?,
         );
         self.get(stat)
-    }
-
-    #[inline]
-    fn with_stat_value<'a>(
-        &self,
-        stat: Stat,
-        f: &'a mut dyn FnMut(&Scalar) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        self.stats_map
-            .read()
-            .unwrap()
-            .get(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(f)
-    }
-
-    #[inline]
-    fn with_computed_stat_value<'a>(
-        &self,
-        stat: Stat,
-        f: &'a mut dyn FnMut(&Scalar) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        if let Some(s) = self.stats_map.read().unwrap().get(stat) {
-            return f(s);
-        }
-
-        self.stats_map
-            .write()
-            .unwrap()
-            .extend(self.to_array().with_dyn(|a| a.compute_statistics(stat))?);
-        self.with_stat_value(stat, f)
     }
 }
