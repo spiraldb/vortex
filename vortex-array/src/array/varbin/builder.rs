@@ -87,7 +87,7 @@ mod test {
         assert_eq!(array.dtype().nullability(), Nullable);
         assert_eq!(
             scalar_at(&array, 0).unwrap(),
-            Scalar::utf8("hello", Nullable)
+            Scalar::utf8("hello".to_string(), Nullable)
         );
         assert!(scalar_at(&array, 1).unwrap().is_null());
     }

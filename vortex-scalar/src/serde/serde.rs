@@ -4,6 +4,7 @@ use std::fmt::Formatter;
 
 use serde::de::{Error, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use vortex_buffer::BufferString;
 
 use crate::pvalue::PValue;
 use crate::value::ScalarValue;
@@ -18,6 +19,7 @@ impl Serialize for ScalarValue {
             ScalarValue::Bool(b) => b.serialize(serializer),
             ScalarValue::Primitive(p) => p.serialize(serializer),
             ScalarValue::Buffer(buffer) => buffer.as_ref().serialize(serializer),
+            ScalarValue::BufferString(buffer) => buffer.as_str().serialize(serializer),
             ScalarValue::List(l) => l.serialize(serializer),
         }
     }
@@ -117,7 +119,7 @@ impl<'de> Deserialize<'de> for ScalarValue {
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.as_bytes().to_vec().into()))
+                Ok(ScalarValue::BufferString(BufferString::from(v.to_string())))
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>

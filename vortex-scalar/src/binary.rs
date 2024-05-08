@@ -43,7 +43,7 @@ impl<'a> TryFrom<&'a Scalar> for BinaryScalar<'a> {
         }
         Ok(Self {
             dtype: value.dtype(),
-            value: value.value.as_bytes()?,
+            value: value.value.as_buffer()?,
         })
     }
 }

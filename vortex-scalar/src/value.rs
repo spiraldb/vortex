@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use vortex_buffer::Buffer;
+use vortex_buffer::{Buffer, BufferString};
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::pvalue::PValue;
@@ -17,6 +17,7 @@ pub enum ScalarValue {
     Bool(bool),
     Primitive(PValue),
     Buffer(Buffer),
+    BufferString(BufferString),
     List(Arc<[ScalarValue]>),
 }
 
@@ -41,11 +42,20 @@ impl ScalarValue {
         }
     }
 
-    pub fn as_bytes(&self) -> VortexResult<Option<Buffer>> {
+    pub fn as_buffer(&self) -> VortexResult<Option<Buffer>> {
         match self {
             ScalarValue::Null => Ok(None),
             ScalarValue::Buffer(b) => Ok(Some(b.clone())),
             _ => Err(vortex_err!("Expected a binary scalar, found {:?}", self)),
+        }
+    }
+
+    pub fn as_buffer_string(&self) -> VortexResult<Option<BufferString>> {
+        match self {
+            ScalarValue::Null => Ok(None),
+            ScalarValue::Buffer(b) => Ok(Some(BufferString::try_from(b.clone())?)),
+            ScalarValue::BufferString(b) => Ok(Some(b.clone())),
+            _ => Err(vortex_err!("Expected a string scalar, found {:?}", self)),
         }
     }
 

@@ -24,6 +24,15 @@ pub use utf8::*;
 pub use value::*;
 use vortex_error::{vortex_bail, VortexResult};
 
+#[cfg(feature = "proto")]
+pub mod proto {
+    pub mod scalar {
+        include!(concat!(env!("OUT_DIR"), "/proto/vortex.scalar.rs"));
+    }
+
+    pub use vortex_dtype::proto::dtype;
+}
+
 #[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
     pub use gen_scalar::vortex::*;

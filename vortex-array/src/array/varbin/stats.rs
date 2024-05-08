@@ -144,11 +144,11 @@ mod test {
         let arr = array(DType::Utf8(Nullability::NonNullable));
         assert_eq!(
             arr.statistics().compute_min::<BufferString>().unwrap(),
-            BufferString::from("hello world")
+            BufferString::from("hello world".to_string())
         );
         assert_eq!(
             arr.statistics().compute_max::<BufferString>().unwrap(),
-            BufferString::from("hello world this is a long string")
+            BufferString::from("hello world this is a long string".to_string())
         );
         assert_eq!(arr.statistics().compute_run_count().unwrap(), 2);
         assert!(!arr.statistics().compute_is_constant().unwrap());
@@ -184,11 +184,11 @@ mod test {
         );
         assert_eq!(
             array.statistics().compute_min::<BufferString>().unwrap(),
-            BufferString::from("hello world")
+            BufferString::from("hello world".to_string())
         );
         assert_eq!(
             array.statistics().compute_max::<BufferString>().unwrap(),
-            BufferString::from("hello world this is a long string")
+            BufferString::from("hello world this is a long string".to_string())
         );
     }
 

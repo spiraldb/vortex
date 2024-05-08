@@ -15,6 +15,11 @@ impl BufferString {
     pub unsafe fn new_unchecked(buffer: Buffer) -> Self {
         Self(buffer)
     }
+
+    pub fn as_str(&self) -> &str {
+        // SAFETY: We have already validated that the buffer is valid UTF-8
+        unsafe { std::str::from_utf8_unchecked(self.0.as_ref()) }
+    }
 }
 
 impl From<BufferString> for Buffer {
@@ -23,9 +28,9 @@ impl From<BufferString> for Buffer {
     }
 }
 
-impl From<&str> for BufferString {
-    fn from(value: &str) -> Self {
-        BufferString(Buffer::from(value.as_bytes()))
+impl From<String> for BufferString {
+    fn from(value: String) -> Self {
+        BufferString(Buffer::from(value.into_bytes()))
     }
 }
 
@@ -42,7 +47,6 @@ impl Deref for BufferString {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        // SAFETY: We have already validated that the buffer is valid UTF-8
-        unsafe { std::str::from_utf8_unchecked(self.0.as_ref()) }
+        self.as_str()
     }
 }

@@ -11,9 +11,11 @@ mod nullability;
 mod ptype;
 mod serde;
 
-#[cfg(feature = "prost")]
+#[cfg(feature = "proto")]
 pub mod proto {
-    include!(concat!(env!("OUT_DIR"), "/proto/vortex.dtype.rs"));
+    pub mod dtype {
+        include!(concat!(env!("OUT_DIR"), "/proto/vortex.dtype.rs"));
+    }
 }
 
 #[cfg(feature = "flatbuffers")]

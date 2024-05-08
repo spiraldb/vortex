@@ -34,7 +34,7 @@ impl Scalar {
     {
         Scalar {
             dtype: DType::Utf8(nullability),
-            value: ScalarValue::Buffer(BufferString::from(str).into()),
+            value: ScalarValue::BufferString(BufferString::from(str)),
         }
     }
 }
@@ -48,11 +48,7 @@ impl<'a> TryFrom<&'a Scalar> for Utf8Scalar<'a> {
         }
         Ok(Self {
             dtype: value.dtype(),
-            value: value
-                .value
-                .as_bytes()?
-                .map(BufferString::try_from)
-                .transpose()?,
+            value: value.value.as_buffer_string()?,
         })
     }
 }
@@ -71,7 +67,7 @@ impl From<&str> for Scalar {
     fn from(value: &str) -> Self {
         Scalar {
             dtype: DType::Utf8(NonNullable),
-            value: ScalarValue::Buffer(value.as_bytes().into()),
+            value: ScalarValue::BufferString(value.to_string().into()),
         }
     }
 }

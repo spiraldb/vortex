@@ -210,7 +210,7 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray<'_> {
 pub fn varbin_scalar(value: Vec<u8>, dtype: &DType) -> Scalar {
     if matches!(dtype, DType::Utf8(_)) {
         let str = unsafe { String::from_utf8_unchecked(value) };
-        Scalar::utf8(str.as_ref(), dtype.nullability())
+        Scalar::utf8(str, dtype.nullability())
     } else {
         Scalar::binary(value.into(), dtype.nullability())
     }
