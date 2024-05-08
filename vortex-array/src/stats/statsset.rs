@@ -156,25 +156,20 @@ impl StatsSet {
     }
 
     fn merge_freq_stat(&mut self, other: &Self, stat: Stat) {
-        match self.values.entry(stat) {
-            Entry::Occupied(mut e) => {
-                if let Some(other_value) = other.get_as::<Vec<u64>>(stat) {
-                    // TODO(robert): Avoid the copy here. We could e.get_mut() but need to figure out casting
-                    let self_value: Vec<u64> = e.get().try_into().unwrap();
-                    e.insert(
-                        self_value
-                            .iter()
-                            .zip_eq(other_value.iter())
-                            .map(|(s, o)| *s + *o)
-                            .collect::<Vec<_>>()
-                            .into(),
-                    );
-                }
-            }
-            Entry::Vacant(e) => {
-                if let Some(other_value) = other.get(stat) {
-                    e.insert(other_value.clone());
-                }
+        if let Entry::Occupied(mut e) = self.values.entry(stat) {
+            if let Some(other_value) = other.get_as::<Vec<u64>>(stat) {
+                // TODO(robert): Avoid the copy here. We could e.get_mut() but need to figure out casting
+                let self_value: Vec<u64> = e.get().try_into().unwrap();
+                e.insert(
+                    self_value
+                        .iter()
+                        .zip_eq(other_value.iter())
+                        .map(|(s, o)| *s + *o)
+                        .collect::<Vec<_>>()
+                        .into(),
+                );
+            } else {
+                e.remove();
             }
         }
     }
@@ -211,7 +206,6 @@ impl IntoIterator for StatsSet {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_scalar::ListScalarVec;
 
     use crate::stats::{Stat, StatsSet};
 
@@ -281,7 +275,7 @@ mod test {
     #[test]
     fn merge_into_freq() {
         let vec = (0..255).collect_vec();
-        let mut first = StatsSet::of(Stat::BitWidthFreq, ListScalarVec(vec.clone()).into());
+        let mut first = StatsSet::of(Stat::BitWidthFreq, vec.clone().into());
         first.merge(&StatsSet::new());
         assert_eq!(first.get(Stat::BitWidthFreq), None);
     }
@@ -290,10 +284,7 @@ mod test {
     fn merge_from_freq() {
         let vec = (0..255).collect_vec();
         let mut first = StatsSet::new();
-        first.merge(&StatsSet::of(
-            Stat::BitWidthFreq,
-            ListScalarVec(vec.clone()).into(),
-        ));
+        first.merge(&StatsSet::of(Stat::BitWidthFreq, vec.clone().into()));
         assert_eq!(first.get(Stat::BitWidthFreq), None);
     }
 
@@ -301,14 +292,11 @@ mod test {
     fn merge_freqs() {
         let vec_in = vec![5u64; 256];
         let vec_out = vec![10u64; 256];
-        let mut first = StatsSet::of(Stat::BitWidthFreq, ListScalarVec(vec_in.clone()).into());
-        first.merge(&StatsSet::of(
-            Stat::BitWidthFreq,
-            ListScalarVec(vec_in.clone()).into(),
-        ));
+        let mut first = StatsSet::of(Stat::BitWidthFreq, vec_in.clone().into());
+        first.merge(&StatsSet::of(Stat::BitWidthFreq, vec_in.clone().into()));
         assert_eq!(
             first.get(Stat::BitWidthFreq).cloned(),
-            Some(ListScalarVec(vec_out.clone()).into())
+            Some(vec_out.clone().into())
         );
     }
 
