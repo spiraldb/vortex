@@ -51,7 +51,7 @@ impl<'a> TryFrom<&'a Scalar> for Utf8Scalar<'a> {
             value: value
                 .value
                 .as_bytes()?
-                .map(|b| BufferString::try_from(b))
+                .map(BufferString::try_from)
                 .transpose()?,
         })
     }

@@ -141,11 +141,11 @@ impl TryFrom<&Scalar> for usize {
     type Error = VortexError;
 
     fn try_from(value: &Scalar) -> Result<Self, Self::Error> {
-        Ok(u64::try_from(
+        u64::try_from(
             value
                 .cast(&DType::Primitive(PType::U64, Nullability::NonNullable))?
                 .as_ref(),
         )
-        .map(|v| v as usize)?)
+        .map(|v| v as usize)
     }
 }
