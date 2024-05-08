@@ -39,13 +39,13 @@ use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
 pub mod flatbuffers {
-    pub use gen_array::vortex::*;
+    pub use generated::vortex::array::*;
 
     #[allow(unused_imports)]
     #[allow(dead_code)]
     #[allow(non_camel_case_types)]
     #[allow(clippy::all)]
-    mod gen_array {
+    mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/array.rs"));
     }
 

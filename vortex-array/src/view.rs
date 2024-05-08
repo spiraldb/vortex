@@ -1,13 +1,16 @@
 use std::fmt::{Debug, Formatter};
 
+use enum_iterator::all;
 use itertools::Itertools;
+use log::warn;
 use vortex_buffer::Buffer;
-use vortex_dtype::DType;
+use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 use crate::encoding::{EncodingId, EncodingRef};
-use crate::flatbuffers::array as fb;
-use crate::stats::{EmptyStatistics, Statistics};
+use crate::flatbuffers as fb;
+use crate::stats::{Stat, Statistics, StatsSet};
 use crate::Context;
 use crate::{Array, IntoArray, ToArray};
 
@@ -53,7 +56,6 @@ impl<'v> ArrayView<'v> {
                 Self::cumulative_nbuffers(array)
             )
         }
-
         let view = Self {
             encoding,
             dtype,
@@ -136,8 +138,83 @@ impl<'v> ArrayView<'v> {
     }
 
     pub fn statistics(&self) -> &dyn Statistics {
-        // TODO(ngates): store statistics in FlatBuffers
-        &EmptyStatistics
+        self
+    }
+}
+
+impl Statistics for ArrayView<'_> {
+    fn get(&self, stat: Stat) -> Option<Scalar> {
+        match stat {
+            Stat::Max => {
+                let max = self.array.stats()?.max();
+                max.and_then(|v| ScalarValue::try_from(v).ok())
+                    .map(|v| Scalar::new(self.dtype.clone(), v))
+            }
+            Stat::Min => {
+                let min = self.array.stats()?.min();
+                min.and_then(|v| ScalarValue::try_from(v).ok())
+                    .map(|v| Scalar::new(self.dtype.clone(), v))
+            }
+            Stat::IsConstant => self.array.stats()?.is_constant().map(bool::into),
+            Stat::IsSorted => self.array.stats()?.is_sorted().map(bool::into),
+            Stat::IsStrictSorted => self.array.stats()?.is_strict_sorted().map(bool::into),
+            Stat::RunCount => self.array.stats()?.run_count().map(u64::into),
+            Stat::TrueCount => self.array.stats()?.true_count().map(u64::into),
+            Stat::NullCount => self.array.stats()?.null_count().map(u64::into),
+            Stat::BitWidthFreq => self
+                .array
+                .stats()?
+                .bit_width_freq()
+                .map(|v| {
+                    v.iter()
+                        .map(|v| ScalarValue::Primitive(PValue::U64(v)))
+                        .collect_vec()
+                })
+                .map(|v| {
+                    Scalar::list(
+                        DType::Primitive(vortex_dtype::PType::U64, Nullability::NonNullable),
+                        v,
+                    )
+                }),
+            Stat::TrailingZeroFreq => self
+                .array
+                .stats()?
+                .trailing_zero_freq()
+                .map(|v| v.iter().collect_vec())
+                .map(|v| v.into()),
+        }
+    }
+
+    /// NB: part of the contract for to_set is that it does not do any expensive computation.
+    /// In other implementations, this means returning the underlying stats map, but for the flatbuffer
+    /// implemetation, we have 'precalculated' stats in the flatbuffer itself, so we need to
+    /// alllocate a stats map and populate it with those fields.
+    fn to_set(&self) -> StatsSet {
+        let mut result = StatsSet::new();
+        for stat in all::<Stat>() {
+            if let Some(value) = self.get(stat) {
+                result.set(stat, value)
+            }
+        }
+        result
+    }
+
+    /// We want to avoid any sort of allocation on instantiation of the ArrayView, so we
+    /// do not allocate a stats_set to cache values.
+    fn set(&self, _stat: Stat, _value: Scalar) {
+        warn!("Cannot write stats to a view")
+    }
+
+    fn compute(&self, stat: Stat) -> Option<Scalar> {
+        if let Some(s) = self.get(stat) {
+            return Some(s);
+        }
+
+        self.to_array()
+            .with_dyn(|a| a.compute_statistics(stat))
+            .ok()?
+            .get(stat)
+            .cloned()
     }
 }
 

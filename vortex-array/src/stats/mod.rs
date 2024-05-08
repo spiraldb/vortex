@@ -8,6 +8,7 @@ use vortex_dtype::{DType, NativePType};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
+pub mod flatbuffers;
 mod statsset;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)]
@@ -90,6 +91,16 @@ impl dyn Statistics + '_ {
     ) -> VortexResult<U> {
         self.get(stat)
             .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
+            .and_then(|s| U::try_from(&s))
+    }
+
+    pub fn get_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
+        &self,
+        stat: Stat,
+    ) -> VortexResult<U> {
+        self.get(stat)
+            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
+            .and_then(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
             .and_then(|s| U::try_from(&s))
     }
 
