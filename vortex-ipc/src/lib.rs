@@ -23,6 +23,7 @@ pub mod flatbuffers {
     }
 }
 
+pub mod r#async;
 pub mod iter;
 mod messages;
 pub mod reader;

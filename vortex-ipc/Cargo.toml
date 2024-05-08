@@ -15,9 +15,11 @@ rust-version = { workspace = true }
 arrow-buffer = { workspace = true }
 fallible-iterator = { workspace = true }
 flatbuffers = { workspace = true }
+futures = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
 nougat = "0.2.4"
+pin-project = { workspace = true }
 vortex-array = { path = "../vortex-array" }
 vortex-buffer = { path = "../vortex-buffer" }
 vortex-error = { path = "../vortex-error" }
@@ -42,7 +44,7 @@ arrow-schema = { workspace = true }
 arrow-select = { workspace = true }
 
 [lints]
-workspace = true
+# workspace = true
 
 [[bench]]
 name = "ipc_take"
