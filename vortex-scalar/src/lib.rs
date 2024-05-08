@@ -26,6 +26,7 @@ use vortex_error::{vortex_bail, VortexResult};
 
 #[cfg(feature = "proto")]
 pub mod proto {
+    #[allow(clippy::module_inception)]
     pub mod scalar {
         include!(concat!(env!("OUT_DIR"), "/proto/vortex.scalar.rs"));
     }
