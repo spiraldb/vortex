@@ -40,4 +40,4 @@ workspace = true
 # default = ["flatbuffers", "proto", "serde"]
 flatbuffers = ["dep:flatbuffers"]
 proto = ["dep:prost"]
-serde = ["dep:serde", "half/serde"]
+serde = ["dep:serde"]
