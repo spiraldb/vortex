@@ -19,6 +19,7 @@ pub use bool::*;
 pub use extension::*;
 pub use list::*;
 pub use primitive::*;
+pub use pvalue::*;
 pub use struct_::*;
 pub use utf8::*;
 pub use value::*;
@@ -36,13 +37,13 @@ pub mod proto {
 
 #[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
-    pub use gen_scalar::vortex::*;
+    pub use generated::vortex::scalar::*;
 
     #[allow(unused_imports)]
     #[allow(dead_code)]
     #[allow(non_camel_case_types)]
     #[allow(clippy::all)]
-    mod gen_scalar {
+    pub mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/scalar.rs"));
     }
 
@@ -62,10 +63,21 @@ pub struct Scalar {
 }
 
 impl Scalar {
+    pub fn new(dtype: DType, value: ScalarValue) -> Self {
+        Self { dtype, value }
+    }
+
+    #[inline]
     pub fn dtype(&self) -> &DType {
         &self.dtype
     }
 
+    #[inline]
+    pub fn value(&self) -> &ScalarValue {
+        &self.value
+    }
+
+    #[inline]
     pub fn into_value(self) -> ScalarValue {
         self.value
     }
