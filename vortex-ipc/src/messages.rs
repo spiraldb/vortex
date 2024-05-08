@@ -1,7 +1,6 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex::flatbuffers as vfb;
-use vortex::stats::Stat;
+use vortex::flatbuffers as fba;
 use vortex::{ArrayData, Context, ViewContext};
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};
@@ -159,7 +158,7 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
 }
 
 impl<'a> WriteFlatBuffer for IPCArray<'a> {
-    type Target<'t> = vfb::Array<'t>;
+    type Target<'t> = fba::Array<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -191,63 +190,18 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
             .collect_vec();
         let children = Some(fbb.create_vector(&children));
 
-        let stats = collect_array_stats(fbb, self.1);
+        let stats = Some(self.1.statistics().write_flatbuffer(fbb));
 
-        vfb::Array::create(
+        fba::Array::create(
             fbb,
-            &vfb::ArrayArgs {
+            &fba::ArrayArgs {
                 version: Default::default(),
                 has_buffer: column_data.buffer().is_some(),
                 encoding,
                 metadata,
-                stats: Some(stats),
+                stats,
                 children,
             },
         )
     }
-}
-
-/// Computes all stats and uses the results to create an ArrayStats table for the flatbuffer message
-fn collect_array_stats<'a>(
-    fbb: &'_ mut FlatBufferBuilder<'a>,
-    array: &'_ ArrayData,
-) -> WIPOffset<vfb::ArrayStats<'a>> {
-    let trailing_zero_freq = array
-        .statistics()
-        .get_as::<Vec<u64>>(Stat::TrailingZeroFreq)
-        .ok()
-        .map(|v| v.iter().copied().collect_vec())
-        .map(|v| fbb.create_vector(v.as_slice()));
-
-    let bit_width_freq = array
-        .statistics()
-        .get_as::<Vec<u64>>(Stat::BitWidthFreq)
-        .ok()
-        .map(|v| v.iter().copied().collect_vec())
-        .map(|v| fbb.create_vector(v.as_slice()));
-
-    let min = array
-        .statistics()
-        .get(Stat::Min)
-        .map(|min| min.value().write_flatbuffer(fbb));
-
-    let max = array
-        .statistics()
-        .get(Stat::Max)
-        .map(|max| max.value().write_flatbuffer(fbb));
-
-    let stat_args = &vfb::ArrayStatsArgs {
-        min,
-        max,
-        is_sorted: array.statistics().get_as::<bool>(Stat::IsSorted).ok(),
-        is_strict_sorted: array.statistics().get_as::<bool>(Stat::IsStrictSorted).ok(),
-        is_constant: array.statistics().get_as::<bool>(Stat::IsConstant).ok(),
-        run_count: array.statistics().get_as::<u64>(Stat::RunCount).ok(),
-        true_count: array.statistics().get_as::<u64>(Stat::TrueCount).ok(),
-        null_count: array.statistics().get_as::<u64>(Stat::NullCount).ok(),
-        bit_width_freq,
-        trailing_zero_freq,
-    };
-
-    vfb::ArrayStats::create(fbb, stat_args)
 }

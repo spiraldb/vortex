@@ -8,6 +8,7 @@ use vortex_dtype::{DType, NativePType};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
+pub mod flatbuffers;
 mod statsset;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Sequence)]

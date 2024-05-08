@@ -212,9 +212,9 @@ impl Statistics for ArrayView<'_> {
 
         self.to_array()
             .with_dyn(|a| a.compute_statistics(stat))
-            .ok()?;
-
-        self.get(stat)
+            .ok()?
+            .get(stat)
+            .cloned()
     }
 }
 
