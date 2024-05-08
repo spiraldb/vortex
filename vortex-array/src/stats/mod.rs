@@ -3,8 +3,9 @@ use std::hash::Hash;
 
 use enum_iterator::Sequence;
 pub use statsset::*;
+use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::{DType, NativePType};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 mod statsset;
@@ -51,18 +52,6 @@ pub trait Statistics {
 
     /// Computes the value of the stat if it's not present
     fn compute(&self, stat: Stat) -> Option<Scalar>;
-
-    fn with_stat_value<'a>(
-        &self,
-        stat: Stat,
-        f: &'a mut dyn FnMut(&Scalar) -> VortexResult<()>,
-    ) -> VortexResult<()>;
-
-    fn with_computed_stat_value<'a>(
-        &self,
-        stat: Stat,
-        f: &'a mut dyn FnMut(&Scalar) -> VortexResult<()>,
-    ) -> VortexResult<()>;
 }
 
 pub struct EmptyStatistics;
@@ -80,24 +69,6 @@ impl Statistics for EmptyStatistics {
 
     fn compute(&self, _stat: Stat) -> Option<Scalar> {
         None
-    }
-
-    #[inline]
-    fn with_stat_value<'a>(
-        &self,
-        _stat: Stat,
-        _f: &'a mut dyn FnMut(&Scalar) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        Ok(())
-    }
-
-    #[inline]
-    fn with_computed_stat_value<'a>(
-        &self,
-        _stat: Stat,
-        _f: &'a mut dyn FnMut(&Scalar) -> VortexResult<()>,
-    ) -> VortexResult<()> {
-        Ok(())
     }
 }
 
@@ -117,36 +88,28 @@ impl dyn Statistics + '_ {
         &self,
         stat: Stat,
     ) -> VortexResult<U> {
-        let mut res: Option<U> = None;
-        self.with_stat_value(stat, &mut |s| {
-            res = Some(U::try_from(s)?);
-            Ok(())
-        })?;
-        Ok(res.expect("Result should have been populated by previous call"))
+        self.get(stat)
+            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
+            .and_then(|s| U::try_from(&s))
     }
 
     pub fn compute_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
     ) -> VortexResult<U> {
-        let mut res: Option<U> = None;
-        self.with_computed_stat_value(stat, &mut |s| {
-            res = Some(U::try_from(s)?);
-            Ok(())
-        })?;
-        Ok(res.expect("Result should have been populated by previous call"))
+        self.compute(stat)
+            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
+            .and_then(|s| U::try_from(&s))
     }
 
     pub fn compute_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
     ) -> VortexResult<U> {
-        let mut res: Option<U> = None;
-        self.with_computed_stat_value(stat, &mut |s| {
-            res = Some(U::try_from(s.cast(&DType::from(U::PTYPE))?.as_ref())?);
-            Ok(())
-        })?;
-        Ok(res.expect("Result should have been populated by previous call"))
+        self.compute(stat)
+            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
+            .and_then(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
+            .and_then(|s| U::try_from(s.as_ref()))
     }
 
     pub fn compute_min<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
