@@ -38,7 +38,7 @@ impl ScalarAtFn for VarBinViewArray<'_> {
             self.bytes_at(index)
                 .map(|bytes| varbin_scalar(bytes, self.dtype()))
         } else {
-            Ok(Scalar::null(self.dtype()))
+            Ok(Scalar::null(self.dtype().clone()))
         }
     }
 }

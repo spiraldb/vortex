@@ -16,8 +16,8 @@ table Array {
 }
 
 table ArrayStats {
-    min: vortex.scalar.Scalar;
-    max: vortex.scalar.Scalar;
+    min: vortex.scalar.ScalarValue;
+    max: vortex.scalar.ScalarValue;
     is_sorted: bool = null;
     is_strict_sorted: bool = null;
     is_constant: bool = null;

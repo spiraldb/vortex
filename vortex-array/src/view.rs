@@ -6,10 +6,7 @@ use log::warn;
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_flatbuffers::ReadFlatBuffer;
-use vortex_scalar::ListScalar;
-use vortex_scalar::Scalar;
-use vortex_scalar::Scalar::List;
+use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 use crate::encoding::{EncodingId, EncodingRef};
 use crate::flatbuffers as fb;
@@ -150,15 +147,13 @@ impl Statistics for ArrayView<'_> {
         match stat {
             Stat::Max => {
                 let max = self.array.stats()?.max();
-                max.as_ref()
-                    .map(Scalar::read_flatbuffer)
-                    .and_then(Result::ok)
+                max.and_then(|v| ScalarValue::try_from(v).ok())
+                    .map(|v| Scalar::new(self.dtype.clone(), v))
             }
             Stat::Min => {
                 let min = self.array.stats()?.min();
-                min.as_ref()
-                    .map(Scalar::read_flatbuffer)
-                    .and_then(Result::ok)
+                min.and_then(|v| ScalarValue::try_from(v).ok())
+                    .map(|v| Scalar::new(self.dtype.clone(), v))
             }
             Stat::IsConstant => self.array.stats()?.is_constant().map(bool::into),
             Stat::IsSorted => self.array.stats()?.is_sorted().map(bool::into),
@@ -170,24 +165,23 @@ impl Statistics for ArrayView<'_> {
                 .array
                 .stats()?
                 .bit_width_freq()
-                .map(|v| v.iter().map(u64::into).collect_vec())
                 .map(|v| {
-                    List(ListScalar::new(
+                    v.iter()
+                        .map(|v| ScalarValue::Primitive(PValue::U64(v)))
+                        .collect_vec()
+                })
+                .map(|v| {
+                    Scalar::list(
                         DType::Primitive(vortex_dtype::PType::U64, Nullability::NonNullable),
-                        Some(v),
-                    ))
+                        v,
+                    )
                 }),
             Stat::TrailingZeroFreq => self
                 .array
                 .stats()?
                 .trailing_zero_freq()
-                .map(|v| v.iter().map(u64::into).collect_vec())
-                .map(|v| {
-                    List(ListScalar::new(
-                        DType::Primitive(vortex_dtype::PType::U64, Nullability::NonNullable),
-                        Some(v),
-                    ))
-                }),
+                .map(|v| v.iter().collect_vec())
+                .map(|v| v.into()),
         }
     }
 

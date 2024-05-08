@@ -19,7 +19,6 @@ use vortex::{
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_flatbuffers::ReadFlatBuffer;
 use vortex_scalar::Scalar;
 
 use crate::flatbuffers::ipc::Message;
@@ -104,8 +103,8 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
             .header_as_schema()
             .unwrap();
 
-        let dtype = DType::read_flatbuffer(
-            &schema_msg
+        let dtype = DType::try_from(
+            schema_msg
                 .dtype()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
         )
@@ -392,7 +391,6 @@ mod tests {
     use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
     use vortex_fastlanes::{BitPackedArray, BitPackedEncoding};
-    use vortex_scalar::ListScalarVec;
 
     use crate::iter::FallibleLendingIterator;
     use crate::reader::StreamReader;
@@ -793,6 +791,7 @@ mod tests {
             .statistics()
             .get(Stat::Min)
             .unwrap()
+            .as_ref()
             .try_into()
             .unwrap();
         assert_eq!(min, 0);
@@ -800,6 +799,7 @@ mod tests {
             .statistics()
             .get(Stat::Max)
             .unwrap()
+            .as_ref()
             .try_into()
             .unwrap();
         assert_eq!(max, 2_999_999);
@@ -817,9 +817,8 @@ mod tests {
         assert_eq!(null_ct, 0);
         let bit_width_freq = data
             .statistics()
-            .get_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)
-            .unwrap()
-            .0;
+            .get_as::<Vec<usize>>(Stat::BitWidthFreq)
+            .unwrap();
         assert_eq!(
             bit_width_freq,
             vec![
@@ -829,9 +828,8 @@ mod tests {
         );
         let trailing_zero_freq = data
             .statistics()
-            .get_as::<ListScalarVec<usize>>(Stat::TrailingZeroFreq)
-            .unwrap()
-            .0;
+            .get_as::<Vec<usize>>(Stat::TrailingZeroFreq)
+            .unwrap();
         assert_eq!(
             trailing_zero_freq,
             vec![

@@ -1,75 +1,73 @@
-use std::fmt::{Display, Formatter};
-
-use vortex_dtype::{DType, Nullability::NonNullable, Nullability::Nullable};
+use vortex_buffer::BufferString;
+use vortex_dtype::DType;
+use vortex_dtype::Nullability;
+use vortex_dtype::Nullability::NonNullable;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::value::ScalarValue;
 use crate::Scalar;
 
-pub type Utf8Scalar = ScalarValue<String>;
+pub struct Utf8Scalar<'a> {
+    dtype: &'a DType,
+    value: Option<BufferString>,
+}
 
-impl Utf8Scalar {
+impl<'a> Utf8Scalar<'a> {
     #[inline]
-    pub fn dtype(&self) -> &DType {
-        match self.nullability() {
-            NonNullable => &DType::Utf8(NonNullable),
-            Nullable => &DType::Utf8(Nullable),
-        }
+    pub fn dtype(&self) -> &'a DType {
+        self.dtype
+    }
+
+    pub fn value(&self) -> Option<BufferString> {
+        self.value.as_ref().cloned()
     }
 
     pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
         todo!()
     }
+}
 
-    pub fn nbytes(&self) -> usize {
-        self.value().map(|v| v.len()).unwrap_or(0)
+impl Scalar {
+    pub fn utf8<B>(str: B, nullability: Nullability) -> Self
+    where
+        BufferString: From<B>,
+    {
+        Scalar {
+            dtype: DType::Utf8(nullability),
+            value: ScalarValue::BufferString(BufferString::from(str)),
+        }
     }
 }
 
-impl From<String> for Scalar {
-    fn from(value: String) -> Self {
-        Utf8Scalar::some(value).into()
+impl<'a> TryFrom<&'a Scalar> for Utf8Scalar<'a> {
+    type Error = VortexError;
+
+    fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
+        if !matches!(value.dtype(), DType::Utf8(_)) {
+            vortex_bail!("Expected utf8 scalar, found {}", value.dtype())
+        }
+        Ok(Self {
+            dtype: value.dtype(),
+            value: value.value.as_buffer_string()?,
+        })
+    }
+}
+
+impl<'a> TryFrom<&'a Scalar> for BufferString {
+    type Error = VortexError;
+
+    fn try_from(value: &'a Scalar) -> VortexResult<Self> {
+        Utf8Scalar::try_from(value)?
+            .value()
+            .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
     }
 }
 
 impl From<&str> for Scalar {
     fn from(value: &str) -> Self {
-        Utf8Scalar::some(value.to_string()).into()
-    }
-}
-
-impl TryFrom<Scalar> for String {
-    type Error = VortexError;
-
-    fn try_from(value: Scalar) -> Result<Self, Self::Error> {
-        let Scalar::Utf8(u) = value else {
-            vortex_bail!(MismatchedTypes: "Utf8", value.dtype());
-        };
-
-        u.into_value()
-            .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
-    }
-}
-
-impl TryFrom<&Scalar> for String {
-    type Error = VortexError;
-
-    fn try_from(value: &Scalar) -> Result<Self, Self::Error> {
-        let Scalar::Utf8(u) = value else {
-            vortex_bail!(MismatchedTypes: "Utf8", value.dtype());
-        };
-
-        u.value()
-            .cloned()
-            .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
-    }
-}
-
-impl Display for Utf8Scalar {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self.value() {
-            None => write!(f, "<none>"),
-            Some(v) => write!(f, "\"{}\"", v),
+        Scalar {
+            dtype: DType::Utf8(NonNullable),
+            value: ScalarValue::BufferString(value.to_string().into()),
         }
     }
 }

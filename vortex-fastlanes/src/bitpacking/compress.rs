@@ -173,7 +173,7 @@ fn bitpack_patches(
             indices.into_array(),
             PrimitiveArray::from_vec(values, Validity::AllValid).into_array(),
             parray.len(),
-            Scalar::null(&parray.dtype().as_nullable()),
+            Scalar::null(parray.dtype().as_nullable()),
         ).unwrap().into_array()
     })
 }
@@ -358,6 +358,7 @@ fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 mod test {
     use vortex::encoding::ArrayEncoding;
     use vortex::{Context, ToArray};
+    use vortex_scalar::PrimitiveScalar;
 
     use super::*;
 
@@ -407,13 +408,12 @@ mod test {
             .iter()
             .enumerate()
             .for_each(|(i, v)| {
-                let scalar_at: u16 =
-                    if let Scalar::Primitive(pscalar) = unpack_single(&compressed, i).unwrap() {
-                        pscalar.value().unwrap().try_into().unwrap()
-                    } else {
-                        panic!("expected u8 scalar")
-                    };
-                assert_eq!(scalar_at, *v);
+                let scalar = unpack_single(&compressed, i).unwrap();
+                let scalar = PrimitiveScalar::try_from(&scalar)
+                    .unwrap()
+                    .typed_value::<u16>()
+                    .unwrap();
+                assert_eq!(scalar, *v);
             });
     }
 }

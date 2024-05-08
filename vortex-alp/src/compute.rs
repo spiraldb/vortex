@@ -30,7 +30,7 @@ impl ScalarAtFn for ALPArray<'_> {
         use crate::ALPFloat;
         let encoded_val = scalar_at(&self.encoded(), index)?;
         match_each_alp_float_ptype!(self.dtype().try_into().unwrap(), |$T| {
-            let encoded_val: <$T as ALPFloat>::ALPInt = encoded_val.try_into().unwrap();
+            let encoded_val: <$T as ALPFloat>::ALPInt = encoded_val.as_ref().try_into().unwrap();
             Scalar::from(<$T as ALPFloat>::decode_single(
                 encoded_val,
                 self.exponents(),

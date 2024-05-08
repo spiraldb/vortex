@@ -3,11 +3,9 @@ use itertools::Itertools;
 use vortex::flatbuffers as vfb;
 use vortex::stats::Stat;
 use vortex::{ArrayData, Context, ViewContext};
-use vortex_dtype::{match_each_native_ptype, DType};
+use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
-use vortex_scalar::Scalar::Primitive;
-use vortex_scalar::{ListScalarVec, PrimitiveScalar};
 
 use crate::flatbuffers::ipc as fb;
 use crate::flatbuffers::ipc::Compression;
@@ -214,42 +212,29 @@ fn collect_array_stats<'a>(
     fbb: &'_ mut FlatBufferBuilder<'a>,
     array: &'_ ArrayData,
 ) -> WIPOffset<vfb::ArrayStats<'a>> {
-    let primitive_ptype = match array.dtype() {
-        DType::Primitive(ptype, _) => Some(ptype),
-        _ => None,
-    };
-
     let trailing_zero_freq = array
         .statistics()
-        .get_as::<ListScalarVec<u64>>(Stat::TrailingZeroFreq)
-        .map(|s| s.0)
+        .get_as::<Vec<u64>>(Stat::TrailingZeroFreq)
         .ok()
         .map(|v| v.iter().copied().collect_vec())
         .map(|v| fbb.create_vector(v.as_slice()));
 
     let bit_width_freq = array
         .statistics()
-        .get_as::<ListScalarVec<u64>>(Stat::BitWidthFreq)
-        .map(|s| s.0)
+        .get_as::<Vec<u64>>(Stat::BitWidthFreq)
         .ok()
         .map(|v| v.iter().copied().collect_vec())
         .map(|v| fbb.create_vector(v.as_slice()));
 
-    let min = primitive_ptype.and_then(|ptype| {
-        match_each_native_ptype!(ptype, |$T| {
-            array.statistics().get_as::<$T>(Stat::Min).ok().map(|min| {
-                Primitive(PrimitiveScalar::some(min)).write_flatbuffer(fbb)
-            })
-        })
-    });
+    let min = array
+        .statistics()
+        .get(Stat::Min)
+        .map(|min| min.value().write_flatbuffer(fbb));
 
-    let max = primitive_ptype.and_then(|ptype| {
-        match_each_native_ptype!(ptype, |$T| {
-            array.statistics().get_as::<$T>(Stat::Max).ok().map(|max| {
-                Primitive(PrimitiveScalar::some(max)).write_flatbuffer(fbb)
-            })
-        })
-    });
+    let max = array
+        .statistics()
+        .get(Stat::Max)
+        .map(|max| max.value().write_flatbuffer(fbb));
 
     let stat_args = &vfb::ArrayStatsArgs {
         min,

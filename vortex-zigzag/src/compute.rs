@@ -1,9 +1,10 @@
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::ArrayCompute;
-use vortex::{ArrayDType, IntoArray, OwnedArray};
-use vortex_error::{vortex_err, VortexResult};
-use vortex_scalar::{PScalar, Scalar};
+use vortex::{IntoArray, OwnedArray};
+use vortex_dtype::PType;
+use vortex_error::VortexResult;
+use vortex_scalar::{PrimitiveScalar, Scalar};
 use zigzag::ZigZag as ExternalZigZag;
 
 use crate::ZigZagArray;
@@ -21,18 +22,13 @@ impl ArrayCompute for ZigZagArray<'_> {
 impl ScalarAtFn for ZigZagArray<'_> {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let scalar = scalar_at(&self.encoded(), index)?;
-        match scalar {
-            Scalar::Primitive(p) => match p.value() {
-                None => Ok(Scalar::null(self.dtype())),
-                Some(p) => match p {
-                    PScalar::U8(u) => Ok(i8::decode(u).into()),
-                    PScalar::U16(u) => Ok(i16::decode(u).into()),
-                    PScalar::U32(u) => Ok(i32::decode(u).into()),
-                    PScalar::U64(u) => Ok(i64::decode(u).into()),
-                    _ => Err(vortex_err!(MismatchedTypes: "unsigned int", self.dtype())),
-                },
-            },
-            _ => Err(vortex_err!(MismatchedTypes: "primitive scalar", self.dtype())),
+        let pscalar = PrimitiveScalar::try_from(&scalar)?;
+        match pscalar.ptype() {
+            PType::U8 => Ok(i8::decode(pscalar.typed_value::<u8>().unwrap()).into()),
+            PType::U16 => Ok(i16::decode(pscalar.typed_value::<u16>().unwrap()).into()),
+            PType::U32 => Ok(i32::decode(pscalar.typed_value::<u32>().unwrap()).into()),
+            PType::U64 => Ok(i64::decode(pscalar.typed_value::<u64>().unwrap()).into()),
+            _ => unreachable!(),
         }
     }
 }

@@ -1,28 +1,41 @@
-use std::fmt::{Debug, Display, Formatter};
+use std::cmp::Ordering;
 
-pub use binary::*;
-pub use bool::*;
-pub use extension::*;
-pub use list::*;
-pub use null::*;
-pub use primitive::*;
-pub use struct_::*;
-pub use utf8::*;
-use vortex_dtype::NativePType;
-use vortex_dtype::{DType, Nullability};
-use vortex_error::VortexResult;
+use vortex_dtype::DType;
 
 mod binary;
 mod bool;
+mod display;
 mod extension;
 mod list;
-mod null;
 mod primitive;
+mod pvalue;
 mod serde;
 mod struct_;
 mod utf8;
 mod value;
 
+pub use binary::*;
+pub use bool::*;
+pub use extension::*;
+pub use list::*;
+pub use primitive::*;
+pub use pvalue::*;
+pub use struct_::*;
+pub use utf8::*;
+pub use value::*;
+use vortex_error::{vortex_bail, VortexResult};
+
+#[cfg(feature = "proto")]
+pub mod proto {
+    #[allow(clippy::module_inception)]
+    pub mod scalar {
+        include!(concat!(env!("OUT_DIR"), "/proto/vortex.scalar.rs"));
+    }
+
+    pub use vortex_dtype::proto::dtype;
+}
+
+#[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
     pub use generated::vortex::scalar::*;
 
@@ -42,127 +55,85 @@ pub mod flatbuffers {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum Scalar {
-    Binary(BinaryScalar),
-    Bool(BoolScalar),
-    List(ListScalar),
-    Null(NullScalar),
-    Primitive(PrimitiveScalar),
-    Struct(StructScalar),
-    Utf8(Utf8Scalar),
-    Extension(ExtScalar),
-}
-
-macro_rules! impls_for_scalars {
-    ($variant:tt, $E:ty) => {
-        impl From<$E> for Scalar {
-            fn from(arr: $E) -> Self {
-                Self::$variant(arr)
-            }
-        }
-    };
-}
-
-impls_for_scalars!(Binary, BinaryScalar);
-impls_for_scalars!(Bool, BoolScalar);
-impls_for_scalars!(List, ListScalar);
-impls_for_scalars!(Null, NullScalar);
-impls_for_scalars!(Primitive, PrimitiveScalar);
-impls_for_scalars!(Struct, StructScalar);
-impls_for_scalars!(Utf8, Utf8Scalar);
-impls_for_scalars!(Extension, ExtScalar);
-
-macro_rules! match_each_scalar {
-    ($self:expr, | $_:tt $scalar:ident | $($body:tt)*) => ({
-        macro_rules! __with_scalar__ {( $_ $scalar:ident ) => ( $($body)* )}
-        match $self {
-            Scalar::Binary(s) => __with_scalar__! { s },
-            Scalar::Bool(s) => __with_scalar__! { s },
-            Scalar::List(s) => __with_scalar__! { s },
-            Scalar::Null(s) => __with_scalar__! { s },
-            Scalar::Primitive(s) => __with_scalar__! { s },
-            Scalar::Struct(s) => __with_scalar__! { s },
-            Scalar::Utf8(s) => __with_scalar__! { s },
-            Scalar::Extension(s) => __with_scalar__! { s },
-        }
-    })
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+pub struct Scalar {
+    pub(crate) dtype: DType,
+    pub(crate) value: ScalarValue,
 }
 
 impl Scalar {
+    pub fn new(dtype: DType, value: ScalarValue) -> Self {
+        Self { dtype, value }
+    }
+
+    #[inline]
     pub fn dtype(&self) -> &DType {
-        match_each_scalar! { self, |$s| $s.dtype() }
+        &self.dtype
     }
 
-    pub fn cast(&self, dtype: &DType) -> VortexResult<Self> {
-        match_each_scalar! { self, |$s| $s.cast(dtype) }
+    #[inline]
+    pub fn value(&self) -> &ScalarValue {
+        &self.value
     }
 
-    pub fn nbytes(&self) -> usize {
-        match_each_scalar! { self, |$s| $s.nbytes() }
-    }
-
-    pub fn nullability(&self) -> Nullability {
-        self.dtype().nullability()
+    #[inline]
+    pub fn into_value(self) -> ScalarValue {
+        self.value
     }
 
     pub fn is_null(&self) -> bool {
-        match self {
-            Scalar::Binary(b) => b.value().is_none(),
-            Scalar::Bool(b) => b.value().is_none(),
-            Scalar::List(l) => l.values().is_none(),
-            Scalar::Null(_) => true,
-            Scalar::Primitive(p) => p.value().is_none(),
-            // FIXME(ngates): can't have a null struct?
-            Scalar::Struct(_) => false,
-            Scalar::Utf8(u) => u.value().is_none(),
-            Scalar::Extension(e) => e.value().is_none(),
-        }
+        self.value.is_null()
     }
 
-    pub fn null(dtype: &DType) -> Self {
+    pub fn null(dtype: DType) -> Self {
         assert!(dtype.is_nullable());
+        Self {
+            dtype,
+            value: ScalarValue::Null,
+        }
+    }
+
+    pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
+        if self.dtype() == dtype {
+            return Ok(self.clone());
+        }
+
+        if self.is_null() && !dtype.is_nullable() {
+            vortex_bail!("Can't cast null scalar to non-nullable type")
+        }
+
         match dtype {
-            DType::Null => NullScalar::new().into(),
-            DType::Bool(_) => BoolScalar::none().into(),
-            DType::Primitive(p, _) => PrimitiveScalar::none_from_ptype(*p).into(),
-            DType::Utf8(_) => Utf8Scalar::none().into(),
-            DType::Binary(_) => BinaryScalar::none().into(),
-            DType::Struct(..) => StructScalar::new(dtype.clone(), vec![]).into(),
-            DType::List(..) => ListScalar::new(dtype.clone(), None).into(),
-            DType::Extension(ext, _) => ExtScalar::null(ext.clone()).into(),
+            DType::Null => vortex_bail!("Can't cast non-null to null"),
+            DType::Bool(_) => BoolScalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::Primitive(..) => PrimitiveScalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::Utf8(_) => Utf8Scalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::Binary(_) => BinaryScalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::Struct(..) => StructScalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::List(..) => ListScalar::try_from(self).and_then(|s| s.cast(dtype)),
+            DType::Extension(..) => ExtScalar::try_from(self).and_then(|s| s.cast(dtype)),
         }
     }
 }
 
-impl Display for Scalar {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match_each_scalar! { self, |$s| Display::fmt($s, f) }
+impl PartialEq for Scalar {
+    fn eq(&self, other: &Self) -> bool {
+        self.dtype == other.dtype && self.value == other.value
     }
 }
 
-/// Allows conversion from Enc scalars to a byte slice.
-pub trait AsBytes {
-    /// Converts this instance into a byte slice
-    fn as_bytes(&self) -> &[u8];
-}
-
-impl<T: NativePType> AsBytes for T {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        let raw_ptr = self as *const T as *const u8;
-        unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of::<T>()) }
+impl PartialOrd for Scalar {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.dtype() == other.dtype() {
+            self.value.partial_cmp(&other.value)
+        } else {
+            None
+        }
     }
 }
 
-#[cfg(test)]
-mod test {
-    use std::mem;
-
-    use crate::Scalar;
-
-    #[test]
-    fn size_of() {
-        assert_eq!(mem::size_of::<Scalar>(), 72);
+impl AsRef<Scalar> for Scalar {
+    fn as_ref(&self) -> &Scalar {
+        self
     }
 }

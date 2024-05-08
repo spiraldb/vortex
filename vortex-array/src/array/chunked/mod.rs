@@ -74,12 +74,12 @@ impl ChunkedArray<'_> {
             .unwrap()
             .to_index();
         let mut chunk_start =
-            usize::try_from(scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
+            usize::try_from(&scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
 
         if chunk_start != index {
             index_chunk -= 1;
             chunk_start =
-                usize::try_from(scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
+                usize::try_from(&scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
         }
 
         let index_in_chunk = index - chunk_start;
@@ -125,7 +125,7 @@ impl AcceptArrayVisitor for ChunkedArray<'_> {
 
 impl ArrayTrait for ChunkedArray<'_> {
     fn len(&self) -> usize {
-        usize::try_from(scalar_at(&self.chunk_ends(), self.nchunks()).unwrap()).unwrap()
+        usize::try_from(&scalar_at(&self.chunk_ends(), self.nchunks()).unwrap()).unwrap()
     }
 }
 

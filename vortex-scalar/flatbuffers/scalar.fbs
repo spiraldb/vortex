@@ -2,57 +2,13 @@ include "vortex-dtype/flatbuffers/dtype.fbs";
 
 namespace vortex.scalar;
 
-table Binary {
-    value: [ubyte];
-}
-
-table Bool {
-    value: bool;
-}
-
-table List {
-    value: [Scalar];
-}
-
-table Null {
-}
-
-table Primitive {
-    ptype: dtype.PType;
-    // TODO(ngates): this isn't an ideal way to store the bytes.
-    bytes: [ubyte];
-}
-
-table Struct_ {
-    names: [string];
-    scalars: [Scalar];
-}
-
-table UTF8 {
-    value: string;
-}
-
-table Extension {
-    id: string;
-    metadata: [ubyte];
-    value: Scalar;
-}
-
-union Type {
-    Binary,
-    Bool,
-    List,
-    Null,
-    Primitive,
-    Struct_,
-    UTF8,
-    Extension,
-}
-
-// TODO(ngates): separate out ScalarValue from Scalar, even in-memory, so we can avoid duplicating dtype information (e.g. Struct field names).
 table Scalar {
-  type: Type;
-  nullability: bool;
+  dtype: vortex.dtype.DType (required);
+  value: ScalarValue (required);
+}
+
+table ScalarValue {
+    flex: [ubyte] (required, flexbuffer);
 }
 
 root_type Scalar;
