@@ -32,7 +32,8 @@ build-vortex = { path = "../build-vortex" }
 workspace = true
 
 [features]
-default = ["flatbuffers", "proto", "serde"]
+# Uncomment for improved IntelliJ support
+# default = ["flatbuffers", "proto", "serde"]
 flatbuffers = [
     "dep:flatbuffers",
     "dep:flexbuffers",
