@@ -5,6 +5,7 @@ use std::fmt::Formatter;
 use serde::de::{Error, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::pvalue::PValue;
 use crate::value::ScalarValue;
 
 impl Serialize for ScalarValue {
@@ -15,6 +16,7 @@ impl Serialize for ScalarValue {
         match self {
             ScalarValue::Null => ().serialize(serializer),
             ScalarValue::Bool(b) => b.serialize(serializer),
+            ScalarValue::Primitive(p) => p.serialize(serializer),
             ScalarValue::Buffer(buffer) => buffer.as_ref().serialize(serializer),
             ScalarValue::List(l) => l.serialize(serializer),
         }
@@ -45,70 +47,70 @@ impl<'de> Deserialize<'de> for ScalarValue {
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.to_le_bytes().to_vec().into()))
+                Ok(ScalarValue::Primitive(PValue::I8(v)))
             }
 
             fn visit_i16<E>(self, v: i16) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.to_le_bytes().to_vec().into()))
+                Ok(ScalarValue::Primitive(PValue::I16(v)))
             }
 
             fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.to_le_bytes().to_vec().into()))
+                Ok(ScalarValue::Primitive(PValue::I32(v)))
             }
 
             fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.to_le_bytes().to_vec().into()))
+                Ok(ScalarValue::Primitive(PValue::I64(v)))
             }
 
             fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.to_le_bytes().to_vec().into()))
+                Ok(ScalarValue::Primitive(PValue::U8(v)))
             }
 
             fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.to_le_bytes().to_vec().into()))
+                Ok(ScalarValue::Primitive(PValue::U16(v)))
             }
 
             fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.to_le_bytes().to_vec().into()))
+                Ok(ScalarValue::Primitive(PValue::U32(v)))
             }
 
             fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.to_le_bytes().to_vec().into()))
+                Ok(ScalarValue::Primitive(PValue::U64(v)))
             }
 
             fn visit_f32<E>(self, v: f32) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.to_le_bytes().to_vec().into()))
+                Ok(ScalarValue::Primitive(PValue::F32(v)))
             }
 
             fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(ScalarValue::Buffer(v.to_le_bytes().to_vec().into()))
+                Ok(ScalarValue::Primitive(PValue::F64(v)))
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -145,5 +147,27 @@ impl<'de> Deserialize<'de> for ScalarValue {
         }
 
         deserializer.deserialize_any(ScalarValueVisitor)
+    }
+}
+
+impl Serialize for PValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            PValue::U8(v) => serializer.serialize_u8(*v),
+            PValue::U16(v) => serializer.serialize_u16(*v),
+            PValue::U32(v) => serializer.serialize_u32(*v),
+            PValue::U64(v) => serializer.serialize_u64(*v),
+            PValue::I8(v) => serializer.serialize_i8(*v),
+            PValue::I16(v) => serializer.serialize_i16(*v),
+            PValue::I32(v) => serializer.serialize_i32(*v),
+            PValue::I64(v) => serializer.serialize_i64(*v),
+            // NOTE(ngates): f16's are serialized bit-wise as u16.
+            PValue::F16(v) => serializer.serialize_u16(v.to_bits()),
+            PValue::F32(v) => serializer.serialize_f32(*v),
+            PValue::F64(v) => serializer.serialize_f64(*v),
+        }
     }
 }

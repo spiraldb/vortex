@@ -255,7 +255,7 @@ mod test {
     use vortex::compute::scalar_at::scalar_at;
     use vortex::ToArray;
     use vortex_dtype::Nullability::Nullable;
-    use vortex_dtype::PType;
+    use vortex_dtype::{DType, PType};
     use vortex_scalar::Scalar;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
@@ -287,7 +287,7 @@ mod test {
         );
         assert_eq!(
             scalar_at(&values.to_array(), 0).unwrap(),
-            Scalar::null(PType::I32.into())
+            Scalar::null(DType::Primitive(PType::I32, Nullable))
         );
         assert_eq!(
             scalar_at(&values.to_array(), 1).unwrap(),

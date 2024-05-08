@@ -124,7 +124,9 @@ impl<'a> VarBinAccumulator<'a> {
 
 #[cfg(test)]
 mod test {
-    use vortex_buffer::BufferString;
+    use std::ops::Deref;
+
+    use vortex_buffer::{Buffer, BufferString};
     use vortex_dtype::{DType, Nullability};
 
     use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
@@ -157,12 +159,12 @@ mod test {
     fn binary_stats() {
         let arr = array(DType::Binary(Nullability::NonNullable));
         assert_eq!(
-            arr.statistics().compute_min::<Vec<u8>>().unwrap(),
-            "hello world".as_bytes().to_vec()
+            arr.statistics().compute_min::<Buffer>().unwrap().deref(),
+            "hello world".as_bytes()
         );
         assert_eq!(
-            arr.statistics().compute_max::<Vec<u8>>().unwrap(),
-            "hello world this is a long string".as_bytes().to_vec()
+            arr.statistics().compute_max::<Buffer>().unwrap().deref(),
+            "hello world this is a long string".as_bytes()
         );
         assert_eq!(arr.statistics().compute_run_count().unwrap(), 2);
         assert!(!arr.statistics().compute_is_constant().unwrap());

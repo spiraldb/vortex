@@ -1985,6 +1985,7 @@ dependencies = [
  "cfg-if",
  "crunchy",
  "num-traits",
+ "serde",
 ]
 
 [[package]]

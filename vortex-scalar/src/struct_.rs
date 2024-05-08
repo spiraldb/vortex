@@ -1,22 +1,34 @@
+use std::sync::Arc;
+
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::value::ScalarValue;
 use crate::Scalar;
 
-pub struct StructScalar<'a>(&'a Scalar);
+pub struct StructScalar<'a> {
+    dtype: &'a DType,
+    fields: Option<Arc<[ScalarValue]>>,
+}
+
 impl<'a> StructScalar<'a> {
     #[inline]
     pub fn dtype(&self) -> &'a DType {
-        self.0.dtype()
+        self.dtype
     }
 
     pub fn field_by_idx(&self, idx: usize, dtype: DType) -> Option<Scalar> {
-        self.0.value.child(idx).map(|value| Scalar { dtype, value })
+        self.fields
+            .as_ref()
+            .and_then(|fields| fields.get(idx))
+            .map(|field| Scalar {
+                dtype,
+                value: field.clone(),
+            })
     }
 
     pub fn field(&self, name: &str, dtype: DType) -> Option<Scalar> {
-        let DType::Struct(struct_dtype, _) = self.0.dtype() else {
+        let DType::Struct(struct_dtype, _) = self.dtype() else {
             unreachable!()
         };
         struct_dtype
@@ -43,9 +55,11 @@ impl<'a> TryFrom<&'a Scalar> for StructScalar<'a> {
 
     fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
         if matches!(value.dtype(), DType::Struct(..)) {
-            Ok(Self(value))
-        } else {
             vortex_bail!("Expected struct scalar, found {}", value.dtype())
         }
+        Ok(Self {
+            dtype: value.dtype(),
+            fields: value.value.as_list()?.cloned(),
+        })
     }
 }

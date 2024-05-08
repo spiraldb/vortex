@@ -1,39 +1,65 @@
+use std::ops::Deref;
+use std::sync::Arc;
+
 use itertools::Itertools;
 use vortex_dtype::DType;
+use vortex_dtype::Nullability::NonNullable;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::value::ScalarValue;
 use crate::Scalar;
 
-pub struct ListScalar<'a>(&'a Scalar);
+pub struct ListScalar<'a> {
+    dtype: &'a DType,
+    elements: Option<Arc<[ScalarValue]>>,
+}
+
 impl<'a> ListScalar<'a> {
     #[inline]
     pub fn dtype(&self) -> &'a DType {
-        self.0.dtype()
+        self.dtype
     }
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.0.value.len()
+        self.elements.as_ref().map(|e| e.len()).unwrap_or(0)
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        match self.elements.as_ref() {
+            None => true,
+            Some(l) => l.is_empty(),
+        }
     }
 
-    pub fn element(&self, idx: usize) -> Option<Scalar> {
+    pub fn element_dtype(&self) -> DType {
         let DType::List(element_type, _) = self.dtype() else {
             unreachable!();
         };
-        self.0.value.child(idx).map(|value| Scalar {
-            dtype: element_type.as_ref().clone(),
-            value,
-        })
+        (*element_type).deref().clone()
+    }
+
+    pub fn element(&self, idx: usize) -> Option<Scalar> {
+        self.elements
+            .as_ref()
+            .and_then(|l| l.get(idx))
+            .map(|value| Scalar {
+                dtype: self.element_dtype(),
+                value: value.clone(),
+            })
     }
 
     pub fn elements(&self) -> impl Iterator<Item = Scalar> + '_ {
-        (0..self.len()).map(move |idx| self.element(idx).expect("incorrect length"))
+        self.elements
+            .as_ref()
+            .map(|e| e.as_ref())
+            .unwrap_or_else(|| &[] as &[ScalarValue])
+            .iter()
+            .map(|e| Scalar {
+                dtype: self.element_dtype(),
+                value: e.clone(),
+            })
     }
 
     pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
@@ -45,11 +71,14 @@ impl<'a> TryFrom<&'a Scalar> for ListScalar<'a> {
     type Error = VortexError;
 
     fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
-        if matches!(value.dtype(), DType::List(..)) {
-            Ok(Self(value))
-        } else {
+        if !matches!(value.dtype(), DType::List(..)) {
             vortex_bail!("Expected list scalar, found {}", value.dtype())
         }
+
+        Ok(Self {
+            dtype: value.dtype(),
+            elements: value.value.as_list()?.cloned(),
+        })
     }
 }
 
@@ -72,7 +101,8 @@ where
 {
     fn from(value: Vec<T>) -> Self {
         let scalars = value.into_iter().map(|v| Scalar::from(v)).collect_vec();
-        let dtype = scalars.first().expect("Empty list").dtype().clone();
+        let element_dtype = scalars.first().expect("Empty list").dtype().clone();
+        let dtype = DType::List(Arc::new(element_dtype), NonNullable);
         Scalar {
             dtype,
             value: ScalarValue::List(scalars.into_iter().map(|s| s.value).collect_vec().into()),

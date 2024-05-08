@@ -1,23 +1,21 @@
 use std::sync::Arc;
 
-use paste::paste;
 use vortex_buffer::Buffer;
-use vortex_dtype::half::f16;
-use vortex_dtype::NativePType;
 use vortex_error::{vortex_err, VortexResult};
 
-/// Represents the internal data of a scalar value. Can only be interpreted by wrapping
+use crate::pvalue::PValue;
+
+/// Represents the internal data of a scalar value. Must be interpreted by wrapping
 /// up with a DType to make a Scalar.
 ///
-/// This is similar to serde_json::Value, but uses our own Buffer implementation for bytes,
-/// an Arc<[]> for list elements, and structs are modelled as lists.
-///
-/// TODO(ngates): we could support reading structs from both structs and lists in the future since
-///  storing sparse structs dense with null scalars may be inefficient.
+/// Note that these values can be deserialized from JSON or other formats. So a PValue may not
+/// have the correct width for what the DType expects. This means primitive values must be
+/// cast on-read.
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ScalarValue {
     Null,
     Bool(bool),
+    Primitive(PValue),
     Buffer(Buffer),
     List(Arc<[ScalarValue]>),
 }
@@ -31,14 +29,15 @@ impl ScalarValue {
         match self {
             ScalarValue::Null => Ok(None),
             ScalarValue::Bool(b) => Ok(Some(*b)),
-            _ => Err(vortex_err!("Not a bool scalar")),
+            _ => Err(vortex_err!("Expected a bool scalar, found {:?}", self)),
         }
     }
 
-    pub fn as_primitive<T: NativePType>(&self) -> Option<T> {
+    pub fn as_pvalue(&self) -> VortexResult<Option<PValue>> {
         match self {
-            ScalarValue::Buffer(b) => T::try_from_le_bytes(b.as_ref()).ok(),
-            _ => None,
+            ScalarValue::Null => Ok(None),
+            ScalarValue::Primitive(p) => Ok(Some(*p)),
+            _ => Err(vortex_err!("Expected a primitive scalar, found {:?}", self)),
         }
     }
 
@@ -46,51 +45,14 @@ impl ScalarValue {
         match self {
             ScalarValue::Null => Ok(None),
             ScalarValue::Buffer(b) => Ok(Some(b.clone())),
-            _ => Err(vortex_err!("Not a binary scalar")),
+            _ => Err(vortex_err!("Expected a binary scalar, found {:?}", self)),
         }
     }
 
-    #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize {
+    pub fn as_list(&self) -> VortexResult<Option<&Arc<[ScalarValue]>>> {
         match self {
-            ScalarValue::List(l) => l.len(),
-            _ => 0,
+            ScalarValue::List(l) => Ok(Some(l)),
+            _ => Err(vortex_err!("Expected a list scalar, found {:?}", self)),
         }
-    }
-
-    pub fn child(&self, idx: usize) -> Option<ScalarValue> {
-        match self {
-            ScalarValue::List(l) => l.get(idx).cloned(),
-            _ => None,
-        }
-    }
-}
-
-macro_rules! primitive_from_scalar_view {
-    ($T:ty) => {
-        paste! {
-            impl From<$T> for ScalarValue {
-                fn from(value: $T) -> Self {
-                    ScalarValue::Buffer(Buffer::from(value.to_le_bytes().as_ref().to_vec()))
-                }
-            }
-        }
-    };
-}
-
-primitive_from_scalar_view!(u8);
-primitive_from_scalar_view!(u16);
-primitive_from_scalar_view!(u32);
-primitive_from_scalar_view!(u64);
-primitive_from_scalar_view!(i8);
-primitive_from_scalar_view!(i16);
-primitive_from_scalar_view!(i32);
-primitive_from_scalar_view!(i64);
-primitive_from_scalar_view!(f32);
-primitive_from_scalar_view!(f64);
-
-impl From<f16> for ScalarValue {
-    fn from(value: f16) -> Self {
-        ScalarValue::Buffer(Buffer::from(value.to_le_bytes().as_ref().to_vec()))
     }
 }

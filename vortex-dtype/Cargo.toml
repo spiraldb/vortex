@@ -17,7 +17,7 @@ path = "src/lib.rs"
 
 [dependencies]
 flatbuffers = { workspace = true, optional = true }
-half = { workspace = true }
+half = { workspace = true, features = ["num-traits"] }
 itertools = { workspace = true }
 num-traits = { workspace = true }
 prost = { workspace = true, optional = true }
@@ -34,3 +34,6 @@ build-vortex = { path = "../build-vortex" }
 
 [lints]
 workspace = true
+
+[features]
+serde = ["dep:serde", "half/serde"]

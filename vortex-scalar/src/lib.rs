@@ -8,6 +8,7 @@ mod display;
 mod extension;
 mod list;
 mod primitive;
+mod pvalue;
 mod serde;
 mod struct_;
 mod utf8;
