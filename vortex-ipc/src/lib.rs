@@ -23,7 +23,8 @@ pub mod flatbuffers {
     }
 }
 
-pub mod r#async;
+mod array_reader;
+mod codecs;
 pub mod iter;
 mod messages;
 pub mod reader;

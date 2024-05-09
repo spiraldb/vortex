@@ -106,6 +106,12 @@ impl From<Vec<u8>> for Buffer {
     }
 }
 
+impl From<bytes::Bytes> for Buffer {
+    fn from(value: bytes::Bytes) -> Self {
+        Buffer::Bytes(value)
+    }
+}
+
 impl From<ArrowBuffer> for Buffer {
     fn from(value: ArrowBuffer) -> Self {
         Buffer::Arrow(value)
