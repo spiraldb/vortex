@@ -5115,6 +5115,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-expr"
+version = "0.1.0"
+dependencies = [
+ "vortex-dtype",
+ "vortex-error",
+ "vortex-scalar",
+]
+
+[[package]]
 name = "vortex-fastlanes"
 version = "0.1.0"
 dependencies = [
