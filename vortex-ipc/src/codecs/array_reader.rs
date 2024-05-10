@@ -1,22 +1,22 @@
 use std::pin::Pin;
 use std::task::Poll;
 
-use bytes::BytesMut;
 use futures_util::Stream;
-use vortex::{ArrayView, Context, IntoArray, OwnedArray, ToArray, ViewContext};
+use pin_project::pin_project;
+use vortex::{Array, ArrayView, Context, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::codecs::message_reader::MessageReader;
 use crate::messages::SerdeContextDeserializer;
-use crate::reader2::ArrayReader;
 
 pub struct IPCReader<'a, M: MessageReader> {
     view_ctx: ViewContext,
     messages: &'a mut M,
 }
 
+#[allow(dead_code)]
 impl<'m, M: MessageReader> IPCReader<'m, M> {
     pub fn new(view_ctx: ViewContext, messages: &'m mut M) -> Self {
         Self { view_ctx, messages }
@@ -78,9 +78,9 @@ pub struct MessageArrayReader<'a, M: MessageReader> {
     row_offset: usize,
 }
 
-impl<M: MessageReader> MessageArrayReader<'_, M> {
+impl<'m, M: MessageReader> MessageArrayReader<'m, M> {
     /// Construct an ArrayReader with a message stream containing chunk messages.
-    pub fn new(ctx: ViewContext, dtype: DType, messages: &mut M) -> Self {
+    pub fn new(ctx: ViewContext, dtype: DType, messages: &'m mut M) -> Self {
         Self {
             ctx,
             dtype,
@@ -90,28 +90,33 @@ impl<M: MessageReader> MessageArrayReader<'_, M> {
         }
     }
 
-    async fn next_chunk(&mut self) -> VortexResult<Option<OwnedArray>> {
-        let Some(chunk_msg) = self.messages.peek().and_then(|msg| msg.header_as_chunk()) else {
+    pub fn into_reader(self) -> impl ArrayReader + 'm {
+        let dtype = self.dtype.clone();
+
+        let inner = futures_util::stream::unfold(self, |mut reader| async move {
+            match reader.next().await {
+                Ok(Some(array)) => Some((Ok(array.to_static()), reader)),
+                Ok(None) => None,
+                Err(e) => Some((Err(e), reader)),
+            }
+        });
+
+        ArrayReaderImpl { dtype, inner }
+    }
+}
+
+impl<M: MessageReader> MessageArrayReader<'_, M> {
+    pub async fn next(&mut self) -> VortexResult<Option<Array>> {
+        if self
+            .messages
+            .peek()
+            .and_then(|msg| msg.header_as_chunk())
+            .is_none()
+        {
             return Ok(None);
-        };
-
-        // Read all the column's buffers
-        self.buffers.clear();
-        let mut offset = 0;
-        for buffer in chunk_msg.buffers().unwrap_or_default().iter() {
-            let _skip = buffer.offset() - offset;
-            self.messages.skip(buffer.offset() - offset).await?;
-
-            // TODO(ngates): read into a single buffer, then Arc::clone and slice
-            let bytes = BytesMut::zeroed(buffer.length() as usize);
-            let bytes = self.messages.read_into(bytes).await?;
-            self.buffers.push(Buffer::from(bytes.freeze()));
-
-            offset = buffer.offset() + buffer.length();
         }
 
-        // Consume any remaining padding after the final buffer.
-        self.messages.skip(chunk_msg.buffer_size() - offset).await?;
+        self.buffers = self.messages.buffers().await?;
 
         // After reading the buffers we're now able to load the next message.
         let col_array = self
@@ -134,18 +139,35 @@ impl<M: MessageReader> MessageArrayReader<'_, M> {
     }
 }
 
-pub struct ArrayReaderImpl {
-    dtype: DType,
+/// A stream of array chunks along with a DType.
+pub trait ArrayReader: Stream<Item = VortexResult<OwnedArray>> {
+    #[allow(dead_code)]
+    fn dtype(&self) -> &DType;
 }
 
-impl ArrayReader for ArrayReaderImpl {
-    #[inline]
+#[pin_project]
+struct ArrayReaderImpl<S>
+where
+    S: Stream<Item = VortexResult<OwnedArray>>,
+{
+    dtype: DType,
+    #[pin]
+    inner: S,
+}
+
+impl<S> ArrayReader for ArrayReaderImpl<S>
+where
+    S: Stream<Item = VortexResult<OwnedArray>>,
+{
     fn dtype(&self) -> &DType {
         &self.dtype
     }
 }
 
-impl Stream for ArrayReaderImpl {
+impl<S> Stream for ArrayReaderImpl<S>
+where
+    S: Stream<Item = VortexResult<OwnedArray>>,
+{
     type Item = VortexResult<OwnedArray>;
 
     fn poll_next(
@@ -153,5 +175,9 @@ impl Stream for ArrayReaderImpl {
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         self.project().inner.poll_next(cx)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
     }
 }

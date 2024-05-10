@@ -58,6 +58,7 @@ impl Buffer {
         }
     }
 
+    // TODO(ngates): make this more like `into_mut` and get back a Vortex BufferMut.
     pub fn into_vec<T: NativePType>(self) -> Result<Vec<T>, Buffer> {
         match self {
             Buffer::Arrow(buffer) => match_each_native_ptype!(T::PTYPE, |$T| {

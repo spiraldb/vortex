@@ -1,16 +1,17 @@
 use std::future::Future;
 
-use bytes::BytesMut;
+use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
-
+mod futures;
+mod monoio;
 use crate::flatbuffers::ipc::Message;
 
 #[allow(dead_code)]
 pub trait MessageReader {
     fn peek(&self) -> Option<Message>;
     fn next(&mut self) -> impl Future<Output = VortexResult<Message>>;
-    fn skip(&mut self, nbytes: u64) -> impl Future<Output = VortexResult<()>>;
-    fn read_into(&mut self, buffer: BytesMut) -> impl Future<Output = VortexResult<BytesMut>>;
+    /// Fetch the buffers associated with this message.
+    fn buffers(&mut self) -> impl Future<Output = VortexResult<Vec<Buffer>>>;
 }
 
 #[cfg(test)]

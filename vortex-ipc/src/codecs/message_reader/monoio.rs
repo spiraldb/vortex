@@ -5,8 +5,14 @@ use bytes::BytesMut;
 use flatbuffers::{root, root_unchecked};
 use monoio::buf::IoBufMut;
 use monoio::io::{AsyncReadRent, AsyncReadRentExt};
+use vortex::encoding::EncodingRef;
+use vortex::Context;
+use vortex_alp::ALPEncoding;
+use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
+use vortex_fastlanes::BitPackedEncoding;
 
+use crate::codecs::array_reader::IPCReader;
 use crate::codecs::message_reader::test::create_stream;
 use crate::codecs::message_reader::MessageReader;
 use crate::flatbuffers::ipc::Message;
@@ -76,6 +82,34 @@ impl<R: AsyncReadRent + Unpin> MessageReader for MonoIoMessageReader<R> {
         }
         Ok(unsafe { root_unchecked::<Message>(&self.prev_message) })
     }
+
+    async fn buffers(&mut self) -> VortexResult<Vec<Buffer>> {
+        let Some(chunk_msg) = unsafe { root_unchecked::<Message>(&self.message) }.header_as_chunk()
+        else {
+            // We could return an error here?
+            return Ok(Vec::new());
+        };
+
+        // Read all the column's buffers
+        let mut offset = 0;
+        let mut buffers = Vec::with_capacity(chunk_msg.buffers().unwrap_or_default().len());
+        for buffer in chunk_msg.buffers().unwrap_or_default().iter() {
+            let _skip = buffer.offset() - offset;
+            self.read.skip(buffer.offset() - offset).await?;
+
+            // TODO(ngates): read into a single buffer, then Arc::clone and slice
+            let bytes = BytesMut::zeroed(buffer.length() as usize);
+            let bytes = self.read.read_exact_into(bytes).await?;
+            buffers.push(Buffer::from(bytes.freeze()));
+
+            offset = buffer.offset() + buffer.length();
+        }
+
+        // Consume any remaining padding after the final buffer.
+        self.read.skip(chunk_msg.buffer_size() - offset).await?;
+
+        Ok(buffers)
+    }
 }
 
 trait AsyncReadRentMoreExt: AsyncReadRentExt {
@@ -86,6 +120,13 @@ trait AsyncReadRentMoreExt: AsyncReadRentExt {
             (Err(e), _) => Err(e),
         }
     }
+
+    async fn skip(&mut self, nbytes: u64) -> VortexResult<()> {
+        let _ = self
+            .read_exact_into(BytesMut::zeroed(nbytes as usize))
+            .await?;
+        Ok(())
+    }
 }
 
 impl<R: AsyncReadRentExt> AsyncReadRentMoreExt for R {}
@@ -94,17 +135,35 @@ impl<R: AsyncReadRentExt> AsyncReadRentMoreExt for R {}
 async fn test_something() -> VortexResult<()> {
     let buffer = create_stream();
 
-    // TODO(ngates): stream
-    // let _stream = buffer
-    //     .into_iter()
-    //     .chunks(64)
-    //     .into_iter()
-    //     .map(|chunk| chunk.collect::<Vec<u8>>());
+    let ctx = Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
+    let mut messages = MonoIoMessageReader::try_new(buffer.as_slice()).await?;
 
-    let mut reader = MonoIoMessageReader::try_new(buffer.as_slice()).await?;
-    while reader.peek().is_some() {
-        let msg = reader.next().await?;
-        println!("MSG {:?}", msg);
+    let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
+    while let Some(mut array) = reader.next().await? {
+        println!("ARRAY");
+
+        while let Some(chunk) = array.next().await? {
+            println!("chunk {:?}", chunk);
+        }
+    }
+
+    Ok(())
+}
+
+#[monoio::test]
+async fn test_array_stream() -> VortexResult<()> {
+    let buffer = create_stream();
+
+    let ctx = Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
+    let mut messages = MonoIoMessageReader::try_new(buffer.as_slice()).await?;
+
+    let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
+    while let Some(mut array) = reader.next().await? {
+        println!("ARRAY");
+
+        while let Some(chunk) = array.next().await? {
+            println!("chunk {:?}", chunk);
+        }
     }
 
     Ok(())
