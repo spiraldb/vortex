@@ -278,6 +278,7 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
             .unwrap()
             .array()
             .unwrap();
+
         let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
 
         // Validate it
@@ -384,7 +385,8 @@ mod tests {
     use vortex::array::chunked::{Chunked, ChunkedArray};
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId, EncodingRef};
-    use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray, OwnedArray};
+    use vortex::stats::{ArrayStatistics, Stat};
+    use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray, OwnedArray, ToStatic};
     use vortex_alp::{ALPArray, ALPEncoding};
     use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
@@ -467,6 +469,46 @@ mod tests {
             ],
             ALPEncoding.id(),
         );
+    }
+
+    #[test]
+    fn test_stats() {
+        let data = PrimitiveArray::from((0i32..3_000_000).collect_vec()).into_array();
+        // calculate stats on the input array so that the output array will also have stats
+        data.statistics().compute_min::<i32>().unwrap();
+
+        let data = round_trip(&data);
+        verify_stats(&data);
+
+        let run_count: u64 = data.statistics().get_as::<u64>(Stat::RunCount).unwrap();
+        assert_eq!(run_count, 3000000);
+    }
+
+    #[test]
+    fn test_stats_chunked() {
+        let array = PrimitiveArray::from((0i32..1_500_000).collect_vec()).into_array();
+        let array2 = PrimitiveArray::from((1_500_000i32..3_000_000).collect_vec()).into_array();
+
+        // calculate stats on the input array so that the output array will also have stats
+        array.statistics().compute_min::<i32>().unwrap();
+        array2.statistics().compute_min::<i32>().unwrap();
+        let chunked_array =
+            ChunkedArray::try_new(vec![array.clone(), array2], array.dtype().clone())
+                .unwrap()
+                .into_array();
+
+        let data = round_trip(&chunked_array);
+
+        // NB: data is an ArrayData constructed from the result of calling read_array on an array
+        // reader. compute on a ChunkedArray calls get_or_compute on the underlying chunks and
+        // merges the results, while get does not. Thus we need to compute a stat and force this
+        // merge computation before we can test get()
+        data.statistics().compute(Stat::Min).unwrap();
+        verify_stats(&data);
+
+        // TODO(@jcasale): run_count calculation is wrong for chunked arrays, this should be 3mm
+        let run_count: u64 = data.statistics().get_as::<u64>(Stat::RunCount).unwrap();
+        assert_eq!(run_count, 3000001);
     }
 
     #[test]
@@ -742,5 +784,78 @@ mod tests {
         let result = result_iter.next().unwrap();
         assert!(result_iter.next().unwrap().is_none());
         Ok(result.unwrap())
+    }
+
+    fn verify_stats(data: &Array) {
+        let min: i32 = data
+            .statistics()
+            .get(Stat::Min)
+            .unwrap()
+            .as_ref()
+            .try_into()
+            .unwrap();
+        assert_eq!(min, 0);
+        let max: i32 = data
+            .statistics()
+            .get(Stat::Max)
+            .unwrap()
+            .as_ref()
+            .try_into()
+            .unwrap();
+        assert_eq!(max, 2_999_999);
+        let is_sorted = data.statistics().get_as::<bool>(Stat::IsSorted).unwrap();
+        assert!(is_sorted);
+        let is_strict_sorted: bool = data
+            .statistics()
+            .get_as::<bool>(Stat::IsStrictSorted)
+            .unwrap();
+        assert!(is_strict_sorted);
+        let is_constant: bool = data.statistics().get_as::<bool>(Stat::IsConstant).unwrap();
+        assert!(!is_constant);
+
+        let null_ct: u64 = data.statistics().get_as::<u64>(Stat::NullCount).unwrap();
+        assert_eq!(null_ct, 0);
+        let bit_width_freq = data
+            .statistics()
+            .get_as::<Vec<usize>>(Stat::BitWidthFreq)
+            .unwrap();
+        assert_eq!(
+            bit_width_freq,
+            vec![
+                1, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768,
+                65536, 131072, 262144, 524288, 1048576, 902848, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ]
+        );
+        let trailing_zero_freq = data
+            .statistics()
+            .get_as::<Vec<usize>>(Stat::TrailingZeroFreq)
+            .unwrap();
+        assert_eq!(
+            trailing_zero_freq,
+            vec![
+                1500000, 750000, 375000, 187500, 93750, 46875, 23437, 11719, 5859, 2930, 1465, 732,
+                366, 183, 92, 46, 23, 11, 6, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+            ]
+        );
+        data.statistics()
+            .compute_true_count()
+            .expect_err("Should not be able to calculate true count for non-boolean array");
+    }
+
+    fn round_trip<'a>(chunked_array: &'a Array<'a>) -> Array<'a> {
+        let context = Context::default();
+        let mut buffer = vec![];
+        {
+            let mut cursor = Cursor::new(&mut buffer);
+            {
+                let mut writer = StreamWriter::try_new(&mut cursor, &context).unwrap();
+                writer.write_array(chunked_array).unwrap();
+            }
+        }
+
+        let mut cursor = Cursor::new(&buffer);
+        let mut reader = StreamReader::try_new(&mut cursor, &context).unwrap();
+        let data = reader.read_array().unwrap();
+        data.to_static()
     }
 }

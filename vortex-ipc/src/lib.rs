@@ -15,10 +15,16 @@ pub mod flatbuffers {
 
     mod deps {
         pub mod array {
-            pub use vortex::flatbuffers::array;
+            pub use vortex::flatbuffers as array;
         }
+
         pub mod dtype {
             pub use vortex_dtype::flatbuffers as dtype;
+        }
+
+        pub mod scalar {
+            #[allow(unused_imports)]
+            pub use vortex_scalar::flatbuffers as scalar;
         }
     }
 }

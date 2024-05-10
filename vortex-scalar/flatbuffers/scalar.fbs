@@ -4,7 +4,11 @@ namespace vortex.scalar;
 
 table Scalar {
   dtype: vortex.dtype.DType (required);
-  value: [ubyte] (flexbuffer);
+  value: ScalarValue (required);
+}
+
+table ScalarValue {
+    flex: [ubyte] (required, flexbuffer);
 }
 
 root_type Scalar;
