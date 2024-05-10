@@ -9,6 +9,7 @@ use vortex_error::VortexResult;
 
 /// NOTE: similar to Arrow RecordBatchReader.
 pub trait ArrayReader: Stream<Item = VortexResult<OwnedArray>> {
+    #[allow(dead_code)]
     fn dtype(&self) -> &DType;
 }
 

@@ -1,75 +1,54 @@
-use std::io;
+use std::future::Future;
 
 use bytes::BytesMut;
-use flatbuffers::{root, root_unchecked};
-use futures_util::{AsyncRead, AsyncReadExt};
 use vortex_error::VortexResult;
 
 use crate::flatbuffers::ipc::Message;
 
-struct AsyncReadMessageReader<R: AsyncRead + Unpin> {
-    // TODO(ngates): swap this for our own mutable aligned buffer so we can support direct reads.
-    message: BytesMut,
-    prev_message: BytesMut,
-    finished: bool,
+#[allow(dead_code)]
+pub trait MessageReader {
+    fn peek(&self) -> Option<Message>;
+    fn next(&mut self) -> impl Future<Output = VortexResult<Message>>;
+    fn skip(&mut self, nbytes: u64) -> impl Future<Output = VortexResult<()>>;
+    fn read_into(&mut self, buffer: BytesMut) -> impl Future<Output = VortexResult<BytesMut>>;
 }
 
-impl<R: AsyncRead + Unpin> AsyncReadMessageReader<R> {
-    pub async fn try_new(read: &mut R) -> VortexResult<Self> {
-        let mut reader = Self {
-            message: BytesMut::new(),
-            prev_message: BytesMut::new(),
-            finished: false,
-        };
-        reader.load_next_message(read).await?;
-        Ok(reader)
-    }
+#[cfg(test)]
+pub mod test {
+    use std::io::Cursor;
 
-    pub fn peek(&self) -> Option<Message> {
-        if self.finished {
-            return None;
-        }
-        // The message has been validated by the next() call.
-        Some(unsafe { root_unchecked::<Message>(&self.message) })
-    }
+    use vortex::array::chunked::ChunkedArray;
+    use vortex::array::primitive::PrimitiveArray;
+    use vortex::encoding::EncodingRef;
+    use vortex::{ArrayDType, Context, IntoArray};
+    use vortex_alp::ALPEncoding;
+    use vortex_fastlanes::BitPackedEncoding;
 
-    pub async fn next(&mut self, read: &mut R) -> VortexResult<Message> {
-        if self.finished {
-            panic!("StreamMessageReader is finished - should've checked peek!");
-        }
-        self.prev_message = self.message.split();
-        if !self.load_next_message(read).await? {
-            self.finished = true;
-        }
-        Ok(unsafe { root_unchecked::<Message>(&self.prev_message) })
-    }
+    use crate::writer::StreamWriter;
 
-    async fn load_next_message(&mut self, read: &mut R) -> VortexResult<bool> {
-        let mut len_buf = [0u8; 4];
-        match read.read_exact(&mut len_buf).await {
-            Ok(()) => {}
-            Err(e) => {
-                return match e.kind() {
-                    io::ErrorKind::UnexpectedEof => Ok(false),
-                    _ => Err(e.into()),
-                };
-            }
+    pub fn create_stream() -> Vec<u8> {
+        let ctx = Context::default().with_encodings([
+            &ALPEncoding as EncodingRef,
+            &BitPackedEncoding as EncodingRef,
+        ]);
+        let array = PrimitiveArray::from(vec![0, 1, 2]).into_array();
+        let chunked_array =
+            ChunkedArray::try_new(vec![array.clone(), array.clone()], array.dtype().clone())
+                .unwrap()
+                .into_array();
+
+        let mut buffer = vec![];
+        let mut cursor = Cursor::new(&mut buffer);
+        {
+            let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
+            writer.write_array(&array).unwrap();
+            writer.write_array(&chunked_array).unwrap();
         }
 
-        let len = u32::from_le_bytes(len_buf);
-        if len == u32::MAX {
-            // Marker for no more messages.
-            return Ok(false);
-        }
+        // Push some extra bytes to test that the reader is well-behaved and doesn't read past the
+        // end of the stream.
+        // let _ = cursor.write(b"hello").unwrap();
 
-        assert_eq!(self.message.len(), 0);
-        // self.message.clear();
-        self.message.reserve(len as usize);
-        self.message.truncate(len as usize);
-        read.read_exact(&mut self.message).await?;
-
-        /// Validate that the message is valid a flatbuffer.
-        let _ = root::<Message>(&self.message)?;
-        Ok(true)
+        buffer
     }
 }

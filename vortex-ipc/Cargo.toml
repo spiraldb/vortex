@@ -20,11 +20,11 @@ flatbuffers = { workspace = true }
 futures-util = { version = "0.3.30" }
 itertools = { workspace = true }
 log = { workspace = true }
-monoio = { version = "0.2.3", optional = true }
+monoio = { version = "0.2.3", optional = true, features = ["bytes"] }
 monoio-codec = { version = "0.3.4", optional = true }
 nougat = "0.2.4"
 pin-project = { workspace = true }
-tokio = { version = "1.37.0", optional = true }
+tokio = { version = "1.37.0", optional = true, features = ["full"] }
 tokio-util = { version = "0.7.11", default-features = false, features = ["codec"], optional = true }
 vortex-array = { path = "../vortex-array" }
 vortex-buffer = { path = "../vortex-buffer" }

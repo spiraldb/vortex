@@ -1,10 +1,4 @@
-use vortex_buffer::Buffer;
-
-mod futures;
+mod array_reader;
+mod async_message_reader;
 mod message_reader;
-mod message_stream;
-
-pub enum Message {
-    FlatBuffer(Buffer),
-    ByteBuffer(Buffer),
-}
+mod monoio_message_reader;
