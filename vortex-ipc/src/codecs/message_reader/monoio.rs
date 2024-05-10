@@ -8,14 +8,11 @@ use monoio::buf::IoBufMut;
 use monoio::io::{AsyncReadRent, AsyncReadRentExt};
 use vortex::encoding::EncodingRef;
 use vortex::Context;
-use vortex_alp::ALPEncoding;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
-use vortex_fastlanes::BitPackedEncoding;
 
 use crate::codecs::array_reader::ArrayReader;
 use crate::codecs::ipc_reader::IPCReader;
-use crate::codecs::message_reader::test::create_stream;
 use crate::codecs::message_reader::MessageReader;
 use crate::flatbuffers::ipc::Message;
 
@@ -133,40 +130,51 @@ trait AsyncReadRentMoreExt: AsyncReadRentExt {
 
 impl<R: AsyncReadRentExt> AsyncReadRentMoreExt for R {}
 
-#[monoio::test]
-async fn test_something() -> VortexResult<()> {
-    let buffer = create_stream();
+#[cfg(test)]
+mod tests {
+    use vortex_alp::ALPEncoding;
+    use vortex_fastlanes::BitPackedEncoding;
 
-    let ctx = Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
-    let mut messages = MonoIoMessageReader::try_new(buffer.as_slice()).await?;
+    use super::*;
+    use crate::codecs::message_reader::test::create_stream;
 
-    let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
-    while let Some(array) = reader.next().await? {
-        futures_util::pin_mut!(array);
-        println!("ARRAY {}", array.dtype());
+    #[monoio::test]
+    async fn test_something() -> VortexResult<()> {
+        let buffer = create_stream();
 
-        while let Some(chunk) = array.try_next().await? {
-            println!("chunk {:?}", chunk);
+        let ctx =
+            Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
+        let mut messages = MonoIoMessageReader::try_new(buffer.as_slice()).await?;
+
+        let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
+        while let Some(array) = reader.next().await? {
+            futures_util::pin_mut!(array);
+            println!("ARRAY {}", array.dtype());
+
+            while let Some(chunk) = array.try_next().await? {
+                println!("chunk {:?}", chunk);
+            }
         }
+
+        Ok(())
     }
 
-    Ok(())
-}
+    #[monoio::test]
+    async fn test_array_stream() -> VortexResult<()> {
+        let buffer = create_stream();
 
-#[monoio::test]
-async fn test_array_stream() -> VortexResult<()> {
-    let buffer = create_stream();
+        let ctx =
+            Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
+        let mut messages = MonoIoMessageReader::try_new(buffer.as_slice()).await?;
 
-    let ctx = Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
-    let mut messages = MonoIoMessageReader::try_new(buffer.as_slice()).await?;
-
-    let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
-    while let Some(array) = reader.next().await? {
-        futures_util::pin_mut!(array);
-        while let Some(array) = array.try_next().await? {
-            println!("chunk {:?}", array);
+        let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
+        while let Some(array) = reader.next().await? {
+            futures_util::pin_mut!(array);
+            while let Some(array) = array.try_next().await? {
+                println!("chunk {:?}", array);
+            }
         }
-    }
 
-    Ok(())
+        Ok(())
+    }
 }

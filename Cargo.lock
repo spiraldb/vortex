@@ -364,19 +364,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "834eee9ce518130a3b4d5af09ecc43e9d6b57ee76613f227a1ddd6b77c7a62bc"
 
 [[package]]
-name = "asynchronous-codec"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a860072022177f903e59730004fb5dc13db9275b79bb2aef7ba8ce831956c233"
-dependencies = [
- "bytes",
- "futures-sink",
- "futures-util",
- "memchr",
- "pin-project-lite",
-]
-
-[[package]]
 name = "atoi"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2765,16 +2752,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
-name = "lending-stream"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6df9b2ed75ba713c108ef896cf3f4cb07b4bbe42b074de3a2d0b0b0f874bac42"
-dependencies = [
- "futures-core",
- "pin-project",
-]
-
-[[package]]
 name = "lexical-core"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3048,17 +3025,6 @@ dependencies = [
  "pin-project-lite",
  "socket2",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "monoio-codec"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58c0e52577d2f766a87e7d60df9a635a35aecf37962e801ca07c73666b95b620"
-dependencies = [
- "bytes",
- "monoio",
- "tokio-util",
 ]
 
 [[package]]
@@ -5184,7 +5150,6 @@ dependencies = [
  "arrow-ipc",
  "arrow-schema",
  "arrow-select",
- "asynchronous-codec",
  "bytes",
  "criterion",
  "fallible-iterator",
@@ -5192,16 +5157,13 @@ dependencies = [
  "flatc",
  "futures-util",
  "itertools 0.12.1",
- "lending-stream",
  "log",
  "monoio",
- "monoio-codec",
  "nougat",
  "pin-project",
  "rand",
  "simplelog",
  "tokio",
- "tokio-util",
  "vortex-alp",
  "vortex-array",
  "vortex-buffer",

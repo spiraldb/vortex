@@ -4,16 +4,10 @@ use std::io;
 use bytes::{Bytes, BytesMut};
 use flatbuffers::{root, root_unchecked};
 use futures_util::{AsyncRead, AsyncReadExt, TryStreamExt};
-use vortex::encoding::EncodingRef;
-use vortex::Context;
-use vortex_alp::ALPEncoding;
 use vortex_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_fastlanes::BitPackedEncoding;
 
 use crate::codecs::array_reader::ArrayReader;
-use crate::codecs::ipc_reader::IPCReader;
-use crate::codecs::message_reader::test::create_stream;
 use crate::codecs::message_reader::MessageReader;
 use crate::flatbuffers::ipc::Message;
 
@@ -134,47 +128,61 @@ impl<R: AsyncRead + Unpin> MessageReader for AsyncReadMessageReader<R> {
     }
 }
 
-#[tokio::test]
-async fn test_something() -> VortexResult<()> {
-    let buffer = create_stream();
+#[cfg(test)]
+mod tests {
+    use vortex::encoding::EncodingRef;
+    use vortex::Context;
+    use vortex_alp::ALPEncoding;
+    use vortex_fastlanes::BitPackedEncoding;
 
-    let ctx = Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
-    let mut messages = AsyncReadMessageReader::try_new(buffer.as_slice()).await?;
+    use super::*;
+    use crate::codecs::ipc_reader::IPCReader;
+    use crate::codecs::message_reader::test::create_stream;
 
-    let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
-    while let Some(array) = reader.next().await? {
-        futures_util::pin_mut!(array);
-        println!("ARRAY: {}", array.dtype());
-        while let Some(chunk) = array.try_next().await? {
-            println!("chunk {:?}", chunk);
+    #[tokio::test]
+    async fn test_something() -> VortexResult<()> {
+        let buffer = create_stream();
+
+        let ctx =
+            Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
+        let mut messages = AsyncReadMessageReader::try_new(buffer.as_slice()).await?;
+
+        let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
+        while let Some(array) = reader.next().await? {
+            futures_util::pin_mut!(array);
+            println!("ARRAY: {}", array.dtype());
+            while let Some(chunk) = array.try_next().await? {
+                println!("chunk {:?}", chunk);
+            }
         }
+
+        Ok(())
     }
 
-    Ok(())
-}
+    #[tokio::test]
+    async fn test_stream() -> VortexResult<()> {
+        let buffer = create_stream();
 
-#[tokio::test]
-async fn test_stream() -> VortexResult<()> {
-    let buffer = create_stream();
+        let stream = futures_util::stream::iter(
+            buffer
+                .chunks(64)
+                .map(|chunk| Ok(Bytes::from(chunk.to_vec()))),
+        );
+        let reader = stream.into_async_read();
 
-    let stream = futures_util::stream::iter(
-        buffer
-            .chunks(64)
-            .map(|chunk| Ok(Bytes::from(chunk.to_vec()))),
-    );
-    let reader = stream.into_async_read();
+        let ctx =
+            Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
+        let mut messages = AsyncReadMessageReader::try_new(reader).await?;
 
-    let ctx = Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
-    let mut messages = AsyncReadMessageReader::try_new(reader).await?;
-
-    let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
-    while let Some(array) = reader.next().await? {
-        futures_util::pin_mut!(array);
-        println!("ARRAY {}", array.dtype());
-        while let Some(chunk) = array.try_next().await? {
-            println!("chunk {:?}", chunk);
+        let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
+        while let Some(array) = reader.next().await? {
+            futures_util::pin_mut!(array);
+            println!("ARRAY {}", array.dtype());
+            while let Some(chunk) = array.try_next().await? {
+                println!("chunk {:?}", chunk);
+            }
         }
-    }
 
-    Ok(())
+        Ok(())
+    }
 }

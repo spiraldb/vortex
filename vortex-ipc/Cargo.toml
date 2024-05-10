@@ -13,20 +13,16 @@ rust-version = { workspace = true }
 
 [dependencies]
 arrow-buffer = { workspace = true }
-asynchronous-codec = { version = "0.7.0", optional = true }
 bytes = { workspace = true }
 fallible-iterator = { workspace = true }
 flatbuffers = { workspace = true }
-futures-util = { version = "0.3.30" }
+futures-util = { workspace = true, features = ["io"] }
 itertools = { workspace = true }
-lending-stream = "1.0.0"
 log = { workspace = true }
-monoio = { version = "0.2.3", optional = true, features = ["bytes"] }
-monoio-codec = { version = "0.3.4", optional = true }
+monoio = { workspace = true, optional = true, features = ["bytes"] }
 nougat = "0.2.4"
 pin-project = { workspace = true }
-tokio = { version = "1.37.0", optional = true, features = ["full"] }
-tokio-util = { version = "0.7.11", default-features = false, features = ["codec", "io-util"], optional = true }
+tokio = { workspace = true, optional = true }
 vortex-array = { path = "../vortex-array" }
 vortex-buffer = { path = "../vortex-buffer" }
 vortex-error = { path = "../vortex-error" }
@@ -42,6 +38,7 @@ walkdir = { workspace = true }
 criterion = { workspace = true }
 rand = { workspace = true }
 simplelog = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 vortex-alp = { path = "../vortex-alp" }
 vortex-fastlanes = { path = "../vortex-fastlanes" }
 arrow = { workspace = true }
@@ -55,9 +52,9 @@ arrow-select = { workspace = true }
 
 [features]
 default = ["futures", "monoio", "tokio"]
-futures = ["dep:asynchronous-codec"]
-monoio = ["dep:monoio", "dep:monoio-codec"]
-tokio = ["dep:tokio", "dep:tokio-util"]
+futures = []
+monoio = ["dep:monoio"]
+tokio = ["dep:tokio"]
 
 [[bench]]
 name = "ipc_take"
