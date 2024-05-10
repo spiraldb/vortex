@@ -11,6 +11,7 @@ use vortex_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_fastlanes::BitPackedEncoding;
 
+use crate::codecs::array_reader::ArrayReader;
 use crate::codecs::ipc_reader::IPCReader;
 use crate::codecs::message_reader::test::create_stream;
 use crate::codecs::message_reader::MessageReader;
@@ -141,10 +142,10 @@ async fn test_something() -> VortexResult<()> {
     let mut messages = AsyncReadMessageReader::try_new(buffer.as_slice()).await?;
 
     let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
-    while let Some(mut array) = reader.next().await? {
-        println!("ARRAY");
-
-        while let Some(chunk) = array.next().await? {
+    while let Some(array) = reader.next().await? {
+        futures_util::pin_mut!(array);
+        println!("ARRAY: {}", array.dtype());
+        while let Some(chunk) = array.try_next().await? {
             println!("chunk {:?}", chunk);
         }
     }
@@ -167,10 +168,10 @@ async fn test_stream() -> VortexResult<()> {
     let mut messages = AsyncReadMessageReader::try_new(reader).await?;
 
     let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
-    while let Some(mut array) = reader.next().await? {
-        println!("ARRAY");
-
-        while let Some(chunk) = array.next().await? {
+    while let Some(array) = reader.next().await? {
+        futures_util::pin_mut!(array);
+        println!("ARRAY {}", array.dtype());
+        while let Some(chunk) = array.try_next().await? {
             println!("chunk {:?}", chunk);
         }
     }

@@ -3,7 +3,7 @@ use vortex::{Context, ViewContext};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::codecs::array_reader::MessageArrayReader;
+use crate::codecs::array_reader::{ArrayReader, MessageArrayReader};
 use crate::codecs::message_reader::MessageReader;
 use crate::messages::SerdeContextDeserializer;
 
@@ -40,7 +40,7 @@ impl<'m, M: MessageReader> IPCReader<'m, M> {
         Ok(Self { messages, view_ctx })
     }
 
-    pub async fn next<'a>(&'a mut self) -> VortexResult<Option<MessageArrayReader<'a, M>>> {
+    pub async fn next<'a>(&'a mut self) -> VortexResult<Option<impl ArrayReader + 'a>> {
         if self
             .messages
             .peek()
@@ -59,10 +59,8 @@ impl<'m, M: MessageReader> IPCReader<'m, M> {
         )
         .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
-        Ok(Some(MessageArrayReader::new(
-            self.view_ctx.clone(),
-            dtype,
-            &mut self.messages,
-        )))
+        Ok(Some(
+            MessageArrayReader::new(self.view_ctx.clone(), dtype, self.messages).into_reader(),
+        ))
     }
 }

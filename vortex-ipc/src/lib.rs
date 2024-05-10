@@ -32,7 +32,6 @@ pub mod flatbuffers {
     }
 }
 
-mod array_reader;
 mod codecs;
 pub mod iter;
 mod messages;
