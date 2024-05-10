@@ -11,7 +11,7 @@ use vortex_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_fastlanes::BitPackedEncoding;
 
-use crate::codecs::array_reader::IPCReader;
+use crate::codecs::ipc_reader::IPCReader;
 use crate::codecs::message_reader::test::create_stream;
 use crate::codecs::message_reader::MessageReader;
 use crate::flatbuffers::ipc::Message;

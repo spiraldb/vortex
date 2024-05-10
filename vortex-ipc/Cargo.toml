@@ -19,6 +19,7 @@ fallible-iterator = { workspace = true }
 flatbuffers = { workspace = true }
 futures-util = { version = "0.3.30" }
 itertools = { workspace = true }
+lending-stream = "1.0.0"
 log = { workspace = true }
 monoio = { version = "0.2.3", optional = true, features = ["bytes"] }
 monoio-codec = { version = "0.3.4", optional = true }

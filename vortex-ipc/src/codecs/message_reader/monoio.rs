@@ -3,6 +3,7 @@
 
 use bytes::BytesMut;
 use flatbuffers::{root, root_unchecked};
+use futures_util::TryStreamExt;
 use monoio::buf::IoBufMut;
 use monoio::io::{AsyncReadRent, AsyncReadRentExt};
 use vortex::encoding::EncodingRef;
@@ -12,7 +13,7 @@ use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
 use vortex_fastlanes::BitPackedEncoding;
 
-use crate::codecs::array_reader::IPCReader;
+use crate::codecs::ipc_reader::IPCReader;
 use crate::codecs::message_reader::test::create_stream;
 use crate::codecs::message_reader::MessageReader;
 use crate::flatbuffers::ipc::Message;
@@ -158,11 +159,12 @@ async fn test_array_stream() -> VortexResult<()> {
     let mut messages = MonoIoMessageReader::try_new(buffer.as_slice()).await?;
 
     let mut reader = IPCReader::try_from_messages(&ctx, &mut messages).await?;
-    while let Some(mut array) = reader.next().await? {
-        println!("ARRAY");
+    while let Some(array) = reader.next().await? {
+        let reader = array.into_reader();
+        futures_util::pin_mut!(reader);
 
-        while let Some(chunk) = array.next().await? {
-            println!("chunk {:?}", chunk);
+        while let Some(array) = reader.try_next().await? {
+            println!("chunk {:?}", array);
         }
     }
 

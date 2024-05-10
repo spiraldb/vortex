@@ -1,3 +1,6 @@
+#![feature(impl_trait_in_assoc_type)]
+#![allow(dead_code)]
+
 use vortex_error::{vortex_err, VortexError};
 
 pub const ALIGNMENT: usize = 64;
@@ -32,7 +35,6 @@ pub mod flatbuffers {
 mod array_reader;
 mod codecs;
 pub mod iter;
-mod lending_stream;
 mod messages;
 pub mod reader;
 pub mod writer;
