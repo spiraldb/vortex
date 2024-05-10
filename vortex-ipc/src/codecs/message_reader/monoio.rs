@@ -3,16 +3,11 @@
 
 use bytes::BytesMut;
 use flatbuffers::{root, root_unchecked};
-use futures_util::TryStreamExt;
 use monoio::buf::IoBufMut;
 use monoio::io::{AsyncReadRent, AsyncReadRentExt};
-use vortex::encoding::EncodingRef;
-use vortex::Context;
 use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
 
-use crate::codecs::array_reader::ArrayReader;
-use crate::codecs::ipc_reader::IPCReader;
 use crate::codecs::message_reader::MessageReader;
 use crate::flatbuffers::ipc::Message;
 
@@ -132,10 +127,15 @@ impl<R: AsyncReadRentExt> AsyncReadRentMoreExt for R {}
 
 #[cfg(test)]
 mod tests {
+    use futures_util::TryStreamExt;
+    use vortex::encoding::EncodingRef;
+    use vortex::Context;
     use vortex_alp::ALPEncoding;
     use vortex_fastlanes::BitPackedEncoding;
 
     use super::*;
+    use crate::codecs::array_reader::ArrayReader;
+    use crate::codecs::ipc_reader::IPCReader;
     use crate::codecs::message_reader::test::create_stream;
 
     #[monoio::test]

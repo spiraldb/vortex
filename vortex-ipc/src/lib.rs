@@ -1,4 +1,3 @@
-#![feature(impl_trait_in_assoc_type)]
 #![allow(dead_code)]
 
 use vortex_error::{vortex_err, VortexError};

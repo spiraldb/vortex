@@ -1,13 +1,12 @@
 #![cfg(feature = "futures")]
 use std::io;
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use flatbuffers::{root, root_unchecked};
-use futures_util::{AsyncRead, AsyncReadExt, TryStreamExt};
+use futures_util::{AsyncRead, AsyncReadExt};
 use vortex_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::codecs::array_reader::ArrayReader;
 use crate::codecs::message_reader::MessageReader;
 use crate::flatbuffers::ipc::Message;
 
@@ -130,12 +129,15 @@ impl<R: AsyncRead + Unpin> MessageReader for AsyncReadMessageReader<R> {
 
 #[cfg(test)]
 mod tests {
+    use bytes::Bytes;
+    use futures_util::TryStreamExt;
     use vortex::encoding::EncodingRef;
     use vortex::Context;
     use vortex_alp::ALPEncoding;
     use vortex_fastlanes::BitPackedEncoding;
 
     use super::*;
+    use crate::codecs::array_reader::ArrayReader;
     use crate::codecs::ipc_reader::IPCReader;
     use crate::codecs::message_reader::test::create_stream;
 
