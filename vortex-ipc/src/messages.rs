@@ -10,16 +10,19 @@ use crate::flatbuffers::ipc as fb;
 use crate::flatbuffers::ipc::Compression;
 use crate::{missing, ALIGNMENT};
 
-pub enum IPCMessage<'a> {
+pub(crate) enum IPCMessage<'a> {
     Context(IPCContext<'a>),
     Schema(IPCSchema<'a>),
     Chunk(IPCChunk<'a>),
 }
 
-pub struct IPCContext<'a>(pub &'a ViewContext);
-pub struct IPCSchema<'a>(pub &'a DType);
-pub struct IPCChunk<'a>(pub &'a ViewContext, pub &'a ArrayData);
-pub struct IPCArray<'a>(pub &'a ViewContext, pub &'a ArrayData);
+pub(crate) struct IPCContext<'a>(pub &'a ViewContext);
+
+pub(crate) struct IPCSchema<'a>(pub &'a DType);
+
+pub(crate) struct IPCChunk<'a>(pub &'a ViewContext, pub &'a ArrayData);
+
+pub(crate) struct IPCArray<'a>(pub &'a ViewContext, pub &'a ArrayData);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
 
