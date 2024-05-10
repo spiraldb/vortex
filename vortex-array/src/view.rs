@@ -1,6 +1,10 @@
+use core::slice::SlicePattern;
 use std::fmt::{Debug, Formatter};
+use std::marker::PhantomData;
+use std::sync::Arc;
 
 use enum_iterator::all;
+use flatbuffers::root;
 use itertools::Itertools;
 use log::warn;
 use vortex_buffer::Buffer;
@@ -17,20 +21,25 @@ use crate::{Array, IntoArray, ToArray};
 #[derive(Clone)]
 pub struct ArrayView<'v> {
     encoding: EncodingRef,
-    dtype: &'v DType,
-    array: fb::Array<'v>,
-    buffers: &'v [Buffer],
-    ctx: &'v ViewContext,
+    dtype: DType,
+    flatbuffer: Buffer,
+    flatbuffer_loc: usize,
+    // TODO(ngates): create an RC'd vector that can be lazily sliced.
+    buffers: Vec<Buffer>,
+    ctx: Arc<ViewContext>,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
     //  which fb:Array children to skip when calculating how to slice into buffers.
+
+    // FIXME(ngates): while we refactor, leave the lifetime parameter in place.
+    _phantom: PhantomData<&'v ()>,
 }
 
 impl<'a> Debug for ArrayView<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ArrayView")
             .field("encoding", &self.encoding)
-            .field("dtype", self.dtype)
+            .field("dtype", &self.dtype)
             // .field("array", &self.array)
             .field("buffers", &self.buffers)
             .field("ctx", &self.ctx)
@@ -40,11 +49,13 @@ impl<'a> Debug for ArrayView<'a> {
 
 impl<'v> ArrayView<'v> {
     pub fn try_new(
-        ctx: &'v ViewContext,
-        dtype: &'v DType,
-        array: fb::Array<'v>,
-        buffers: &'v [Buffer],
+        ctx: Arc<ViewContext>,
+        dtype: DType,
+        flatbuffer: Buffer,
+        buffers: Vec<Buffer>,
     ) -> VortexResult<Self> {
+        let array = root::<fb::Array>(flatbuffer.as_slice())?;
+
         let encoding = ctx
             .find_encoding(array.encoding())
             .ok_or_else(|| vortex_err!(InvalidSerde: "Encoding ID out of bounds"))?;
@@ -59,7 +70,8 @@ impl<'v> ArrayView<'v> {
         let view = Self {
             encoding,
             dtype,
-            array,
+            flatbuffer,
+            flatbuffer_loc: array._tab.loc(),
             buffers,
             ctx,
         };
@@ -72,12 +84,19 @@ impl<'v> ArrayView<'v> {
         Ok(view)
     }
 
+    pub fn flatbuffer(&self) -> fb::Array {
+        unsafe {
+            let tab = flatbuffers::Table::new(self.flatbuffer.as_slice(), self.flatbuffer_loc);
+            fb::Array::init_from_table(tab)
+        }
+    }
+
     pub fn encoding(&self) -> EncodingRef {
         self.encoding
     }
 
     pub fn dtype(&self) -> &DType {
-        self.dtype
+        &self.dtype
     }
 
     pub fn metadata(&self) -> Option<&'v [u8]> {
@@ -230,7 +249,7 @@ impl<'v> IntoArray<'v> for ArrayView<'v> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ViewContext {
     encodings: Vec<EncodingRef>,
 }

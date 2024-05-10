@@ -12,6 +12,7 @@ rust-version.workspace = true
 
 [dependencies]
 flatbuffers = { workspace = true }
+vortex-buffer = { path = "../vortex-buffer" }
 
 [lints]
 workspace = true
