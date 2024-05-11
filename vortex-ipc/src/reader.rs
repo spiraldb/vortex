@@ -563,10 +563,10 @@ mod tests {
     #[test]
     fn test_write_read_bitpacked() {
         // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
-        let uncompressed = PrimitiveArray::from((0i64..3_000).rev().collect_vec());
+        let uncompressed = PrimitiveArray::from((0u64..3_000).rev().collect_vec());
         let packed = BitPackedArray::encode(uncompressed.array(), 5).unwrap();
 
-        let expected = &[2989i64, 2988, 2987, 2986];
+        let expected = &[2989u64, 2988, 2987, 2986];
         test_base_case(&packed.into_array(), expected, PrimitiveEncoding.id());
     }
 
