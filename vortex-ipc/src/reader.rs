@@ -1,6 +1,7 @@
 use std::io;
 use std::io::{BufReader, Read};
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use arrow_buffer::Buffer as ArrowBuffer;
 use fallible_iterator::FallibleIterator;
@@ -28,7 +29,7 @@ use crate::messages::SerdeContextDeserializer;
 pub struct StreamReader<R: Read> {
     read: R,
     messages: StreamMessageReader<R>,
-    ctx: ViewContext,
+    ctx: Arc<ViewContext>,
 }
 
 impl<R: Read> StreamReader<BufReader<R>> {
@@ -58,7 +59,7 @@ impl<R: Read> StreamReader<R> {
         Ok(Self {
             read,
             messages,
-            ctx: view_ctx,
+            ctx: view_ctx.into(),
         })
     }
 
@@ -111,7 +112,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
         .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
         Ok(Some(StreamArrayReader {
-            ctx: &self.ctx,
+            ctx: self.ctx.clone(),
             read: &mut self.read,
             messages: &mut self.messages,
             dtype,
@@ -123,7 +124,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
 
 #[allow(dead_code)]
 pub struct StreamArrayReader<'a, R: Read> {
-    ctx: &'a ViewContext,
+    ctx: Arc<ViewContext>,
     read: &'a mut R,
     messages: &'a mut StreamMessageReader<R>,
     dtype: DType,
@@ -278,8 +279,15 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
             .unwrap()
             .array()
             .unwrap();
+        // FIXME(ngates): extract the flatbuffer directly
+        let flatbuffer = Buffer::from(col_array._tab.buf().to_vec());
 
-        let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
+        let view = ArrayView::try_new(
+            self.ctx.clone(),
+            self.dtype.clone(),
+            flatbuffer,
+            self.buffers.clone(),
+        )?;
 
         // Validate it
         view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;

@@ -1,4 +1,3 @@
-use core::slice::SlicePattern;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -54,7 +53,8 @@ impl<'v> ArrayView<'v> {
         flatbuffer: Buffer,
         buffers: Vec<Buffer>,
     ) -> VortexResult<Self> {
-        let array = root::<fb::Array>(flatbuffer.as_slice())?;
+        let array = root::<fb::Array>(flatbuffer.as_ref())?;
+        let flatbuffer_loc = array._tab.loc();
 
         let encoding = ctx
             .find_encoding(array.encoding())
@@ -71,9 +71,10 @@ impl<'v> ArrayView<'v> {
             encoding,
             dtype,
             flatbuffer,
-            flatbuffer_loc: array._tab.loc(),
+            flatbuffer_loc,
             buffers,
             ctx,
+            _phantom: Default::default(),
         };
 
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
@@ -86,7 +87,7 @@ impl<'v> ArrayView<'v> {
 
     pub fn flatbuffer(&self) -> fb::Array {
         unsafe {
-            let tab = flatbuffers::Table::new(self.flatbuffer.as_slice(), self.flatbuffer_loc);
+            let tab = flatbuffers::Table::new(self.flatbuffer.as_ref(), self.flatbuffer_loc);
             fb::Array::init_from_table(tab)
         }
     }
@@ -99,8 +100,8 @@ impl<'v> ArrayView<'v> {
         &self.dtype
     }
 
-    pub fn metadata(&self) -> Option<&'v [u8]> {
-        self.array.metadata().map(|m| m.bytes())
+    pub fn metadata(&self) -> Option<&[u8]> {
+        self.flatbuffer().metadata().map(|m| m.bytes())
     }
 
     // TODO(ngates): should we separate self and DType lifetimes? Should DType be cloned?
@@ -110,7 +111,7 @@ impl<'v> ArrayView<'v> {
         // Figure out how many buffers to skip...
         // We store them depth-first.
         let buffer_offset = self
-            .array
+            .flatbuffer()
             .children()?
             .iter()
             .take(idx)
@@ -118,19 +119,19 @@ impl<'v> ArrayView<'v> {
             .sum();
         let buffer_count = Self::cumulative_nbuffers(child);
 
-        Some(
-            Self::try_new(
-                self.ctx,
-                dtype,
-                child,
-                &self.buffers[buffer_offset..][0..buffer_count],
-            )
-            .unwrap(),
-        )
+        Some(Self {
+            encoding: self.encoding,
+            dtype: dtype.clone(),
+            flatbuffer: self.flatbuffer.clone(),
+            flatbuffer_loc: child._tab.loc(),
+            buffers: self.buffers[buffer_offset..][0..buffer_count].to_vec(),
+            ctx: self.ctx.clone(),
+            _phantom: Default::default(),
+        })
     }
 
-    fn array_child(&self, idx: usize) -> Option<fb::Array<'v>> {
-        let children = self.array.children()?;
+    fn array_child(&self, idx: usize) -> Option<fb::Array> {
+        let children = self.flatbuffer().children()?;
         if idx < children.len() {
             Some(children.get(idx))
         } else {
@@ -140,7 +141,7 @@ impl<'v> ArrayView<'v> {
 
     /// Whether the current Array makes use of a buffer
     pub fn has_buffer(&self) -> bool {
-        self.array.has_buffer()
+        self.flatbuffer().has_buffer()
     }
 
     /// The number of buffers used by the current Array and all its children.
@@ -152,7 +153,7 @@ impl<'v> ArrayView<'v> {
         nbuffers
     }
 
-    pub fn buffer(&self) -> Option<&'v Buffer> {
+    pub fn buffer(&self) -> Option<&Buffer> {
         self.has_buffer().then(|| &self.buffers[0])
     }
 
@@ -165,23 +166,27 @@ impl Statistics for ArrayView<'_> {
     fn get(&self, stat: Stat) -> Option<Scalar> {
         match stat {
             Stat::Max => {
-                let max = self.array.stats()?.max();
+                let max = self.flatbuffer().stats()?.max();
                 max.and_then(|v| ScalarValue::try_from(v).ok())
                     .map(|v| Scalar::new(self.dtype.clone(), v))
             }
             Stat::Min => {
-                let min = self.array.stats()?.min();
+                let min = self.flatbuffer().stats()?.min();
                 min.and_then(|v| ScalarValue::try_from(v).ok())
                     .map(|v| Scalar::new(self.dtype.clone(), v))
             }
-            Stat::IsConstant => self.array.stats()?.is_constant().map(bool::into),
-            Stat::IsSorted => self.array.stats()?.is_sorted().map(bool::into),
-            Stat::IsStrictSorted => self.array.stats()?.is_strict_sorted().map(bool::into),
-            Stat::RunCount => self.array.stats()?.run_count().map(u64::into),
-            Stat::TrueCount => self.array.stats()?.true_count().map(u64::into),
-            Stat::NullCount => self.array.stats()?.null_count().map(u64::into),
+            Stat::IsConstant => self.flatbuffer().stats()?.is_constant().map(bool::into),
+            Stat::IsSorted => self.flatbuffer().stats()?.is_sorted().map(bool::into),
+            Stat::IsStrictSorted => self
+                .flatbuffer()
+                .stats()?
+                .is_strict_sorted()
+                .map(bool::into),
+            Stat::RunCount => self.flatbuffer().stats()?.run_count().map(u64::into),
+            Stat::TrueCount => self.flatbuffer().stats()?.true_count().map(u64::into),
+            Stat::NullCount => self.flatbuffer().stats()?.null_count().map(u64::into),
             Stat::BitWidthFreq => self
-                .array
+                .flatbuffer()
                 .stats()?
                 .bit_width_freq()
                 .map(|v| {
@@ -196,7 +201,7 @@ impl Statistics for ArrayView<'_> {
                     )
                 }),
             Stat::TrailingZeroFreq => self
-                .array
+                .flatbuffer()
                 .stats()?
                 .trailing_zero_freq()
                 .map(|v| v.iter().collect_vec())
