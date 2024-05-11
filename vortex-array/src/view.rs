@@ -110,6 +110,9 @@ impl<'v> ArrayView<'v> {
     // TODO(ngates): should we separate self and DType lifetimes? Should DType be cloned?
     pub fn child(&'v self, idx: usize, dtype: &'v DType) -> Option<ArrayView<'v>> {
         let child = self.array_child(idx)?;
+        let flatbuffer_loc = child._tab.loc();
+
+        let encoding = self.ctx.find_encoding(child.encoding())?;
 
         // Figure out how many buffers to skip...
         // We store them depth-first.
@@ -123,10 +126,10 @@ impl<'v> ArrayView<'v> {
         let buffer_count = Self::cumulative_nbuffers(child);
 
         Some(Self {
-            encoding: self.encoding,
+            encoding,
             dtype: dtype.clone(),
             flatbuffer: self.flatbuffer.clone(),
-            flatbuffer_loc: child._tab.loc(),
+            flatbuffer_loc,
             buffers: self.buffers[buffer_offset..][0..buffer_count].to_vec(),
             ctx: self.ctx.clone(),
             _phantom: Default::default(),

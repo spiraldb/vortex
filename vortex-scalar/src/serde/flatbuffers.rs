@@ -18,6 +18,7 @@ impl TryFrom<fb::Scalar<'_>> for Scalar {
         let dtype = DType::try_from(dtype)?;
 
         // TODO(ngates): what's the point of all this if I have to copy the data into a Vec?
+        // FIXME(ngates): ah, I think we want `bytes()`.
         let flex_value = value.value().flex().iter().collect_vec();
         let reader = flexbuffers::Reader::get_root(flex_value.as_slice())?;
         let value = ScalarValue::deserialize(reader)?;
