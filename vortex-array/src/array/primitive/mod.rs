@@ -1,3 +1,5 @@
+use std::mem::size_of;
+
 use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use num_traits::AsPrimitive;
@@ -110,7 +112,15 @@ impl PrimitiveArray<'_> {
             .into_buffer()
             .into_vec()
             .unwrap_or_else(|b| Vec::from(b.as_ref()));
-        unsafe { std::mem::transmute::<_, Vec<T>>(bytes) }
+
+        unsafe {
+            let mut bytes = std::mem::ManuallyDrop::new(bytes);
+            Vec::from_raw_parts(
+                bytes.as_mut_ptr() as *mut T,
+                bytes.len() / size_of::<T>(),
+                bytes.capacity() / size_of::<T>(),
+            )
+        }
     }
 
     pub fn reinterpret_cast(&self, ptype: PType) -> Self {
