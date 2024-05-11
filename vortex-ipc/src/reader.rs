@@ -272,20 +272,18 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
         self.read.skip(chunk_msg.buffer_size() - offset)?;
 
         // After reading the buffers we're now able to load the next message.
-        let col_array = self
-            .messages
-            .next(self.read)?
-            .header_as_chunk()
-            .unwrap()
-            .array()
-            .unwrap();
-        // FIXME(ngates): extract the flatbuffer directly
-        let flatbuffer = Buffer::from(col_array._tab.buf().to_vec());
+        let flatbuffer = self.messages.next_raw(self.read)?;
 
         let view = ArrayView::try_new(
             self.ctx.clone(),
             self.dtype.clone(),
             flatbuffer,
+            |flatbuffer| {
+                root::<Message>(flatbuffer)
+                    .map_err(VortexError::from)
+                    .map(|msg| msg.header_as_chunk().unwrap())
+                    .and_then(|chunk| chunk.array().ok_or(vortex_err!("Chunk missing Array")))
+            },
             self.buffers.clone(),
         )?;
 
@@ -342,6 +340,17 @@ impl<R: Read> StreamMessageReader<R> {
         }
         // The message has been validated by the next() call.
         Some(unsafe { root_unchecked::<Message>(&self.message) })
+    }
+
+    pub fn next_raw(&mut self, read: &mut R) -> VortexResult<Buffer> {
+        if self.finished {
+            panic!("StreamMessageReader is finished - should've checked peek!");
+        }
+        std::mem::swap(&mut self.prev_message, &mut self.message);
+        if !self.load_next_message(read)? {
+            self.finished = true;
+        }
+        Ok(Buffer::from(self.prev_message.clone()))
     }
 
     pub fn next(&mut self, read: &mut R) -> VortexResult<Message> {

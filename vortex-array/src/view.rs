@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use enum_iterator::all;
-use flatbuffers::root;
 use itertools::Itertools;
 use log::warn;
 use vortex_buffer::Buffer;
@@ -47,13 +46,17 @@ impl<'a> Debug for ArrayView<'a> {
 }
 
 impl<'v> ArrayView<'v> {
-    pub fn try_new(
+    pub fn try_new<F>(
         ctx: Arc<ViewContext>,
         dtype: DType,
         flatbuffer: Buffer,
+        flatbuffer_init: F,
         buffers: Vec<Buffer>,
-    ) -> VortexResult<Self> {
-        let array = root::<fb::Array>(flatbuffer.as_ref())?;
+    ) -> VortexResult<Self>
+    where
+        F: FnOnce(&[u8]) -> VortexResult<fb::Array>,
+    {
+        let array = flatbuffer_init(flatbuffer.as_ref())?;
         let flatbuffer_loc = array._tab.loc();
 
         let encoding = ctx
