@@ -10,12 +10,12 @@ use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
-use vortex_dtype::{match_each_integer_ptype, NativePType};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_dtype::{match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType};
+use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::bitpacking::compress::unpack_single;
-use crate::{match_integers_by_width, unpack_single_primitive, BitPackedArray};
+use crate::{unpack_single_primitive, BitPackedArray};
 
 mod slice;
 
@@ -66,7 +66,7 @@ impl TakeFn for BitPackedArray<'_> {
         }
 
         let indices = indices.clone().flatten_primitive()?;
-        let taken = match_integers_by_width!(ptype, |$T| {
+        let taken = match_each_unsigned_integer_ptype!(ptype, |$T| {
             PrimitiveArray::from_vec(take_primitive::<$T>(self, &indices)?, taken_validity)
         });
         Ok(taken.reinterpret_cast(ptype).into_array())

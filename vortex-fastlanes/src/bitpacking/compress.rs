@@ -8,11 +8,13 @@ use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray, ToStatic};
 use vortex_dtype::PType::U8;
-use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
+use vortex_dtype::{
+    match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
+};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::{match_integers_by_width, BitPackedArray, BitPackedEncoding, OwnedBitPackedArray};
+use crate::{BitPackedArray, BitPackedEncoding, OwnedBitPackedArray};
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -118,9 +120,9 @@ pub(crate) fn bitpack_encode(
 
 pub(crate) fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<OwnedArray> {
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
-    // TODO(ngates): we should implement this using a vortex cast to centralize this hack.
-    let bytes = match_integers_by_width!(parray.ptype(), |$P| {
-        bitpack_primitive(parray.buffer().typed_data::<$P>(), bit_width)
+    let parray = parray.reinterpret_cast(parray.ptype().to_unsigned());
+    let bytes = match_each_unsigned_integer_ptype!(parray.ptype(), |$P| {
+        bitpack_primitive(parray.typed_data::<$P>(), bit_width)
     });
     Ok(PrimitiveArray::from(bytes).into_array())
 }
@@ -163,7 +165,7 @@ fn bitpack_patches(
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
         let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
-        for (i, v) in parray.buffer().typed_data::<$T>().iter().enumerate() {
+        for (i, v) in parray.typed_data::<$T>().iter().enumerate() {
             if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width {
                 indices.push(i as u64);
                 values.push(*v);
@@ -185,7 +187,7 @@ pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray<'a>> {
     let encoded = cast(&array.packed(), U8.into())?.flatten_primitive()?;
     let ptype: PType = array.dtype().try_into()?;
 
-    let mut unpacked = match_integers_by_width!(ptype, |$P| {
+    let mut unpacked = match_each_unsigned_integer_ptype!(ptype, |$P| {
         PrimitiveArray::from_vec(
             unpack_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, offset, length),
             array.validity(),
@@ -287,7 +289,7 @@ pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResul
     let ptype: PType = array.dtype().try_into()?;
     let index_in_encoded = index + array.offset();
 
-    let scalar: Scalar = match_integers_by_width!(ptype, |$P| {
+    let scalar: Scalar = match_each_unsigned_integer_ptype!(ptype, |$P| {
         unsafe {
             unpack_single_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, index_in_encoded).map(|v| v.into())
         }
