@@ -139,7 +139,7 @@ impl ScalarAtFn for VarBinArray<'_> {
             Ok(varbin_scalar(
                 self.bytes_at(index)?
                     // TODO(ngates): update to use buffer when we refactor scalars.
-                    .into_vec::<u8>()
+                    .into_vec()
                     .unwrap_or_else(|b| b.as_ref().to_vec()),
                 self.dtype(),
             ))

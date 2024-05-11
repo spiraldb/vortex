@@ -216,7 +216,7 @@ mod test {
         .unwrap();
 
         assert_eq!(
-            decoded.buffer().typed_data::<i32>(),
+            decoded.typed_data::<i32>(),
             vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3].as_slice()
         );
         assert_eq!(
