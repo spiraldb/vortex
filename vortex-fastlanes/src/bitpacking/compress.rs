@@ -120,7 +120,7 @@ pub(crate) fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     // TODO(ngates): we should implement this using a vortex cast to centralize this hack.
     let bytes = match_integers_by_width!(parray.ptype(), |$P| {
-        bitpack_primitive(parray.buffer().typed_data::<$P>(), bit_width)
+        bitpack_primitive(parray.typed_data::<$P>(), bit_width)
     });
     Ok(PrimitiveArray::from(bytes).into_array())
 }
@@ -163,7 +163,7 @@ fn bitpack_patches(
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
         let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
-        for (i, v) in parray.buffer().typed_data::<$T>().iter().enumerate() {
+        for (i, v) in parray.typed_data::<$T>().iter().enumerate() {
             if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width {
                 indices.push(i as u64);
                 values.push(*v);

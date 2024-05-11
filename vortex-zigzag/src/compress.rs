@@ -76,16 +76,10 @@ where
 #[allow(dead_code)]
 pub fn zigzag_decode<'a>(parray: &'a PrimitiveArray<'a>) -> PrimitiveArray<'a> {
     match parray.ptype() {
-        PType::U8 => zigzag_decode_primitive::<i8>(parray.buffer().typed_data(), parray.validity()),
-        PType::U16 => {
-            zigzag_decode_primitive::<i16>(parray.buffer().typed_data(), parray.validity())
-        }
-        PType::U32 => {
-            zigzag_decode_primitive::<i32>(parray.buffer().typed_data(), parray.validity())
-        }
-        PType::U64 => {
-            zigzag_decode_primitive::<i64>(parray.buffer().typed_data(), parray.validity())
-        }
+        PType::U8 => zigzag_decode_primitive::<i8>(parray.typed_data(), parray.validity()),
+        PType::U16 => zigzag_decode_primitive::<i16>(parray.typed_data(), parray.validity()),
+        PType::U32 => zigzag_decode_primitive::<i32>(parray.typed_data(), parray.validity()),
+        PType::U64 => zigzag_decode_primitive::<i64>(parray.typed_data(), parray.validity()),
         _ => panic!("Unsupported ptype {}", parray.ptype()),
     }
 }

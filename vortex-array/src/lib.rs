@@ -1,3 +1,5 @@
+extern crate core;
+
 pub mod accessor;
 pub mod array;
 pub mod arrow;
