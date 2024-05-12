@@ -196,6 +196,7 @@ impl<T: AsArray> ArrayDType for T {
         match self.as_array_ref() {
             Array::Data(d) => d.dtype(),
             Array::View(v) => v.dtype(),
+            Array::Phantom(_) => unreachable!(),
         }
     }
 }
@@ -205,6 +206,7 @@ impl<T: AsArray> ArrayStatistics for T {
         match self.as_array_ref() {
             Array::Data(d) => d.statistics(),
             Array::View(v) => v.statistics(),
+            Array::Phantom(_) => unreachable!(),
         }
     }
 }
@@ -253,6 +255,7 @@ impl<'a, T: IntoArray<'a> + ArrayEncodingRef + ArrayStatistics + GetArrayMetadat
                 )
                 .unwrap()
             }
+            Array::Phantom(_) => unreachable!(),
         }
     }
 }

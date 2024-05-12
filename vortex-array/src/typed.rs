@@ -58,6 +58,7 @@ impl<'a, D: ArrayDef> TryFrom<Array<'a>> for TypedArray<'a, D> {
                 .unwrap()
                 .clone(),
             Array::View(v) => D::Metadata::try_deserialize_metadata(v.metadata())?,
+            Array::Phantom(_) => unreachable!(),
         };
         Ok(TypedArray { array, metadata })
     }

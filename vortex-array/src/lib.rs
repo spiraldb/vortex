@@ -64,7 +64,8 @@ pub mod flatbuffers {
 #[derive(Debug, Clone)]
 pub enum Array<'v> {
     Data(ArrayData),
-    View(ArrayView<'v>),
+    View(ArrayView),
+    Phantom(&'v ()),
 }
 
 pub type OwnedArray = Array<'static>;
@@ -74,6 +75,7 @@ impl Array<'_> {
         match self {
             Array::Data(d) => d.encoding(),
             Array::View(v) => v.encoding(),
+            Array::Phantom(_) => unreachable!(),
         }
     }
 
@@ -93,6 +95,7 @@ impl Array<'_> {
         match self {
             Array::Data(d) => d.child(idx, dtype).cloned().map(Array::Data),
             Array::View(v) => v.child(idx, dtype).map(Array::View),
+            Array::Phantom(_) => unreachable!(),
         }
     }
 
@@ -100,6 +103,7 @@ impl Array<'_> {
         match self {
             Array::Data(d) => d.buffer(),
             Array::View(v) => v.buffer(),
+            Array::Phantom(_) => unreachable!(),
         }
     }
 }
@@ -109,6 +113,7 @@ impl<'a> Array<'a> {
         match self {
             Array::Data(d) => d.into_buffer(),
             Array::View(v) => v.buffer().cloned(),
+            Array::Phantom(_) => unreachable!(),
         }
     }
 }
@@ -215,6 +220,7 @@ impl Display for Array<'_> {
         let prefix = match self {
             Array::Data(_) => "",
             Array::View(_) => "$",
+            Array::Phantom(_) => unreachable!(),
         };
         write!(
             f,
@@ -232,6 +238,7 @@ impl IntoArrayData for Array<'_> {
         match self {
             Array::Data(d) => d,
             Array::View(_) => self.with_dyn(|a| a.to_array_data()),
+            Array::Phantom(_) => unreachable!(),
         }
     }
 }

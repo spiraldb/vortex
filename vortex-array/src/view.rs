@@ -1,5 +1,4 @@
 use std::fmt::{Debug, Formatter};
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use enum_iterator::all;
@@ -17,7 +16,7 @@ use crate::Context;
 use crate::{Array, IntoArray, ToArray};
 
 #[derive(Clone)]
-pub struct ArrayView<'v> {
+pub struct ArrayView {
     encoding: EncodingRef,
     dtype: DType,
     flatbuffer: Buffer,
@@ -28,12 +27,9 @@ pub struct ArrayView<'v> {
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
     //  which fb:Array children to skip when calculating how to slice into buffers.
-
-    // FIXME(ngates): while we refactor, leave the lifetime parameter in place.
-    _phantom: PhantomData<&'v ()>,
 }
 
-impl<'a> Debug for ArrayView<'a> {
+impl Debug for ArrayView {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ArrayView")
             .field("encoding", &self.encoding)
@@ -45,7 +41,7 @@ impl<'a> Debug for ArrayView<'a> {
     }
 }
 
-impl<'v> ArrayView<'v> {
+impl ArrayView {
     pub fn try_new<F>(
         ctx: Arc<ViewContext>,
         dtype: DType,
@@ -77,7 +73,6 @@ impl<'v> ArrayView<'v> {
             flatbuffer_loc,
             buffers,
             ctx,
-            _phantom: Default::default(),
         };
 
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
@@ -108,7 +103,7 @@ impl<'v> ArrayView<'v> {
     }
 
     // TODO(ngates): should we separate self and DType lifetimes? Should DType be cloned?
-    pub fn child(&'v self, idx: usize, dtype: &'v DType) -> Option<ArrayView<'v>> {
+    pub fn child(&self, idx: usize, dtype: &DType) -> Option<ArrayView> {
         let child = self.array_child(idx)?;
         let flatbuffer_loc = child._tab.loc();
 
@@ -132,7 +127,6 @@ impl<'v> ArrayView<'v> {
             flatbuffer_loc,
             buffers: self.buffers[buffer_offset..][0..buffer_count].to_vec(),
             ctx: self.ctx.clone(),
-            _phantom: Default::default(),
         })
     }
 
@@ -168,7 +162,7 @@ impl<'v> ArrayView<'v> {
     }
 }
 
-impl Statistics for ArrayView<'_> {
+impl Statistics for ArrayView {
     fn get(&self, stat: Stat) -> Option<Scalar> {
         match stat {
             Stat::Max => {
@@ -248,13 +242,13 @@ impl Statistics for ArrayView<'_> {
     }
 }
 
-impl ToArray for ArrayView<'_> {
+impl ToArray for ArrayView {
     fn to_array(&self) -> Array {
         Array::View(self.clone())
     }
 }
 
-impl<'v> IntoArray<'v> for ArrayView<'v> {
+impl<'v> IntoArray<'v> for ArrayView {
     fn into_array(self) -> Array<'v> {
         Array::View(self)
     }
