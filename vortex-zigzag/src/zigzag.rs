@@ -69,10 +69,7 @@ impl AcceptArrayVisitor for ZigZagArray {
 impl ArrayStatisticsCompute for ZigZagArray {}
 
 impl ArrayFlatten for ZigZagArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         todo!("ZigZagArray::flatten")
     }
 }

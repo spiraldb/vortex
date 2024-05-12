@@ -95,10 +95,7 @@ impl DeltaArray {
 }
 
 impl ArrayFlatten for DeltaArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         decompress(self).map(Flattened::Primitive)
     }
 }

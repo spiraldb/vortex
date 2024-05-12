@@ -105,10 +105,7 @@ impl FromIterator<OwnedArray> for OwnedChunkedArray {
 }
 
 impl ArrayFlatten for ChunkedArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         Ok(Flattened::Chunked(self))
     }
 }

@@ -46,10 +46,7 @@ impl DictArray {
 }
 
 impl ArrayFlatten for DictArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         take(&self.values(), &self.codes())?.flatten()
     }
 }

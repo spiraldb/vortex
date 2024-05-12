@@ -87,10 +87,7 @@ impl ArrayValidity for RoaringBoolArray {
 }
 
 impl ArrayFlatten for RoaringBoolArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         // TODO(ngates): benchmark the fastest conversion from BitMap.
         //  Via bitset requires two copies.
         let bitset = self

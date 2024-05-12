@@ -10,10 +10,7 @@ use crate::validity::Validity;
 use crate::{ArrayFlatten, ArrayTrait, Flattened};
 
 impl ArrayFlatten for SparseArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         // Resolve our indices into a vector of usize applying the offset
         let indices = self.resolved_indices();
 
@@ -38,7 +35,7 @@ fn flatten_sparse_values<T: NativePType + for<'a> TryFrom<&'a Scalar, Error = Vo
     len: usize,
     fill_value: &Scalar,
     mut validity: BooleanBufferBuilder,
-) -> VortexResult<Flattened<'static>> {
+) -> VortexResult<Flattened> {
     let primitive_fill = if fill_value.is_null() {
         T::default()
     } else {

@@ -182,10 +182,7 @@ impl<T: NativePType> IntoArray for Vec<T> {
 }
 
 impl ArrayFlatten for PrimitiveArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         Ok(Flattened::Primitive(self))
     }
 }

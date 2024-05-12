@@ -81,10 +81,7 @@ impl ArrayValidity for RoaringIntArray {
 }
 
 impl ArrayFlatten for RoaringIntArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         todo!()
     }
 }

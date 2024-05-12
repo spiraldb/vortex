@@ -50,11 +50,8 @@ impl ExtensionArray {
 }
 
 impl ArrayFlatten for ExtensionArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
-        todo!()
+    fn flatten(self) -> VortexResult<Flattened> {
+        Ok(Flattened::Extension(self))
     }
 }
 

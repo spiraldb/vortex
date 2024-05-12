@@ -11,7 +11,7 @@ use crate::encoding::ArrayEncoding;
 use crate::{Array, IntoArray};
 
 /// The set of encodings that can be converted to Arrow with zero-copy.
-pub enum Flattened<'a> {
+pub enum Flattened {
     Bool(BoolArray),
     Chunked(ChunkedArray),
     Primitive(PrimitiveArray),
@@ -19,17 +19,14 @@ pub enum Flattened<'a> {
     VarBin(VarBinArray),
     VarBinView(VarBinViewArray),
     Extension(ExtensionArray),
-    Phantom(&'a ()),
 }
 
 pub trait ArrayFlatten {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a;
+    fn flatten(self) -> VortexResult<Flattened>;
 }
 
 impl<'a> Array {
-    pub fn flatten(self) -> VortexResult<Flattened<'a>> {
+    pub fn flatten(self) -> VortexResult<Flattened> {
         ArrayEncoding::flatten(self.encoding(), self)
     }
 
@@ -46,7 +43,7 @@ impl<'a> Array {
     }
 }
 
-impl<'a> IntoArray for Flattened<'a> {
+impl IntoArray for Flattened {
     fn into_array(self) -> Array {
         match self {
             Flattened::Bool(a) => a.into_array(),
@@ -56,7 +53,6 @@ impl<'a> IntoArray for Flattened<'a> {
             Flattened::VarBin(a) => a.into_array(),
             Flattened::Extension(a) => a.into_array(),
             Flattened::VarBinView(a) => a.into_array(),
-            Flattened::Phantom(_) => unreachable!(),
         }
     }
 }

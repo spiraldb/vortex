@@ -93,10 +93,7 @@ impl ArrayTrait for BoolArray {
 }
 
 impl ArrayFlatten for BoolArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         Ok(Flattened::Bool(self))
     }
 }

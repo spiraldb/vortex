@@ -144,7 +144,7 @@ macro_rules! impl_encoding {
                     $Name::ID
                 }
 
-                fn flatten<'a>(&self, array: Array) -> VortexResult<Flattened<'a>> {
+                fn flatten(&self, array: Array) -> VortexResult<Flattened> {
                     <Self as ArrayEncodingExt>::flatten(array)
                 }
 

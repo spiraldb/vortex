@@ -112,10 +112,7 @@ impl ArrayValidity for REEArray {
 }
 
 impl ArrayFlatten for REEArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         let pends = self.ends().flatten_primitive()?;
         let pvalues = self.values().flatten_primitive()?;
         ree_decode(&pends, &pvalues, self.validity(), self.offset(), self.len())

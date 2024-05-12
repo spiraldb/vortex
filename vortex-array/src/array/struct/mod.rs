@@ -99,10 +99,7 @@ impl StructArray {
 }
 
 impl ArrayFlatten for StructArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         Ok(Flattened::Struct(StructArray::try_new(
             self.names().clone(),
             (0..self.nfields())

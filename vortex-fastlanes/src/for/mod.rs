@@ -62,10 +62,7 @@ impl ArrayValidity for FoRArray {
 }
 
 impl ArrayFlatten for FoRArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         decompress(self).map(Flattened::Primitive)
     }
 }

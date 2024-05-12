@@ -129,10 +129,7 @@ impl BitPackedArray {
 }
 
 impl ArrayFlatten for BitPackedArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         unpack(self).map(Flattened::Primitive)
     }
 }

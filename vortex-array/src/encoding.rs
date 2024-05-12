@@ -39,7 +39,7 @@ pub trait ArrayEncoding: 'static + Sync + Send + Debug {
     fn id(&self) -> EncodingId;
 
     /// Flatten the given array.
-    fn flatten<'a>(&self, array: Array) -> VortexResult<Flattened<'a>>;
+    fn flatten(&self, array: Array) -> VortexResult<Flattened>;
 
     /// Unwrap the provided array into an implementation of ArrayTrait
     #[allow(clippy::needless_lifetimes)]
@@ -69,10 +69,7 @@ impl Hash for dyn ArrayEncoding + '_ {
 pub trait ArrayEncodingExt {
     type D: ArrayDef;
 
-    fn flatten<'a>(array: Array) -> VortexResult<Flattened<'a>>
-    where
-        <Self as ArrayEncodingExt>::D: 'a,
-    {
+    fn flatten(array: Array) -> VortexResult<Flattened> {
         let typed = <<Self::D as ArrayDef>::Array as TryFrom<Array>>::try_from(array)?;
         ArrayFlatten::flatten(typed)
     }

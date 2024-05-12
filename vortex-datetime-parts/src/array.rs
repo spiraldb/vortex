@@ -80,10 +80,7 @@ impl DateTimePartsArray {
 }
 
 impl ArrayFlatten for DateTimePartsArray {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+    fn flatten(self) -> VortexResult<Flattened> {
         // TODO(ngates): flatten into vortex.localdatetime or appropriate per dtype
         todo!()
     }
