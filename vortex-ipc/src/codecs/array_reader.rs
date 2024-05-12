@@ -1,12 +1,14 @@
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::Poll;
 
+use flatbuffers::root;
 use futures_util::Stream;
 use pin_project::pin_project;
 use vortex::{Array, ArrayView, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexResult};
 
 use crate::codecs::message_reader::MessageReader;
 
@@ -53,7 +55,7 @@ where
 }
 
 pub(crate) struct MessageArrayReader<'a, M: MessageReader> {
-    ctx: ViewContext,
+    ctx: Arc<ViewContext>,
     dtype: DType,
     messages: &'a mut M,
 
@@ -64,7 +66,7 @@ pub(crate) struct MessageArrayReader<'a, M: MessageReader> {
 
 impl<'m, M: MessageReader> MessageArrayReader<'m, M> {
     /// Construct an ArrayReader with a message stream containing chunk messages.
-    pub fn new(ctx: ViewContext, dtype: DType, messages: &'m mut M) -> Self {
+    pub fn new(ctx: Arc<ViewContext>, dtype: DType, messages: &'m mut M) -> Self {
         Self {
             ctx,
             dtype,
@@ -104,16 +106,22 @@ impl<M: MessageReader> MessageArrayReader<'_, M> {
         self.buffers = self.messages.buffers().await?;
 
         // After reading the buffers we're now able to load the next message.
-        let col_array = self
-            .messages
-            .next()
-            .await?
-            .header_as_chunk()
-            .unwrap()
-            .array()
-            .unwrap();
+        let flatbuffer = self.messages.next_raw().await?;
 
-        let view = ArrayView::try_new(&self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
+        let view = ArrayView::try_new(
+            self.ctx.clone(),
+            // TODO(ngates): we should Rc the DType.
+            self.dtype.clone(),
+            flatbuffer,
+            |flatbuffer| {
+                root::<crate::flatbuffers::ipc::Message>(flatbuffer)
+                    .map_err(VortexError::from)
+                    .map(|msg| msg.header_as_chunk().unwrap())
+                    .and_then(|chunk| chunk.array().ok_or(vortex_err!("Chunk missing Array")))
+            },
+            // TODO(ngates): no point storing buffers on self (unless we try and reuse them)
+            self.buffers.clone(),
+        )?;
 
         // Validate it
         view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;

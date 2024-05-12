@@ -13,6 +13,7 @@ use crate::flatbuffers::ipc::Message;
 pub trait MessageReader {
     fn peek(&self) -> Option<Message>;
     fn next(&mut self) -> impl Future<Output = VortexResult<Message>>;
+    fn next_raw(&mut self) -> impl Future<Output = VortexResult<Buffer>>;
     fn read_into(
         &mut self,
         buffers: Vec<Vec<u8>>,
