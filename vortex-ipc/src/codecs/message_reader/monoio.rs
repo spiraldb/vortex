@@ -3,9 +3,8 @@
 
 use bytes::BytesMut;
 use flatbuffers::{root, root_unchecked};
-use monoio::buf::IoBufMut;
+use monoio::buf::{IoBufMut, IoVecBufMut, VecBuf};
 use monoio::io::{AsyncReadRent, AsyncReadRentExt};
-use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
 
 use crate::codecs::message_reader::MessageReader;
@@ -77,32 +76,12 @@ impl<R: AsyncReadRent + Unpin> MessageReader for MonoIoMessageReader<R> {
         Ok(unsafe { root_unchecked::<Message>(&self.prev_message) })
     }
 
-    async fn buffers(&mut self) -> VortexResult<Vec<Buffer>> {
-        let Some(chunk_msg) = unsafe { root_unchecked::<Message>(&self.message) }.header_as_chunk()
-        else {
-            // We could return an error here?
-            return Ok(Vec::new());
-        };
-
-        // Read all the column's buffers
-        let mut offset = 0;
-        let mut buffers = Vec::with_capacity(chunk_msg.buffers().unwrap_or_default().len());
-        for buffer in chunk_msg.buffers().unwrap_or_default().iter() {
-            let _skip = buffer.offset() - offset;
-            self.read.skip(buffer.offset() - offset).await?;
-
-            // TODO(ngates): read into a single buffer, then Arc::clone and slice
-            let bytes = BytesMut::zeroed(buffer.length() as usize);
-            let bytes = self.read.read_exact_into(bytes).await?;
-            buffers.push(Buffer::from(bytes.freeze()));
-
-            offset = buffer.offset() + buffer.length();
-        }
-
-        // Consume any remaining padding after the final buffer.
-        self.read.skip(chunk_msg.buffer_size() - offset).await?;
-
-        Ok(buffers)
+    async fn read_into(&mut self, buffers: Vec<Vec<u8>>) -> VortexResult<Vec<Vec<u8>>> {
+        Ok(self
+            .read
+            .readv_exact_into(VecBuf::from(buffers))
+            .await?
+            .into())
     }
 }
 
@@ -115,11 +94,12 @@ trait AsyncReadRentMoreExt: AsyncReadRentExt {
         }
     }
 
-    async fn skip(&mut self, nbytes: u64) -> VortexResult<()> {
-        let _ = self
-            .read_exact_into(BytesMut::zeroed(nbytes as usize))
-            .await?;
-        Ok(())
+    /// Same as read_vectored_exact except unwraps the BufResult into a regular IO result.
+    async fn readv_exact_into<B: IoVecBufMut>(&mut self, buf: B) -> std::io::Result<B> {
+        match self.read_vectored_exact(buf).await {
+            (Ok(_), buf) => Ok(buf),
+            (Err(e), _) => Err(e),
+        }
     }
 }
 

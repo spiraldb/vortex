@@ -1,10 +1,10 @@
 #![cfg(feature = "futures")]
+
 use std::io;
 
 use bytes::BytesMut;
 use flatbuffers::{root, root_unchecked};
 use futures_util::{AsyncRead, AsyncReadExt};
-use vortex_buffer::Buffer;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::codecs::message_reader::MessageReader;
@@ -64,19 +64,6 @@ impl<R: AsyncRead + Unpin> AsyncReadMessageReader<R> {
     }
 }
 
-trait AsyncReadMoreExt: AsyncReadExt {
-    async fn skip(&mut self, nbytes: u64) -> VortexResult<()>
-    where
-        Self: Unpin,
-    {
-        // TODO(ngates): can we grab dev/null? At the very least we should do this in small buffers.
-        let mut bytes = BytesMut::zeroed(nbytes as usize);
-        self.read_exact(bytes.as_mut()).await?;
-        Ok(())
-    }
-}
-impl<R: AsyncReadExt> AsyncReadMoreExt for R {}
-
 impl<R: AsyncRead + Unpin> MessageReader for AsyncReadMessageReader<R> {
     fn peek(&self) -> Option<Message> {
         if self.finished {
@@ -97,32 +84,12 @@ impl<R: AsyncRead + Unpin> MessageReader for AsyncReadMessageReader<R> {
         Ok(unsafe { root_unchecked::<Message>(&self.prev_message) })
     }
 
-    async fn buffers(&mut self) -> VortexResult<Vec<Buffer>> {
-        let Some(chunk_msg) = unsafe { root_unchecked::<Message>(&self.message) }.header_as_chunk()
-        else {
-            // We could return an error here?
-            return Ok(Vec::new());
-        };
-
-        // Read all the column's buffers
-        let mut offset = 0;
-        let mut buffers = Vec::with_capacity(chunk_msg.buffers().unwrap_or_default().len());
-        for buffer in chunk_msg.buffers().unwrap_or_default().iter() {
-            let _skip = buffer.offset() - offset;
-            self.read.skip(buffer.offset() - offset).await?;
-
-            // TODO(ngates): read into a single buffer, then Arc::clone and slice
-            let mut bytes = BytesMut::zeroed(buffer.length() as usize);
-            self.read.read_exact(bytes.as_mut()).await?;
-            buffers.push(Buffer::from(bytes.freeze()));
-
-            offset = buffer.offset() + buffer.length();
+    async fn read_into(&mut self, mut buffers: Vec<Vec<u8>>) -> VortexResult<Vec<Vec<u8>>> {
+        // TODO(ngates): there is no read_vectored_exact for AsyncRead, so for now we'll
+        //  just read one-by-one
+        for buffer in buffers.iter_mut() {
+            self.read.read_exact(buffer).await?;
         }
-
-        // Consume any remaining padding after the final buffer.
-        let _buffer_size = chunk_msg.buffer_size();
-        self.read.skip(chunk_msg.buffer_size() - offset).await?;
-
         Ok(buffers)
     }
 }
