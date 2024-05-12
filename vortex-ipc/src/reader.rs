@@ -121,7 +121,6 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
     }
 }
 
-#[allow(dead_code)]
 pub struct StreamArrayReader<'a, R: Read> {
     ctx: &'a ViewContext,
     read: &'a mut R,

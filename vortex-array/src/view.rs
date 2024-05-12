@@ -230,7 +230,7 @@ impl<'v> IntoArray<'v> for ArrayView<'v> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ViewContext {
     encodings: Vec<EncodingRef>,
 }

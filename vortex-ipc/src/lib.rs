@@ -29,6 +29,7 @@ pub mod flatbuffers {
     }
 }
 
+pub mod codecs;
 pub mod iter;
 mod messages;
 pub mod reader;
