@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pin_project::pin_project;
 use vortex::{Context, ViewContext};
 use vortex_dtype::DType;
@@ -10,13 +12,13 @@ use crate::messages::SerdeContextDeserializer;
 /// An IPC reader is used to emit arrays from a stream of Vortex IPC messages.
 #[pin_project]
 pub struct IPCReader<'m, M> {
-    view_ctx: ViewContext,
+    view_ctx: Arc<ViewContext>,
     messages: &'m mut M,
 }
 
 impl<'m, M: MessageReader> IPCReader<'m, M> {
     /// Construct an IPC reader using an existing ViewContext.
-    pub fn new(view_ctx: ViewContext, messages: &'m mut M) -> Self {
+    pub fn new(view_ctx: Arc<ViewContext>, messages: &'m mut M) -> Self {
         Self { view_ctx, messages }
     }
 
@@ -31,13 +33,16 @@ impl<'m, M: MessageReader> IPCReader<'m, M> {
             }
         }
 
-        let view_ctx: ViewContext = SerdeContextDeserializer {
+        let view_ctx = SerdeContextDeserializer {
             fb: messages.next().await?.header_as_context().unwrap(),
             ctx,
         }
         .try_into()?;
 
-        Ok(Self { messages, view_ctx })
+        Ok(Self {
+            messages,
+            view_ctx: Arc::new(view_ctx),
+        })
     }
 
     pub async fn next<'a>(&'a mut self) -> VortexResult<Option<impl ArrayReader + 'a>> {

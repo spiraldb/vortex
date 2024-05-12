@@ -1,6 +1,7 @@
 use std::io;
 use std::io::{BufReader, Read};
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use arrow_buffer::Buffer as ArrowBuffer;
 use fallible_iterator::FallibleIterator;
@@ -28,7 +29,7 @@ use crate::messages::SerdeContextDeserializer;
 pub struct StreamReader<R: Read> {
     read: R,
     messages: StreamMessageReader<R>,
-    ctx: ViewContext,
+    ctx: Arc<ViewContext>,
 }
 
 impl<R: Read> StreamReader<BufReader<R>> {
@@ -58,7 +59,7 @@ impl<R: Read> StreamReader<R> {
         Ok(Self {
             read,
             messages,
-            ctx: view_ctx,
+            ctx: view_ctx.into(),
         })
     }
 
@@ -111,7 +112,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
         .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
         Ok(Some(StreamArrayReader {
-            ctx: &self.ctx,
+            ctx: self.ctx.clone(),
             read: &mut self.read,
             messages: &mut self.messages,
             dtype,
@@ -122,7 +123,7 @@ impl<R: Read> FallibleLendingIterator for StreamReader<R> {
 }
 
 pub struct StreamArrayReader<'a, R: Read> {
-    ctx: &'a ViewContext,
+    ctx: Arc<ViewContext>,
     read: &'a mut R,
     messages: &'a mut StreamMessageReader<R>,
     dtype: DType,
@@ -270,15 +271,20 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
         self.read.skip(chunk_msg.buffer_size() - offset)?;
 
         // After reading the buffers we're now able to load the next message.
-        let col_array = self
-            .messages
-            .next(self.read)?
-            .header_as_chunk()
-            .unwrap()
-            .array()
-            .unwrap();
+        let flatbuffer = self.messages.next_raw(self.read)?;
 
-        let view = ArrayView::try_new(self.ctx, &self.dtype, col_array, self.buffers.as_slice())?;
+        let view = ArrayView::try_new(
+            self.ctx.clone(),
+            self.dtype.clone(),
+            flatbuffer,
+            |flatbuffer| {
+                root::<Message>(flatbuffer)
+                    .map_err(VortexError::from)
+                    .map(|msg| msg.header_as_chunk().unwrap())
+                    .and_then(|chunk| chunk.array().ok_or(vortex_err!("Chunk missing Array")))
+            },
+            self.buffers.clone(),
+        )?;
 
         // Validate it
         view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;
@@ -333,6 +339,17 @@ impl<R: Read> StreamMessageReader<R> {
         }
         // The message has been validated by the next() call.
         Some(unsafe { root_unchecked::<Message>(&self.message) })
+    }
+
+    pub fn next_raw(&mut self, read: &mut R) -> VortexResult<Buffer> {
+        if self.finished {
+            panic!("StreamMessageReader is finished - should've checked peek!");
+        }
+        std::mem::swap(&mut self.prev_message, &mut self.message);
+        if !self.load_next_message(read)? {
+            self.finished = true;
+        }
+        Ok(Buffer::from(self.prev_message.clone()))
     }
 
     pub fn next(&mut self, read: &mut R) -> VortexResult<Message> {

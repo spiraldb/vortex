@@ -4,6 +4,7 @@ use bytes::BytesMut;
 use flatbuffers::{root, root_unchecked};
 use monoio::buf::{IoBufMut, IoVecBufMut, VecBuf};
 use monoio::io::{AsyncReadRent, AsyncReadRentExt};
+use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
 
 use crate::codecs::message_reader::MessageReader;
@@ -73,6 +74,17 @@ impl<R: AsyncReadRent + Unpin> MessageReader for MonoIoMessageReader<R> {
             self.finished = true;
         }
         Ok(unsafe { root_unchecked::<Message>(&self.prev_message) })
+    }
+
+    async fn next_raw(&mut self) -> VortexResult<Buffer> {
+        if self.finished {
+            panic!("StreamMessageReader is finished - should've checked peek!");
+        }
+        self.prev_message = self.message.split();
+        if !self.load_next_message().await? {
+            self.finished = true;
+        }
+        Ok(Buffer::from(self.prev_message.clone().freeze()))
     }
 
     async fn read_into(&mut self, buffers: Vec<Vec<u8>>) -> VortexResult<Vec<Vec<u8>>> {
