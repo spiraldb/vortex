@@ -37,13 +37,13 @@ impl<D: ArrayDef> TypedArray<D> {
     }
 }
 
-impl<'a, 'b, D: ArrayDef> TypedArray<D> {
-    pub fn array(&'a self) -> &'a Array {
+impl<D: ArrayDef> TypedArray<D> {
+    pub fn array(&self) -> &Array {
         &self.array
     }
 }
 
-impl<'a, D: ArrayDef> TryFrom<Array> for TypedArray<D> {
+impl<D: ArrayDef> TryFrom<Array> for TypedArray<D> {
     type Error = VortexError;
 
     fn try_from(array: Array) -> Result<Self, Self::Error> {
@@ -71,7 +71,7 @@ impl<'a, D: ArrayDef> TryFrom<&'a Array> for TypedArray<D> {
     }
 }
 
-impl<'a, D: ArrayDef> AsArray for TypedArray<D> {
+impl<D: ArrayDef> AsArray for TypedArray<D> {
     fn as_array_ref(&self) -> &Array {
         &self.array
     }
@@ -83,7 +83,7 @@ impl<D: ArrayDef> ToArray for TypedArray<D> {
     }
 }
 
-impl<'a, D: ArrayDef> IntoArray for TypedArray<D> {
+impl<D: ArrayDef> IntoArray for TypedArray<D> {
     fn into_array(self) -> Array {
         self.array
     }

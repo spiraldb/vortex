@@ -213,7 +213,7 @@ impl AcceptArrayVisitor for PrimitiveArray {
     }
 }
 
-impl<'a> Array {
+impl Array {
     pub fn into_primitive(self) -> PrimitiveArray {
         PrimitiveArray::try_from(self).expect("expected primitive array")
     }

@@ -180,7 +180,7 @@ fn bitpack_patches(
     })
 }
 
-pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
+pub fn unpack(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
     let offset = array.offset();
@@ -206,7 +206,7 @@ pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
     }
 }
 
-fn patch_unpacked<'a>(array: PrimitiveArray, patches: &Array) -> VortexResult<PrimitiveArray> {
+fn patch_unpacked(array: PrimitiveArray, patches: &Array) -> VortexResult<PrimitiveArray> {
     match patches.encoding().id() {
         Sparse::ID => {
             match_each_integer_ptype!(array.ptype(), |$T| {

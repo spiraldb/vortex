@@ -108,7 +108,7 @@ impl<T: ToBytes> Eq for Value<T> {}
 
 /// Dictionary encode primitive array with given PType.
 /// Null values in the original array are encoded in the dictionary.
-pub fn dict_encode_typed_primitive<'a, T: NativePType>(
+pub fn dict_encode_typed_primitive<T: NativePType>(
     array: &PrimitiveArray,
 ) -> (PrimitiveArray, PrimitiveArray) {
     let mut lookup_dict: HashMap<Value<T>, u64> = HashMap::new();
@@ -172,7 +172,7 @@ fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
     &bytes[begin..end]
 }
 
-fn dict_encode_typed_varbin<'a, I, U>(dtype: DType, values: I) -> (PrimitiveArray, VarBinArray)
+fn dict_encode_typed_varbin<I, U>(dtype: DType, values: I) -> (PrimitiveArray, VarBinArray)
 where
     I: Iterator<Item = Option<U>>,
     U: AsRef<[u8]>,

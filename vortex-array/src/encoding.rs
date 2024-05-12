@@ -42,6 +42,7 @@ pub trait ArrayEncoding: 'static + Sync + Send + Debug {
     fn flatten<'a>(&self, array: Array) -> VortexResult<Flattened<'a>>;
 
     /// Unwrap the provided array into an implementation of ArrayTrait
+    #[allow(clippy::needless_lifetimes)]
     fn with_dyn<'a>(
         &self,
         array: &'a Array,

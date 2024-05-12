@@ -131,7 +131,7 @@ pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
     }
 }
 
-fn patch_decoded<'a>(array: PrimitiveArray, patches: &Array) -> VortexResult<PrimitiveArray> {
+fn patch_decoded(array: PrimitiveArray, patches: &Array) -> VortexResult<PrimitiveArray> {
     match patches.encoding().id() {
         Sparse::ID => {
             match_each_alp_float_ptype!(array.ptype(), |$T| {

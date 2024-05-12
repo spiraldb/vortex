@@ -54,7 +54,7 @@ impl LocalDateTimeArray {
     }
 }
 
-impl<'a> TryFrom<&ExtensionArray> for LocalDateTimeArray {
+impl TryFrom<&ExtensionArray> for LocalDateTimeArray {
     type Error = VortexError;
 
     fn try_from(value: &ExtensionArray) -> Result<Self, Self::Error> {
@@ -81,7 +81,7 @@ impl AsArrowArray for LocalDateTimeArray {
     }
 }
 
-impl<'a> TryFrom<&Array> for LocalDateTimeArray {
+impl TryFrom<&Array> for LocalDateTimeArray {
     type Error = VortexError;
 
     fn try_from(value: &Array) -> Result<Self, Self::Error> {

@@ -148,6 +148,7 @@ macro_rules! impl_encoding {
                     <Self as ArrayEncodingExt>::flatten(array)
                 }
 
+                #[allow(clippy::needless_lifetimes)]
                 #[inline]
                 fn with_dyn<'a>(
                     &self,
@@ -179,7 +180,7 @@ macro_rules! impl_encoding {
     };
 }
 
-impl<'a> AsArray for Array {
+impl AsArray for Array {
     fn as_array_ref(&self) -> &Array {
         self
     }
@@ -209,7 +210,7 @@ impl<T: AsArray> ArrayStatistics for T {
     }
 }
 
-impl<'a, T: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoArrayData for T {
+impl<T: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoArrayData for T {
     fn into_array_data(self) -> ArrayData {
         let encoding = self.encoding();
         let metadata = self.metadata();

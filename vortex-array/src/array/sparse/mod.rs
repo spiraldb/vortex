@@ -25,7 +25,7 @@ pub struct SparseMetadata {
     fill_value: Scalar,
 }
 
-impl<'a> SparseArray {
+impl SparseArray {
     pub fn new(indices: Array, values: Array, len: usize, fill_value: Scalar) -> Self {
         Self::try_new(indices, values, len, fill_value).unwrap()
     }

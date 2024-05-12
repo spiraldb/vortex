@@ -64,7 +64,7 @@ impl EncodingCompression for REEEncoding {
     }
 }
 
-pub fn ree_encode<'a>(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
+pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     let validity = if array.validity().nullability() == Nullability::NonNullable {
         Validity::NonNullable
     } else {
@@ -118,7 +118,7 @@ fn ree_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
     (ends, values)
 }
 
-pub fn ree_decode<'a>(
+pub fn ree_decode(
     ends: &PrimitiveArray,
     values: &PrimitiveArray,
     validity: Validity,
