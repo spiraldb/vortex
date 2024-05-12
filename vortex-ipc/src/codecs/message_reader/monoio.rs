@@ -1,5 +1,4 @@
 #![cfg(feature = "monoio")]
-#![allow(dead_code)]
 
 use bytes::BytesMut;
 use flatbuffers::{root, root_unchecked};
@@ -10,7 +9,7 @@ use vortex_error::VortexResult;
 use crate::codecs::message_reader::MessageReader;
 use crate::flatbuffers::ipc::Message;
 
-struct MonoIoMessageReader<R: AsyncReadRent + Unpin> {
+pub struct MonoIoMessageReader<R: AsyncReadRent + Unpin> {
     // TODO(ngates): swap this for our own mutable aligned buffer so we can support direct reads.
     read: R,
     message: BytesMut,

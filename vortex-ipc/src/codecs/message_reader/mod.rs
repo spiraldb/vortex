@@ -6,11 +6,10 @@ use vortex_error::VortexResult;
 
 use crate::ALIGNMENT;
 
-mod futures;
-mod monoio;
+pub mod futures;
+pub mod monoio;
 use crate::flatbuffers::ipc::Message;
 
-#[allow(dead_code)]
 pub trait MessageReader {
     fn peek(&self) -> Option<Message>;
     fn next(&mut self) -> impl Future<Output = VortexResult<Message>>;
@@ -20,58 +19,60 @@ pub trait MessageReader {
     ) -> impl Future<Output = VortexResult<Vec<Vec<u8>>>>;
 
     /// Fetch the buffers associated with this message.
-    async fn buffers(&mut self) -> VortexResult<Vec<Buffer>> {
-        let Some(chunk_msg) = self.peek().and_then(|m| m.header_as_chunk()) else {
-            // We could return an error here?
-            return Ok(Vec::new());
-        };
+    fn buffers(&mut self) -> impl Future<Output = VortexResult<Vec<Buffer>>> {
+        async {
+            let Some(chunk_msg) = self.peek().and_then(|m| m.header_as_chunk()) else {
+                // We could return an error here?
+                return Ok(Vec::new());
+            };
 
-        // Initialize the column's buffers for a vectored read.
-        // To start with, we include the padding and then truncate the buffers after.
-        // TODO(ngates): improve the flatbuffer format instead of storing offset/len per buffer.
-        let buffers = chunk_msg
-            .buffers()
-            .unwrap_or_default()
-            .iter()
-            .map(|buffer| {
-                // FIXME(ngates): this assumes the next buffer offset == the aligned length of
-                //  the previous buffer. I will fix this by improving the flatbuffer format instead
-                //  of fiddling with the logic here.
-                let len_width_padding =
-                    (buffer.length() as usize + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
-                // TODO(ngates): switch to use uninitialized
-                vec![0u8; len_width_padding]
-            })
-            .collect_vec();
+            // Initialize the column's buffers for a vectored read.
+            // To start with, we include the padding and then truncate the buffers after.
+            // TODO(ngates): improve the flatbuffer format instead of storing offset/len per buffer.
+            let buffers = chunk_msg
+                .buffers()
+                .unwrap_or_default()
+                .iter()
+                .map(|buffer| {
+                    // FIXME(ngates): this assumes the next buffer offset == the aligned length of
+                    //  the previous buffer. I will fix this by improving the flatbuffer format instead
+                    //  of fiddling with the logic here.
+                    let len_width_padding =
+                        (buffer.length() as usize + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
+                    // TODO(ngates): switch to use uninitialized
+                    vec![0u8; len_width_padding]
+                })
+                .collect_vec();
 
-        // Just sanity check the above
-        assert_eq!(
-            buffers.iter().map(|b| b.len()).sum::<usize>(),
-            chunk_msg.buffer_size() as usize
-        );
+            // Just sanity check the above
+            assert_eq!(
+                buffers.iter().map(|b| b.len()).sum::<usize>(),
+                chunk_msg.buffer_size() as usize
+            );
 
-        // Issue a vectored read to fill all buffers
-        let buffers: Vec<Vec<u8>> = self.read_into(buffers).await?;
+            // Issue a vectored read to fill all buffers
+            let buffers: Vec<Vec<u8>> = self.read_into(buffers).await?;
 
-        // Truncate each buffer to strip the padding.
-        let buffers = buffers
-            .into_iter()
-            .zip(
-                self.peek()
-                    .unwrap()
-                    .header_as_chunk()
-                    .unwrap()
-                    .buffers()
-                    .unwrap_or_default()
-                    .iter(),
-            )
-            .map(|(mut vec, buf)| {
-                vec.truncate(buf.length() as usize);
-                Buffer::from(vec)
-            })
-            .collect_vec();
+            // Truncate each buffer to strip the padding.
+            let buffers = buffers
+                .into_iter()
+                .zip(
+                    self.peek()
+                        .unwrap()
+                        .header_as_chunk()
+                        .unwrap()
+                        .buffers()
+                        .unwrap_or_default()
+                        .iter(),
+                )
+                .map(|(mut vec, buf)| {
+                    vec.truncate(buf.length() as usize);
+                    Buffer::from(vec)
+                })
+                .collect_vec();
 
-        Ok(buffers)
+            Ok(buffers)
+        }
     }
 }
 

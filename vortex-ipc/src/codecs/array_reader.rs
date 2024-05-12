@@ -25,12 +25,6 @@ struct ArrayReaderAdapter<S> {
     inner: S,
 }
 
-impl<S> ArrayReaderAdapter<S> {
-    pub fn new(dtype: DType, inner: S) -> Self {
-        Self { dtype, inner }
-    }
-}
-
 impl<S> ArrayReader for ArrayReaderAdapter<S>
 where
     S: Stream<Item = VortexResult<OwnedArray>>,

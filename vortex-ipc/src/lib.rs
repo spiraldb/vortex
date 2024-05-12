@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use vortex_error::{vortex_err, VortexError};
 
 pub const ALIGNMENT: usize = 64;
@@ -31,7 +29,7 @@ pub mod flatbuffers {
     }
 }
 
-mod codecs;
+pub mod codecs;
 pub mod iter;
 mod messages;
 pub mod reader;
