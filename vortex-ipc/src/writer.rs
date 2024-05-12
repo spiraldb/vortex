@@ -10,7 +10,6 @@ use vortex_flatbuffers::FlatBufferWriter;
 use crate::messages::{IPCChunk, IPCContext, IPCMessage, IPCSchema};
 use crate::ALIGNMENT;
 
-#[allow(dead_code)]
 pub struct StreamWriter<W: Write> {
     write: W,
     ctx: ViewContext,
