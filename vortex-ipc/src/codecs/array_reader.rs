@@ -21,10 +21,16 @@ pub trait ArrayReader: Stream<Item = VortexResult<Array>> {
 
 /// An adapter for a stream of array chunks to implement an ArrayReader.
 #[pin_project]
-struct ArrayReaderAdapter<S> {
+pub struct ArrayReaderAdapter<S> {
     dtype: DType,
     #[pin]
     inner: S,
+}
+
+impl<S> ArrayReaderAdapter<S> {
+    pub fn new(dtype: DType, inner: S) -> Self {
+        Self { dtype, inner }
+    }
 }
 
 impl<S> ArrayReader for ArrayReaderAdapter<S>

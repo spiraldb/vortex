@@ -41,6 +41,7 @@ pub trait MessageReader {
                     let len_width_padding =
                         (buffer.length() as usize + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
                     // TODO(ngates): switch to use uninitialized
+                    // TODO(ngates): allocate the entire thing in one go and then split
                     vec![0u8; len_width_padding]
                 })
                 .collect_vec();

@@ -12,8 +12,8 @@ use crate::codecs::message_reader::MessageReader;
 use crate::flatbuffers::ipc::Message;
 
 pub struct AsyncReadMessageReader<R: AsyncRead + Unpin> {
-    // TODO(ngates): swap this for our own mutable aligned buffer so we can support direct reads.
     read: R,
+    // TODO(ngates): swap this for our own mutable aligned buffer so we can support direct reads.
     message: BytesMut,
     prev_message: BytesMut,
     finished: bool,

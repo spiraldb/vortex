@@ -11,8 +11,8 @@ use crate::codecs::message_reader::MessageReader;
 use crate::flatbuffers::ipc::Message;
 
 pub struct MonoIoMessageReader<R: AsyncReadRent + Unpin> {
-    // TODO(ngates): swap this for our own mutable aligned buffer so we can support direct reads.
     read: R,
+    // TODO(ngates): swap this for our own mutable aligned buffer so we can support direct reads.
     message: BytesMut,
     prev_message: BytesMut,
     finished: bool,
@@ -39,8 +39,6 @@ impl<R: AsyncReadRent + Unpin> MonoIoMessageReader<R> {
             // Marker for no more messages.
             return Ok(false);
         }
-
-        // TODO(ngates): we may be able to use self.message.split() and then swap back after.
 
         let message = self
             .read
