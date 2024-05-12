@@ -869,7 +869,6 @@ mod tests {
 
         let mut cursor = Cursor::new(&buffer);
         let mut reader = StreamReader::try_new(&mut cursor, &context).unwrap();
-        let data = reader.read_array().unwrap();
-        data
+        reader.read_array().unwrap()
     }
 }

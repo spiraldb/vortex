@@ -146,12 +146,11 @@ macro_rules! impl_encoding {
                     <Self as ArrayEncodingExt>::flatten(array)
                 }
 
-                #[allow(clippy::needless_lifetimes)]
                 #[inline]
-                fn with_dyn<'a>(
+                fn with_dyn(
                     &self,
-                    array: &'a Array,
-                    f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
+                    array: &Array,
+                    f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'b)) -> VortexResult<()>,
                 ) -> VortexResult<()> {
                     <Self as ArrayEncodingExt>::with_dyn(array, f)
                 }

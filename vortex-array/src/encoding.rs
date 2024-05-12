@@ -42,11 +42,10 @@ pub trait ArrayEncoding: 'static + Sync + Send + Debug {
     fn flatten(&self, array: Array) -> VortexResult<Flattened>;
 
     /// Unwrap the provided array into an implementation of ArrayTrait
-    #[allow(clippy::needless_lifetimes)]
-    fn with_dyn<'a>(
+    fn with_dyn(
         &self,
-        array: &'a Array,
-        f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
+        array: &Array,
+        f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'b)) -> VortexResult<()>,
     ) -> VortexResult<()>;
 
     /// Return a compressor for this encoding.
@@ -74,10 +73,9 @@ pub trait ArrayEncodingExt {
         ArrayFlatten::flatten(typed)
     }
 
-    fn with_dyn<'a, R, F>(array: &'a Array, mut f: F) -> R
+    fn with_dyn<R, F>(array: &Array, mut f: F) -> R
     where
-        F: for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> R,
-        <Self as ArrayEncodingExt>::D: 'a,
+        F: for<'b> FnMut(&'b (dyn ArrayTrait + 'b)) -> R,
     {
         let typed =
             <<Self::D as ArrayDef>::Array as TryFrom<Array>>::try_from(array.clone()).unwrap();
