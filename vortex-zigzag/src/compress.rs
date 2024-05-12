@@ -61,9 +61,9 @@ pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<OwnedZigZagArray> 
     OwnedZigZagArray::try_new(encoded.into_array())
 }
 
-fn zigzag_encode_primitive<'a, T: ExternalZigZag + NativePType>(
-    values: &'a [T],
-    validity: Validity<'a>,
+fn zigzag_encode_primitive<T: ExternalZigZag + NativePType>(
+    values: &[T],
+    validity: Validity,
 ) -> PrimitiveArray
 where
     <T as ExternalZigZag>::UInt: NativePType,
@@ -85,9 +85,9 @@ pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
 }
 
 #[allow(dead_code)]
-fn zigzag_decode_primitive<'a, T: ExternalZigZag + NativePType>(
-    values: &'a [T::UInt],
-    validity: Validity<'a>,
+fn zigzag_decode_primitive<T: ExternalZigZag + NativePType>(
+    values: &[T::UInt],
+    validity: Validity,
 ) -> PrimitiveArray
 where
     <T as ExternalZigZag>::UInt: NativePType,

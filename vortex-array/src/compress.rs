@@ -178,7 +178,7 @@ impl<'a> Compressor<'a> {
         Ok(compressed)
     }
 
-    pub fn compress_validity<'v>(&self, validity: Validity<'v>) -> VortexResult<Validity<'v>> {
+    pub fn compress_validity(&self, validity: Validity) -> VortexResult<Validity> {
         match validity {
             Validity::Array(a) => Ok(Validity::Array(self.compress(&a, None)?)),
             a => Ok(a),

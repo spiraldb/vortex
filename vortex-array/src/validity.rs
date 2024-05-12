@@ -25,7 +25,7 @@ pub enum ValidityMetadata {
 }
 
 impl ValidityMetadata {
-    pub fn to_validity<'v>(&self, array: Option<Array>) -> Validity<'v> {
+    pub fn to_validity(&self, array: Option<Array>) -> Validity {
         match self {
             ValidityMetadata::NonNullable => Validity::NonNullable,
             ValidityMetadata::AllValid => Validity::AllValid,
@@ -38,18 +38,17 @@ impl ValidityMetadata {
     }
 }
 
-pub type OwnedValidity = Validity<'static>;
+pub type OwnedValidity = Validity;
 
 #[derive(Clone, Debug)]
-pub enum Validity<'v> {
+pub enum Validity {
     NonNullable,
     AllValid,
     AllInvalid,
     Array(Array),
-    Phantom(&'v ()),
 }
 
-impl<'v> Validity<'v> {
+impl Validity {
     pub const DTYPE: DType = DType::Bool(Nullability::NonNullable);
 
     pub fn into_array_data(self) -> Option<ArrayData> {
@@ -76,7 +75,6 @@ impl<'v> Validity<'v> {
                 }
                 Ok(ValidityMetadata::Array)
             }
-            Validity::Phantom(_) => unreachable!(),
         }
     }
 
@@ -99,7 +97,6 @@ impl<'v> Validity<'v> {
             Validity::NonNullable | Validity::AllValid => true,
             Validity::AllInvalid => false,
             Validity::Array(a) => bool::try_from(&scalar_at(a, index).unwrap()).unwrap(),
-            Validity::Phantom(_) => unreachable!(),
         }
     }
 
@@ -116,7 +113,6 @@ impl<'v> Validity<'v> {
             Validity::AllValid => Ok(Validity::AllValid),
             Validity::AllInvalid => Ok(Validity::AllInvalid),
             Validity::Array(a) => Ok(Validity::Array(take(a, indices)?)),
-            Validity::Phantom(_) => unreachable!(),
         }
     }
 
@@ -140,7 +136,6 @@ impl<'v> Validity<'v> {
                     LogicalValidity::Array(a.to_array_data())
                 }
             }
-            Validity::Phantom(_) => unreachable!(),
         }
     }
 
@@ -150,12 +145,11 @@ impl<'v> Validity<'v> {
             Validity::AllValid => Validity::AllValid,
             Validity::AllInvalid => Validity::AllInvalid,
             Validity::Array(a) => Validity::Array(a.to_array_data().into_array()),
-            Validity::Phantom(_) => unreachable!(),
         }
     }
 }
 
-impl PartialEq for Validity<'_> {
+impl PartialEq for Validity {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Validity::NonNullable, Validity::NonNullable) => true,
@@ -286,7 +280,7 @@ impl LogicalValidity {
         }
     }
 
-    pub fn into_validity<'a>(self) -> Validity<'a> {
+    pub fn into_validity(self) -> Validity {
         match self {
             LogicalValidity::AllValid(_) => Validity::AllValid,
             LogicalValidity::AllInvalid(_) => Validity::AllInvalid,
