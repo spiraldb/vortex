@@ -1,13 +1,13 @@
 use log::info;
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::{Array, IntoArray, OwnedArray};
+use crate::{Array, IntoArray};
 
 pub trait TakeFn {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray>;
+    fn take(&self, indices: &Array) -> VortexResult<Array>;
 }
 
-pub fn take(array: &Array, indices: &Array) -> VortexResult<OwnedArray> {
+pub fn take(array: &Array, indices: &Array) -> VortexResult<Array> {
     array.with_dyn(|a| {
         if let Some(take) = a.take() {
             return take.take(indices);

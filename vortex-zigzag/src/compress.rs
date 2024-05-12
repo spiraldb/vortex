@@ -2,12 +2,12 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
-use vortex::{Array, IntoArray, OwnedArray};
+use vortex::{Array, IntoArray};
 use vortex_dtype::{NativePType, PType};
 use vortex_error::VortexResult;
 use zigzag::ZigZag as ExternalZigZag;
 
-use crate::{OwnedZigZagArray, ZigZagArray, ZigZagEncoding};
+use crate::{ZigZagArray, ZigZagEncoding};
 
 impl EncodingCompression for ZigZagEncoding {
     fn can_compress(
@@ -38,11 +38,11 @@ impl EncodingCompression for ZigZagEncoding {
         array: &Array,
         like: Option<&Array>,
         ctx: Compressor,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         let zigzag_like = like.map(|like_arr| ZigZagArray::try_from(like_arr).unwrap());
         let encoded = zigzag_encode(&array.as_primitive())?;
 
-        Ok(OwnedZigZagArray::new(ctx.compress(
+        Ok(ZigZagArray::new(ctx.compress(
             &encoded.encoded(),
             zigzag_like.as_ref().map(|z| z.encoded()).as_ref(),
         )?)
@@ -50,7 +50,7 @@ impl EncodingCompression for ZigZagEncoding {
     }
 }
 
-pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<OwnedZigZagArray> {
+pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
     let encoded = match parray.ptype() {
         PType::I8 => zigzag_encode_primitive::<i8>(parray.typed_data(), parray.validity()),
         PType::I16 => zigzag_encode_primitive::<i16>(parray.typed_data(), parray.validity()),
@@ -58,7 +58,7 @@ pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<OwnedZigZagArray> 
         PType::I64 => zigzag_encode_primitive::<i64>(parray.typed_data(), parray.validity()),
         _ => panic!("Unsupported ptype {}", parray.ptype()),
     };
-    OwnedZigZagArray::try_new(encoded.into_array())
+    ZigZagArray::try_new(encoded.into_array())
 }
 
 fn zigzag_encode_primitive<T: ExternalZigZag + NativePType>(

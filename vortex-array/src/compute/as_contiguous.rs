@@ -1,13 +1,13 @@
 use itertools::Itertools;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::{Array, ArrayDType, OwnedArray};
+use crate::{Array, ArrayDType};
 
 pub trait AsContiguousFn {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray>;
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array>;
 }
 
-pub fn as_contiguous(arrays: &[Array]) -> VortexResult<OwnedArray> {
+pub fn as_contiguous(arrays: &[Array]) -> VortexResult<Array> {
     if arrays.is_empty() {
         vortex_bail!(ComputeError: "No arrays to concatenate");
     }

@@ -72,8 +72,6 @@ macro_rules! impl_encoding {
             pub struct [<$Name Array>] {
                 typed: TypedArray<$Name>
             }
-            #[allow(dead_code)]
-            pub type [<Owned $Name Array>] = [<$Name Array>];
             impl [<$Name Array>] {
                 pub fn array(&self) -> &Array {
                     self.typed.array()

@@ -1,13 +1,13 @@
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::{Array, OwnedArray};
+use crate::Array;
 
 /// Limit array to start..stop range
 pub trait SliceFn {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray>;
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array>;
 }
 
-pub fn slice(array: &Array, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+pub fn slice(array: &Array, start: usize, stop: usize) -> VortexResult<Array> {
     check_slice_bounds(array, start, stop)?;
 
     array.with_dyn(|c| {

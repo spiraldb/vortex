@@ -7,7 +7,7 @@ use vortex::array::bool::{Bool, BoolArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, OwnedArray};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::Nullability::Nullable;
@@ -50,7 +50,7 @@ impl RoaringBoolArray {
         )
     }
 
-    pub fn encode(array: OwnedArray) -> VortexResult<OwnedArray> {
+    pub fn encode(array: Array) -> VortexResult<Array> {
         if array.encoding().id() == Bool::ID {
             roaring_encode(BoolArray::try_from(array)?).map(|a| a.into_array())
         } else {

@@ -9,7 +9,7 @@ use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::compute::take::take;
 use crate::stats::ArrayStatistics;
-use crate::{Array, ArrayData, IntoArray, IntoArrayData, OwnedArray, ToArray, ToArrayData};
+use crate::{Array, ArrayData, IntoArray, IntoArrayData, ToArray, ToArrayData};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -37,8 +37,6 @@ impl ValidityMetadata {
         }
     }
 }
-
-pub type OwnedValidity = Validity;
 
 #[derive(Clone, Debug)]
 pub enum Validity {
@@ -139,7 +137,7 @@ impl Validity {
         }
     }
 
-    pub fn to_static(&self) -> OwnedValidity {
+    pub fn to_static(&self) -> Validity {
         match self {
             Validity::NonNullable => Validity::NonNullable,
             Validity::AllValid => Validity::AllValid,
@@ -164,7 +162,7 @@ impl PartialEq for Validity {
     }
 }
 
-impl From<Vec<bool>> for OwnedValidity {
+impl From<Vec<bool>> for Validity {
     fn from(bools: Vec<bool>) -> Self {
         if bools.iter().all(|b| *b) {
             Validity::AllValid
@@ -176,7 +174,7 @@ impl From<Vec<bool>> for OwnedValidity {
     }
 }
 
-impl From<BooleanBuffer> for OwnedValidity {
+impl From<BooleanBuffer> for Validity {
     fn from(value: BooleanBuffer) -> Self {
         if value.count_set_bits() == value.len() {
             Validity::AllValid
@@ -188,13 +186,13 @@ impl From<BooleanBuffer> for OwnedValidity {
     }
 }
 
-impl From<NullBuffer> for OwnedValidity {
+impl From<NullBuffer> for Validity {
     fn from(value: NullBuffer) -> Self {
         value.into_inner().into()
     }
 }
 
-impl FromIterator<LogicalValidity> for OwnedValidity {
+impl FromIterator<LogicalValidity> for Validity {
     fn from_iter<T: IntoIterator<Item = LogicalValidity>>(iter: T) -> Self {
         let validities: Vec<LogicalValidity> = iter.into_iter().collect();
 
@@ -221,7 +219,7 @@ impl FromIterator<LogicalValidity> for OwnedValidity {
     }
 }
 
-impl<'a, E> FromIterator<&'a Option<E>> for OwnedValidity {
+impl<'a, E> FromIterator<&'a Option<E>> for Validity {
     fn from_iter<T: IntoIterator<Item = &'a Option<E>>>(iter: T) -> Self {
         let bools: Vec<bool> = iter.into_iter().map(|option| option.is_some()).collect();
         Validity::from(bools)
@@ -290,7 +288,7 @@ impl LogicalValidity {
 }
 
 impl IntoArray for LogicalValidity {
-    fn into_array(self) -> OwnedArray {
+    fn into_array(self) -> Array {
         match self {
             LogicalValidity::AllValid(len) => BoolArray::from(vec![true; len]).into_array(),
             LogicalValidity::AllInvalid(len) => BoolArray::from(vec![false; len]).into_array(),

@@ -57,19 +57,19 @@ impl BoolArray {
     }
 }
 
-impl From<BooleanBuffer> for OwnedBoolArray {
+impl From<BooleanBuffer> for BoolArray {
     fn from(value: BooleanBuffer) -> Self {
         BoolArray::try_new(value, Validity::NonNullable).unwrap()
     }
 }
 
-impl From<Vec<bool>> for OwnedBoolArray {
+impl From<Vec<bool>> for BoolArray {
     fn from(value: Vec<bool>) -> Self {
         BoolArray::from_vec(value, Validity::NonNullable)
     }
 }
 
-impl FromIterator<Option<bool>> for OwnedBoolArray {
+impl FromIterator<Option<bool>> for BoolArray {
     fn from_iter<I: IntoIterator<Item = Option<bool>>>(iter: I) -> Self {
         let iter = iter.into_iter();
         let (lower, _) = iter.size_hint();

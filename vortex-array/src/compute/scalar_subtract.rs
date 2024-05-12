@@ -2,13 +2,13 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::{Array, ArrayDType, OwnedArray};
+use crate::{Array, ArrayDType};
 
 pub trait SubtractScalarFn {
-    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray>;
+    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array>;
 }
 
-pub fn subtract_scalar(array: &Array, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
+pub fn subtract_scalar(array: &Array, to_subtract: &Scalar) -> VortexResult<Array> {
     if let Some(subtraction_result) =
         array.with_dyn(|c| c.subtract_scalar().map(|t| t.subtract_scalar(to_subtract)))
     {

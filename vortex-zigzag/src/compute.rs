@@ -1,7 +1,7 @@
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::ArrayCompute;
-use vortex::{IntoArray, OwnedArray};
+use vortex::{Array, IntoArray};
 use vortex_dtype::PType;
 use vortex_error::VortexResult;
 use vortex_scalar::{PrimitiveScalar, Scalar};
@@ -34,7 +34,7 @@ impl ScalarAtFn for ZigZagArray {
 }
 
 impl SliceFn for ZigZagArray {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(ZigZagArray::try_new(slice(&self.encoded(), start, stop)?)?.into_array())
     }
 }

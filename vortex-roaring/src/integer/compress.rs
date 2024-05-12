@@ -4,11 +4,11 @@ use num_traits::NumCast;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::ArrayStatistics;
-use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToStatic};
+use vortex::{Array, ArrayDType, ArrayDef, IntoArray, ToStatic};
 use vortex_dtype::{NativePType, PType};
 use vortex_error::VortexResult;
 
-use crate::{OwnedRoaringIntArray, RoaringInt, RoaringIntArray, RoaringIntEncoding};
+use crate::{RoaringInt, RoaringIntArray, RoaringIntEncoding};
 
 impl EncodingCompression for RoaringIntEncoding {
     fn can_compress(
@@ -51,7 +51,7 @@ impl EncodingCompression for RoaringIntEncoding {
         array: &Array,
         _like: Option<&Array>,
         _ctx: Compressor,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         let parray = array.clone().flatten_primitive()?;
         Ok(roaring_encode(parray).into_array().to_static())
     }
@@ -67,7 +67,7 @@ pub fn roaring_encode(parray: PrimitiveArray) -> RoaringIntArray {
     }
 }
 
-fn roaring_encode_primitive<T: NumCast + NativePType>(values: &[T]) -> OwnedRoaringIntArray {
+fn roaring_encode_primitive<T: NumCast + NativePType>(values: &[T]) -> RoaringIntArray {
     let mut bitmap = Bitmap::new();
     bitmap.extend(values.iter().map(|i| i.to_u32().unwrap()));
     bitmap.run_optimize();

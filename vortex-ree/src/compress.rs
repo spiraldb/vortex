@@ -6,7 +6,7 @@ use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray};
 use vortex_dtype::Nullability;
 use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
@@ -40,7 +40,7 @@ impl EncodingCompression for REEEncoding {
         array: &Array,
         like: Option<&Array>,
         ctx: Compressor,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         let ree_like = like.map(|like_arr| REEArray::try_from(like_arr).unwrap());
         let ree_like_ref = ree_like.as_ref();
         let primitive_array = array.as_primitive();

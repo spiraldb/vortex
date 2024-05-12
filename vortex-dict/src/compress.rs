@@ -10,7 +10,7 @@ use vortex::array::varbin::{VarBin, VarBinArray};
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray};
+use vortex::{Array, ArrayDType, ArrayDef, IntoArray, ToArray};
 use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_dtype::{NativePType, ToBytes};
 use vortex_error::VortexResult;
@@ -46,7 +46,7 @@ impl EncodingCompression for DictEncoding {
         array: &Array,
         like: Option<&Array>,
         ctx: Compressor,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         let dict_like = like.map(|like_arr| DictArray::try_from(like_arr).unwrap());
         let dict_like_ref = dict_like.as_ref();
 

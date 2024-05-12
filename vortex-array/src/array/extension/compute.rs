@@ -11,7 +11,7 @@ use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::{Array, IntoArray, OwnedArray, ToStatic};
+use crate::{Array, IntoArray, ToStatic};
 
 impl ArrayCompute for ExtensionArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -55,7 +55,7 @@ impl AsArrowArray for ExtensionArray {
 }
 
 impl AsContiguousFn for ExtensionArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let storage_arrays = arrays
             .iter()
             .map(|a| {
@@ -83,7 +83,7 @@ impl ScalarAtFn for ExtensionArray {
 }
 
 impl SliceFn for ExtensionArray {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(ExtensionArray::new(
             self.ext_dtype().clone(),
             slice(&self.storage(), start, stop)?,
@@ -93,7 +93,7 @@ impl SliceFn for ExtensionArray {
 }
 
 impl TakeFn for ExtensionArray {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         Ok(
             ExtensionArray::new(self.ext_dtype().clone(), take(&self.storage(), indices)?)
                 .into_array(),

@@ -7,7 +7,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::validity::Validity;
-use vortex::{Array, IntoArray, OwnedArray};
+use vortex::{Array, IntoArray};
 use vortex_dtype::Nullability;
 use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::VortexResult;
@@ -36,7 +36,7 @@ impl EncodingCompression for DeltaEncoding {
         array: &Array,
         like: Option<&Array>,
         ctx: Compressor,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         let parray = PrimitiveArray::try_from(array)?;
         let like_delta = like.map(|l| DeltaArray::try_from(l).unwrap());
 

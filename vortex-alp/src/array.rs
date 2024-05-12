@@ -3,7 +3,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, ToArrayData};
 use vortex_dtype::PType;
 use vortex_error::vortex_bail;
 
@@ -50,7 +50,7 @@ impl ALPArray {
         )
     }
 
-    pub fn encode(array: Array) -> VortexResult<OwnedArray> {
+    pub fn encode(array: Array) -> VortexResult<Array> {
         if let Ok(parray) = PrimitiveArray::try_from(array) {
             Ok(alp_encode(&parray)?.into_array())
         } else {

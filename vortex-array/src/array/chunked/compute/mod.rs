@@ -8,7 +8,7 @@ use crate::compute::scalar_subtract::SubtractScalarFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::{Array, OwnedArray, ToStatic};
+use crate::{Array, ToStatic};
 
 mod slice;
 mod take;
@@ -36,7 +36,7 @@ impl ArrayCompute for ChunkedArray {
 }
 
 impl AsContiguousFn for ChunkedArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         // Combine all the chunks into one, then call as_contiguous again.
         let mut chunks = Vec::with_capacity(self.nchunks());
         for array in arrays {

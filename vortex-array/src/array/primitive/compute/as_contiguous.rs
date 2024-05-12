@@ -6,10 +6,10 @@ use crate::array::primitive::PrimitiveArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::validity::Validity;
 use crate::ArrayDType;
-use crate::{Array, IntoArray, OwnedArray};
+use crate::{Array, IntoArray};
 
 impl AsContiguousFn for PrimitiveArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let validity = if self.dtype().is_nullable() {
             Validity::from_iter(arrays.iter().map(|a| a.with_dyn(|a| a.logical_validity())))
         } else {

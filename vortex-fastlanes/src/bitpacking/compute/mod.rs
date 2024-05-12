@@ -9,7 +9,7 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray};
 use vortex_dtype::{match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
@@ -49,7 +49,7 @@ impl ScalarAtFn for BitPackedArray {
 }
 
 impl TakeFn for BitPackedArray {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         let ptype = self.dtype().try_into()?;
         let validity = self.validity();
         let taken_validity = validity.take(indices)?;

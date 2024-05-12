@@ -5,7 +5,7 @@ use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayFlatten, OwnedArray};
+use vortex::{impl_encoding, ArrayFlatten};
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::PType;
@@ -61,7 +61,7 @@ impl RoaringIntArray {
         self.metadata().ptype
     }
 
-    pub fn encode(array: OwnedArray) -> VortexResult<OwnedArray> {
+    pub fn encode(array: Array) -> VortexResult<Array> {
         if array.encoding().id() == Primitive::ID {
             Ok(roaring_encode(PrimitiveArray::try_from(array)?).into_array())
         } else {

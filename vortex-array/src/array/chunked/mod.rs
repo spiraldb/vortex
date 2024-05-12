@@ -11,7 +11,7 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
+use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, ToArrayData};
 
 mod compute;
 mod stats;
@@ -93,9 +93,9 @@ impl<'a> ChunkedArray {
     }
 }
 
-impl FromIterator<OwnedArray> for OwnedChunkedArray {
-    fn from_iter<T: IntoIterator<Item = OwnedArray>>(iter: T) -> Self {
-        let chunks: Vec<OwnedArray> = iter.into_iter().collect();
+impl FromIterator<Array> for ChunkedArray {
+    fn from_iter<T: IntoIterator<Item = Array>>(iter: T) -> Self {
+        let chunks: Vec<Array> = iter.into_iter().collect();
         let dtype = chunks
             .first()
             .map(|c| c.dtype().clone())
@@ -139,7 +139,7 @@ impl ArrayValidity for ChunkedArray {
 impl EncodingCompression for ChunkedEncoding {}
 
 impl SubtractScalarFn for ChunkedArray {
-    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
+    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array> {
         self.chunks()
             .map(|chunk| subtract_scalar(&chunk, to_subtract))
             .collect::<VortexResult<Vec<_>>>()
@@ -156,12 +156,12 @@ mod test {
     use vortex_dtype::{DType, Nullability};
     use vortex_dtype::{NativePType, PType};
 
-    use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
+    use crate::array::chunked::ChunkedArray;
     use crate::compute::scalar_subtract::subtract_scalar;
     use crate::compute::slice::slice;
     use crate::{Array, IntoArray, ToArray};
 
-    fn chunked_array() -> OwnedChunkedArray {
+    fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(
             vec![
                 vec![1u64, 2, 3].into_array(),

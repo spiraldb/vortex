@@ -4,11 +4,11 @@ use vortex_error::VortexResult;
 use crate::array::chunked::ChunkedArray;
 use crate::compute::cast::cast;
 use crate::compute::take::{take, TakeFn};
-use crate::{Array, IntoArray, OwnedArray, ToArray, ToStatic};
+use crate::{Array, IntoArray, ToArray, ToStatic};
 use crate::{ArrayDType, ArrayTrait};
 
 impl TakeFn for ChunkedArray {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         if self.len() == indices.len() {
             return Ok(self.to_array().to_static());
         }

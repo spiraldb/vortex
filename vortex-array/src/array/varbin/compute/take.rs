@@ -5,15 +5,15 @@ use vortex_dtype::NativePType;
 use vortex_error::VortexResult;
 
 use crate::array::varbin::builder::VarBinBuilder;
-use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
+use crate::array::varbin::VarBinArray;
 use crate::compute::take::TakeFn;
 use crate::validity::Validity;
+use crate::Array;
 use crate::ArrayDType;
 use crate::IntoArray;
-use crate::{Array, OwnedArray};
 
 impl TakeFn for VarBinArray {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         // TODO(ngates): support i64 indices.
         assert!(
             indices.len() < i32::MAX as usize,
@@ -43,7 +43,7 @@ fn take<I: NativePType, O: NativePType>(
     data: &[u8],
     indices: &[I],
     validity: Validity,
-) -> VortexResult<OwnedVarBinArray> {
+) -> VortexResult<VarBinArray> {
     let logical_validity = validity.to_logical(offsets.len() - 1);
     if let Some(v) = logical_validity.to_null_buffer()? {
         return Ok(take_nullable(dtype, offsets, data, indices, v));
@@ -65,7 +65,7 @@ fn take_nullable<I: NativePType, O: NativePType>(
     data: &[u8],
     indices: &[I],
     null_buffer: NullBuffer,
-) -> OwnedVarBinArray {
+) -> VarBinArray {
     let mut builder = VarBinBuilder::<I>::with_capacity(indices.len());
     for &idx in indices {
         let idx = idx.to_usize().unwrap();

@@ -5,7 +5,7 @@ use vortex_dtype::DType;
 use vortex_dtype::NativePType;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
+use crate::array::varbin::VarBinArray;
 use crate::validity::Validity;
 use crate::IntoArray;
 
@@ -48,7 +48,7 @@ impl<O: NativePType> VarBinBuilder<O> {
         self.validity.append_null();
     }
 
-    pub fn finish(&mut self, dtype: DType) -> OwnedVarBinArray {
+    pub fn finish(&mut self, dtype: DType) -> VarBinArray {
         let offsets = PrimitiveArray::from(mem::take(&mut self.offsets));
         let data = PrimitiveArray::from(mem::take(&mut self.data));
 

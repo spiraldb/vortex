@@ -21,7 +21,7 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
-use vortex::{IntoArray, OwnedArray, ToArrayData, ToStatic};
+use vortex::{Array, IntoArray, ToArrayData, ToStatic};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_ipc::iter::FallibleLendingIterator;
@@ -32,7 +32,7 @@ use crate::CTX;
 
 pub const BATCH_SIZE: usize = 65_536;
 
-pub fn open_vortex(path: &Path) -> VortexResult<OwnedArray> {
+pub fn open_vortex(path: &Path) -> VortexResult<Array> {
     let mut file = File::open(path)?;
 
     let mut reader = StreamReader::try_new(&mut file, &CTX)?;
@@ -93,7 +93,7 @@ pub fn write_csv_as_parquet(csv_path: PathBuf, output_path: &Path) -> VortexResu
     Ok(())
 }
 
-pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<OwnedArray> {
+pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<Array> {
     let array = open_vortex(path)?;
     let taken = take(&array, &indices.to_vec().into_array())?;
     // For equivalence.... we flatten to make sure we're not cheating too much.

@@ -119,7 +119,7 @@ impl BitPackedArray {
         ))
     }
 
-    pub fn encode(array: &Array, bit_width: usize) -> VortexResult<OwnedBitPackedArray> {
+    pub fn encode(array: &Array, bit_width: usize) -> VortexResult<BitPackedArray> {
         if let Ok(parray) = PrimitiveArray::try_from(array) {
             Ok(bitpack_encode(parray, bit_width)?)
         } else {

@@ -2,7 +2,7 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, ArrayDType, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -40,7 +40,7 @@ impl ScalarAtFn for ALPArray {
 }
 
 impl TakeFn for ALPArray {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         // TODO(ngates): wrap up indices in an array that caches decompression?
         Ok(ALPArray::try_new(
             take(&self.encoded(), indices)?,
@@ -52,7 +52,7 @@ impl TakeFn for ALPArray {
 }
 
 impl SliceFn for ALPArray {
-    fn slice(&self, start: usize, end: usize) -> VortexResult<OwnedArray> {
+    fn slice(&self, start: usize, end: usize) -> VortexResult<Array> {
         Ok(ALPArray::try_new(
             slice(&self.encoded(), start, end)?,
             self.exponents().clone(),

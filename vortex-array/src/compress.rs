@@ -13,9 +13,7 @@ use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::sampling::stratified_slices;
 use crate::stats::ArrayStatistics;
 use crate::validity::Validity;
-use crate::{
-    compute, Array, ArrayDType, ArrayDef, ArrayTrait, Context, IntoArray, OwnedArray, ToStatic,
-};
+use crate::{compute, Array, ArrayDType, ArrayDef, ArrayTrait, Context, IntoArray, ToStatic};
 
 pub trait EncodingCompression: ArrayEncoding {
     fn cost(&self) -> u8 {
@@ -35,7 +33,7 @@ pub trait EncodingCompression: ArrayEncoding {
         _array: &Array,
         _like: Option<&Array>,
         _ctx: Compressor,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         vortex_bail!(NotImplemented: "compress", self.id())
     }
 
@@ -134,7 +132,7 @@ impl<'a> Compressor<'a> {
         cloned
     }
 
-    pub fn compress(&self, arr: &Array, like: Option<&Array>) -> VortexResult<OwnedArray> {
+    pub fn compress(&self, arr: &Array, like: Option<&Array>) -> VortexResult<Array> {
         if arr.is_empty() {
             return Ok(arr.to_static());
         }
@@ -185,12 +183,12 @@ impl<'a> Compressor<'a> {
         }
     }
 
-    fn compress_array(&self, arr: &Array) -> VortexResult<OwnedArray> {
+    fn compress_array(&self, arr: &Array) -> VortexResult<Array> {
         match arr.encoding().id() {
             Chunked::ID => {
                 // For chunked arrays, we compress each chunk individually
                 let chunked = ChunkedArray::try_from(arr)?;
-                let compressed_chunks: VortexResult<Vec<OwnedArray>> = chunked
+                let compressed_chunks: VortexResult<Vec<Array>> = chunked
                     .chunks()
                     .map(|chunk| self.compress_array(&chunk))
                     .collect();
@@ -228,10 +226,7 @@ impl<'a> Compressor<'a> {
     }
 }
 
-pub fn sampled_compression(
-    array: &Array,
-    compressor: &Compressor,
-) -> VortexResult<Option<OwnedArray>> {
+pub fn sampled_compression(array: &Array, compressor: &Compressor) -> VortexResult<Option<Array>> {
     // First, we try constant compression and shortcut any sampling.
     if !array.is_empty() && array.statistics().compute_is_constant().unwrap_or(false) {
         return Ok(Some(
@@ -320,7 +315,7 @@ fn find_best_compression<'a>(
     candidates: Vec<&'a dyn EncodingCompression>,
     sample: &Array,
     ctx: &Compressor,
-) -> VortexResult<Option<(&'a dyn EncodingCompression, OwnedArray)>> {
+) -> VortexResult<Option<(&'a dyn EncodingCompression, Array)>> {
     let mut best = None;
     let mut best_ratio = 1.0;
     for compression in candidates {

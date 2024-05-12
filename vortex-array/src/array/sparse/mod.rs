@@ -184,7 +184,7 @@ mod test {
     use crate::compute::cast::cast;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::{Array, IntoArray, OwnedArray};
+    use crate::{Array, IntoArray};
 
     fn nullable_fill() -> Scalar {
         Scalar::null(DType::Primitive(PType::I32, Nullable))
@@ -195,7 +195,7 @@ mod test {
         Scalar::from(42i32)
     }
 
-    fn sparse_array(fill_value: Scalar) -> OwnedArray {
+    fn sparse_array(fill_value: Scalar) -> Array {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
         let mut values = vec![100i32, 200, 300].into_array();
         values = cast(&values, fill_value.dtype()).unwrap();

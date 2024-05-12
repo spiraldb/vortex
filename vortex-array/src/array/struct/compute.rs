@@ -17,7 +17,7 @@ use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::validity::Validity;
 use crate::ArrayTrait;
-use crate::{Array, ArrayDType, IntoArray, OwnedArray};
+use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for StructArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -70,7 +70,7 @@ impl AsArrowArray for StructArray {
 }
 
 impl AsContiguousFn for StructArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let struct_arrays = arrays
             .iter()
             .map(StructArray::try_from)
@@ -113,7 +113,7 @@ impl ScalarAtFn for StructArray {
 }
 
 impl TakeFn for StructArray {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         StructArray::try_new(
             self.names().clone(),
             self.children()
@@ -127,7 +127,7 @@ impl TakeFn for StructArray {
 }
 
 impl SliceFn for StructArray {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         let fields = self
             .children()
             .map(|field| slice(&field, start, stop))

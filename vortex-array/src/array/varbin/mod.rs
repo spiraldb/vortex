@@ -9,7 +9,7 @@ use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::validity::{Validity, ValidityMetadata};
-use crate::{impl_encoding, ArrayDType, OwnedArray, ToArrayData};
+use crate::{impl_encoding, ArrayDType, ToArrayData};
 
 mod accessor;
 mod array;
@@ -93,7 +93,7 @@ impl VarBinArray {
             .to_validity(self.array().child(2, &Validity::DTYPE))
     }
 
-    pub fn sliced_bytes(&self) -> VortexResult<OwnedArray> {
+    pub fn sliced_bytes(&self) -> VortexResult<Array> {
         let first_offset: usize = scalar_at(&self.offsets(), 0)?.as_ref().try_into()?;
         let last_offset: usize = scalar_at(&self.offsets(), self.offsets().len() - 1)?
             .as_ref()
@@ -227,9 +227,9 @@ mod test {
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
     use crate::validity::Validity;
-    use crate::{IntoArray, OwnedArray};
+    use crate::{Array, IntoArray};
 
-    fn binary_array() -> OwnedArray {
+    fn binary_array() -> Array {
         let values = PrimitiveArray::from(
             "hello worldhello world this is a long string"
                 .as_bytes()

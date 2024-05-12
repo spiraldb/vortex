@@ -4,10 +4,10 @@ use vortex_error::VortexResult;
 use crate::array::bool::BoolArray;
 use crate::compute::fill::FillForwardFn;
 use crate::validity::ArrayValidity;
-use crate::{ArrayDType, IntoArray, OwnedArray, ToArrayData};
+use crate::{Array, ArrayDType, IntoArray, ToArrayData};
 
 impl FillForwardFn for BoolArray {
-    fn fill_forward(&self) -> VortexResult<OwnedArray> {
+    fn fill_forward(&self) -> VortexResult<Array> {
         if self.dtype().nullability() == Nullability::NonNullable {
             return Ok(self.to_array_data().into_array());
         }

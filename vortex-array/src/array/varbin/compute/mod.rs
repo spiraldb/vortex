@@ -20,7 +20,7 @@ use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 use crate::validity::{ArrayValidity, Validity};
-use crate::{Array, ArrayDType, IntoArray, OwnedArray, ToArray};
+use crate::{Array, ArrayDType, IntoArray, ToArray};
 
 mod slice;
 mod take;
@@ -48,7 +48,7 @@ impl ArrayCompute for VarBinArray {
 }
 
 impl AsContiguousFn for VarBinArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let bytes_chunks: Vec<Array> = arrays
             .iter()
             .map(|a| VarBinArray::try_from(a).unwrap().sliced_bytes())

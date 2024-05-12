@@ -2,7 +2,7 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, IntoArray, OwnedArray};
+use vortex::{Array, IntoArray};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{PrimitiveScalar, Scalar};
@@ -24,7 +24,7 @@ impl ArrayCompute for FoRArray {
 }
 
 impl TakeFn for FoRArray {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         FoRArray::try_new(
             take(&self.encoded(), indices)?,
             self.reference().clone(),
@@ -55,7 +55,7 @@ impl ScalarAtFn for FoRArray {
 }
 
 impl SliceFn for FoRArray {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         FoRArray::try_new(
             slice(&self.encoded(), start, stop)?,
             self.reference().clone(),

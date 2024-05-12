@@ -14,9 +14,7 @@ use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
 use vortex::compute::take::take;
 use vortex::stats::{ArrayStatistics, Stat};
-use vortex::{
-    Array, ArrayDType, ArrayView, Context, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext,
-};
+use vortex::{Array, ArrayDType, ArrayView, Context, IntoArray, ToArray, ToStatic, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -206,7 +204,7 @@ impl<'a, R: Read> Drop for StreamArrayReader<'a, R> {
 /// to avoid this work happening at exipry, users can just consume the rest of the iterator
 /// themselves when they see fit.
 impl<'a, R: Read> FallibleIterator for TakeIterator<'a, R> {
-    type Item = OwnedArray;
+    type Item = Array;
     type Error = VortexError;
 
     fn next(&mut self) -> VortexResult<Option<Self::Item>> {
@@ -402,7 +400,7 @@ mod tests {
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId, EncodingRef};
     use vortex::stats::{ArrayStatistics, Stat};
-    use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray, OwnedArray, ToStatic};
+    use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray, ToStatic};
     use vortex_alp::{ALPArray, ALPEncoding};
     use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
@@ -780,7 +778,7 @@ mod tests {
     fn test_read_write_single_chunk_array<'a>(
         data: &'a Array,
         indices: &'a Array,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         let ctx =
             Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
 

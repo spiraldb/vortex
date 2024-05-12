@@ -67,8 +67,6 @@ pub enum Array {
     View(ArrayView),
 }
 
-pub type OwnedArray = Array;
-
 impl Array {
     pub fn encoding(&self) -> EncodingRef {
         match self {
@@ -114,7 +112,7 @@ impl Array {
 }
 
 impl ToStatic for Array {
-    type Static = OwnedArray;
+    type Static = Array;
 
     fn to_static(&self) -> Self::Static {
         Array::Data(self.to_array_data())

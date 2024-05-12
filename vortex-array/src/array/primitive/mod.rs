@@ -11,7 +11,7 @@ use vortex_error::vortex_bail;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayFlatten;
-use crate::{impl_encoding, ArrayDType, OwnedArray};
+use crate::{impl_encoding, ArrayDType};
 
 mod accessor;
 mod compute;
@@ -176,7 +176,7 @@ impl<T: NativePType> From<Vec<T>> for PrimitiveArray {
 }
 
 impl<T: NativePType> IntoArray for Vec<T> {
-    fn into_array(self) -> OwnedArray {
+    fn into_array(self) -> Array {
         PrimitiveArray::from(self).into_array()
     }
 }

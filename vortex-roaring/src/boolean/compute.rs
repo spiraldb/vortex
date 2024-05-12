@@ -2,7 +2,7 @@ use croaring::Bitmap;
 use vortex::compute::scalar_at::ScalarAtFn;
 use vortex::compute::slice::SliceFn;
 use vortex::compute::ArrayCompute;
-use vortex::{IntoArray, OwnedArray};
+use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -29,7 +29,7 @@ impl ScalarAtFn for RoaringBoolArray {
 }
 
 impl SliceFn for RoaringBoolArray {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         let slice_bitmap = Bitmap::from_range(start as u32..stop as u32);
         let bitmap = self.bitmap().and(&slice_bitmap).add_offset(-(start as i64));
 

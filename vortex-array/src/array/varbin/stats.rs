@@ -129,10 +129,10 @@ mod test {
     use vortex_buffer::{Buffer, BufferString};
     use vortex_dtype::{DType, Nullability};
 
-    use crate::array::varbin::{OwnedVarBinArray, VarBinArray};
+    use crate::array::varbin::VarBinArray;
     use crate::stats::{ArrayStatistics, Stat};
 
-    fn array(dtype: DType) -> OwnedVarBinArray {
+    fn array(dtype: DType) -> VarBinArray {
         VarBinArray::from_vec(
             vec!["hello world", "hello world this is a long string"],
             dtype,

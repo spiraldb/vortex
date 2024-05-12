@@ -11,10 +11,10 @@ use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_subtract::SubtractScalarFn;
 use crate::stats::{ArrayStatistics, Stat};
 use crate::validity::ArrayValidity;
-use crate::{ArrayDType, ArrayTrait, IntoArray, OwnedArray, ToStatic};
+use crate::{Array, ArrayDType, ArrayTrait, IntoArray, ToStatic};
 
 impl SubtractScalarFn for PrimitiveArray {
-    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
+    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array> {
         if self.dtype() != to_subtract.dtype() {
             vortex_bail!(MismatchedTypes: self.dtype(), to_subtract.dtype())
         }
