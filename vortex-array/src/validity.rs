@@ -136,15 +136,6 @@ impl Validity {
             }
         }
     }
-
-    pub fn to_static(&self) -> Validity {
-        match self {
-            Validity::NonNullable => Validity::NonNullable,
-            Validity::AllValid => Validity::AllValid,
-            Validity::AllInvalid => Validity::AllInvalid,
-            Validity::Array(a) => Validity::Array(a.to_array_data().into_array()),
-        }
-    }
 }
 
 impl PartialEq for Validity {
