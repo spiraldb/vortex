@@ -14,7 +14,7 @@ use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
 use vortex::compute::take::take;
 use vortex::stats::{ArrayStatistics, Stat};
-use vortex::{Array, ArrayDType, ArrayView, Context, IntoArray, ToArray, ToStatic, ViewContext};
+use vortex::{Array, ArrayDType, ArrayView, Context, IntoArray, ToArray, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -69,7 +69,7 @@ impl<R: Read> StreamReader<R> {
 
         let mut chunks = vec![];
         while let Some(chunk) = array_reader.next()? {
-            chunks.push(chunk.to_static());
+            chunks.push(chunk);
         }
 
         if chunks.len() == 1 {
@@ -400,7 +400,7 @@ mod tests {
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId, EncodingRef};
     use vortex::stats::{ArrayStatistics, Stat};
-    use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray, ToStatic};
+    use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray};
     use vortex_alp::{ALPArray, ALPEncoding};
     use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
@@ -870,6 +870,6 @@ mod tests {
         let mut cursor = Cursor::new(&buffer);
         let mut reader = StreamReader::try_new(&mut cursor, &context).unwrap();
         let data = reader.read_array().unwrap();
-        data.to_static()
+        data
     }
 }

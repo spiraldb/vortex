@@ -8,7 +8,7 @@ use crate::compute::scalar_subtract::SubtractScalarFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::{Array, ToStatic};
+use crate::Array;
 
 mod slice;
 mod take;
@@ -41,7 +41,7 @@ impl AsContiguousFn for ChunkedArray {
         let mut chunks = Vec::with_capacity(self.nchunks());
         for array in arrays {
             for chunk in ChunkedArray::try_from(array).unwrap().chunks() {
-                chunks.push(chunk.to_static());
+                chunks.push(chunk);
             }
         }
         as_contiguous(&chunks)

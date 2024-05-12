@@ -152,7 +152,7 @@ impl PrimitiveArray {
             vortex_bail!(MismatchedTypes: self.dtype(), T::PTYPE)
         }
 
-        let validity = self.validity().to_static();
+        let validity = self.validity();
 
         let mut own_values = self.into_typed_data();
         // TODO(robert): Also patch validity

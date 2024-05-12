@@ -21,7 +21,7 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
-use vortex::{Array, IntoArray, ToArrayData, ToStatic};
+use vortex::{Array, IntoArray, ToArrayData};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_ipc::iter::FallibleLendingIterator;
@@ -40,7 +40,7 @@ pub fn open_vortex(path: &Path) -> VortexResult<Array> {
     let dtype = reader.dtype().clone();
     let mut chunks = vec![];
     while let Some(chunk) = reader.next()? {
-        chunks.push(chunk.to_static())
+        chunks.push(chunk)
     }
     Ok(ChunkedArray::try_new(chunks, dtype)?.into_array())
 }

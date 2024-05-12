@@ -1,7 +1,7 @@
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::{Array, ArrayDType, ToStatic};
+use crate::{Array, ArrayDType};
 
 pub trait CastFn {
     fn cast(&self, dtype: &DType) -> VortexResult<Array>;
@@ -9,7 +9,7 @@ pub trait CastFn {
 
 pub fn cast(array: &Array, dtype: &DType) -> VortexResult<Array> {
     if array.dtype() == dtype {
-        return Ok(array.to_static());
+        return Ok(array.clone());
     }
 
     // TODO(ngates): check for null_count if dtype is non-nullable

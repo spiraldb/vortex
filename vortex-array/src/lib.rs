@@ -111,14 +111,6 @@ impl Array {
     }
 }
 
-impl ToStatic for Array {
-    type Static = Array;
-
-    fn to_static(&self) -> Self::Static {
-        Array::Data(self.to_array_data())
-    }
-}
-
 pub trait ToArray {
     fn to_array(&self) -> Array;
 }
@@ -133,12 +125,6 @@ pub trait ToArrayData {
 
 pub trait IntoArrayData {
     fn into_array_data(self) -> ArrayData;
-}
-
-pub trait ToStatic {
-    type Static;
-
-    fn to_static(&self) -> Self::Static;
 }
 
 pub trait AsArray {

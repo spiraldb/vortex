@@ -10,7 +10,7 @@ use vortex::array::varbin::{VarBin, VarBinArray, VarBinEncoding};
 use vortex::array::varbinview::{VarBinView, VarBinViewArray, VarBinViewEncoding};
 use vortex::compute::take::take;
 use vortex::encoding::EncodingRef;
-use vortex::ToStatic;
+use vortex::ToArray;
 use vortex::{Array, ArrayDType, ArrayData, IntoArray};
 use vortex::{ArrayDef, IntoArrayData};
 use vortex_alp::{ALPArray, ALPEncoding, ALP};
@@ -47,7 +47,7 @@ macro_rules! pyarray {
 
            impl [<Py $T>] {
                pub fn wrap(py: Python<'_>, inner: $T) -> PyResult<Py<Self>> {
-                   let init = PyClassInitializer::from(PyArray { inner: inner.array().to_static() })
+                   let init = PyClassInitializer::from(PyArray { inner: inner.to_array().clone() })
                         .add_subclass([<Py $T>] { inner, encoding: &$E });
                    Py::new(py, init)
                }

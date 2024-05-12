@@ -4,7 +4,7 @@ use num_traits::NumCast;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::ArrayStatistics;
-use vortex::{Array, ArrayDType, ArrayDef, IntoArray, ToStatic};
+use vortex::{Array, ArrayDType, ArrayDef, IntoArray};
 use vortex_dtype::{NativePType, PType};
 use vortex_error::VortexResult;
 
@@ -53,7 +53,7 @@ impl EncodingCompression for RoaringIntEncoding {
         _ctx: Compressor,
     ) -> VortexResult<Array> {
         let parray = array.clone().flatten_primitive()?;
-        Ok(roaring_encode(parray).into_array().to_static())
+        Ok(roaring_encode(parray).into_array())
     }
 }
 

@@ -13,7 +13,7 @@ use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::sampling::stratified_slices;
 use crate::stats::ArrayStatistics;
 use crate::validity::Validity;
-use crate::{compute, Array, ArrayDType, ArrayDef, ArrayTrait, Context, IntoArray, ToStatic};
+use crate::{compute, Array, ArrayDType, ArrayDef, ArrayTrait, Context, IntoArray};
 
 pub trait EncodingCompression: ArrayEncoding {
     fn cost(&self) -> u8 {
@@ -134,7 +134,7 @@ impl<'a> Compressor<'a> {
 
     pub fn compress(&self, arr: &Array, like: Option<&Array>) -> VortexResult<Array> {
         if arr.is_empty() {
-            return Ok(arr.to_static());
+            return Ok(arr.clone());
         }
 
         // Attempt to compress using the "like" array, otherwise fall back to sampled compression
@@ -199,7 +199,7 @@ impl<'a> Compressor<'a> {
             }
             Constant::ID => {
                 // Not much better we can do than constant!
-                Ok(arr.to_static())
+                Ok(arr.clone())
             }
             Struct::ID => {
                 // For struct arrays, we compress each field individually
@@ -220,7 +220,7 @@ impl<'a> Compressor<'a> {
             _ => {
                 // Otherwise, we run sampled compression over pluggable encodings
                 let sampled = sampled_compression(arr, self)?;
-                Ok(sampled.unwrap_or_else(|| arr.to_static()))
+                Ok(sampled.unwrap_or_else(|| arr.clone()))
             }
         }
     }

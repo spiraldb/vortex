@@ -6,7 +6,7 @@ use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, ToStatic};
+use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray};
 use vortex_dtype::PType::U8;
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
@@ -61,7 +61,7 @@ impl EncodingCompression for BitPackedEncoding {
 
         if bit_width == parray.ptype().bit_width() {
             // Nothing we can do
-            return Ok(array.to_static());
+            return Ok(array.clone());
         }
 
         let validity = ctx.compress_validity(parray.validity())?;

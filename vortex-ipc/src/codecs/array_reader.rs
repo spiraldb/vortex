@@ -5,7 +5,7 @@ use std::task::Poll;
 use flatbuffers::root;
 use futures_util::Stream;
 use pin_project::pin_project;
-use vortex::{Array, ArrayView, IntoArray, ToArray, ToStatic, ViewContext};
+use vortex::{Array, ArrayView, IntoArray, ToArray, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
@@ -81,7 +81,7 @@ impl<'m, M: MessageReader> MessageArrayReader<'m, M> {
 
         let inner = futures_util::stream::unfold(self, move |mut reader| async move {
             match reader.next().await {
-                Ok(Some(array)) => Some((Ok(array.to_static()), reader)),
+                Ok(Some(array)) => Some((Ok(array), reader)),
                 Ok(None) => None,
                 Err(e) => Some((Err(e), reader)),
             }

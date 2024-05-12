@@ -11,7 +11,7 @@ use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::{Array, IntoArray, ToStatic};
+use crate::{Array, IntoArray};
 
 impl ArrayCompute for ExtensionArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
@@ -62,7 +62,6 @@ impl AsContiguousFn for ExtensionArray {
                 ExtensionArray::try_from(a)
                     .expect("not an extension array")
                     .storage()
-                    .to_static()
             })
             .collect::<Vec<_>>();
 
