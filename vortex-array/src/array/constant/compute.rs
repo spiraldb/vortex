@@ -7,9 +7,9 @@ use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::{Array, ArrayTrait, IntoArray, OwnedArray};
+use crate::{Array, ArrayTrait, IntoArray};
 
-impl ArrayCompute for ConstantArray<'_> {
+impl ArrayCompute for ConstantArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
@@ -23,8 +23,8 @@ impl ArrayCompute for ConstantArray<'_> {
     }
 }
 
-impl AsContiguousFn for ConstantArray<'_> {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+impl AsContiguousFn for ConstantArray {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let chunks = arrays
             .iter()
             .map(|a| ConstantArray::try_from(a).unwrap())
@@ -45,14 +45,14 @@ impl AsContiguousFn for ConstantArray<'_> {
     }
 }
 
-impl ScalarAtFn for ConstantArray<'_> {
+impl ScalarAtFn for ConstantArray {
     fn scalar_at(&self, _index: usize) -> VortexResult<Scalar> {
         Ok(self.scalar().clone())
     }
 }
 
-impl TakeFn for ConstantArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for ConstantArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         Ok(ConstantArray::new(self.scalar().clone(), indices.len()).into_array())
     }
 }

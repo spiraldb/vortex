@@ -6,7 +6,7 @@ use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::compute::cast::cast;
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray, ToStatic};
+use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray};
 use vortex_dtype::PType::U8;
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
@@ -14,7 +14,7 @@ use vortex_dtype::{
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::{BitPackedArray, BitPackedEncoding, OwnedBitPackedArray};
+use crate::{BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -51,7 +51,7 @@ impl EncodingCompression for BitPackedEncoding {
         array: &Array,
         like: Option<&Array>,
         ctx: Compressor,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         let parray = array.as_primitive();
         let bit_width_freq = parray.statistics().compute_bit_width_freq()?;
 
@@ -61,7 +61,7 @@ impl EncodingCompression for BitPackedEncoding {
 
         if bit_width == parray.ptype().bit_width() {
             // Nothing we can do
-            return Ok(array.to_static());
+            return Ok(array.clone());
         }
 
         let validity = ctx.compress_validity(parray.validity())?;
@@ -88,9 +88,9 @@ impl EncodingCompression for BitPackedEncoding {
 }
 
 pub(crate) fn bitpack_encode(
-    array: PrimitiveArray<'_>,
+    array: PrimitiveArray,
     bit_width: usize,
-) -> VortexResult<OwnedBitPackedArray> {
+) -> VortexResult<BitPackedArray> {
     let bit_width_freq = array.statistics().compute_bit_width_freq()?;
     let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
@@ -118,7 +118,7 @@ pub(crate) fn bitpack_encode(
     )
 }
 
-pub(crate) fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<OwnedArray> {
+pub(crate) fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Array> {
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     let parray = parray.reinterpret_cast(parray.ptype().to_unsigned());
     let bytes = match_each_unsigned_integer_ptype!(parray.ptype(), |$P| {
@@ -157,11 +157,7 @@ pub fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: us
     output
 }
 
-fn bitpack_patches(
-    parray: &PrimitiveArray,
-    bit_width: usize,
-    num_exceptions_hint: usize,
-) -> OwnedArray {
+fn bitpack_patches(parray: &PrimitiveArray, bit_width: usize, num_exceptions_hint: usize) -> Array {
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
         let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
@@ -180,7 +176,7 @@ fn bitpack_patches(
     })
 }
 
-pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray<'a>> {
+pub fn unpack(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
     let offset = array.offset();
@@ -206,10 +202,7 @@ pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray<'a>> {
     }
 }
 
-fn patch_unpacked<'a>(
-    array: PrimitiveArray<'a>,
-    patches: &Array,
-) -> VortexResult<PrimitiveArray<'a>> {
+fn patch_unpacked(array: PrimitiveArray, patches: &Array) -> VortexResult<PrimitiveArray> {
     match patches.encoding().id() {
         Sparse::ID => {
             match_each_integer_ptype!(array.ptype(), |$T| {

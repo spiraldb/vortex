@@ -8,7 +8,7 @@ use vortex::ArrayTrait;
 use vortex_dict::dict_encode_typed_primitive;
 use vortex_dtype::match_each_native_ptype;
 
-fn gen_primitive_dict<'a>(len: usize, uniqueness: f64) -> PrimitiveArray<'a> {
+fn gen_primitive_dict(len: usize, uniqueness: f64) -> PrimitiveArray {
     let mut rng = thread_rng();
     let value_range = len as f64 * uniqueness;
     let range = Uniform::new(-(value_range / 2.0) as i32, (value_range / 2.0) as i32);
@@ -17,7 +17,7 @@ fn gen_primitive_dict<'a>(len: usize, uniqueness: f64) -> PrimitiveArray<'a> {
     PrimitiveArray::from(data)
 }
 
-fn gen_varbin_dict<'a>(len: usize, uniqueness: f64) -> VarBinArray<'a> {
+fn gen_varbin_dict(len: usize, uniqueness: f64) -> VarBinArray {
     let mut rng = thread_rng();
     let uniq_cnt = (len as f64 * uniqueness) as usize;
     let dict: Vec<String> = (0..uniq_cnt)

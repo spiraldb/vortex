@@ -18,7 +18,7 @@ pub struct StructMetadata {
     validity: ValidityMetadata,
 }
 
-impl StructArray<'_> {
+impl StructArray {
     pub fn field(&self, idx: usize) -> Option<Array> {
         let DType::Struct(st, _) = self.dtype() else {
             unreachable!()
@@ -52,13 +52,13 @@ impl StructArray<'_> {
     }
 }
 
-impl<'a> StructArray<'a> {
-    pub fn children(&'a self) -> impl Iterator<Item = Array<'a>> {
+impl<'a> StructArray {
+    pub fn children(&'a self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nfields()).map(move |idx| self.field(idx).unwrap())
     }
 }
 
-impl StructArray<'_> {
+impl StructArray {
     pub fn try_new(
         names: FieldNames,
         fields: Vec<Array>,
@@ -98,11 +98,8 @@ impl StructArray<'_> {
     }
 }
 
-impl ArrayFlatten for StructArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for StructArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         Ok(Flattened::Struct(StructArray::try_new(
             self.names().clone(),
             (0..self.nfields())
@@ -119,13 +116,13 @@ impl ArrayFlatten for StructArray<'_> {
     }
 }
 
-impl ArrayTrait for StructArray<'_> {
+impl ArrayTrait for StructArray {
     fn len(&self) -> usize {
         self.metadata().length
     }
 }
 
-impl ArrayValidity for StructArray<'_> {
+impl ArrayValidity for StructArray {
     fn is_valid(&self, _index: usize) -> bool {
         todo!()
     }
@@ -135,7 +132,7 @@ impl ArrayValidity for StructArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for StructArray<'_> {
+impl AcceptArrayVisitor for StructArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         for (idx, name) in self.names().iter().enumerate() {
             let child = self.field(idx).unwrap();
@@ -145,6 +142,6 @@ impl AcceptArrayVisitor for StructArray<'_> {
     }
 }
 
-impl ArrayStatisticsCompute for StructArray<'_> {}
+impl ArrayStatisticsCompute for StructArray {}
 
 impl EncodingCompression for StructEncoding {}

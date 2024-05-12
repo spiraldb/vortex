@@ -9,7 +9,7 @@ use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::validity::{Validity, ValidityMetadata};
-use crate::{impl_encoding, ArrayDType, OwnedArray, ToArrayData};
+use crate::{impl_encoding, ArrayDType, ToArrayData};
 
 mod accessor;
 mod array;
@@ -31,7 +31,7 @@ pub struct VarBinMetadata {
     offsets_dtype: DType,
 }
 
-impl VarBinArray<'_> {
+impl VarBinArray {
     pub fn try_new(
         offsets: Array,
         bytes: Array,
@@ -93,7 +93,7 @@ impl VarBinArray<'_> {
             .to_validity(self.array().child(2, &Validity::DTYPE))
     }
 
-    pub fn sliced_bytes(&self) -> VortexResult<OwnedArray> {
+    pub fn sliced_bytes(&self) -> VortexResult<Array> {
         let first_offset: usize = scalar_at(&self.offsets(), 0)?.as_ref().try_into()?;
         let last_offset: usize = scalar_at(&self.offsets(), self.offsets().len() - 1)?
             .as_ref()
@@ -159,49 +159,49 @@ impl VarBinArray<'_> {
     }
 }
 
-impl From<Vec<&[u8]>> for VarBinArray<'_> {
+impl From<Vec<&[u8]>> for VarBinArray {
     fn from(value: Vec<&[u8]>) -> Self {
         VarBinArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<Vec<u8>>> for VarBinArray<'_> {
+impl From<Vec<Vec<u8>>> for VarBinArray {
     fn from(value: Vec<Vec<u8>>) -> Self {
         VarBinArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<String>> for VarBinArray<'_> {
+impl From<Vec<String>> for VarBinArray {
     fn from(value: Vec<String>) -> Self {
         VarBinArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<&str>> for VarBinArray<'_> {
+impl From<Vec<&str>> for VarBinArray {
     fn from(value: Vec<&str>) -> Self {
         VarBinArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl<'a> FromIterator<Option<&'a [u8]>> for VarBinArray<'_> {
+impl<'a> FromIterator<Option<&'a [u8]>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a [u8]>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Binary(Nullability::Nullable))
     }
 }
 
-impl FromIterator<Option<Vec<u8>>> for VarBinArray<'_> {
+impl FromIterator<Option<Vec<u8>>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<Vec<u8>>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Binary(Nullability::Nullable))
     }
 }
 
-impl FromIterator<Option<String>> for VarBinArray<'_> {
+impl FromIterator<Option<String>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<String>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Utf8(Nullability::Nullable))
     }
 }
 
-impl<'a> FromIterator<Option<&'a str>> for VarBinArray<'_> {
+impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a str>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Utf8(Nullability::Nullable))
     }
@@ -227,9 +227,9 @@ mod test {
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
     use crate::validity::Validity;
-    use crate::{IntoArray, OwnedArray};
+    use crate::{Array, IntoArray};
 
-    fn binary_array() -> OwnedArray {
+    fn binary_array() -> Array {
         let values = PrimitiveArray::from(
             "hello worldhello world this is a long string"
                 .as_bytes()

@@ -2,14 +2,14 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, IntoArray, OwnedArray};
+use vortex::{Array, IntoArray};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{PrimitiveScalar, Scalar};
 
 use crate::FoRArray;
 
-impl ArrayCompute for FoRArray<'_> {
+impl ArrayCompute for FoRArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -23,8 +23,8 @@ impl ArrayCompute for FoRArray<'_> {
     }
 }
 
-impl TakeFn for FoRArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for FoRArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         FoRArray::try_new(
             take(&self.encoded(), indices)?,
             self.reference().clone(),
@@ -34,7 +34,7 @@ impl TakeFn for FoRArray<'_> {
     }
 }
 
-impl ScalarAtFn for FoRArray<'_> {
+impl ScalarAtFn for FoRArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let encoded_scalar = scalar_at(&self.encoded(), index)?;
         let encoded = PrimitiveScalar::try_from(&encoded_scalar)?;
@@ -54,8 +54,8 @@ impl ScalarAtFn for FoRArray<'_> {
     }
 }
 
-impl SliceFn for FoRArray<'_> {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+impl SliceFn for FoRArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         FoRArray::try_new(
             slice(&self.encoded(), start, stop)?,
             self.reference().clone(),

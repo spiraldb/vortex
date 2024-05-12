@@ -11,7 +11,7 @@ use vortex_error::vortex_bail;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayFlatten;
-use crate::{impl_encoding, ArrayDType, OwnedArray};
+use crate::{impl_encoding, ArrayDType};
 
 mod accessor;
 mod compute;
@@ -24,7 +24,7 @@ pub struct PrimitiveMetadata {
     validity: ValidityMetadata,
 }
 
-impl PrimitiveArray<'_> {
+impl PrimitiveArray {
     // TODO(ngates): remove the Arrow types from this API.
     pub fn try_new<T: NativePType + ArrowNativeType>(
         buffer: ScalarBuffer<T>,
@@ -152,7 +152,7 @@ impl PrimitiveArray<'_> {
             vortex_bail!(MismatchedTypes: self.dtype(), T::PTYPE)
         }
 
-        let validity = self.validity().to_static();
+        let validity = self.validity();
 
         let mut own_values = self.into_typed_data();
         // TODO(robert): Also patch validity
@@ -169,34 +169,31 @@ impl PrimitiveArray<'_> {
     }
 }
 
-impl<T: NativePType> From<Vec<T>> for PrimitiveArray<'_> {
+impl<T: NativePType> From<Vec<T>> for PrimitiveArray {
     fn from(values: Vec<T>) -> Self {
         PrimitiveArray::from_vec(values, Validity::NonNullable)
     }
 }
 
-impl<T: NativePType> IntoArray<'static> for Vec<T> {
-    fn into_array(self) -> OwnedArray {
+impl<T: NativePType> IntoArray for Vec<T> {
+    fn into_array(self) -> Array {
         PrimitiveArray::from(self).into_array()
     }
 }
 
-impl ArrayFlatten for PrimitiveArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for PrimitiveArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         Ok(Flattened::Primitive(self))
     }
 }
 
-impl ArrayTrait for PrimitiveArray<'_> {
+impl ArrayTrait for PrimitiveArray {
     fn len(&self) -> usize {
         self.buffer().len() / self.ptype().byte_width()
     }
 }
 
-impl ArrayValidity for PrimitiveArray<'_> {
+impl ArrayValidity for PrimitiveArray {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
@@ -206,15 +203,15 @@ impl ArrayValidity for PrimitiveArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for PrimitiveArray<'_> {
+impl AcceptArrayVisitor for PrimitiveArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_buffer(self.buffer())?;
         visitor.visit_validity(&self.validity())
     }
 }
 
-impl<'a> Array<'a> {
-    pub fn into_primitive(self) -> PrimitiveArray<'a> {
+impl Array {
+    pub fn into_primitive(self) -> PrimitiveArray {
         PrimitiveArray::try_from(self).expect("expected primitive array")
     }
 

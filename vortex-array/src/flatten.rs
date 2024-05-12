@@ -11,42 +11,40 @@ use crate::encoding::ArrayEncoding;
 use crate::{Array, IntoArray};
 
 /// The set of encodings that can be converted to Arrow with zero-copy.
-pub enum Flattened<'a> {
-    Bool(BoolArray<'a>),
-    Chunked(ChunkedArray<'a>),
-    Primitive(PrimitiveArray<'a>),
-    Struct(StructArray<'a>),
-    VarBin(VarBinArray<'a>),
-    VarBinView(VarBinViewArray<'a>),
-    Extension(ExtensionArray<'a>),
+pub enum Flattened {
+    Bool(BoolArray),
+    Chunked(ChunkedArray),
+    Primitive(PrimitiveArray),
+    Struct(StructArray),
+    VarBin(VarBinArray),
+    VarBinView(VarBinViewArray),
+    Extension(ExtensionArray),
 }
 
 pub trait ArrayFlatten {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a;
+    fn flatten(self) -> VortexResult<Flattened>;
 }
 
-impl<'a> Array<'a> {
-    pub fn flatten(self) -> VortexResult<Flattened<'a>> {
+impl Array {
+    pub fn flatten(self) -> VortexResult<Flattened> {
         ArrayEncoding::flatten(self.encoding(), self)
     }
 
-    pub fn flatten_bool(self) -> VortexResult<BoolArray<'a>> {
+    pub fn flatten_bool(self) -> VortexResult<BoolArray> {
         BoolArray::try_from(self.flatten()?.into_array())
     }
 
-    pub fn flatten_primitive(self) -> VortexResult<PrimitiveArray<'a>> {
+    pub fn flatten_primitive(self) -> VortexResult<PrimitiveArray> {
         PrimitiveArray::try_from(self.flatten()?.into_array())
     }
 
-    pub fn flatten_varbin(self) -> VortexResult<VarBinArray<'a>> {
+    pub fn flatten_varbin(self) -> VortexResult<VarBinArray> {
         VarBinArray::try_from(self.flatten()?.into_array())
     }
 }
 
-impl<'a> IntoArray<'a> for Flattened<'a> {
-    fn into_array(self) -> Array<'a> {
+impl IntoArray for Flattened {
+    fn into_array(self) -> Array {
         match self {
             Flattened::Bool(a) => a.into_array(),
             Flattened::Primitive(a) => a.into_array(),

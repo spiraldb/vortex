@@ -11,10 +11,10 @@ use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_subtract::SubtractScalarFn;
 use crate::stats::{ArrayStatistics, Stat};
 use crate::validity::ArrayValidity;
-use crate::{ArrayDType, ArrayTrait, IntoArray, OwnedArray, ToStatic};
+use crate::{Array, ArrayDType, ArrayTrait, IntoArray};
 
-impl SubtractScalarFn for PrimitiveArray<'_> {
-    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
+impl SubtractScalarFn for PrimitiveArray {
+    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array> {
         if self.dtype() != to_subtract.dtype() {
             vortex_bail!(MismatchedTypes: self.dtype(), to_subtract.dtype())
         }
@@ -44,7 +44,7 @@ impl SubtractScalarFn for PrimitiveArray<'_> {
                 PrimitiveArray::from(sub_vec)
             })
         };
-        Ok(result.into_array().to_static())
+        Ok(result.into_array())
     }
 }
 
@@ -52,9 +52,9 @@ fn subtract_scalar_integer<
     'a,
     T: NativePType + OverflowingSub + SaturatingSub + for<'b> TryFrom<&'b Scalar, Error = VortexError>,
 >(
-    subtract_from: &PrimitiveArray<'a>,
+    subtract_from: &PrimitiveArray,
     to_subtract: T,
-) -> VortexResult<PrimitiveArray<'a>> {
+) -> VortexResult<PrimitiveArray> {
     if to_subtract.is_zero() {
         // if to_subtract is zero, skip operation
         return Ok(subtract_from.clone());

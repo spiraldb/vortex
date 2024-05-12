@@ -10,7 +10,7 @@ use vortex::array::varbin::{VarBin, VarBinArray};
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray};
+use vortex::{Array, ArrayDType, ArrayDef, IntoArray, ToArray};
 use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_dtype::{NativePType, ToBytes};
 use vortex_error::VortexResult;
@@ -46,7 +46,7 @@ impl EncodingCompression for DictEncoding {
         array: &Array,
         like: Option<&Array>,
         ctx: Compressor,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         let dict_like = like.map(|like_arr| DictArray::try_from(like_arr).unwrap());
         let dict_like_ref = dict_like.as_ref();
 
@@ -108,9 +108,9 @@ impl<T: ToBytes> Eq for Value<T> {}
 
 /// Dictionary encode primitive array with given PType.
 /// Null values in the original array are encoded in the dictionary.
-pub fn dict_encode_typed_primitive<'a, T: NativePType>(
-    array: &PrimitiveArray<'a>,
-) -> (PrimitiveArray<'a>, PrimitiveArray<'a>) {
+pub fn dict_encode_typed_primitive<T: NativePType>(
+    array: &PrimitiveArray,
+) -> (PrimitiveArray, PrimitiveArray) {
     let mut lookup_dict: HashMap<Value<T>, u64> = HashMap::new();
     let mut codes: Vec<u64> = Vec::new();
     let mut values: Vec<T> = Vec::new();
@@ -156,7 +156,7 @@ pub fn dict_encode_typed_primitive<'a, T: NativePType>(
 }
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying
-pub fn dict_encode_varbin<'a>(array: &'a VarBinArray) -> (PrimitiveArray<'a>, VarBinArray<'a>) {
+pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
     array
         .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
         .unwrap()
@@ -172,10 +172,7 @@ fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
     &bytes[begin..end]
 }
 
-fn dict_encode_typed_varbin<'a, I, U>(
-    dtype: DType,
-    values: I,
-) -> (PrimitiveArray<'a>, VarBinArray<'a>)
+fn dict_encode_typed_varbin<I, U>(dtype: DType, values: I) -> (PrimitiveArray, VarBinArray)
 where
     I: Iterator<Item = Option<U>>,
     U: AsRef<[u8]>,

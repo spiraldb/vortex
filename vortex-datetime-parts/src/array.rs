@@ -16,7 +16,7 @@ pub struct DateTimePartsMetadata {
     subseconds_dtype: DType,
 }
 
-impl DateTimePartsArray<'_> {
+impl DateTimePartsArray {
     pub fn try_new(
         dtype: DType,
         days: Array,
@@ -79,17 +79,14 @@ impl DateTimePartsArray<'_> {
     }
 }
 
-impl ArrayFlatten for DateTimePartsArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for DateTimePartsArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         // TODO(ngates): flatten into vortex.localdatetime or appropriate per dtype
         todo!()
     }
 }
 
-impl ArrayValidity for DateTimePartsArray<'_> {
+impl ArrayValidity for DateTimePartsArray {
     fn is_valid(&self, index: usize) -> bool {
         self.days().with_dyn(|a| a.is_valid(index))
     }
@@ -99,7 +96,7 @@ impl ArrayValidity for DateTimePartsArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for DateTimePartsArray<'_> {
+impl AcceptArrayVisitor for DateTimePartsArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("days", &self.days())?;
         visitor.visit_child("seconds", &self.seconds())?;
@@ -107,9 +104,9 @@ impl AcceptArrayVisitor for DateTimePartsArray<'_> {
     }
 }
 
-impl ArrayStatisticsCompute for DateTimePartsArray<'_> {}
+impl ArrayStatisticsCompute for DateTimePartsArray {}
 
-impl ArrayTrait for DateTimePartsArray<'_> {
+impl ArrayTrait for DateTimePartsArray {
     fn len(&self) -> usize {
         self.days().len()
     }

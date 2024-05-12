@@ -14,9 +14,7 @@ use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
 use vortex::compute::take::take;
 use vortex::stats::{ArrayStatistics, Stat};
-use vortex::{
-    Array, ArrayDType, ArrayView, Context, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext,
-};
+use vortex::{Array, ArrayDType, ArrayView, Context, IntoArray, ToArray, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -71,7 +69,7 @@ impl<R: Read> StreamReader<R> {
 
         let mut chunks = vec![];
         while let Some(chunk) = array_reader.next()? {
-            chunks.push(chunk.to_static());
+            chunks.push(chunk);
         }
 
         if chunks.len() == 1 {
@@ -136,7 +134,7 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
         &self.dtype
     }
 
-    pub fn take(self, indices: &'a Array<'_>) -> VortexResult<TakeIterator<'a, R>> {
+    pub fn take(self, indices: &'a Array) -> VortexResult<TakeIterator<'a, R>> {
         if !indices.is_empty() {
             if !indices.statistics().compute_is_sorted()? {
                 vortex_bail!("Indices must be sorted to take from IPC stream")
@@ -171,7 +169,7 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
 
 pub struct TakeIterator<'a, R: Read> {
     reader: StreamArrayReader<'a, R>,
-    indices: &'a Array<'a>,
+    indices: &'a Array,
     row_offset: usize,
 }
 
@@ -206,7 +204,7 @@ impl<'a, R: Read> Drop for StreamArrayReader<'a, R> {
 /// to avoid this work happening at exipry, users can just consume the rest of the iterator
 /// themselves when they see fit.
 impl<'a, R: Read> FallibleIterator for TakeIterator<'a, R> {
-    type Item = OwnedArray;
+    type Item = Array;
     type Error = VortexError;
 
     fn next(&mut self) -> VortexResult<Option<Self::Item>> {
@@ -244,9 +242,9 @@ impl<'a, R: Read> FallibleIterator for TakeIterator<'a, R> {
 #[gat]
 impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
     type Error = VortexError;
-    type Item<'next> = Array<'next> where Self: 'next;
+    type Item<'next> = Array where Self: 'next;
 
-    fn next(&mut self) -> Result<Option<Array<'_>>, Self::Error> {
+    fn next(&mut self) -> Result<Option<Array>, Self::Error> {
         let Some(chunk_msg) = self.messages.peek().and_then(|msg| msg.header_as_chunk()) else {
             return Ok(None);
         };
@@ -402,7 +400,7 @@ mod tests {
     use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::{ArrayEncoding, EncodingId, EncodingRef};
     use vortex::stats::{ArrayStatistics, Stat};
-    use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray, OwnedArray, ToStatic};
+    use vortex::{Array, ArrayDType, ArrayDef, Context, IntoArray};
     use vortex_alp::{ALPArray, ALPEncoding};
     use vortex_dtype::NativePType;
     use vortex_error::VortexResult;
@@ -780,7 +778,7 @@ mod tests {
     fn test_read_write_single_chunk_array<'a>(
         data: &'a Array,
         indices: &'a Array,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         let ctx =
             Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
 
@@ -858,7 +856,7 @@ mod tests {
             .expect_err("Should not be able to calculate true count for non-boolean array");
     }
 
-    fn round_trip<'a>(chunked_array: &'a Array<'a>) -> Array<'a> {
+    fn round_trip(chunked_array: &Array) -> Array {
         let context = Context::default();
         let mut buffer = vec![];
         {
@@ -871,7 +869,6 @@ mod tests {
 
         let mut cursor = Cursor::new(&buffer);
         let mut reader = StreamReader::try_new(&mut cursor, &context).unwrap();
-        let data = reader.read_array().unwrap();
-        data.to_static()
+        reader.read_array().unwrap()
     }
 }

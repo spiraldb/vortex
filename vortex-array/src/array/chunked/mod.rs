@@ -11,7 +11,7 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
+use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, ToArrayData};
 
 mod compute;
 mod stats;
@@ -21,7 +21,7 @@ impl_encoding!("vortex.chunked", Chunked);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChunkedMetadata;
 
-impl ChunkedArray<'_> {
+impl ChunkedArray {
     const ENDS_DTYPE: DType = DType::Primitive(PType::U64, Nullability::NonNullable);
 
     pub fn try_new(chunks: Vec<Array>, dtype: DType) -> VortexResult<Self> {
@@ -87,15 +87,15 @@ impl ChunkedArray<'_> {
     }
 }
 
-impl<'a> ChunkedArray<'a> {
-    pub fn chunks(&'a self) -> impl Iterator<Item = Array<'a>> {
+impl<'a> ChunkedArray {
+    pub fn chunks(&'a self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
     }
 }
 
-impl FromIterator<OwnedArray> for OwnedChunkedArray {
-    fn from_iter<T: IntoIterator<Item = OwnedArray>>(iter: T) -> Self {
-        let chunks: Vec<OwnedArray> = iter.into_iter().collect();
+impl FromIterator<Array> for ChunkedArray {
+    fn from_iter<T: IntoIterator<Item = Array>>(iter: T) -> Self {
+        let chunks: Vec<Array> = iter.into_iter().collect();
         let dtype = chunks
             .first()
             .map(|c| c.dtype().clone())
@@ -104,16 +104,13 @@ impl FromIterator<OwnedArray> for OwnedChunkedArray {
     }
 }
 
-impl ArrayFlatten for ChunkedArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for ChunkedArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         Ok(Flattened::Chunked(self))
     }
 }
 
-impl AcceptArrayVisitor for ChunkedArray<'_> {
+impl AcceptArrayVisitor for ChunkedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("chunk_ends", &self.chunk_ends())?;
         for (idx, chunk) in self.chunks().enumerate() {
@@ -123,13 +120,13 @@ impl AcceptArrayVisitor for ChunkedArray<'_> {
     }
 }
 
-impl ArrayTrait for ChunkedArray<'_> {
+impl ArrayTrait for ChunkedArray {
     fn len(&self) -> usize {
         usize::try_from(&scalar_at(&self.chunk_ends(), self.nchunks()).unwrap()).unwrap()
     }
 }
 
-impl ArrayValidity for ChunkedArray<'_> {
+impl ArrayValidity for ChunkedArray {
     fn is_valid(&self, _index: usize) -> bool {
         todo!()
     }
@@ -141,8 +138,8 @@ impl ArrayValidity for ChunkedArray<'_> {
 
 impl EncodingCompression for ChunkedEncoding {}
 
-impl SubtractScalarFn for ChunkedArray<'_> {
-    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
+impl SubtractScalarFn for ChunkedArray {
+    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array> {
         self.chunks()
             .map(|chunk| subtract_scalar(&chunk, to_subtract))
             .collect::<VortexResult<Vec<_>>>()
@@ -159,12 +156,12 @@ mod test {
     use vortex_dtype::{DType, Nullability};
     use vortex_dtype::{NativePType, PType};
 
-    use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
+    use crate::array::chunked::ChunkedArray;
     use crate::compute::scalar_subtract::subtract_scalar;
     use crate::compute::slice::slice;
     use crate::{Array, IntoArray, ToArray};
 
-    fn chunked_array() -> OwnedChunkedArray {
+    fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(
             vec![
                 vec![1u64, 2, 3].into_array(),

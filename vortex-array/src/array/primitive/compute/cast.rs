@@ -5,11 +5,11 @@ use vortex_error::{vortex_err, VortexResult};
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::cast::CastFn;
 use crate::validity::Validity;
-use crate::ArrayDType;
-use crate::{IntoArray, OwnedArray};
+use crate::IntoArray;
+use crate::{Array, ArrayDType};
 
-impl CastFn for PrimitiveArray<'_> {
-    fn cast(&self, dtype: &DType) -> VortexResult<OwnedArray> {
+impl CastFn for PrimitiveArray {
+    fn cast(&self, dtype: &DType) -> VortexResult<Array> {
         let ptype = PType::try_from(dtype)?;
 
         // Short-cut if we can just change the nullability

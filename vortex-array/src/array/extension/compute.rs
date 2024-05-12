@@ -11,9 +11,9 @@ use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::{Array, IntoArray, OwnedArray, ToStatic};
+use crate::{Array, IntoArray};
 
-impl ArrayCompute for ExtensionArray<'_> {
+impl ArrayCompute for ExtensionArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }
@@ -42,7 +42,7 @@ impl ArrayCompute for ExtensionArray<'_> {
     }
 }
 
-impl AsArrowArray for ExtensionArray<'_> {
+impl AsArrowArray for ExtensionArray {
     /// To support full compatability with Arrow, we hard-code the conversion of our datetime
     /// arrays to Arrow's Timestamp arrays here. For all other extension arrays, we return an
     /// Arrow extension array with the same definition.
@@ -54,15 +54,14 @@ impl AsArrowArray for ExtensionArray<'_> {
     }
 }
 
-impl AsContiguousFn for ExtensionArray<'_> {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+impl AsContiguousFn for ExtensionArray {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let storage_arrays = arrays
             .iter()
             .map(|a| {
                 ExtensionArray::try_from(a)
                     .expect("not an extension array")
                     .storage()
-                    .to_static()
             })
             .collect::<Vec<_>>();
 
@@ -73,7 +72,7 @@ impl AsContiguousFn for ExtensionArray<'_> {
     }
 }
 
-impl ScalarAtFn for ExtensionArray<'_> {
+impl ScalarAtFn for ExtensionArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         Ok(Scalar::extension(
             self.ext_dtype().clone(),
@@ -82,8 +81,8 @@ impl ScalarAtFn for ExtensionArray<'_> {
     }
 }
 
-impl SliceFn for ExtensionArray<'_> {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+impl SliceFn for ExtensionArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(ExtensionArray::new(
             self.ext_dtype().clone(),
             slice(&self.storage(), start, stop)?,
@@ -92,8 +91,8 @@ impl SliceFn for ExtensionArray<'_> {
     }
 }
 
-impl TakeFn for ExtensionArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for ExtensionArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         Ok(
             ExtensionArray::new(self.ext_dtype().clone(), take(&self.storage(), indices)?)
                 .into_array(),

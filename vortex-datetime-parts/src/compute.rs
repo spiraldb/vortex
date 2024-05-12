@@ -1,12 +1,12 @@
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, ArrayDType, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::DateTimePartsArray;
 
-impl ArrayCompute for DateTimePartsArray<'_> {
+impl ArrayCompute for DateTimePartsArray {
     fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
@@ -16,8 +16,8 @@ impl ArrayCompute for DateTimePartsArray<'_> {
     }
 }
 
-impl TakeFn for DateTimePartsArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for DateTimePartsArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         Ok(DateTimePartsArray::try_new(
             self.dtype().clone(),
             take(&self.days(), indices)?,
@@ -28,8 +28,8 @@ impl TakeFn for DateTimePartsArray<'_> {
     }
 }
 
-impl SliceFn for DateTimePartsArray<'_> {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+impl SliceFn for DateTimePartsArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(DateTimePartsArray::try_new(
             self.dtype().clone(),
             slice(&self.days(), start, stop)?,

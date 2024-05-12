@@ -9,7 +9,7 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray};
 use vortex_dtype::{match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
@@ -19,7 +19,7 @@ use crate::{unpack_single_primitive, BitPackedArray};
 
 mod slice;
 
-impl ArrayCompute for BitPackedArray<'_> {
+impl ArrayCompute for BitPackedArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -33,7 +33,7 @@ impl ArrayCompute for BitPackedArray<'_> {
     }
 }
 
-impl ScalarAtFn for BitPackedArray<'_> {
+impl ScalarAtFn for BitPackedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if index >= self.len() {
             return Err(vortex_err!(OutOfBounds: index, 0, self.len()));
@@ -48,8 +48,8 @@ impl ScalarAtFn for BitPackedArray<'_> {
     }
 }
 
-impl TakeFn for BitPackedArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for BitPackedArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         let ptype = self.dtype().try_into()?;
         let validity = self.validity();
         let taken_validity = validity.take(indices)?;

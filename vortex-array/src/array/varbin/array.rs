@@ -5,7 +5,7 @@ use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::ArrayTrait;
 
-impl ArrayValidity for VarBinArray<'_> {
+impl ArrayValidity for VarBinArray {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
@@ -15,7 +15,7 @@ impl ArrayValidity for VarBinArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for VarBinArray<'_> {
+impl AcceptArrayVisitor for VarBinArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("offsets", &self.offsets())?;
         visitor.visit_child("bytes", &self.bytes())?;
@@ -23,7 +23,7 @@ impl AcceptArrayVisitor for VarBinArray<'_> {
     }
 }
 
-impl ArrayTrait for VarBinArray<'_> {
+impl ArrayTrait for VarBinArray {
     fn len(&self) -> usize {
         self.offsets().len() - 1
     }

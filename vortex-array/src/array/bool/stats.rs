@@ -6,7 +6,7 @@ use crate::array::bool::BoolArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::ArrayTrait;
 
-impl ArrayStatisticsCompute for BoolArray<'_> {
+impl ArrayStatisticsCompute for BoolArray {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
         if self.is_empty() {
             return Ok(StatsSet::from(HashMap::from([

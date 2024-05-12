@@ -62,14 +62,12 @@ pub mod flatbuffers {
 }
 
 #[derive(Debug, Clone)]
-pub enum Array<'v> {
+pub enum Array {
     Data(ArrayData),
-    View(ArrayView<'v>),
+    View(ArrayView),
 }
 
-pub type OwnedArray = Array<'static>;
-
-impl Array<'_> {
+impl Array {
     pub fn encoding(&self) -> EncodingRef {
         match self {
             Array::Data(d) => d.encoding(),
@@ -89,7 +87,7 @@ impl Array<'_> {
         self.with_dyn(|a| a.is_empty())
     }
 
-    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array<'a>> {
+    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array> {
         match self {
             Array::Data(d) => d.child(idx, dtype).cloned().map(Array::Data),
             Array::View(v) => v.child(idx, dtype).map(Array::View),
@@ -104,7 +102,7 @@ impl Array<'_> {
     }
 }
 
-impl<'a> Array<'a> {
+impl Array {
     pub fn into_buffer(self) -> Option<Buffer> {
         match self {
             Array::Data(d) => d.into_buffer(),
@@ -113,20 +111,12 @@ impl<'a> Array<'a> {
     }
 }
 
-impl ToStatic for Array<'_> {
-    type Static = OwnedArray;
-
-    fn to_static(&self) -> Self::Static {
-        Array::Data(self.to_array_data())
-    }
-}
-
 pub trait ToArray {
     fn to_array(&self) -> Array;
 }
 
-pub trait IntoArray<'a> {
-    fn into_array(self) -> Array<'a>;
+pub trait IntoArray {
+    fn into_array(self) -> Array;
 }
 
 pub trait ToArrayData {
@@ -135,12 +125,6 @@ pub trait ToArrayData {
 
 pub trait IntoArrayData {
     fn into_array_data(self) -> ArrayData;
-}
-
-pub trait ToStatic {
-    type Static;
-
-    fn to_static(&self) -> Self::Static;
 }
 
 pub trait AsArray {
@@ -191,8 +175,8 @@ impl ArrayVisitor for NBytesVisitor {
     }
 }
 
-impl<'a> Array<'a> {
-    pub fn with_dyn<R, F>(&'a self, mut f: F) -> R
+impl Array {
+    pub fn with_dyn<R, F>(&self, mut f: F) -> R
     where
         F: FnMut(&dyn ArrayTrait) -> R,
     {
@@ -210,7 +194,7 @@ impl<'a> Array<'a> {
     }
 }
 
-impl Display for Array<'_> {
+impl Display for Array {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let prefix = match self {
             Array::Data(_) => "",
@@ -227,7 +211,7 @@ impl Display for Array<'_> {
     }
 }
 
-impl IntoArrayData for Array<'_> {
+impl IntoArrayData for Array {
     fn into_array_data(self) -> ArrayData {
         match self {
             Array::Data(d) => d,

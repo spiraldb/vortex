@@ -17,9 +17,9 @@ use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::validity::Validity;
 use crate::ArrayTrait;
-use crate::{Array, ArrayDType, IntoArray, OwnedArray};
+use crate::{Array, ArrayDType, IntoArray};
 
-impl ArrayCompute for StructArray<'_> {
+impl ArrayCompute for StructArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }
@@ -41,7 +41,7 @@ impl ArrayCompute for StructArray<'_> {
     }
 }
 
-impl AsArrowArray for StructArray<'_> {
+impl AsArrowArray for StructArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         let field_arrays: Vec<ArrowArrayRef> =
             self.children().map(|f| as_arrow(&f)).try_collect()?;
@@ -69,8 +69,8 @@ impl AsArrowArray for StructArray<'_> {
     }
 }
 
-impl AsContiguousFn for StructArray<'_> {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+impl AsContiguousFn for StructArray {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let struct_arrays = arrays
             .iter()
             .map(StructArray::try_from)
@@ -101,7 +101,7 @@ impl AsContiguousFn for StructArray<'_> {
     }
 }
 
-impl ScalarAtFn for StructArray<'_> {
+impl ScalarAtFn for StructArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         Ok(Scalar::r#struct(
             self.dtype().clone(),
@@ -112,8 +112,8 @@ impl ScalarAtFn for StructArray<'_> {
     }
 }
 
-impl TakeFn for StructArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for StructArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         StructArray::try_new(
             self.names().clone(),
             self.children()
@@ -126,8 +126,8 @@ impl TakeFn for StructArray<'_> {
     }
 }
 
-impl SliceFn for StructArray<'_> {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+impl SliceFn for StructArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         let fields = self
             .children()
             .map(|field| slice(&field, start, stop))

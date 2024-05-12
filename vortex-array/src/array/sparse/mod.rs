@@ -25,14 +25,14 @@ pub struct SparseMetadata {
     fill_value: Scalar,
 }
 
-impl<'a> SparseArray<'a> {
-    pub fn new(indices: Array<'a>, values: Array<'a>, len: usize, fill_value: Scalar) -> Self {
+impl SparseArray {
+    pub fn new(indices: Array, values: Array, len: usize, fill_value: Scalar) -> Self {
         Self::try_new(indices, values, len, fill_value).unwrap()
     }
 
     pub fn try_new(
-        indices: Array<'a>,
-        values: Array<'a>,
+        indices: Array,
+        values: Array,
         len: usize,
         fill_value: Scalar,
     ) -> VortexResult<Self> {
@@ -40,8 +40,8 @@ impl<'a> SparseArray<'a> {
     }
 
     pub(crate) fn try_new_with_offset(
-        indices: Array<'a>,
-        values: Array<'a>,
+        indices: Array,
+        values: Array,
         len: usize,
         indices_offset: usize,
         fill_value: Scalar,
@@ -71,7 +71,7 @@ impl<'a> SparseArray<'a> {
     }
 }
 
-impl SparseArray<'_> {
+impl SparseArray {
     #[inline]
     pub fn indices_offset(&self) -> usize {
         self.metadata().indices_offset
@@ -119,22 +119,22 @@ impl SparseArray<'_> {
     }
 }
 
-impl ArrayTrait for SparseArray<'_> {
+impl ArrayTrait for SparseArray {
     fn len(&self) -> usize {
         self.metadata().len
     }
 }
 
-impl AcceptArrayVisitor for SparseArray<'_> {
+impl AcceptArrayVisitor for SparseArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("indices", &self.indices())?;
         visitor.visit_child("values", &self.values())
     }
 }
 
-impl ArrayStatisticsCompute for SparseArray<'_> {}
+impl ArrayStatisticsCompute for SparseArray {}
 
-impl ArrayValidity for SparseArray<'_> {
+impl ArrayValidity for SparseArray {
     fn is_valid(&self, index: usize) -> bool {
         match self.find_index(index).unwrap() {
             None => !self.fill_value().is_null(),
@@ -184,7 +184,7 @@ mod test {
     use crate::compute::cast::cast;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::{Array, IntoArray, OwnedArray};
+    use crate::{Array, IntoArray};
 
     fn nullable_fill() -> Scalar {
         Scalar::null(DType::Primitive(PType::I32, Nullable))
@@ -195,7 +195,7 @@ mod test {
         Scalar::from(42i32)
     }
 
-    fn sparse_array(fill_value: Scalar) -> OwnedArray {
+    fn sparse_array(fill_value: Scalar) -> Array {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
         let mut values = vec![100i32, 200, 300].into_array();
         values = cast(&values, fill_value.dtype()).unwrap();

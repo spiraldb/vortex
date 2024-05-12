@@ -5,7 +5,7 @@ use std::task::Poll;
 use flatbuffers::root;
 use futures_util::Stream;
 use pin_project::pin_project;
-use vortex::{Array, ArrayView, IntoArray, OwnedArray, ToArray, ToStatic, ViewContext};
+use vortex::{Array, ArrayView, IntoArray, ToArray, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
@@ -15,7 +15,7 @@ use crate::codecs::message_reader::MessageReader;
 /// A stream of array chunks along with a DType.
 ///
 /// Can be thought of as equivalent to Arrow's RecordBatchReader.
-pub trait ArrayReader: Stream<Item = VortexResult<OwnedArray>> {
+pub trait ArrayReader: Stream<Item = VortexResult<Array>> {
     fn dtype(&self) -> &DType;
 }
 
@@ -29,7 +29,7 @@ struct ArrayReaderAdapter<S> {
 
 impl<S> ArrayReader for ArrayReaderAdapter<S>
 where
-    S: Stream<Item = VortexResult<OwnedArray>>,
+    S: Stream<Item = VortexResult<Array>>,
 {
     fn dtype(&self) -> &DType {
         &self.dtype
@@ -38,9 +38,9 @@ where
 
 impl<S> Stream for ArrayReaderAdapter<S>
 where
-    S: Stream<Item = VortexResult<OwnedArray>>,
+    S: Stream<Item = VortexResult<Array>>,
 {
-    type Item = VortexResult<OwnedArray>;
+    type Item = VortexResult<Array>;
 
     fn poll_next(
         self: Pin<&mut Self>,
@@ -81,7 +81,7 @@ impl<'m, M: MessageReader> MessageArrayReader<'m, M> {
 
         let inner = futures_util::stream::unfold(self, move |mut reader| async move {
             match reader.next().await {
-                Ok(Some(array)) => Some((Ok(array.to_static()), reader)),
+                Ok(Some(array)) => Some((Ok(array), reader)),
                 Ok(None) => None,
                 Err(e) => Some((Err(e), reader)),
             }

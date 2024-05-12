@@ -6,7 +6,7 @@ use vortex_scalar::Scalar;
 
 use crate::dict::DictArray;
 
-impl ArrayStatisticsCompute for DictArray<'_> {
+impl ArrayStatisticsCompute for DictArray {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
         let mut stats: HashMap<Stat, Scalar> = HashMap::new();
 

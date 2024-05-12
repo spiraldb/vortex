@@ -16,7 +16,7 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
 use vortex::encoding::EncodingRef;
-use vortex::{Context, IntoArray, OwnedArray, ToArrayData};
+use vortex::{Array, Context, IntoArray, ToArrayData};
 use vortex_alp::ALPEncoding;
 use vortex_datetime_parts::DateTimePartsEncoding;
 use vortex_dict::DictEncoding;
@@ -120,7 +120,7 @@ pub fn setup_logger(level: LevelFilter) {
     .unwrap();
 }
 
-pub fn compress_taxi_data() -> OwnedArray {
+pub fn compress_taxi_data() -> Array {
     let file = File::open(taxi_data_parquet()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
     let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);

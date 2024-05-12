@@ -5,7 +5,7 @@ use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayFlatten, OwnedArray};
+use vortex::{impl_encoding, ArrayFlatten};
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::PType;
@@ -24,7 +24,7 @@ pub struct RoaringIntMetadata {
     length: usize,
 }
 
-impl RoaringIntArray<'_> {
+impl RoaringIntArray {
     pub fn new(bitmap: Bitmap, ptype: PType) -> Self {
         Self::try_new(bitmap, ptype).unwrap()
     }
@@ -61,7 +61,7 @@ impl RoaringIntArray<'_> {
         self.metadata().ptype
     }
 
-    pub fn encode(array: OwnedArray) -> VortexResult<OwnedArray> {
+    pub fn encode(array: Array) -> VortexResult<Array> {
         if array.encoding().id() == Primitive::ID {
             Ok(roaring_encode(PrimitiveArray::try_from(array)?).into_array())
         } else {
@@ -70,7 +70,7 @@ impl RoaringIntArray<'_> {
     }
 }
 
-impl ArrayValidity for RoaringIntArray<'_> {
+impl ArrayValidity for RoaringIntArray {
     fn logical_validity(&self) -> LogicalValidity {
         LogicalValidity::AllValid(self.bitmap().iter().count())
     }
@@ -80,24 +80,21 @@ impl ArrayValidity for RoaringIntArray<'_> {
     }
 }
 
-impl ArrayFlatten for RoaringIntArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for RoaringIntArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         todo!()
     }
 }
 
-impl AcceptArrayVisitor for RoaringIntArray<'_> {
+impl AcceptArrayVisitor for RoaringIntArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         todo!()
     }
 }
 
-impl ArrayStatisticsCompute for RoaringIntArray<'_> {}
+impl ArrayStatisticsCompute for RoaringIntArray {}
 
-impl ArrayTrait for RoaringIntArray<'_> {
+impl ArrayTrait for RoaringIntArray {
     fn len(&self) -> usize {
         self.metadata().length
     }

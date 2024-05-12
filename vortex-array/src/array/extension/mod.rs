@@ -15,7 +15,7 @@ pub struct ExtensionMetadata {
     storage_dtype: DType,
 }
 
-impl ExtensionArray<'_> {
+impl ExtensionArray {
     pub fn new(ext_dtype: ExtDType, storage: Array) -> Self {
         Self::try_from_parts(
             DType::Extension(ext_dtype, storage.dtype().nullability()),
@@ -49,16 +49,13 @@ impl ExtensionArray<'_> {
     }
 }
 
-impl ArrayFlatten for ExtensionArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
-        todo!()
+impl ArrayFlatten for ExtensionArray {
+    fn flatten(self) -> VortexResult<Flattened> {
+        Ok(Flattened::Extension(self))
     }
 }
 
-impl ArrayValidity for ExtensionArray<'_> {
+impl ArrayValidity for ExtensionArray {
     fn is_valid(&self, index: usize) -> bool {
         self.storage().with_dyn(|a| a.is_valid(index))
     }
@@ -68,17 +65,17 @@ impl ArrayValidity for ExtensionArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for ExtensionArray<'_> {
+impl AcceptArrayVisitor for ExtensionArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("storage", &self.storage())
     }
 }
 
-impl ArrayStatisticsCompute for ExtensionArray<'_> {
+impl ArrayStatisticsCompute for ExtensionArray {
     // TODO(ngates): pass through stats to the underlying and cast the scalars.
 }
 
-impl ArrayTrait for ExtensionArray<'_> {
+impl ArrayTrait for ExtensionArray {
     fn len(&self) -> usize {
         self.storage().len()
     }

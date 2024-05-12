@@ -3,14 +3,14 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, IntoArray, OwnedArray};
+use vortex::{Array, IntoArray};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::REEArray;
 
-impl ArrayCompute for REEArray<'_> {
+impl ArrayCompute for REEArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -24,14 +24,14 @@ impl ArrayCompute for REEArray<'_> {
     }
 }
 
-impl ScalarAtFn for REEArray<'_> {
+impl ScalarAtFn for REEArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         scalar_at(&self.values(), self.find_physical_index(index)?)
     }
 }
 
-impl TakeFn for REEArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for REEArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         let primitive_indices = indices.clone().flatten_primitive()?;
         let physical_indices = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
             primitive_indices
@@ -50,8 +50,8 @@ impl TakeFn for REEArray<'_> {
     }
 }
 
-impl SliceFn for REEArray<'_> {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+impl SliceFn for REEArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         let slice_begin = self.find_physical_index(start)?;
         let slice_end = self.find_physical_index(stop)?;
         Ok(REEArray::with_offset_and_size(

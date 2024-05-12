@@ -9,11 +9,8 @@ use crate::validity::Validity;
 use crate::{ArrayDType, ArrayTrait};
 use crate::{ArrayFlatten, Flattened};
 
-impl ArrayFlatten for ConstantArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for ConstantArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         let validity = match self.dtype().nullability() {
             Nullability::NonNullable => Validity::NonNullable,
             Nullability::Nullable => match self.scalar().is_null() {

@@ -16,9 +16,9 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::ArrayCompute;
 use crate::validity::ArrayValidity;
-use crate::{ArrayDType, IntoArray, IntoArrayData, OwnedArray};
+use crate::{Array, ArrayDType, IntoArray, IntoArrayData};
 
-impl ArrayCompute for VarBinViewArray<'_> {
+impl ArrayCompute for VarBinViewArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }
@@ -32,7 +32,7 @@ impl ArrayCompute for VarBinViewArray<'_> {
     }
 }
 
-impl ScalarAtFn for VarBinViewArray<'_> {
+impl ScalarAtFn for VarBinViewArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
             self.bytes_at(index)
@@ -43,7 +43,7 @@ impl ScalarAtFn for VarBinViewArray<'_> {
     }
 }
 
-impl AsArrowArray for VarBinViewArray<'_> {
+impl AsArrowArray for VarBinViewArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         // Views should be buffer of u8
         let views = self.views().flatten_primitive()?;
@@ -80,8 +80,8 @@ impl AsArrowArray for VarBinViewArray<'_> {
     }
 }
 
-impl SliceFn for VarBinViewArray<'_> {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+impl SliceFn for VarBinViewArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(VarBinViewArray::try_new(
             slice(&self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?
                 .into_array_data()

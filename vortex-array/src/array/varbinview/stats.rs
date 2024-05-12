@@ -6,7 +6,7 @@ use crate::array::varbinview::VarBinViewArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::{ArrayDType, ArrayTrait};
 
-impl ArrayStatisticsCompute for VarBinViewArray<'_> {
+impl ArrayStatisticsCompute for VarBinViewArray {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
         if self.is_empty() {
             return Ok(StatsSet::new());

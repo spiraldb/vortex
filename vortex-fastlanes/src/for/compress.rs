@@ -4,7 +4,7 @@ use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
-use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray};
 use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
 use vortex_error::{vortex_err, VortexResult};
 
@@ -43,7 +43,7 @@ impl EncodingCompression for FoREncoding {
         array: &Array,
         like: Option<&Array>,
         ctx: Compressor,
-    ) -> VortexResult<OwnedArray> {
+    ) -> VortexResult<Array> {
         let parray = PrimitiveArray::try_from(array)?;
         let shift = trailing_zeros(array);
         let min = parray

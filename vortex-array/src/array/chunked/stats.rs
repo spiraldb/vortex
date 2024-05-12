@@ -4,7 +4,7 @@ use crate::array::chunked::ChunkedArray;
 use crate::stats::ArrayStatistics;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 
-impl ArrayStatisticsCompute for ChunkedArray<'_> {
+impl ArrayStatisticsCompute for ChunkedArray {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
         Ok(self
             .chunks()
