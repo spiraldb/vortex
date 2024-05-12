@@ -74,7 +74,7 @@ where
 }
 
 #[allow(dead_code)]
-pub fn zigzag_decode<'a>(parray: &'a PrimitiveArray) -> PrimitiveArray {
+pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
     match parray.ptype() {
         PType::U8 => zigzag_decode_primitive::<i8>(parray.typed_data(), parray.validity()),
         PType::U16 => zigzag_decode_primitive::<i16>(parray.typed_data(), parray.validity()),

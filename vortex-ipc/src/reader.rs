@@ -858,7 +858,7 @@ mod tests {
             .expect_err("Should not be able to calculate true count for non-boolean array");
     }
 
-    fn round_trip<'a>(chunked_array: &'a Array) -> Array {
+    fn round_trip(chunked_array: &Array) -> Array {
         let context = Context::default();
         let mut buffer = vec![];
         {

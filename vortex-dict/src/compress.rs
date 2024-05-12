@@ -156,7 +156,7 @@ pub fn dict_encode_typed_primitive<'a, T: NativePType>(
 }
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying
-pub fn dict_encode_varbin<'a>(array: &'a VarBinArray) -> (PrimitiveArray, VarBinArray) {
+pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
     array
         .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
         .unwrap()

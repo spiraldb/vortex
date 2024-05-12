@@ -36,7 +36,7 @@ impl ZigZagArray {
         Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
     }
 
-    pub fn encode<'a>(array: &'a Array) -> VortexResult<Array> {
+    pub fn encode(array: &Array) -> VortexResult<Array> {
         PrimitiveArray::try_from(array)
             .map_err(|_| vortex_err!("ZigZag can only encoding primitive arrays"))
             .map(|parray| zigzag_encode(&parray))?
