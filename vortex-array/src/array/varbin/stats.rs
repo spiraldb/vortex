@@ -10,7 +10,7 @@ use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::{ArrayDType, ArrayTrait};
 
-impl ArrayStatisticsCompute for VarBinArray<'_> {
+impl ArrayStatisticsCompute for VarBinArray {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
         if self.is_empty() {
             return Ok(StatsSet::new());

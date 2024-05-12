@@ -19,7 +19,7 @@ use crate::{unpack_single_primitive, BitPackedArray};
 
 mod slice;
 
-impl ArrayCompute for BitPackedArray<'_> {
+impl ArrayCompute for BitPackedArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -33,7 +33,7 @@ impl ArrayCompute for BitPackedArray<'_> {
     }
 }
 
-impl ScalarAtFn for BitPackedArray<'_> {
+impl ScalarAtFn for BitPackedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if index >= self.len() {
             return Err(vortex_err!(OutOfBounds: index, 0, self.len()));
@@ -48,7 +48,7 @@ impl ScalarAtFn for BitPackedArray<'_> {
     }
 }
 
-impl TakeFn for BitPackedArray<'_> {
+impl TakeFn for BitPackedArray {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         let ptype = self.dtype().try_into()?;
         let validity = self.validity();

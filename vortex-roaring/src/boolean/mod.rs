@@ -23,7 +23,7 @@ pub struct RoaringBoolMetadata {
     length: usize,
 }
 
-impl RoaringBoolArray<'_> {
+impl RoaringBoolArray {
     pub fn try_new(bitmap: Bitmap, length: usize) -> VortexResult<Self> {
         if length < bitmap.cardinality() as usize {
             vortex_bail!("RoaringBoolArray length is less than bitmap cardinality")
@@ -58,7 +58,7 @@ impl RoaringBoolArray<'_> {
         }
     }
 }
-impl AcceptArrayVisitor for RoaringBoolArray<'_> {
+impl AcceptArrayVisitor for RoaringBoolArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         // TODO(ngates): should we store a buffer in memory? Or delay serialization?
         //  Or serialize into metadata? The only reason we support buffers is so we can write to
@@ -68,15 +68,15 @@ impl AcceptArrayVisitor for RoaringBoolArray<'_> {
     }
 }
 
-impl ArrayTrait for RoaringBoolArray<'_> {
+impl ArrayTrait for RoaringBoolArray {
     fn len(&self) -> usize {
         self.metadata().length
     }
 }
 
-impl ArrayStatisticsCompute for RoaringBoolArray<'_> {}
+impl ArrayStatisticsCompute for RoaringBoolArray {}
 
-impl ArrayValidity for RoaringBoolArray<'_> {
+impl ArrayValidity for RoaringBoolArray {
     fn logical_validity(&self) -> LogicalValidity {
         LogicalValidity::AllValid(self.len())
     }
@@ -86,7 +86,7 @@ impl ArrayValidity for RoaringBoolArray<'_> {
     }
 }
 
-impl ArrayFlatten for RoaringBoolArray<'_> {
+impl ArrayFlatten for RoaringBoolArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,

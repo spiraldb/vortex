@@ -17,7 +17,7 @@ pub struct DictMetadata {
     codes_dtype: DType,
 }
 
-impl DictArray<'_> {
+impl DictArray {
     pub fn try_new(codes: Array, values: Array) -> VortexResult<Self> {
         if !codes.dtype().is_unsigned_int() {
             vortex_bail!(MismatchedTypes: "unsigned int", codes.dtype());
@@ -45,7 +45,7 @@ impl DictArray<'_> {
     }
 }
 
-impl ArrayFlatten for DictArray<'_> {
+impl ArrayFlatten for DictArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,
@@ -54,7 +54,7 @@ impl ArrayFlatten for DictArray<'_> {
     }
 }
 
-impl ArrayValidity for DictArray<'_> {
+impl ArrayValidity for DictArray {
     fn is_valid(&self, index: usize) -> bool {
         let values_index = scalar_at(&self.codes(), index)
             .unwrap()
@@ -82,14 +82,14 @@ impl ArrayValidity for DictArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for DictArray<'_> {
+impl AcceptArrayVisitor for DictArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("values", &self.values())?;
         visitor.visit_child("codes", &self.codes())
     }
 }
 
-impl ArrayTrait for DictArray<'_> {
+impl ArrayTrait for DictArray {
     fn len(&self) -> usize {
         self.codes().len()
     }

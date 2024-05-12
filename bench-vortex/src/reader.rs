@@ -56,7 +56,7 @@ pub fn rewrite_parquet_as_vortex<W: Write>(
     Ok(())
 }
 
-pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedArray<'static>> {
+pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedArray> {
     let taxi_pq = File::open(parquet_path)?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq)?;
 

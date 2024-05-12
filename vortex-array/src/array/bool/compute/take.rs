@@ -9,7 +9,7 @@ use crate::AsArray;
 use crate::IntoArray;
 use crate::{Array, OwnedArray};
 
-impl TakeFn for BoolArray<'_> {
+impl TakeFn for BoolArray {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         let validity = self.validity();
         let indices = indices.clone().flatten_primitive()?;

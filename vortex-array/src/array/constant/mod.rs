@@ -19,7 +19,7 @@ pub struct ConstantMetadata {
     length: usize,
 }
 
-impl ConstantArray<'_> {
+impl ConstantArray {
     pub fn new<S>(scalar: S, length: usize) -> Self
     where
         Scalar: From<S>,
@@ -46,7 +46,7 @@ impl ConstantArray<'_> {
     }
 }
 
-impl ArrayValidity for ConstantArray<'_> {
+impl ArrayValidity for ConstantArray {
     fn is_valid(&self, _index: usize) -> bool {
         match self.metadata().scalar.dtype().is_nullable() {
             true => !self.scalar().is_null(),
@@ -62,13 +62,13 @@ impl ArrayValidity for ConstantArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for ConstantArray<'_> {
+impl AcceptArrayVisitor for ConstantArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         Ok(())
     }
 }
 
-impl ArrayTrait for ConstantArray<'_> {
+impl ArrayTrait for ConstantArray {
     fn len(&self) -> usize {
         self.metadata().length
     }

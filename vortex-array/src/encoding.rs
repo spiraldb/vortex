@@ -39,12 +39,12 @@ pub trait ArrayEncoding: 'static + Sync + Send + Debug {
     fn id(&self) -> EncodingId;
 
     /// Flatten the given array.
-    fn flatten<'a>(&self, array: Array<'a>) -> VortexResult<Flattened<'a>>;
+    fn flatten<'a>(&self, array: Array) -> VortexResult<Flattened<'a>>;
 
     /// Unwrap the provided array into an implementation of ArrayTrait
     fn with_dyn<'a>(
         &self,
-        array: &'a Array<'a>,
+        array: &'a Array,
         f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> VortexResult<()>,
     ) -> VortexResult<()>;
 
@@ -68,21 +68,21 @@ impl Hash for dyn ArrayEncoding + '_ {
 pub trait ArrayEncodingExt {
     type D: ArrayDef;
 
-    fn flatten<'a>(array: Array<'a>) -> VortexResult<Flattened<'a>>
+    fn flatten<'a>(array: Array) -> VortexResult<Flattened<'a>>
     where
         <Self as ArrayEncodingExt>::D: 'a,
     {
-        let typed = <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array)?;
+        let typed = <<Self::D as ArrayDef>::Array as TryFrom<Array>>::try_from(array)?;
         ArrayFlatten::flatten(typed)
     }
 
-    fn with_dyn<'a, R, F>(array: &'a Array<'a>, mut f: F) -> R
+    fn with_dyn<'a, R, F>(array: &'a Array, mut f: F) -> R
     where
         F: for<'b> FnMut(&'b (dyn ArrayTrait + 'a)) -> R,
         <Self as ArrayEncodingExt>::D: 'a,
     {
         let typed =
-            <<Self::D as ArrayDef>::Array<'a> as TryFrom<Array>>::try_from(array.clone()).unwrap();
+            <<Self::D as ArrayDef>::Array as TryFrom<Array>>::try_from(array.clone()).unwrap();
         f(&typed)
     }
 }

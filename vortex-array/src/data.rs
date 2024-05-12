@@ -131,7 +131,7 @@ impl ToArray for ArrayData {
     }
 }
 
-impl IntoArray<'static> for ArrayData {
+impl IntoArray for ArrayData {
     fn into_array(self) -> OwnedArray {
         Array::Data(self)
     }

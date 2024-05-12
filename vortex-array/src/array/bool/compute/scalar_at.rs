@@ -6,7 +6,7 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::validity::ArrayValidity;
 use crate::ArrayDType;
 
-impl ScalarAtFn for BoolArray<'_> {
+impl ScalarAtFn for BoolArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
             Ok(self.boolean_buffer().value(index).into())

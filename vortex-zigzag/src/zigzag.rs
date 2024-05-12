@@ -16,7 +16,7 @@ pub struct ZigZagMetadata {
     encoded_dtype: DType,
 }
 
-impl ZigZagArray<'_> {
+impl ZigZagArray {
     pub fn new(encoded: Array) -> Self {
         Self::try_new(encoded).unwrap()
     }
@@ -36,7 +36,7 @@ impl ZigZagArray<'_> {
         Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
     }
 
-    pub fn encode<'a>(array: &'a Array<'a>) -> VortexResult<Array<'a>> {
+    pub fn encode<'a>(array: &'a Array) -> VortexResult<Array> {
         PrimitiveArray::try_from(array)
             .map_err(|_| vortex_err!("ZigZag can only encoding primitive arrays"))
             .map(|parray| zigzag_encode(&parray))?
@@ -50,7 +50,7 @@ impl ZigZagArray<'_> {
     }
 }
 
-impl ArrayValidity for ZigZagArray<'_> {
+impl ArrayValidity for ZigZagArray {
     fn is_valid(&self, index: usize) -> bool {
         self.encoded().with_dyn(|a| a.is_valid(index))
     }
@@ -60,15 +60,15 @@ impl ArrayValidity for ZigZagArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for ZigZagArray<'_> {
+impl AcceptArrayVisitor for ZigZagArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("encoded", &self.encoded())
     }
 }
 
-impl ArrayStatisticsCompute for ZigZagArray<'_> {}
+impl ArrayStatisticsCompute for ZigZagArray {}
 
-impl ArrayFlatten for ZigZagArray<'_> {
+impl ArrayFlatten for ZigZagArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,
@@ -77,7 +77,7 @@ impl ArrayFlatten for ZigZagArray<'_> {
     }
 }
 
-impl ArrayTrait for ZigZagArray<'_> {
+impl ArrayTrait for ZigZagArray {
     fn len(&self) -> usize {
         self.encoded().len()
     }

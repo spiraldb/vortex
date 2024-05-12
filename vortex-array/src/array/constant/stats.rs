@@ -7,7 +7,7 @@ use crate::array::constant::ConstantArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::ArrayTrait;
 
-impl ArrayStatisticsCompute for ConstantArray<'_> {
+impl ArrayStatisticsCompute for ConstantArray {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
         if let Ok(b) = BoolScalar::try_from(self.scalar()) {
             let true_count = if b.value().unwrap_or(false) {

@@ -13,7 +13,7 @@ use crate::{Array, OwnedArray, ToStatic};
 mod slice;
 mod take;
 
-impl ArrayCompute for ChunkedArray<'_> {
+impl ArrayCompute for ChunkedArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
@@ -35,7 +35,7 @@ impl ArrayCompute for ChunkedArray<'_> {
     }
 }
 
-impl AsContiguousFn for ChunkedArray<'_> {
+impl AsContiguousFn for ChunkedArray {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
         // Combine all the chunks into one, then call as_contiguous again.
         let mut chunks = Vec::with_capacity(self.nchunks());
@@ -48,7 +48,7 @@ impl AsContiguousFn for ChunkedArray<'_> {
     }
 }
 
-impl ScalarAtFn for ChunkedArray<'_> {
+impl ScalarAtFn for ChunkedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let (chunk_index, chunk_offset) = self.find_chunk_idx(index);
         scalar_at(&self.chunk(chunk_index).unwrap(), chunk_offset)

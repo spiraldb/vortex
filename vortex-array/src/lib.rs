@@ -62,20 +62,18 @@ pub mod flatbuffers {
 }
 
 #[derive(Debug, Clone)]
-pub enum Array<'v> {
+pub enum Array {
     Data(ArrayData),
     View(ArrayView),
-    Phantom(&'v ()),
 }
 
-pub type OwnedArray = Array<'static>;
+pub type OwnedArray = Array;
 
-impl Array<'_> {
+impl Array {
     pub fn encoding(&self) -> EncodingRef {
         match self {
             Array::Data(d) => d.encoding(),
             Array::View(v) => v.encoding(),
-            Array::Phantom(_) => unreachable!(),
         }
     }
 
@@ -91,11 +89,10 @@ impl Array<'_> {
         self.with_dyn(|a| a.is_empty())
     }
 
-    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array<'a>> {
+    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array> {
         match self {
             Array::Data(d) => d.child(idx, dtype).cloned().map(Array::Data),
             Array::View(v) => v.child(idx, dtype).map(Array::View),
-            Array::Phantom(_) => unreachable!(),
         }
     }
 
@@ -103,22 +100,20 @@ impl Array<'_> {
         match self {
             Array::Data(d) => d.buffer(),
             Array::View(v) => v.buffer(),
-            Array::Phantom(_) => unreachable!(),
         }
     }
 }
 
-impl<'a> Array<'a> {
+impl Array {
     pub fn into_buffer(self) -> Option<Buffer> {
         match self {
             Array::Data(d) => d.into_buffer(),
             Array::View(v) => v.buffer().cloned(),
-            Array::Phantom(_) => unreachable!(),
         }
     }
 }
 
-impl ToStatic for Array<'_> {
+impl ToStatic for Array {
     type Static = OwnedArray;
 
     fn to_static(&self) -> Self::Static {
@@ -130,8 +125,8 @@ pub trait ToArray {
     fn to_array(&self) -> Array;
 }
 
-pub trait IntoArray<'a> {
-    fn into_array(self) -> Array<'a>;
+pub trait IntoArray {
+    fn into_array(self) -> Array;
 }
 
 pub trait ToArrayData {
@@ -196,8 +191,8 @@ impl ArrayVisitor for NBytesVisitor {
     }
 }
 
-impl<'a> Array<'a> {
-    pub fn with_dyn<R, F>(&'a self, mut f: F) -> R
+impl Array {
+    pub fn with_dyn<R, F>(&self, mut f: F) -> R
     where
         F: FnMut(&dyn ArrayTrait) -> R,
     {
@@ -215,12 +210,11 @@ impl<'a> Array<'a> {
     }
 }
 
-impl Display for Array<'_> {
+impl Display for Array {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let prefix = match self {
             Array::Data(_) => "",
             Array::View(_) => "$",
-            Array::Phantom(_) => unreachable!(),
         };
         write!(
             f,
@@ -233,12 +227,11 @@ impl Display for Array<'_> {
     }
 }
 
-impl IntoArrayData for Array<'_> {
+impl IntoArrayData for Array {
     fn into_array_data(self) -> ArrayData {
         match self {
             Array::Data(d) => d,
             Array::View(_) => self.with_dyn(|a| a.to_array_data()),
-            Array::Phantom(_) => unreachable!(),
         }
     }
 }

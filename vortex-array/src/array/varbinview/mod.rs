@@ -104,7 +104,7 @@ pub struct VarBinViewMetadata {
     n_children: usize,
 }
 
-impl VarBinViewArray<'_> {
+impl VarBinViewArray {
     pub fn try_new(
         views: Array,
         data: Vec<Array>,
@@ -217,7 +217,7 @@ impl VarBinViewArray<'_> {
     }
 }
 
-impl ArrayFlatten for VarBinViewArray<'_> {
+impl ArrayFlatten for VarBinViewArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,
@@ -226,7 +226,7 @@ impl ArrayFlatten for VarBinViewArray<'_> {
     }
 }
 
-impl ArrayValidity for VarBinViewArray<'_> {
+impl ArrayValidity for VarBinViewArray {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
@@ -236,7 +236,7 @@ impl ArrayValidity for VarBinViewArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for VarBinViewArray<'_> {
+impl AcceptArrayVisitor for VarBinViewArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("views", &self.views())?;
         for i in 0..self.metadata().n_children {
@@ -246,55 +246,55 @@ impl AcceptArrayVisitor for VarBinViewArray<'_> {
     }
 }
 
-impl ArrayTrait for VarBinViewArray<'_> {
+impl ArrayTrait for VarBinViewArray {
     fn len(&self) -> usize {
         self.view_slice().len()
     }
 }
 
-impl From<Vec<&[u8]>> for VarBinViewArray<'_> {
+impl From<Vec<&[u8]>> for VarBinViewArray {
     fn from(value: Vec<&[u8]>) -> Self {
         VarBinViewArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<Vec<u8>>> for VarBinViewArray<'_> {
+impl From<Vec<Vec<u8>>> for VarBinViewArray {
     fn from(value: Vec<Vec<u8>>) -> Self {
         VarBinViewArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<String>> for VarBinViewArray<'_> {
+impl From<Vec<String>> for VarBinViewArray {
     fn from(value: Vec<String>) -> Self {
         VarBinViewArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<&str>> for VarBinViewArray<'_> {
+impl From<Vec<&str>> for VarBinViewArray {
     fn from(value: Vec<&str>) -> Self {
         VarBinViewArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl<'a> FromIterator<Option<&'a [u8]>> for VarBinViewArray<'_> {
+impl<'a> FromIterator<Option<&'a [u8]>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a [u8]>>>(iter: T) -> Self {
         VarBinViewArray::from_iter(iter, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl FromIterator<Option<Vec<u8>>> for VarBinViewArray<'_> {
+impl FromIterator<Option<Vec<u8>>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<Vec<u8>>>>(iter: T) -> Self {
         VarBinViewArray::from_iter(iter, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl FromIterator<Option<String>> for VarBinViewArray<'_> {
+impl FromIterator<Option<String>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<String>>>(iter: T) -> Self {
         VarBinViewArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray<'_> {
+impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a str>>>(iter: T) -> Self {
         VarBinViewArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
     }

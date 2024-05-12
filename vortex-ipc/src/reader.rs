@@ -136,7 +136,7 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
         &self.dtype
     }
 
-    pub fn take(self, indices: &'a Array<'_>) -> VortexResult<TakeIterator<'a, R>> {
+    pub fn take(self, indices: &'a Array) -> VortexResult<TakeIterator<'a, R>> {
         if !indices.is_empty() {
             if !indices.statistics().compute_is_sorted()? {
                 vortex_bail!("Indices must be sorted to take from IPC stream")
@@ -171,7 +171,7 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
 
 pub struct TakeIterator<'a, R: Read> {
     reader: StreamArrayReader<'a, R>,
-    indices: &'a Array<'a>,
+    indices: &'a Array,
     row_offset: usize,
 }
 
@@ -244,9 +244,9 @@ impl<'a, R: Read> FallibleIterator for TakeIterator<'a, R> {
 #[gat]
 impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
     type Error = VortexError;
-    type Item<'next> = Array<'next> where Self: 'next;
+    type Item<'next> = Array where Self: 'next;
 
-    fn next(&mut self) -> Result<Option<Array<'_>>, Self::Error> {
+    fn next(&mut self) -> Result<Option<Array>, Self::Error> {
         let Some(chunk_msg) = self.messages.peek().and_then(|msg| msg.header_as_chunk()) else {
             return Ok(None);
         };
@@ -858,7 +858,7 @@ mod tests {
             .expect_err("Should not be able to calculate true count for non-boolean array");
     }
 
-    fn round_trip<'a>(chunked_array: &'a Array<'a>) -> Array<'a> {
+    fn round_trip<'a>(chunked_array: &'a Array) -> Array {
         let context = Context::default();
         let mut buffer = vec![];
         {

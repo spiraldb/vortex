@@ -12,13 +12,14 @@ use crate::{Array, IntoArray};
 
 /// The set of encodings that can be converted to Arrow with zero-copy.
 pub enum Flattened<'a> {
-    Bool(BoolArray<'a>),
-    Chunked(ChunkedArray<'a>),
-    Primitive(PrimitiveArray<'a>),
-    Struct(StructArray<'a>),
-    VarBin(VarBinArray<'a>),
-    VarBinView(VarBinViewArray<'a>),
-    Extension(ExtensionArray<'a>),
+    Bool(BoolArray),
+    Chunked(ChunkedArray),
+    Primitive(PrimitiveArray),
+    Struct(StructArray),
+    VarBin(VarBinArray),
+    VarBinView(VarBinViewArray),
+    Extension(ExtensionArray),
+    Phantom(&'a ()),
 }
 
 pub trait ArrayFlatten {
@@ -27,26 +28,26 @@ pub trait ArrayFlatten {
         Self: 'a;
 }
 
-impl<'a> Array<'a> {
+impl<'a> Array {
     pub fn flatten(self) -> VortexResult<Flattened<'a>> {
         ArrayEncoding::flatten(self.encoding(), self)
     }
 
-    pub fn flatten_bool(self) -> VortexResult<BoolArray<'a>> {
+    pub fn flatten_bool(self) -> VortexResult<BoolArray> {
         BoolArray::try_from(self.flatten()?.into_array())
     }
 
-    pub fn flatten_primitive(self) -> VortexResult<PrimitiveArray<'a>> {
+    pub fn flatten_primitive(self) -> VortexResult<PrimitiveArray> {
         PrimitiveArray::try_from(self.flatten()?.into_array())
     }
 
-    pub fn flatten_varbin(self) -> VortexResult<VarBinArray<'a>> {
+    pub fn flatten_varbin(self) -> VortexResult<VarBinArray> {
         VarBinArray::try_from(self.flatten()?.into_array())
     }
 }
 
-impl<'a> IntoArray<'a> for Flattened<'a> {
-    fn into_array(self) -> Array<'a> {
+impl<'a> IntoArray for Flattened<'a> {
+    fn into_array(self) -> Array {
         match self {
             Flattened::Bool(a) => a.into_array(),
             Flattened::Primitive(a) => a.into_array(),
@@ -55,6 +56,7 @@ impl<'a> IntoArray<'a> for Flattened<'a> {
             Flattened::VarBin(a) => a.into_array(),
             Flattened::Extension(a) => a.into_array(),
             Flattened::VarBinView(a) => a.into_array(),
+            Flattened::Phantom(_) => unreachable!(),
         }
     }
 }

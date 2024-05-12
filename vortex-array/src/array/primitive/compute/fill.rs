@@ -6,7 +6,7 @@ use crate::compute::fill::FillForwardFn;
 use crate::validity::ArrayValidity;
 use crate::{IntoArray, OwnedArray, ToArrayData};
 
-impl FillForwardFn for PrimitiveArray<'_> {
+impl FillForwardFn for PrimitiveArray {
     fn fill_forward(&self) -> VortexResult<OwnedArray> {
         let validity = self.logical_validity();
         let Some(nulls) = validity.to_null_buffer()? else {

@@ -8,7 +8,7 @@ use vortex_scalar::Scalar;
 
 use crate::DictArray;
 
-impl ArrayCompute for DictArray<'_> {
+impl ArrayCompute for DictArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -22,14 +22,14 @@ impl ArrayCompute for DictArray<'_> {
     }
 }
 
-impl ScalarAtFn for DictArray<'_> {
+impl ScalarAtFn for DictArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let dict_index: usize = scalar_at(&self.codes(), index)?.as_ref().try_into()?;
         scalar_at(&self.values(), dict_index)
     }
 }
 
-impl TakeFn for DictArray<'_> {
+impl TakeFn for DictArray {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         // Dict
         //   codes: 0 0 1
@@ -39,7 +39,7 @@ impl TakeFn for DictArray<'_> {
     }
 }
 
-impl SliceFn for DictArray<'_> {
+impl SliceFn for DictArray {
     // TODO(robert): Add function to trim the dictionary
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         DictArray::try_new(slice(&self.codes(), start, stop)?, self.values())

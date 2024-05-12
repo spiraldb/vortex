@@ -5,7 +5,7 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::slice::{slice, SliceFn};
 use crate::{IntoArray, OwnedArray};
 
-impl SliceFn for SparseArray<'_> {
+impl SliceFn for SparseArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         // Find the index of the first patch index that is greater than or equal to the offset of this array
         let index_start_index =

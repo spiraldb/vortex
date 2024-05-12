@@ -49,7 +49,7 @@ impl EncodingCompression for ALPEncoding {
         array: &Array,
         like: Option<&Array>,
         ctx: Compressor,
-    ) -> VortexResult<Array<'static>> {
+    ) -> VortexResult<Array> {
         let like_alp = like.map(|like_array| like_array.as_array_ref());
         let like_exponents = like
             .map(|like_array| ALPArray::try_from(like_array).unwrap())
@@ -131,10 +131,7 @@ pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
     }
 }
 
-fn patch_decoded<'a>(
-    array: PrimitiveArray<'a>,
-    patches: &Array,
-) -> VortexResult<PrimitiveArray<'a>> {
+fn patch_decoded<'a>(array: PrimitiveArray, patches: &Array) -> VortexResult<PrimitiveArray> {
     match patches.encoding().id() {
         Sparse::ID => {
             match_each_alp_float_ptype!(array.ptype(), |$T| {

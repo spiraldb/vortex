@@ -7,7 +7,7 @@ use crate::array::bool::BoolArray;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::validity::ArrayValidity;
 
-impl AsArrowArray for BoolArray<'_> {
+impl AsArrowArray for BoolArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         Ok(Arc::new(ArrowBoolArray::new(
             self.boolean_buffer().clone(),

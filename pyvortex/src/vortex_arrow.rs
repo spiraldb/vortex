@@ -13,7 +13,7 @@ pub fn map_arrow_err(error: ArrowError) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
 
-pub fn export_array<'py>(py: Python<'py>, array: &Array<'_>) -> PyResult<&'py PyAny> {
+pub fn export_array<'py>(py: Python<'py>, array: &Array) -> PyResult<&'py PyAny> {
     // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
     // NOTE(robert): Return RecordBatchStreamReader always?
     let chunks = as_arrow_chunks(array).map_err(PyVortexError::map_err)?;

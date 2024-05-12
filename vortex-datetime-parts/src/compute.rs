@@ -6,7 +6,7 @@ use vortex_error::VortexResult;
 
 use crate::DateTimePartsArray;
 
-impl ArrayCompute for DateTimePartsArray<'_> {
+impl ArrayCompute for DateTimePartsArray {
     fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
@@ -16,7 +16,7 @@ impl ArrayCompute for DateTimePartsArray<'_> {
     }
 }
 
-impl TakeFn for DateTimePartsArray<'_> {
+impl TakeFn for DateTimePartsArray {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         Ok(DateTimePartsArray::try_new(
             self.dtype().clone(),
@@ -28,7 +28,7 @@ impl TakeFn for DateTimePartsArray<'_> {
     }
 }
 
-impl SliceFn for DateTimePartsArray<'_> {
+impl SliceFn for DateTimePartsArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         Ok(DateTimePartsArray::try_new(
             self.dtype().clone(),

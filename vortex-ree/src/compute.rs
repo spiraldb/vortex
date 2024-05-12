@@ -10,7 +10,7 @@ use vortex_scalar::Scalar;
 
 use crate::REEArray;
 
-impl ArrayCompute for REEArray<'_> {
+impl ArrayCompute for REEArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -24,13 +24,13 @@ impl ArrayCompute for REEArray<'_> {
     }
 }
 
-impl ScalarAtFn for REEArray<'_> {
+impl ScalarAtFn for REEArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         scalar_at(&self.values(), self.find_physical_index(index)?)
     }
 }
 
-impl TakeFn for REEArray<'_> {
+impl TakeFn for REEArray {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         let primitive_indices = indices.clone().flatten_primitive()?;
         let physical_indices = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
@@ -50,7 +50,7 @@ impl TakeFn for REEArray<'_> {
     }
 }
 
-impl SliceFn for REEArray<'_> {
+impl SliceFn for REEArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         let slice_begin = self.find_physical_index(start)?;
         let slice_end = self.find_physical_index(stop)?;

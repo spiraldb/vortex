@@ -8,7 +8,7 @@ use crate::validity::Validity;
 use crate::ArrayDType;
 use crate::{IntoArray, OwnedArray};
 
-impl CastFn for PrimitiveArray<'_> {
+impl CastFn for PrimitiveArray {
     fn cast(&self, dtype: &DType) -> VortexResult<OwnedArray> {
         let ptype = PType::try_from(dtype)?;
 

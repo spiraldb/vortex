@@ -6,7 +6,7 @@ use crate::compute::fill::FillForwardFn;
 use crate::validity::ArrayValidity;
 use crate::{ArrayDType, IntoArray, OwnedArray, ToArrayData};
 
-impl FillForwardFn for BoolArray<'_> {
+impl FillForwardFn for BoolArray {
     fn fill_forward(&self) -> VortexResult<OwnedArray> {
         if self.dtype().nullability() == Nullability::NonNullable {
             return Ok(self.to_array_data().into_array());

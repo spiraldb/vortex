@@ -19,12 +19,12 @@ lazy_static! {
     static ref ID: ExtID = ExtID::from(LocalDateTimeArray::ID);
 }
 
-pub struct LocalDateTimeArray<'a> {
-    ext: ExtensionArray<'a>,
+pub struct LocalDateTimeArray {
+    ext: ExtensionArray,
     time_unit: TimeUnit,
 }
 
-impl LocalDateTimeArray<'_> {
+impl LocalDateTimeArray {
     pub const ID: &'static str = "vortex.localdatetime";
 
     pub fn try_new(time_unit: TimeUnit, timestamps: Array) -> VortexResult<Self> {
@@ -54,10 +54,10 @@ impl LocalDateTimeArray<'_> {
     }
 }
 
-impl<'a> TryFrom<&ExtensionArray<'a>> for LocalDateTimeArray<'a> {
+impl<'a> TryFrom<&ExtensionArray> for LocalDateTimeArray {
     type Error = VortexError;
 
-    fn try_from(value: &ExtensionArray<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: &ExtensionArray) -> Result<Self, Self::Error> {
         LocalDateTimeArray::try_new(
             try_parse_time_unit(value.ext_dtype())?,
             value.storage().clone(),
@@ -65,7 +65,7 @@ impl<'a> TryFrom<&ExtensionArray<'a>> for LocalDateTimeArray<'a> {
     }
 }
 
-impl AsArrowArray for LocalDateTimeArray<'_> {
+impl AsArrowArray for LocalDateTimeArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         // A LocalDateTime maps to an Arrow Timestamp array with no timezone.
         let timestamps = cast(&self.timestamps(), PType::I64.into())?.flatten_primitive()?;
@@ -81,16 +81,16 @@ impl AsArrowArray for LocalDateTimeArray<'_> {
     }
 }
 
-impl<'a> TryFrom<&Array<'a>> for LocalDateTimeArray<'a> {
+impl<'a> TryFrom<&Array> for LocalDateTimeArray {
     type Error = VortexError;
 
-    fn try_from(value: &Array<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: &Array) -> Result<Self, Self::Error> {
         let ext = ExtensionArray::try_from(value)?;
         LocalDateTimeArray::try_new(try_parse_time_unit(ext.ext_dtype())?, ext.storage())
     }
 }
 
-impl IntoArrayData for LocalDateTimeArray<'_> {
+impl IntoArrayData for LocalDateTimeArray {
     fn into_array_data(self) -> ArrayData {
         self.ext.into_array_data()
     }

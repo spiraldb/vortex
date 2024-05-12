@@ -9,7 +9,7 @@ use zigzag::ZigZag as ExternalZigZag;
 
 use crate::ZigZagArray;
 
-impl ArrayCompute for ZigZagArray<'_> {
+impl ArrayCompute for ZigZagArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -19,7 +19,7 @@ impl ArrayCompute for ZigZagArray<'_> {
     }
 }
 
-impl ScalarAtFn for ZigZagArray<'_> {
+impl ScalarAtFn for ZigZagArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let scalar = scalar_at(&self.encoded(), index)?;
         let pscalar = PrimitiveScalar::try_from(&scalar)?;
@@ -33,7 +33,7 @@ impl ScalarAtFn for ZigZagArray<'_> {
     }
 }
 
-impl SliceFn for ZigZagArray<'_> {
+impl SliceFn for ZigZagArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         Ok(ZigZagArray::try_new(slice(&self.encoded(), start, stop)?)?.into_array())
     }

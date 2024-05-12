@@ -248,8 +248,8 @@ impl ToArray for ArrayView {
     }
 }
 
-impl<'v> IntoArray<'v> for ArrayView {
-    fn into_array(self) -> Array<'v> {
+impl<'v> IntoArray for ArrayView {
+    fn into_array(self) -> Array {
         Array::View(self)
     }
 }

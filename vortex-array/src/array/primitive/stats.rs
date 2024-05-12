@@ -18,7 +18,7 @@ use crate::IntoArray;
 trait PStatsType: NativePType + Into<Scalar> + BitWidth {}
 impl<T: NativePType + Into<Scalar> + BitWidth> PStatsType for T {}
 
-impl ArrayStatisticsCompute for PrimitiveArray<'_> {
+impl ArrayStatisticsCompute for PrimitiveArray {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
         match_each_native_ptype!(self.ptype(), |$P| {
             match self.logical_validity() {

@@ -16,7 +16,7 @@ use crate::{Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
 
 mod slice;
 
-impl ArrayCompute for SparseArray<'_> {
+impl ArrayCompute for SparseArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
@@ -34,7 +34,7 @@ impl ArrayCompute for SparseArray<'_> {
     }
 }
 
-impl AsContiguousFn for SparseArray<'_> {
+impl AsContiguousFn for SparseArray {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
         let sparse = arrays
             .iter()
@@ -55,7 +55,7 @@ impl AsContiguousFn for SparseArray<'_> {
     }
 }
 
-impl ScalarAtFn for SparseArray<'_> {
+impl ScalarAtFn for SparseArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         match self.find_index(index)? {
             None => self.fill_value().clone().cast(self.dtype()),
@@ -64,7 +64,7 @@ impl ScalarAtFn for SparseArray<'_> {
     }
 }
 
-impl TakeFn for SparseArray<'_> {
+impl TakeFn for SparseArray {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         let flat_indices = indices.clone().flatten_primitive()?;
         // if we are taking a lot of values we should build a hashmap

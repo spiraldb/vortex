@@ -20,7 +20,7 @@ mod slice;
 mod subtract_scalar;
 mod take;
 
-impl ArrayCompute for PrimitiveArray<'_> {
+impl ArrayCompute for PrimitiveArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }

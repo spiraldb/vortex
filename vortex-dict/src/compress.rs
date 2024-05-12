@@ -109,8 +109,8 @@ impl<T: ToBytes> Eq for Value<T> {}
 /// Dictionary encode primitive array with given PType.
 /// Null values in the original array are encoded in the dictionary.
 pub fn dict_encode_typed_primitive<'a, T: NativePType>(
-    array: &PrimitiveArray<'a>,
-) -> (PrimitiveArray<'a>, PrimitiveArray<'a>) {
+    array: &PrimitiveArray,
+) -> (PrimitiveArray, PrimitiveArray) {
     let mut lookup_dict: HashMap<Value<T>, u64> = HashMap::new();
     let mut codes: Vec<u64> = Vec::new();
     let mut values: Vec<T> = Vec::new();
@@ -156,7 +156,7 @@ pub fn dict_encode_typed_primitive<'a, T: NativePType>(
 }
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying
-pub fn dict_encode_varbin<'a>(array: &'a VarBinArray) -> (PrimitiveArray<'a>, VarBinArray<'a>) {
+pub fn dict_encode_varbin<'a>(array: &'a VarBinArray) -> (PrimitiveArray, VarBinArray) {
     array
         .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
         .unwrap()
@@ -172,10 +172,7 @@ fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
     &bytes[begin..end]
 }
 
-fn dict_encode_typed_varbin<'a, I, U>(
-    dtype: DType,
-    values: I,
-) -> (PrimitiveArray<'a>, VarBinArray<'a>)
+fn dict_encode_typed_varbin<'a, I, U>(dtype: DType, values: I) -> (PrimitiveArray, VarBinArray)
 where
     I: Iterator<Item = Option<U>>,
     U: AsRef<[u8]>,

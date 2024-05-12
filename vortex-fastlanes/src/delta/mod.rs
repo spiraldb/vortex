@@ -20,7 +20,7 @@ pub struct DeltaMetadata {
     len: usize,
 }
 
-impl DeltaArray<'_> {
+impl DeltaArray {
     pub fn try_new(
         len: usize,
         bases: Array,
@@ -94,7 +94,7 @@ impl DeltaArray<'_> {
     }
 }
 
-impl ArrayFlatten for DeltaArray<'_> {
+impl ArrayFlatten for DeltaArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,
@@ -103,7 +103,7 @@ impl ArrayFlatten for DeltaArray<'_> {
     }
 }
 
-impl ArrayValidity for DeltaArray<'_> {
+impl ArrayValidity for DeltaArray {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
@@ -113,16 +113,16 @@ impl ArrayValidity for DeltaArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for DeltaArray<'_> {
+impl AcceptArrayVisitor for DeltaArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("bases", &self.bases())?;
         visitor.visit_child("deltas", &self.deltas())
     }
 }
 
-impl ArrayStatisticsCompute for DeltaArray<'_> {}
+impl ArrayStatisticsCompute for DeltaArray {}
 
-impl ArrayTrait for DeltaArray<'_> {
+impl ArrayTrait for DeltaArray {
     fn len(&self) -> usize {
         self.metadata().len
     }

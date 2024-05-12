@@ -9,7 +9,7 @@ use crate::array::sparse::SparseArray;
 use crate::validity::Validity;
 use crate::{ArrayFlatten, ArrayTrait, Flattened};
 
-impl ArrayFlatten for SparseArray<'_> {
+impl ArrayFlatten for SparseArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,

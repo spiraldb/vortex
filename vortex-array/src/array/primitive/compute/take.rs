@@ -8,7 +8,7 @@ use crate::compute::take::TakeFn;
 use crate::IntoArray;
 use crate::{Array, OwnedArray};
 
-impl TakeFn for PrimitiveArray<'_> {
+impl TakeFn for PrimitiveArray {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         let validity = self.validity();
         let indices = indices.clone().flatten_primitive()?;

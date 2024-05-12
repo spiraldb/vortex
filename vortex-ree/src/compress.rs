@@ -64,7 +64,7 @@ impl EncodingCompression for REEEncoding {
     }
 }
 
-pub fn ree_encode<'a>(array: &PrimitiveArray) -> (PrimitiveArray<'a>, PrimitiveArray<'a>) {
+pub fn ree_encode<'a>(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     let validity = if array.validity().nullability() == Nullability::NonNullable {
         Validity::NonNullable
     } else {
@@ -124,7 +124,7 @@ pub fn ree_decode<'a>(
     validity: Validity,
     offset: usize,
     length: usize,
-) -> VortexResult<PrimitiveArray<'a>> {
+) -> VortexResult<PrimitiveArray> {
     match_each_native_ptype!(values.ptype(), |$P| {
         match_each_integer_ptype!(ends.ptype(), |$E| {
             Ok(PrimitiveArray::from_vec(ree_decode_primitive(

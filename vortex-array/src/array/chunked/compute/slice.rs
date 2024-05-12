@@ -4,7 +4,7 @@ use crate::array::chunked::ChunkedArray;
 use crate::compute::slice::{slice, SliceFn};
 use crate::{ArrayDType, IntoArray, OwnedArray};
 
-impl SliceFn for ChunkedArray<'_> {
+impl SliceFn for ChunkedArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         let (offset_chunk, offset_in_first_chunk) = self.find_chunk_idx(start);
         let (length_chunk, length_in_last_chunk) = self.find_chunk_idx(stop);

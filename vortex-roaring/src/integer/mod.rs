@@ -24,7 +24,7 @@ pub struct RoaringIntMetadata {
     length: usize,
 }
 
-impl RoaringIntArray<'_> {
+impl RoaringIntArray {
     pub fn new(bitmap: Bitmap, ptype: PType) -> Self {
         Self::try_new(bitmap, ptype).unwrap()
     }
@@ -70,7 +70,7 @@ impl RoaringIntArray<'_> {
     }
 }
 
-impl ArrayValidity for RoaringIntArray<'_> {
+impl ArrayValidity for RoaringIntArray {
     fn logical_validity(&self) -> LogicalValidity {
         LogicalValidity::AllValid(self.bitmap().iter().count())
     }
@@ -80,7 +80,7 @@ impl ArrayValidity for RoaringIntArray<'_> {
     }
 }
 
-impl ArrayFlatten for RoaringIntArray<'_> {
+impl ArrayFlatten for RoaringIntArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,
@@ -89,15 +89,15 @@ impl ArrayFlatten for RoaringIntArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for RoaringIntArray<'_> {
+impl AcceptArrayVisitor for RoaringIntArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         todo!()
     }
 }
 
-impl ArrayStatisticsCompute for RoaringIntArray<'_> {}
+impl ArrayStatisticsCompute for RoaringIntArray {}
 
-impl ArrayTrait for RoaringIntArray<'_> {
+impl ArrayTrait for RoaringIntArray {
     fn len(&self) -> usize {
         self.metadata().length
     }

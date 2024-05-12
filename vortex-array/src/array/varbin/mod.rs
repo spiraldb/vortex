@@ -31,7 +31,7 @@ pub struct VarBinMetadata {
     offsets_dtype: DType,
 }
 
-impl VarBinArray<'_> {
+impl VarBinArray {
     pub fn try_new(
         offsets: Array,
         bytes: Array,
@@ -159,49 +159,49 @@ impl VarBinArray<'_> {
     }
 }
 
-impl From<Vec<&[u8]>> for VarBinArray<'_> {
+impl From<Vec<&[u8]>> for VarBinArray {
     fn from(value: Vec<&[u8]>) -> Self {
         VarBinArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<Vec<u8>>> for VarBinArray<'_> {
+impl From<Vec<Vec<u8>>> for VarBinArray {
     fn from(value: Vec<Vec<u8>>) -> Self {
         VarBinArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<String>> for VarBinArray<'_> {
+impl From<Vec<String>> for VarBinArray {
     fn from(value: Vec<String>) -> Self {
         VarBinArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<&str>> for VarBinArray<'_> {
+impl From<Vec<&str>> for VarBinArray {
     fn from(value: Vec<&str>) -> Self {
         VarBinArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl<'a> FromIterator<Option<&'a [u8]>> for VarBinArray<'_> {
+impl<'a> FromIterator<Option<&'a [u8]>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a [u8]>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Binary(Nullability::Nullable))
     }
 }
 
-impl FromIterator<Option<Vec<u8>>> for VarBinArray<'_> {
+impl FromIterator<Option<Vec<u8>>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<Vec<u8>>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Binary(Nullability::Nullable))
     }
 }
 
-impl FromIterator<Option<String>> for VarBinArray<'_> {
+impl FromIterator<Option<String>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<String>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Utf8(Nullability::Nullable))
     }
 }
 
-impl<'a> FromIterator<Option<&'a str>> for VarBinArray<'_> {
+impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a str>>>(iter: T) -> Self {
         VarBinArray::from_iter(iter, DType::Utf8(Nullability::Nullable))
     }

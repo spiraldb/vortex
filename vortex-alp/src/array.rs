@@ -19,7 +19,7 @@ pub struct ALPMetadata {
     patches_dtype: Option<DType>,
 }
 
-impl ALPArray<'_> {
+impl ALPArray {
     pub fn try_new(
         encoded: Array,
         exponents: Exponents,
@@ -50,7 +50,7 @@ impl ALPArray<'_> {
         )
     }
 
-    pub fn encode(array: Array<'_>) -> VortexResult<OwnedArray> {
+    pub fn encode(array: Array) -> VortexResult<OwnedArray> {
         if let Ok(parray) = PrimitiveArray::try_from(array) {
             Ok(alp_encode(&parray)?.into_array())
         } else {
@@ -77,7 +77,7 @@ impl ALPArray<'_> {
     }
 }
 
-impl ArrayValidity for ALPArray<'_> {
+impl ArrayValidity for ALPArray {
     fn is_valid(&self, index: usize) -> bool {
         self.encoded().with_dyn(|a| a.is_valid(index))
     }
@@ -87,7 +87,7 @@ impl ArrayValidity for ALPArray<'_> {
     }
 }
 
-impl ArrayFlatten for ALPArray<'_> {
+impl ArrayFlatten for ALPArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,
@@ -96,7 +96,7 @@ impl ArrayFlatten for ALPArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for ALPArray<'_> {
+impl AcceptArrayVisitor for ALPArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("encoded", &self.encoded())?;
         if self.patches().is_some() {
@@ -109,9 +109,9 @@ impl AcceptArrayVisitor for ALPArray<'_> {
     }
 }
 
-impl ArrayStatisticsCompute for ALPArray<'_> {}
+impl ArrayStatisticsCompute for ALPArray {}
 
-impl ArrayTrait for ALPArray<'_> {
+impl ArrayTrait for ALPArray {
     fn len(&self) -> usize {
         self.encoded().len()
     }

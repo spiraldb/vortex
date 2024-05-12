@@ -6,7 +6,7 @@ use vortex_error::VortexResult;
 
 use crate::BitPackedArray;
 
-impl SliceFn for BitPackedArray<'_> {
+impl SliceFn for BitPackedArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         let offset = start % 1024;
         let block_start = max(0, start - offset);

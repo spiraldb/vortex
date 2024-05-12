@@ -88,7 +88,7 @@ impl EncodingCompression for BitPackedEncoding {
 }
 
 pub(crate) fn bitpack_encode(
-    array: PrimitiveArray<'_>,
+    array: PrimitiveArray,
     bit_width: usize,
 ) -> VortexResult<OwnedBitPackedArray> {
     let bit_width_freq = array.statistics().compute_bit_width_freq()?;
@@ -180,7 +180,7 @@ fn bitpack_patches(
     })
 }
 
-pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray<'a>> {
+pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
     let offset = array.offset();
@@ -206,10 +206,7 @@ pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray<'a>> {
     }
 }
 
-fn patch_unpacked<'a>(
-    array: PrimitiveArray<'a>,
-    patches: &Array,
-) -> VortexResult<PrimitiveArray<'a>> {
+fn patch_unpacked<'a>(array: PrimitiveArray, patches: &Array) -> VortexResult<PrimitiveArray> {
     match patches.encoding().id() {
         Sparse::ID => {
             match_each_integer_ptype!(array.ptype(), |$T| {

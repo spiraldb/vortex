@@ -25,7 +25,7 @@ use crate::{Array, ArrayDType, IntoArray, OwnedArray, ToArray};
 mod slice;
 mod take;
 
-impl ArrayCompute for VarBinArray<'_> {
+impl ArrayCompute for VarBinArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }
@@ -47,7 +47,7 @@ impl ArrayCompute for VarBinArray<'_> {
     }
 }
 
-impl AsContiguousFn for VarBinArray<'_> {
+impl AsContiguousFn for VarBinArray {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
         let bytes_chunks: Vec<Array> = arrays
             .iter()
@@ -83,7 +83,7 @@ impl AsContiguousFn for VarBinArray<'_> {
     }
 }
 
-impl AsArrowArray for VarBinArray<'_> {
+impl AsArrowArray for VarBinArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         // Ensure the offsets are either i32 or i64
         let offsets = self.offsets().flatten_primitive()?;
@@ -133,7 +133,7 @@ impl AsArrowArray for VarBinArray<'_> {
     }
 }
 
-impl ScalarAtFn for VarBinArray<'_> {
+impl ScalarAtFn for VarBinArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
             Ok(varbin_scalar(

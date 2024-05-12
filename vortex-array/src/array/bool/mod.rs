@@ -19,7 +19,7 @@ pub struct BoolMetadata {
     length: usize,
 }
 
-impl BoolArray<'_> {
+impl BoolArray {
     pub fn buffer(&self) -> &Buffer {
         self.array().buffer().expect("missing buffer")
     }
@@ -35,7 +35,7 @@ impl BoolArray<'_> {
     }
 }
 
-impl BoolArray<'_> {
+impl BoolArray {
     pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
         Ok(Self {
             typed: TypedArray::try_from_parts(
@@ -86,13 +86,13 @@ impl FromIterator<Option<bool>> for OwnedBoolArray {
     }
 }
 
-impl ArrayTrait for BoolArray<'_> {
+impl ArrayTrait for BoolArray {
     fn len(&self) -> usize {
         self.metadata().length
     }
 }
 
-impl ArrayFlatten for BoolArray<'_> {
+impl ArrayFlatten for BoolArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,
@@ -101,7 +101,7 @@ impl ArrayFlatten for BoolArray<'_> {
     }
 }
 
-impl ArrayValidity for BoolArray<'_> {
+impl ArrayValidity for BoolArray {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
@@ -111,7 +111,7 @@ impl ArrayValidity for BoolArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for BoolArray<'_> {
+impl AcceptArrayVisitor for BoolArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_buffer(self.buffer())?;
         visitor.visit_validity(&self.validity())

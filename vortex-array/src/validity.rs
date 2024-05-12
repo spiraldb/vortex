@@ -25,7 +25,7 @@ pub enum ValidityMetadata {
 }
 
 impl ValidityMetadata {
-    pub fn to_validity<'v>(&self, array: Option<Array<'v>>) -> Validity<'v> {
+    pub fn to_validity<'v>(&self, array: Option<Array>) -> Validity<'v> {
         match self {
             ValidityMetadata::NonNullable => Validity::NonNullable,
             ValidityMetadata::AllValid => Validity::AllValid,
@@ -45,7 +45,8 @@ pub enum Validity<'v> {
     NonNullable,
     AllValid,
     AllInvalid,
-    Array(Array<'v>),
+    Array(Array),
+    Phantom(&'v ()),
 }
 
 impl<'v> Validity<'v> {
@@ -75,6 +76,7 @@ impl<'v> Validity<'v> {
                 }
                 Ok(ValidityMetadata::Array)
             }
+            Validity::Phantom(_) => unreachable!(),
         }
     }
 
@@ -97,6 +99,7 @@ impl<'v> Validity<'v> {
             Validity::NonNullable | Validity::AllValid => true,
             Validity::AllInvalid => false,
             Validity::Array(a) => bool::try_from(&scalar_at(a, index).unwrap()).unwrap(),
+            Validity::Phantom(_) => unreachable!(),
         }
     }
 
@@ -113,6 +116,7 @@ impl<'v> Validity<'v> {
             Validity::AllValid => Ok(Validity::AllValid),
             Validity::AllInvalid => Ok(Validity::AllInvalid),
             Validity::Array(a) => Ok(Validity::Array(take(a, indices)?)),
+            Validity::Phantom(_) => unreachable!(),
         }
     }
 
@@ -136,6 +140,7 @@ impl<'v> Validity<'v> {
                     LogicalValidity::Array(a.to_array_data())
                 }
             }
+            Validity::Phantom(_) => unreachable!(),
         }
     }
 
@@ -145,6 +150,7 @@ impl<'v> Validity<'v> {
             Validity::AllValid => Validity::AllValid,
             Validity::AllInvalid => Validity::AllInvalid,
             Validity::Array(a) => Validity::Array(a.to_array_data().into_array()),
+            Validity::Phantom(_) => unreachable!(),
         }
     }
 }
@@ -289,7 +295,7 @@ impl LogicalValidity {
     }
 }
 
-impl IntoArray<'static> for LogicalValidity {
+impl IntoArray for LogicalValidity {
     fn into_array(self) -> OwnedArray {
         match self {
             LogicalValidity::AllValid(len) => BoolArray::from(vec![true; len]).into_array(),

@@ -8,7 +8,7 @@ use vortex_scalar::Scalar;
 
 use crate::{match_each_alp_float_ptype, ALPArray};
 
-impl ArrayCompute for ALPArray<'_> {
+impl ArrayCompute for ALPArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -22,7 +22,7 @@ impl ArrayCompute for ALPArray<'_> {
     }
 }
 
-impl ScalarAtFn for ALPArray<'_> {
+impl ScalarAtFn for ALPArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if let Some(patch) = self.patches().and_then(|p| scalar_at(&p, index).ok()) {
             return Ok(patch);
@@ -39,7 +39,7 @@ impl ScalarAtFn for ALPArray<'_> {
     }
 }
 
-impl TakeFn for ALPArray<'_> {
+impl TakeFn for ALPArray {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         // TODO(ngates): wrap up indices in an array that caches decompression?
         Ok(ALPArray::try_new(
@@ -51,7 +51,7 @@ impl TakeFn for ALPArray<'_> {
     }
 }
 
-impl SliceFn for ALPArray<'_> {
+impl SliceFn for ALPArray {
     fn slice(&self, start: usize, end: usize) -> VortexResult<OwnedArray> {
         Ok(ALPArray::try_new(
             slice(&self.encoded(), start, end)?,

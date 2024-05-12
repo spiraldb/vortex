@@ -9,7 +9,7 @@ use vortex_scalar::{PrimitiveScalar, Scalar};
 
 use crate::FoRArray;
 
-impl ArrayCompute for FoRArray<'_> {
+impl ArrayCompute for FoRArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -23,7 +23,7 @@ impl ArrayCompute for FoRArray<'_> {
     }
 }
 
-impl TakeFn for FoRArray<'_> {
+impl TakeFn for FoRArray {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         FoRArray::try_new(
             take(&self.encoded(), indices)?,
@@ -34,7 +34,7 @@ impl TakeFn for FoRArray<'_> {
     }
 }
 
-impl ScalarAtFn for FoRArray<'_> {
+impl ScalarAtFn for FoRArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let encoded_scalar = scalar_at(&self.encoded(), index)?;
         let encoded = PrimitiveScalar::try_from(&encoded_scalar)?;
@@ -54,7 +54,7 @@ impl ScalarAtFn for FoRArray<'_> {
     }
 }
 
-impl SliceFn for FoRArray<'_> {
+impl SliceFn for FoRArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         FoRArray::try_new(
             slice(&self.encoded(), start, stop)?,

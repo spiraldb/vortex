@@ -50,7 +50,7 @@ impl EncodingCompression for ZigZagEncoding {
     }
 }
 
-pub fn zigzag_encode(parray: &PrimitiveArray<'_>) -> VortexResult<OwnedZigZagArray> {
+pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<OwnedZigZagArray> {
     let encoded = match parray.ptype() {
         PType::I8 => zigzag_encode_primitive::<i8>(parray.typed_data(), parray.validity()),
         PType::I16 => zigzag_encode_primitive::<i16>(parray.typed_data(), parray.validity()),
@@ -64,7 +64,7 @@ pub fn zigzag_encode(parray: &PrimitiveArray<'_>) -> VortexResult<OwnedZigZagArr
 fn zigzag_encode_primitive<'a, T: ExternalZigZag + NativePType>(
     values: &'a [T],
     validity: Validity<'a>,
-) -> PrimitiveArray<'a>
+) -> PrimitiveArray
 where
     <T as ExternalZigZag>::UInt: NativePType,
 {
@@ -74,7 +74,7 @@ where
 }
 
 #[allow(dead_code)]
-pub fn zigzag_decode<'a>(parray: &'a PrimitiveArray<'a>) -> PrimitiveArray<'a> {
+pub fn zigzag_decode<'a>(parray: &'a PrimitiveArray) -> PrimitiveArray {
     match parray.ptype() {
         PType::U8 => zigzag_decode_primitive::<i8>(parray.typed_data(), parray.validity()),
         PType::U16 => zigzag_decode_primitive::<i16>(parray.typed_data(), parray.validity()),
@@ -88,7 +88,7 @@ pub fn zigzag_decode<'a>(parray: &'a PrimitiveArray<'a>) -> PrimitiveArray<'a> {
 fn zigzag_decode_primitive<'a, T: ExternalZigZag + NativePType>(
     values: &'a [T::UInt],
     validity: Validity<'a>,
-) -> PrimitiveArray<'a>
+) -> PrimitiveArray
 where
     <T as ExternalZigZag>::UInt: NativePType,
 {

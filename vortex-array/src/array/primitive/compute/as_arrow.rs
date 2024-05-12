@@ -12,7 +12,7 @@ use crate::compute::as_arrow::AsArrowArray;
 use crate::validity::ArrayValidity;
 use crate::ArrayTrait;
 
-impl AsArrowArray for PrimitiveArray<'_> {
+impl AsArrowArray for PrimitiveArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         use arrow_array::types::*;
         Ok(match self.ptype() {

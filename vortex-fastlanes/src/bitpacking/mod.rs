@@ -22,7 +22,7 @@ pub struct BitPackedMetadata {
 }
 
 /// NB: All non-null values in the patches array are considered patches
-impl BitPackedArray<'_> {
+impl BitPackedArray {
     pub fn try_new(
         packed: Array,
         validity: Validity,
@@ -119,7 +119,7 @@ impl BitPackedArray<'_> {
         ))
     }
 
-    pub fn encode(array: &Array<'_>, bit_width: usize) -> VortexResult<OwnedBitPackedArray> {
+    pub fn encode(array: &Array, bit_width: usize) -> VortexResult<OwnedBitPackedArray> {
         if let Ok(parray) = PrimitiveArray::try_from(array) {
             Ok(bitpack_encode(parray, bit_width)?)
         } else {
@@ -128,7 +128,7 @@ impl BitPackedArray<'_> {
     }
 }
 
-impl ArrayFlatten for BitPackedArray<'_> {
+impl ArrayFlatten for BitPackedArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,
@@ -137,7 +137,7 @@ impl ArrayFlatten for BitPackedArray<'_> {
     }
 }
 
-impl ArrayValidity for BitPackedArray<'_> {
+impl ArrayValidity for BitPackedArray {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
@@ -147,7 +147,7 @@ impl ArrayValidity for BitPackedArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for BitPackedArray<'_> {
+impl AcceptArrayVisitor for BitPackedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("packed", &self.packed())?;
         if self.metadata().patches_dtype.is_some() {
@@ -160,9 +160,9 @@ impl AcceptArrayVisitor for BitPackedArray<'_> {
     }
 }
 
-impl ArrayStatisticsCompute for BitPackedArray<'_> {}
+impl ArrayStatisticsCompute for BitPackedArray {}
 
-impl ArrayTrait for BitPackedArray<'_> {
+impl ArrayTrait for BitPackedArray {
     fn len(&self) -> usize {
         self.metadata().length
     }

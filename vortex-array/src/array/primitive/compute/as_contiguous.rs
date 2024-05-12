@@ -8,7 +8,7 @@ use crate::validity::Validity;
 use crate::ArrayDType;
 use crate::{Array, IntoArray, OwnedArray};
 
-impl AsContiguousFn for PrimitiveArray<'_> {
+impl AsContiguousFn for PrimitiveArray {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
         let validity = if self.dtype().is_nullable() {
             Validity::from_iter(arrays.iter().map(|a| a.with_dyn(|a| a.logical_validity())))

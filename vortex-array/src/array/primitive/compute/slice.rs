@@ -6,7 +6,7 @@ use crate::compute::slice::SliceFn;
 use crate::IntoArray;
 use crate::OwnedArray;
 
-impl SliceFn for PrimitiveArray<'_> {
+impl SliceFn for PrimitiveArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
         match_each_native_ptype!(self.ptype(), |$T| {
             Ok(PrimitiveArray::try_new(

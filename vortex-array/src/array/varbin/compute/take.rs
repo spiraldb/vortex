@@ -12,7 +12,7 @@ use crate::ArrayDType;
 use crate::IntoArray;
 use crate::{Array, OwnedArray};
 
-impl TakeFn for VarBinArray<'_> {
+impl TakeFn for VarBinArray {
     fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
         // TODO(ngates): support i64 indices.
         assert!(

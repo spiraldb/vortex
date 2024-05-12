@@ -21,7 +21,7 @@ impl_encoding!("vortex.chunked", Chunked);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChunkedMetadata;
 
-impl ChunkedArray<'_> {
+impl ChunkedArray {
     const ENDS_DTYPE: DType = DType::Primitive(PType::U64, Nullability::NonNullable);
 
     pub fn try_new(chunks: Vec<Array>, dtype: DType) -> VortexResult<Self> {
@@ -87,8 +87,8 @@ impl ChunkedArray<'_> {
     }
 }
 
-impl<'a> ChunkedArray<'a> {
-    pub fn chunks(&'a self) -> impl Iterator<Item = Array<'a>> {
+impl<'a> ChunkedArray {
+    pub fn chunks(&'a self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
     }
 }
@@ -104,7 +104,7 @@ impl FromIterator<OwnedArray> for OwnedChunkedArray {
     }
 }
 
-impl ArrayFlatten for ChunkedArray<'_> {
+impl ArrayFlatten for ChunkedArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,
@@ -113,7 +113,7 @@ impl ArrayFlatten for ChunkedArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for ChunkedArray<'_> {
+impl AcceptArrayVisitor for ChunkedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("chunk_ends", &self.chunk_ends())?;
         for (idx, chunk) in self.chunks().enumerate() {
@@ -123,13 +123,13 @@ impl AcceptArrayVisitor for ChunkedArray<'_> {
     }
 }
 
-impl ArrayTrait for ChunkedArray<'_> {
+impl ArrayTrait for ChunkedArray {
     fn len(&self) -> usize {
         usize::try_from(&scalar_at(&self.chunk_ends(), self.nchunks()).unwrap()).unwrap()
     }
 }
 
-impl ArrayValidity for ChunkedArray<'_> {
+impl ArrayValidity for ChunkedArray {
     fn is_valid(&self, _index: usize) -> bool {
         todo!()
     }
@@ -141,7 +141,7 @@ impl ArrayValidity for ChunkedArray<'_> {
 
 impl EncodingCompression for ChunkedEncoding {}
 
-impl SubtractScalarFn for ChunkedArray<'_> {
+impl SubtractScalarFn for ChunkedArray {
     fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<OwnedArray> {
         self.chunks()
             .map(|chunk| subtract_scalar(&chunk, to_subtract))

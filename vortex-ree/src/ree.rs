@@ -20,7 +20,7 @@ pub struct REEMetadata {
     length: usize,
 }
 
-impl REEArray<'_> {
+impl REEArray {
     pub fn try_new(ends: Array, values: Array, validity: Validity) -> VortexResult<Self> {
         let length: usize = scalar_at(&ends, ends.len() - 1)?.as_ref().try_into()?;
         Self::with_offset_and_size(ends, values, validity, length, 0)
@@ -101,7 +101,7 @@ impl REEArray<'_> {
     }
 }
 
-impl ArrayValidity for REEArray<'_> {
+impl ArrayValidity for REEArray {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
@@ -111,7 +111,7 @@ impl ArrayValidity for REEArray<'_> {
     }
 }
 
-impl ArrayFlatten for REEArray<'_> {
+impl ArrayFlatten for REEArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,
@@ -123,7 +123,7 @@ impl ArrayFlatten for REEArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for REEArray<'_> {
+impl AcceptArrayVisitor for REEArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("ends", &self.ends())?;
         visitor.visit_child("values", &self.values())?;
@@ -131,9 +131,9 @@ impl AcceptArrayVisitor for REEArray<'_> {
     }
 }
 
-impl ArrayStatisticsCompute for REEArray<'_> {}
+impl ArrayStatisticsCompute for REEArray {}
 
-impl ArrayTrait for REEArray<'_> {
+impl ArrayTrait for REEArray {
     fn len(&self) -> usize {
         self.metadata().length
     }

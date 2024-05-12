@@ -9,7 +9,7 @@ use crate::validity::Validity;
 use crate::{ArrayDType, ArrayTrait};
 use crate::{ArrayFlatten, Flattened};
 
-impl ArrayFlatten for ConstantArray<'_> {
+impl ArrayFlatten for ConstantArray {
     fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
     where
         Self: 'a,

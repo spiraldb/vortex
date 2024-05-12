@@ -5,7 +5,7 @@ use crate::accessor::ArrayAccessor;
 use crate::array::primitive::PrimitiveArray;
 use crate::validity::ArrayValidity;
 
-impl<T: NativePType> ArrayAccessor<T> for PrimitiveArray<'_> {
+impl<T: NativePType> ArrayAccessor<T> for PrimitiveArray {
     fn with_iterator<F, R>(&self, f: F) -> VortexResult<R>
     where
         F: for<'a> FnOnce(&mut (dyn Iterator<Item = Option<&'a T>>)) -> R,
