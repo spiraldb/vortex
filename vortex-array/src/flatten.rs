@@ -25,7 +25,7 @@ pub trait ArrayFlatten {
     fn flatten(self) -> VortexResult<Flattened>;
 }
 
-impl<'a> Array {
+impl Array {
     pub fn flatten(self) -> VortexResult<Flattened> {
         ArrayEncoding::flatten(self.encoding(), self)
     }
