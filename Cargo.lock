@@ -5054,7 +5054,6 @@ dependencies = [
  "arrow-buffer",
  "bytes",
  "flexbuffers",
- "vortex-dtype",
 ]
 
 [[package]]

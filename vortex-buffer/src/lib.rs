@@ -6,7 +6,6 @@ use std::ops::{Deref, Range};
 
 use arrow_buffer::Buffer as ArrowBuffer;
 pub use string::*;
-use vortex_dtype::{match_each_native_ptype, NativePType};
 
 #[derive(Debug, Clone)]
 pub enum Buffer {
@@ -42,32 +41,10 @@ impl Buffer {
         }
     }
 
-    pub fn typed_data<T: NativePType>(&self) -> &[T] {
+    pub fn into_vec(self) -> Result<Vec<u8>, Buffer> {
         match self {
-            Buffer::Arrow(buffer) => unsafe {
-                match_each_native_ptype!(T::PTYPE, |$T| {
-                    std::mem::transmute(buffer.typed_data::<$T>())
-                })
-            },
-            Buffer::Bytes(bytes) => {
-                // From ArrowBuffer::typed_data
-                let (prefix, offsets, suffix) = unsafe { bytes.align_to::<T>() };
-                assert!(prefix.is_empty() && suffix.is_empty());
-                offsets
-            }
-        }
-    }
-
-    // TODO(ngates): make this more like `into_mut` and get back a Vortex BufferMut.
-    pub fn into_vec<T: NativePType>(self) -> Result<Vec<T>, Buffer> {
-        match self {
-            Buffer::Arrow(buffer) => match_each_native_ptype!(T::PTYPE, |$T| {
-                buffer
-                    .into_vec()
-                    .map(|vec| unsafe { std::mem::transmute::<Vec<$T>, Vec<T>>(vec) })
-                    .map_err(Buffer::Arrow)
-            }),
-            // Cannot always convert bytes into a mutable vec
+            Buffer::Arrow(buffer) => buffer.into_vec::<u8>().map_err(Buffer::Arrow),
+            // Cannot convert bytes into a mutable vec
             Buffer::Bytes(_) => Err(self),
         }
     }

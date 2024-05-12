@@ -1,3 +1,5 @@
+use std::mem::size_of;
+
 use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use num_traits::AsPrimitive;
@@ -90,7 +92,35 @@ impl PrimitiveArray<'_> {
             T::PTYPE,
             self.ptype(),
         );
-        self.buffer().typed_data::<T>()
+
+        let (prefix, offsets, suffix) = unsafe { self.buffer().as_ref().align_to::<T>() };
+        assert!(prefix.is_empty() && suffix.is_empty());
+        offsets
+    }
+
+    /// Convert the array into a mutable vec of the given type.
+    /// If possible, this will be zero-copy.
+    pub fn into_typed_data<T: NativePType>(self) -> Vec<T> {
+        assert_eq!(
+            T::PTYPE,
+            self.ptype(),
+            "Attempted to get typed_data of type {} from array of type {}",
+            T::PTYPE,
+            self.ptype(),
+        );
+        let bytes = self
+            .into_buffer()
+            .into_vec()
+            .unwrap_or_else(|b| Vec::from(b.as_ref()));
+
+        unsafe {
+            let mut bytes = std::mem::ManuallyDrop::new(bytes);
+            Vec::from_raw_parts(
+                bytes.as_mut_ptr() as *mut T,
+                bytes.len() / size_of::<T>(),
+                bytes.capacity() / size_of::<T>(),
+            )
+        }
     }
 
     pub fn reinterpret_cast(&self, ptype: PType) -> Self {
@@ -124,10 +154,7 @@ impl PrimitiveArray<'_> {
 
         let validity = self.validity().to_static();
 
-        let mut own_values = self
-            .into_buffer()
-            .into_vec::<T>()
-            .unwrap_or_else(|b| Vec::from(b.typed_data::<T>()));
+        let mut own_values = self.into_typed_data();
         // TODO(robert): Also patch validity
         for (idx, value) in positions.iter().zip_eq(values.iter()) {
             own_values[(*idx).as_()] = *value;
