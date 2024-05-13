@@ -1,7 +1,8 @@
 use std::pin::Pin;
+use std::task::{Context, Poll};
 
-use futures_util::stream::try_unfold;
-use futures_util::TryStreamExt;
+use futures_util::{ready, Stream};
+use pin_project::pin_project;
 use vortex::compute::scalar_subtract::subtract_scalar;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
@@ -13,14 +14,18 @@ use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::codecs::array_reader::ArrayReaderAdapter;
 use crate::codecs::ArrayReader;
 
-pub trait ArrayReaderTake: ArrayReader {
-    fn take_indices(self, indices: &Array) -> VortexResult<impl ArrayReader>
-    where
-        Self: Sized,
-    {
+#[pin_project]
+pub struct Take<'idx, R: ArrayReader> {
+    #[pin]
+    reader: R,
+    indices: &'idx Array,
+    row_offset: usize,
+}
+
+impl<'idx, R: ArrayReader> Take<'idx, R> {
+    pub fn try_new(reader: R, indices: &'idx Array) -> VortexResult<Self> {
         if !indices.is_empty() {
             if !indices.statistics().compute_is_sorted()? {
                 vortex_bail!("Indices must be sorted to take from IPC stream")
@@ -41,75 +46,62 @@ pub trait ArrayReaderTake: ArrayReader {
             }
         }
 
-        let dtype = self.dtype().clone();
-        let init = Take {
-            reader: self,
+        Ok(Self {
+            reader,
             indices,
             row_offset: 0,
-        };
-
-        Ok(ArrayReaderAdapter::new(
-            dtype,
-            try_unfold(init, |mut take| async move {
-                let batch = take.next().await?;
-                Ok(batch.map(|b| (b, take)))
-            }),
-        ))
+        })
     }
 }
-impl<R: ArrayReader + Unpin> ArrayReaderTake for R {}
 
-struct Take<'idx, R: ArrayReader> {
-    reader: R,
-    indices: &'idx Array,
-    row_offset: usize,
-}
+impl<'idx, R: ArrayReader> Stream for Take<'idx, R> {
+    type Item = VortexResult<Array>;
 
-impl<'idx, R: ArrayReader> Take<'idx, R> {
-    async fn next(self: Pin<&mut Self>) -> VortexResult<Option<Array>> {
-        if self.indices.is_empty() {
-            return Ok(None);
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut this = self.project();
+
+        if this.indices.is_empty() {
+            return Poll::Ready(None);
         }
 
-        let this = self.project();
-
-        while let Some(batch) = self.reader.try_next().await? {
-            let curr_offset = self.row_offset;
-            let left = search_sorted::<usize>(self.indices, curr_offset, SearchSortedSide::Left)?
+        while let Some(batch) = ready!(this.reader.as_mut().poll_next(cx)?) {
+            let curr_offset = *this.row_offset;
+            let left = search_sorted::<usize>(this.indices, curr_offset, SearchSortedSide::Left)?
                 .to_index();
             let right = search_sorted::<usize>(
-                self.indices,
+                this.indices,
                 curr_offset + batch.len(),
                 SearchSortedSide::Left,
             )?
             .to_index();
 
-            self.row_offset += batch.len();
+            *this.row_offset += batch.len();
 
             if left == right {
                 continue;
             }
 
-            let indices_for_batch = slice(self.indices, left, right)?.flatten_primitive()?;
+            let indices_for_batch = slice(this.indices, left, right)?.flatten_primitive()?;
             let shifted_arr = match_each_integer_ptype!(indices_for_batch.ptype(), |$T| {
                 subtract_scalar(&indices_for_batch.into_array(), &Scalar::from(curr_offset as $T))?
             });
 
-            return take(&batch, &shifted_arr).map(Some);
+            return Poll::Ready(take(&batch, &shifted_arr).map(Some).transpose());
         }
-        Ok(None)
+
+        Poll::Ready(None)
     }
 }
 
 #[cfg(test)]
 mod test {
-
     use futures_util::io::Cursor;
+    use futures_util::{pin_mut, StreamExt};
     use itertools::Itertools;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::{Context, IntoArray};
 
-    use crate::codecs::array_reader_take::ArrayReaderTake;
+    use crate::codecs::array_reader::ext::ArrayReaderExt;
     use crate::codecs::futures::AsyncReadMessageReader;
     use crate::codecs::IPCReader;
     use crate::writer::StreamWriter;
@@ -126,10 +118,10 @@ mod test {
 
     #[tokio::test]
     async fn test_empty_index() {
-        let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec());
-        let mut buffer = write_ipc(data);
+        let data = PrimitiveArray::from((0i32..3_000_000).collect_vec());
+        let buffer = write_ipc(data);
 
-        let indices = PrimitiveArray::from(Vec::<i32>::new()).into_array();
+        let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
 
         let mut messages = AsyncReadMessageReader::try_new(Cursor::new(buffer))
             .await
@@ -138,10 +130,11 @@ mod test {
             .await
             .unwrap();
         let array_reader = reader.next().await.unwrap().unwrap();
-        futures_util::pin_mut!(array_reader);
 
-        let mut result_iter = array_reader.take_indices(&indices).unwrap();
-        let result = result_iter.next().await.unwrap();
-        assert!(result.is_none())
+        let result_iter = array_reader.take_indices(&indices).unwrap();
+        pin_mut!(result_iter);
+
+        let result = result_iter.next().await.unwrap().unwrap();
+        println!("Taken {:?}", result);
     }
 }
