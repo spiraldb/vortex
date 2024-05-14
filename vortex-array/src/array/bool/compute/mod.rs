@@ -15,7 +15,7 @@ mod scalar_at;
 mod slice;
 mod take;
 
-impl ArrayCompute for BoolArray<'_> {
+impl ArrayCompute for BoolArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }

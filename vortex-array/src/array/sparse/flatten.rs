@@ -1,19 +1,16 @@
 use arrow_buffer::BooleanBufferBuilder;
 use itertools::Itertools;
-use vortex_error::VortexResult;
+use vortex_dtype::{match_each_native_ptype, NativePType};
+use vortex_error::{VortexError, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
-use crate::ptype::NativePType;
-use crate::scalar::Scalar;
 use crate::validity::Validity;
-use crate::{match_each_native_ptype, ArrayFlatten, ArrayTrait, Flattened};
+use crate::{ArrayFlatten, ArrayTrait, Flattened};
 
-impl ArrayFlatten for SparseArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for SparseArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         // Resolve our indices into a vector of usize applying the offset
         let indices = self.resolved_indices();
 
@@ -32,13 +29,13 @@ impl ArrayFlatten for SparseArray<'_> {
     }
 }
 
-fn flatten_sparse_values<T: NativePType>(
+fn flatten_sparse_values<T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
     values: &[T],
     indices: &[usize],
     len: usize,
     fill_value: &Scalar,
     mut validity: BooleanBufferBuilder,
-) -> VortexResult<Flattened<'static>> {
+) -> VortexResult<Flattened> {
     let primitive_fill = if fill_value.is_null() {
         T::default()
     } else {

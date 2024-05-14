@@ -3,12 +3,10 @@ use std::mem;
 use std::mem::ManuallyDrop;
 
 use arrow_buffer::NullBufferBuilder;
-use vortex_schema::DType;
+use vortex_dtype::DType;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbinview::{
-    BinaryView, Inlined, OwnedVarBinViewArray, Ref, VarBinViewArray, VIEW_SIZE,
-};
+use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE};
 use crate::validity::Validity;
 use crate::{ArrayData, IntoArray, IntoArrayData, ToArray};
 
@@ -82,7 +80,7 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
         self.nulls.append_null();
     }
 
-    pub fn finish(mut self, dtype: DType) -> OwnedVarBinViewArray {
+    pub fn finish(mut self, dtype: DType) -> VarBinViewArray {
         let mut completed = self
             .completed
             .into_iter()

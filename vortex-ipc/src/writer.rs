@@ -2,31 +2,35 @@ use std::io::{BufWriter, Write};
 
 use itertools::Itertools;
 use vortex::array::chunked::ChunkedArray;
-use vortex::{Array, ArrayDType, SerdeContext, ToArrayData};
+use vortex::{Array, ArrayDType, Context, ToArrayData, ViewContext};
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_flatbuffers::FlatBufferWriter;
-use vortex_schema::DType;
 
 use crate::messages::{IPCChunk, IPCContext, IPCMessage, IPCSchema};
 use crate::ALIGNMENT;
 
-#[allow(dead_code)]
 pub struct StreamWriter<W: Write> {
     write: W,
-    ctx: SerdeContext,
+    ctx: ViewContext,
 }
 
 impl<W: Write> StreamWriter<BufWriter<W>> {
-    pub fn try_new(write: W, ctx: SerdeContext) -> VortexResult<Self> {
+    pub fn try_new(write: W, ctx: &Context) -> VortexResult<Self> {
         Self::try_new_unbuffered(BufWriter::new(write), ctx)
     }
 }
 
 impl<W: Write> StreamWriter<W> {
-    pub fn try_new_unbuffered(mut write: W, ctx: SerdeContext) -> VortexResult<Self> {
+    pub fn try_new_unbuffered(mut write: W, ctx: &Context) -> VortexResult<Self> {
+        let view_ctx = ViewContext::from(ctx);
+
         // Write the IPC context to the stream
-        write.write_message(&IPCMessage::Context(IPCContext(&ctx)), ALIGNMENT)?;
-        Ok(Self { write, ctx })
+        write.write_message(&IPCMessage::Context(IPCContext(&view_ctx)), ALIGNMENT)?;
+        Ok(Self {
+            write,
+            ctx: view_ctx,
+        })
     }
 
     pub fn write_array(&mut self, array: &Array) -> VortexResult<()> {
@@ -65,12 +69,19 @@ impl<W: Write> StreamWriter<W> {
             .zip_eq(buffer_offsets.iter().skip(1))
         {
             let buffer_len = buffer.len();
-            self.write.write_all(buffer.as_slice())?;
+            self.write.write_all(buffer.as_ref())?;
             let padding = (buffer_end as usize) - current_offset - buffer_len;
             self.write.write_all(&vec![0; padding])?;
             current_offset = buffer_end as usize;
         }
 
         Ok(())
+    }
+}
+
+impl<W: Write> Drop for StreamWriter<W> {
+    fn drop(&mut self) {
+        // Terminate the stream
+        let _ = self.write.write_all(&[u8::MAX; 4]);
     }
 }

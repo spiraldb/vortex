@@ -7,16 +7,13 @@ use num_traits::AsPrimitive;
 use vortex::accessor::ArrayAccessor;
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::array::varbin::{VarBin, VarBinArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::NativePType;
-use vortex::scalar::AsBytes;
-use vortex::stats::{ArrayStatistics, Stat};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
+use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
-use vortex::{
-    match_each_native_ptype, Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToArray,
-};
+use vortex::{Array, ArrayDType, ArrayDef, IntoArray, ToArray};
+use vortex_dtype::{match_each_native_ptype, DType};
+use vortex_dtype::{NativePType, ToBytes};
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
 use crate::dict::{DictArray, DictEncoding};
 
@@ -35,7 +32,7 @@ impl EncodingCompression for DictEncoding {
         // We don't have a unique stat yet, but strict-sorted implies unique.
         if array
             .statistics()
-            .compute_as(Stat::IsStrictSorted)
+            .compute_is_strict_sorted()
             .unwrap_or(false)
         {
             return None;
@@ -48,8 +45,8 @@ impl EncodingCompression for DictEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
-    ) -> VortexResult<OwnedArray> {
+        ctx: Compressor,
+    ) -> VortexResult<Array> {
         let dict_like = like.map(|like_arr| DictArray::try_from(like_arr).unwrap());
         let dict_like_ref = dict_like.as_ref();
 
@@ -95,25 +92,25 @@ impl EncodingCompression for DictEncoding {
 #[derive(Debug)]
 struct Value<T>(T);
 
-impl<T: AsBytes> Hash for Value<T> {
+impl<T: ToBytes> Hash for Value<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.as_bytes().hash(state)
+        self.0.to_le_bytes().hash(state)
     }
 }
 
-impl<T: AsBytes> PartialEq<Self> for Value<T> {
+impl<T: ToBytes> PartialEq<Self> for Value<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.0.as_bytes().eq(other.0.as_bytes())
+        self.0.to_le_bytes().eq(other.0.to_le_bytes())
     }
 }
 
-impl<T: AsBytes> Eq for Value<T> {}
+impl<T: ToBytes> Eq for Value<T> {}
 
 /// Dictionary encode primitive array with given PType.
 /// Null values in the original array are encoded in the dictionary.
-pub fn dict_encode_typed_primitive<'a, T: NativePType>(
-    array: &PrimitiveArray<'a>,
-) -> (PrimitiveArray<'a>, PrimitiveArray<'a>) {
+pub fn dict_encode_typed_primitive<T: NativePType>(
+    array: &PrimitiveArray,
+) -> (PrimitiveArray, PrimitiveArray) {
     let mut lookup_dict: HashMap<Value<T>, u64> = HashMap::new();
     let mut codes: Vec<u64> = Vec::new();
     let mut values: Vec<T> = Vec::new();
@@ -159,7 +156,7 @@ pub fn dict_encode_typed_primitive<'a, T: NativePType>(
 }
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying
-pub fn dict_encode_varbin<'a>(array: &'a VarBinArray) -> (PrimitiveArray<'a>, VarBinArray<'a>) {
+pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
     array
         .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
         .unwrap()
@@ -175,10 +172,7 @@ fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
     &bytes[begin..end]
 }
 
-fn dict_encode_typed_varbin<'a, I, U>(
-    dtype: DType,
-    values: I,
-) -> (PrimitiveArray<'a>, VarBinArray<'a>)
+fn dict_encode_typed_varbin<I, U>(dtype: DType, values: I) -> (PrimitiveArray, VarBinArray)
 where
     I: Iterator<Item = Option<U>>,
     U: AsRef<[u8]>,
@@ -256,7 +250,10 @@ mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::compute::scalar_at::scalar_at;
-    use vortex::scalar::PrimitiveScalar;
+    use vortex::ToArray;
+    use vortex_dtype::Nullability::Nullable;
+    use vortex_dtype::{DType, PType};
+    use vortex_scalar::Scalar;
 
     use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
 
@@ -264,8 +261,8 @@ mod test {
     fn encode_primitive() {
         let arr = PrimitiveArray::from(vec![1, 1, 3, 3, 3]);
         let (codes, values) = dict_encode_typed_primitive::<i32>(&arr);
-        assert_eq!(codes.buffer().typed_data::<u64>(), &[0, 0, 1, 1, 1]);
-        assert_eq!(values.buffer().typed_data::<i32>(), &[1, 3]);
+        assert_eq!(codes.typed_data::<u64>(), &[0, 0, 1, 1, 1]);
+        assert_eq!(values.typed_data::<i32>(), &[1, 3]);
     }
 
     #[test]
@@ -281,21 +278,18 @@ mod test {
             None,
         ]);
         let (codes, values) = dict_encode_typed_primitive::<i32>(&arr);
+        assert_eq!(codes.typed_data::<u64>(), &[1, 1, 0, 2, 2, 0, 2, 0]);
         assert_eq!(
-            codes.buffer().typed_data::<u64>(),
-            &[1, 1, 0, 2, 2, 0, 2, 0]
+            scalar_at(&values.to_array(), 0).unwrap(),
+            Scalar::null(DType::Primitive(PType::I32, Nullable))
         );
         assert_eq!(
-            scalar_at(values.array(), 0).unwrap(),
-            PrimitiveScalar::nullable::<i32>(None).into()
+            scalar_at(&values.to_array(), 1).unwrap(),
+            Scalar::primitive(1, Nullable)
         );
         assert_eq!(
-            scalar_at(values.array(), 1).unwrap(),
-            PrimitiveScalar::nullable(Some(1)).into()
-        );
-        assert_eq!(
-            scalar_at(values.array(), 2).unwrap(),
-            PrimitiveScalar::nullable(Some(3)).into()
+            scalar_at(&values.to_array(), 2).unwrap(),
+            Scalar::primitive(3, Nullable)
         );
     }
 
@@ -303,7 +297,7 @@ mod test {
     fn encode_varbin() {
         let arr = VarBinArray::from(vec!["hello", "world", "hello", "again", "world"]);
         let (codes, values) = dict_encode_varbin(&arr);
-        assert_eq!(codes.buffer().typed_data::<u64>(), &[0, 1, 0, 2, 1]);
+        assert_eq!(codes.typed_data::<u64>(), &[0, 1, 0, 2, 1]);
         values
             .with_iterator(|iter| {
                 assert_eq!(
@@ -331,11 +325,8 @@ mod test {
         .into_iter()
         .collect();
         let (codes, values) = dict_encode_varbin(&arr);
-        assert_eq!(
-            codes.buffer().typed_data::<u64>(),
-            &[1, 0, 2, 1, 0, 3, 2, 0]
-        );
-        assert_eq!(String::from_utf8(values.bytes_at(0).unwrap()).unwrap(), "");
+        assert_eq!(codes.typed_data::<u64>(), &[1, 0, 2, 1, 0, 3, 2, 0]);
+        assert_eq!(str::from_utf8(&values.bytes_at(0).unwrap()).unwrap(), "");
         values
             .with_iterator(|iter| {
                 assert_eq!(

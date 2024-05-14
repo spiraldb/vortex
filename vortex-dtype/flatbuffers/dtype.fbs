@@ -1,0 +1,77 @@
+namespace vortex.dtype;
+
+enum PType: uint8 {
+    U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
+    I32,
+    I64,
+    F16,
+    F32,
+    F64,
+}
+
+table Null {}
+
+table Bool {
+    nullable: bool;
+}
+
+table Primitive {
+    ptype: PType;
+    nullable: bool;
+}
+
+table Decimal {
+    /// Total number of decimal digits
+    precision: uint8;
+    /// Number of digits after the decimal point "."
+    scale: uint8;
+    nullable: bool;
+}
+
+table Utf8 {
+    nullable: bool;
+}
+
+table Binary {
+    nullable: bool;
+}
+
+table Struct_ {
+    names: [string];
+    dtypes: [DType];
+    nullable: bool;
+}
+
+table List {
+    element_type: DType;
+    nullable: bool;
+}
+
+table Extension {
+    id: string;
+    metadata: [ubyte];
+    nullable: bool;
+}
+
+union Type {
+    Null,
+    Bool,
+    Primitive,
+    Decimal,
+    Utf8,
+    Binary,
+    Struct_,
+    List,
+    Extension,
+}
+
+table DType {
+  type: Type;
+}
+
+root_type DType;

@@ -2,11 +2,10 @@ use itertools::Itertools;
 use num_traits::{PrimInt, WrappingAdd, WrappingSub};
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::{NativePType, PType};
-use vortex::scalar::ListScalarVec;
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
-use vortex::{match_each_integer_ptype, Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray};
+use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::{FoRArray, FoREncoding};
@@ -30,8 +29,8 @@ impl EncodingCompression for FoREncoding {
         }
 
         // Nothing for us to do if the min is already zero and tz == 0
-        let shift = trailing_zeros(parray.array());
-        let min = parray.statistics().compute_as_cast::<i64>(Stat::Min)?;
+        let shift = trailing_zeros(array);
+        let min = parray.statistics().compute_as_cast::<i64>(Stat::Min).ok()?;
         if min == 0 && shift == 0 {
             return None;
         }
@@ -43,8 +42,8 @@ impl EncodingCompression for FoREncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
-    ) -> VortexResult<OwnedArray> {
+        ctx: Compressor,
+    ) -> VortexResult<Array> {
         let parray = PrimitiveArray::try_from(array)?;
         let shift = trailing_zeros(array);
         let min = parray
@@ -56,7 +55,7 @@ impl EncodingCompression for FoREncoding {
             if shift == <$T>::PTYPE.bit_width() as u8 {
                 ConstantArray::new($T::default(), parray.len()).into_array()
             } else {
-                compress_primitive::<$T>(parray, shift, $T::try_from(min.clone())?).into_array()
+                compress_primitive::<$T>(parray, shift, $T::try_from(&min)?).into_array()
             }
         });
         let for_like = like.map(|like_arr| FoRArray::try_from(like_arr).unwrap());
@@ -130,8 +129,7 @@ fn decompress_primitive<T: NativePType + WrappingAdd + PrimInt>(
 fn trailing_zeros(array: &Array) -> u8 {
     let tz_freq = array
         .statistics()
-        .compute_as::<ListScalarVec<usize>>(Stat::TrailingZeroFreq)
-        .map(|v| v.0)
+        .compute_trailing_zero_freq()
         .unwrap_or(vec![0]);
     tz_freq
         .iter()
@@ -143,29 +141,27 @@ fn trailing_zeros(array: &Array) -> u8 {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
 
     use vortex::compute::scalar_at::ScalarAtFn;
     use vortex::encoding::{ArrayEncoding, EncodingRef};
+    use vortex::Context;
 
     use super::*;
     use crate::BitPackedEncoding;
 
-    fn compress_ctx() -> CompressCtx {
-        let cfg = CompressConfig::new()
-            // We need some BitPacking else we will need choose FoR.
-            .with_enabled([&FoREncoding as EncodingRef, &BitPackedEncoding]);
-        CompressCtx::new(Arc::new(cfg))
+    fn ctx() -> Context {
+        // We need some BitPacking else we will need choose FoR.
+        Context::default().with_encodings([&FoREncoding as EncodingRef, &BitPackedEncoding])
     }
 
     #[test]
     fn test_compress() {
-        let ctx = compress_ctx();
-
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
 
-        let compressed = ctx.compress(array.array(), None).unwrap();
+        let compressed = Compressor::new(&ctx())
+            .compress(array.array(), None)
+            .unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
         assert_eq!(
             u32::try_from(FoRArray::try_from(compressed).unwrap().reference()).unwrap(),
@@ -175,11 +171,11 @@ mod test {
 
     #[test]
     fn test_decompress() {
-        let ctx = compress_ctx();
-
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
-        let compressed = ctx.compress(array.array(), None).unwrap();
+        let compressed = Compressor::new(&ctx())
+            .compress(array.array(), None)
+            .unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
 
         let decompressed = compressed.flatten_primitive().unwrap();
@@ -188,13 +184,13 @@ mod test {
 
     #[test]
     fn test_overflow() {
-        let ctx = compress_ctx();
-
         // Create a range offset by a million
         let array = PrimitiveArray::from((i8::MIN..i8::MAX).collect_vec());
-        let compressed = FoREncoding {}.compress(array.array(), None, ctx).unwrap();
+        let compressed = FoREncoding {}
+            .compress(array.array(), None, Compressor::new(&ctx()))
+            .unwrap();
         let compressed = FoRArray::try_from(compressed).unwrap();
-        assert_eq!(i8::MIN, compressed.reference().try_into().unwrap());
+        assert_eq!(i8::MIN, i8::try_from(compressed.reference()).unwrap());
 
         let encoded = compressed.encoded().flatten_primitive().unwrap();
         let bitcast: &[u8] = unsafe { std::mem::transmute(encoded.typed_data::<i8>()) };
@@ -208,7 +204,10 @@ mod test {
             .iter()
             .enumerate()
             .for_each(|(i, v)| {
-                assert_eq!(*v, compressed.scalar_at(i).unwrap().try_into().unwrap());
+                assert_eq!(
+                    *v,
+                    i8::try_from(compressed.scalar_at(i).unwrap().as_ref()).unwrap()
+                );
             });
     }
 }

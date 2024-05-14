@@ -1,11 +1,10 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex::encoding::find_encoding;
-use vortex::flatbuffers::array as fba;
-use vortex::{ArrayData, SerdeContext};
+use vortex::flatbuffers as fba;
+use vortex::{ArrayData, Context, ViewContext};
+use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
-use vortex_schema::DType;
 
 use crate::flatbuffers::ipc as fb;
 use crate::flatbuffers::ipc::Compression;
@@ -17,12 +16,16 @@ pub(crate) enum IPCMessage<'a> {
     Chunk(IPCChunk<'a>),
 }
 
-pub(crate) struct IPCContext<'a>(pub &'a SerdeContext);
+pub(crate) struct IPCContext<'a>(pub &'a ViewContext);
+
 pub(crate) struct IPCSchema<'a>(pub &'a DType);
-pub(crate) struct IPCChunk<'a>(pub &'a SerdeContext, pub &'a ArrayData);
-pub(crate) struct IPCArray<'a>(pub &'a SerdeContext, pub &'a ArrayData);
+
+pub(crate) struct IPCChunk<'a>(pub &'a ViewContext, pub &'a ArrayData);
+
+pub(crate) struct IPCArray<'a>(pub &'a ViewContext, pub &'a ArrayData);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
+
 impl WriteFlatBuffer for IPCMessage<'_> {
     type Target<'a> = fb::Message<'a>;
 
@@ -59,9 +62,9 @@ impl<'a> WriteFlatBuffer for IPCContext<'a> {
             .0
             .encodings()
             .iter()
-            .map(|e| e.id().name())
-            .map(|name| {
-                let encoding_id = fbb.create_string(name);
+            .map(|e| e.id())
+            .map(|id| {
+                let encoding_id = fbb.create_string(id.as_ref());
                 fb::Encoding::create(
                     fbb,
                     &fb::EncodingArgs {
@@ -81,20 +84,27 @@ impl<'a> WriteFlatBuffer for IPCContext<'a> {
     }
 }
 
-impl<'a> TryFrom<fb::Context<'a>> for SerdeContext {
+pub struct SerdeContextDeserializer<'a> {
+    pub(crate) fb: fb::Context<'a>,
+    pub(crate) ctx: &'a Context,
+}
+
+impl<'a> TryFrom<SerdeContextDeserializer<'a>> for ViewContext {
     type Error = VortexError;
 
-    fn try_from(value: fb::Context<'a>) -> Result<Self, Self::Error> {
-        let fb_encodings = value.encodings().ok_or_else(missing("encodings"))?;
+    fn try_from(deser: SerdeContextDeserializer<'a>) -> Result<Self, Self::Error> {
+        let fb_encodings = deser.fb.encodings().ok_or_else(missing("encodings"))?;
         let mut encodings = Vec::with_capacity(fb_encodings.len());
         for fb_encoding in fb_encodings {
             let encoding_id = fb_encoding.id().ok_or_else(missing("encoding.id"))?;
             encodings.push(
-                find_encoding(encoding_id)
+                deser
+                    .ctx
+                    .lookup_encoding(encoding_id)
                     .ok_or_else(|| vortex_err!("Stream uses unknown encoding {}", encoding_id))?,
             );
         }
-        Ok(Self::new(encodings.into()))
+        Ok(Self::new(encodings))
     }
 }
 
@@ -159,7 +169,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
 
         let encoding = ctx
             .encoding_idx(column_data.encoding().id())
-            // TODO(ngates): return result from this writer?
+            // FIXME(ngates): return result from this writer?
             .unwrap_or_else(|| panic!("Encoding not found: {:?}", column_data.encoding()));
 
         let metadata = Some(
@@ -180,6 +190,8 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
             .collect_vec();
         let children = Some(fbb.create_vector(&children));
 
+        let stats = Some(self.1.statistics().write_flatbuffer(fbb));
+
         fba::Array::create(
             fbb,
             &fba::ArrayArgs {
@@ -187,6 +199,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
                 has_buffer: column_data.buffer().is_some(),
                 encoding,
                 metadata,
+                stats,
                 children,
             },
         )

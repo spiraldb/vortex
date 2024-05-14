@@ -1,13 +1,13 @@
+use vortex_dtype::Nullability;
 use vortex_error::VortexResult;
-use vortex_schema::Nullability;
 
 use crate::array::bool::BoolArray;
 use crate::compute::fill::FillForwardFn;
 use crate::validity::ArrayValidity;
-use crate::{ArrayDType, IntoArray, OwnedArray, ToArrayData};
+use crate::{Array, ArrayDType, IntoArray, ToArrayData};
 
-impl FillForwardFn for BoolArray<'_> {
-    fn fill_forward(&self) -> VortexResult<OwnedArray> {
+impl FillForwardFn for BoolArray {
+    fn fill_forward(&self) -> VortexResult<Array> {
         if self.dtype().nullability() == Nullability::NonNullable {
             return Ok(self.to_array_data().into_array());
         }

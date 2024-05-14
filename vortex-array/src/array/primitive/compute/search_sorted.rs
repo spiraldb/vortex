@@ -1,12 +1,12 @@
+use vortex_dtype::match_each_native_ptype;
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::search_sorted::{SearchResult, SearchSorted};
 use crate::compute::search_sorted::{SearchSortedFn, SearchSortedSide};
-use crate::match_each_native_ptype;
-use crate::scalar::Scalar;
 
-impl SearchSortedFn for PrimitiveArray<'_> {
+impl SearchSortedFn for PrimitiveArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
         match_each_native_ptype!(self.ptype(), |$T| {
             let pvalue: $T = value.try_into()?;

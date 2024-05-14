@@ -2,9 +2,9 @@ use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
 
 use vortex_error::{vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::compute::scalar_at::scalar_at;
-use crate::scalar::Scalar;
 use crate::{Array, ArrayDType};
 
 #[derive(Debug, Copy, Clone)]
@@ -56,7 +56,7 @@ pub fn search_sorted<T: Into<Scalar>>(
 
         Err(vortex_err!(
             NotImplemented: "search_sorted",
-            array.encoding().id().name()
+            array.encoding().id()
         ))
     })
 }
@@ -180,7 +180,7 @@ fn search_sorted_side_idx<F: FnMut(usize) -> Ordering>(
     SearchResult::NotFound(left)
 }
 
-impl IndexOrd<Scalar> for Array<'_> {
+impl IndexOrd<Scalar> for Array {
     fn index_cmp(&self, idx: usize, elem: &Scalar) -> Option<Ordering> {
         let scalar_a = scalar_at(self, idx).ok()?;
         scalar_a.partial_cmp(elem)
@@ -194,7 +194,7 @@ impl<T: PartialOrd> IndexOrd<T> for [T] {
     }
 }
 
-impl Len for Array<'_> {
+impl Len for Array {
     fn len(&self) -> usize {
         Array::len(self)
     }

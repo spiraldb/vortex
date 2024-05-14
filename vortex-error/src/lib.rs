@@ -101,6 +101,12 @@ pub enum VortexError {
         #[backtrace]
         io::Error,
     ),
+    #[error(transparent)]
+    Utf8Error(
+        #[from]
+        #[backtrace]
+        std::str::Utf8Error,
+    ),
     #[cfg(feature = "parquet")]
     #[error(transparent)]
     ParquetError(
@@ -113,6 +119,13 @@ pub enum VortexError {
         #[from]
         #[backtrace]
         std::array::TryFromSliceError,
+    ),
+    #[cfg(feature = "worker")]
+    #[error(transparent)]
+    WorkerError(
+        #[from]
+        #[backtrace]
+        worker::Error,
     ),
 }
 
@@ -132,10 +145,10 @@ macro_rules! vortex_err {
             $crate::VortexError::OutOfBounds($idx, $start, $stop, Backtrace::capture())
         )
     }};
-    (NotImplemented: $func:expr, $arr:expr) => {{
+    (NotImplemented: $func:expr, $by_whom:expr) => {{
         use std::backtrace::Backtrace;
         $crate::__private::must_use(
-            $crate::VortexError::NotImplemented($func.into(), $arr.into(), Backtrace::capture())
+            $crate::VortexError::NotImplemented($func.into(), format!("{}", $by_whom).into(), Backtrace::capture())
         )
     }};
     (MismatchedTypes: $expected:literal, $actual:expr) => {{
@@ -182,5 +195,12 @@ pub mod __private {
     #[must_use]
     pub fn must_use(error: crate::VortexError) -> crate::VortexError {
         error
+    }
+}
+
+#[cfg(feature = "worker")]
+impl From<VortexError> for worker::Error {
+    fn from(value: VortexError) -> Self {
+        worker::Error::RustError(value.to_string())
     }
 }

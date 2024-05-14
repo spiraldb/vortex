@@ -1,25 +1,26 @@
 use std::collections::HashMap;
 
 use vortex_error::VortexResult;
-use vortex_schema::DType;
+use vortex_scalar::BoolScalar;
 
 use crate::array::constant::ConstantArray;
-use crate::scalar::Scalar;
-use crate::stats::{ArrayStatisticsCompute, Stat};
-use crate::{ArrayDType, ArrayTrait};
+use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
+use crate::ArrayTrait;
 
-impl ArrayStatisticsCompute for ConstantArray<'_> {
-    fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
-        if matches!(self.dtype(), &DType::Bool(_)) {
-            let Scalar::Bool(b) = self.scalar() else {
-                unreachable!("Got bool dtype without bool scalar")
+impl ArrayStatisticsCompute for ConstantArray {
+    fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
+        if let Ok(b) = BoolScalar::try_from(self.scalar()) {
+            let true_count = if b.value().unwrap_or(false) {
+                self.len() as u64
+            } else {
+                0
             };
-            return Ok([(
+            return Ok(StatsSet::from(HashMap::from([(
                 Stat::TrueCount,
-                (self.len() as u64 * b.value().cloned().map(|v| v as u64).unwrap_or(0)).into(),
-            )]
-            .into());
+                true_count.into(),
+            )])));
         }
-        Ok(HashMap::default())
+
+        Ok(StatsSet::new())
     }
 }

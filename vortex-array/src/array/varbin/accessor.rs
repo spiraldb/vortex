@@ -1,11 +1,11 @@
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 
 use crate::accessor::ArrayAccessor;
 use crate::array::varbin::VarBinArray;
-use crate::match_each_integer_ptype;
 use crate::validity::ArrayValidity;
 
-impl ArrayAccessor<[u8]> for VarBinArray<'_> {
+impl ArrayAccessor<[u8]> for VarBinArray {
     fn with_iterator<F, R>(&self, f: F) -> VortexResult<R>
     where
         F: for<'a> FnOnce(&mut (dyn Iterator<Item = Option<&'a [u8]>>)) -> R,

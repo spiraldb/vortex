@@ -1,13 +1,13 @@
+use vortex_dtype::match_each_native_ptype;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::fill::FillForwardFn;
-use crate::match_each_native_ptype;
 use crate::validity::ArrayValidity;
-use crate::{IntoArray, OwnedArray, ToArrayData};
+use crate::{Array, IntoArray, ToArrayData};
 
-impl FillForwardFn for PrimitiveArray<'_> {
-    fn fill_forward(&self) -> VortexResult<OwnedArray> {
+impl FillForwardFn for PrimitiveArray {
+    fn fill_forward(&self) -> VortexResult<Array> {
         let validity = self.logical_validity();
         let Some(nulls) = validity.to_null_buffer()? else {
             return Ok(self.to_array_data().into_array());

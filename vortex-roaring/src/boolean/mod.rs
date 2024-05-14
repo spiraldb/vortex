@@ -4,16 +4,14 @@ use compress::roaring_encode;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::bool::{Bool, BoolArray};
-use vortex::buffer::Buffer;
-use vortex::scalar::AsBytes;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, OwnedArray};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_schema::Nullability;
-use vortex_schema::Nullability::NonNullable;
-use Nullability::Nullable;
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
+use vortex_buffer::Buffer;
+use vortex_dtype::Nullability::NonNullable;
+use vortex_dtype::Nullability::Nullable;
+use vortex_error::{vortex_bail, vortex_err};
 
 mod compress;
 mod compute;
@@ -25,7 +23,7 @@ pub struct RoaringBoolMetadata {
     length: usize,
 }
 
-impl RoaringBoolArray<'_> {
+impl RoaringBoolArray {
     pub fn try_new(bitmap: Bitmap, length: usize) -> VortexResult<Self> {
         if length < bitmap.cardinality() as usize {
             vortex_bail!("RoaringBoolArray length is less than bitmap cardinality")
@@ -34,9 +32,9 @@ impl RoaringBoolArray<'_> {
                 typed: TypedArray::try_from_parts(
                     DType::Bool(NonNullable),
                     RoaringBoolMetadata { length },
-                    Some(Buffer::Owned(bitmap.serialize::<Portable>().into())),
+                    Some(Buffer::from(bitmap.serialize::<Portable>())),
                     vec![].into(),
-                    HashMap::default(),
+                    StatsSet::new(),
                 )?,
             })
         }
@@ -48,11 +46,11 @@ impl RoaringBoolArray<'_> {
             self.array()
                 .buffer()
                 .expect("RoaringBoolArray buffer is missing")
-                .as_slice(),
+                .as_ref(),
         )
     }
 
-    pub fn encode(array: OwnedArray) -> VortexResult<OwnedArray> {
+    pub fn encode(array: Array) -> VortexResult<Array> {
         if array.encoding().id() == Bool::ID {
             roaring_encode(BoolArray::try_from(array)?).map(|a| a.into_array())
         } else {
@@ -60,7 +58,7 @@ impl RoaringBoolArray<'_> {
         }
     }
 }
-impl AcceptArrayVisitor for RoaringBoolArray<'_> {
+impl AcceptArrayVisitor for RoaringBoolArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         // TODO(ngates): should we store a buffer in memory? Or delay serialization?
         //  Or serialize into metadata? The only reason we support buffers is so we can write to
@@ -70,15 +68,15 @@ impl AcceptArrayVisitor for RoaringBoolArray<'_> {
     }
 }
 
-impl ArrayTrait for RoaringBoolArray<'_> {
+impl ArrayTrait for RoaringBoolArray {
     fn len(&self) -> usize {
         self.metadata().length
     }
 }
 
-impl ArrayStatisticsCompute for RoaringBoolArray<'_> {}
+impl ArrayStatisticsCompute for RoaringBoolArray {}
 
-impl ArrayValidity for RoaringBoolArray<'_> {
+impl ArrayValidity for RoaringBoolArray {
     fn logical_validity(&self) -> LogicalValidity {
         LogicalValidity::AllValid(self.len())
     }
@@ -88,11 +86,8 @@ impl ArrayValidity for RoaringBoolArray<'_> {
     }
 }
 
-impl ArrayFlatten for RoaringBoolArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for RoaringBoolArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         // TODO(ngates): benchmark the fastest conversion from BitMap.
         //  Via bitset requires two copies.
         let bitset = self
@@ -100,7 +95,7 @@ impl ArrayFlatten for RoaringBoolArray<'_> {
             .to_bitset()
             .ok_or(vortex_err!("Failed to convert RoaringBitmap to Bitset"))?;
 
-        let bytes = &bitset.as_slice().as_bytes()[0..bitset.size_in_bytes()];
+        let bytes = &bitset.as_slice()[0..bitset.size_in_bytes()];
         let buffer = ArrowBuffer::from_slice_ref(bytes);
         Ok(Flattened::Bool(BoolArray::try_new(
             BooleanBuffer::new(buffer, 0, bitset.size_in_bits()),
@@ -116,9 +111,9 @@ impl ArrayFlatten for RoaringBoolArray<'_> {
 mod test {
     use vortex::array::bool::BoolArray;
     use vortex::compute::scalar_at::scalar_at;
-    use vortex::scalar::Scalar;
     use vortex::IntoArray;
     use vortex_error::VortexResult;
+    use vortex_scalar::Scalar;
 
     use crate::RoaringBoolArray;
 

@@ -2,16 +2,13 @@ use croaring::Bitmap;
 use log::debug;
 use num_traits::NumCast;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::{NativePType, PType};
-use vortex::stats::{ArrayStatistics, Stat};
-use vortex::{Array, ArrayDType, ArrayDef, IntoArray, OwnedArray, ToStatic};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
+use vortex::stats::ArrayStatistics;
+use vortex::{Array, ArrayDType, ArrayDef, IntoArray};
+use vortex_dtype::{NativePType, PType};
 use vortex_error::VortexResult;
-use vortex_schema::DType;
-use vortex_schema::Nullability::NonNullable;
-use vortex_schema::Signedness::Unsigned;
 
-use crate::{OwnedRoaringIntArray, RoaringInt, RoaringIntArray, RoaringIntEncoding};
+use crate::{RoaringInt, RoaringIntArray, RoaringIntEncoding};
 
 impl EncodingCompression for RoaringIntEncoding {
     fn can_compress(
@@ -25,27 +22,22 @@ impl EncodingCompression for RoaringIntEncoding {
         }
 
         // Only support non-nullable uint arrays
-        if !matches!(array.dtype(), DType::Int(_, Unsigned, NonNullable)) {
-            debug!("Skipping roaring int, not non-nullable");
+        if !array.dtype().is_unsigned_int() || array.dtype().is_nullable() {
+            debug!("Skipping roaring int, not a uint");
             return None;
         }
 
         // Only support sorted unique arrays
         if !array
             .statistics()
-            .compute_as(Stat::IsStrictSorted)
+            .compute_is_strict_sorted()
             .unwrap_or(false)
         {
             debug!("Skipping roaring int, not strict sorted");
             return None;
         }
 
-        if array
-            .statistics()
-            .compute_as(Stat::Max)
-            .map(|s: usize| s > u32::MAX as usize)
-            .unwrap_or(false)
-        {
+        if array.statistics().compute_max().unwrap_or(0) > u32::MAX as usize {
             debug!("Skipping roaring int, max is larger than {}", u32::MAX);
             return None;
         }
@@ -58,10 +50,10 @@ impl EncodingCompression for RoaringIntEncoding {
         &self,
         array: &Array,
         _like: Option<&Array>,
-        _ctx: CompressCtx,
-    ) -> VortexResult<OwnedArray> {
+        _ctx: Compressor,
+    ) -> VortexResult<Array> {
         let parray = array.clone().flatten_primitive()?;
-        Ok(roaring_encode(parray).into_array().to_static())
+        Ok(roaring_encode(parray).into_array())
     }
 }
 
@@ -75,7 +67,7 @@ pub fn roaring_encode(parray: PrimitiveArray) -> RoaringIntArray {
     }
 }
 
-fn roaring_encode_primitive<T: NumCast + NativePType>(values: &[T]) -> OwnedRoaringIntArray {
+fn roaring_encode_primitive<T: NumCast + NativePType>(values: &[T]) -> RoaringIntArray {
     let mut bitmap = Bitmap::new();
     bitmap.extend(values.iter().map(|i| i.to_u32().unwrap()));
     bitmap.run_optimize();

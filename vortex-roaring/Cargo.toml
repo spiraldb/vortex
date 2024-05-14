@@ -14,14 +14,14 @@ rust-version = { workspace = true }
 [dependencies]
 arrow-buffer = { workspace = true }
 vortex-array = { path = "../vortex-array" }
+vortex-buffer = { path = "../vortex-buffer" }
 vortex-error = { path = "../vortex-error" }
-vortex-schema = { path = "../vortex-schema" }
-linkme = { workspace = true }
+vortex-dtype = { path = "../vortex-dtype" }
+vortex-scalar = { path = "../vortex-scalar" }
 croaring = { workspace = true }
 num-traits = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true }
-paste = { workspace = true }
 
 [lints]
 workspace = true

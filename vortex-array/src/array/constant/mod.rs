@@ -1,10 +1,12 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
-use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::impl_encoding;
+use crate::stats::Stat;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-
 mod compute;
 mod flatten;
 mod stats;
@@ -17,23 +19,23 @@ pub struct ConstantMetadata {
     length: usize,
 }
 
-impl ConstantArray<'_> {
+impl ConstantArray {
     pub fn new<S>(scalar: S, length: usize) -> Self
     where
         Scalar: From<S>,
     {
         let scalar: Scalar = scalar.into();
-        let stats = HashMap::from([
+        let stats = StatsSet::from(HashMap::from([
             (Stat::Max, scalar.clone()),
             (Stat::Min, scalar.clone()),
             (Stat::IsConstant, true.into()),
             (Stat::IsSorted, true.into()),
             (Stat::RunCount, 1.into()),
-        ]);
+        ]));
         Self::try_from_parts(
             scalar.dtype().clone(),
             ConstantMetadata { scalar, length },
-            vec![].into(),
+            [].into(),
             stats,
         )
         .unwrap()
@@ -44,7 +46,7 @@ impl ConstantArray<'_> {
     }
 }
 
-impl ArrayValidity for ConstantArray<'_> {
+impl ArrayValidity for ConstantArray {
     fn is_valid(&self, _index: usize) -> bool {
         match self.metadata().scalar.dtype().is_nullable() {
             true => !self.scalar().is_null(),
@@ -60,13 +62,13 @@ impl ArrayValidity for ConstantArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for ConstantArray<'_> {
+impl AcceptArrayVisitor for ConstantArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         Ok(())
     }
 }
 
-impl ArrayTrait for ConstantArray<'_> {
+impl ArrayTrait for ConstantArray {
     fn len(&self) -> usize {
         self.metadata().length
     }

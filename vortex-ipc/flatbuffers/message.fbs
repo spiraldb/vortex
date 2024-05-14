@@ -1,5 +1,5 @@
 include "vortex-array/flatbuffers/array.fbs";
-include "vortex-schema/flatbuffers/dtype.fbs";
+include "vortex-dtype/flatbuffers/dtype.fbs";
 
 namespace vortex.ipc;
 

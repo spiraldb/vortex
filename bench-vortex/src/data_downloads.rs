@@ -7,18 +7,17 @@ use arrow_array::RecordBatchReader;
 use bzip2::read::BzDecoder;
 use lance::dataset::WriteParams;
 use lance::Dataset;
-use lance_parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder as LanceParquetRecordBatchReaderBuilder;
 use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::arrow::FromArrowType;
-use vortex::{IntoArray, SerdeContext, ToArrayData};
+use vortex::{IntoArray, ToArrayData};
+use vortex_dtype::DType;
 use vortex_error::{VortexError, VortexResult};
 use vortex_ipc::writer::StreamWriter;
-use vortex_schema::DType;
 
-use crate::idempotent;
 use crate::reader::BATCH_SIZE;
+use crate::{idempotent, CTX};
 
 pub fn download_data(fname: PathBuf, data_url: &str) -> PathBuf {
     idempotent(&fname, |path| {
@@ -36,7 +35,7 @@ pub fn download_data(fname: PathBuf, data_url: &str) -> PathBuf {
 pub fn parquet_to_lance(lance_fname: &Path, parquet_file: &Path) -> VortexResult<PathBuf> {
     let write_params = WriteParams::default();
     let read = File::open(parquet_file)?;
-    let reader = LanceParquetRecordBatchReaderBuilder::try_new(read)
+    let reader = ParquetRecordBatchReaderBuilder::try_new(read)
         .unwrap()
         .build()
         .unwrap();
@@ -60,9 +59,8 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
         // FIXME(ngates): #157 the compressor should handle batch size.
         let reader = builder.with_batch_size(BATCH_SIZE).build().unwrap();
 
-        let ctx = SerdeContext::default();
         let mut write = File::create(path).unwrap();
-        let mut writer = StreamWriter::try_new(&mut write, ctx).unwrap();
+        let mut writer = StreamWriter::try_new(&mut write, &CTX).unwrap();
 
         let dtype = DType::from_arrow(reader.schema());
         writer.write_schema(&dtype).unwrap();

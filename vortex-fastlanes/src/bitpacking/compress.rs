@@ -2,20 +2,19 @@ use arrayref::array_ref;
 use fastlanez::TryBitPack;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::compute::cast::cast;
-use vortex::ptype::PType::U8;
-use vortex::ptype::{NativePType, PType};
-use vortex::scalar::{ListScalarVec, Scalar};
-use vortex::stats::{ArrayStatistics, Stat};
+use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
-use vortex::{
-    match_each_integer_ptype, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, OwnedArray,
-    ToStatic,
+use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray};
+use vortex_dtype::PType::U8;
+use vortex_dtype::{
+    match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
-use crate::{match_integers_by_width, BitPackedArray, BitPackedEncoding};
+use crate::{BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
     fn cost(&self) -> u8 {
@@ -36,10 +35,7 @@ impl EncodingCompression for BitPackedEncoding {
         }
 
         let bytes_per_exception = bytes_per_exception(parray.ptype());
-        let bit_width_freq = parray
-            .statistics()
-            .compute_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)?
-            .0;
+        let bit_width_freq = parray.statistics().compute_bit_width_freq().ok()?;
         let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception);
 
         // Check that the bit width is less than the type's bit width
@@ -54,14 +50,10 @@ impl EncodingCompression for BitPackedEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
-    ) -> VortexResult<OwnedArray> {
+        ctx: Compressor,
+    ) -> VortexResult<Array> {
         let parray = array.as_primitive();
-        let bit_width_freq = parray
-            .statistics()
-            .compute_as::<ListScalarVec<usize>>(Stat::BitWidthFreq)
-            .unwrap()
-            .0;
+        let bit_width_freq = parray.statistics().compute_bit_width_freq()?;
 
         let like_bp = like.map(|l| BitPackedArray::try_from(l).unwrap());
         let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception(parray.ptype()));
@@ -69,13 +61,11 @@ impl EncodingCompression for BitPackedEncoding {
 
         if bit_width == parray.ptype().bit_width() {
             // Nothing we can do
-            return Ok(array.to_static());
+            return Ok(array.clone());
         }
 
-        let packed = bitpack(&parray, bit_width)?;
-
         let validity = ctx.compress_validity(parray.validity())?;
-
+        let packed = bitpack(&parray, bit_width)?;
         let patches = if num_exceptions > 0 {
             Some(ctx.auxiliary("patches").compress(
                 &bitpack_patches(&parray, bit_width, num_exceptions),
@@ -97,11 +87,42 @@ impl EncodingCompression for BitPackedEncoding {
     }
 }
 
-fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<OwnedArray> {
+pub(crate) fn bitpack_encode(
+    array: PrimitiveArray,
+    bit_width: usize,
+) -> VortexResult<BitPackedArray> {
+    let bit_width_freq = array.statistics().compute_bit_width_freq()?;
+    let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
+
+    if bit_width >= array.ptype().bit_width() {
+        // Nothing we can do
+        vortex_bail!(
+            "Cannot pack -- specified bit width is greater than or equal to the type's bit width"
+        )
+    }
+
+    let packed = bitpack(&array, bit_width)?;
+    let patches = if num_exceptions > 0 {
+        Some(bitpack_patches(&array, bit_width, num_exceptions))
+    } else {
+        None
+    };
+
+    BitPackedArray::try_new(
+        packed,
+        array.validity(),
+        patches,
+        bit_width,
+        array.dtype().clone(),
+        array.len(),
+    )
+}
+
+pub(crate) fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Array> {
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
-    // TODO(ngates): we should implement this using a vortex cast to centralize this hack.
-    let bytes = match_integers_by_width!(parray.ptype(), |$P| {
-        bitpack_primitive(parray.buffer().typed_data::<$P>(), bit_width)
+    let parray = parray.reinterpret_cast(parray.ptype().to_unsigned());
+    let bytes = match_each_unsigned_integer_ptype!(parray.ptype(), |$P| {
+        bitpack_primitive(parray.typed_data::<$P>(), bit_width)
     });
     Ok(PrimitiveArray::from(bytes).into_array())
 }
@@ -136,15 +157,11 @@ pub fn bitpack_primitive<T: NativePType + TryBitPack>(array: &[T], bit_width: us
     output
 }
 
-fn bitpack_patches(
-    parray: &PrimitiveArray,
-    bit_width: usize,
-    num_exceptions_hint: usize,
-) -> OwnedArray {
+fn bitpack_patches(parray: &PrimitiveArray, bit_width: usize, num_exceptions_hint: usize) -> Array {
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
         let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
-        for (i, v) in parray.buffer().typed_data::<$T>().iter().enumerate() {
+        for (i, v) in parray.typed_data::<$T>().iter().enumerate() {
             if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width {
                 indices.push(i as u64);
                 values.push(*v);
@@ -154,19 +171,19 @@ fn bitpack_patches(
             indices.into_array(),
             PrimitiveArray::from_vec(values, Validity::AllValid).into_array(),
             parray.len(),
-            Scalar::null(&parray.dtype().as_nullable()),
+            Scalar::null(parray.dtype().as_nullable()),
         ).unwrap().into_array()
     })
 }
 
-pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray<'a>> {
+pub fn unpack(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
     let offset = array.offset();
     let encoded = cast(&array.packed(), U8.into())?.flatten_primitive()?;
     let ptype: PType = array.dtype().try_into()?;
 
-    let mut unpacked = match_integers_by_width!(ptype, |$P| {
+    let mut unpacked = match_each_unsigned_integer_ptype!(ptype, |$P| {
         PrimitiveArray::from_vec(
             unpack_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, offset, length),
             array.validity(),
@@ -185,10 +202,7 @@ pub fn unpack<'a>(array: BitPackedArray) -> VortexResult<PrimitiveArray<'a>> {
     }
 }
 
-fn patch_unpacked<'a>(
-    array: PrimitiveArray<'a>,
-    patches: &Array,
-) -> VortexResult<PrimitiveArray<'a>> {
+fn patch_unpacked(array: PrimitiveArray, patches: &Array) -> VortexResult<PrimitiveArray> {
     match patches.encoding().id() {
         Sparse::ID => {
             match_each_integer_ptype!(array.ptype(), |$T| {
@@ -268,7 +282,7 @@ pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResul
     let ptype: PType = array.dtype().try_into()?;
     let index_in_encoded = index + array.offset();
 
-    let scalar: Scalar = match_integers_by_width!(ptype, |$P| {
+    let scalar: Scalar = match_each_unsigned_integer_ptype!(ptype, |$P| {
         unsafe {
             unpack_single_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, index_in_encoded).map(|v| v.into())
         }
@@ -329,17 +343,23 @@ fn bytes_per_exception(ptype: PType) -> usize {
 }
 
 fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
+    if (bit_width_freq.len()) <= bit_width {
+        return 0;
+    }
     bit_width_freq[bit_width + 1..].iter().sum()
 }
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-
-    use vortex::encoding::{ArrayEncoding, EncodingRef};
-    use vortex::ToArray;
+    use vortex::encoding::ArrayEncoding;
+    use vortex::{Context, ToArray};
+    use vortex_scalar::PrimitiveScalar;
 
     use super::*;
+
+    fn ctx() -> Context {
+        Context::default().with_encoding(&BitPackedEncoding)
+    }
 
     #[test]
     fn test_best_bit_width() {
@@ -351,10 +371,7 @@ mod test {
 
     #[test]
     fn test_compress() {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
-        let compressed = ctx
+        let compressed = Compressor::new(&ctx())
             .compress(
                 PrimitiveArray::from(Vec::from_iter((0..10_000).map(|i| (i % 63) as u8))).array(),
                 None,
@@ -373,11 +390,10 @@ mod test {
     }
 
     fn compression_roundtrip(n: usize) {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
         let values = PrimitiveArray::from(Vec::from_iter((0..n).map(|i| (i % 2047) as u16)));
-        let compressed = ctx.compress(values.array(), None).unwrap();
+        let compressed = Compressor::new(&ctx())
+            .compress(values.array(), None)
+            .unwrap();
         let compressed = BitPackedArray::try_from(compressed).unwrap();
         let decompressed = compressed.to_array().flatten_primitive().unwrap();
         assert_eq!(decompressed.typed_data::<u16>(), values.typed_data::<u16>());
@@ -387,13 +403,12 @@ mod test {
             .iter()
             .enumerate()
             .for_each(|(i, v)| {
-                let scalar_at: u16 =
-                    if let Scalar::Primitive(pscalar) = unpack_single(&compressed, i).unwrap() {
-                        pscalar.value().unwrap().try_into().unwrap()
-                    } else {
-                        panic!("expected u8 scalar")
-                    };
-                assert_eq!(scalar_at, *v);
+                let scalar = unpack_single(&compressed, i).unwrap();
+                let scalar = PrimitiveScalar::try_from(&scalar)
+                    .unwrap()
+                    .typed_value::<u16>()
+                    .unwrap();
+                assert_eq!(scalar, *v);
             });
     }
 }

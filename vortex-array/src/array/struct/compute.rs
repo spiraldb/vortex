@@ -6,6 +6,7 @@ use arrow_array::{
 use arrow_schema::{Field, Fields};
 use itertools::Itertools;
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::array::r#struct::StructArray;
 use crate::compute::as_arrow::{as_arrow, AsArrowArray};
@@ -14,11 +15,11 @@ use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::scalar::{Scalar, StructScalar};
+use crate::validity::Validity;
 use crate::ArrayTrait;
-use crate::{Array, ArrayDType, IntoArray, OwnedArray};
+use crate::{Array, ArrayDType, IntoArray};
 
-impl ArrayCompute for StructArray<'_> {
+impl ArrayCompute for StructArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }
@@ -40,7 +41,7 @@ impl ArrayCompute for StructArray<'_> {
     }
 }
 
-impl AsArrowArray for StructArray<'_> {
+impl AsArrowArray for StructArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         let field_arrays: Vec<ArrowArrayRef> =
             self.children().map(|f| as_arrow(&f)).try_collect()?;
@@ -49,10 +50,10 @@ impl AsArrowArray for StructArray<'_> {
             .names()
             .iter()
             .zip(field_arrays.iter())
-            .zip(self.fields().iter())
+            .zip(self.dtypes().iter())
             .map(|((name, arrow_field), vortex_field)| {
                 Field::new(
-                    name.as_str(),
+                    &**name,
                     arrow_field.data_type().clone(),
                     vortex_field.is_nullable(),
                 )
@@ -68,18 +69,24 @@ impl AsArrowArray for StructArray<'_> {
     }
 }
 
-impl AsContiguousFn for StructArray<'_> {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+impl AsContiguousFn for StructArray {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let struct_arrays = arrays
             .iter()
             .map(StructArray::try_from)
             .collect::<VortexResult<Vec<_>>>()?;
-        let mut fields = vec![Vec::new(); self.fields().len()];
+        let mut fields = vec![Vec::new(); self.dtypes().len()];
         for array in struct_arrays.iter() {
-            for f in 0..self.fields().len() {
-                fields[f].push(array.child(f).unwrap())
+            for (f, field) in fields.iter_mut().enumerate() {
+                field.push(array.field(f).unwrap());
             }
         }
+
+        let validity = if self.dtype().is_nullable() {
+            Validity::from_iter(arrays.iter().map(|a| a.with_dyn(|a| a.logical_validity())))
+        } else {
+            Validity::NonNullable
+        };
 
         StructArray::try_new(
             self.names().clone(),
@@ -88,42 +95,49 @@ impl AsContiguousFn for StructArray<'_> {
                 .map(|field_arrays| as_contiguous(field_arrays))
                 .try_collect()?,
             self.len(),
+            validity,
         )
         .map(|a| a.into_array())
     }
 }
 
-impl ScalarAtFn for StructArray<'_> {
+impl ScalarAtFn for StructArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        Ok(StructScalar::new(
+        Ok(Scalar::r#struct(
             self.dtype().clone(),
             self.children()
-                .map(|field| scalar_at(&field, index))
+                .map(|field| scalar_at(&field, index).map(|s| s.into_value()))
                 .try_collect()?,
-        )
-        .into())
+        ))
     }
 }
 
-impl TakeFn for StructArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for StructArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         StructArray::try_new(
             self.names().clone(),
             self.children()
                 .map(|field| take(&field, indices))
                 .try_collect()?,
             indices.len(),
+            self.validity().take(indices)?,
         )
         .map(|a| a.into_array())
     }
 }
 
-impl SliceFn for StructArray<'_> {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+impl SliceFn for StructArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         let fields = self
             .children()
             .map(|field| slice(&field, start, stop))
             .try_collect()?;
-        StructArray::try_new(self.names().clone(), fields, stop - start).map(|a| a.into_array())
+        StructArray::try_new(
+            self.names().clone(),
+            fields,
+            stop - start,
+            self.validity().slice(start, stop)?,
+        )
+        .map(|a| a.into_array())
     }
 }

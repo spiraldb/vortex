@@ -1,17 +1,15 @@
 use std::cmp::min;
 
 use itertools::Itertools;
-use num_traits::AsPrimitive;
+use num_traits::{AsPrimitive, FromPrimitive};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::{match_each_native_ptype, NativePType};
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
-use vortex::ArrayDType;
-use vortex::ArrayTrait;
-use vortex::{match_each_integer_ptype, Array, ArrayDef, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray};
+use vortex_dtype::Nullability;
+use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
-use vortex_schema::Nullability;
 
 use crate::{REEArray, REEEncoding};
 
@@ -28,7 +26,7 @@ impl EncodingCompression for REEEncoding {
         let avg_run_length = array.len() as f32
             / array
                 .statistics()
-                .compute_as(Stat::RunCount)
+                .compute_run_count()
                 .unwrap_or(array.len()) as f32;
         if avg_run_length < config.ree_average_run_threshold {
             return None;
@@ -41,18 +39,19 @@ impl EncodingCompression for REEEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
-    ) -> VortexResult<OwnedArray> {
+        ctx: Compressor,
+    ) -> VortexResult<Array> {
         let ree_like = like.map(|like_arr| REEArray::try_from(like_arr).unwrap());
         let ree_like_ref = ree_like.as_ref();
         let primitive_array = array.as_primitive();
 
         let (ends, values) = ree_encode(&primitive_array);
-        let compressed_ends = ctx
-            .auxiliary("ends")
-            .compress(ends.array(), ree_like_ref.map(|ree| ree.ends()).as_ref())?;
+        let compressed_ends = ctx.auxiliary("ends").compress(
+            &ends.into_array(),
+            ree_like_ref.map(|ree| ree.ends()).as_ref(),
+        )?;
         let compressed_values = ctx.named("values").excluding(&REEEncoding).compress(
-            values.array(),
+            &values.into_array(),
             ree_like_ref.map(|ree| ree.values()).as_ref(),
         )?;
 
@@ -65,7 +64,7 @@ impl EncodingCompression for REEEncoding {
     }
 }
 
-pub fn ree_encode<'a>(array: &PrimitiveArray) -> (PrimitiveArray<'a>, PrimitiveArray<'a>) {
+pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     let validity = if array.validity().nullability() == Nullability::NonNullable {
         Validity::NonNullable
     } else {
@@ -119,13 +118,13 @@ fn ree_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
     (ends, values)
 }
 
-pub fn ree_decode<'a>(
+pub fn ree_decode(
     ends: &PrimitiveArray,
     values: &PrimitiveArray,
     validity: Validity,
     offset: usize,
     length: usize,
-) -> VortexResult<PrimitiveArray<'a>> {
+) -> VortexResult<PrimitiveArray> {
     match_each_native_ptype!(values.ptype(), |$P| {
         match_each_integer_ptype!(ends.ptype(), |$E| {
             Ok(PrimitiveArray::from_vec(ree_decode_primitive(
@@ -138,7 +137,10 @@ pub fn ree_decode<'a>(
     })
 }
 
-pub fn ree_decode_primitive<E: NativePType + AsPrimitive<usize> + Ord, T: NativePType>(
+pub fn ree_decode_primitive<
+    E: NativePType + AsPrimitive<usize> + FromPrimitive + Ord,
+    T: NativePType,
+>(
     run_ends: &[E],
     values: &[T],
     offset: usize,
@@ -214,7 +216,7 @@ mod test {
         .unwrap();
 
         assert_eq!(
-            decoded.buffer().typed_data::<i32>(),
+            decoded.typed_data::<i32>(),
             vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3].as_slice()
         );
         assert_eq!(

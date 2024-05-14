@@ -1,7 +1,6 @@
 pub mod accessor;
 pub mod array;
 pub mod arrow;
-pub mod buffer;
 pub mod compress;
 pub mod compute;
 mod context;
@@ -10,9 +9,7 @@ pub mod encoding;
 mod flatten;
 mod implementation;
 mod metadata;
-pub mod ptype;
 mod sampling;
-pub mod scalar;
 pub mod stats;
 mod tree;
 mod typed;
@@ -28,14 +25,13 @@ pub use context::*;
 pub use data::*;
 pub use flatten::*;
 pub use implementation::*;
-pub use linkme;
 pub use metadata::*;
 pub use typed::*;
 pub use view::*;
+use vortex_buffer::Buffer;
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
 
-use crate::buffer::Buffer;
 use crate::compute::ArrayCompute;
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
@@ -43,42 +39,35 @@ use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
 pub mod flatbuffers {
-    pub use gen_array::vortex::*;
-    pub use gen_scalar::vortex::*;
+    pub use generated::vortex::array::*;
 
     #[allow(unused_imports)]
     #[allow(dead_code)]
     #[allow(non_camel_case_types)]
     #[allow(clippy::all)]
-    mod gen_array {
+    mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/array.rs"));
-    }
-
-    #[allow(unused_imports)]
-    #[allow(dead_code)]
-    #[allow(non_camel_case_types)]
-    #[allow(clippy::all)]
-    mod gen_scalar {
-        include!(concat!(env!("OUT_DIR"), "/flatbuffers/scalar.rs"));
     }
 
     mod deps {
         pub mod dtype {
             #[allow(unused_imports)]
-            pub use vortex_schema::flatbuffers as dtype;
+            pub use vortex_dtype::flatbuffers as dtype;
+        }
+        pub mod scalar {
+            #[allow(unused_imports)]
+            pub use vortex_scalar::flatbuffers as scalar;
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Array<'v> {
+pub enum Array {
     Data(ArrayData),
-    View(ArrayView<'v>),
+    View(ArrayView),
 }
 
-pub type OwnedArray = Array<'static>;
-
-impl Array<'_> {
+impl Array {
     pub fn encoding(&self) -> EncodingRef {
         match self {
             Array::Data(d) => d.encoding(),
@@ -98,7 +87,7 @@ impl Array<'_> {
         self.with_dyn(|a| a.is_empty())
     }
 
-    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array<'a>> {
+    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array> {
         match self {
             Array::Data(d) => d.child(idx, dtype).cloned().map(Array::Data),
             Array::View(v) => v.child(idx, dtype).map(Array::View),
@@ -113,20 +102,12 @@ impl Array<'_> {
     }
 }
 
-impl<'a> Array<'a> {
-    pub fn into_buffer(self) -> Option<Buffer<'a>> {
+impl Array {
+    pub fn into_buffer(self) -> Option<Buffer> {
         match self {
             Array::Data(d) => d.into_buffer(),
-            Array::View(v) => v.buffer().map(|b| b.to_static()),
+            Array::View(v) => v.buffer().cloned(),
         }
-    }
-}
-
-impl ToStatic for Array<'_> {
-    type Static = OwnedArray;
-
-    fn to_static(&self) -> Self::Static {
-        Array::Data(self.to_array_data())
     }
 }
 
@@ -134,8 +115,8 @@ pub trait ToArray {
     fn to_array(&self) -> Array;
 }
 
-pub trait IntoArray<'a> {
-    fn into_array(self) -> Array<'a>;
+pub trait IntoArray {
+    fn into_array(self) -> Array;
 }
 
 pub trait ToArrayData {
@@ -144,12 +125,6 @@ pub trait ToArrayData {
 
 pub trait IntoArrayData {
     fn into_array_data(self) -> ArrayData;
-}
-
-pub trait ToStatic {
-    type Static;
-
-    fn to_static(&self) -> Self::Static;
 }
 
 pub trait AsArray {
@@ -200,8 +175,8 @@ impl ArrayVisitor for NBytesVisitor {
     }
 }
 
-impl<'a> Array<'a> {
-    pub fn with_dyn<R, F>(&'a self, mut f: F) -> R
+impl Array {
+    pub fn with_dyn<R, F>(&self, mut f: F) -> R
     where
         F: FnMut(&dyn ArrayTrait) -> R,
     {
@@ -219,7 +194,7 @@ impl<'a> Array<'a> {
     }
 }
 
-impl Display for Array<'_> {
+impl Display for Array {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let prefix = match self {
             Array::Data(_) => "",
@@ -236,7 +211,7 @@ impl Display for Array<'_> {
     }
 }
 
-impl IntoArrayData for Array<'_> {
+impl IntoArrayData for Array {
     fn into_array_data(self) -> ArrayData {
         match self {
             Array::Data(d) => d,

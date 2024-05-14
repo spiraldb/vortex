@@ -3,7 +3,8 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::vortex_bail;
+use vortex_scalar::Scalar;
 
 use crate::r#for::compress::decompress;
 
@@ -18,7 +19,7 @@ pub struct FoRMetadata {
     shift: u8,
 }
 
-impl FoRArray<'_> {
+impl FoRArray {
     pub fn try_new(child: Array, reference: Scalar, shift: u8) -> VortexResult<Self> {
         if reference.is_null() {
             vortex_bail!("Reference value cannot be null",);
@@ -27,8 +28,8 @@ impl FoRArray<'_> {
         Self::try_from_parts(
             child.dtype().clone(),
             FoRMetadata { reference, shift },
-            vec![child.to_array_data()].into(),
-            HashMap::new(),
+            [child.to_array_data()].into(),
+            StatsSet::new(),
         )
     }
 
@@ -50,7 +51,7 @@ impl FoRArray<'_> {
     }
 }
 
-impl ArrayValidity for FoRArray<'_> {
+impl ArrayValidity for FoRArray {
     fn is_valid(&self, index: usize) -> bool {
         self.encoded().with_dyn(|a| a.is_valid(index))
     }
@@ -60,29 +61,26 @@ impl ArrayValidity for FoRArray<'_> {
     }
 }
 
-impl ArrayFlatten for FoRArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for FoRArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         decompress(self).map(Flattened::Primitive)
     }
 }
 
-impl AcceptArrayVisitor for FoRArray<'_> {
+impl AcceptArrayVisitor for FoRArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("encoded", &self.encoded())
     }
 }
 
-impl ArrayStatisticsCompute for FoRArray<'_> {}
+impl ArrayStatisticsCompute for FoRArray {}
 
-impl ArrayTrait for FoRArray<'_> {
+impl ArrayTrait for FoRArray {
     fn len(&self) -> usize {
         self.encoded().len()
     }
 
     fn nbytes(&self) -> usize {
-        self.reference().nbytes() + self.encoded().nbytes()
+        self.encoded().nbytes()
     }
 }

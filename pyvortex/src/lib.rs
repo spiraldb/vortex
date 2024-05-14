@@ -1,9 +1,7 @@
 use dtype::PyDType;
-use log::debug;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use vortex::encoding::VORTEX_ENCODINGS;
-use vortex_schema::DType;
-use vortex_schema::Signedness::{Signed, Unsigned};
+use vortex_dtype::{DType, PType};
 
 use crate::array::*;
 
@@ -18,14 +16,6 @@ mod vortex_arrow;
 fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
 
-    debug!(
-        "Discovered encodings: {:?}",
-        VORTEX_ENCODINGS
-            .iter()
-            .map(|e| e.id().to_string())
-            .collect::<Vec<String>>()
-    );
-
     m.add_function(wrap_pyfunction!(encode::encode, m)?)?;
     // m.add_function(wrap_pyfunction!(compress::compress, m)?)?;
 
@@ -33,7 +23,6 @@ fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyBoolArray>()?;
     m.add_class::<PyBitPackedArray>()?;
     m.add_class::<PyChunkedArray>()?;
-    m.add_class::<PyCompositeArray>()?;
     m.add_class::<PyConstantArray>()?;
     m.add_class::<PyDeltaArray>()?;
     m.add_class::<PyDictArray>()?;
@@ -69,28 +58,51 @@ fn dtype_bool(py: Python<'_>, nullable: bool) -> PyResult<Py<PyDType>> {
 #[pyfunction(name = "int")]
 #[pyo3(signature = (width = None, nullable = false))]
 fn dtype_int(py: Python<'_>, width: Option<u16>, nullable: bool) -> PyResult<Py<PyDType>> {
-    PyDType::wrap(
-        py,
-        DType::Int(width.unwrap_or(64).into(), Signed, nullable.into()),
-    )
+    let dtype = if let Some(width) = width {
+        match width {
+            8 => DType::Primitive(PType::I8, nullable.into()),
+            16 => DType::Primitive(PType::I16, nullable.into()),
+            32 => DType::Primitive(PType::I32, nullable.into()),
+            64 => DType::Primitive(PType::I64, nullable.into()),
+            _ => return Err(PyValueError::new_err("Invalid int width")),
+        }
+    } else {
+        DType::Primitive(PType::I64, nullable.into())
+    };
+    PyDType::wrap(py, dtype)
 }
 
 #[pyfunction(name = "uint")]
 #[pyo3(signature = (width = None, nullable = false))]
 fn dtype_uint(py: Python<'_>, width: Option<u16>, nullable: bool) -> PyResult<Py<PyDType>> {
-    PyDType::wrap(
-        py,
-        DType::Int(width.unwrap_or(64).into(), Unsigned, nullable.into()),
-    )
+    let dtype = if let Some(width) = width {
+        match width {
+            8 => DType::Primitive(PType::U8, nullable.into()),
+            16 => DType::Primitive(PType::U16, nullable.into()),
+            32 => DType::Primitive(PType::U32, nullable.into()),
+            64 => DType::Primitive(PType::U64, nullable.into()),
+            _ => return Err(PyValueError::new_err("Invalid uint width")),
+        }
+    } else {
+        DType::Primitive(PType::U64, nullable.into())
+    };
+    PyDType::wrap(py, dtype)
 }
 
 #[pyfunction(name = "float")]
 #[pyo3(signature = (width = None, nullable = false))]
 fn dtype_float(py: Python<'_>, width: Option<i8>, nullable: bool) -> PyResult<Py<PyDType>> {
-    PyDType::wrap(
-        py,
-        DType::Float(width.unwrap_or(64).into(), nullable.into()),
-    )
+    let dtype = if let Some(width) = width {
+        match width {
+            16 => DType::Primitive(PType::F16, nullable.into()),
+            32 => DType::Primitive(PType::F32, nullable.into()),
+            64 => DType::Primitive(PType::F64, nullable.into()),
+            _ => return Err(PyValueError::new_err("Invalid float width")),
+        }
+    } else {
+        DType::Primitive(PType::F64, nullable.into())
+    };
+    PyDType::wrap(py, dtype)
 }
 
 #[pyfunction(name = "utf8")]

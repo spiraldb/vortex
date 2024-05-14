@@ -9,17 +9,17 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::ptype::NativePType;
-use vortex::scalar::Scalar;
-use vortex::{match_each_integer_ptype, Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray};
+use vortex_dtype::{match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType};
+use vortex_error::{vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::bitpacking::compress::unpack_single;
-use crate::{match_integers_by_width, unpack_single_primitive, BitPackedArray};
+use crate::{unpack_single_primitive, BitPackedArray};
 
 mod slice;
 
-impl ArrayCompute for BitPackedArray<'_> {
+impl ArrayCompute for BitPackedArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -33,7 +33,7 @@ impl ArrayCompute for BitPackedArray<'_> {
     }
 }
 
-impl ScalarAtFn for BitPackedArray<'_> {
+impl ScalarAtFn for BitPackedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if index >= self.len() {
             return Err(vortex_err!(OutOfBounds: index, 0, self.len()));
@@ -48,8 +48,8 @@ impl ScalarAtFn for BitPackedArray<'_> {
     }
 }
 
-impl TakeFn for BitPackedArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for BitPackedArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         let ptype = self.dtype().try_into()?;
         let validity = self.validity();
         let taken_validity = validity.take(indices)?;
@@ -59,14 +59,14 @@ impl TakeFn for BitPackedArray<'_> {
                 Ok(primitive_patches.into_array())
             } else {
                 Ok(
-                    ConstantArray::new(Scalar::null(&self.dtype().as_nullable()), indices.len())
+                    ConstantArray::new(Scalar::null(self.dtype().as_nullable()), indices.len())
                         .into_array(),
                 )
             };
         }
 
         let indices = indices.clone().flatten_primitive()?;
-        let taken = match_integers_by_width!(ptype, |$T| {
+        let taken = match_each_unsigned_integer_ptype!(ptype, |$T| {
             PrimitiveArray::from_vec(take_primitive::<$T>(self, &indices)?, taken_validity)
         });
         Ok(taken.reinterpret_cast(ptype).into_array())
@@ -175,29 +175,29 @@ fn do_patch_for_take_primitive<T: NativePType + TryBitPack>(
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-
     use itertools::Itertools;
     use rand::distributions::Uniform;
     use rand::{thread_rng, Rng};
     use vortex::array::primitive::{Primitive, PrimitiveArray};
     use vortex::array::sparse::SparseArray;
-    use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
+    use vortex::compress::Compressor;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::take::take;
-    use vortex::encoding::EncodingRef;
-    use vortex::{ArrayDef, IntoArray};
+    use vortex::{ArrayDef, Context, IntoArray};
 
     use crate::{BitPackedArray, BitPackedEncoding};
 
+    fn ctx() -> Context {
+        Context::default().with_encoding(&BitPackedEncoding)
+    }
+
     #[test]
     fn take_indices() {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
         let indices = PrimitiveArray::from(vec![0, 125, 2047, 2049, 2151, 2790]);
         let unpacked = PrimitiveArray::from((0..4096).map(|i| (i % 63) as u8).collect::<Vec<_>>());
-        let bitpacked = ctx.compress(unpacked.array(), None).unwrap();
+        let bitpacked = Compressor::new(&ctx())
+            .compress(unpacked.array(), None)
+            .unwrap();
         let result = take(&bitpacked, indices.array()).unwrap();
         assert_eq!(result.encoding().id(), Primitive::ID);
         let primitive_result = result.flatten_primitive().unwrap();
@@ -207,16 +207,10 @@ mod test {
 
     #[test]
     fn take_random_indices() {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
         let num_patches: usize = 128;
         let values = (0..u16::MAX as u32 + num_patches as u32).collect::<Vec<_>>();
         let uncompressed = PrimitiveArray::from(values.clone());
-        let packed = BitPackedEncoding {}
-            .compress(uncompressed.array(), None, ctx)
-            .unwrap();
-        let packed = BitPackedArray::try_from(packed).unwrap();
+        let packed = BitPackedArray::encode(uncompressed.array(), 16).unwrap();
         assert!(packed.patches().is_some());
 
         let patches = SparseArray::try_from(packed.patches().unwrap()).unwrap();
@@ -242,11 +236,12 @@ mod test {
             .enumerate()
             .for_each(|(ti, i)| {
                 assert_eq!(
-                    u32::try_from(scalar_at(packed.array(), *i as usize).unwrap()).unwrap(),
+                    u32::try_from(scalar_at(packed.array(), *i as usize).unwrap().as_ref())
+                        .unwrap(),
                     values[*i as usize]
                 );
                 assert_eq!(
-                    u32::try_from(scalar_at(&taken, ti).unwrap()).unwrap(),
+                    u32::try_from(scalar_at(&taken, ti).unwrap().as_ref()).unwrap(),
                     values[*i as usize]
                 );
             });
@@ -254,15 +249,9 @@ mod test {
 
     #[test]
     fn test_scalar_at() {
-        let cfg = CompressConfig::new().with_enabled([&BitPackedEncoding as EncodingRef]);
-        let ctx = CompressCtx::new(Arc::new(cfg));
-
         let values = (0u32..257).collect_vec();
         let uncompressed = PrimitiveArray::from(values.clone()).into_array();
-        let packed = BitPackedEncoding
-            .compress(&uncompressed, None, ctx)
-            .unwrap();
-        let packed = BitPackedArray::try_from(packed).unwrap();
+        let packed = BitPackedArray::encode(&uncompressed, 8).unwrap();
         assert!(packed.patches().is_some());
 
         let patches = SparseArray::try_from(packed.patches().unwrap()).unwrap();
@@ -270,7 +259,7 @@ mod test {
 
         values.iter().enumerate().for_each(|(i, v)| {
             assert_eq!(
-                u32::try_from(scalar_at(packed.array(), i).unwrap()).unwrap(),
+                u32::try_from(scalar_at(packed.array(), i).unwrap().as_ref()).unwrap(),
                 *v
             );
         });

@@ -1,23 +1,23 @@
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
-use vortex::compress::{CompressConfig, CompressCtx, EncodingCompression};
-use vortex::ptype::{NativePType, PType};
-use vortex::scalar::Scalar;
+use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray, OwnedArray};
+use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray};
+use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::alp::ALPFloat;
 use crate::array::{ALPArray, ALPEncoding};
-use crate::{Exponents, OwnedALPArray};
+use crate::Exponents;
 
 #[macro_export]
 macro_rules! match_each_alp_float_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
+        use vortex_dtype::PType;
         use vortex_error::vortex_err;
-        use vortex::ptype::PType;
         let ptype = $self;
         match ptype {
             PType::F32 => Ok(__with__! { f32 }),
@@ -48,8 +48,8 @@ impl EncodingCompression for ALPEncoding {
         &self,
         array: &Array,
         like: Option<&Array>,
-        ctx: CompressCtx,
-    ) -> VortexResult<Array<'static>> {
+        ctx: Compressor,
+    ) -> VortexResult<Array> {
         let like_alp = like.map(|like_array| like_array.as_array_ref());
         let like_exponents = like
             .map(|like_array| ALPArray::try_from(like_array).unwrap())
@@ -83,7 +83,7 @@ impl EncodingCompression for ALPEncoding {
 fn encode_to_array<T>(
     values: &PrimitiveArray,
     exponents: Option<&Exponents>,
-) -> (Exponents, OwnedArray, Option<OwnedArray>)
+) -> (Exponents, Array, Option<Array>)
 where
     T: ALPFloat + NativePType,
     T::ALPInt: NativePType,
@@ -98,14 +98,14 @@ where
                 PrimitiveArray::from(exc_pos).into_array(),
                 PrimitiveArray::from_vec(exc, Validity::AllValid).into_array(),
                 len,
-                Scalar::null(&values.dtype().as_nullable()),
+                Scalar::null(values.dtype().as_nullable()),
             )
             .into_array()
         }),
     )
 }
 
-pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<OwnedALPArray> {
+pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
     let (exponents, encoded, patches) = match parray.ptype() {
         PType::F32 => encode_to_array::<f32>(parray, None),
         PType::F64 => encode_to_array::<f64>(parray, None),
@@ -131,10 +131,7 @@ pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
     }
 }
 
-fn patch_decoded<'a>(
-    array: PrimitiveArray<'a>,
-    patches: &Array,
-) -> VortexResult<PrimitiveArray<'a>> {
+fn patch_decoded(array: PrimitiveArray, patches: &Array) -> VortexResult<PrimitiveArray> {
     match patches.encoding().id() {
         Sparse::ID => {
             match_each_alp_float_ptype!(array.ptype(), |$T| {

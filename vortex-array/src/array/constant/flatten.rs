@@ -1,19 +1,16 @@
-use vortex_error::VortexResult;
-use vortex_schema::Nullability;
+use vortex_dtype::{match_each_native_ptype, Nullability, PType};
+use vortex_error::{vortex_bail, VortexResult};
+use vortex_scalar::BoolScalar;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::scalar::Scalar;
 use crate::validity::Validity;
-use crate::{match_each_native_ptype, ArrayDType, ArrayTrait};
+use crate::{ArrayDType, ArrayTrait};
 use crate::{ArrayFlatten, Flattened};
 
-impl ArrayFlatten for ConstantArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for ConstantArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         let validity = match self.dtype().nullability() {
             Nullability::NonNullable => Validity::NonNullable,
             Nullability::Nullable => match self.scalar().is_null() {
@@ -22,20 +19,22 @@ impl ArrayFlatten for ConstantArray<'_> {
             },
         };
 
-        Ok(match self.scalar() {
-            Scalar::Bool(b) => Flattened::Bool(BoolArray::from_vec(
-                vec![b.value().copied().unwrap_or_default(); self.len()],
+        if let Ok(b) = BoolScalar::try_from(self.scalar()) {
+            return Ok(Flattened::Bool(BoolArray::from_vec(
+                vec![b.value().unwrap_or_default(); self.len()],
                 validity,
-            )),
-            Scalar::Primitive(p) => {
-                match_each_native_ptype!(p.ptype(), |$P| {
-                    Flattened::Primitive(PrimitiveArray::from_vec::<$P>(
-                        vec![$P::try_from(self.scalar())?; self.len()],
-                        validity,
-                    ))
-                })
-            }
-            _ => panic!("Unsupported scalar type {}", self.dtype()),
-        })
+            )));
+        }
+
+        if let Ok(ptype) = PType::try_from(self.scalar().dtype()) {
+            return match_each_native_ptype!(ptype, |$P| {
+                Ok(Flattened::Primitive(PrimitiveArray::from_vec::<$P>(
+                    vec![$P::try_from(self.scalar())?; self.len()],
+                    validity,
+                )))
+            });
+        }
+
+        vortex_bail!("Unsupported scalar type {}", self.dtype())
     }
 }

@@ -1,0 +1,43 @@
+[package]
+name = "vortex-dtype"
+version = { workspace = true }
+description = "Vortex schema"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[lib]
+name = "vortex_dtype"
+path = "src/lib.rs"
+
+[dependencies]
+flatbuffers = { workspace = true, optional = true }
+half = { workspace = true, features = ["num-traits"] }
+itertools = { workspace = true }
+num-traits = { workspace = true }
+prost = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["rc", "derive"] }
+vortex-error = { path = "../vortex-error" }
+vortex-flatbuffers = { path = "../vortex-flatbuffers" }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+serde_test = { workspace = true }
+
+[build-dependencies]
+build-vortex = { path = "../build-vortex" }
+
+[lints]
+workspace = true
+
+[features]
+# Uncomment for improved IntelliJ support
+# default = ["flatbuffers", "proto", "serde"]
+flatbuffers = ["dep:flatbuffers"]
+proto = ["dep:prost"]
+serde = ["dep:serde"]

@@ -1,24 +1,22 @@
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use vortex_buffer::Buffer;
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_schema::DType;
+use vortex_scalar::Scalar;
 
-use crate::buffer::{Buffer, OwnedBuffer};
 use crate::encoding::EncodingRef;
-use crate::scalar::Scalar;
-use crate::stats::Stat;
-use crate::stats::Statistics;
-use crate::{Array, ArrayMetadata, IntoArray, OwnedArray, ToArray};
+use crate::stats::{Stat, Statistics, StatsSet};
+use crate::{Array, ArrayMetadata, IntoArray, ToArray};
 
 #[derive(Clone, Debug)]
 pub struct ArrayData {
     encoding: EncodingRef,
     dtype: DType, // FIXME(ngates): Arc?
     metadata: Arc<dyn ArrayMetadata>,
-    buffer: Option<OwnedBuffer>,
+    buffer: Option<Buffer>,
     children: Arc<[ArrayData]>,
-    stats_map: Arc<RwLock<HashMap<Stat, Scalar>>>,
+    stats_map: Arc<RwLock<StatsSet>>,
 }
 
 impl ArrayData {
@@ -26,9 +24,9 @@ impl ArrayData {
         encoding: EncodingRef,
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
-        buffer: Option<OwnedBuffer>,
+        buffer: Option<Buffer>,
         children: Arc<[ArrayData]>,
-        statistics: HashMap<Stat, Scalar>,
+        statistics: StatsSet,
     ) -> VortexResult<Self> {
         let data = Self {
             encoding,
@@ -63,7 +61,7 @@ impl ArrayData {
         self.buffer.as_ref()
     }
 
-    pub fn into_buffer(self) -> Option<OwnedBuffer> {
+    pub fn into_buffer(self) -> Option<Buffer> {
         self.buffer
     }
 
@@ -133,36 +131,35 @@ impl ToArray for ArrayData {
     }
 }
 
-impl IntoArray<'static> for ArrayData {
-    fn into_array(self) -> OwnedArray {
+impl IntoArray for ArrayData {
+    fn into_array(self) -> Array {
         Array::Data(self)
     }
 }
 
 impl Statistics for ArrayData {
-    fn compute(&self, stat: Stat) -> Option<Scalar> {
-        let mut locked = self.stats_map.write().unwrap();
-        let stats = self
-            .to_array()
-            .with_dyn(|a| a.compute_statistics(stat))
-            .ok()?;
-        for (k, v) in &stats {
-            locked.insert(*k, v.clone());
-        }
-        stats.get(&stat).cloned()
+    fn get(&self, stat: Stat) -> Option<Scalar> {
+        self.stats_map.read().unwrap().get(stat).cloned()
     }
 
-    fn get(&self, stat: Stat) -> Option<Scalar> {
-        let locked = self.stats_map.read().unwrap();
-        locked.get(&stat).cloned()
+    fn to_set(&self) -> StatsSet {
+        self.stats_map.read().unwrap().clone()
     }
 
     fn set(&self, stat: Stat, value: Scalar) {
-        let mut locked = self.stats_map.write().unwrap();
-        locked.insert(stat, value);
+        self.stats_map.write().unwrap().set(stat, value);
     }
 
-    fn to_map(&self) -> HashMap<Stat, Scalar> {
-        self.stats_map.read().unwrap().clone()
+    fn compute(&self, stat: Stat) -> Option<Scalar> {
+        if let Some(s) = self.get(stat) {
+            return Some(s);
+        }
+
+        self.stats_map.write().unwrap().extend(
+            self.to_array()
+                .with_dyn(|a| a.compute_statistics(stat))
+                .ok()?,
+        );
+        self.get(stat)
     }
 }

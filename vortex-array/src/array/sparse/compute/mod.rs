@@ -1,21 +1,22 @@
 use std::collections::HashMap;
 
 use itertools::Itertools;
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_scalar::Scalar;
 
-use crate::array::primitive::{OwnedPrimitiveArray, PrimitiveArray};
+use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
 use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::scalar::Scalar;
-use crate::{match_each_integer_ptype, Array, ArrayDType, ArrayTrait, IntoArray, OwnedArray};
+use crate::{Array, ArrayDType, ArrayTrait, IntoArray};
 
 mod slice;
 
-impl ArrayCompute for SparseArray<'_> {
+impl ArrayCompute for SparseArray {
     fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
@@ -33,8 +34,8 @@ impl ArrayCompute for SparseArray<'_> {
     }
 }
 
-impl AsContiguousFn for SparseArray<'_> {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+impl AsContiguousFn for SparseArray {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let sparse = arrays
             .iter()
             .map(|a| SparseArray::try_from(a).unwrap())
@@ -54,7 +55,7 @@ impl AsContiguousFn for SparseArray<'_> {
     }
 }
 
-impl ScalarAtFn for SparseArray<'_> {
+impl ScalarAtFn for SparseArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         match self.find_index(index)? {
             None => self.fill_value().clone().cast(self.dtype()),
@@ -63,8 +64,8 @@ impl ScalarAtFn for SparseArray<'_> {
     }
 }
 
-impl TakeFn for SparseArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for SparseArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         let flat_indices = indices.clone().flatten_primitive()?;
         // if we are taking a lot of values we should build a hashmap
         let (positions, physical_take_indices) = if indices.len() > 128 {
@@ -88,7 +89,7 @@ impl TakeFn for SparseArray<'_> {
 fn take_map(
     array: &SparseArray,
     indices: &PrimitiveArray,
-) -> VortexResult<(OwnedPrimitiveArray, OwnedPrimitiveArray)> {
+) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
     let indices_map: HashMap<u64, u64> = array
         .resolved_indices()
         .iter()
@@ -112,7 +113,7 @@ fn take_map(
 fn take_search_sorted(
     array: &SparseArray,
     indices: &PrimitiveArray,
-) -> VortexResult<(OwnedPrimitiveArray, OwnedPrimitiveArray)> {
+) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
     let resolved = match_each_integer_ptype!(indices.ptype(), |$P| {
         indices
             .typed_data::<$P>()
@@ -137,7 +138,8 @@ fn take_search_sorted(
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_schema::{DType, FloatWidth, Nullability};
+    use vortex_dtype::{DType, Nullability, PType};
+    use vortex_scalar::Scalar;
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::compute::take_map;
@@ -145,17 +147,16 @@ mod test {
     use crate::compute::as_contiguous::as_contiguous;
     use crate::compute::slice::slice;
     use crate::compute::take::take;
-    use crate::scalar::Scalar;
     use crate::validity::Validity;
-    use crate::{ArrayTrait, IntoArray, OwnedArray};
+    use crate::{Array, ArrayTrait, IntoArray};
 
-    fn sparse_array() -> OwnedArray {
+    fn sparse_array() -> Array {
         SparseArray::new(
             PrimitiveArray::from(vec![0u64, 37, 47, 99]).into_array(),
             PrimitiveArray::from_vec(vec![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid)
                 .into_array(),
             100,
-            Scalar::null(&DType::Float(FloatWidth::_64, Nullability::Nullable)),
+            Scalar::null(DType::Primitive(PType::F64, Nullability::Nullable)),
         )
         .into_array()
     }

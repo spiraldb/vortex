@@ -2,8 +2,8 @@ use std::fmt::Formatter;
 use std::{mem, slice};
 
 use ::serde::{Deserialize, Serialize};
-use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{IntWidth, Nullability, Signedness};
+use vortex_dtype::Nullability;
+use vortex_error::vortex_bail;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbinview::builder::VarBinViewBuilder;
@@ -104,25 +104,19 @@ pub struct VarBinViewMetadata {
     n_children: usize,
 }
 
-impl VarBinViewArray<'_> {
+impl VarBinViewArray {
     pub fn try_new(
         views: Array,
         data: Vec<Array>,
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
-        if !matches!(
-            views.dtype(),
-            DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
-        ) {
+        if !matches!(views.dtype(), &DType::BYTES) {
             vortex_bail!(MismatchedTypes: "u8", views.dtype());
         }
 
         for d in data.iter() {
-            if !matches!(
-                d.dtype(),
-                DType::Int(IntWidth::_8, Signedness::Unsigned, Nullability::NonNullable)
-            ) {
+            if !matches!(d.dtype(), &DType::BYTES) {
                 vortex_bail!(MismatchedTypes: "u8", d.dtype());
             }
         }
@@ -147,7 +141,7 @@ impl VarBinViewArray<'_> {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, metadata, children.into(), HashMap::default())
+        Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
     }
 
     fn view_slice(&self) -> &[BinaryView] {
@@ -223,16 +217,13 @@ impl VarBinViewArray<'_> {
     }
 }
 
-impl ArrayFlatten for VarBinViewArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for VarBinViewArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         Ok(Flattened::VarBinView(self))
     }
 }
 
-impl ArrayValidity for VarBinViewArray<'_> {
+impl ArrayValidity for VarBinViewArray {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
@@ -242,7 +233,7 @@ impl ArrayValidity for VarBinViewArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for VarBinViewArray<'_> {
+impl AcceptArrayVisitor for VarBinViewArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("views", &self.views())?;
         for i in 0..self.metadata().n_children {
@@ -252,55 +243,55 @@ impl AcceptArrayVisitor for VarBinViewArray<'_> {
     }
 }
 
-impl ArrayTrait for VarBinViewArray<'_> {
+impl ArrayTrait for VarBinViewArray {
     fn len(&self) -> usize {
         self.view_slice().len()
     }
 }
 
-impl From<Vec<&[u8]>> for VarBinViewArray<'_> {
+impl From<Vec<&[u8]>> for VarBinViewArray {
     fn from(value: Vec<&[u8]>) -> Self {
         VarBinViewArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<Vec<u8>>> for VarBinViewArray<'_> {
+impl From<Vec<Vec<u8>>> for VarBinViewArray {
     fn from(value: Vec<Vec<u8>>) -> Self {
         VarBinViewArray::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<String>> for VarBinViewArray<'_> {
+impl From<Vec<String>> for VarBinViewArray {
     fn from(value: Vec<String>) -> Self {
         VarBinViewArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl From<Vec<&str>> for VarBinViewArray<'_> {
+impl From<Vec<&str>> for VarBinViewArray {
     fn from(value: Vec<&str>) -> Self {
         VarBinViewArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl<'a> FromIterator<Option<&'a [u8]>> for VarBinViewArray<'_> {
+impl<'a> FromIterator<Option<&'a [u8]>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a [u8]>>>(iter: T) -> Self {
         VarBinViewArray::from_iter(iter, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl FromIterator<Option<Vec<u8>>> for VarBinViewArray<'_> {
+impl FromIterator<Option<Vec<u8>>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<Vec<u8>>>>(iter: T) -> Self {
         VarBinViewArray::from_iter(iter, DType::Binary(Nullability::NonNullable))
     }
 }
 
-impl FromIterator<Option<String>> for VarBinViewArray<'_> {
+impl FromIterator<Option<String>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<String>>>(iter: T) -> Self {
         VarBinViewArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
     }
 }
 
-impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray<'_> {
+impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a str>>>(iter: T) -> Self {
         VarBinViewArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
     }
@@ -311,12 +302,12 @@ impl EncodingCompression for VarBinViewEncoding {}
 #[cfg(test)]
 mod test {
     use arrow_array::array::StringViewArray as ArrowStringViewArray;
+    use vortex_scalar::Scalar;
 
     use crate::array::varbinview::VarBinViewArray;
     use crate::compute::as_arrow::as_arrow;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::scalar::Scalar;
     use crate::{ArrayTrait, IntoArray};
 
     #[test]

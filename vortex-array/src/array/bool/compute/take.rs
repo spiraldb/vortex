@@ -1,16 +1,16 @@
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::compute::take::TakeFn;
-use crate::match_each_integer_ptype;
+use crate::Array;
 use crate::AsArray;
 use crate::IntoArray;
-use crate::{Array, OwnedArray};
 
-impl TakeFn for BoolArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for BoolArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         let validity = self.validity();
         let indices = indices.clone().flatten_primitive()?;
         match_each_integer_ptype!(indices.ptype(), |$I| {

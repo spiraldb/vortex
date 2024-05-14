@@ -2,13 +2,14 @@ use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::scalar::{PrimitiveScalar, Scalar};
-use vortex::{match_each_integer_ptype, Array, IntoArray, OwnedArray};
-use vortex_error::VortexResult;
+use vortex::{Array, IntoArray};
+use vortex_dtype::match_each_integer_ptype;
+use vortex_error::{vortex_bail, VortexResult};
+use vortex_scalar::{PrimitiveScalar, Scalar};
 
 use crate::FoRArray;
 
-impl ArrayCompute for FoRArray<'_> {
+impl ArrayCompute for FoRArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -22,8 +23,8 @@ impl ArrayCompute for FoRArray<'_> {
     }
 }
 
-impl TakeFn for FoRArray<'_> {
-    fn take(&self, indices: &Array) -> VortexResult<OwnedArray> {
+impl TakeFn for FoRArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
         FoRArray::try_new(
             take(&self.encoded(), indices)?,
             self.reference().clone(),
@@ -33,28 +34,28 @@ impl TakeFn for FoRArray<'_> {
     }
 }
 
-impl ScalarAtFn for FoRArray<'_> {
+impl ScalarAtFn for FoRArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let encoded_scalar = scalar_at(&self.encoded(), index)?;
+        let encoded = PrimitiveScalar::try_from(&encoded_scalar)?;
+        let reference = PrimitiveScalar::try_from(self.reference())?;
 
-        match (&encoded_scalar, self.reference()) {
-            (Scalar::Primitive(p), Scalar::Primitive(r)) => match p.value() {
-                None => Ok(encoded_scalar),
-                Some(pv) => match_each_integer_ptype!(pv.ptype(), |$P| {
-                    use num_traits::WrappingAdd;
-                    Ok(PrimitiveScalar::try_new::<$P>(
-                        Some((p.typed_value::<$P>().unwrap() << self.shift()).wrapping_add(r.typed_value::<$P>().unwrap())),
-                        p.dtype().nullability()
-                    ).unwrap().into())
-                }),
-            },
-            _ => unreachable!("Reference and encoded values had different dtypes"),
+        if encoded.ptype() != reference.ptype() {
+            vortex_bail!("Reference and encoded values had different dtypes");
         }
+
+        match_each_integer_ptype!(encoded.ptype(), |$P| {
+            use num_traits::WrappingAdd;
+            Ok(Scalar::primitive::<$P>(
+                (encoded.typed_value::<$P>().unwrap() << self.shift()).wrapping_add(reference.typed_value::<$P>().unwrap()),
+                encoded.dtype().nullability()
+            ))
+        })
     }
 }
 
-impl SliceFn for FoRArray<'_> {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+impl SliceFn for FoRArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         FoRArray::try_new(
             slice(&self.encoded(), start, stop)?,
             self.reference().clone(),
@@ -67,8 +68,9 @@ impl SliceFn for FoRArray<'_> {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compress::{CompressCtx, EncodingCompression};
+    use vortex::compress::{Compressor, EncodingCompression};
     use vortex::compute::scalar_at::scalar_at;
+    use vortex::Context;
 
     use crate::FoREncoding;
 
@@ -78,7 +80,7 @@ mod test {
             .compress(
                 PrimitiveArray::from(vec![11, 15, 19]).array(),
                 None,
-                CompressCtx::default(),
+                Compressor::new(&Context::default()),
             )
             .unwrap();
         assert_eq!(scalar_at(&forarr, 0).unwrap(), 11.into());

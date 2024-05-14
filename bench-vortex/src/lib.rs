@@ -3,27 +3,27 @@
 use std::env::temp_dir;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use arrow_array::RecordBatchReader;
 use humansize::DECIMAL;
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use log::{info, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
-use vortex::compress::{CompressConfig, CompressCtx};
-use vortex::encoding::{EncodingRef, VORTEX_ENCODINGS};
-use vortex::{IntoArray, OwnedArray, ToArrayData};
+use vortex::compress::Compressor;
+use vortex::encoding::EncodingRef;
+use vortex::{Array, Context, IntoArray, ToArrayData};
 use vortex_alp::ALPEncoding;
 use vortex_datetime_parts::DateTimePartsEncoding;
 use vortex_dict::DictEncoding;
+use vortex_dtype::DType;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
-use vortex_schema::DType;
 
 use crate::data_downloads::FileType;
 use crate::reader::BATCH_SIZE;
@@ -35,6 +35,22 @@ pub mod public_bi_data;
 pub mod reader;
 pub mod taxi_data;
 pub mod vortex_utils;
+
+lazy_static! {
+    pub static ref CTX: Context = Context::default().with_encodings([
+        &ALPEncoding as EncodingRef,
+        &DictEncoding,
+        &BitPackedEncoding,
+        &FoREncoding,
+        &DateTimePartsEncoding,
+        // &DeltaEncoding,  Blows up the search space too much.
+        &REEEncoding,
+        &RoaringBoolEncoding,
+        // &RoaringIntEncoding,
+        // Doesn't offer anything more than FoR really
+        // &ZigZagEncoding,
+    ]);
+}
 
 /// Creates a file if it doesn't already exist.
 /// NB: Does NOT modify the given path to ensure that it resides in the data directory.
@@ -104,33 +120,7 @@ pub fn setup_logger(level: LevelFilter) {
     .unwrap();
 }
 
-pub fn enumerate_arrays() -> Vec<EncodingRef> {
-    println!(
-        "FOUND {:?}",
-        VORTEX_ENCODINGS.iter().map(|e| e.id()).collect_vec()
-    );
-    vec![
-        &ALPEncoding,
-        &DictEncoding,
-        &BitPackedEncoding,
-        &FoREncoding,
-        &DateTimePartsEncoding,
-        // &DeltaEncoding,  Blows up the search space too much.
-        &REEEncoding,
-        &RoaringBoolEncoding,
-        // &RoaringIntEncoding,
-        // Doesn't offer anything more than FoR really
-        // &ZigZagEncoding,
-    ]
-}
-
-pub fn compress_ctx() -> CompressCtx {
-    let cfg = CompressConfig::new().with_enabled(enumerate_arrays());
-    info!("Compression config {cfg:?}");
-    CompressCtx::new(Arc::new(cfg))
-}
-
-pub fn compress_taxi_data() -> OwnedArray {
+pub fn compress_taxi_data() -> Array {
     let file = File::open(taxi_data_parquet()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
     let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
@@ -147,7 +137,6 @@ pub fn compress_taxi_data() -> OwnedArray {
         .build()
         .unwrap();
 
-    let ctx = compress_ctx();
     let schema = reader.schema();
     let mut uncompressed_size: usize = 0;
     let chunks = reader
@@ -156,7 +145,7 @@ pub fn compress_taxi_data() -> OwnedArray {
         .map(|batch| batch.to_array_data().into_array())
         .map(|array| {
             uncompressed_size += array.nbytes();
-            ctx.clone().compress(&array, None).unwrap()
+            Compressor::new(&CTX).compress(&array, None).unwrap()
         })
         .collect_vec();
 
@@ -184,19 +173,19 @@ pub struct CompressionRunStats {
 
 impl CompressionRunStats {
     pub fn to_results(&self, dataset_name: String) -> Vec<CompressionRunResults> {
-        let DType::Struct(ns, fs) = &self.schema else {
+        let DType::Struct(st, _) = &self.schema else {
             unreachable!()
         };
 
         self.compressed_sizes
             .iter()
-            .zip_eq(ns.iter().zip_eq(fs))
+            .zip_eq(st.names().iter().zip_eq(st.dtypes().iter()))
             .map(
                 |(&size, (column_name, column_type))| CompressionRunResults {
                     dataset_name: dataset_name.clone(),
                     file_name: self.file_name.clone(),
                     file_type: self.file_type.to_string(),
-                    column_name: (**column_name).clone(),
+                    column_name: (**column_name).to_string(),
                     column_type: column_type.to_string(),
                     compressed_size: size,
                     total_compressed_size: self.total_compressed_size,
@@ -226,13 +215,14 @@ mod test {
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use vortex::arrow::FromArrowArray;
+    use vortex::compress::Compressor;
     use vortex::compute::as_arrow::as_arrow;
     use vortex::{ArrayData, IntoArray};
     use vortex_ipc::reader::StreamReader;
     use vortex_ipc::writer::StreamWriter;
 
     use crate::taxi_data::taxi_data_parquet;
-    use crate::{compress_ctx, compress_taxi_data, setup_logger};
+    use crate::{compress_taxi_data, setup_logger, CTX};
 
     #[ignore]
     #[test]
@@ -255,12 +245,12 @@ mod test {
 
             let mut buf = Vec::<u8>::new();
             {
-                let mut writer = StreamWriter::try_new(&mut buf, Default::default()).unwrap();
+                let mut writer = StreamWriter::try_new(&mut buf, &CTX).unwrap();
                 writer.write_array(&vortex_array).unwrap();
             }
 
             let mut read = buf.as_slice();
-            let mut reader = StreamReader::try_new(&mut read).unwrap();
+            let mut reader = StreamReader::try_new(&mut read, &CTX).unwrap();
             reader.read_array().unwrap();
         }
     }
@@ -290,13 +280,12 @@ mod test {
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
         let reader = builder.with_limit(1).build().unwrap();
 
-        let ctx = compress_ctx();
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
             let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
 
-            let compressed = ctx.clone().compress(&vortex_array, None).unwrap();
+            let compressed = Compressor::new(&CTX).compress(&vortex_array, None).unwrap();
             let compressed_as_arrow = as_arrow(&compressed).unwrap();
             assert_eq!(compressed_as_arrow.deref(), arrow_array.deref());
         }

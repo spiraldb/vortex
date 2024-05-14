@@ -1,12 +1,14 @@
 use ::serde::{Deserialize, Serialize};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_dtype::match_each_integer_ptype;
+use vortex_error::vortex_bail;
+use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, match_each_integer_ptype, ArrayDType, IntoArrayData, ToArrayData};
+use crate::{impl_encoding, ArrayDType, IntoArrayData, ToArrayData};
 
 mod compress;
 mod compute;
@@ -23,14 +25,14 @@ pub struct SparseMetadata {
     fill_value: Scalar,
 }
 
-impl<'a> SparseArray<'a> {
-    pub fn new(indices: Array<'a>, values: Array<'a>, len: usize, fill_value: Scalar) -> Self {
+impl SparseArray {
+    pub fn new(indices: Array, values: Array, len: usize, fill_value: Scalar) -> Self {
         Self::try_new(indices, values, len, fill_value).unwrap()
     }
 
     pub fn try_new(
-        indices: Array<'a>,
-        values: Array<'a>,
+        indices: Array,
+        values: Array,
         len: usize,
         fill_value: Scalar,
     ) -> VortexResult<Self> {
@@ -38,8 +40,8 @@ impl<'a> SparseArray<'a> {
     }
 
     pub(crate) fn try_new_with_offset(
-        indices: Array<'a>,
-        values: Array<'a>,
+        indices: Array,
+        values: Array,
         len: usize,
         indices_offset: usize,
         fill_value: Scalar,
@@ -63,13 +65,13 @@ impl<'a> SparseArray<'a> {
                 len,
                 fill_value,
             },
-            vec![indices.to_array_data(), values.to_array_data()].into(),
-            HashMap::default(),
+            [indices.to_array_data(), values.to_array_data()].into(),
+            StatsSet::new(),
         )
     }
 }
 
-impl SparseArray<'_> {
+impl SparseArray {
     #[inline]
     pub fn indices_offset(&self) -> usize {
         self.metadata().indices_offset
@@ -117,22 +119,22 @@ impl SparseArray<'_> {
     }
 }
 
-impl ArrayTrait for SparseArray<'_> {
+impl ArrayTrait for SparseArray {
     fn len(&self) -> usize {
         self.metadata().len
     }
 }
 
-impl AcceptArrayVisitor for SparseArray<'_> {
+impl AcceptArrayVisitor for SparseArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("indices", &self.indices())?;
         visitor.visit_child("values", &self.values())
     }
 }
 
-impl ArrayStatisticsCompute for SparseArray<'_> {}
+impl ArrayStatisticsCompute for SparseArray {}
 
-impl ArrayValidity for SparseArray<'_> {
+impl ArrayValidity for SparseArray {
     fn is_valid(&self, index: usize) -> bool {
         match self.find_index(index).unwrap() {
             None => !self.fill_value().is_null(),
@@ -172,21 +174,20 @@ impl ArrayValidity for SparseArray<'_> {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
+    use vortex_dtype::Nullability::Nullable;
+    use vortex_dtype::{DType, PType};
     use vortex_error::VortexError;
-    use vortex_schema::Nullability::Nullable;
-    use vortex_schema::Signedness::Signed;
-    use vortex_schema::{DType, IntWidth};
+    use vortex_scalar::Scalar;
 
     use crate::accessor::ArrayAccessor;
     use crate::array::sparse::SparseArray;
     use crate::compute::cast::cast;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::scalar::Scalar;
-    use crate::{Array, IntoArray, OwnedArray};
+    use crate::{Array, IntoArray};
 
     fn nullable_fill() -> Scalar {
-        Scalar::null(&DType::Int(IntWidth::_32, Signed, Nullable))
+        Scalar::null(DType::Primitive(PType::I32, Nullable))
     }
 
     #[allow(dead_code)]
@@ -194,7 +195,7 @@ mod test {
         Scalar::from(42i32)
     }
 
-    fn sparse_array(fill_value: Scalar) -> OwnedArray {
+    fn sparse_array(fill_value: Scalar) -> Array {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
         let mut values = vec![100i32, 200, 300].into_array();
         values = cast(&values, fill_value.dtype()).unwrap();
@@ -232,7 +233,7 @@ mod test {
 
     #[test]
     pub fn iter_sliced() {
-        let p_fill_val = Some(non_nullable_fill().try_into().unwrap());
+        let p_fill_val = Some(non_nullable_fill().as_ref().try_into().unwrap());
         assert_sparse_array(
             &slice(&sparse_array(non_nullable_fill()), 2, 7).unwrap(),
             &[Some(100), p_fill_val, p_fill_val, Some(200), p_fill_val],
@@ -271,7 +272,7 @@ mod test {
     #[test]
     pub fn test_scalar_at() {
         assert_eq!(
-            usize::try_from(scalar_at(&sparse_array(nullable_fill()), 2).unwrap()).unwrap(),
+            usize::try_from(&scalar_at(&sparse_array(nullable_fill()), 2).unwrap()).unwrap(),
             100
         );
         let error = scalar_at(&sparse_array(nullable_fill()), 10).err().unwrap();
@@ -287,7 +288,7 @@ mod test {
     pub fn scalar_at_sliced() {
         let sliced = slice(&sparse_array(nullable_fill()), 2, 7).unwrap();
         assert_eq!(
-            usize::try_from(scalar_at(&sliced, 0).unwrap()).unwrap(),
+            usize::try_from(&scalar_at(&sliced, 0).unwrap()).unwrap(),
             100
         );
         let error = scalar_at(&sliced, 5).err().unwrap();
@@ -303,7 +304,7 @@ mod test {
     pub fn scalar_at_sliced_twice() {
         let sliced_once = slice(&sparse_array(nullable_fill()), 1, 8).unwrap();
         assert_eq!(
-            usize::try_from(scalar_at(&sliced_once, 1).unwrap()).unwrap(),
+            usize::try_from(&scalar_at(&sliced_once, 1).unwrap()).unwrap(),
             100
         );
         let error = scalar_at(&sliced_once, 7).err().unwrap();
@@ -316,7 +317,7 @@ mod test {
 
         let sliced_twice = slice(&sliced_once, 1, 6).unwrap();
         assert_eq!(
-            usize::try_from(scalar_at(&sliced_twice, 3).unwrap()).unwrap(),
+            usize::try_from(&scalar_at(&sliced_twice, 3).unwrap()).unwrap(),
             200
         );
         let error2 = scalar_at(&sliced_twice, 5).err().unwrap();

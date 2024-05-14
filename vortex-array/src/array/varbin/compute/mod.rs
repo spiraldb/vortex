@@ -4,8 +4,10 @@ use arrow_array::{
     ArrayRef as ArrowArrayRef, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray,
 };
 use itertools::Itertools;
+use vortex_dtype::DType;
+use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::DType;
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::{varbin_scalar, VarBinArray};
@@ -17,15 +19,13 @@ use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::ptype::PType;
-use crate::scalar::Scalar;
 use crate::validity::{ArrayValidity, Validity};
-use crate::{Array, ArrayDType, IntoArray, OwnedArray, ToArray};
+use crate::{Array, ArrayDType, IntoArray, ToArray};
 
 mod slice;
 mod take;
 
-impl ArrayCompute for VarBinArray<'_> {
+impl ArrayCompute for VarBinArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }
@@ -47,8 +47,8 @@ impl ArrayCompute for VarBinArray<'_> {
     }
 }
 
-impl AsContiguousFn for VarBinArray<'_> {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<OwnedArray> {
+impl AsContiguousFn for VarBinArray {
+    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let bytes_chunks: Vec<Array> = arrays
             .iter()
             .map(|a| VarBinArray::try_from(a).unwrap().sliced_bytes())
@@ -83,7 +83,7 @@ impl AsContiguousFn for VarBinArray<'_> {
     }
 }
 
-impl AsArrowArray for VarBinArray<'_> {
+impl AsArrowArray for VarBinArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
         // Ensure the offsets are either i32 or i64
         let offsets = self.offsets().flatten_primitive()?;
@@ -133,13 +133,18 @@ impl AsArrowArray for VarBinArray<'_> {
     }
 }
 
-impl ScalarAtFn for VarBinArray<'_> {
+impl ScalarAtFn for VarBinArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
-            self.bytes_at(index)
-                .map(|bytes| varbin_scalar(bytes, self.dtype()))
+            Ok(varbin_scalar(
+                self.bytes_at(index)?
+                    // TODO(ngates): update to use buffer when we refactor scalars.
+                    .into_vec()
+                    .unwrap_or_else(|b| b.as_ref().to_vec()),
+                self.dtype(),
+            ))
         } else {
-            Ok(Scalar::null(self.dtype()))
+            Ok(Scalar::null(self.dtype().clone()))
         }
     }
 }

@@ -1,9 +1,9 @@
-use std::sync::Arc;
-
 use arrow_array::RecordBatch;
+use itertools::Itertools;
 
 use crate::array::r#struct::StructArray;
 use crate::arrow::FromArrowArray;
+use crate::validity::Validity;
 use crate::{ArrayData, IntoArray, IntoArrayData, ToArrayData};
 
 impl ToArrayData for RecordBatch {
@@ -12,10 +12,9 @@ impl ToArrayData for RecordBatch {
             self.schema()
                 .fields()
                 .iter()
-                .map(|f| f.name())
-                .map(|s| s.to_owned())
-                .map(Arc::new)
-                .collect(),
+                .map(|f| f.name().as_str().into())
+                .collect_vec()
+                .into(),
             self.columns()
                 .iter()
                 .zip(self.schema().fields())
@@ -24,6 +23,7 @@ impl ToArrayData for RecordBatch {
                 })
                 .collect(),
             self.num_rows(),
+            Validity::AllValid,
         )
         .unwrap()
         .into_array_data()

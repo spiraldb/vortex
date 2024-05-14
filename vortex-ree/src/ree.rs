@@ -2,11 +2,11 @@ use serde::{Deserialize, Serialize};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::compute::scalar_at::scalar_at;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
-use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute};
+use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, Stat};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::vortex_bail;
 
 use crate::compress::{ree_decode, ree_encode};
 
@@ -20,9 +20,9 @@ pub struct REEMetadata {
     length: usize,
 }
 
-impl REEArray<'_> {
+impl REEArray {
     pub fn try_new(ends: Array, values: Array, validity: Validity) -> VortexResult<Self> {
-        let length: usize = scalar_at(&ends, ends.len() - 1)?.try_into()?;
+        let length: usize = scalar_at(&ends, ends.len() - 1)?.as_ref().try_into()?;
         Self::with_offset_and_size(ends, values, validity, length, 0)
     }
 
@@ -59,7 +59,7 @@ impl REEArray<'_> {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, metadata, children.into(), HashMap::new())
+        Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
@@ -101,7 +101,7 @@ impl REEArray<'_> {
     }
 }
 
-impl ArrayValidity for REEArray<'_> {
+impl ArrayValidity for REEArray {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
@@ -111,11 +111,8 @@ impl ArrayValidity for REEArray<'_> {
     }
 }
 
-impl ArrayFlatten for REEArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for REEArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         let pends = self.ends().flatten_primitive()?;
         let pvalues = self.values().flatten_primitive()?;
         ree_decode(&pends, &pvalues, self.validity(), self.offset(), self.len())
@@ -123,7 +120,7 @@ impl ArrayFlatten for REEArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for REEArray<'_> {
+impl AcceptArrayVisitor for REEArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("ends", &self.ends())?;
         visitor.visit_child("values", &self.values())?;
@@ -131,9 +128,9 @@ impl AcceptArrayVisitor for REEArray<'_> {
     }
 }
 
-impl ArrayStatisticsCompute for REEArray<'_> {}
+impl ArrayStatisticsCompute for REEArray {}
 
-impl ArrayTrait for REEArray<'_> {
+impl ArrayTrait for REEArray {
     fn len(&self) -> usize {
         self.metadata().length
     }
@@ -145,7 +142,7 @@ mod test {
     use vortex::compute::slice::slice;
     use vortex::validity::Validity;
     use vortex::{ArrayDType, ArrayTrait, IntoArray};
-    use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+    use vortex_dtype::{DType, Nullability, PType};
 
     use crate::REEArray;
 
@@ -160,7 +157,7 @@ mod test {
         assert_eq!(arr.len(), 10);
         assert_eq!(
             arr.dtype(),
-            &DType::Int(IntWidth::_32, Signedness::Signed, Nullability::NonNullable)
+            &DType::Primitive(PType::I32, Nullability::NonNullable)
         );
 
         // 0, 1 => 1
@@ -188,7 +185,7 @@ mod test {
         .unwrap();
         assert_eq!(
             arr.dtype(),
-            &DType::Int(IntWidth::_32, Signedness::Signed, Nullability::NonNullable)
+            &DType::Primitive(PType::I32, Nullability::NonNullable)
         );
         assert_eq!(arr.len(), 5);
 

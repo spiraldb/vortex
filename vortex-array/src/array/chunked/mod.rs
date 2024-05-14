@@ -1,15 +1,17 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{IntWidth, Nullability, Signedness};
+use vortex_dtype::{Nullability, PType};
+use vortex_error::vortex_bail;
+use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
+use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
+use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, ToArrayData};
 
 mod compute;
 mod stats;
@@ -19,12 +21,8 @@ impl_encoding!("vortex.chunked", Chunked);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChunkedMetadata;
 
-impl ChunkedArray<'_> {
-    const ENDS_DTYPE: DType = DType::Int(
-        IntWidth::_64,
-        Signedness::Unsigned,
-        Nullability::NonNullable,
-    );
+impl ChunkedArray {
+    const ENDS_DTYPE: DType = DType::Primitive(PType::U64, Nullability::NonNullable);
 
     pub fn try_new(chunks: Vec<Array>, dtype: DType) -> VortexResult<Self> {
         for chunk in &chunks {
@@ -48,7 +46,7 @@ impl ChunkedArray<'_> {
         let mut children = vec![chunk_ends.into_array_data()];
         children.extend(chunks.iter().map(|a| a.to_array_data()));
 
-        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), HashMap::default())
+        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), StatsSet::new())
     }
 
     #[inline]
@@ -76,12 +74,12 @@ impl ChunkedArray<'_> {
             .unwrap()
             .to_index();
         let mut chunk_start =
-            usize::try_from(scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
+            usize::try_from(&scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
 
         if chunk_start != index {
             index_chunk -= 1;
             chunk_start =
-                usize::try_from(scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
+                usize::try_from(&scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
         }
 
         let index_in_chunk = index - chunk_start;
@@ -89,15 +87,15 @@ impl ChunkedArray<'_> {
     }
 }
 
-impl<'a> ChunkedArray<'a> {
-    pub fn chunks(&'a self) -> impl Iterator<Item = Array<'a>> {
+impl<'a> ChunkedArray {
+    pub fn chunks(&'a self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
     }
 }
 
-impl FromIterator<OwnedArray> for OwnedChunkedArray {
-    fn from_iter<T: IntoIterator<Item = OwnedArray>>(iter: T) -> Self {
-        let chunks: Vec<OwnedArray> = iter.into_iter().collect();
+impl FromIterator<Array> for ChunkedArray {
+    fn from_iter<T: IntoIterator<Item = Array>>(iter: T) -> Self {
+        let chunks: Vec<Array> = iter.into_iter().collect();
         let dtype = chunks
             .first()
             .map(|c| c.dtype().clone())
@@ -106,16 +104,13 @@ impl FromIterator<OwnedArray> for OwnedChunkedArray {
     }
 }
 
-impl ArrayFlatten for ChunkedArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for ChunkedArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         Ok(Flattened::Chunked(self))
     }
 }
 
-impl AcceptArrayVisitor for ChunkedArray<'_> {
+impl AcceptArrayVisitor for ChunkedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("chunk_ends", &self.chunk_ends())?;
         for (idx, chunk) in self.chunks().enumerate() {
@@ -125,13 +120,13 @@ impl AcceptArrayVisitor for ChunkedArray<'_> {
     }
 }
 
-impl ArrayTrait for ChunkedArray<'_> {
+impl ArrayTrait for ChunkedArray {
     fn len(&self) -> usize {
-        usize::try_from(scalar_at(&self.chunk_ends(), self.nchunks()).unwrap()).unwrap()
+        usize::try_from(&scalar_at(&self.chunk_ends(), self.nchunks()).unwrap()).unwrap()
     }
 }
 
-impl ArrayValidity for ChunkedArray<'_> {
+impl ArrayValidity for ChunkedArray {
     fn is_valid(&self, _index: usize) -> bool {
         todo!()
     }
@@ -143,32 +138,41 @@ impl ArrayValidity for ChunkedArray<'_> {
 
 impl EncodingCompression for ChunkedEncoding {}
 
+impl SubtractScalarFn for ChunkedArray {
+    fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array> {
+        self.chunks()
+            .map(|chunk| subtract_scalar(&chunk, to_subtract))
+            .collect::<VortexResult<Vec<_>>>()
+            .map(|chunks| {
+                ChunkedArray::try_new(chunks, self.dtype().clone())
+                    .expect("Subtraction on chunked array changed dtype")
+                    .into_array()
+            })
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use vortex_schema::{DType, IntWidth, Nullability, Signedness};
+    use vortex_dtype::{DType, Nullability};
+    use vortex_dtype::{NativePType, PType};
 
-    use crate::array::chunked::{ChunkedArray, OwnedChunkedArray};
-    use crate::ptype::NativePType;
-    use crate::{Array, IntoArray};
+    use crate::array::chunked::ChunkedArray;
+    use crate::compute::scalar_subtract::subtract_scalar;
+    use crate::compute::slice::slice;
+    use crate::{Array, IntoArray, ToArray};
 
-    #[allow(dead_code)]
-    fn chunked_array() -> OwnedChunkedArray {
+    fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(
             vec![
                 vec![1u64, 2, 3].into_array(),
                 vec![4u64, 5, 6].into_array(),
                 vec![7u64, 8, 9].into_array(),
             ],
-            DType::Int(
-                IntWidth::_64,
-                Signedness::Unsigned,
-                Nullability::NonNullable,
-            ),
+            DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap()
     }
 
-    #[allow(dead_code)]
     fn assert_equal_slices<T: NativePType>(arr: Array, slice: &[T]) {
         let mut values = Vec::with_capacity(arr.len());
         ChunkedArray::try_from(arr)
@@ -179,29 +183,66 @@ mod test {
         assert_eq!(values, slice);
     }
 
-    // FIXME(ngates): bring back when slicing is a compute function.
-    // #[test]
-    // pub fn slice_middle() {
-    //     assert_equal_slices(chunked_array().slice(2, 5).unwrap(), &[3u64, 4, 5])
-    // }
-    //
-    // #[test]
-    // pub fn slice_begin() {
-    //     assert_equal_slices(chunked_array().slice(1, 3).unwrap(), &[2u64, 3]);
-    // }
-    //
-    // #[test]
-    // pub fn slice_aligned() {
-    //     assert_equal_slices(chunked_array().slice(3, 6).unwrap(), &[4u64, 5, 6]);
-    // }
-    //
-    // #[test]
-    // pub fn slice_many_aligned() {
-    //     assert_equal_slices(chunked_array().slice(0, 6).unwrap(), &[1u64, 2, 3, 4, 5, 6]);
-    // }
-    //
-    // #[test]
-    // pub fn slice_end() {
-    //     assert_equal_slices(chunked_array().slice(7, 8).unwrap(), &[8u64]);
-    // }
+    #[test]
+    pub fn slice_middle() {
+        assert_equal_slices(slice(chunked_array().array(), 2, 5).unwrap(), &[3u64, 4, 5])
+    }
+
+    #[test]
+    pub fn slice_begin() {
+        assert_equal_slices(slice(chunked_array().array(), 1, 3).unwrap(), &[2u64, 3]);
+    }
+
+    #[test]
+    pub fn slice_aligned() {
+        assert_equal_slices(slice(chunked_array().array(), 3, 6).unwrap(), &[4u64, 5, 6]);
+    }
+
+    #[test]
+    pub fn slice_many_aligned() {
+        assert_equal_slices(
+            slice(chunked_array().array(), 0, 6).unwrap(),
+            &[1u64, 2, 3, 4, 5, 6],
+        );
+    }
+
+    #[test]
+    pub fn slice_end() {
+        assert_equal_slices(slice(chunked_array().array(), 7, 8).unwrap(), &[8u64]);
+    }
+
+    #[test]
+    fn test_scalar_subtract() {
+        let chunked = chunked_array();
+        let to_subtract = 1u64;
+        let array = subtract_scalar(&chunked.to_array(), &to_subtract.into()).unwrap();
+
+        let chunked = ChunkedArray::try_from(array).unwrap();
+        let mut chunks_out = chunked.chunks();
+
+        let results = chunks_out
+            .next()
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, &[0u64, 1, 2]);
+        let results = chunks_out
+            .next()
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, &[3u64, 4, 5]);
+        let results = chunks_out
+            .next()
+            .unwrap()
+            .flatten_primitive()
+            .unwrap()
+            .typed_data::<u64>()
+            .to_vec();
+        assert_eq!(results, &[6u64, 7, 8]);
+    }
 }

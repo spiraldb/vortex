@@ -1,19 +1,17 @@
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::array::bool::BoolArray;
 use crate::compute::scalar_at::ScalarAtFn;
-use crate::scalar::{BoolScalar, Scalar};
 use crate::validity::ArrayValidity;
 use crate::ArrayDType;
 
-impl ScalarAtFn for BoolArray<'_> {
+impl ScalarAtFn for BoolArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        Ok(BoolScalar::try_new(
-            self.is_valid(index)
-                .then(|| self.boolean_buffer().value(index)),
-            self.dtype().nullability(),
-        )
-        .unwrap()
-        .into())
+        if self.is_valid(index) {
+            Ok(self.boolean_buffer().value(index).into())
+        } else {
+            return Ok(Scalar::null(self.dtype().clone()));
+        }
     }
 }

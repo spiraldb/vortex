@@ -1,13 +1,23 @@
-use std::collections::HashMap;
-
 use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
-use crate::scalar::Scalar;
-use crate::stats::{ArrayStatisticsCompute, Stat};
+use crate::stats::ArrayStatistics;
+use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 
-impl ArrayStatisticsCompute for ChunkedArray<'_> {
-    fn compute_statistics(&self, _stat: Stat) -> VortexResult<HashMap<Stat, Scalar>> {
-        todo!()
+impl ArrayStatisticsCompute for ChunkedArray {
+    fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
+        Ok(self
+            .chunks()
+            .map(|c| {
+                let s = c.statistics();
+                // HACK(robert): This will compute all stats, but we could just compute one
+                s.compute(stat);
+                s.to_set()
+            })
+            .reduce(|mut acc, x| {
+                acc.merge(&x);
+                acc
+            })
+            .unwrap_or_default())
     }
 }

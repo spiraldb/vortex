@@ -2,22 +2,22 @@ use std::fmt;
 
 use humansize::{format_size, DECIMAL};
 use serde::ser::Error;
+use vortex_buffer::Buffer;
 use vortex_error::{VortexError, VortexResult};
 
 use crate::array::chunked::ChunkedArray;
-use crate::buffer::Buffer;
 use crate::visitor::ArrayVisitor;
 use crate::{Array, ToArrayData};
 
-impl Array<'_> {
+impl Array {
     pub fn tree_display(&self) -> TreeDisplayWrapper {
         TreeDisplayWrapper(self)
     }
 }
 
-pub struct TreeDisplayWrapper<'a>(&'a Array<'a>);
+pub struct TreeDisplayWrapper<'a>(&'a Array);
 impl<'a> TreeDisplayWrapper<'a> {
-    pub fn new(array: &'a Array<'a>) -> Self {
+    pub fn new(array: &'a Array) -> Self {
         Self(array)
     }
 }

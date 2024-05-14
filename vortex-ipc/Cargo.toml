@@ -13,15 +13,21 @@ rust-version = { workspace = true }
 
 [dependencies]
 arrow-buffer = { workspace = true }
+bytes = { workspace = true }
+fallible-iterator = { workspace = true }
 flatbuffers = { workspace = true }
+futures-util = { workspace = true, features = ["io"] }
 itertools = { workspace = true }
-lending-iterator = "0.1.7"
+log = { workspace = true }
+monoio = { workspace = true, optional = true, features = ["bytes"] }
 nougat = "0.2.4"
-streaming-iterator = "0.1.9"
+pin-project = { workspace = true }
 vortex-array = { path = "../vortex-array" }
+vortex-buffer = { path = "../vortex-buffer" }
 vortex-error = { path = "../vortex-error" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
-vortex-schema = { path = "../vortex-schema" }
+vortex-dtype = { path = "../vortex-dtype" }
+vortex-scalar = { path = "../vortex-scalar" }
 
 [build-dependencies]
 flatc = { workspace = true }
@@ -31,10 +37,27 @@ walkdir = { workspace = true }
 criterion = { workspace = true }
 rand = { workspace = true }
 simplelog = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+vortex-alp = { path = "../vortex-alp" }
+vortex-fastlanes = { path = "../vortex-fastlanes" }
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+arrow-ipc = { workspace = true, features = ["lz4"] }
+arrow-schema = { workspace = true }
+arrow-select = { workspace = true }
 
 [lints]
 workspace = true
 
+[features]
+default = ["futures", "monoio"]
+futures = []
+monoio = ["dep:monoio"]
+
 [[bench]]
 name = "ipc_take"
+harness = false
+
+[[bench]]
+name = "ipc_array_reader_take"
 harness = false

@@ -1,14 +1,14 @@
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::{Array, ArrayDType, OwnedArray, ToStatic};
+use crate::{Array, ArrayDType};
 
 pub trait FillForwardFn {
-    fn fill_forward(&self) -> VortexResult<OwnedArray>;
+    fn fill_forward(&self) -> VortexResult<Array>;
 }
 
-pub fn fill_forward(array: &Array) -> VortexResult<OwnedArray> {
+pub fn fill_forward(array: &Array) -> VortexResult<Array> {
     if !array.dtype().is_nullable() {
-        return Ok(array.to_static());
+        return Ok(array.clone());
     }
 
     array.with_dyn(|a| {
@@ -17,7 +17,7 @@ pub fn fill_forward(array: &Array) -> VortexResult<OwnedArray> {
             .unwrap_or_else(|| {
                 Err(vortex_err!(
                     NotImplemented: "fill_forward",
-                    array.encoding().id().name()
+                    array.encoding().id()
                 ))
             })
     })

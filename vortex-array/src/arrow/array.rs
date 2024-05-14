@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use arrow_array::array::{
     Array as ArrowArray, ArrayRef as ArrowArrayRef, BooleanArray as ArrowBooleanArray,
     GenericByteArray, NullArray as ArrowNullArray, PrimitiveArray as ArrowPrimitiveArray,
@@ -21,18 +19,19 @@ use arrow_array::{BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit};
-use vortex_schema::DType;
+use itertools::Itertools;
+use vortex_dtype::DType;
+use vortex_dtype::NativePType;
+use vortex_scalar::Scalar;
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
-use crate::array::datetime::{LocalDateTime, LocalDateTimeArray};
+use crate::array::datetime::LocalDateTimeArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::arrow::FromArrowArray;
-use crate::ptype::NativePType;
-use crate::scalar::NullScalar;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
 use crate::{ArrayData, IntoArray, IntoArrayData};
@@ -101,13 +100,9 @@ where
             DataType::Timestamp(time_unit, tz) => match tz {
                 // A timestamp with no timezone is the equivalent of an "unknown" timezone.
                 // Therefore, we must treat it as a LocalDateTime and not an Instant.
-                None => LocalDateTimeArray::new(
-                    LocalDateTime::new((&time_unit).into()),
-                    arr.into_array(),
-                )
-                .as_composite()
-                .unwrap()
-                .into_array_data(),
+                None => LocalDateTimeArray::try_new((&time_unit).into(), arr.into_array())
+                    .expect("Invalid LocalDateTimeArray")
+                    .into_array_data(),
                 Some(_tz) => todo!(),
             },
             DataType::Date32 => todo!(),
@@ -180,9 +175,9 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
             value
                 .column_names()
                 .iter()
-                .map(|s| s.to_string())
-                .map(Arc::new)
-                .collect(),
+                .map(|s| (*s).into())
+                .collect_vec()
+                .into(),
             value
                 .columns()
                 .iter()
@@ -192,6 +187,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
                 })
                 .collect(),
             value.len(),
+            nulls(value.nulls(), nullable),
         )
         .unwrap()
         .into_array_data()
@@ -201,7 +197,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
 impl FromArrowArray<&ArrowNullArray> for ArrayData {
     fn from_arrow(value: &ArrowNullArray, nullable: bool) -> Self {
         assert!(nullable);
-        ConstantArray::new(NullScalar::new(), value.len()).into_array_data()
+        ConstantArray::new(Scalar::null(DType::Null), value.len()).into_array_data()
     }
 }
 

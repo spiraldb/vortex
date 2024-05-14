@@ -1,13 +1,13 @@
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::{Array, ArrayDType, OwnedArray};
+use crate::{Array, ArrayDType};
 
 pub trait PatchFn {
-    fn patch(&self, patch: &Array) -> VortexResult<OwnedArray>;
+    fn patch(&self, patch: &Array) -> VortexResult<Array>;
 }
 
 /// Returns a new array where the non-null values from the patch array are replaced in the original.
-pub fn patch(array: &Array, patch: &Array) -> VortexResult<OwnedArray> {
+pub fn patch(array: &Array, patch: &Array) -> VortexResult<Array> {
     if array.len() != patch.len() {
         vortex_bail!(
             "patch array {} must have the same length as the original array {}",
@@ -21,8 +21,8 @@ pub fn patch(array: &Array, patch: &Array) -> VortexResult<OwnedArray> {
     }
 
     array.with_dyn(|a| {
-        a.patch().map(|t| t.patch(patch)).unwrap_or_else(|| {
-            Err(vortex_err!(NotImplemented: "take", array.encoding().id().name()))
-        })
+        a.patch()
+            .map(|t| t.patch(patch))
+            .unwrap_or_else(|| Err(vortex_err!(NotImplemented: "take", array.encoding().id())))
     })
 }

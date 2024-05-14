@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::{FromArrowArray, FromArrowType};
 use vortex::{ArrayData, IntoArray, ToArrayData};
-use vortex_schema::DType;
+use vortex_dtype::DType;
 
 use crate::array::PyArray;
 use crate::error::PyVortexError;

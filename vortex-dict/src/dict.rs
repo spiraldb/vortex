@@ -6,9 +6,9 @@ use vortex::compute::take::take;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::IntoArrayData;
-use vortex::{impl_encoding, match_each_integer_ptype, ArrayDType, ArrayFlatten, ToArrayData};
-use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::Signedness;
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
+use vortex_dtype::match_each_integer_ptype;
+use vortex_error::vortex_bail;
 
 impl_encoding!("vortex.dict", Dict);
 
@@ -17,9 +17,9 @@ pub struct DictMetadata {
     codes_dtype: DType,
 }
 
-impl DictArray<'_> {
+impl DictArray {
     pub fn try_new(codes: Array, values: Array) -> VortexResult<Self> {
-        if !matches!(codes.dtype(), DType::Int(_, Signedness::Unsigned, _)) {
+        if !codes.dtype().is_unsigned_int() {
             vortex_bail!(MismatchedTypes: "unsigned int", codes.dtype());
         }
         Self::try_from_parts(
@@ -27,8 +27,8 @@ impl DictArray<'_> {
             DictMetadata {
                 codes_dtype: codes.dtype().clone(),
             },
-            vec![values.to_array_data(), codes.to_array_data()].into(),
-            HashMap::new(),
+            [values.to_array_data(), codes.to_array_data()].into(),
+            StatsSet::new(),
         )
     }
 
@@ -45,18 +45,19 @@ impl DictArray<'_> {
     }
 }
 
-impl ArrayFlatten for DictArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for DictArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         take(&self.values(), &self.codes())?.flatten()
     }
 }
 
-impl ArrayValidity for DictArray<'_> {
+impl ArrayValidity for DictArray {
     fn is_valid(&self, index: usize) -> bool {
-        let values_index = scalar_at(&self.codes(), index).unwrap().try_into().unwrap();
+        let values_index = scalar_at(&self.codes(), index)
+            .unwrap()
+            .as_ref()
+            .try_into()
+            .unwrap();
         self.values().with_dyn(|a| a.is_valid(values_index))
     }
 
@@ -78,14 +79,14 @@ impl ArrayValidity for DictArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for DictArray<'_> {
+impl AcceptArrayVisitor for DictArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("values", &self.values())?;
         visitor.visit_child("codes", &self.codes())
     }
 }
 
-impl ArrayTrait for DictArray<'_> {
+impl ArrayTrait for DictArray {
     fn len(&self) -> usize {
         self.codes().len()
     }

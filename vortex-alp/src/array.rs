@@ -3,9 +3,9 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, OwnedArray, ToArrayData};
-use vortex_error::{vortex_bail, VortexResult};
-use vortex_schema::{IntWidth, Signedness};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, ToArrayData};
+use vortex_dtype::PType;
+use vortex_error::vortex_bail;
 
 use crate::alp::Exponents;
 use crate::compress::{alp_encode, decompress};
@@ -19,7 +19,7 @@ pub struct ALPMetadata {
     patches_dtype: Option<DType>,
 }
 
-impl ALPArray<'_> {
+impl ALPArray {
     pub fn try_new(
         encoded: Array,
         exponents: Exponents,
@@ -27,12 +27,8 @@ impl ALPArray<'_> {
     ) -> VortexResult<Self> {
         let encoded_dtype = encoded.dtype().clone();
         let dtype = match encoded.dtype() {
-            DType::Int(IntWidth::_32, Signedness::Signed, nullability) => {
-                DType::Float(32.into(), *nullability)
-            }
-            DType::Int(IntWidth::_64, Signedness::Signed, nullability) => {
-                DType::Float(64.into(), *nullability)
-            }
+            DType::Primitive(PType::I32, nullability) => DType::Primitive(PType::F32, *nullability),
+            DType::Primitive(PType::I64, nullability) => DType::Primitive(PType::F64, *nullability),
             d => vortex_bail!(MismatchedTypes: "int32 or int64", d),
         };
 
@@ -54,7 +50,7 @@ impl ALPArray<'_> {
         )
     }
 
-    pub fn encode(array: Array<'_>) -> VortexResult<OwnedArray> {
+    pub fn encode(array: Array) -> VortexResult<Array> {
         if let Ok(parray) = PrimitiveArray::try_from(array) {
             Ok(alp_encode(&parray)?.into_array())
         } else {
@@ -81,7 +77,7 @@ impl ALPArray<'_> {
     }
 }
 
-impl ArrayValidity for ALPArray<'_> {
+impl ArrayValidity for ALPArray {
     fn is_valid(&self, index: usize) -> bool {
         self.encoded().with_dyn(|a| a.is_valid(index))
     }
@@ -91,16 +87,13 @@ impl ArrayValidity for ALPArray<'_> {
     }
 }
 
-impl ArrayFlatten for ALPArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for ALPArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         decompress(self).map(Flattened::Primitive)
     }
 }
 
-impl AcceptArrayVisitor for ALPArray<'_> {
+impl AcceptArrayVisitor for ALPArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("encoded", &self.encoded())?;
         if self.patches().is_some() {
@@ -113,9 +106,9 @@ impl AcceptArrayVisitor for ALPArray<'_> {
     }
 }
 
-impl ArrayStatisticsCompute for ALPArray<'_> {}
+impl ArrayStatisticsCompute for ALPArray {}
 
-impl ArrayTrait for ALPArray<'_> {
+impl ArrayTrait for ALPArray {
     fn len(&self) -> usize {
         self.encoded().len()
     }

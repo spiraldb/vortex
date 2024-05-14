@@ -3,8 +3,9 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::ValidityMetadata;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, match_each_integer_ptype, ArrayDType, ArrayFlatten, IntoArrayData};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use vortex_dtype::match_each_integer_ptype;
+use vortex_error::vortex_bail;
 
 use crate::delta::compress::decompress;
 
@@ -19,7 +20,7 @@ pub struct DeltaMetadata {
     len: usize,
 }
 
-impl DeltaArray<'_> {
+impl DeltaArray {
     pub fn try_new(
         len: usize,
         bases: Array,
@@ -47,8 +48,8 @@ impl DeltaArray<'_> {
                 validity: validity.to_metadata(len)?,
                 len,
             },
-            vec![bases.into_array_data(), deltas.into_array_data()].into(),
-            HashMap::new(),
+            [bases.into_array_data(), deltas.into_array_data()].into(),
+            StatsSet::new(),
         )?;
 
         let expected_bases_len = {
@@ -93,16 +94,13 @@ impl DeltaArray<'_> {
     }
 }
 
-impl ArrayFlatten for DeltaArray<'_> {
-    fn flatten<'a>(self) -> VortexResult<Flattened<'a>>
-    where
-        Self: 'a,
-    {
+impl ArrayFlatten for DeltaArray {
+    fn flatten(self) -> VortexResult<Flattened> {
         decompress(self).map(Flattened::Primitive)
     }
 }
 
-impl ArrayValidity for DeltaArray<'_> {
+impl ArrayValidity for DeltaArray {
     fn is_valid(&self, index: usize) -> bool {
         self.validity().is_valid(index)
     }
@@ -112,16 +110,16 @@ impl ArrayValidity for DeltaArray<'_> {
     }
 }
 
-impl AcceptArrayVisitor for DeltaArray<'_> {
+impl AcceptArrayVisitor for DeltaArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("bases", &self.bases())?;
         visitor.visit_child("deltas", &self.deltas())
     }
 }
 
-impl ArrayStatisticsCompute for DeltaArray<'_> {}
+impl ArrayStatisticsCompute for DeltaArray {}
 
-impl ArrayTrait for DeltaArray<'_> {
+impl ArrayTrait for DeltaArray {
     fn len(&self) -> usize {
         self.metadata().len
     }

@@ -1,13 +1,13 @@
 use std::cmp::max;
 
 use vortex::compute::slice::{slice, SliceFn};
-use vortex::{ArrayDType, IntoArray, OwnedArray, ToStatic};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::BitPackedArray;
 
-impl SliceFn for BitPackedArray<'_> {
-    fn slice(&self, start: usize, stop: usize) -> VortexResult<OwnedArray> {
+impl SliceFn for BitPackedArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         let offset = start % 1024;
         let block_start = max(0, start - offset);
         let block_stop = ((stop + 1023) / 1024) * 1024;
@@ -23,6 +23,6 @@ impl SliceFn for BitPackedArray<'_> {
             stop - start,
             offset,
         )
-        .map(|a| a.into_array().to_static())
+        .map(|a| a.into_array())
     }
 }
