@@ -5054,10 +5054,10 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-schema",
+ "build-vortex",
  "criterion",
  "enum-iterator",
  "flatbuffers",
- "flatc",
  "flexbuffers",
  "getrandom",
  "humansize",
@@ -5074,7 +5074,6 @@ dependencies = [
  "vortex-error",
  "vortex-flatbuffers",
  "vortex-scalar",
- "walkdir",
 ]
 
 [[package]]
