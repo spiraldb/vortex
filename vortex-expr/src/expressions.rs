@@ -18,9 +18,6 @@ pub enum Expr {
     /// A constant scalar value.
     Literal(Scalar),
 
-    /// Additive inverse of an expression. The expression's type must be numeric.
-    Minus(Box<Expr>),
-
     /// Negation of an expression. The expression's type must be a boolean.
     Not(Box<Expr>),
 }
@@ -50,7 +47,7 @@ impl Expr {
         binary_expr(self, Operator::GreaterThan, other)
     }
 
-    pub fn gt_eq(self, other: Expr) -> Expr {
+    pub fn gte(self, other: Expr) -> Expr {
         binary_expr(self, Operator::GreaterThanOrEqualTo, other)
     }
 
@@ -58,17 +55,12 @@ impl Expr {
         binary_expr(self, Operator::LessThan, other)
     }
 
-    pub fn lt_eq(self, other: Expr) -> Expr {
+    pub fn lte(self, other: Expr) -> Expr {
         binary_expr(self, Operator::LessThanOrEqualTo, other)
     }
 
-    // misc
     pub fn is_null(self) -> Expr {
         Expr::IsNull(Box::new(self))
-    }
-
-    pub fn minus(self) -> Self {
-        Expr::Minus(Box::new(self))
     }
 }
 

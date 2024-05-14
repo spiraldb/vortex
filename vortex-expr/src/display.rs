@@ -18,7 +18,6 @@ impl Display for Expr {
                 write!(f, "{wrapped}")
             }
             Expr::Not(expr) => write!(f, "NOT {expr}"),
-            Expr::Minus(expr) => write!(f, "(- {expr})"),
             Expr::IsNull(expr) => write!(f, "{expr} IS NULL"),
         }
     }
@@ -109,11 +108,6 @@ impl Display for Operator {
             Operator::GreaterThanOrEqualTo => ">=",
             Operator::LessThan => "<",
             Operator::LessThanOrEqualTo => "<=",
-            Operator::Plus => "+",
-            Operator::Minus | Operator::UnaryMinus => "-",
-            Operator::Multiplication => "*",
-            Operator::Division => "/",
-            Operator::Modulo => "%",
         };
         write!(f, "{display}")
     }
@@ -126,19 +120,6 @@ mod tests {
 
     #[test]
     fn test_formatting() {
-        // Addition
-        assert_eq!(format!("{}", lit(1u32) + lit(2u32)), "1u32 + 2u32");
-        // Subtraction
-        assert_eq!(format!("{}", lit(1u32) - lit(2u32)), "1u32 - 2u32");
-        // Multiplication
-        assert_eq!(format!("{}", lit(1u32) * lit(2u32)), "1u32 * 2u32");
-        // Division
-        assert_eq!(format!("{}", lit(1u32) / lit(2u32)), "1u32 / 2u32");
-        // Modulus
-        assert_eq!(format!("{}", lit(1u32) % lit(2u32)), "1u32 % 2u32");
-        // Negate
-        assert_eq!(format!("{}", -lit(1u32)), "(- 1u32)");
-
         // And
         let string = format!("{}", lit(true).and(lit(false)));
         assert_eq!(string, "true AND false");
@@ -153,8 +134,8 @@ mod tests {
     #[test]
     fn test_format_respects_operator_associativity() {
         let left = field("id").eq(lit(1));
-        let right = field("id2").eq(-lit(2));
+        let right = field("id2").eq(lit(2));
         let s = format!("{}", equals(left, right));
-        assert_eq!(s, "id = 1i32 = (id2 = (- 2i32))")
+        assert_eq!(s, "id = 1i32 = (id2 = 2i32)")
     }
 }

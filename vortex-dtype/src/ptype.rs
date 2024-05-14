@@ -91,7 +91,7 @@ macro_rules! match_each_native_ptype {
 }
 
 #[macro_export]
-macro_rules! match_each_signed_ptype {
+macro_rules! match_each_potentially_negative_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
         use $crate::PType;
