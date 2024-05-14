@@ -30,8 +30,7 @@ vortex-dtype = { path = "../vortex-dtype" }
 vortex-scalar = { path = "../vortex-scalar" }
 
 [build-dependencies]
-flatc = { workspace = true }
-walkdir = { workspace = true }
+build-vortex = { path = "../build-vortex" }
 
 [dev-dependencies]
 criterion = { workspace = true }
