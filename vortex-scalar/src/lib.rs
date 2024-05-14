@@ -42,7 +42,7 @@ pub mod flatbuffers {
     #[allow(unused_imports)]
     #[allow(dead_code)]
     #[allow(non_camel_case_types)]
-    #[allow(clippy::all)]
+    #[allow(clippy::all, clippy::restriction)]
     pub mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/scalar.rs"));
     }
