@@ -101,9 +101,9 @@ mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::{Context, IntoArray};
 
-    use crate::codecs::array_reader::ext::ArrayReaderExt;
-    use crate::codecs::futures::AsyncReadMessageReader;
-    use crate::codecs::IPCReader;
+    use crate::codecs::array_reader::ArrayReaderExt;
+    use crate::codecs::MessageReader;
+    use crate::io::FuturesVortexRead;
     use crate::writer::StreamWriter;
 
     fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
@@ -123,15 +123,18 @@ mod test {
 
         let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
 
-        let mut messages = AsyncReadMessageReader::try_new(Cursor::new(buffer))
+        let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer)))
             .await
             .unwrap();
-        let mut reader = IPCReader::try_from_messages(&Context::default(), &mut messages)
+        let view_ctx = messages
+            .read_view_context(&Context::default())
             .await
             .unwrap();
-        let array_reader = reader.next().await.unwrap().unwrap();
+        let dtype = messages.read_dtype().await.unwrap();
 
-        let result_iter = array_reader.take_rows(&indices).unwrap();
+        let reader = messages.next_array_reader(view_ctx, dtype);
+
+        let result_iter = reader.take_rows(&indices).unwrap();
         pin_mut!(result_iter);
 
         let result = result_iter.next().await.unwrap().unwrap();
