@@ -91,26 +91,6 @@ macro_rules! match_each_native_ptype {
 }
 
 #[macro_export]
-macro_rules! match_each_potentially_negative_ptype {
-    ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
-        macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
-        use $crate::PType;
-        use $crate::half::f16;
-        match $self {
-            PType::I8 => __with__! { i8 },
-            PType::I16 => __with__! { i16 },
-            PType::I32 => __with__! { i32 },
-            PType::I64 => __with__! { i64 },
-            PType::F16 => __with__! { f16 },
-            PType::F32 => __with__! { f32 },
-            PType::F64 => __with__! { f64 },
-            _ => panic!("Unsupported ptype {}", $self),
-
-        }
-    })
-}
-
-#[macro_export]
 macro_rules! match_each_integer_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
