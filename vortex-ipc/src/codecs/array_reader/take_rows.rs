@@ -107,7 +107,7 @@ mod test {
     use vortex_error::VortexResult;
 
     use crate::codecs::array_reader::ArrayReaderExt;
-    use crate::codecs::{ArrayReader, MessageReader};
+    use crate::codecs::MessageReader;
     use crate::io::FuturesVortexRead;
     use crate::writer::StreamWriter;
 
@@ -132,7 +132,7 @@ mod test {
         let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer)))
             .await
             .unwrap();
-        let reader = <dyn ArrayReader>::try_from_messages(&ctx, &mut messages).await?;
+        let reader = messages.array_reader_from_stream(&ctx).await?;
 
         let result_iter = reader.take_rows(&indices).unwrap();
         pin_mut!(result_iter);
@@ -159,7 +159,8 @@ mod test {
         let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer))).await?;
 
         let ctx = Context::default();
-        let take_iter = <dyn ArrayReader>::try_from_messages(&ctx, &mut messages)
+        let take_iter = messages
+            .array_reader_from_stream(&ctx)
             .await?
             .take_rows(&indices)?;
         pin_mut!(take_iter);

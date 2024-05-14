@@ -228,7 +228,17 @@ impl<R: VortexRead> MessageReader<R> {
         Ok(Some(view.into_array()))
     }
 
-    pub fn next_array_reader(
+    /// Construct an ArrayReader pulling the ViewContext and DType from the stream.
+    pub async fn array_reader_from_stream(
+        &mut self,
+        ctx: &Context,
+    ) -> VortexResult<impl ArrayReader + '_> {
+        let view_context = self.read_view_context(ctx).await?;
+        let dtype = self.read_dtype().await?;
+        Ok(self.array_reader(view_context, dtype))
+    }
+
+    pub fn array_reader(
         &mut self,
         view_context: Arc<ViewContext>,
         dtype: DType,
@@ -258,16 +268,5 @@ impl<R: VortexRead> MessageReader<R> {
                 }
             }),
         )
-    }
-}
-
-impl dyn ArrayReader {
-    pub async fn try_from_messages<'a, R: VortexRead>(
-        ctx: &'a Context,
-        messages: &'a mut MessageReader<R>,
-    ) -> VortexResult<impl ArrayReader + 'a> {
-        let view_context = messages.read_view_context(ctx).await.unwrap();
-        let dtype = messages.read_dtype().await.unwrap();
-        Ok(messages.next_array_reader(view_context, dtype))
     }
 }
