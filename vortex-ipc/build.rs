@@ -1,1 +1,3 @@
-../flatbuffers.build.rs
+fn main() {
+    build_vortex::build_flatbuffers();
+}
