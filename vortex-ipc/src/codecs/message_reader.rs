@@ -36,9 +36,9 @@ impl<R: VortexRead> MessageReader<R> {
     }
 
     async fn load_next_message(&mut self) -> VortexResult<bool> {
-        let mut len_buffer = self.message.split_to(0);
-        len_buffer.resize(4, 0);
-        let mut len_buffer = match self.read.read_into(len_buffer).await {
+        let mut buffer = std::mem::take(&mut self.message);
+        buffer.resize(4, 0);
+        let mut buffer = match self.read.read_into(buffer).await {
             Ok(b) => b,
             Err(e) => {
                 return match e.kind() {
@@ -48,7 +48,7 @@ impl<R: VortexRead> MessageReader<R> {
             }
         };
 
-        let len = len_buffer.get_u32_le();
+        let len = buffer.get_u32_le();
         if len == u32::MAX {
             // Marker for no more messages.
             return Ok(false);
@@ -56,11 +56,9 @@ impl<R: VortexRead> MessageReader<R> {
             vortex_bail!(InvalidSerde: "Invalid IPC stream")
         }
 
-        // TODO(ngates): avoid zeroing the buffer here
-        let mut message = self.message.split_to(0);
-        message.reserve(len as usize);
-        unsafe { message.set_len(len as usize) };
-        self.message = self.read.read_into(message).await?;
+        buffer.reserve(len as usize);
+        unsafe { buffer.set_len(len as usize) };
+        self.message = self.read.read_into(buffer).await?;
 
         // Validate that the message is valid a flatbuffer.
         root::<fb::Message>(&self.message).map_err(
