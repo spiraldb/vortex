@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::io;
 use std::sync::Arc;
 
@@ -164,75 +163,69 @@ impl<R: VortexRead> MessageReader<R> {
         Ok(buffers)
     }
 
-    pub fn read_view_context<'a>(
+    pub async fn read_view_context<'a>(
         &'a mut self,
         ctx: &'a Context,
-    ) -> impl Future<Output = VortexResult<Arc<ViewContext>>> + 'a {
-        async {
-            if self.peek().and_then(|m| m.header_as_context()).is_none() {
-                vortex_bail!("Expected context message");
-            }
-
-            let view_ctx: ViewContext = SerdeContextDeserializer {
-                fb: self.next().await?.header_as_context().unwrap(),
-                ctx,
-            }
-            .try_into()?;
-
-            Ok(view_ctx.into())
+    ) -> VortexResult<Arc<ViewContext>> {
+        if self.peek().and_then(|m| m.header_as_context()).is_none() {
+            vortex_bail!("Expected context message");
         }
+
+        let view_ctx: ViewContext = SerdeContextDeserializer {
+            fb: self.next().await?.header_as_context().unwrap(),
+            ctx,
+        }
+        .try_into()?;
+
+        Ok(view_ctx.into())
     }
 
-    pub fn read_dtype(&mut self) -> impl Future<Output = VortexResult<DType>> + '_ {
-        async {
-            if self.peek().and_then(|m| m.header_as_schema()).is_none() {
-                vortex_bail!("Expected schema message")
-            }
-
-            let schema_msg = self.next().await?.header_as_schema().unwrap();
-
-            let dtype = DType::try_from(
-                schema_msg
-                    .dtype()
-                    .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
-            )
-            .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
-
-            Ok(dtype)
+    pub async fn read_dtype(&mut self) -> VortexResult<DType> {
+        if self.peek().and_then(|m| m.header_as_schema()).is_none() {
+            vortex_bail!("Expected schema message")
         }
+
+        let schema_msg = self.next().await?.header_as_schema().unwrap();
+
+        let dtype = DType::try_from(
+            schema_msg
+                .dtype()
+                .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
+        )
+        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
+
+        Ok(dtype)
     }
 
-    pub fn maybe_read_chunk(
+    pub async fn maybe_read_chunk(
         &mut self,
         view_ctx: Arc<ViewContext>,
         dtype: DType,
-    ) -> impl Future<Output = VortexResult<Option<Array>>> + '_ {
-        async {
-            if self.peek().and_then(|m| m.header_as_chunk()).is_none() {
-                return Ok(None);
-            }
-
-            let buffers = self.read_buffers().await?;
-            let flatbuffer = self.next_raw().await?;
-
-            let view = ArrayView::try_new(
-                view_ctx,
-                dtype,
-                flatbuffer,
-                |flatbuffer| {
-                    root::<fb::Message>(flatbuffer)
-                        .map_err(VortexError::from)
-                        .map(|msg| msg.header_as_chunk().unwrap())
-                        .and_then(|chunk| chunk.array().ok_or(vortex_err!("Chunk missing Array")))
-                },
-                buffers,
-            )?;
-
-            // Validate it
-            view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;
-
-            Ok(Some(view.into_array()))
+    ) -> VortexResult<Option<Array>> {
+        if self.peek().and_then(|m| m.header_as_chunk()).is_none() {
+            return Ok(None);
         }
+
+        let buffers = self.read_buffers().await?;
+        let flatbuffer = self.next_raw().await?;
+
+        let view = ArrayView::try_new(
+            view_ctx,
+            dtype,
+            flatbuffer,
+            |flatbuffer| {
+                root::<fb::Message>(flatbuffer)
+                    .map_err(VortexError::from)
+                    .map(|msg| msg.header_as_chunk().unwrap())
+                    .and_then(|chunk| chunk.array().ok_or(vortex_err!("Chunk missing Array")))
+            },
+            buffers,
+        )?;
+
+        // Validate it
+        view.to_array().with_dyn(|_| Ok::<(), VortexError>(()))?;
+
+        Ok(Some(view.into_array()))
     }
 
     pub fn next_array_reader(
@@ -260,7 +253,7 @@ impl<R: VortexRead> MessageReader<R> {
                     .maybe_read_chunk(state.view_context.clone(), state.dtype.clone())
                     .await?
                 {
-                    None => return Ok(None),
+                    None => Ok(None),
                     Some(array) => Ok(Some((array, state))),
                 }
             }),

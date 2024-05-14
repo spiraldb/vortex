@@ -11,7 +11,7 @@ pub struct FuturesVortexRead<R: AsyncRead>(pub R);
 
 impl<R: AsyncRead + Unpin> VortexRead for FuturesVortexRead<R> {
     async fn read_into(&mut self, mut buffer: BytesMut) -> io::Result<BytesMut> {
-        let _ = self.0.read_exact(buffer.as_mut()).await?;
+        self.0.read_exact(buffer.as_mut()).await?;
         Ok(buffer)
     }
 }
