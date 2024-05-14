@@ -1,8 +1,10 @@
 use std::ops;
 
+use serde::{Deserialize, Serialize};
+
 use crate::expressions::Expr;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub enum Operator {
     // binary logic
     And,

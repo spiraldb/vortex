@@ -1,10 +1,11 @@
+use serde::{Deserialize, Serialize};
 use vortex_dtype::FieldName;
 use vortex_scalar::Scalar;
 
 use crate::expression_fns::binary_expr;
 use crate::operators::Operator;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum Expr {
     /// A binary expression such as "duration_seconds == 100"
     Binary(BinaryExpr),
@@ -64,7 +65,7 @@ impl Expr {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct BinaryExpr {
     pub left: Box<Expr>,
     pub op: Operator,

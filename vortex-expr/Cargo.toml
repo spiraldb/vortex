@@ -15,9 +15,10 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
-vortex-dtype = { path = "../vortex-dtype" }
+vortex-dtype = { path = "../vortex-dtype", features = ["serde"] }
 vortex-error = { path = "../vortex-error" }
-vortex-scalar = { path = "../vortex-scalar" }
+vortex-scalar = { path = "../vortex-scalar", features = ["serde"] }
+serde = { version = "1.0.200", features = ["derive"] }
 
 
 [dev-dependencies]
