@@ -25,6 +25,7 @@ pub struct TakeRows<'idx, R: ArrayReader> {
 }
 
 impl<'idx, R: ArrayReader> TakeRows<'idx, R> {
+    #[allow(dead_code)]
     pub fn try_new(reader: R, indices: &'idx Array) -> VortexResult<Self> {
         if !indices.is_empty() {
             if !indices.statistics().compute_is_sorted()? {
@@ -127,10 +128,10 @@ mod test {
         let mut messages = AsyncReadMessageReader::try_new(Cursor::new(buffer))
             .await
             .unwrap();
-        let mut reader = IPCReader::try_from_messages(&Context::default(), messages)
+        let mut reader = IPCReader::try_from_messages(&Context::default(), &mut messages)
             .await
             .unwrap();
-        let array_reader = reader.into_array_reader().await.unwrap().unwrap();
+        let array_reader = reader.next().await.unwrap().unwrap();
 
         let result_iter = array_reader.take_rows(&indices).unwrap();
         pin_mut!(result_iter);

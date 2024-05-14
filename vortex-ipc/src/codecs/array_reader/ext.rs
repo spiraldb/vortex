@@ -15,7 +15,7 @@ pub trait ArrayReaderExt: ArrayReader {
         Box::pin(self)
     }
 
-    fn take_indices(self, indices: &Array) -> VortexResult<impl ArrayReader>
+    fn take_rows(self, indices: &Array) -> VortexResult<impl ArrayReader>
     where
         Self: Sized,
     {

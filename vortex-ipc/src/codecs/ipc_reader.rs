@@ -3,11 +3,11 @@ use std::sync::Arc;
 use pin_project::pin_project;
 use vortex::{Context, ViewContext};
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::codecs::array_reader::{ArrayReader, MessageArrayReader};
+use crate::codecs::message_reader::ext::MessageReaderExt;
 use crate::codecs::message_reader::MessageReader;
-use crate::messages::SerdeContextDeserializer;
 
 /// An IPC reader is used to emit arrays from a stream of Vortex IPC messages.
 #[pin_project]
@@ -24,20 +24,10 @@ impl<'m, M: MessageReader> IPCReader<'m, M> {
 
     /// Read a ViewContext message from the stream and use it to construct an IPCReader.
     pub async fn try_from_messages(ctx: &Context, messages: &'m mut M) -> VortexResult<Self> {
-        match messages.peek() {
-            None => vortex_bail!("IPC stream is empty"),
-            Some(msg) => {
-                if msg.header_as_context().is_none() {
-                    vortex_bail!(InvalidSerde: "Expected IPC Context as first message in stream")
-                }
-            }
-        }
-
-        let view_ctx = SerdeContextDeserializer {
-            fb: messages.next().await?.header_as_context().unwrap(),
-            ctx,
-        }
-        .try_into()?;
+        let view_ctx = messages
+            .read_view_context(ctx)
+            .await?
+            .ok_or_else(|| vortex_err!("Expected IPC context message"))?;
 
         Ok(Self {
             messages,

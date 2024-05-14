@@ -131,7 +131,7 @@ mod test {
             .unwrap();
         let array_reader = reader.next().await.unwrap().unwrap();
 
-        let result_iter = array_reader.take_indices(&indices).unwrap();
+        let result_iter = array_reader.take_rows(&indices).unwrap();
         pin_mut!(result_iter);
 
         let result = result_iter.next().await.unwrap().unwrap();

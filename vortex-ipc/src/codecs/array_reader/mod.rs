@@ -1,5 +1,6 @@
 mod ext;
 mod take;
+mod take_rows;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll;
@@ -13,6 +14,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
+use crate::codecs::ext::MessageReaderExt;
 use crate::codecs::message_reader::MessageReader;
 
 /// A stream of array chunks along with a DType.
@@ -63,7 +65,7 @@ where
     }
 }
 
-pub(crate) struct MessageArrayReader<'a, M: MessageReader> {
+pub struct MessageArrayReader<'a, M: MessageReader> {
     ctx: Arc<ViewContext>,
     dtype: DType,
     messages: &'a mut M,
@@ -112,7 +114,7 @@ impl<M: MessageReader> MessageArrayReader<'_, M> {
         }
 
         // TODO(ngates): can we reuse our existing buffers?
-        self.buffers = self.messages.buffers().await?;
+        self.buffers = self.messages.read_buffers().await?;
 
         // After reading the buffers we're now able to load the next message.
         let flatbuffer = self.messages.next_raw().await?;
