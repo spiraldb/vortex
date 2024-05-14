@@ -24,10 +24,7 @@ impl<'m, M: MessageReader> IPCReader<'m, M> {
 
     /// Read a ViewContext message from the stream and use it to construct an IPCReader.
     pub async fn try_from_messages(ctx: &Context, messages: &'m mut M) -> VortexResult<Self> {
-        let view_ctx = messages
-            .read_view_context(ctx)
-            .await?
-            .ok_or_else(|| vortex_err!("Expected IPC context message"))?;
+        let view_ctx = messages.read_view_context(ctx).await?;
 
         Ok(Self {
             messages,

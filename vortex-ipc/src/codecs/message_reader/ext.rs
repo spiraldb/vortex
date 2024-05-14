@@ -6,7 +6,7 @@ use itertools::Itertools;
 use vortex::{Array, ArrayView, Context, IntoArray, ToArray, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::codecs::MessageReader;
 use crate::messages::SerdeContextDeserializer;
@@ -16,10 +16,10 @@ pub trait MessageReaderExt: MessageReader {
     fn read_view_context(
         &mut self,
         ctx: &Context,
-    ) -> impl Future<Output = VortexResult<Option<ViewContext>>> {
+    ) -> impl Future<Output = VortexResult<ViewContext>> {
         async {
             if self.peek().and_then(|m| m.header_as_context()).is_none() {
-                return Ok(None);
+                vortex_bail!("Expected context message");
             }
 
             let view_ctx = SerdeContextDeserializer {
@@ -28,14 +28,14 @@ pub trait MessageReaderExt: MessageReader {
             }
             .try_into()?;
 
-            Ok(Some(view_ctx))
+            Ok(view_ctx)
         }
     }
 
-    fn read_dtype(&mut self) -> impl Future<Output = VortexResult<Option<DType>>> {
+    fn read_dtype(&mut self) -> impl Future<Output = VortexResult<DType>> {
         async {
             if self.peek().and_then(|m| m.header_as_schema()).is_none() {
-                return Ok(None);
+                vortex_bail!("Expected schema message");
             }
 
             let schema_msg = self.next().await?.header_as_schema().unwrap();
@@ -47,11 +47,11 @@ pub trait MessageReaderExt: MessageReader {
             )
             .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
 
-            Ok(Some(dtype))
+            Ok(dtype)
         }
     }
 
-    fn read_chunk(
+    fn maybe_read_chunk(
         &mut self,
         view_ctx: Arc<ViewContext>,
         dtype: DType,
