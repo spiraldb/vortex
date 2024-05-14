@@ -120,6 +120,13 @@ pub enum VortexError {
         #[backtrace]
         std::array::TryFromSliceError,
     ),
+    #[cfg(feature = "worker")]
+    #[error(transparent)]
+    WorkerError(
+        #[from]
+        #[backtrace]
+        worker::Error,
+    ),
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;
@@ -188,5 +195,12 @@ pub mod __private {
     #[must_use]
     pub fn must_use(error: crate::VortexError) -> crate::VortexError {
         error
+    }
+}
+
+#[cfg(feature = "worker")]
+impl From<VortexError> for worker::Error {
+    fn from(value: VortexError) -> Self {
+        worker::Error::RustError(value.to_string())
     }
 }

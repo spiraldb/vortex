@@ -22,7 +22,6 @@ log = { workspace = true }
 monoio = { workspace = true, optional = true, features = ["bytes"] }
 nougat = "0.2.4"
 pin-project = { workspace = true }
-tokio = { workspace = true, optional = true }
 vortex-array = { path = "../vortex-array" }
 vortex-buffer = { path = "../vortex-buffer" }
 vortex-error = { path = "../vortex-error" }
@@ -51,10 +50,9 @@ arrow-select = { workspace = true }
 workspace = true
 
 [features]
-default = ["futures", "monoio", "tokio"]
+default = ["futures", "monoio"]
 futures = []
 monoio = ["dep:monoio"]
-tokio = ["dep:tokio"]
 
 [[bench]]
 name = "ipc_take"

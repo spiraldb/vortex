@@ -21,6 +21,7 @@ flatbuffers = { workspace = true }
 flexbuffers = { workspace = true, optional = true }
 parquet = { workspace = true, optional = true }
 thiserror = { workspace = true }
+worker = { workspace = true, optional = true }
 
 [lints]
 workspace = true
