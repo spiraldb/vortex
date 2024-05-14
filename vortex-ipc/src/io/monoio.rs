@@ -33,7 +33,6 @@ mod tests {
     use vortex_fastlanes::BitPackedEncoding;
 
     use super::*;
-    use crate::codecs::ArrayReader;
     use crate::codecs::MessageReader;
     use crate::test::create_stream;
 
@@ -44,7 +43,7 @@ mod tests {
         let ctx =
             Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
         let mut messages = MessageReader::try_new(MonoVortexRead(buffer.as_slice())).await?;
-        let reader = <dyn ArrayReader>::try_from_messages(&ctx, &mut messages).await?;
+        let reader = messages.array_reader_from_stream(&ctx).await?;
         pin_mut!(reader);
 
         while let Some(chunk) = reader.try_next().await? {
