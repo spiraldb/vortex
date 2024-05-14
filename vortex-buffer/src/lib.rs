@@ -41,6 +41,13 @@ impl Buffer {
         }
     }
 
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            Buffer::Arrow(b) => b.as_ref(),
+            Buffer::Bytes(b) => b.as_ref(),
+        }
+    }
+
     pub fn into_vec(self) -> Result<Vec<u8>, Buffer> {
         match self {
             Buffer::Arrow(buffer) => buffer.into_vec::<u8>().map_err(Buffer::Arrow),
@@ -54,19 +61,13 @@ impl Deref for Buffer {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        match self {
-            Buffer::Arrow(b) => b.deref(),
-            Buffer::Bytes(b) => b.deref(),
-        }
+        self.as_bytes()
     }
 }
 
 impl AsRef<[u8]> for Buffer {
     fn as_ref(&self) -> &[u8] {
-        match self {
-            Buffer::Arrow(b) => b.as_ref(),
-            Buffer::Bytes(b) => b.as_ref(),
-        }
+        self.as_bytes()
     }
 }
 
