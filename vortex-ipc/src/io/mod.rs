@@ -5,7 +5,9 @@ mod futures;
 mod monoio;
 
 use bytes::BytesMut;
+#[cfg(feature = "futures")]
 pub use futures::*;
+#[cfg(feature = "monoio")]
 pub use monoio::*;
 
 pub trait VortexRead {

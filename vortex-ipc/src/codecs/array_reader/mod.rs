@@ -7,7 +7,6 @@ use vortex_error::VortexResult;
 
 mod adapter;
 mod ext;
-mod take;
 mod take_rows;
 
 /// A stream of array chunks along with a DType.

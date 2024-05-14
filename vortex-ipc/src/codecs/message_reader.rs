@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::io;
 use std::sync::Arc;
 
@@ -263,14 +262,12 @@ impl<R: VortexRead> MessageReader<R> {
 }
 
 impl dyn ArrayReader {
-    pub fn try_from_messages<'a, R: VortexRead>(
+    pub async fn try_from_messages<'a, R: VortexRead>(
         ctx: &'a Context,
         messages: &'a mut MessageReader<R>,
-    ) -> impl Future<Output = VortexResult<impl ArrayReader + 'a>> {
-        async {
-            let view_context = messages.read_view_context(ctx).await.unwrap();
-            let dtype = messages.read_dtype().await.unwrap();
-            Ok(messages.next_array_reader(view_context, dtype))
-        }
+    ) -> VortexResult<impl ArrayReader + 'a> {
+        let view_context = messages.read_view_context(ctx).await.unwrap();
+        let dtype = messages.read_dtype().await.unwrap();
+        Ok(messages.next_array_reader(view_context, dtype))
     }
 }

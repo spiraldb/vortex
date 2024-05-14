@@ -1,7 +1,7 @@
 use vortex::Array;
 use vortex_error::VortexResult;
 
-use super::take::Take;
+use crate::codecs::array_reader::take_rows::TakeRows;
 use crate::codecs::array_reader::ArrayReaderAdapter;
 use crate::codecs::ArrayReader;
 
@@ -12,7 +12,7 @@ pub trait ArrayReaderExt: ArrayReader {
     {
         Ok(ArrayReaderAdapter::new(
             self.dtype().clone(),
-            Take::try_new(self, indices)?,
+            TakeRows::try_new(self, indices)?,
         ))
     }
 }

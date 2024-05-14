@@ -190,7 +190,7 @@ mod test {
             .compress(array.array(), None, Compressor::new(&ctx()))
             .unwrap();
         let compressed = FoRArray::try_from(compressed).unwrap();
-        assert_eq!(i8::MIN, compressed.reference().try_into().unwrap());
+        assert_eq!(i8::MIN, i8::try_from(compressed.reference()).unwrap());
 
         let encoded = compressed.encoded().flatten_primitive().unwrap();
         let bitcast: &[u8] = unsafe { std::mem::transmute(encoded.typed_data::<i8>()) };
@@ -206,12 +206,7 @@ mod test {
             .for_each(|(i, v)| {
                 assert_eq!(
                     *v,
-                    compressed
-                        .scalar_at(i)
-                        .unwrap()
-                        .as_ref()
-                        .try_into()
-                        .unwrap()
+                    i8::try_from(compressed.scalar_at(i).unwrap().as_ref()).unwrap()
                 );
             });
     }
