@@ -5054,10 +5054,10 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-schema",
+ "build-vortex",
  "criterion",
  "enum-iterator",
  "flatbuffers",
- "flatc",
  "flexbuffers",
  "getrandom",
  "humansize",
@@ -5074,7 +5074,6 @@ dependencies = [
  "vortex-error",
  "vortex-flatbuffers",
  "vortex-scalar",
- "walkdir",
 ]
 
 [[package]]
@@ -5180,11 +5179,11 @@ dependencies = [
  "arrow-ipc",
  "arrow-schema",
  "arrow-select",
+ "build-vortex",
  "bytes",
  "criterion",
  "fallible-iterator",
  "flatbuffers",
- "flatc",
  "futures-util",
  "itertools 0.12.1",
  "log",
@@ -5202,7 +5201,6 @@ dependencies = [
  "vortex-fastlanes",
  "vortex-flatbuffers",
  "vortex-scalar",
- "walkdir",
 ]
 
 [[package]]

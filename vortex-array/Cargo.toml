@@ -45,8 +45,7 @@ serde = { workspace = true, features = ["derive"] }
 getrandom = { workspace = true, features = ["js"] }
 
 [build-dependencies]
-flatc = { workspace = true }
-walkdir = { workspace = true }
+build-vortex = { path = "../build-vortex" }
 
 [dev-dependencies]
 criterion = { workspace = true }
