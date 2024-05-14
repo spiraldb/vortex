@@ -102,68 +102,66 @@ impl<R: VortexRead> MessageReader<R> {
     }
 
     /// Fetch the buffers associated with this message.
-    fn read_buffers(&mut self) -> impl Future<Output = VortexResult<Vec<Buffer>>> + '_ {
-        async {
-            let Some(chunk_msg) = self.peek().and_then(|m| m.header_as_chunk()) else {
-                // We could return an error here?
-                return Ok(Vec::new());
-            };
+    async fn read_buffers(&mut self) -> VortexResult<Vec<Buffer>> {
+        let Some(chunk_msg) = self.peek().and_then(|m| m.header_as_chunk()) else {
+            // We could return an error here?
+            return Ok(Vec::new());
+        };
 
-            // Initialize the column's buffers for a vectored read.
-            // To start with, we include the padding and then truncate the buffers after.
-            // TODO(ngates): improve the flatbuffer format instead of storing offset/len per buffer.
-            let buffers = chunk_msg
-                .buffers()
-                .unwrap_or_default()
-                .iter()
-                .map(|buffer| {
-                    // FIXME(ngates): this assumes the next buffer offset == the aligned length of
-                    //  the previous buffer. I will fix this by improving the flatbuffer format instead
-                    //  of fiddling with the logic here.
-                    let len_width_padding =
-                        (buffer.length() as usize + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
-                    // TODO(ngates): switch to use uninitialized
-                    // TODO(ngates): allocate the entire thing in one go and then split
-                    vec![0u8; len_width_padding]
-                })
-                .collect_vec();
+        // Initialize the column's buffers for a vectored read.
+        // To start with, we include the padding and then truncate the buffers after.
+        // TODO(ngates): improve the flatbuffer format instead of storing offset/len per buffer.
+        let buffers = chunk_msg
+            .buffers()
+            .unwrap_or_default()
+            .iter()
+            .map(|buffer| {
+                // FIXME(ngates): this assumes the next buffer offset == the aligned length of
+                //  the previous buffer. I will fix this by improving the flatbuffer format instead
+                //  of fiddling with the logic here.
+                let len_width_padding =
+                    (buffer.length() as usize + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
+                // TODO(ngates): switch to use uninitialized
+                // TODO(ngates): allocate the entire thing in one go and then split
+                vec![0u8; len_width_padding]
+            })
+            .collect_vec();
 
-            // Just sanity check the above
-            assert_eq!(
-                buffers.iter().map(|b| b.len()).sum::<usize>(),
-                chunk_msg.buffer_size() as usize
-            );
+        // Just sanity check the above
+        assert_eq!(
+            buffers.iter().map(|b| b.len()).sum::<usize>(),
+            chunk_msg.buffer_size() as usize
+        );
 
-            // Issue a single read to grab all buffers
-            let mut all_buffers = BytesMut::with_capacity(chunk_msg.buffer_size() as usize);
-            unsafe { all_buffers.set_len(chunk_msg.buffer_size() as usize) };
-            let mut all_buffers = self.read.read_into(all_buffers).await?;
+        // Issue a single read to grab all buffers
+        let mut all_buffers = BytesMut::with_capacity(chunk_msg.buffer_size() as usize);
+        unsafe { all_buffers.set_len(chunk_msg.buffer_size() as usize) };
+        let mut all_buffers = self.read.read_into(all_buffers).await?;
 
-            // Split out into individual buffers
-            let buffers = self
-                .peek()
-                .expect("Checked above in peek")
-                .header_as_chunk()
-                .expect("Checked above in peek")
-                .buffers()
-                .unwrap_or_default()
-                .iter()
-                .scan(0, |offset, buffer| {
-                    let len = buffer.length() as usize;
-                    let padding_len = buffer.offset() as usize - *offset;
+        // Split out into individual buffers
+        let buffers = self
+            .peek()
+            .expect("Checked above in peek")
+            .header_as_chunk()
+            .expect("Checked above in peek")
+            .buffers()
+            .unwrap_or_default()
+            .iter()
+            .scan(0, |offset, buffer| {
+                let len = buffer.length() as usize;
+                let padding_len = buffer.offset() as usize - *offset;
 
-                    // Strip off any padding from the previous buffer
-                    all_buffers.advance(padding_len);
-                    // Grab the buffer
-                    let buffer = all_buffers.split_to(len);
+                // Strip off any padding from the previous buffer
+                all_buffers.advance(padding_len);
+                // Grab the buffer
+                let buffer = all_buffers.split_to(len);
 
-                    *offset += padding_len + len;
-                    Some(Buffer::from(buffer.freeze()))
-                })
-                .collect_vec();
+                *offset += padding_len + len;
+                Some(Buffer::from(buffer.freeze()))
+            })
+            .collect_vec();
 
-            Ok(buffers)
-        }
+        Ok(buffers)
     }
 
     pub fn read_view_context<'a>(
