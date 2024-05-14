@@ -7,7 +7,7 @@ use crate::operators::Operator;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     /// A binary expression such as "duration_seconds == 100"
-    BinaryExpr(BinaryExpr),
+    Binary(BinaryExpr),
 
     /// A named reference to a qualified field in a dtype.
     Field(FieldName),

@@ -11,7 +11,7 @@ use crate::scalar::ScalarDisplayWrapper;
 impl Display for Expr {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Expr::BinaryExpr(expr) => write!(f, "{expr}"),
+            Expr::Binary(expr) => write!(f, "{expr}"),
             Expr::Field(d) => write!(f, "{d}"),
             Expr::Literal(v) => {
                 let wrapped = ScalarDisplayWrapper(v);
@@ -37,7 +37,7 @@ impl Display for BinaryExpr {
             outer_op: Operator,
             side: Side,
         ) -> fmt::Result {
-            if let Expr::BinaryExpr(inner) = outer {
+            if let Expr::Binary(inner) = outer {
                 let inner_op_precedence = inner.op.precedence();
                 // if the inner operator has higher precedence than the outer expression,
                 // wrap it in parentheses to prevent inversion of priority
