@@ -37,6 +37,7 @@ fn all_null_stats(len: usize) -> VortexResult<StatsSet> {
         (Stat::IsStrictSorted, (len < 2).into()),
         (Stat::RunCount, 1.into()),
         (Stat::NullCount, len.into()),
+        (Stat::TrueCount, 0.into()),
     ])))
 }
 
@@ -139,5 +140,74 @@ impl BoolStatsAccumulator {
             (Stat::RunCount, self.run_count.into()),
             (Stat::TrueCount, self.true_count.into()),
         ]))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use vortex_dtype::DType;
+    use vortex_dtype::Nullability::Nullable;
+    use vortex_scalar::Scalar;
+    use crate::array::bool::BoolArray;
+    use crate::stats::{ArrayStatistics, Stat};
+
+    #[test]
+    fn bool_stats() {
+        let bool_arr = BoolArray::from(vec![false, false, true, true, false, true, true, false]);
+        assert_eq!(bool_arr.statistics().compute_is_strict_sorted().unwrap(), false);
+        assert_eq!(bool_arr.statistics().compute_is_sorted().unwrap(), false);
+        assert_eq!(bool_arr.statistics().compute_is_constant().unwrap(), false);
+        assert_eq!(bool_arr.statistics().compute_min::<bool>().unwrap(), false);
+        assert_eq!(bool_arr.statistics().compute_max::<bool>().unwrap(), true);
+        assert_eq!(bool_arr.statistics().compute_run_count().unwrap(), 5);
+        assert_eq!(bool_arr.statistics().compute_true_count().unwrap(), 4);
+    }
+
+    #[test]
+    fn strict_sorted() {
+        let bool_arr_1 = BoolArray::from(vec![false, true]);
+        assert_eq!(bool_arr_1.statistics().compute_is_strict_sorted().unwrap(), true);
+        assert_eq!(bool_arr_1.statistics().compute_is_sorted().unwrap(), true);
+
+        let bool_arr_2 = BoolArray::from(vec![true]);
+        assert_eq!(bool_arr_2.statistics().compute_is_strict_sorted().unwrap(), true);
+        assert_eq!(bool_arr_2.statistics().compute_is_sorted().unwrap(), true);
+
+        let bool_arr_3 = BoolArray::from(vec![false]);
+        assert_eq!(bool_arr_3.statistics().compute_is_strict_sorted().unwrap(), true);
+        assert_eq!(bool_arr_3.statistics().compute_is_sorted().unwrap(), true);
+
+        let bool_arr_4 = BoolArray::from(vec![true, false]);
+        assert_eq!(bool_arr_4.statistics().compute_is_strict_sorted().unwrap(), false);
+        assert_eq!(bool_arr_4.statistics().compute_is_sorted().unwrap(), false);
+
+        let bool_arr_5 = BoolArray::from(vec![false, true, true]);
+        assert_eq!(bool_arr_5.statistics().compute_is_strict_sorted().unwrap(), false);
+        assert_eq!(bool_arr_5.statistics().compute_is_sorted().unwrap(), true);
+    }
+
+    #[test]
+    fn nullable_stats() {
+        let bool_arr = BoolArray::from_iter(vec![Some(false), Some(true), None, Some(true), Some(false), None, None]);
+        assert_eq!(bool_arr.statistics().compute_is_strict_sorted().unwrap(), false);
+        assert_eq!(bool_arr.statistics().compute_is_sorted().unwrap(), false);
+        assert_eq!(bool_arr.statistics().compute_is_constant().unwrap(), false);
+        assert_eq!(bool_arr.statistics().compute_min::<bool>().unwrap(), false);
+        assert_eq!(bool_arr.statistics().compute_max::<bool>().unwrap(), true);
+        assert_eq!(bool_arr.statistics().compute_run_count().unwrap(), 3);
+        assert_eq!(bool_arr.statistics().compute_true_count().unwrap(), 2);
+    }
+
+
+    #[test]
+    fn all_nullable_stats() {
+        let bool_arr = BoolArray::from_iter(vec![None, None, None, None, None]);
+        assert_eq!(bool_arr.statistics().compute_is_strict_sorted().unwrap(), false);
+        assert_eq!(bool_arr.statistics().compute_is_sorted().unwrap(), true);
+        assert_eq!(bool_arr.statistics().compute_is_constant().unwrap(), true);
+        assert_eq!(bool_arr.statistics().compute(Stat::Min).unwrap(), Scalar::null(DType::Bool(Nullable)));
+        assert_eq!(bool_arr.statistics().compute(Stat::Max).unwrap(), Scalar::null(DType::Bool(Nullable)));
+        assert_eq!(bool_arr.statistics().compute_run_count().unwrap(), 1);
+        assert_eq!(bool_arr.statistics().compute_true_count().unwrap(), 0);
     }
 }

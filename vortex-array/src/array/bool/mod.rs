@@ -25,7 +25,7 @@ impl BoolArray {
     }
 
     pub fn boolean_buffer(&self) -> BooleanBuffer {
-        BooleanBuffer::new(BoolArray::buffer(self).clone().into(), 0, self.len())
+        BooleanBuffer::new(self.buffer().clone().into(), 0, self.len())
     }
 
     pub fn validity(&self) -> Validity {
