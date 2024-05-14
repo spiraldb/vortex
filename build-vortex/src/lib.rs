@@ -8,13 +8,13 @@ use flatc::flatc;
 use walkdir::WalkDir;
 
 fn manifest_dir() -> PathBuf {
-    PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+    PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"))
         .canonicalize()
         .expect("Failed to canonicalize CARGO_MANIFEST_DIR")
 }
 
 fn out_dir() -> PathBuf {
-    PathBuf::from(env::var("OUT_DIR").unwrap())
+    PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"))
         .canonicalize()
         .expect("Failed to canonicalize OUT_DIR")
 }
@@ -79,18 +79,29 @@ fn rerun_if_changed(path: &Path) {
     println!(
         "cargo:rerun-if-changed={}",
         path.canonicalize()
-            .unwrap_or_else(|_| panic!("failed to canonicalize {}", path.to_str().unwrap()))
+            .unwrap_or_else(|_| panic!(
+                "failed to canonicalize {}",
+                path.to_str().expect("not unicode")
+            ))
             .to_str()
-            .unwrap()
+            .expect("not unicode")
     );
 }
 
 fn check_call(command: &mut Command) {
-    let name = command.get_program().to_str().unwrap().to_string();
+    let name = command
+        .get_program()
+        .to_str()
+        .expect("not unicode")
+        .to_string();
     let Ok(status) = command.status() else {
         panic!("Failed to launch {}", &name)
     };
     if !status.success() {
-        panic!("{} failed with status {}", &name, status.code().unwrap());
+        panic!(
+            "{} failed with status {}",
+            &name,
+            status.code().expect("process terminated by signal")
+        );
     }
 }
