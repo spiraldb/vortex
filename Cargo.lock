@@ -5179,11 +5179,11 @@ dependencies = [
  "arrow-ipc",
  "arrow-schema",
  "arrow-select",
+ "build-vortex",
  "bytes",
  "criterion",
  "fallible-iterator",
  "flatbuffers",
- "flatc",
  "futures-util",
  "itertools 0.12.1",
  "log",
@@ -5201,7 +5201,6 @@ dependencies = [
  "vortex-fastlanes",
  "vortex-flatbuffers",
  "vortex-scalar",
- "walkdir",
 ]
 
 [[package]]
