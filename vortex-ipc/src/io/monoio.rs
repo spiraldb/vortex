@@ -5,6 +5,7 @@ use std::io;
 
 use bytes::BytesMut;
 use futures_util::FutureExt;
+use monoio::buf::IoBufMut;
 use monoio::io::{AsyncReadRent, AsyncReadRentExt};
 
 use crate::io::VortexRead;
@@ -13,10 +14,11 @@ pub struct MonoVortexRead<R: AsyncReadRent>(R);
 
 impl<R: AsyncReadRent> VortexRead for MonoVortexRead<R> {
     fn read_into(&mut self, buffer: BytesMut) -> impl Future<Output = io::Result<BytesMut>> {
+        let len = buffer.len();
         self.0
-            .read_exact(buffer)
+            .read_exact(buffer.slice_mut(0..len))
             .map(|(result, buffer)| match result {
-                Ok(_len) => Ok(buffer),
+                Ok(_len) => Ok(buffer.into_inner()),
                 Err(e) => Err(e),
             })
     }

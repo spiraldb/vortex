@@ -50,7 +50,7 @@ arrow-select = { workspace = true }
 workspace = true
 
 [features]
-default = ["futures"]
+default = ["futures", "monoio"]
 futures = []
 monoio = ["dep:monoio"]
 
