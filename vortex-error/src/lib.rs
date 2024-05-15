@@ -9,6 +9,7 @@ use std::{env, fmt, io};
 #[derive(Debug)]
 pub struct ErrString(Cow<'static, str>);
 
+#[allow(clippy::fallible_impl_from)]
 impl<T> From<T> for ErrString
 where
     T: Into<Cow<'static, str>>,
@@ -193,7 +194,7 @@ pub mod __private {
     #[inline]
     #[cold]
     #[must_use]
-    pub fn must_use(error: crate::VortexError) -> crate::VortexError {
+    pub const fn must_use(error: crate::VortexError) -> crate::VortexError {
         error
     }
 }
