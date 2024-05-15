@@ -40,7 +40,7 @@ impl AsContiguousFn for ChunkedArray {
         // Combine all the chunks into one, then call as_contiguous again.
         let mut chunks = Vec::with_capacity(self.nchunks());
         for array in arrays {
-            for chunk in ChunkedArray::try_from(array).unwrap().chunks() {
+            for chunk in Self::try_from(array).unwrap().chunks() {
                 chunks.push(chunk);
             }
         }

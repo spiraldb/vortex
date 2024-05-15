@@ -42,8 +42,8 @@ impl<'a> StructScalar<'a> {
 }
 
 impl Scalar {
-    pub fn r#struct(dtype: DType, children: Vec<ScalarValue>) -> Scalar {
-        Scalar {
+    pub fn r#struct(dtype: DType, children: Vec<ScalarValue>) -> Self {
+        Self {
             dtype,
             value: ScalarValue::List(children.into()),
         }

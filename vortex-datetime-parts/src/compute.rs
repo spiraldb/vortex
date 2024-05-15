@@ -18,7 +18,7 @@ impl ArrayCompute for DateTimePartsArray {
 
 impl TakeFn for DateTimePartsArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        Ok(DateTimePartsArray::try_new(
+        Ok(Self::try_new(
             self.dtype().clone(),
             take(&self.days(), indices)?,
             take(&self.seconds(), indices)?,
@@ -30,7 +30,7 @@ impl TakeFn for DateTimePartsArray {
 
 impl SliceFn for DateTimePartsArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        Ok(DateTimePartsArray::try_new(
+        Ok(Self::try_new(
             self.dtype().clone(),
             slice(&self.days(), start, stop)?,
             slice(&self.seconds(), start, stop)?,

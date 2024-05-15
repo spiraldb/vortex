@@ -87,7 +87,7 @@ impl EncodingCompression for BitPackedEncoding {
     }
 }
 
-pub(crate) fn bitpack_encode(
+pub fn bitpack_encode(
     array: PrimitiveArray,
     bit_width: usize,
 ) -> VortexResult<BitPackedArray> {
@@ -118,7 +118,7 @@ pub(crate) fn bitpack_encode(
     )
 }
 
-pub(crate) fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Array> {
+pub fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Array> {
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     let parray = parray.reinterpret_cast(parray.ptype().to_unsigned());
     let bytes = match_each_unsigned_integer_ptype!(parray.ptype(), |$P| {
@@ -276,7 +276,7 @@ pub fn unpack_primitive<T: NativePType + TryBitPack>(
     output
 }
 
-pub(crate) fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
+pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
     let bit_width = array.bit_width();
     let encoded = cast(&array.packed(), U8.into())?.flatten_primitive()?;
     let ptype: PType = array.dtype().try_into()?;

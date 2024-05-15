@@ -25,7 +25,7 @@ impl ArrayData {
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
         buffer: Option<Buffer>,
-        children: Arc<[ArrayData]>,
+        children: Arc<[Self]>,
         statistics: StatsSet,
     ) -> VortexResult<Self> {
         let data = Self {
@@ -65,7 +65,7 @@ impl ArrayData {
         self.buffer
     }
 
-    pub fn child(&self, index: usize, dtype: &DType) -> Option<&ArrayData> {
+    pub fn child(&self, index: usize, dtype: &DType) -> Option<&Self> {
         match self.children.get(index) {
             None => None,
             Some(child) => {
@@ -75,7 +75,7 @@ impl ArrayData {
         }
     }
 
-    pub fn children(&self) -> &[ArrayData] {
+    pub fn children(&self) -> &[Self] {
         &self.children
     }
 

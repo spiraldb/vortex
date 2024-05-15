@@ -20,6 +20,6 @@ impl<'de> Deserialize<'de> for Nullability {
     where
         D: Deserializer<'de>,
     {
-        bool::deserialize(deserializer).map(Nullability::from)
+        bool::deserialize(deserializer).map(Self::from)
     }
 }

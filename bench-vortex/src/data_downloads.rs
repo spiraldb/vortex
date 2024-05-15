@@ -116,10 +116,10 @@ pub enum FileType {
 impl Display for FileType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
-            FileType::Csv => "csv".to_string(),
-            FileType::Parquet => "parquet".to_string(),
-            FileType::Vortex => "vortex".to_string(),
-            FileType::Lance => "lance".to_string(),
+            Self::Csv => "csv".to_string(),
+            Self::Parquet => "parquet".to_string(),
+            Self::Vortex => "vortex".to_string(),
+            Self::Lance => "lance".to_string(),
         };
         write!(f, "{}", str)
     }

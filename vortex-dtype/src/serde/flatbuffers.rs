@@ -15,23 +15,23 @@ impl TryFrom<fb::DType<'_>> for DType {
 
     fn try_from(fb: fb::DType<'_>) -> Result<Self, Self::Error> {
         match fb.type_type() {
-            fb::Type::Null => Ok(DType::Null),
-            fb::Type::Bool => Ok(DType::Bool(fb.type__as_bool().unwrap().nullable().into())),
+            fb::Type::Null => Ok(Self::Null),
+            fb::Type::Bool => Ok(Self::Bool(fb.type__as_bool().unwrap().nullable().into())),
             fb::Type::Primitive => {
                 let fb_primitive = fb.type__as_primitive().unwrap();
-                Ok(DType::Primitive(
+                Ok(Self::Primitive(
                     fb_primitive.ptype().try_into()?,
                     fb_primitive.nullable().into(),
                 ))
             }
-            fb::Type::Binary => Ok(DType::Binary(
+            fb::Type::Binary => Ok(Self::Binary(
                 fb.type__as_binary().unwrap().nullable().into(),
             )),
-            fb::Type::Utf8 => Ok(DType::Utf8(fb.type__as_utf_8().unwrap().nullable().into())),
+            fb::Type::Utf8 => Ok(Self::Utf8(fb.type__as_utf_8().unwrap().nullable().into())),
             fb::Type::List => {
                 let fb_list = fb.type__as_list().unwrap();
-                let element_dtype = DType::try_from(fb_list.element_type().unwrap())?;
-                Ok(DType::List(
+                let element_dtype = Self::try_from(fb_list.element_type().unwrap())?;
+                Ok(Self::List(
                     Arc::new(element_dtype),
                     fb_list.nullable().into(),
                 ))
@@ -45,13 +45,13 @@ impl TryFrom<fb::DType<'_>> for DType {
                     .map(|n| (*n).into())
                     .collect_vec()
                     .into();
-                let dtypes: Vec<DType> = fb_struct
+                let dtypes: Vec<Self> = fb_struct
                     .dtypes()
                     .unwrap()
                     .iter()
-                    .map(DType::try_from)
+                    .map(Self::try_from)
                     .collect::<VortexResult<Vec<_>>>()?;
-                Ok(DType::Struct(
+                Ok(Self::Struct(
                     StructDType::new(names, dtypes),
                     fb_struct.nullable().into(),
                 ))
@@ -60,7 +60,7 @@ impl TryFrom<fb::DType<'_>> for DType {
                 let fb_ext = fb.type__as_extension().unwrap();
                 let id = ExtID::from(fb_ext.id().unwrap());
                 let metadata = fb_ext.metadata().map(|m| ExtMetadata::from(m.bytes()));
-                Ok(DType::Extension(
+                Ok(Self::Extension(
                     ExtDType::new(id, metadata),
                     fb_ext.nullable().into(),
                 ))
@@ -79,15 +79,15 @@ impl WriteFlatBuffer for DType {
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
         let dtype_union = match self {
-            DType::Null => fb::Null::create(fbb, &fb::NullArgs {}).as_union_value(),
-            DType::Bool(n) => fb::Bool::create(
+            Self::Null => fb::Null::create(fbb, &fb::NullArgs {}).as_union_value(),
+            Self::Bool(n) => fb::Bool::create(
                 fbb,
                 &fb::BoolArgs {
                     nullable: (*n).into(),
                 },
             )
             .as_union_value(),
-            DType::Primitive(ptype, n) => fb::Primitive::create(
+            Self::Primitive(ptype, n) => fb::Primitive::create(
                 fbb,
                 &fb::PrimitiveArgs {
                     ptype: (*ptype).into(),
@@ -95,21 +95,21 @@ impl WriteFlatBuffer for DType {
                 },
             )
             .as_union_value(),
-            DType::Utf8(n) => fb::Utf8::create(
+            Self::Utf8(n) => fb::Utf8::create(
                 fbb,
                 &fb::Utf8Args {
                     nullable: (*n).into(),
                 },
             )
             .as_union_value(),
-            DType::Binary(n) => fb::Binary::create(
+            Self::Binary(n) => fb::Binary::create(
                 fbb,
                 &fb::BinaryArgs {
                     nullable: (*n).into(),
                 },
             )
             .as_union_value(),
-            DType::Struct(st, n) => {
+            Self::Struct(st, n) => {
                 let names = st
                     .names()
                     .iter()
@@ -134,7 +134,7 @@ impl WriteFlatBuffer for DType {
                 )
                 .as_union_value()
             }
-            DType::List(e, n) => {
+            Self::List(e, n) => {
                 let element_type = Some(e.as_ref().write_flatbuffer(fbb));
                 fb::List::create(
                     fbb,
@@ -145,7 +145,7 @@ impl WriteFlatBuffer for DType {
                 )
                 .as_union_value()
             }
-            DType::Extension(ext, n) => {
+            Self::Extension(ext, n) => {
                 let id = Some(fbb.create_string(ext.id().as_ref()));
                 let metadata = ext.metadata().map(|m| fbb.create_vector(m.as_ref()));
                 fb::Extension::create(
@@ -161,14 +161,14 @@ impl WriteFlatBuffer for DType {
         };
 
         let dtype_type = match self {
-            DType::Null => fb::Type::Null,
-            DType::Bool(_) => fb::Type::Bool,
-            DType::Primitive(..) => fb::Type::Primitive,
-            DType::Utf8(_) => fb::Type::Utf8,
-            DType::Binary(_) => fb::Type::Binary,
-            DType::Struct(..) => fb::Type::Struct_,
-            DType::List(..) => fb::Type::List,
-            DType::Extension { .. } => fb::Type::Extension,
+            Self::Null => fb::Type::Null,
+            Self::Bool(_) => fb::Type::Bool,
+            Self::Primitive(..) => fb::Type::Primitive,
+            Self::Utf8(_) => fb::Type::Utf8,
+            Self::Binary(_) => fb::Type::Binary,
+            Self::Struct(..) => fb::Type::Struct_,
+            Self::List(..) => fb::Type::List,
+            Self::Extension { .. } => fb::Type::Extension,
         };
 
         fb::DType::create(
@@ -184,17 +184,17 @@ impl WriteFlatBuffer for DType {
 impl From<PType> for fb::PType {
     fn from(value: PType) -> Self {
         match value {
-            PType::U8 => fb::PType::U8,
-            PType::U16 => fb::PType::U16,
-            PType::U32 => fb::PType::U32,
-            PType::U64 => fb::PType::U64,
-            PType::I8 => fb::PType::I8,
-            PType::I16 => fb::PType::I16,
-            PType::I32 => fb::PType::I32,
-            PType::I64 => fb::PType::I64,
-            PType::F16 => fb::PType::F16,
-            PType::F32 => fb::PType::F32,
-            PType::F64 => fb::PType::F64,
+            PType::U8 => Self::U8,
+            PType::U16 => Self::U16,
+            PType::U32 => Self::U32,
+            PType::U64 => Self::U64,
+            PType::I8 => Self::I8,
+            PType::I16 => Self::I16,
+            PType::I32 => Self::I32,
+            PType::I64 => Self::I64,
+            PType::F16 => Self::F16,
+            PType::F32 => Self::F32,
+            PType::F64 => Self::F64,
         }
     }
 }
@@ -204,17 +204,17 @@ impl TryFrom<fb::PType> for PType {
 
     fn try_from(value: fb::PType) -> Result<Self, Self::Error> {
         Ok(match value {
-            fb::PType::U8 => PType::U8,
-            fb::PType::U16 => PType::U16,
-            fb::PType::U32 => PType::U32,
-            fb::PType::U64 => PType::U64,
-            fb::PType::I8 => PType::I8,
-            fb::PType::I16 => PType::I16,
-            fb::PType::I32 => PType::I32,
-            fb::PType::I64 => PType::I64,
-            fb::PType::F16 => PType::F16,
-            fb::PType::F32 => PType::F32,
-            fb::PType::F64 => PType::F64,
+            fb::PType::U8 => Self::U8,
+            fb::PType::U16 => Self::U16,
+            fb::PType::U32 => Self::U32,
+            fb::PType::U64 => Self::U64,
+            fb::PType::I8 => Self::I8,
+            fb::PType::I16 => Self::I16,
+            fb::PType::I32 => Self::I32,
+            fb::PType::I64 => Self::I64,
+            fb::PType::F16 => Self::F16,
+            fb::PType::F32 => Self::F32,
+            fb::PType::F64 => Self::F64,
             _ => vortex_bail!(InvalidSerde: "Unknown PType variant"),
         })
     }

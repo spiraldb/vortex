@@ -73,7 +73,7 @@ impl AsContiguousFn for StructArray {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let struct_arrays = arrays
             .iter()
-            .map(StructArray::try_from)
+            .map(Self::try_from)
             .collect::<VortexResult<Vec<_>>>()?;
         let mut fields = vec![Vec::new(); self.dtypes().len()];
         for array in struct_arrays.iter() {
@@ -88,7 +88,7 @@ impl AsContiguousFn for StructArray {
             Validity::NonNullable
         };
 
-        StructArray::try_new(
+        Self::try_new(
             self.names().clone(),
             fields
                 .iter()
@@ -114,7 +114,7 @@ impl ScalarAtFn for StructArray {
 
 impl TakeFn for StructArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        StructArray::try_new(
+        Self::try_new(
             self.names().clone(),
             self.children()
                 .map(|field| take(&field, indices))
@@ -132,7 +132,7 @@ impl SliceFn for StructArray {
             .children()
             .map(|field| slice(&field, start, stop))
             .try_collect()?;
-        StructArray::try_new(
+        Self::try_new(
             self.names().clone(),
             fields,
             stop - start,

@@ -94,7 +94,7 @@ impl Scalar {
         }
     }
 
-    pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
+    pub fn cast(&self, dtype: &DType) -> VortexResult<Self> {
         if self.dtype() == dtype {
             return Ok(self.clone());
         }
@@ -132,8 +132,8 @@ impl PartialOrd for Scalar {
     }
 }
 
-impl AsRef<Scalar> for Scalar {
-    fn as_ref(&self) -> &Scalar {
+impl AsRef<Self> for Scalar {
+    fn as_ref(&self) -> &Self {
         self
     }
 }

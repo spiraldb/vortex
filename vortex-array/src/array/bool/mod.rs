@@ -59,13 +59,13 @@ impl BoolArray {
 
 impl From<BooleanBuffer> for BoolArray {
     fn from(value: BooleanBuffer) -> Self {
-        BoolArray::try_new(value, Validity::NonNullable).unwrap()
+        Self::try_new(value, Validity::NonNullable).unwrap()
     }
 }
 
 impl From<Vec<bool>> for BoolArray {
     fn from(value: Vec<bool>) -> Self {
-        BoolArray::from_vec(value, Validity::NonNullable)
+        Self::from_vec(value, Validity::NonNullable)
     }
 }
 
@@ -82,7 +82,7 @@ impl FromIterator<Option<bool>> for BoolArray {
             })
             .collect::<Vec<_>>();
 
-        BoolArray::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap()
+        Self::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap()
     }
 }
 

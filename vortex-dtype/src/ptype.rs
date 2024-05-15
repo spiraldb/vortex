@@ -141,11 +141,11 @@ macro_rules! match_each_float_ptype {
 
 impl PType {
     pub const fn is_unsigned_int(self) -> bool {
-        matches!(self, PType::U8 | PType::U16 | PType::U32 | PType::U64)
+        matches!(self, Self::U8 | Self::U16 | Self::U32 | Self::U64)
     }
 
     pub const fn is_signed_int(self) -> bool {
-        matches!(self, PType::I8 | PType::I16 | PType::I32 | PType::I64)
+        matches!(self, Self::I8 | Self::I16 | Self::I32 | Self::I64)
     }
 
     pub const fn is_int(self) -> bool {
@@ -153,7 +153,7 @@ impl PType {
     }
 
     pub const fn is_float(self) -> bool {
-        matches!(self, PType::F16 | PType::F32 | PType::F64)
+        matches!(self, Self::F16 | Self::F32 | Self::F64)
     }
 
     pub const fn byte_width(&self) -> usize {
@@ -164,22 +164,22 @@ impl PType {
         self.byte_width() * 8
     }
 
-    pub fn to_signed(self) -> PType {
+    pub fn to_signed(self) -> Self {
         match self {
-            PType::U8 => PType::I8,
-            PType::U16 => PType::I16,
-            PType::U32 => PType::I32,
-            PType::U64 => PType::I64,
+            Self::U8 => Self::I8,
+            Self::U16 => Self::I16,
+            Self::U32 => Self::I32,
+            Self::U64 => Self::I64,
             _ => self,
         }
     }
 
-    pub fn to_unsigned(self) -> PType {
+    pub fn to_unsigned(self) -> Self {
         match self {
-            PType::I8 => PType::U8,
-            PType::I16 => PType::U16,
-            PType::I32 => PType::U32,
-            PType::I64 => PType::U64,
+            Self::I8 => Self::U8,
+            Self::I16 => Self::U16,
+            Self::I32 => Self::U32,
+            Self::I64 => Self::U64,
             _ => self,
         }
     }
@@ -214,17 +214,17 @@ impl DType {
 impl Display for PType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PType::U8 => write!(f, "u8"),
-            PType::U16 => write!(f, "u16"),
-            PType::U32 => write!(f, "u32"),
-            PType::U64 => write!(f, "u64"),
-            PType::I8 => write!(f, "i8"),
-            PType::I16 => write!(f, "i16"),
-            PType::I32 => write!(f, "i32"),
-            PType::I64 => write!(f, "i64"),
-            PType::F16 => write!(f, "f16"),
-            PType::F32 => write!(f, "f32"),
-            PType::F64 => write!(f, "f64"),
+            Self::U8 => write!(f, "u8"),
+            Self::U16 => write!(f, "u16"),
+            Self::U32 => write!(f, "u32"),
+            Self::U64 => write!(f, "u64"),
+            Self::I8 => write!(f, "i8"),
+            Self::I16 => write!(f, "i16"),
+            Self::I32 => write!(f, "i32"),
+            Self::I64 => write!(f, "i64"),
+            Self::F16 => write!(f, "f16"),
+            Self::F32 => write!(f, "f32"),
+            Self::F64 => write!(f, "f64"),
         }
     }
 }

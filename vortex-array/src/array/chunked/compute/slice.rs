@@ -11,7 +11,7 @@ impl SliceFn for ChunkedArray {
 
         if length_chunk == offset_chunk {
             if let Some(chunk) = self.chunk(offset_chunk) {
-                return ChunkedArray::try_new(
+                return Self::try_new(
                     vec![slice(&chunk, offset_in_first_chunk, length_in_last_chunk)?],
                     self.dtype().clone(),
                 )
@@ -35,6 +35,6 @@ impl SliceFn for ChunkedArray {
             *c = slice(c, 0, length_in_last_chunk)?;
         }
 
-        ChunkedArray::try_new(chunks, self.dtype().clone()).map(|a| a.into_array())
+        Self::try_new(chunks, self.dtype().clone()).map(|a| a.into_array())
     }
 }

@@ -12,7 +12,7 @@ impl BufferString {
     ///
     /// # Safety
     /// Assumes that the buffer contains valid UTF-8.
-    pub unsafe fn new_unchecked(buffer: Buffer) -> Self {
+    pub const unsafe fn new_unchecked(buffer: Buffer) -> Self {
         Self(buffer)
     }
 
@@ -30,7 +30,7 @@ impl From<BufferString> for Buffer {
 
 impl From<String> for BufferString {
     fn from(value: String) -> Self {
-        BufferString(Buffer::from(value.into_bytes()))
+        Self(Buffer::from(value.into_bytes()))
     }
 }
 

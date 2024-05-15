@@ -50,7 +50,7 @@ impl EncodingCompression for REEEncoding {
             &ends.into_array(),
             ree_like_ref.map(|ree| ree.ends()).as_ref(),
         )?;
-        let compressed_values = ctx.named("values").excluding(&REEEncoding).compress(
+        let compressed_values = ctx.named("values").excluding(&Self).compress(
             &values.into_array(),
             ree_like_ref.map(|ree| ree.values()).as_ref(),
         )?;

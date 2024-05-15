@@ -171,7 +171,7 @@ impl PrimitiveArray {
 
 impl<T: NativePType> From<Vec<T>> for PrimitiveArray {
     fn from(values: Vec<T>) -> Self {
-        PrimitiveArray::from_vec(values, Validity::NonNullable)
+        Self::from_vec(values, Validity::NonNullable)
     }
 }
 

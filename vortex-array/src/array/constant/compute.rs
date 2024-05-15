@@ -27,11 +27,11 @@ impl AsContiguousFn for ConstantArray {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let chunks = arrays
             .iter()
-            .map(|a| ConstantArray::try_from(a).unwrap())
+            .map(|a| Self::try_from(a).unwrap())
             .collect_vec();
 
         if chunks.iter().map(|c| c.scalar()).all_equal() {
-            Ok(ConstantArray::new(
+            Ok(Self::new(
                 chunks.first().unwrap().scalar().clone(),
                 chunks.iter().map(|c| c.len()).sum(),
             )
@@ -53,6 +53,6 @@ impl ScalarAtFn for ConstantArray {
 
 impl TakeFn for ConstantArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        Ok(ConstantArray::new(self.scalar().clone(), indices.len()).into_array())
+        Ok(Self::new(self.scalar().clone(), indices.len()).into_array())
     }
 }

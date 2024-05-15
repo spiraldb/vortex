@@ -235,10 +235,10 @@ impl PyArray {
         PyDType::wrap(self_.py(), self_.inner.dtype().clone())
     }
 
-    fn take(&self, indices: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
+    fn take(&self, indices: PyRef<'_, Self>) -> PyResult<Py<Self>> {
         take(&self.inner, indices.unwrap())
             .map_err(PyVortexError::map_err)
-            .and_then(|arr| PyArray::wrap(indices.py(), arr.into_array_data()))
+            .and_then(|arr| Self::wrap(indices.py(), arr.into_array_data()))
     }
 }
 //

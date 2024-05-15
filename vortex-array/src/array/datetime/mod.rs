@@ -40,10 +40,10 @@ lazy_static! {
 impl TimeUnit {
     pub fn metadata(&self) -> &ExtMetadata {
         match self {
-            TimeUnit::Ns => &METADATA_NS,
-            TimeUnit::Us => &METADATA_US,
-            TimeUnit::Ms => &METADATA_MS,
-            TimeUnit::S => &METADATA_S,
+            Self::Ns => &METADATA_NS,
+            Self::Us => &METADATA_US,
+            Self::Ms => &METADATA_MS,
+            Self::S => &METADATA_S,
         }
     }
 }
@@ -51,10 +51,10 @@ impl TimeUnit {
 impl Display for TimeUnit {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            TimeUnit::Ns => write!(f, "ns"),
-            TimeUnit::Us => write!(f, "us"),
-            TimeUnit::Ms => write!(f, "ms"),
-            TimeUnit::S => write!(f, "s"),
+            Self::Ns => write!(f, "ns"),
+            Self::Us => write!(f, "us"),
+            Self::Ms => write!(f, "ms"),
+            Self::S => write!(f, "s"),
         }
     }
 }

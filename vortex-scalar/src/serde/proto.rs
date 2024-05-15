@@ -36,6 +36,6 @@ impl TryFrom<&pb::Scalar> for Scalar {
             Value::String(v) => ScalarValue::BufferString(BufferString::from(v.clone())),
         };
 
-        Ok(Scalar { dtype, value })
+        Ok(Self { dtype, value })
     }
 }
