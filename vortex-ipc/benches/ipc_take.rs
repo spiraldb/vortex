@@ -6,15 +6,17 @@ use arrow_array::{Array, Int32Array, RecordBatch};
 use arrow_ipc::writer::{IpcWriteOptions, StreamWriter as ArrowStreamWriter};
 use arrow_ipc::{CompressionType, MetadataVersion};
 use arrow_schema::{DataType, Field, Schema};
+use criterion::async_executor::FuturesExecutor;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use futures_util::{pin_mut, TryStreamExt};
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
 use vortex::{Context, IntoArray};
-use vortex_ipc::iter::FallibleLendingIterator;
-use vortex_ipc::reader::StreamReader;
+use vortex_ipc::io::FuturesVortexRead;
 use vortex_ipc::writer::StreamWriter;
+use vortex_ipc::MessageReader;
 
 fn ipc_take(c: &mut Criterion) {
     let mut group = c.benchmark_group("ipc_take");
@@ -62,12 +64,17 @@ fn ipc_take(c: &mut Criterion) {
             let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
             writer.write_array(&compressed).unwrap();
         }
-        b.iter(|| {
-            let mut cursor = Cursor::new(&buffer);
-            let mut reader = StreamReader::try_new(&mut cursor, &ctx).unwrap();
-            let mut array_reader = reader.next().unwrap().unwrap();
-            let array_view = array_reader.next().unwrap().unwrap();
-            black_box(take(&array_view, &indices))
+
+        let ctx_ref = &ctx;
+        let ro_buffer = buffer.as_ref();
+        let indices_ref = &indices;
+
+        b.to_async(FuturesExecutor).iter(|| async move {
+            let mut msgs = MessageReader::try_new(FuturesVortexRead::from(ro_buffer)).await?;
+            let reader = msgs.array_stream_from_messages(ctx_ref).await?;
+            pin_mut!(reader);
+            let array_view = reader.try_next().await?.unwrap();
+            black_box(take(&array_view, indices_ref))
         });
     });
 }

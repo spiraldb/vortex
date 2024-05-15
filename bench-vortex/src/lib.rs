@@ -218,8 +218,6 @@ mod test {
     use vortex::compress::Compressor;
     use vortex::compute::as_arrow::as_arrow;
     use vortex::{ArrayData, IntoArray};
-    use vortex_ipc::reader::StreamReader;
-    use vortex_ipc::writer::StreamWriter;
 
     use crate::taxi_data::taxi_data_parquet;
     use crate::{compress_taxi_data, setup_logger, CTX};
@@ -229,30 +227,6 @@ mod test {
     fn compression_ratio() {
         setup_logger(LevelFilter::Debug);
         _ = compress_taxi_data();
-    }
-
-    #[ignore]
-    #[test]
-    fn round_trip_serde() {
-        let file = File::open(taxi_data_parquet()).unwrap();
-        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-        let reader = builder.with_limit(1).build().unwrap();
-
-        for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
-            let struct_arrow: ArrowStructArray = record_batch.into();
-            let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
-
-            let mut buf = Vec::<u8>::new();
-            {
-                let mut writer = StreamWriter::try_new(&mut buf, &CTX).unwrap();
-                writer.write_array(&vortex_array).unwrap();
-            }
-
-            let mut read = buf.as_slice();
-            let mut reader = StreamReader::try_new(&mut read, &CTX).unwrap();
-            reader.read_array().unwrap();
-        }
     }
 
     #[ignore]

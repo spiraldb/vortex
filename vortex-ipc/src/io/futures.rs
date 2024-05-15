@@ -3,6 +3,7 @@
 use std::io;
 
 use bytes::BytesMut;
+use futures_util::io::Cursor;
 use futures_util::{AsyncRead, AsyncReadExt};
 
 use crate::io::VortexRead;
@@ -13,6 +14,12 @@ impl<R: AsyncRead + Unpin> VortexRead for FuturesVortexRead<R> {
     async fn read_into(&mut self, mut buffer: BytesMut) -> io::Result<BytesMut> {
         self.0.read_exact(buffer.as_mut()).await?;
         Ok(buffer)
+    }
+}
+
+impl<'a> From<&'a [u8]> for FuturesVortexRead<Cursor<&'a [u8]>> {
+    fn from(buffer: &'a [u8]) -> Self {
+        FuturesVortexRead(Cursor::new(buffer))
     }
 }
 

@@ -12,16 +12,13 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-arrow-buffer = { workspace = true }
 bytes = { workspace = true }
-fallible-iterator = { workspace = true }
 flatbuffers = { workspace = true }
-futures-util = { workspace = true, features = ["io"] }
+futures-util = { workspace = true }
 itertools = { workspace = true }
-log = { workspace = true }
 monoio = { workspace = true, optional = true, features = ["bytes"] }
-nougat = "0.2.4"
 pin-project = { workspace = true }
+tokio = { workspace = true, features = ["io-util"], optional = true }
 vortex-array = { path = "../vortex-array" }
 vortex-buffer = { path = "../vortex-buffer" }
 vortex-error = { path = "../vortex-error" }
@@ -49,8 +46,8 @@ arrow-select = { workspace = true }
 workspace = true
 
 [features]
-default = ["futures", "monoio"]
-futures = []
+default = ["futures", "monoio", "tokio"]
+futures = ["futures-util/io"]
 monoio = ["dep:monoio"]
 
 [[bench]]
