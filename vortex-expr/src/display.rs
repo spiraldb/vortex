@@ -58,7 +58,7 @@ mod tests {
     use vortex_dtype::field_paths::{field, FieldPath};
 
     use crate::expressions::{lit, Conjunction, Disjunction};
-    use crate::field_paths::FieldPathOperator;
+    use crate::field_paths::FieldPathOperations;
 
     #[test]
     fn test_predicate_formatting() {

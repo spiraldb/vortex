@@ -3,7 +3,7 @@ use vortex_dtype::field_paths::FieldPath;
 use crate::expressions::{Predicate, Value};
 use crate::operators::Operator;
 
-pub trait FieldPathOperator {
+pub trait FieldPathOperations {
     fn eq(self, other: Value) -> Predicate;
     fn not_eq(self, other: Value) -> Predicate;
     fn gt(self, other: Value) -> Predicate;
@@ -12,7 +12,7 @@ pub trait FieldPathOperator {
     fn lte(self, other: Value) -> Predicate;
 }
 
-impl FieldPathOperator for FieldPath {
+impl FieldPathOperations for FieldPath {
     // comparisons
     fn eq(self, other: Value) -> Predicate {
         Predicate {
