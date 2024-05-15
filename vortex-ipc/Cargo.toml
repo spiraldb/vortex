@@ -13,6 +13,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 bytes = { workspace = true }
+derive_builder = { workspace = true }
 flatbuffers = { workspace = true }
 futures-util = { workspace = true }
 itertools = { workspace = true }
@@ -43,7 +44,7 @@ arrow-schema = { workspace = true }
 arrow-select = { workspace = true }
 
 [lints]
-workspace = true
+# workspace = true
 
 [features]
 default = ["futures", "monoio", "tokio"]

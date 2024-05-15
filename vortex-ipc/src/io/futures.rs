@@ -8,7 +8,7 @@ use futures_util::{AsyncRead, AsyncReadExt};
 
 use crate::io::VortexRead;
 
-pub struct FuturesVortexRead<R: AsyncRead>(pub R);
+pub struct FuturesVortexRead<R>(pub R);
 
 impl<R: AsyncRead + Unpin> VortexRead for FuturesVortexRead<R> {
     async fn read_into(&mut self, mut buffer: BytesMut) -> io::Result<BytesMut> {
