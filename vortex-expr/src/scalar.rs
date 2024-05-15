@@ -1,6 +1,6 @@
 use vortex_scalar::Scalar;
 
-use crate::expressions::{Value};
+use crate::expressions::Value;
 use crate::literal::Literal;
 
 pub struct ScalarDisplayWrapper<'a>(pub &'a Scalar);

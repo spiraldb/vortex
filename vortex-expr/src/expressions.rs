@@ -53,11 +53,6 @@ impl Value {
     }
 }
 
-pub enum Predicate {
-    Expression,
-    Not,
-}
-
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct PredicateExpr {
     pub left: Value,
@@ -82,6 +77,8 @@ impl FieldExpr {
     }
 
     pub fn new(field_name: impl Into<FieldName>) -> Self {
-        Self { field_name: field_name.into() }
+        Self {
+            field_name: field_name.into(),
+        }
     }
 }

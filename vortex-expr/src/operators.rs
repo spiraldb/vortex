@@ -1,6 +1,7 @@
 use std::ops;
 
 use serde::{Deserialize, Serialize};
+
 use crate::expression_fns::predicate;
 use crate::expressions::PredicateExpr;
 
@@ -20,12 +21,12 @@ impl ops::Not for PredicateExpr {
 
     fn not(self) -> Self::Output {
         let inverse_op = match self.op {
-            Operator::EqualTo => { Operator::NotEqualTo }
-            Operator::NotEqualTo => { Operator::EqualTo }
-            Operator::GreaterThan => { Operator::LessThanOrEqualTo }
-            Operator::GreaterThanOrEqualTo => { Operator::LessThan }
-            Operator::LessThan => { Operator::GreaterThanOrEqualTo }
-            Operator::LessThanOrEqualTo => { Operator::GreaterThan }
+            Operator::EqualTo => Operator::NotEqualTo,
+            Operator::NotEqualTo => Operator::EqualTo,
+            Operator::GreaterThan => Operator::LessThanOrEqualTo,
+            Operator::GreaterThanOrEqualTo => Operator::LessThan,
+            Operator::LessThan => Operator::GreaterThanOrEqualTo,
+            Operator::LessThanOrEqualTo => Operator::GreaterThan,
         };
         predicate(self.left, inverse_op, self.right)
     }

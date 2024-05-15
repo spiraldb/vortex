@@ -2,8 +2,8 @@
 
 use vortex_dtype::FieldName;
 
-use crate::expressions::{FieldExpr, PredicateExpr, Value};
 use crate::expressions::Value::Field;
+use crate::expressions::{FieldExpr, PredicateExpr, Value};
 use crate::operators::Operator;
 
 pub fn predicate(left: Value, op: Operator, right: Value) -> PredicateExpr {
@@ -16,9 +16,9 @@ pub fn field(field_name: impl Into<FieldName>) -> Value {
 }
 
 pub fn equals(left: Value, right: Value) -> PredicateExpr {
-    predicate(
-        left,
-        Operator::EqualTo,
-        right,
-    )
+    predicate(left, Operator::EqualTo, right)
+}
+
+pub fn not_equals(left: Value, right: Value) -> PredicateExpr {
+    predicate(left, Operator::NotEqualTo, right)
 }

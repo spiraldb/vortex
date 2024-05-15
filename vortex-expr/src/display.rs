@@ -4,10 +4,9 @@ use std::fmt::{Display, Formatter};
 use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_scalar::{BoolScalar, PrimitiveScalar};
 
-use crate::expressions::{PredicateExpr, Value, FieldExpr, DNFExpr, ConjunctionExpr};
-use crate::operators::{Operator};
+use crate::expressions::{ConjunctionExpr, DNFExpr, FieldExpr, PredicateExpr, Value};
+use crate::operators::Operator;
 use crate::scalar::ScalarDisplayWrapper;
-
 
 impl Display for DNFExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -82,9 +81,11 @@ impl Display for FieldExpr {
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Value::Field(expr) => { std::fmt::Display::fmt(expr, f) }
-            Value::Literal(scalar) => { ScalarDisplayWrapper(scalar).fmt(f) }
-            Value::IsNull(field) => { write!(f, "{field} IS NULL") }
+            Value::Field(expr) => std::fmt::Display::fmt(expr, f),
+            Value::Literal(scalar) => ScalarDisplayWrapper(scalar).fmt(f),
+            Value::IsNull(field) => {
+                write!(f, "{field} IS NULL")
+            }
         }
     }
 }
@@ -125,17 +126,19 @@ mod tests {
                 lit(1u32).lt(lit(2u32)),
                 lit(1u32).gte(lit(2u32)),
                 !lit(1u32).lte(lit(2u32)),
-            ]
+            ],
         };
         let d2 = ConjunctionExpr {
             predicates: vec![
                 lit(2u32).lt(lit(3u32)),
                 lit(3u32).gte(lit(4u32)),
                 !lit(5u32).lte(lit(6u32)),
-            ]
+            ],
         };
 
-        let dnf = DNFExpr { conjunctions: vec![d1, d2] };
+        let dnf = DNFExpr {
+            conjunctions: vec![d1, d2],
+        };
 
         let string = format!("{}", dnf);
         print!("{}", string);
