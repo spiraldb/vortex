@@ -1,0 +1,28 @@
+[package]
+name = "vortex-expr"
+version = { workspace = true }
+description = "Vortex Expressions"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+vortex-dtype = { path = "../vortex-dtype" }
+vortex-error = { path = "../vortex-error" }
+vortex-scalar = { path = "../vortex-scalar" }
+serde = { workspace = true, optional = true, features = ["derive"] }
+
+
+[dev-dependencies]
+
+
+[features]
+serde = ["dep:serde", "vortex-dtype/serde", "vortex-scalar/serde"]

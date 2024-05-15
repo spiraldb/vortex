@@ -11,6 +11,7 @@ members = [
     "vortex-datetime-parts",
     "vortex-dict",
     "vortex-error",
+    "vortex-expr",
     "vortex-fastlanes",
     "vortex-flatbuffers",
     "vortex-ipc",
