@@ -6,7 +6,7 @@ use vortex_error::{vortex_bail, VortexResult};
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FieldPath {
-    pub field_names: Vec<FieldIdentifier>,
+    field_names: Vec<FieldIdentifier>,
 }
 
 impl FieldPath {
