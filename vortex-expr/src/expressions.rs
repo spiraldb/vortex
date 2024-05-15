@@ -4,13 +4,21 @@ use vortex_scalar::Scalar;
 use crate::expressions::Value::Field;
 use crate::operators::Operator;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde("transparent")
+)]
 pub struct Disjunction {
     pub conjunctions: Vec<Conjunction>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde("transparent")
+)]
 pub struct Conjunction {
     pub predicates: Vec<Predicate>,
 }
