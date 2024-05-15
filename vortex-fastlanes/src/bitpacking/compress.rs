@@ -35,7 +35,7 @@ impl EncodingCompression for BitPackedEncoding {
         }
 
         let bytes_per_exception = bytes_per_exception(parray.ptype());
-        let bit_width_freq = parray.statistics().compute_bit_width_freq().ok()?;
+        let bit_width_freq = parray.statistics().compute_bit_width_freq()?;
         let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception);
 
         // Check that the bit width is less than the type's bit width
@@ -53,7 +53,10 @@ impl EncodingCompression for BitPackedEncoding {
         ctx: Compressor,
     ) -> VortexResult<Array> {
         let parray = array.as_primitive();
-        let bit_width_freq = parray.statistics().compute_bit_width_freq()?;
+        let bit_width_freq = parray
+            .statistics()
+            .compute_bit_width_freq()
+            .ok_or_else(|| vortex_err!(ComputeError: "missing bit width frequency"))?;
 
         let like_bp = like.map(|l| BitPackedArray::try_from(l).unwrap());
         let bit_width = best_bit_width(&bit_width_freq, bytes_per_exception(parray.ptype()));
@@ -88,7 +91,10 @@ impl EncodingCompression for BitPackedEncoding {
 }
 
 pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<BitPackedArray> {
-    let bit_width_freq = array.statistics().compute_bit_width_freq()?;
+    let bit_width_freq = array
+        .statistics()
+        .compute_bit_width_freq()
+        .ok_or_else(|| vortex_err!(ComputeError: "missing bit width frequency"))?;
     let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
     if bit_width >= array.ptype().bit_width() {
