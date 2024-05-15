@@ -8,11 +8,11 @@ use crate::operators::Operator;
 
 #[derive(Deserialize, Serialize)]
 pub struct DNFExpr {
-    pub conjunctions: Vec<Disjunction>,
+    pub conjunctions: Vec<ConjunctionExpr>,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub struct Disjunction {
+pub struct ConjunctionExpr {
     pub predicates: Vec<PredicateExpr>,
 }
 

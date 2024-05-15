@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use vortex_dtype::{match_each_native_ptype, DType};
 use vortex_scalar::{BoolScalar, PrimitiveScalar};
 
-use crate::expressions::{PredicateExpr, Value, FieldExpr, DNFExpr, Disjunction};
+use crate::expressions::{PredicateExpr, Value, FieldExpr, DNFExpr, ConjunctionExpr};
 use crate::operators::{Operator};
 use crate::scalar::ScalarDisplayWrapper;
 
@@ -26,7 +26,7 @@ impl Display for DNFExpr {
     }
 }
 
-impl Display for Disjunction {
+impl Display for ConjunctionExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let iter = self.predicates.iter();
         let mut first = true;
@@ -105,7 +105,7 @@ impl Display for Operator {
 
 #[cfg(test)]
 mod tests {
-    use crate::expressions::{Disjunction, DNFExpr};
+    use crate::expressions::{ConjunctionExpr, DNFExpr};
     use crate::literal::lit;
 
     #[test]
@@ -120,14 +120,14 @@ mod tests {
 
     #[test]
     fn test_dnf_formatting() {
-        let d1 = Disjunction {
+        let d1 = ConjunctionExpr {
             predicates: vec![
                 lit(1u32).lt(lit(2u32)),
                 lit(1u32).gte(lit(2u32)),
                 !lit(1u32).lte(lit(2u32)),
             ]
         };
-        let d2 = Disjunction {
+        let d2 = ConjunctionExpr {
             predicates: vec![
                 lit(2u32).lt(lit(3u32)),
                 lit(3u32).gte(lit(4u32)),
