@@ -31,13 +31,11 @@ impl FieldPathBuilder {
         }
     }
 
-    // Adds a field identifier to the path.
     pub fn join<T: Into<FieldIdentifier>>(mut self, identifier: T) -> Self {
         self.field_names.push(identifier.into());
         self
     }
 
-    // Builds the FieldPath object.
     pub fn build(self) -> FieldPath {
         FieldPath {
             field_names: self.field_names,
