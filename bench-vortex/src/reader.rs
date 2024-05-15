@@ -34,7 +34,6 @@ pub const BATCH_SIZE: usize = 65_536;
 
 pub fn open_vortex(path: &Path) -> VortexResult<Array> {
     let mut file = File::open(path)?;
-
     let mut reader = StreamReader::try_new(&mut file, &CTX)?;
     let mut reader = reader.next()?.unwrap();
     let dtype = reader.dtype().clone();

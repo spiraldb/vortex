@@ -33,7 +33,7 @@ vortex-scalar = { path = "../vortex-scalar" }
 build-vortex = { path = "../build-vortex" }
 
 [dev-dependencies]
-criterion = { workspace = true }
+criterion = { workspace = true, features = ["async_futures"] }
 rand = { workspace = true }
 simplelog = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

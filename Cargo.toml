@@ -103,3 +103,4 @@ warnings = "deny"
 
 [workspace.lints.clippy]
 all = "deny"
+nursery = "deny"

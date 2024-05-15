@@ -1,15 +1,17 @@
 use std::io::Cursor;
 
+use criterion::async_executor::FuturesExecutor;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use fallible_iterator::FallibleIterator;
+use futures_util::{pin_mut, TryStreamExt};
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::{Context, IntoArray};
 use vortex_dtype::Nullability;
 use vortex_dtype::{DType, PType};
-use vortex_ipc::iter::FallibleLendingIterator;
-use vortex_ipc::reader::StreamReader;
+use vortex_ipc::array_stream::ArrayStreamExt;
+use vortex_ipc::io::FuturesVortexRead;
 use vortex_ipc::writer::StreamWriter;
+use vortex_ipc::MessageReader;
 
 // 100 record batches, 100k rows each
 // take from the first 20 batches and last batch
@@ -38,12 +40,20 @@ fn ipc_array_reader_take(c: &mut Criterion) {
         }
         let indices = indices.clone().into_array();
 
-        b.iter(|| {
-            let mut cursor = Cursor::new(&buffer);
-            let mut reader = StreamReader::try_new(&mut cursor, &ctx).unwrap();
-            let array_reader = reader.next().unwrap().unwrap();
-            let mut iterator = array_reader.take(&indices).unwrap();
-            while let Some(arr) = iterator.next().unwrap() {
+        b.to_async(FuturesExecutor).iter(|| async {
+            let mut cursor = futures_util::io::Cursor::new(&buffer);
+            let mut msgs = MessageReader::try_new(FuturesVortexRead(&mut cursor))
+                .await
+                .unwrap();
+            let stream = msgs
+                .array_stream_from_messages(&ctx)
+                .await
+                .unwrap()
+                .take_rows(&indices)
+                .unwrap();
+            pin_mut!(stream);
+
+            while let Some(arr) = stream.try_next().await.unwrap() {
                 black_box(arr);
             }
         });

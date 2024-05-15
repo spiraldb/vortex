@@ -7,23 +7,23 @@ use vortex::Array;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
-use crate::codecs::ArrayReader;
+use crate::array_stream::ArrayStream;
 
 /// An adapter for a stream of array chunks to implement an ArrayReader.
 #[pin_project]
-pub struct ArrayReaderAdapter<S> {
+pub struct ArrayStreamAdapter<S> {
     dtype: DType,
     #[pin]
     inner: S,
 }
 
-impl<S> ArrayReaderAdapter<S> {
+impl<S> ArrayStreamAdapter<S> {
     pub fn new(dtype: DType, inner: S) -> Self {
         Self { dtype, inner }
     }
 }
 
-impl<S> ArrayReader for ArrayReaderAdapter<S>
+impl<S> ArrayStream for ArrayStreamAdapter<S>
 where
     S: Stream<Item = VortexResult<Array>>,
 {
@@ -32,7 +32,7 @@ where
     }
 }
 
-impl<S> Stream for ArrayReaderAdapter<S>
+impl<S> Stream for ArrayStreamAdapter<S>
 where
     S: Stream<Item = VortexResult<Array>>,
 {
