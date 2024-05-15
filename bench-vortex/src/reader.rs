@@ -24,24 +24,29 @@ use vortex::compute::take::take;
 use vortex::{Array, IntoArray, ToArrayData};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_ipc::iter::FallibleLendingIterator;
-use vortex_ipc::reader::StreamReader;
+use vortex_ipc::array_stream::ArrayStreamExt;
+use vortex_ipc::io::TokioVortexRead;
 use vortex_ipc::writer::StreamWriter;
+use vortex_ipc::MessageReader;
 
 use crate::CTX;
 
 pub const BATCH_SIZE: usize = 65_536;
 
 pub fn open_vortex(path: &Path) -> VortexResult<Array> {
-    let mut file = File::open(path)?;
-    let mut reader = StreamReader::try_new(&mut file, &CTX)?;
-    let mut reader = reader.next()?.unwrap();
-    let dtype = reader.dtype().clone();
-    let mut chunks = vec![];
-    while let Some(chunk) = reader.next()? {
-        chunks.push(chunk)
-    }
-    Ok(ChunkedArray::try_new(chunks, dtype)?.into_array())
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let file = tokio::fs::File::open(path).await.unwrap();
+            let mut msgs = MessageReader::try_new(TokioVortexRead(file)).await.unwrap();
+            msgs.array_stream_from_messages(&CTX)
+                .await
+                .unwrap()
+                .collect()
+                .await
+        })
 }
 
 pub fn rewrite_parquet_as_vortex<W: Write>(

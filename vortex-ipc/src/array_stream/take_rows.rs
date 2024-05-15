@@ -28,11 +28,16 @@ impl<'idx, R: ArrayStream> TakeRows<'idx, R> {
     #[allow(dead_code)]
     pub fn try_new(reader: R, indices: &'idx Array) -> VortexResult<Self> {
         if !indices.is_empty() {
-            if !indices.statistics().compute_is_sorted()? {
+            if !indices.statistics().compute_is_sorted().unwrap_or(false) {
                 vortex_bail!("Indices must be sorted to take from IPC stream")
             }
 
-            if indices.statistics().compute_null_count()? > 0 {
+            if indices
+                .statistics()
+                .compute_null_count()
+                .map(|nc| nc > 0)
+                .unwrap_or(true)
+            {
                 vortex_bail!("Indices must not contain nulls")
             }
 
@@ -41,7 +46,11 @@ impl<'idx, R: ArrayStream> TakeRows<'idx, R> {
             }
 
             if indices.dtype().is_signed_int()
-                && indices.statistics().compute_as_cast::<i64>(Stat::Min)? < 0
+                && indices
+                    .statistics()
+                    .compute_as_cast::<i64>(Stat::Min)
+                    .map(|min| min < 0)
+                    .unwrap_or(true)
             {
                 vortex_bail!("Indices must be positive")
             }

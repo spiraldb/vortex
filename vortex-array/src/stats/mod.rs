@@ -5,7 +5,7 @@ use enum_iterator::Sequence;
 pub use statsset::*;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::{DType, NativePType};
-use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex_error::{VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 pub mod flatbuffers;
@@ -88,82 +88,80 @@ impl dyn Statistics + '_ {
     pub fn get_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
-    ) -> VortexResult<U> {
+    ) -> Option<U> {
         self.get(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(|s| U::try_from(&s))
+            .map(|s| U::try_from(&s).expect("Invalid stats cast"))
     }
 
     pub fn get_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
-    ) -> VortexResult<U> {
+    ) -> Option<U> {
         self.get(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
-            .and_then(|s| U::try_from(&s))
+            .map(|s| {
+                s.cast(&DType::Primitive(U::PTYPE, NonNullable))
+                    .expect("Invalid scalar cast")
+            })
+            .map(|s| U::try_from(&s).expect("Invalid stats cast"))
     }
 
     pub fn compute_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
-    ) -> VortexResult<U> {
+    ) -> Option<U> {
         self.compute(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(|s| U::try_from(&s))
+            .map(|s| U::try_from(&s).expect("Invalid stats cast"))
     }
 
     pub fn compute_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
         stat: Stat,
-    ) -> VortexResult<U> {
+    ) -> Option<U> {
         self.compute(stat)
-            .ok_or_else(|| vortex_err!(ComputeError: "statistic {} missing", stat))
-            .and_then(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
-            .and_then(|s| U::try_from(s.as_ref()))
+            .map(|s| {
+                s.cast(&DType::Primitive(U::PTYPE, NonNullable))
+                    .expect("Invalid scalar cast")
+            })
+            .map(|s| U::try_from(&s).expect("Invalid stats cast"))
     }
 
-    pub fn compute_min<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
-        &self,
-    ) -> VortexResult<U> {
+    pub fn compute_min<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(&self) -> Option<U> {
         self.compute_as(Stat::Min)
     }
 
-    pub fn compute_max<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
-        &self,
-    ) -> VortexResult<U> {
+    pub fn compute_max<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(&self) -> Option<U> {
         self.compute_as(Stat::Max)
     }
 
-    pub fn compute_is_strict_sorted(&self) -> VortexResult<bool> {
+    pub fn compute_is_strict_sorted(&self) -> Option<bool> {
         self.compute_as(Stat::IsStrictSorted)
     }
 
-    pub fn compute_is_sorted(&self) -> VortexResult<bool> {
+    pub fn compute_is_sorted(&self) -> Option<bool> {
         self.compute_as(Stat::IsSorted)
     }
 
-    pub fn compute_is_constant(&self) -> VortexResult<bool> {
+    pub fn compute_is_constant(&self) -> Option<bool> {
         self.compute_as(Stat::IsConstant)
     }
 
-    pub fn compute_true_count(&self) -> VortexResult<usize> {
+    pub fn compute_true_count(&self) -> Option<usize> {
         self.compute_as(Stat::TrueCount)
     }
 
-    pub fn compute_null_count(&self) -> VortexResult<usize> {
+    pub fn compute_null_count(&self) -> Option<usize> {
         self.compute_as(Stat::NullCount)
     }
 
-    pub fn compute_run_count(&self) -> VortexResult<usize> {
+    pub fn compute_run_count(&self) -> Option<usize> {
         self.compute_as(Stat::RunCount)
     }
 
-    pub fn compute_bit_width_freq(&self) -> VortexResult<Vec<usize>> {
+    pub fn compute_bit_width_freq(&self) -> Option<Vec<usize>> {
         self.compute_as::<Vec<usize>>(Stat::BitWidthFreq)
     }
 
-    pub fn compute_trailing_zero_freq(&self) -> VortexResult<Vec<usize>> {
+    pub fn compute_trailing_zero_freq(&self) -> Option<Vec<usize>> {
         self.compute_as::<Vec<usize>>(Stat::TrailingZeroFreq)
     }
 }

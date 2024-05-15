@@ -16,6 +16,7 @@ use crate::validity::LogicalValidity;
 use crate::IntoArray;
 
 trait PStatsType: NativePType + Into<Scalar> + BitWidth {}
+
 impl<T: NativePType + Into<Scalar> + BitWidth> PStatsType for T {}
 
 impl ArrayStatisticsCompute for PrimitiveArray {
@@ -236,8 +237,11 @@ impl<T: PStatsType> StatsAccumulator<T> {
 
 #[cfg(test)]
 mod test {
+    use vortex_dtype::{DType, Nullability, PType};
+    use vortex_scalar::Scalar;
+
     use crate::array::primitive::PrimitiveArray;
-    use crate::stats::ArrayStatistics;
+    use crate::stats::{ArrayStatistics, Stat};
 
     #[test]
     fn stats() {
@@ -299,9 +303,10 @@ mod test {
     #[test]
     fn all_null() {
         let arr = PrimitiveArray::from_nullable_vec(vec![Option::<i32>::None, None, None]);
-        let min: Option<i32> = arr.statistics().compute_min().ok();
-        let max: Option<i32> = arr.statistics().compute_max().ok();
-        assert_eq!(min, None);
-        assert_eq!(max, None);
+        let min: Option<Scalar> = arr.statistics().compute(Stat::Min);
+        let max: Option<Scalar> = arr.statistics().compute(Stat::Max);
+        let null_i32 = Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable));
+        assert_eq!(min, Some(null_i32.clone()));
+        assert_eq!(max, Some(null_i32));
     }
 }

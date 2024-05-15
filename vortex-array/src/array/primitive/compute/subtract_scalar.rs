@@ -60,7 +60,7 @@ fn subtract_scalar_integer<
         return Ok(subtract_from.clone());
     }
 
-    if let Ok(min) = subtract_from.statistics().compute_as_cast::<T>(Stat::Min) {
+    if let Some(min) = subtract_from.statistics().compute_as_cast::<T>(Stat::Min) {
         if let (_, true) = min.overflowing_sub(&to_subtract) {
             vortex_bail!(
                 "Integer subtraction over/underflow: {}, {}",
@@ -69,7 +69,7 @@ fn subtract_scalar_integer<
             )
         }
     }
-    if let Ok(max) = subtract_from.statistics().compute_as_cast::<T>(Stat::Max) {
+    if let Some(max) = subtract_from.statistics().compute_as_cast::<T>(Stat::Max) {
         if let (_, true) = max.overflowing_sub(&to_subtract) {
             vortex_bail!(
                 "Integer subtraction over/underflow: {}, {}",

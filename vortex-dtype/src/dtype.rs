@@ -8,7 +8,8 @@ use DType::*;
 use crate::nullability::Nullability;
 use crate::{ExtDType, PType};
 
-pub type FieldNames = Arc<[Arc<str>]>;
+pub type FieldName = Arc<str>;
+pub type FieldNames = Arc<[FieldName]>;
 
 pub type Metadata = Vec<u8>;
 

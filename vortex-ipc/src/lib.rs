@@ -33,10 +33,8 @@ pub mod flatbuffers {
 pub mod array_stream;
 pub mod chunked_reader;
 pub mod io;
-pub mod iter;
 mod message_reader;
 mod messages;
-pub mod reader;
 pub mod writer;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
