@@ -299,8 +299,8 @@ mod test {
     #[test]
     fn all_null() {
         let arr = PrimitiveArray::from_nullable_vec(vec![Option::<i32>::None, None, None]);
-        let min: Option<i32> = arr.statistics().compute_min().ok();
-        let max: Option<i32> = arr.statistics().compute_max().ok();
+        let min: Option<i32> = arr.statistics().compute_min();
+        let max: Option<i32> = arr.statistics().compute_max();
         assert_eq!(min, None);
         assert_eq!(max, None);
     }

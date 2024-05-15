@@ -13,13 +13,11 @@ impl WriteFlatBuffer for &dyn Statistics {
     ) -> WIPOffset<Self::Target<'fb>> {
         let trailing_zero_freq = self
             .get_as::<Vec<u64>>(Stat::TrailingZeroFreq)
-            .ok()
             .map(|v| v.iter().copied().collect_vec())
             .map(|v| fbb.create_vector(v.as_slice()));
 
         let bit_width_freq = self
             .get_as::<Vec<u64>>(Stat::BitWidthFreq)
-            .ok()
             .map(|v| v.iter().copied().collect_vec())
             .map(|v| fbb.create_vector(v.as_slice()));
 
@@ -34,12 +32,12 @@ impl WriteFlatBuffer for &dyn Statistics {
         let stat_args = &crate::flatbuffers::ArrayStatsArgs {
             min,
             max,
-            is_sorted: self.get_as::<bool>(Stat::IsSorted).ok(),
-            is_strict_sorted: self.get_as::<bool>(Stat::IsStrictSorted).ok(),
-            is_constant: self.get_as::<bool>(Stat::IsConstant).ok(),
-            run_count: self.get_as_cast::<u64>(Stat::RunCount).ok(),
-            true_count: self.get_as_cast::<u64>(Stat::TrueCount).ok(),
-            null_count: self.get_as_cast::<u64>(Stat::NullCount).ok(),
+            is_sorted: self.get_as::<bool>(Stat::IsSorted),
+            is_strict_sorted: self.get_as::<bool>(Stat::IsStrictSorted),
+            is_constant: self.get_as::<bool>(Stat::IsConstant),
+            run_count: self.get_as_cast::<u64>(Stat::RunCount),
+            true_count: self.get_as_cast::<u64>(Stat::TrueCount),
+            null_count: self.get_as_cast::<u64>(Stat::NullCount),
             bit_width_freq,
             trailing_zero_freq,
         };
