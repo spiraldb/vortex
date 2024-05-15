@@ -7,7 +7,7 @@ use crate::operators::Operator;
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
-    serde("transparent")
+    serde(transparent)
 )]
 pub struct Disjunction {
     pub conjunctions: Vec<Conjunction>,
@@ -17,7 +17,7 @@ pub struct Disjunction {
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
-    serde("transparent")
+    serde(transparent)
 )]
 pub struct Conjunction {
     pub predicates: Vec<Predicate>,
