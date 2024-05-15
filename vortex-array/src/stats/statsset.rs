@@ -294,10 +294,7 @@ mod test {
         let vec_out = vec![10u64; 256];
         let mut first = StatsSet::of(Stat::BitWidthFreq, vec_in.clone().into());
         first.merge(&StatsSet::of(Stat::BitWidthFreq, vec_in.into()));
-        assert_eq!(
-            first.get(Stat::BitWidthFreq).cloned(),
-            Some(vec_out.into())
-        );
+        assert_eq!(first.get(Stat::BitWidthFreq).cloned(), Some(vec_out.into()));
     }
 
     #[test]

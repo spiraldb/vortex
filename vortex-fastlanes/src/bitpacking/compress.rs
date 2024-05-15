@@ -87,10 +87,7 @@ impl EncodingCompression for BitPackedEncoding {
     }
 }
 
-pub fn bitpack_encode(
-    array: PrimitiveArray,
-    bit_width: usize,
-) -> VortexResult<BitPackedArray> {
+pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<BitPackedArray> {
     let bit_width_freq = array.statistics().compute_bit_width_freq()?;
     let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 

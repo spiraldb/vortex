@@ -58,17 +58,10 @@ impl AsContiguousFn for ExtensionArray {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let storage_arrays = arrays
             .iter()
-            .map(|a| {
-                Self::try_from(a)
-                    .expect("not an extension array")
-                    .storage()
-            })
+            .map(|a| Self::try_from(a).expect("not an extension array").storage())
             .collect::<Vec<_>>();
 
-        Ok(
-            Self::new(self.ext_dtype().clone(), as_contiguous(&storage_arrays)?)
-                .into_array(),
-        )
+        Ok(Self::new(self.ext_dtype().clone(), as_contiguous(&storage_arrays)?).into_array())
     }
 }
 
@@ -93,9 +86,6 @@ impl SliceFn for ExtensionArray {
 
 impl TakeFn for ExtensionArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        Ok(
-            Self::new(self.ext_dtype().clone(), take(&self.storage(), indices)?)
-                .into_array(),
-        )
+        Ok(Self::new(self.ext_dtype().clone(), take(&self.storage(), indices)?).into_array())
     }
 }

@@ -182,9 +182,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
                 .columns()
                 .iter()
                 .zip(value.fields())
-                .map(|(c, field)| {
-                    Self::from_arrow(c.clone(), field.is_nullable()).into_array()
-                })
+                .map(|(c, field)| Self::from_arrow(c.clone(), field.is_nullable()).into_array())
                 .collect(),
             value.len(),
             nulls(value.nulls(), nullable),
@@ -230,15 +228,9 @@ impl FromArrowArray<ArrowArrayRef> for ArrayData {
             DataType::Int16 => Self::from_arrow(array.as_primitive::<Int16Type>(), nullable),
             DataType::Int32 => Self::from_arrow(array.as_primitive::<Int32Type>(), nullable),
             DataType::Int64 => Self::from_arrow(array.as_primitive::<Int64Type>(), nullable),
-            DataType::Float16 => {
-                Self::from_arrow(array.as_primitive::<Float16Type>(), nullable)
-            }
-            DataType::Float32 => {
-                Self::from_arrow(array.as_primitive::<Float32Type>(), nullable)
-            }
-            DataType::Float64 => {
-                Self::from_arrow(array.as_primitive::<Float64Type>(), nullable)
-            }
+            DataType::Float16 => Self::from_arrow(array.as_primitive::<Float16Type>(), nullable),
+            DataType::Float32 => Self::from_arrow(array.as_primitive::<Float32Type>(), nullable),
+            DataType::Float64 => Self::from_arrow(array.as_primitive::<Float64Type>(), nullable),
             DataType::Utf8 => Self::from_arrow(array.as_string::<i32>(), nullable),
             DataType::LargeUtf8 => Self::from_arrow(array.as_string::<i64>(), nullable),
             DataType::Binary => Self::from_arrow(array.as_binary::<i32>(), nullable),
@@ -257,14 +249,12 @@ impl FromArrowArray<ArrowArrayRef> for ArrayData {
                 TimeUnit::Second => {
                     Self::from_arrow(array.as_primitive::<TimestampSecondType>(), nullable)
                 }
-                TimeUnit::Millisecond => Self::from_arrow(
-                    array.as_primitive::<TimestampMillisecondType>(),
-                    nullable,
-                ),
-                TimeUnit::Microsecond => Self::from_arrow(
-                    array.as_primitive::<TimestampMicrosecondType>(),
-                    nullable,
-                ),
+                TimeUnit::Millisecond => {
+                    Self::from_arrow(array.as_primitive::<TimestampMillisecondType>(), nullable)
+                }
+                TimeUnit::Microsecond => {
+                    Self::from_arrow(array.as_primitive::<TimestampMicrosecondType>(), nullable)
+                }
                 TimeUnit::Nanosecond => {
                     Self::from_arrow(array.as_primitive::<TimestampNanosecondType>(), nullable)
                 }

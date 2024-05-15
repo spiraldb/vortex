@@ -58,10 +58,7 @@ impl TryFrom<&ExtensionArray> for LocalDateTimeArray {
     type Error = VortexError;
 
     fn try_from(value: &ExtensionArray) -> Result<Self, Self::Error> {
-        Self::try_new(
-            try_parse_time_unit(value.ext_dtype())?,
-            value.storage(),
-        )
+        Self::try_new(try_parse_time_unit(value.ext_dtype())?, value.storage())
     }
 }
 

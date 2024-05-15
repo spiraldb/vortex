@@ -91,9 +91,7 @@ impl FromArrowType<&Field> for DType {
                         .map(|f| f.name().as_str().into())
                         .collect_vec()
                         .into(),
-                    f.iter()
-                        .map(|f| Self::from_arrow(f.as_ref()))
-                        .collect_vec(),
+                    f.iter().map(|f| Self::from_arrow(f.as_ref())).collect_vec(),
                 ),
                 nullability,
             ),
