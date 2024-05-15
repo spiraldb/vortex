@@ -75,7 +75,7 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
     #[inline]
     pub fn push_null(&mut self) {
         self.views.push(BinaryView {
-            inlined: Inlined::new("".as_bytes()),
+            inlined: Inlined::new(b""),
         });
         self.nulls.append_null();
     }

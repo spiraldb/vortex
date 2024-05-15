@@ -70,7 +70,7 @@ where
 {
     let mut encoded = Vec::with_capacity(values.len());
     encoded.extend(values.iter().map(|v| T::encode(*v)));
-    PrimitiveArray::from_vec(encoded.to_vec(), validity.to_owned())
+    PrimitiveArray::from_vec(encoded.to_vec(), validity)
 }
 
 #[allow(dead_code)]

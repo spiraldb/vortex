@@ -27,7 +27,7 @@ impl<'a> BinaryScalar<'a> {
 
 impl Scalar {
     pub fn binary(buffer: Buffer, nullability: Nullability) -> Self {
-        Scalar {
+        Self {
             dtype: DType::Binary(nullability),
             value: ScalarValue::Buffer(buffer),
         }

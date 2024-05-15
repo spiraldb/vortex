@@ -254,7 +254,7 @@ impl<R: VortexRead> MessageReader<R> {
         };
 
         ArrayReaderAdapter::new(
-            dtype.clone(),
+            dtype,
             try_unfold(init, |state| async move {
                 match state
                     .msgs

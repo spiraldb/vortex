@@ -10,7 +10,7 @@ impl PyVortexError {
     }
 
     pub fn map_err(error: VortexError) -> PyErr {
-        PyVortexError::new(error).into()
+        Self::new(error).into()
     }
 }
 

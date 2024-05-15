@@ -144,7 +144,7 @@ impl SubtractScalarFn for ChunkedArray {
             .map(|chunk| subtract_scalar(&chunk, to_subtract))
             .collect::<VortexResult<Vec<_>>>()
             .map(|chunks| {
-                ChunkedArray::try_new(chunks, self.dtype().clone())
+                Self::try_new(chunks, self.dtype().clone())
                     .expect("Subtraction on chunked array changed dtype")
                     .into_array()
             })

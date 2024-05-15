@@ -39,7 +39,7 @@ impl Context {
 
 impl Default for Context {
     fn default() -> Self {
-        Context {
+        Self {
             encodings: HashMap::from_iter(
                 [
                     &BoolEncoding as EncodingRef,

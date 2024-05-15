@@ -25,7 +25,7 @@ impl AsRef<str> for ExtID {
 
 impl From<&str> for ExtID {
     fn from(value: &str) -> Self {
-        ExtID(value.into())
+        Self(value.into())
     }
 }
 
@@ -47,7 +47,7 @@ impl AsRef<[u8]> for ExtMetadata {
 
 impl From<&[u8]> for ExtMetadata {
     fn from(value: &[u8]) -> Self {
-        ExtMetadata(value.into())
+        Self(value.into())
     }
 }
 

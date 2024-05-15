@@ -27,10 +27,10 @@ pub enum ValidityMetadata {
 impl ValidityMetadata {
     pub fn to_validity(&self, array: Option<Array>) -> Validity {
         match self {
-            ValidityMetadata::NonNullable => Validity::NonNullable,
-            ValidityMetadata::AllValid => Validity::AllValid,
-            ValidityMetadata::AllInvalid => Validity::AllInvalid,
-            ValidityMetadata::Array => match array {
+            Self::NonNullable => Validity::NonNullable,
+            Self::AllValid => Validity::AllValid,
+            Self::AllInvalid => Validity::AllInvalid,
+            Self::Array => match array {
                 None => panic!("Missing validity array"),
                 Some(a) => Validity::Array(a),
             },
@@ -51,17 +51,17 @@ impl Validity {
 
     pub fn into_array_data(self) -> Option<ArrayData> {
         match self {
-            Validity::Array(a) => Some(a.into_array_data()),
+            Self::Array(a) => Some(a.into_array_data()),
             _ => None,
         }
     }
 
     pub fn to_metadata(&self, length: usize) -> VortexResult<ValidityMetadata> {
         match self {
-            Validity::NonNullable => Ok(ValidityMetadata::NonNullable),
-            Validity::AllValid => Ok(ValidityMetadata::AllValid),
-            Validity::AllInvalid => Ok(ValidityMetadata::AllInvalid),
-            Validity::Array(a) => {
+            Self::NonNullable => Ok(ValidityMetadata::NonNullable),
+            Self::AllValid => Ok(ValidityMetadata::AllValid),
+            Self::AllInvalid => Ok(ValidityMetadata::AllInvalid),
+            Self::Array(a) => {
                 // We force the caller to validate the length here.
                 let validity_len = a.with_dyn(|a| a.len());
                 if validity_len != length {
@@ -78,48 +78,48 @@ impl Validity {
 
     pub fn array(&self) -> Option<&Array> {
         match self {
-            Validity::Array(a) => Some(a),
+            Self::Array(a) => Some(a),
             _ => None,
         }
     }
 
     pub fn nullability(&self) -> Nullability {
         match self {
-            Validity::NonNullable => Nullability::NonNullable,
+            Self::NonNullable => Nullability::NonNullable,
             _ => Nullability::Nullable,
         }
     }
 
     pub fn is_valid(&self, index: usize) -> bool {
         match self {
-            Validity::NonNullable | Validity::AllValid => true,
-            Validity::AllInvalid => false,
-            Validity::Array(a) => bool::try_from(&scalar_at(a, index).unwrap()).unwrap(),
+            Self::NonNullable | Self::AllValid => true,
+            Self::AllInvalid => false,
+            Self::Array(a) => bool::try_from(&scalar_at(a, index).unwrap()).unwrap(),
         }
     }
 
-    pub fn slice(&self, start: usize, stop: usize) -> VortexResult<Validity> {
+    pub fn slice(&self, start: usize, stop: usize) -> VortexResult<Self> {
         match self {
-            Validity::Array(a) => Ok(Validity::Array(slice(a, start, stop)?)),
+            Self::Array(a) => Ok(Self::Array(slice(a, start, stop)?)),
             _ => Ok(self.clone()),
         }
     }
 
-    pub fn take(&self, indices: &Array) -> VortexResult<Validity> {
+    pub fn take(&self, indices: &Array) -> VortexResult<Self> {
         match self {
-            Validity::NonNullable => Ok(Validity::NonNullable),
-            Validity::AllValid => Ok(Validity::AllValid),
-            Validity::AllInvalid => Ok(Validity::AllInvalid),
-            Validity::Array(a) => Ok(Validity::Array(take(a, indices)?)),
+            Self::NonNullable => Ok(Self::NonNullable),
+            Self::AllValid => Ok(Self::AllValid),
+            Self::AllInvalid => Ok(Self::AllInvalid),
+            Self::Array(a) => Ok(Self::Array(take(a, indices)?)),
         }
     }
 
     pub fn to_logical(&self, length: usize) -> LogicalValidity {
         match self {
-            Validity::NonNullable => LogicalValidity::AllValid(length),
-            Validity::AllValid => LogicalValidity::AllValid(length),
-            Validity::AllInvalid => LogicalValidity::AllInvalid(length),
-            Validity::Array(a) => {
+            Self::NonNullable => LogicalValidity::AllValid(length),
+            Self::AllValid => LogicalValidity::AllValid(length),
+            Self::AllInvalid => LogicalValidity::AllInvalid(length),
+            Self::Array(a) => {
                 // Logical validity should map into AllValid/AllInvalid where possible.
                 if a.statistics().compute_min::<bool>().unwrap_or(false) {
                     LogicalValidity::AllValid(length)
@@ -141,10 +141,10 @@ impl Validity {
 impl PartialEq for Validity {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Validity::NonNullable, Validity::NonNullable) => true,
-            (Validity::AllValid, Validity::AllValid) => true,
-            (Validity::AllInvalid, Validity::AllInvalid) => true,
-            (Validity::Array(a), Validity::Array(b)) => {
+            (Self::NonNullable, Self::NonNullable) => true,
+            (Self::AllValid, Self::AllValid) => true,
+            (Self::AllInvalid, Self::AllInvalid) => true,
+            (Self::Array(a), Self::Array(b)) => {
                 a.clone().flatten_bool().unwrap().boolean_buffer()
                     == b.clone().flatten_bool().unwrap().boolean_buffer()
             }
@@ -156,11 +156,11 @@ impl PartialEq for Validity {
 impl From<Vec<bool>> for Validity {
     fn from(bools: Vec<bool>) -> Self {
         if bools.iter().all(|b| *b) {
-            Validity::AllValid
+            Self::AllValid
         } else if !bools.iter().any(|b| *b) {
-            Validity::AllInvalid
+            Self::AllInvalid
         } else {
-            Validity::Array(BoolArray::from_vec(bools, Validity::NonNullable).into_array())
+            Self::Array(BoolArray::from_vec(bools, Self::NonNullable).into_array())
         }
     }
 }
@@ -168,11 +168,11 @@ impl From<Vec<bool>> for Validity {
 impl From<BooleanBuffer> for Validity {
     fn from(value: BooleanBuffer) -> Self {
         if value.count_set_bits() == value.len() {
-            Validity::AllValid
+            Self::AllValid
         } else if value.count_set_bits() == 0 {
-            Validity::AllInvalid
+            Self::AllInvalid
         } else {
-            Validity::Array(BoolArray::from(value).into_array())
+            Self::Array(BoolArray::from(value).into_array())
         }
     }
 }
@@ -213,7 +213,7 @@ impl FromIterator<LogicalValidity> for Validity {
 impl<'a, E> FromIterator<&'a Option<E>> for Validity {
     fn from_iter<T: IntoIterator<Item = &'a Option<E>>>(iter: T) -> Self {
         let bools: Vec<bool> = iter.into_iter().map(|option| option.is_some()).collect();
-        Validity::from(bools)
+        Self::from(bools)
     }
 }
 
@@ -227,9 +227,9 @@ pub enum LogicalValidity {
 impl LogicalValidity {
     pub fn to_null_buffer(&self) -> VortexResult<Option<NullBuffer>> {
         match self {
-            LogicalValidity::AllValid(_) => Ok(None),
-            LogicalValidity::AllInvalid(l) => Ok(Some(NullBuffer::new_null(*l))),
-            LogicalValidity::Array(a) => Ok(Some(NullBuffer::new(
+            Self::AllValid(_) => Ok(None),
+            Self::AllInvalid(l) => Ok(Some(NullBuffer::new_null(*l))),
+            Self::Array(a) => Ok(Some(NullBuffer::new(
                 a.to_array().flatten_bool()?.boolean_buffer(),
             ))),
         }
@@ -237,43 +237,43 @@ impl LogicalValidity {
 
     pub fn to_present_null_buffer(&self) -> VortexResult<NullBuffer> {
         match self {
-            LogicalValidity::AllValid(l) => Ok(NullBuffer::new_valid(*l)),
-            LogicalValidity::AllInvalid(l) => Ok(NullBuffer::new_null(*l)),
-            LogicalValidity::Array(a) => Ok(NullBuffer::new(
+            Self::AllValid(l) => Ok(NullBuffer::new_valid(*l)),
+            Self::AllInvalid(l) => Ok(NullBuffer::new_null(*l)),
+            Self::Array(a) => Ok(NullBuffer::new(
                 a.to_array().flatten_bool()?.boolean_buffer(),
             )),
         }
     }
 
     pub fn all_valid(&self) -> bool {
-        matches!(self, LogicalValidity::AllValid(_))
+        matches!(self, Self::AllValid(_))
     }
 
     pub fn all_invalid(&self) -> bool {
-        matches!(self, LogicalValidity::AllInvalid(_))
+        matches!(self, Self::AllInvalid(_))
     }
 
     pub fn len(&self) -> usize {
         match self {
-            LogicalValidity::AllValid(n) => *n,
-            LogicalValidity::AllInvalid(n) => *n,
-            LogicalValidity::Array(a) => a.to_array().len(),
+            Self::AllValid(n) => *n,
+            Self::AllInvalid(n) => *n,
+            Self::Array(a) => a.to_array().len(),
         }
     }
 
     pub fn is_empty(&self) -> bool {
         match self {
-            LogicalValidity::AllValid(n) => *n == 0,
-            LogicalValidity::AllInvalid(n) => *n == 0,
-            LogicalValidity::Array(a) => a.to_array().is_empty(),
+            Self::AllValid(n) => *n == 0,
+            Self::AllInvalid(n) => *n == 0,
+            Self::Array(a) => a.to_array().is_empty(),
         }
     }
 
     pub fn into_validity(self) -> Validity {
         match self {
-            LogicalValidity::AllValid(_) => Validity::AllValid,
-            LogicalValidity::AllInvalid(_) => Validity::AllInvalid,
-            LogicalValidity::Array(a) => Validity::Array(a.into_array()),
+            Self::AllValid(_) => Validity::AllValid,
+            Self::AllInvalid(_) => Validity::AllInvalid,
+            Self::Array(a) => Validity::Array(a.into_array()),
         }
     }
 }
@@ -281,9 +281,9 @@ impl LogicalValidity {
 impl IntoArray for LogicalValidity {
     fn into_array(self) -> Array {
         match self {
-            LogicalValidity::AllValid(len) => BoolArray::from(vec![true; len]).into_array(),
-            LogicalValidity::AllInvalid(len) => BoolArray::from(vec![false; len]).into_array(),
-            LogicalValidity::Array(a) => a.into_array(),
+            Self::AllValid(len) => BoolArray::from(vec![true; len]).into_array(),
+            Self::AllInvalid(len) => BoolArray::from(vec![false; len]).into_array(),
+            Self::Array(a) => a.into_array(),
         }
     }
 }

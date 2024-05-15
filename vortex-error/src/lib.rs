@@ -17,7 +17,7 @@ where
         if env::var("VORTEX_PANIC_ON_ERR").as_deref().unwrap_or("") == "1" {
             panic!("{}", msg.into())
         } else {
-            ErrString(msg.into())
+            Self(msg.into())
         }
     }
 }
@@ -201,6 +201,6 @@ pub mod __private {
 #[cfg(feature = "worker")]
 impl From<VortexError> for worker::Error {
     fn from(value: VortexError) -> Self {
-        worker::Error::RustError(value.to_string())
+        Self::RustError(value.to_string())
     }
 }

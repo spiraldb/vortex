@@ -100,7 +100,7 @@ impl StructArray {
 
 impl ArrayFlatten for StructArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::Struct(StructArray::try_new(
+        Ok(Flattened::Struct(Self::try_new(
             self.names().clone(),
             (0..self.nfields())
                 .map(|i| {

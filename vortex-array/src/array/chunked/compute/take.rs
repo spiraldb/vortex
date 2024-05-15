@@ -46,7 +46,7 @@ impl TakeFn for ChunkedArray {
             )?);
         }
 
-        Ok(ChunkedArray::try_new(chunks, self.dtype().clone())?.into_array())
+        Ok(Self::try_new(chunks, self.dtype().clone())?.into_array())
     }
 }
 

@@ -97,7 +97,7 @@ pub mod test {
 
         let arr = StructArray::try_new(
             ["a".into(), "b".into()].into(),
-            vec![col.clone(), nested_struct.into_array()],
+            vec![col, nested_struct.into_array()],
             3,
             Validity::AllValid,
         )

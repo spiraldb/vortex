@@ -121,7 +121,7 @@ mod test {
     pub fn iter() -> VortexResult<()> {
         let bool: BoolArray = BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool.into_array())?;
-        let round_trip = RoaringBoolArray::try_from(array.clone())?;
+        let round_trip = RoaringBoolArray::try_from(array)?;
         let values = round_trip.bitmap().to_vec();
         assert_eq!(values, vec![0, 2, 3]);
 

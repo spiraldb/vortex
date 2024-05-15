@@ -76,8 +76,8 @@ impl<'a> TryFrom<&'a Scalar> for PrimitiveScalar<'a> {
 }
 
 impl Scalar {
-    pub fn primitive<T: NativePType + Into<PValue>>(value: T, nullability: Nullability) -> Scalar {
-        Scalar {
+    pub fn primitive<T: NativePType + Into<PValue>>(value: T, nullability: Nullability) -> Self {
+        Self {
             dtype: DType::Primitive(T::PTYPE, nullability),
             value: ScalarValue::Primitive(value.into()),
         }
@@ -132,7 +132,7 @@ primitive_scalar!(f64);
 
 impl From<usize> for Scalar {
     fn from(value: usize) -> Self {
-        Scalar::from(value as u64)
+        Self::from(value as u64)
     }
 }
 
@@ -146,6 +146,6 @@ impl TryFrom<&Scalar> for usize {
                 .cast(&DType::Primitive(PType::U64, Nullability::NonNullable))?
                 .as_ref(),
         )
-        .map(|v| v as usize)
+        .map(|v| v as Self)
     }
 }

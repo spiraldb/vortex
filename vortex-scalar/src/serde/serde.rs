@@ -15,12 +15,12 @@ impl Serialize for ScalarValue {
         S: Serializer,
     {
         match self {
-            ScalarValue::Null => ().serialize(serializer),
-            ScalarValue::Bool(b) => b.serialize(serializer),
-            ScalarValue::Primitive(p) => p.serialize(serializer),
-            ScalarValue::Buffer(buffer) => buffer.as_ref().serialize(serializer),
-            ScalarValue::BufferString(buffer) => buffer.as_str().serialize(serializer),
-            ScalarValue::List(l) => l.serialize(serializer),
+            Self::Null => ().serialize(serializer),
+            Self::Bool(b) => b.serialize(serializer),
+            Self::Primitive(p) => p.serialize(serializer),
+            Self::Buffer(buffer) => buffer.as_ref().serialize(serializer),
+            Self::BufferString(buffer) => buffer.as_str().serialize(serializer),
+            Self::List(l) => l.serialize(serializer),
         }
     }
 }
@@ -158,18 +158,18 @@ impl Serialize for PValue {
         S: Serializer,
     {
         match self {
-            PValue::U8(v) => serializer.serialize_u8(*v),
-            PValue::U16(v) => serializer.serialize_u16(*v),
-            PValue::U32(v) => serializer.serialize_u32(*v),
-            PValue::U64(v) => serializer.serialize_u64(*v),
-            PValue::I8(v) => serializer.serialize_i8(*v),
-            PValue::I16(v) => serializer.serialize_i16(*v),
-            PValue::I32(v) => serializer.serialize_i32(*v),
-            PValue::I64(v) => serializer.serialize_i64(*v),
+            Self::U8(v) => serializer.serialize_u8(*v),
+            Self::U16(v) => serializer.serialize_u16(*v),
+            Self::U32(v) => serializer.serialize_u32(*v),
+            Self::U64(v) => serializer.serialize_u64(*v),
+            Self::I8(v) => serializer.serialize_i8(*v),
+            Self::I16(v) => serializer.serialize_i16(*v),
+            Self::I32(v) => serializer.serialize_i32(*v),
+            Self::I64(v) => serializer.serialize_i64(*v),
             // NOTE(ngates): f16's are serialized bit-wise as u16.
-            PValue::F16(v) => serializer.serialize_u16(v.to_bits()),
-            PValue::F32(v) => serializer.serialize_f32(*v),
-            PValue::F64(v) => serializer.serialize_f64(*v),
+            Self::F16(v) => serializer.serialize_u16(v.to_bits()),
+            Self::F32(v) => serializer.serialize_f32(*v),
+            Self::F64(v) => serializer.serialize_f64(*v),
         }
     }
 }

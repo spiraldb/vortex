@@ -10,11 +10,11 @@ impl flexbuffers::Buffer for Buffer {
 
     fn slice(&self, range: Range<usize>) -> Option<Self> {
         // TODO(ngates): bounds-check and return None?
-        Some(Buffer::slice(self, range))
+        Some(Self::slice(self, range))
     }
 
     fn empty() -> Self {
-        Buffer::from(vec![])
+        Self::from(vec![])
     }
 
     fn buffer_str(&self) -> Result<Self::BufferString, Utf8Error> {

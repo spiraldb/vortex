@@ -26,10 +26,10 @@ pub enum DType {
 }
 
 impl DType {
-    pub const BYTES: DType = Primitive(PType::U8, Nullability::NonNullable);
+    pub const BYTES: Self = Primitive(PType::U8, Nullability::NonNullable);
 
     /// The default DType for indices
-    pub const IDX: DType = Primitive(PType::U64, Nullability::NonNullable);
+    pub const IDX: Self = Primitive(PType::U64, Nullability::NonNullable);
 
     pub fn nullability(&self) -> Nullability {
         self.is_nullable().into()

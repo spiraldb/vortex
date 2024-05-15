@@ -22,7 +22,7 @@ fn scalar_subtract(c: &mut Criterion) {
 
     let to_subtract = -1i64;
 
-    let chunked = ChunkedArray::from_iter([data1.clone(), data2]).into_array();
+    let chunked = ChunkedArray::from_iter([data1, data2]).into_array();
 
     group.bench_function("vortex", |b| {
         b.iter(|| {

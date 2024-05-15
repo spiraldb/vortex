@@ -72,7 +72,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
             Compressor::new(&CTX).compress(&vortex_array, None).unwrap()
         })
         .collect_vec();
-    ChunkedArray::try_new(chunks, dtype.clone())
+    ChunkedArray::try_new(chunks, dtype)
 }
 
 pub fn write_csv_as_parquet(csv_path: PathBuf, output_path: &Path) -> VortexResult<()> {

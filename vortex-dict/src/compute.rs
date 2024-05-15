@@ -35,14 +35,14 @@ impl TakeFn for DictArray {
         //   codes: 0 0 1
         //   dict: a b c d e f g h
         let codes = take(&self.codes(), indices)?;
-        DictArray::try_new(codes, self.values()).map(|a| a.into_array())
+        Self::try_new(codes, self.values()).map(|a| a.into_array())
     }
 }
 
 impl SliceFn for DictArray {
     // TODO(robert): Add function to trim the dictionary
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        DictArray::try_new(slice(&self.codes(), start, stop)?, self.values())
+        Self::try_new(slice(&self.codes(), start, stop)?, self.values())
             .map(|a| a.into_array())
     }
 }

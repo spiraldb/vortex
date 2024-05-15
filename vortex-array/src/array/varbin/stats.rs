@@ -160,7 +160,7 @@ mod test {
         let arr = array(DType::Binary(Nullability::NonNullable));
         assert_eq!(
             arr.statistics().compute_min::<Buffer>().unwrap().deref(),
-            "hello world".as_bytes()
+            b"hello world"
         );
         assert_eq!(
             arr.statistics().compute_max::<Buffer>().unwrap().deref(),

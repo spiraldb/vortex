@@ -30,7 +30,7 @@ impl From<BufferString> for Buffer {
 
 impl From<String> for BufferString {
     fn from(value: String) -> Self {
-        BufferString(Buffer::from(value.into_bytes()))
+        Self(Buffer::from(value.into_bytes()))
     }
 }
 

@@ -71,7 +71,7 @@ impl REEArray {
         if array.encoding().id() == Primitive::ID {
             let primitive = PrimitiveArray::try_from(array)?;
             let (ends, values) = ree_encode(&primitive);
-            REEArray::try_new(ends.into_array(), values.into_array(), primitive.validity())
+            Self::try_new(ends.into_array(), values.into_array(), primitive.validity())
         } else {
             vortex_bail!("REE can only encode primitive arrays")
         }

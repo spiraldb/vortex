@@ -13,7 +13,7 @@ impl SliceFn for SparseArray {
         let index_end_index =
             search_sorted(&self.indices(), stop, SearchSortedSide::Left)?.to_index();
 
-        Ok(SparseArray::try_new_with_offset(
+        Ok(Self::try_new_with_offset(
             slice(&self.indices(), index_start_index, index_end_index)?,
             slice(&self.values(), index_start_index, index_end_index)?,
             stop - start,

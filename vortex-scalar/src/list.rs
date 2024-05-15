@@ -68,8 +68,8 @@ impl<'a> ListScalar<'a> {
 }
 
 impl Scalar {
-    pub fn list(element_dtype: DType, children: Vec<ScalarValue>) -> Scalar {
-        Scalar {
+    pub fn list(element_dtype: DType, children: Vec<ScalarValue>) -> Self {
+        Self {
             dtype: DType::List(Arc::new(element_dtype), NonNullable),
             value: ScalarValue::List(children.into()),
         }
@@ -106,13 +106,13 @@ impl<'a, T: for<'b> TryFrom<&'b Scalar, Error = VortexError>> TryFrom<&'a Scalar
 
 impl<T> From<Vec<T>> for Scalar
 where
-    Scalar: From<T>,
+    Self: From<T>,
 {
     fn from(value: Vec<T>) -> Self {
-        let scalars = value.into_iter().map(|v| Scalar::from(v)).collect_vec();
+        let scalars = value.into_iter().map(|v| Self::from(v)).collect_vec();
         let element_dtype = scalars.first().expect("Empty list").dtype().clone();
         let dtype = DType::List(Arc::new(element_dtype), NonNullable);
-        Scalar {
+        Self {
             dtype,
             value: ScalarValue::List(scalars.into_iter().map(|s| s.value).collect_vec().into()),
         }

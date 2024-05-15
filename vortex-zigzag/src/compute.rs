@@ -35,6 +35,6 @@ impl ScalarAtFn for ZigZagArray {
 
 impl SliceFn for ZigZagArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        Ok(ZigZagArray::try_new(slice(&self.encoded(), start, stop)?)?.into_array())
+        Ok(Self::try_new(slice(&self.encoded(), start, stop)?)?.into_array())
     }
 }

@@ -29,7 +29,7 @@ lazy_static::lazy_static! {
     static ref URLS: HashMap<PBIDataset, Vec<PBIUrl>> = HashMap::from([
             (AirlineSentiment, vec![
                 PBIUrl::new("AirlineSentiment", "AirlineSentiment_1.csv.bz2")]),
-            (Arade, vec!(PBIUrl::new("Arade","Arade_1.csv.bz2"))),
+            (Arade, vec![PBIUrl::new("Arade","Arade_1.csv.bz2")]),
             (Bimbo, vec![
                 PBIUrl::new("Bimbo", "Bimbo_1.csv.bz2")]),
             (CMSprovider, vec![
@@ -346,7 +346,7 @@ struct PBIUrl {
 
 impl PBIUrl {
     fn new(dataset_name: &'static str, file_name: &'static str) -> Self {
-        PBIUrl {
+        Self {
             dataset_name,
             file_name,
         }
@@ -419,7 +419,7 @@ pub enum BenchmarkDatasets {
 impl BenchmarkDataset for BenchmarkDatasets {
     fn as_uncompressed(&self) {
         match self {
-            BenchmarkDatasets::PBI(dataset) => {
+            Self::PBI(dataset) => {
                 dataset.download_bzip();
                 dataset.unzip();
             }
@@ -531,13 +531,13 @@ impl BenchmarkDataset for BenchmarkDatasets {
 
     fn list_files(&self, types: FileType) -> Vec<PathBuf> {
         match self {
-            BenchmarkDatasets::PBI(dataset) => dataset.list_files(types),
+            Self::PBI(dataset) => dataset.list_files(types),
         }
     }
 
     fn directory_location(&self) -> PathBuf {
         match self {
-            BenchmarkDatasets::PBI(dataset) => "PBI".to_data_path().join(dataset.dataset_name()),
+            Self::PBI(dataset) => "PBI".to_data_path().join(dataset.dataset_name()),
         }
     }
 }
