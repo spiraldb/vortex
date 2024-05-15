@@ -27,9 +27,9 @@ impl ops::Not for Predicate {
             Operator::LessThanOrEqualTo => Operator::GreaterThan,
         };
         Predicate {
-            left: self.left,
+            field: self.field,
             op: inverse_op,
-            right: self.right,
+            value: self.value,
         }
     }
 }

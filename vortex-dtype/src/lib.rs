@@ -1,12 +1,16 @@
 #![cfg(target_endian = "little")]
 
+extern crate core;
+
 pub use dtype::*;
 pub use extension::*;
 pub use half;
 pub use nullability::*;
 pub use ptype::*;
+
 mod dtype;
 mod extension;
+pub mod field_paths;
 mod nullability;
 mod ptype;
 mod serde;
@@ -28,5 +32,6 @@ pub mod flatbuffers {
     mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/dtype.rs"));
     }
+
     pub use generated::vortex::dtype::*;
 }
