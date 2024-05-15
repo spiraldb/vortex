@@ -31,6 +31,7 @@ pub mod flatbuffers {
 }
 
 pub mod array_stream;
+pub mod chunked_reader;
 pub mod io;
 pub mod iter;
 mod message_reader;
