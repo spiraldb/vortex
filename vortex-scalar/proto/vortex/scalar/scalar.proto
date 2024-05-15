@@ -1,21 +1,15 @@
 syntax = "proto3";
 
-import "google/protobuf/any.proto";
-import "vortex/dtype/dtype.proto";
+import "google/protobuf/struct.proto";
+import "vortex-dtype/proto/dtype.proto";
 
 package vortex.scalar;
 
 message Scalar {
   vortex.dtype.DType dtype = 1;
-  oneof value {
-    bool bool = 2;
-    uint32 uint32 = 3;
-    uint64 uint64 = 4;
-    sint32 sint32 = 5;
-    sint64 sint64 = 6;
-    float float = 7;
-    double double = 8;
-    bytes bytes = 9;
-    string string = 10;
-  }
+  ScalarValue value = 2;
+}
+
+message ScalarValue {
+  google.protobuf.Value value = 1;
 }
