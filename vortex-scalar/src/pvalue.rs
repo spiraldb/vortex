@@ -22,17 +22,17 @@ pub enum PValue {
 impl PValue {
     pub fn ptype(&self) -> PType {
         match self {
-            PValue::U8(_) => PType::U8,
-            PValue::U16(_) => PType::U16,
-            PValue::U32(_) => PType::U32,
-            PValue::U64(_) => PType::U64,
-            PValue::I8(_) => PType::I8,
-            PValue::I16(_) => PType::I16,
-            PValue::I32(_) => PType::I32,
-            PValue::I64(_) => PType::I64,
-            PValue::F16(_) => PType::F16,
-            PValue::F32(_) => PType::F32,
-            PValue::F64(_) => PType::F64,
+            Self::U8(_) => PType::U8,
+            Self::U16(_) => PType::U16,
+            Self::U32(_) => PType::U32,
+            Self::U64(_) => PType::U64,
+            Self::I8(_) => PType::I8,
+            Self::I16(_) => PType::I16,
+            Self::I32(_) => PType::I32,
+            Self::I64(_) => PType::I64,
+            Self::F16(_) => PType::F16,
+            Self::F32(_) => PType::F32,
+            Self::F64(_) => PType::F64,
         }
     }
 }
@@ -100,9 +100,9 @@ impl TryFrom<PValue> for f16 {
     fn try_from(value: PValue) -> Result<Self, Self::Error> {
         // We serialize f16 as u16.
         match value {
-            PValue::U16(u) => Some(f16::from_bits(u)),
-            PValue::F32(f) => <f16 as NumCast>::from(f),
-            PValue::F64(f) => <f16 as NumCast>::from(f),
+            PValue::U16(u) => Some(Self::from_bits(u)),
+            PValue::F32(f) => <Self as NumCast>::from(f),
+            PValue::F64(f) => <Self as NumCast>::from(f),
             _ => None,
         }
         .ok_or_else(|| vortex_err!("Cannot read primitive value {:?} as {}", value, PType::F16))

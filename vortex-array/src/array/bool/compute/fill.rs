@@ -25,7 +25,7 @@ impl FillForwardFn for BoolArray {
                 last_value
             })
             .collect::<Vec<_>>();
-        Ok(BoolArray::from(filled).into_array())
+        Ok(Self::from(filled).into_array())
     }
 }
 

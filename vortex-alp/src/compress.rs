@@ -65,13 +65,13 @@ impl EncodingCompression for ALPEncoding {
 
         let compressed_encoded = ctx
             .named("packed")
-            .excluding(&ALPEncoding)
+            .excluding(&Self)
             .compress(encoded.as_array_ref(), like_alp)?;
 
         let compressed_patches = patches
             .map(|p| {
                 ctx.auxiliary("patches")
-                    .excluding(&ALPEncoding)
+                    .excluding(&Self)
                     .compress(p.as_array_ref(), like_alp)
             })
             .transpose()?;
@@ -105,7 +105,7 @@ where
     )
 }
 
-pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
+pub fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
     let (exponents, encoded, patches) = match parray.ptype() {
         PType::F32 => encode_to_array::<f32>(parray, None),
         PType::F64 => encode_to_array::<f64>(parray, None),
@@ -115,7 +115,7 @@ pub(crate) fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
 }
 
 pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
-    let encoded = array.encoded().clone().flatten_primitive()?;
+    let encoded = array.encoded().flatten_primitive()?;
 
     let decoded = match_each_alp_float_ptype!(array.dtype().try_into().unwrap(), |$T| {
         PrimitiveArray::from_vec(

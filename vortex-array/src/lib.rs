@@ -70,8 +70,8 @@ pub enum Array {
 impl Array {
     pub fn encoding(&self) -> EncodingRef {
         match self {
-            Array::Data(d) => d.encoding(),
-            Array::View(v) => v.encoding(),
+            Self::Data(d) => d.encoding(),
+            Self::View(v) => v.encoding(),
         }
     }
 
@@ -87,17 +87,17 @@ impl Array {
         self.with_dyn(|a| a.is_empty())
     }
 
-    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Array> {
+    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Self> {
         match self {
-            Array::Data(d) => d.child(idx, dtype).cloned().map(Array::Data),
-            Array::View(v) => v.child(idx, dtype).map(Array::View),
+            Self::Data(d) => d.child(idx, dtype).cloned().map(Array::Data),
+            Self::View(v) => v.child(idx, dtype).map(Array::View),
         }
     }
 
     pub fn buffer(&self) -> Option<&Buffer> {
         match self {
-            Array::Data(d) => d.buffer(),
-            Array::View(v) => v.buffer(),
+            Self::Data(d) => d.buffer(),
+            Self::View(v) => v.buffer(),
         }
     }
 }
@@ -105,8 +105,8 @@ impl Array {
 impl Array {
     pub fn into_buffer(self) -> Option<Buffer> {
         match self {
-            Array::Data(d) => d.into_buffer(),
-            Array::View(v) => v.buffer().cloned(),
+            Self::Data(d) => d.into_buffer(),
+            Self::View(v) => v.buffer().cloned(),
         }
     }
 }
@@ -197,8 +197,8 @@ impl Array {
 impl Display for Array {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let prefix = match self {
-            Array::Data(_) => "",
-            Array::View(_) => "$",
+            Self::Data(_) => "",
+            Self::View(_) => "$",
         };
         write!(
             f,
@@ -214,8 +214,8 @@ impl Display for Array {
 impl IntoArrayData for Array {
     fn into_array_data(self) -> ArrayData {
         match self {
-            Array::Data(d) => d,
-            Array::View(_) => self.with_dyn(|a| a.to_array_data()),
+            Self::Data(d) => d,
+            Self::View(_) => self.with_dyn(|a| a.to_array_data()),
         }
     }
 }

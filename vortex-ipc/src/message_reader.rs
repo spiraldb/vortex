@@ -10,7 +10,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::codecs::{ArrayReader, ArrayReaderAdapter};
+use crate::array_stream::{ArrayStream, ArrayStreamAdapter};
 use crate::flatbuffers::ipc as fb;
 use crate::io::VortexRead;
 use crate::messages::SerdeContextDeserializer;
@@ -215,7 +215,11 @@ impl<R: VortexRead> MessageReader<R> {
                 root::<fb::Message>(flatbuffer)
                     .map_err(VortexError::from)
                     .map(|msg| msg.header_as_chunk().unwrap())
-                    .and_then(|chunk| chunk.array().ok_or(vortex_err!("Chunk missing Array")))
+                    .and_then(|chunk| {
+                        chunk
+                            .array()
+                            .ok_or_else(|| vortex_err!("Chunk missing Array"))
+                    })
             },
             buffers,
         )?;
@@ -226,21 +230,21 @@ impl<R: VortexRead> MessageReader<R> {
         Ok(Some(view.into_array()))
     }
 
-    /// Construct an ArrayReader pulling the ViewContext and DType from the stream.
-    pub async fn array_reader_from_stream(
+    /// Construct an ArrayStream pulling the ViewContext and DType from the stream.
+    pub async fn array_stream_from_messages(
         &mut self,
         ctx: &Context,
-    ) -> VortexResult<impl ArrayReader + '_> {
+    ) -> VortexResult<impl ArrayStream + '_> {
         let view_context = self.read_view_context(ctx).await?;
         let dtype = self.read_dtype().await?;
-        Ok(self.array_reader(view_context, dtype))
+        Ok(self.array_stream(view_context, dtype))
     }
 
-    pub fn array_reader(
+    pub fn array_stream(
         &mut self,
         view_context: Arc<ViewContext>,
         dtype: DType,
-    ) -> impl ArrayReader + '_ {
+    ) -> impl ArrayStream + '_ {
         struct State<'a, R: VortexRead> {
             msgs: &'a mut MessageReader<R>,
             view_context: Arc<ViewContext>,
@@ -253,8 +257,8 @@ impl<R: VortexRead> MessageReader<R> {
             dtype: dtype.clone(),
         };
 
-        ArrayReaderAdapter::new(
-            dtype.clone(),
+        ArrayStreamAdapter::new(
+            dtype,
             try_unfold(init, |state| async move {
                 match state
                     .msgs

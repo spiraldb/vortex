@@ -51,7 +51,7 @@ impl AsContiguousFn for VarBinArray {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let bytes_chunks: Vec<Array> = arrays
             .iter()
-            .map(|a| VarBinArray::try_from(a).unwrap().sliced_bytes())
+            .map(|a| Self::try_from(a).unwrap().sliced_bytes())
             .try_collect()?;
         let bytes = as_contiguous(&bytes_chunks)?;
 
@@ -63,7 +63,7 @@ impl AsContiguousFn for VarBinArray {
 
         let mut offsets = Vec::new();
         offsets.push(0);
-        for a in arrays.iter().map(|a| VarBinArray::try_from(a).unwrap()) {
+        for a in arrays.iter().map(|a| Self::try_from(a).unwrap()) {
             let first_offset: u64 = a.first_offset()?;
             let offsets_array = cast(&a.offsets(), PType::U64.into())?.flatten_primitive()?;
             let shift = offsets.last().copied().unwrap_or(0);
@@ -78,8 +78,7 @@ impl AsContiguousFn for VarBinArray {
 
         let offsets_array = PrimitiveArray::from(offsets).into_array();
 
-        VarBinArray::try_new(offsets_array, bytes, self.dtype().clone(), validity)
-            .map(|a| a.into_array())
+        Self::try_new(offsets_array, bytes, self.dtype().clone(), validity).map(|a| a.into_array())
     }
 }
 

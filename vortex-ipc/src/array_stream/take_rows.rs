@@ -14,17 +14,17 @@ use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::codecs::ArrayReader;
+use crate::array_stream::ArrayStream;
 
 #[pin_project]
-pub struct TakeRows<'idx, R: ArrayReader> {
+pub struct TakeRows<'idx, R: ArrayStream> {
     #[pin]
     reader: R,
     indices: &'idx Array,
     row_offset: usize,
 }
 
-impl<'idx, R: ArrayReader> TakeRows<'idx, R> {
+impl<'idx, R: ArrayStream> TakeRows<'idx, R> {
     #[allow(dead_code)]
     pub fn try_new(reader: R, indices: &'idx Array) -> VortexResult<Self> {
         if !indices.is_empty() {
@@ -55,7 +55,7 @@ impl<'idx, R: ArrayReader> TakeRows<'idx, R> {
     }
 }
 
-impl<'idx, R: ArrayReader> Stream for TakeRows<'idx, R> {
+impl<'idx, R: ArrayStream> Stream for TakeRows<'idx, R> {
     type Item = VortexResult<Array>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -106,10 +106,10 @@ mod test {
     use vortex::{ArrayDType, Context, IntoArray};
     use vortex_error::VortexResult;
 
-    use crate::codecs::array_reader::ArrayReaderExt;
-    use crate::codecs::MessageReader;
+    use crate::array_stream::ArrayStreamExt;
     use crate::io::FuturesVortexRead;
     use crate::writer::StreamWriter;
+    use crate::MessageReader;
 
     fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
         let mut buffer = vec![];
@@ -132,7 +132,7 @@ mod test {
         let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer)))
             .await
             .unwrap();
-        let reader = messages.array_reader_from_stream(&ctx).await?;
+        let reader = messages.array_stream_from_messages(&ctx).await?;
 
         let result_iter = reader.take_rows(&indices).unwrap();
         pin_mut!(result_iter);
@@ -160,7 +160,7 @@ mod test {
 
         let ctx = Context::default();
         let take_iter = messages
-            .array_reader_from_stream(&ctx)
+            .array_stream_from_messages(&ctx)
             .await?
             .take_rows(&indices)?;
         pin_mut!(take_iter);

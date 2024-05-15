@@ -91,7 +91,7 @@ impl<'a, 'b: 'a> ArrayVisitor for TreeFormatter<'a, 'b> {
 }
 
 impl<'a, 'b: 'a> TreeFormatter<'a, 'b> {
-    fn new(fmt: &'a mut fmt::Formatter<'b>, indent: String) -> TreeFormatter<'a, 'b> {
+    fn new(fmt: &'a mut fmt::Formatter<'b>, indent: String) -> Self {
         TreeFormatter {
             fmt,
             indent,

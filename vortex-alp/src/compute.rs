@@ -42,7 +42,7 @@ impl ScalarAtFn for ALPArray {
 impl TakeFn for ALPArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         // TODO(ngates): wrap up indices in an array that caches decompression?
-        Ok(ALPArray::try_new(
+        Ok(Self::try_new(
             take(&self.encoded(), indices)?,
             self.exponents().clone(),
             self.patches().map(|p| take(&p, indices)).transpose()?,
@@ -53,7 +53,7 @@ impl TakeFn for ALPArray {
 
 impl SliceFn for ALPArray {
     fn slice(&self, start: usize, end: usize) -> VortexResult<Array> {
-        Ok(ALPArray::try_new(
+        Ok(Self::try_new(
             slice(&self.encoded(), start, end)?,
             self.exponents().clone(),
             self.patches().map(|p| slice(&p, start, end)).transpose()?,

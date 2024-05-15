@@ -59,7 +59,7 @@ impl<D: ArrayDef> TryFrom<Array> for TypedArray<D> {
                 .clone(),
             Array::View(v) => D::Metadata::try_deserialize_metadata(v.metadata())?,
         };
-        Ok(TypedArray { array, metadata })
+        Ok(Self { array, metadata })
     }
 }
 

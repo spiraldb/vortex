@@ -23,45 +23,45 @@ pub enum ScalarValue {
 
 impl ScalarValue {
     pub fn is_null(&self) -> bool {
-        matches!(self, ScalarValue::Null)
+        matches!(self, Self::Null)
     }
 
     pub fn as_bool(&self) -> VortexResult<Option<bool>> {
         match self {
-            ScalarValue::Null => Ok(None),
-            ScalarValue::Bool(b) => Ok(Some(*b)),
+            Self::Null => Ok(None),
+            Self::Bool(b) => Ok(Some(*b)),
             _ => Err(vortex_err!("Expected a bool scalar, found {:?}", self)),
         }
     }
 
     pub fn as_pvalue(&self) -> VortexResult<Option<PValue>> {
         match self {
-            ScalarValue::Null => Ok(None),
-            ScalarValue::Primitive(p) => Ok(Some(*p)),
+            Self::Null => Ok(None),
+            Self::Primitive(p) => Ok(Some(*p)),
             _ => Err(vortex_err!("Expected a primitive scalar, found {:?}", self)),
         }
     }
 
     pub fn as_buffer(&self) -> VortexResult<Option<Buffer>> {
         match self {
-            ScalarValue::Null => Ok(None),
-            ScalarValue::Buffer(b) => Ok(Some(b.clone())),
+            Self::Null => Ok(None),
+            Self::Buffer(b) => Ok(Some(b.clone())),
             _ => Err(vortex_err!("Expected a binary scalar, found {:?}", self)),
         }
     }
 
     pub fn as_buffer_string(&self) -> VortexResult<Option<BufferString>> {
         match self {
-            ScalarValue::Null => Ok(None),
-            ScalarValue::Buffer(b) => Ok(Some(BufferString::try_from(b.clone())?)),
-            ScalarValue::BufferString(b) => Ok(Some(b.clone())),
+            Self::Null => Ok(None),
+            Self::Buffer(b) => Ok(Some(BufferString::try_from(b.clone())?)),
+            Self::BufferString(b) => Ok(Some(b.clone())),
             _ => Err(vortex_err!("Expected a string scalar, found {:?}", self)),
         }
     }
 
-    pub fn as_list(&self) -> VortexResult<Option<&Arc<[ScalarValue]>>> {
+    pub fn as_list(&self) -> VortexResult<Option<&Arc<[Self]>>> {
         match self {
-            ScalarValue::List(l) => Ok(Some(l)),
+            Self::List(l) => Ok(Some(l)),
             _ => Err(vortex_err!("Expected a list scalar, found {:?}", self)),
         }
     }

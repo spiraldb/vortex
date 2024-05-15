@@ -93,7 +93,7 @@ impl ArrayFlatten for RoaringBoolArray {
         let bitset = self
             .bitmap()
             .to_bitset()
-            .ok_or(vortex_err!("Failed to convert RoaringBitmap to Bitset"))?;
+            .ok_or_else(|| vortex_err!("Failed to convert RoaringBitmap to Bitset"))?;
 
         let bytes = &bitset.as_slice()[0..bitset.size_in_bytes()];
         let buffer = ArrowBuffer::from_slice_ref(bytes);
@@ -121,7 +121,7 @@ mod test {
     pub fn iter() -> VortexResult<()> {
         let bool: BoolArray = BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool.into_array())?;
-        let round_trip = RoaringBoolArray::try_from(array.clone())?;
+        let round_trip = RoaringBoolArray::try_from(array)?;
         let values = round_trip.bitmap().to_vec();
         assert_eq!(values, vec![0, 2, 3]);
 

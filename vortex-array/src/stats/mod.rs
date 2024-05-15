@@ -28,16 +28,16 @@ pub enum Stat {
 impl Display for Stat {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Stat::BitWidthFreq => write!(f, "bit_width_frequency"),
-            Stat::TrailingZeroFreq => write!(f, "trailing_zero_frequency"),
-            Stat::IsConstant => write!(f, "is_constant"),
-            Stat::IsSorted => write!(f, "is_sorted"),
-            Stat::IsStrictSorted => write!(f, "is_strict_sorted"),
-            Stat::Max => write!(f, "max"),
-            Stat::Min => write!(f, "min"),
-            Stat::RunCount => write!(f, "run_count"),
-            Stat::TrueCount => write!(f, "true_count"),
-            Stat::NullCount => write!(f, "null_count"),
+            Self::BitWidthFreq => write!(f, "bit_width_frequency"),
+            Self::TrailingZeroFreq => write!(f, "trailing_zero_frequency"),
+            Self::IsConstant => write!(f, "is_constant"),
+            Self::IsSorted => write!(f, "is_sorted"),
+            Self::IsStrictSorted => write!(f, "is_strict_sorted"),
+            Self::Max => write!(f, "max"),
+            Self::Min => write!(f, "min"),
+            Self::RunCount => write!(f, "run_count"),
+            Self::TrueCount => write!(f, "true_count"),
+            Self::NullCount => write!(f, "null_count"),
         }
     }
 }

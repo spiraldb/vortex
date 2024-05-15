@@ -38,14 +38,14 @@ impl AsContiguousFn for SparseArray {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
         let sparse = arrays
             .iter()
-            .map(|a| SparseArray::try_from(a).unwrap())
+            .map(|a| Self::try_from(a).unwrap())
             .collect_vec();
 
         if !sparse.iter().map(|a| a.fill_value()).all_equal() {
             vortex_bail!("Cannot concatenate SparseArrays with differing fill values");
         }
 
-        Ok(SparseArray::new(
+        Ok(Self::new(
             as_contiguous(&sparse.iter().map(|a| a.indices()).collect_vec())?,
             as_contiguous(&sparse.iter().map(|a| a.values()).collect_vec())?,
             sparse.iter().map(|a| a.len()).sum(),
@@ -76,7 +76,7 @@ impl TakeFn for SparseArray {
 
         let taken_values = take(&self.values(), &physical_take_indices.into_array())?;
 
-        Ok(SparseArray::new(
+        Ok(Self::new(
             positions.into_array(),
             taken_values,
             indices.len(),

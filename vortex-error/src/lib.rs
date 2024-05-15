@@ -9,6 +9,7 @@ use std::{env, fmt, io};
 #[derive(Debug)]
 pub struct ErrString(Cow<'static, str>);
 
+#[allow(clippy::fallible_impl_from)]
 impl<T> From<T> for ErrString
 where
     T: Into<Cow<'static, str>>,
@@ -17,7 +18,7 @@ where
         if env::var("VORTEX_PANIC_ON_ERR").as_deref().unwrap_or("") == "1" {
             panic!("{}", msg.into())
         } else {
-            ErrString(msg.into())
+            Self(msg.into())
         }
     }
 }
@@ -193,7 +194,7 @@ pub mod __private {
     #[inline]
     #[cold]
     #[must_use]
-    pub fn must_use(error: crate::VortexError) -> crate::VortexError {
+    pub const fn must_use(error: crate::VortexError) -> crate::VortexError {
         error
     }
 }
@@ -201,6 +202,6 @@ pub mod __private {
 #[cfg(feature = "worker")]
 impl From<VortexError> for worker::Error {
     fn from(value: VortexError) -> Self {
-        worker::Error::RustError(value.to_string())
+        Self::RustError(value.to_string())
     }
 }

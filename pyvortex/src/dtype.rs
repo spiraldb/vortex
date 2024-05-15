@@ -32,7 +32,7 @@ impl PyDType {
         #[pyo3(from_py_with = "import_arrow_dtype")] arrow_dtype: DataType,
         nullable: bool,
     ) -> PyResult<Py<Self>> {
-        PyDType::wrap(
+        Self::wrap(
             cls.py(),
             DType::from_arrow(&Field::new("_", arrow_dtype, nullable)),
         )

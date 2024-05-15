@@ -32,7 +32,7 @@ impl LocalDateTimeArray {
             vortex_bail!("Timestamps must be an integer array")
         }
         Ok(Self {
-            ext: ExtensionArray::new(LocalDateTimeArray::ext_dtype(time_unit), timestamps),
+            ext: ExtensionArray::new(Self::ext_dtype(time_unit), timestamps),
             time_unit,
         })
     }
@@ -58,10 +58,7 @@ impl TryFrom<&ExtensionArray> for LocalDateTimeArray {
     type Error = VortexError;
 
     fn try_from(value: &ExtensionArray) -> Result<Self, Self::Error> {
-        LocalDateTimeArray::try_new(
-            try_parse_time_unit(value.ext_dtype())?,
-            value.storage().clone(),
-        )
+        Self::try_new(try_parse_time_unit(value.ext_dtype())?, value.storage())
     }
 }
 
@@ -86,7 +83,7 @@ impl TryFrom<&Array> for LocalDateTimeArray {
 
     fn try_from(value: &Array) -> Result<Self, Self::Error> {
         let ext = ExtensionArray::try_from(value)?;
-        LocalDateTimeArray::try_new(try_parse_time_unit(ext.ext_dtype())?, ext.storage())
+        Self::try_new(try_parse_time_unit(ext.ext_dtype())?, ext.storage())
     }
 }
 

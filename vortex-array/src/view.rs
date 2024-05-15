@@ -103,7 +103,7 @@ impl ArrayView {
     }
 
     // TODO(ngates): should we separate self and DType lifetimes? Should DType be cloned?
-    pub fn child(&self, idx: usize, dtype: &DType) -> Option<ArrayView> {
+    pub fn child(&self, idx: usize, dtype: &DType) -> Option<Self> {
         let child = self.array_child(idx)?;
         let flatbuffer_loc = child._tab.loc();
 
@@ -288,6 +288,6 @@ impl Default for ViewContext {
 
 impl From<&Context> for ViewContext {
     fn from(value: &Context) -> Self {
-        ViewContext::new(value.encodings().collect_vec())
+        Self::new(value.encodings().collect_vec())
     }
 }

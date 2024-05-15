@@ -33,7 +33,7 @@ impl Inlined {
             "Inlined strings must be shorter than 13 characters, {} given",
             value.len()
         );
-        let mut inlined = Inlined {
+        let mut inlined = Self {
             size: value.len() as u32,
             data: [0u8; BinaryView::MAX_INLINED_SIZE],
         };
@@ -251,49 +251,49 @@ impl ArrayTrait for VarBinViewArray {
 
 impl From<Vec<&[u8]>> for VarBinViewArray {
     fn from(value: Vec<&[u8]>) -> Self {
-        VarBinViewArray::from_vec(value, DType::Binary(Nullability::NonNullable))
+        Self::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
 impl From<Vec<Vec<u8>>> for VarBinViewArray {
     fn from(value: Vec<Vec<u8>>) -> Self {
-        VarBinViewArray::from_vec(value, DType::Binary(Nullability::NonNullable))
+        Self::from_vec(value, DType::Binary(Nullability::NonNullable))
     }
 }
 
 impl From<Vec<String>> for VarBinViewArray {
     fn from(value: Vec<String>) -> Self {
-        VarBinViewArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
+        Self::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
 impl From<Vec<&str>> for VarBinViewArray {
     fn from(value: Vec<&str>) -> Self {
-        VarBinViewArray::from_vec(value, DType::Utf8(Nullability::NonNullable))
+        Self::from_vec(value, DType::Utf8(Nullability::NonNullable))
     }
 }
 
 impl<'a> FromIterator<Option<&'a [u8]>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a [u8]>>>(iter: T) -> Self {
-        VarBinViewArray::from_iter(iter, DType::Binary(Nullability::NonNullable))
+        Self::from_iter(iter, DType::Binary(Nullability::NonNullable))
     }
 }
 
 impl FromIterator<Option<Vec<u8>>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<Vec<u8>>>>(iter: T) -> Self {
-        VarBinViewArray::from_iter(iter, DType::Binary(Nullability::NonNullable))
+        Self::from_iter(iter, DType::Binary(Nullability::NonNullable))
     }
 }
 
 impl FromIterator<Option<String>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<String>>>(iter: T) -> Self {
-        VarBinViewArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
+        Self::from_iter(iter, DType::Utf8(Nullability::NonNullable))
     }
 }
 
 impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a str>>>(iter: T) -> Self {
-        VarBinViewArray::from_iter(iter, DType::Utf8(Nullability::NonNullable))
+        Self::from_iter(iter, DType::Utf8(Nullability::NonNullable))
     }
 }
 

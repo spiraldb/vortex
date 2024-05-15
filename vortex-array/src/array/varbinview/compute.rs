@@ -82,7 +82,7 @@ impl AsArrowArray for VarBinViewArray {
 
 impl SliceFn for VarBinViewArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        Ok(VarBinViewArray::try_new(
+        Ok(Self::try_new(
             slice(&self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?
                 .into_array_data()
                 .into_array(),

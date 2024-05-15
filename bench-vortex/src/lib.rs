@@ -149,7 +149,7 @@ pub fn compress_taxi_data() -> Array {
         })
         .collect_vec();
 
-    let compressed = ChunkedArray::try_new(chunks.clone(), DType::from_arrow(schema))
+    let compressed = ChunkedArray::try_new(chunks, DType::from_arrow(schema))
         .unwrap()
         .into_array();
 

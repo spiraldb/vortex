@@ -22,15 +22,15 @@ pub enum SearchResult {
 impl SearchResult {
     pub fn to_found(self) -> Option<usize> {
         match self {
-            SearchResult::Found(i) => Some(i),
-            SearchResult::NotFound(_) => None,
+            Self::Found(i) => Some(i),
+            Self::NotFound(_) => None,
         }
     }
 
     pub fn to_index(self) -> usize {
         match self {
-            SearchResult::Found(i) => i,
-            SearchResult::NotFound(i) => i,
+            Self::Found(i) => i,
+            Self::NotFound(i) => i,
         }
     }
 }
@@ -196,7 +196,7 @@ impl<T: PartialOrd> IndexOrd<T> for [T] {
 
 impl Len for Array {
     fn len(&self) -> usize {
-        Array::len(self)
+        Self::len(self)
     }
 }
 

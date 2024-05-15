@@ -27,7 +27,7 @@ impl StatsSet {
     }
 
     pub fn of(stat: Stat, value: Scalar) -> Self {
-        StatsSet::from(HashMap::from([(stat, value)]))
+        Self::from(HashMap::from([(stat, value)]))
     }
 
     pub fn get(&self, stat: Stat) -> Option<&Scalar> {
@@ -275,7 +275,7 @@ mod test {
     #[test]
     fn merge_into_freq() {
         let vec = (0..255).collect_vec();
-        let mut first = StatsSet::of(Stat::BitWidthFreq, vec.clone().into());
+        let mut first = StatsSet::of(Stat::BitWidthFreq, vec.into());
         first.merge(&StatsSet::new());
         assert_eq!(first.get(Stat::BitWidthFreq), None);
     }
@@ -284,7 +284,7 @@ mod test {
     fn merge_from_freq() {
         let vec = (0..255).collect_vec();
         let mut first = StatsSet::new();
-        first.merge(&StatsSet::of(Stat::BitWidthFreq, vec.clone().into()));
+        first.merge(&StatsSet::of(Stat::BitWidthFreq, vec.into()));
         assert_eq!(first.get(Stat::BitWidthFreq), None);
     }
 
@@ -293,11 +293,8 @@ mod test {
         let vec_in = vec![5u64; 256];
         let vec_out = vec![10u64; 256];
         let mut first = StatsSet::of(Stat::BitWidthFreq, vec_in.clone().into());
-        first.merge(&StatsSet::of(Stat::BitWidthFreq, vec_in.clone().into()));
-        assert_eq!(
-            first.get(Stat::BitWidthFreq).cloned(),
-            Some(vec_out.clone().into())
-        );
+        first.merge(&StatsSet::of(Stat::BitWidthFreq, vec_in.into()));
+        assert_eq!(first.get(Stat::BitWidthFreq).cloned(), Some(vec_out.into()));
     }
 
     #[test]

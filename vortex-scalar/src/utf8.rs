@@ -32,7 +32,7 @@ impl Scalar {
     where
         BufferString: From<B>,
     {
-        Scalar {
+        Self {
             dtype: DType::Utf8(nullability),
             value: ScalarValue::BufferString(BufferString::from(str)),
         }
@@ -65,7 +65,7 @@ impl<'a> TryFrom<&'a Scalar> for BufferString {
 
 impl From<&str> for Scalar {
     fn from(value: &str) -> Self {
-        Scalar {
+        Self {
             dtype: DType::Utf8(NonNullable),
             value: ScalarValue::BufferString(value.to_string().into()),
         }

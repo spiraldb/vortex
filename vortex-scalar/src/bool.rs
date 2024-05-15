@@ -33,7 +33,7 @@ impl<'a> BoolScalar<'a> {
 
 impl Scalar {
     pub fn bool(value: bool, nullability: Nullability) -> Self {
-        Scalar {
+        Self {
             dtype: DType::Bool(nullability),
             value: ScalarValue::Bool(value),
         }
@@ -66,7 +66,7 @@ impl TryFrom<&Scalar> for bool {
 
 impl From<bool> for Scalar {
     fn from(value: bool) -> Self {
-        Scalar {
+        Self {
             dtype: DType::Bool(NonNullable),
             value: ScalarValue::Bool(value),
         }

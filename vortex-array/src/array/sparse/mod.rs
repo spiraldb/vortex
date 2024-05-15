@@ -146,7 +146,7 @@ impl ArrayValidity for SparseArray {
         let validity = if self.fill_value().is_null() {
             // If we have a null fill value, then the result is a Sparse array with a fill_value
             // of true, and patch values of false.
-            SparseArray::try_new_with_offset(
+            Self::try_new_with_offset(
                 self.indices(),
                 ConstantArray::new(false, self.len()).into_array(),
                 self.len(),
@@ -156,7 +156,7 @@ impl ArrayValidity for SparseArray {
         } else {
             // If the fill_value is non-null, then the validity is based on the validity of the
             // existing values.
-            SparseArray::try_new_with_offset(
+            Self::try_new_with_offset(
                 self.indices(),
                 self.values()
                     .with_dyn(|a| a.logical_validity().into_array()),

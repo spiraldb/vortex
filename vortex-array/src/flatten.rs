@@ -46,13 +46,13 @@ impl Array {
 impl IntoArray for Flattened {
     fn into_array(self) -> Array {
         match self {
-            Flattened::Bool(a) => a.into_array(),
-            Flattened::Primitive(a) => a.into_array(),
-            Flattened::Struct(a) => a.into_array(),
-            Flattened::Chunked(a) => a.into_array(),
-            Flattened::VarBin(a) => a.into_array(),
-            Flattened::Extension(a) => a.into_array(),
-            Flattened::VarBinView(a) => a.into_array(),
+            Self::Bool(a) => a.into_array(),
+            Self::Primitive(a) => a.into_array(),
+            Self::Struct(a) => a.into_array(),
+            Self::Chunked(a) => a.into_array(),
+            Self::VarBin(a) => a.into_array(),
+            Self::Extension(a) => a.into_array(),
+            Self::VarBinView(a) => a.into_array(),
         }
     }
 }

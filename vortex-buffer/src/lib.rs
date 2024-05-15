@@ -20,39 +20,39 @@ unsafe impl Sync for Buffer {}
 impl Buffer {
     pub fn len(&self) -> usize {
         match self {
-            Buffer::Arrow(b) => b.len(),
-            Buffer::Bytes(b) => b.len(),
+            Self::Arrow(b) => b.len(),
+            Self::Bytes(b) => b.len(),
         }
     }
 
     pub fn is_empty(&self) -> bool {
         match self {
-            Buffer::Arrow(b) => b.is_empty(),
-            Buffer::Bytes(b) => b.is_empty(),
+            Self::Arrow(b) => b.is_empty(),
+            Self::Bytes(b) => b.is_empty(),
         }
     }
 
     pub fn slice(&self, range: Range<usize>) -> Self {
         match self {
-            Buffer::Arrow(b) => {
-                Buffer::Arrow(b.slice_with_length(range.start, range.end - range.start))
+            Self::Arrow(b) => {
+                Self::Arrow(b.slice_with_length(range.start, range.end - range.start))
             }
-            Buffer::Bytes(b) => Buffer::Bytes(b.slice(range)),
+            Self::Bytes(b) => Self::Bytes(b.slice(range)),
         }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
         match self {
-            Buffer::Arrow(b) => b.as_ref(),
-            Buffer::Bytes(b) => b.as_ref(),
+            Self::Arrow(b) => b.as_ref(),
+            Self::Bytes(b) => b.as_ref(),
         }
     }
 
-    pub fn into_vec(self) -> Result<Vec<u8>, Buffer> {
+    pub fn into_vec(self) -> Result<Vec<u8>, Self> {
         match self {
-            Buffer::Arrow(buffer) => buffer.into_vec::<u8>().map_err(Buffer::Arrow),
+            Self::Arrow(buffer) => buffer.into_vec::<u8>().map_err(Buffer::Arrow),
             // Cannot convert bytes into a mutable vec
-            Buffer::Bytes(_) => Err(self),
+            Self::Bytes(_) => Err(self),
         }
     }
 }
@@ -74,26 +74,26 @@ impl AsRef<[u8]> for Buffer {
 impl From<&[u8]> for Buffer {
     fn from(value: &[u8]) -> Self {
         // We prefer Arrow since it retains mutability
-        Buffer::Arrow(ArrowBuffer::from(value))
+        Self::Arrow(ArrowBuffer::from(value))
     }
 }
 
 impl From<Vec<u8>> for Buffer {
     fn from(value: Vec<u8>) -> Self {
         // We prefer Arrow since it retains mutability
-        Buffer::Arrow(ArrowBuffer::from_vec(value))
+        Self::Arrow(ArrowBuffer::from_vec(value))
     }
 }
 
 impl From<bytes::Bytes> for Buffer {
     fn from(value: bytes::Bytes) -> Self {
-        Buffer::Bytes(value)
+        Self::Bytes(value)
     }
 }
 
 impl From<ArrowBuffer> for Buffer {
     fn from(value: ArrowBuffer) -> Self {
-        Buffer::Arrow(value)
+        Self::Arrow(value)
     }
 }
 

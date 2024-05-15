@@ -10,9 +10,9 @@ pub enum Nullability {
 impl From<bool> for Nullability {
     fn from(value: bool) -> Self {
         if value {
-            Nullability::Nullable
+            Self::Nullable
         } else {
-            Nullability::NonNullable
+            Self::NonNullable
         }
     }
 }
@@ -29,8 +29,8 @@ impl From<Nullability> for bool {
 impl Display for Nullability {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Nullability::NonNullable => write!(f, ""),
-            Nullability::Nullable => write!(f, "?"),
+            Self::NonNullable => write!(f, ""),
+            Self::Nullable => write!(f, "?"),
         }
     }
 }

@@ -62,7 +62,7 @@ impl EncodingCompression for FoREncoding {
 
         let compressed_child = ctx
             .named("for")
-            .excluding(&FoREncoding)
+            .excluding(&Self)
             .compress(&child, for_like.as_ref().map(|l| l.encoded()).as_ref())?;
         FoRArray::try_new(compressed_child, min, shift).map(|a| a.into_array())
     }
@@ -130,7 +130,7 @@ fn trailing_zeros(array: &Array) -> u8 {
     let tz_freq = array
         .statistics()
         .compute_trailing_zero_freq()
-        .unwrap_or(vec![0]);
+        .unwrap_or_else(|_| vec![0]);
     tz_freq
         .iter()
         .enumerate()

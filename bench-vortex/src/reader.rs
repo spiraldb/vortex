@@ -34,7 +34,6 @@ pub const BATCH_SIZE: usize = 65_536;
 
 pub fn open_vortex(path: &Path) -> VortexResult<Array> {
     let mut file = File::open(path)?;
-
     let mut reader = StreamReader::try_new(&mut file, &CTX)?;
     let mut reader = reader.next()?.unwrap();
     let dtype = reader.dtype().clone();
@@ -72,7 +71,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
             Compressor::new(&CTX).compress(&vortex_array, None).unwrap()
         })
         .collect_vec();
-    ChunkedArray::try_new(chunks, dtype.clone())
+    ChunkedArray::try_new(chunks, dtype)
 }
 
 pub fn write_csv_as_parquet(csv_path: PathBuf, output_path: &Path) -> VortexResult<()> {

@@ -103,3 +103,4 @@ warnings = "deny"
 
 [workspace.lints.clippy]
 all = "deny"
+or_fun_call = "deny"

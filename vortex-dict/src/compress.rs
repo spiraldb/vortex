@@ -57,11 +57,11 @@ impl EncodingCompression for DictEncoding {
                     dict_encode_typed_primitive::<$P>(&p)
                 });
                 (
-                    ctx.auxiliary("codes").excluding(&DictEncoding).compress(
+                    ctx.auxiliary("codes").excluding(&Self).compress(
                         &codes.to_array(),
                         dict_like_ref.map(|dict| dict.codes()).as_ref(),
                     )?,
-                    ctx.named("values").excluding(&DictEncoding).compress(
+                    ctx.named("values").excluding(&Self).compress(
                         &dict.to_array(),
                         dict_like_ref.map(|dict| dict.values()).as_ref(),
                     )?,
@@ -71,11 +71,11 @@ impl EncodingCompression for DictEncoding {
                 let vb = VarBinArray::try_from(array).unwrap();
                 let (codes, dict) = dict_encode_varbin(&vb);
                 (
-                    ctx.auxiliary("codes").excluding(&DictEncoding).compress(
+                    ctx.auxiliary("codes").excluding(&Self).compress(
                         &codes.to_array(),
                         dict_like_ref.map(|dict| dict.codes()).as_ref(),
                     )?,
-                    ctx.named("values").excluding(&DictEncoding).compress(
+                    ctx.named("values").excluding(&Self).compress(
                         &dict.to_array(),
                         dict_like_ref.map(|dict| dict.values()).as_ref(),
                     )?,
