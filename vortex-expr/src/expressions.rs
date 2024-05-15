@@ -34,9 +34,9 @@ pub enum Value {
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Predicate {
-    pub field: FieldPath,
+    pub left: FieldPath,
     pub op: Operator,
-    pub value: Value,
+    pub right: Value,
 }
 
 pub fn lit<T: Into<Scalar>>(n: T) -> Value {
@@ -47,49 +47,49 @@ impl Value {
     // comparisons
     pub fn eq(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            field: field.into(),
+            left: field.into(),
             op: Operator::EqualTo,
-            value: self,
+            right: self,
         }
     }
 
     pub fn not_eq(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            field: field.into(),
+            left: field.into(),
             op: Operator::NotEqualTo,
-            value: self,
+            right: self,
         }
     }
 
     pub fn gt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            field: field.into(),
+            left: field.into(),
             op: Operator::GreaterThan,
-            value: self,
+            right: self,
         }
     }
 
     pub fn gte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            field: field.into(),
+            left: field.into(),
             op: Operator::GreaterThanOrEqualTo,
-            value: self,
+            right: self,
         }
     }
 
     pub fn lt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            field: field.into(),
+            left: field.into(),
             op: Operator::LessThan,
-            value: self,
+            right: self,
         }
     }
 
     pub fn lte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            field: field.into(),
+            left: field.into(),
             op: Operator::LessThanOrEqualTo,
-            value: self,
+            right: self,
         }
     }
 }
@@ -106,9 +106,9 @@ mod test {
         let value: Value = lit(scalar);
         let field = field("id");
         let expr = Predicate {
-            field,
+            left: field,
             op: Operator::EqualTo,
-            value,
+            right: value,
         };
         assert_eq!(format!("{}", expr), "($id = 1)");
     }

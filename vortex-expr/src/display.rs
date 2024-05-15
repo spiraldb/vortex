@@ -26,7 +26,7 @@ impl Display for Conjunction {
 
 impl Display for Predicate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {} {})", self.field, self.op, self.value)
+        write!(f, "({} {} {})", self.left, self.op, self.right)
     }
 }
 
