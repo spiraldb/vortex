@@ -236,8 +236,10 @@ impl<T: PStatsType> StatsAccumulator<T> {
 
 #[cfg(test)]
 mod test {
+    use vortex_scalar::Scalar;
+
     use crate::array::primitive::PrimitiveArray;
-    use crate::stats::ArrayStatistics;
+    use crate::stats::{ArrayStatistics, Stat};
 
     #[test]
     fn stats() {
@@ -299,8 +301,8 @@ mod test {
     #[test]
     fn all_null() {
         let arr = PrimitiveArray::from_nullable_vec(vec![Option::<i32>::None, None, None]);
-        let min: Option<i32> = arr.statistics().compute_min();
-        let max: Option<i32> = arr.statistics().compute_max();
+        let min: Option<Scalar> = arr.statistics().compute(Stat::Min);
+        let max: Option<Scalar> = arr.statistics().compute(Stat::Max);
         assert_eq!(min, None);
         assert_eq!(max, None);
     }
