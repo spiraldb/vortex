@@ -1,11 +1,9 @@
 use std::ops;
 
-use serde::{Deserialize, Serialize};
+use crate::expressions::Predicate;
 
-use crate::expression_fns::predicate;
-use crate::expressions::PredicateExpr;
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Operator {
     // comparison
     EqualTo,
@@ -16,7 +14,7 @@ pub enum Operator {
     LessThanOrEqualTo,
 }
 
-impl ops::Not for PredicateExpr {
+impl ops::Not for Predicate {
     type Output = Self;
 
     fn not(self) -> Self::Output {
@@ -28,6 +26,10 @@ impl ops::Not for PredicateExpr {
             Operator::LessThan => Operator::GreaterThanOrEqualTo,
             Operator::LessThanOrEqualTo => Operator::GreaterThan,
         };
-        predicate(self.left, inverse_op, self.right)
+        Predicate {
+            left: self.left,
+            op: inverse_op,
+            right: self.right,
+        }
     }
 }

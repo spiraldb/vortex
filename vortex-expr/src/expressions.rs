@@ -1,84 +1,104 @@
-use serde::{Deserialize, Serialize};
 use vortex_dtype::FieldName;
 use vortex_scalar::Scalar;
 
-use crate::expression_fns::predicate;
-use crate::literal::lit;
+use crate::expressions::Value::Field;
 use crate::operators::Operator;
 
-#[derive(Deserialize, Serialize)]
-pub struct DNFExpr {
-    pub conjunctions: Vec<ConjunctionExpr>,
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Disjunction {
+    pub conjunctions: Vec<Conjunction>,
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub struct ConjunctionExpr {
-    pub predicates: Vec<PredicateExpr>,
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Conjunction {
+    pub predicates: Vec<Predicate>,
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Value {
     /// A named reference to a qualified field in a dtype.
-    Field(FieldExpr),
+    Field(FieldName),
     /// A constant scalar value.
     Literal(Scalar),
-    /// True if argument is NULL, false otherwise. This expression itself is never NULL.
-    IsNull(FieldExpr),
 }
 
 impl Value {
+    pub fn field(field_name: impl Into<FieldName>) -> Value {
+        Field(field_name.into())
+    }
     // comparisons
-    pub fn eq(self, other: Value) -> PredicateExpr {
-        predicate(self, Operator::EqualTo, other)
+    pub fn eq(self, other: Value) -> Predicate {
+        Predicate {
+            left: self,
+            op: Operator::EqualTo,
+            right: other,
+        }
     }
 
-    pub fn not_eq(self, other: Value) -> PredicateExpr {
-        predicate(self, Operator::NotEqualTo, other)
+    pub fn not_eq(self, other: Value) -> Predicate {
+        Predicate {
+            left: self,
+            op: Operator::NotEqualTo,
+            right: other,
+        }
     }
 
-    pub fn gt(self, other: Value) -> PredicateExpr {
-        predicate(self, Operator::GreaterThan, other)
+    pub fn gt(self, other: Value) -> Predicate {
+        Predicate {
+            left: self,
+            op: Operator::GreaterThan,
+            right: other,
+        }
     }
 
-    pub fn gte(self, other: Value) -> PredicateExpr {
-        predicate(self, Operator::GreaterThanOrEqualTo, other)
+    pub fn gte(self, other: Value) -> Predicate {
+        Predicate {
+            left: self,
+            op: Operator::GreaterThanOrEqualTo,
+            right: other,
+        }
     }
 
-    pub fn lt(self, other: Value) -> PredicateExpr {
-        predicate(self, Operator::LessThan, other)
+    pub fn lt(self, other: Value) -> Predicate {
+        Predicate {
+            left: self,
+            op: Operator::LessThan,
+            right: other,
+        }
     }
 
-    pub fn lte(self, other: Value) -> PredicateExpr {
-        predicate(self, Operator::LessThanOrEqualTo, other)
+    pub fn lte(self, other: Value) -> Predicate {
+        Predicate {
+            left: self,
+            op: Operator::LessThanOrEqualTo,
+            right: other,
+        }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub struct PredicateExpr {
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Predicate {
     pub left: Value,
     pub op: Operator,
     pub right: Value,
 }
 
-impl PredicateExpr {
-    pub fn new(left: Value, op: Operator, right: Value) -> Self {
-        Self { left, op, right }
-    }
+pub fn lit<T: Into<Scalar>>(n: T) -> Value {
+    Value::Literal(n.into())
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub struct FieldExpr {
-    pub field_name: FieldName,
-}
+#[cfg(test)]
+mod test {
+    use super::*;
 
-impl FieldExpr {
-    pub fn is_null(self) -> PredicateExpr {
-        predicate(Value::IsNull(self), Operator::EqualTo, lit(true))
-    }
-
-    pub fn new(field_name: impl Into<FieldName>) -> Self {
-        Self {
-            field_name: field_name.into(),
-        }
+    #[test]
+    fn test_lit() {
+        let scalar: Scalar = 1.into();
+        let rhs: Value = lit(scalar);
+        let expr = Value::field("id").eq(rhs);
+        assert_eq!(format!("{}", expr), "(id = 1)");
     }
 }

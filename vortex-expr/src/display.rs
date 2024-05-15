@@ -1,52 +1,32 @@
 use core::fmt;
 use std::fmt::{Display, Formatter};
 
-use crate::expressions::{ConjunctionExpr, DNFExpr, FieldExpr, PredicateExpr, Value};
+use crate::expressions::{Conjunction, Disjunction, Predicate, Value};
 use crate::operators::Operator;
 
-impl Display for DNFExpr {
+impl Display for Disjunction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let iter = self.conjunctions.iter();
-        let mut first = true;
-        for conj in iter {
-            if first {
-                first = false;
-            } else {
-                write!(f, "\nOR \n")?;
-            }
-
-            write!(f, "{conj}")?;
-        }
-        Ok(())
+        self.conjunctions
+            .iter()
+            .map(|v| format!("{}", v))
+            .intersperse("\nOR \n".to_string())
+            .try_for_each(|s| write!(f, "{}", s))
     }
 }
 
-impl Display for ConjunctionExpr {
+impl Display for Conjunction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let iter = self.predicates.iter();
-        let mut first = true;
-        for disj in iter {
-            if first {
-                first = false;
-            } else {
-                write!(f, " AND ")?;
-            }
-
-            write!(f, "{disj}")?;
-        }
-        Ok(())
+        self.predicates
+            .iter()
+            .map(|v| format!("{}", v))
+            .intersperse(" AND ".to_string())
+            .try_for_each(|s| write!(f, "{}", s))
     }
 }
 
-impl Display for PredicateExpr {
+impl Display for Predicate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "({} {} {})", self.left, self.op, self.right)
-    }
-}
-
-impl Display for FieldExpr {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        std::fmt::Display::fmt(&self.field_name, f)
     }
 }
 
@@ -55,9 +35,6 @@ impl Display for Value {
         match self {
             Value::Field(expr) => std::fmt::Display::fmt(expr, f),
             Value::Literal(scalar) => scalar.fmt(f),
-            Value::IsNull(field) => {
-                write!(f, "{field} IS NULL")
-            }
         }
     }
 }
@@ -78,8 +55,7 @@ impl Display for Operator {
 
 #[cfg(test)]
 mod tests {
-    use crate::expressions::{ConjunctionExpr, DNFExpr};
-    use crate::literal::lit;
+    use crate::expressions::{lit, Conjunction, Disjunction};
 
     #[test]
     fn test_predicate_formatting() {
@@ -93,14 +69,14 @@ mod tests {
 
     #[test]
     fn test_dnf_formatting() {
-        let d1 = ConjunctionExpr {
+        let d1 = Conjunction {
             predicates: vec![
                 lit(1u32).lt(lit(2u32)),
                 lit(1u32).gte(lit(2u32)),
                 !lit(1u32).lte(lit(2u32)),
             ],
         };
-        let d2 = ConjunctionExpr {
+        let d2 = Conjunction {
             predicates: vec![
                 lit(2u32).lt(lit(3u32)),
                 lit(3u32).gte(lit(4u32)),
@@ -108,7 +84,7 @@ mod tests {
             ],
         };
 
-        let dnf = DNFExpr {
+        let dnf = Disjunction {
             conjunctions: vec![d1, d2],
         };
 
