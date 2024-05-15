@@ -28,7 +28,6 @@ impl EncodingCompression for ZigZagEncoding {
         parray
             .statistics()
             .compute_as_cast::<i64>(Stat::Min)
-            .ok()
             .filter(|&min| min < 0)
             .map(|_| self as &dyn EncodingCompression)
     }

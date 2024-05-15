@@ -136,11 +136,16 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
 
     pub fn take(self, indices: &'a Array) -> VortexResult<TakeIterator<'a, R>> {
         if !indices.is_empty() {
-            if !indices.statistics().compute_is_sorted()? {
+            if !indices.statistics().compute_is_sorted().unwrap_or(false) {
                 vortex_bail!("Indices must be sorted to take from IPC stream")
             }
 
-            if indices.statistics().compute_null_count()? > 0 {
+            if indices
+                .statistics()
+                .compute_null_count()
+                .map(|nc| nc > 0)
+                .unwrap_or(true)
+            {
                 vortex_bail!("Indices must not contain nulls")
             }
 
@@ -149,7 +154,11 @@ impl<'a, R: Read> StreamArrayReader<'a, R> {
             }
 
             if indices.dtype().is_signed_int()
-                && indices.statistics().compute_as_cast::<i64>(Stat::Min)? < 0
+                && indices
+                    .statistics()
+                    .compute_as_cast::<i64>(Stat::Min)
+                    .map(|min| min < 0)
+                    .unwrap_or(true)
             {
                 vortex_bail!("Indices must be positive")
             }
@@ -855,9 +864,7 @@ mod tests {
                 366, 183, 92, 46, 23, 11, 6, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
             ]
         );
-        data.statistics()
-            .compute_true_count()
-            .expect_err("Should not be able to calculate true count for non-boolean array");
+        assert_eq!(data.statistics().compute_true_count(), None);
     }
 
     fn round_trip(chunked_array: &Array) -> Array {

@@ -30,7 +30,7 @@ impl EncodingCompression for FoREncoding {
 
         // Nothing for us to do if the min is already zero and tz == 0
         let shift = trailing_zeros(array);
-        let min = parray.statistics().compute_as_cast::<i64>(Stat::Min).ok()?;
+        let min = parray.statistics().compute_as_cast::<i64>(Stat::Min)?;
         if min == 0 && shift == 0 {
             return None;
         }
@@ -130,7 +130,7 @@ fn trailing_zeros(array: &Array) -> u8 {
     let tz_freq = array
         .statistics()
         .compute_trailing_zero_freq()
-        .unwrap_or_else(|_| vec![0]);
+        .unwrap_or_else(|| vec![0]);
     tz_freq
         .iter()
         .enumerate()
@@ -141,7 +141,6 @@ fn trailing_zeros(array: &Array) -> u8 {
 
 #[cfg(test)]
 mod test {
-
     use vortex::compute::scalar_at::ScalarAtFn;
     use vortex::encoding::{ArrayEncoding, EncodingRef};
     use vortex::Context;
