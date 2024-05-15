@@ -21,6 +21,6 @@ mod test {
         let scalar: Scalar = 1.into();
         let rhs: Value = lit(scalar);
         let expr = field("id").eq(rhs);
-        assert_eq!(format!("{}", expr), "(id = 1i32)");
+        assert_eq!(format!("{}", expr), "(id = 1)");
     }
 }
