@@ -93,7 +93,7 @@ impl ArrayFlatten for RoaringBoolArray {
         let bitset = self
             .bitmap()
             .to_bitset()
-            .ok_or(vortex_err!("Failed to convert RoaringBitmap to Bitset"))?;
+            .ok_or_else(|| vortex_err!("Failed to convert RoaringBitmap to Bitset"))?;
 
         let bytes = &bitset.as_slice()[0..bitset.size_in_bytes()];
         let buffer = ArrowBuffer::from_slice_ref(bytes);

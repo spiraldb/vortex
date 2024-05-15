@@ -279,7 +279,11 @@ impl<'iter, R: Read> FallibleLendingIterator for StreamArrayReader<'iter, R> {
                 root::<Message>(flatbuffer)
                     .map_err(VortexError::from)
                     .map(|msg| msg.header_as_chunk().unwrap())
-                    .and_then(|chunk| chunk.array().ok_or(vortex_err!("Chunk missing Array")))
+                    .and_then(|chunk| {
+                        chunk
+                            .array()
+                            .ok_or_else(|| vortex_err!("Chunk missing Array"))
+                    })
             },
             self.buffers.clone(),
         )?;
