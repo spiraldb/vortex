@@ -118,7 +118,7 @@ impl<'a> Iterator for ArrayDataIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.stack.pop()?;
-        for child in next.children.as_ref().iter().rev() {
+        for child in next.children.iter().rev() {
             self.stack.push(child);
         }
         Some(next)

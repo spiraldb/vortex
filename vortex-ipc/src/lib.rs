@@ -1,4 +1,5 @@
 pub use message_reader::*;
+pub use message_writer::*;
 use vortex_error::{vortex_err, VortexError};
 
 pub const ALIGNMENT: usize = 64;
@@ -34,7 +35,9 @@ pub mod array_stream;
 pub mod chunked_reader;
 pub mod io;
 mod message_reader;
+mod message_writer;
 mod messages;
+pub mod stream_writer;
 pub mod writer;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {

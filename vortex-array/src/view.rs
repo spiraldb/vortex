@@ -259,6 +259,14 @@ pub struct ViewContext {
     encodings: Vec<EncodingRef>,
 }
 
+impl Default for ViewContext {
+    fn default() -> Self {
+        // FIXME(ngates): this isn't super safe to do. The ViewContext should always be pulled
+        //  from the serialized data.
+        Self::from(&Context::default())
+    }
+}
+
 impl ViewContext {
     pub fn new(encodings: Vec<EncodingRef>) -> Self {
         Self { encodings }
@@ -277,12 +285,6 @@ impl ViewContext {
             .iter()
             .position(|e| e.id() == encoding_id)
             .map(|i| i as u16)
-    }
-}
-
-impl Default for ViewContext {
-    fn default() -> Self {
-        todo!("FIXME(ngates): which encodings to enable?")
     }
 }
 

@@ -112,30 +112,29 @@ mod test {
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::ArrayEncoding;
-    use vortex::{ArrayDType, Context, IntoArray};
+    use vortex::{ArrayDType, Context, IntoArray, ViewContext};
     use vortex_error::VortexResult;
 
     use crate::array_stream::ArrayStreamExt;
     use crate::io::FuturesVortexRead;
-    use crate::writer::StreamWriter;
+    use crate::stream_writer::ArrayWriter;
     use crate::MessageReader;
 
-    fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
-        let mut buffer = vec![];
-        let mut cursor = std::io::Cursor::new(&mut buffer);
-        {
-            let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
-            writer.write_array(&array.into_array()).unwrap();
-        }
-        buffer
+    async fn write_array<A: IntoArray>(array: A) -> Vec<u8> {
+        let mut writer = ArrayWriter::new(vec![], ViewContext::default());
+        writer.write_context().await.unwrap();
+        writer.write_array(array.into_array()).await.unwrap();
+        writer.into_write()
     }
 
     #[tokio::test]
     async fn test_empty_index() -> VortexResult<()> {
         let data = PrimitiveArray::from((0i32..3_000_000).collect_vec());
-        let buffer = write_ipc(data);
+        let buffer = write_array(data).await;
 
         let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
+
+        ArrayReader
 
         let ctx = Context::default();
         let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer)))
