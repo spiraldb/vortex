@@ -49,10 +49,11 @@ fn indices_matching_predicate(arr: &PrimitiveArray, predicate: &Predicate) -> Vo
             predicate_fn(&v, &rhs_typed)
         })
         .filter(|(idx, _)| validity.is_valid(idx.clone()))
+        //todo(@jcasale): 64-bit RoaringBitmap?
         .map(|(idx, _)| idx as u32)
         .collect_vec()
     });
-
+    //todo(@jcasale): 64-bit RoaringBitmap?
     let mut bitmap = Bitmap::with_container_capacity(arr.len() as u32);
 
     matching_idxs.into_iter().for_each(|idx| bitmap.add(idx));
