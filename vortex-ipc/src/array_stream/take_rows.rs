@@ -115,29 +115,30 @@ mod test {
     use vortex::{ArrayDType, Context, IntoArray, ViewContext};
     use vortex_error::VortexResult;
 
-    use crate::array_stream::ArrayStreamExt;
-    use crate::io::FuturesVortexRead;
+    use crate::array_stream::{ArrayStreamExt, ArrayStreamFactory};
+    use crate::io::FuturesAdapter;
     use crate::stream_writer::ArrayWriter;
     use crate::MessageReader;
 
-    async fn write_array<A: IntoArray>(array: A) -> Vec<u8> {
+    async fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
         let mut writer = ArrayWriter::new(vec![], ViewContext::default());
         writer.write_context().await.unwrap();
-        writer.write_array(array.into_array()).await.unwrap();
+        writer
+            .write_array_stream(ArrayStreamFactory::from_array(array.into_array()))
+            .await
+            .unwrap();
         writer.into_write()
     }
 
     #[tokio::test]
     async fn test_empty_index() -> VortexResult<()> {
         let data = PrimitiveArray::from((0i32..3_000_000).collect_vec());
-        let buffer = write_array(data).await;
+        let buffer = write_ipc(data).await;
 
         let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
 
-        ArrayReader
-
         let ctx = Context::default();
-        let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer)))
+        let mut messages = MessageReader::try_new(FuturesAdapter(Cursor::new(buffer)))
             .await
             .unwrap();
         let reader = messages.array_stream_from_messages(&ctx).await?;
@@ -162,9 +163,10 @@ mod test {
         let data2 =
             PrimitiveArray::from((3_000_000i32..6_000_000).rev().collect_vec()).into_array();
         let chunked = ChunkedArray::try_new(vec![data.clone(), data2], data.dtype().clone())?;
-        let buffer = write_ipc(chunked);
 
-        let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer))).await?;
+        let buffer = write_ipc(chunked).await;
+
+        let mut messages = MessageReader::try_new(FuturesAdapter(buffer.as_slice())).await?;
 
         let ctx = Context::default();
         let take_iter = messages

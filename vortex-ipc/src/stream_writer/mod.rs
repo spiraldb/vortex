@@ -1,9 +1,6 @@
-mod reader;
-
-use std::future::Future;
-
-use futures_util::TryStreamExt;
-use vortex::{Array, ArrayDType, IntoArrayData, ViewContext};
+use futures_util::{Stream, TryStreamExt};
+use vortex::{Array, IntoArrayData, ViewContext};
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
 use crate::array_stream::ArrayStream;
@@ -28,46 +25,69 @@ impl<W: VortexWrite> ArrayWriter<W> {
     }
 
     pub async fn write_context(&mut self) -> VortexResult<ByteRange> {
-        self.with_range(|| async { self.msgs.write_view_context(&self.view_ctx).await })
+        let begin = self.msgs.tell();
+        self.msgs.write_view_context(&self.view_ctx).await?;
+        let end = self.msgs.tell();
+        Ok(ByteRange { begin, end })
     }
 
-    pub async fn write_array(&mut self, array: Array) -> VortexResult<ByteRange> {
-        self.with_range(|| async {
-            self.msgs.write_dtype(array.dtype()).await?;
+    pub async fn write_dtype(&mut self, dtype: &DType) -> VortexResult<ByteRange> {
+        let begin = self.msgs.tell();
+        self.msgs.write_dtype(dtype).await?;
+        let end = self.msgs.tell();
+        Ok(ByteRange { begin, end })
+    }
+
+    pub async fn write_array_chunks<S>(&mut self, mut stream: S) -> VortexResult<ChunkPositions>
+    where
+        S: Stream<Item = VortexResult<Array>> + Unpin,
+    {
+        let mut byte_offsets = vec![0];
+        let mut row_offsets = vec![0];
+        let mut row_offset = 0;
+
+        while let Some(chunk) = stream.try_next().await? {
+            row_offset += chunk.len() as u64;
+            row_offsets.push(row_offset);
             self.msgs
-                .write_chunk(&self.view_ctx, array.into_array_data())
-                .await
+                .write_chunk(&self.view_ctx, chunk.into_array_data())
+                .await?;
+            byte_offsets.push(self.msgs.tell());
+        }
+
+        Ok(ChunkPositions {
+            byte_offsets,
+            row_offsets,
         })
     }
 
     pub async fn write_array_stream<S: ArrayStream + Unpin>(
         &mut self,
         mut array_stream: S,
-    ) -> VortexResult<ByteRange> {
-        self.with_range(|| async {
-            self.msgs.write_dtype(array_stream.dtype()).await?;
-            while let Some(array) = array_stream.try_next().await? {
-                self.msgs
-                    .write_chunk(&self.view_ctx, array.into_array_data())
-                    .await?;
-            }
+    ) -> VortexResult<ArrayPosition> {
+        let dtype_pos = self.write_dtype(array_stream.dtype()).await?;
+        let chunk_pos = self.write_array_chunks(&mut array_stream).await?;
+        Ok(ArrayPosition {
+            dtype: dtype_pos,
+            chunks: chunk_pos,
         })
-    }
-
-    async fn with_range<F, Fut>(&mut self, f: F) -> VortexResult<ByteRange>
-    where
-        F: FnMut() -> Fut,
-        Fut: Future<Output = VortexResult<()>>,
-    {
-        let begin = self.msgs.tell();
-        f().await?;
-        let end = self.msgs.tell() - begin;
-        Ok(ByteRange { begin, end })
     }
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct ByteRange {
-    pub begin: usize,
-    pub end: usize,
+    pub begin: u64,
+    pub end: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct ArrayPosition {
+    dtype: ByteRange,
+    chunks: ChunkPositions,
+}
+
+#[derive(Clone, Debug)]
+pub struct ChunkPositions {
+    byte_offsets: Vec<u64>,
+    row_offsets: Vec<u64>,
 }

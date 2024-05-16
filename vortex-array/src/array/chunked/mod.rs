@@ -88,7 +88,7 @@ impl ChunkedArray {
 }
 
 impl<'a> ChunkedArray {
-    pub fn chunks(&'a self) -> impl Iterator<Item = Array> + '_ {
+    pub fn chunks(&'a self) -> impl Iterator<Item = Array> + 'a {
         (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
     }
 }

@@ -16,7 +16,7 @@ const ZEROS: [u8; 512] = [0u8; 512];
 #[derive(Debug)]
 pub struct MessageWriter<W> {
     write: W,
-    pos: usize,
+    pos: u64,
     alignment: usize,
 
     scratch: Option<Vec<u8>>,
@@ -38,7 +38,7 @@ impl<W: VortexWrite> MessageWriter<W> {
     }
 
     /// Returns the current position in the stream.
-    pub fn tell(&self) -> usize {
+    pub fn tell(&self) -> u64 {
         self.pos
     }
 
@@ -106,9 +106,9 @@ impl<W: VortexWrite> MessageWriter<W> {
             .write_all(buffer.slice(0, buffer_len))
             .await?
             .into_inner();
-        self.pos += buffer_len;
+        self.pos += buffer_len as u64;
         self.write.write_all(&ZEROS[0..padding_bytes]).await?;
-        self.pos += padding_bytes;
+        self.pos += padding_bytes as u64;
 
         // Replace the scratch buffer
         self.scratch = Some(buffer);

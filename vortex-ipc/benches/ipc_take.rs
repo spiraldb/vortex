@@ -14,7 +14,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
 use vortex::{Context, IntoArray};
-use vortex_ipc::io::FuturesVortexRead;
+use vortex_ipc::io::FuturesAdapter;
 use vortex_ipc::writer::StreamWriter;
 use vortex_ipc::MessageReader;
 
@@ -70,7 +70,7 @@ fn ipc_take(c: &mut Criterion) {
         let indices_ref = &indices;
 
         b.to_async(FuturesExecutor).iter(|| async move {
-            let mut msgs = MessageReader::try_new(FuturesVortexRead::from(ro_buffer)).await?;
+            let mut msgs = MessageReader::try_new(FuturesAdapter::from(ro_buffer)).await?;
             let reader = msgs.array_stream_from_messages(ctx_ref).await?;
             pin_mut!(reader);
             let array_view = reader.try_next().await?.unwrap();

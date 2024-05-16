@@ -10,7 +10,7 @@ use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::chunked_reader::ChunkedArrayReader;
-use crate::io::{FuturesVortexRead, VortexReadAt};
+use crate::io::{FuturesAdapter, VortexReadAt};
 use crate::MessageReader;
 
 impl<R: VortexReadAt> ChunkedArrayReader<R> {
@@ -90,7 +90,7 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
             unsafe { buffer.set_len(range_byte_len) }
             let buffer = self.read.read_at_into(start_byte, buffer).await?;
 
-            let mut msgs = MessageReader::try_new(FuturesVortexRead(buffer.as_ref())).await?;
+            let mut msgs = MessageReader::try_new(FuturesAdapter(buffer.as_ref())).await?;
             let stream = msgs.array_stream(self.view_context.clone(), self.dtype.clone());
             pin_mut!(stream);
 

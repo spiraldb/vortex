@@ -9,7 +9,7 @@ use vortex::{Context, IntoArray};
 use vortex_dtype::Nullability;
 use vortex_dtype::{DType, PType};
 use vortex_ipc::array_stream::ArrayStreamExt;
-use vortex_ipc::io::FuturesVortexRead;
+use vortex_ipc::io::FuturesAdapter;
 use vortex_ipc::writer::StreamWriter;
 use vortex_ipc::MessageReader;
 
@@ -42,7 +42,7 @@ fn ipc_array_reader_take(c: &mut Criterion) {
 
         b.to_async(FuturesExecutor).iter(|| async {
             let mut cursor = futures_util::io::Cursor::new(&buffer);
-            let mut msgs = MessageReader::try_new(FuturesVortexRead(&mut cursor))
+            let mut msgs = MessageReader::try_new(FuturesAdapter(&mut cursor))
                 .await
                 .unwrap();
             let stream = msgs

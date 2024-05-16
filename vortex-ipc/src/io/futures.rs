@@ -3,23 +3,16 @@
 use std::io;
 
 use bytes::BytesMut;
-use futures_util::io::Cursor;
 use futures_util::{AsyncRead, AsyncReadExt};
 
 use crate::io::VortexRead;
 
-pub struct FuturesVortexRead<R>(pub R);
+pub struct FuturesAdapter<IO>(pub IO);
 
-impl<R: AsyncRead + Unpin> VortexRead for FuturesVortexRead<R> {
+impl<R: AsyncRead + Unpin> VortexRead for FuturesAdapter<R> {
     async fn read_into(&mut self, mut buffer: BytesMut) -> io::Result<BytesMut> {
         self.0.read_exact(buffer.as_mut()).await?;
         Ok(buffer)
-    }
-}
-
-impl<'a> From<&'a [u8]> for FuturesVortexRead<Cursor<&'a [u8]>> {
-    fn from(buffer: &'a [u8]) -> Self {
-        FuturesVortexRead(Cursor::new(buffer))
     }
 }
 
@@ -50,7 +43,7 @@ mod tests {
 
         let ctx =
             Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
-        let mut messages = MessageReader::try_new(FuturesVortexRead(reader)).await?;
+        let mut messages = MessageReader::try_new(FuturesAdapter(reader)).await?;
         let reader = messages.array_stream_from_messages(&ctx).await?;
         pin_mut!(reader);
 
