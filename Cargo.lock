@@ -5029,6 +5029,7 @@ dependencies = [
  "arrow-schema",
  "build-vortex",
  "criterion",
+ "croaring",
  "enum-iterator",
  "flatbuffers",
  "flexbuffers",

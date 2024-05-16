@@ -1,3 +1,4 @@
+use croaring::Bitmap;
 use itertools::Itertools;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::{vortex_bail, VortexResult};
@@ -11,57 +12,50 @@ use crate::{Array, ArrayTrait, IntoArray};
 
 impl FilterIndicesFn for PrimitiveArray {
     fn filter_indices(&self, predicate: &Disjunction) -> VortexResult<Array> {
-        let conjunction_indices = predicate
-            .conjunctions
-            .iter()
-            .map(|conj| {
-                MergeOp::All(
-                    conj.predicates
-                        .iter()
-                        .map(|pred| indices_matching_predicate(self, pred).unwrap())
-                        .map(|a| a.into_iter())
-                        .collect_vec(),
-                )
-                .collect_vec()
-                .into_iter()
-            })
-            .collect_vec();
-        let indices = MergeOp::Any(conjunction_indices)
-            .enumerate()
-            .filter(|(_, v)| *v)
-            .map(|(idx, _)| idx as u64)
-            .collect_vec();
+        let mut conjunction_indices = predicate.conjunctions.iter().flat_map(|conj| {
+            MergeOp::All(
+                &mut conj
+                    .predicates
+                    .iter()
+                    .map(|pred| indices_matching_predicate(self, pred).unwrap()),
+            )
+            .merge()
+        });
+        let indices = MergeOp::Any(&mut conjunction_indices)
+            .merge()
+            .map(|bitmap| bitmap.iter().map(|idx| idx as u64).collect_vec())
+            .unwrap_or(Vec::new());
         Ok(PrimitiveArray::from_vec(indices, Validity::AllValid).into_array())
     }
 }
 
-fn indices_matching_predicate(
-    arr: &PrimitiveArray,
-    predicate: &Predicate,
-) -> VortexResult<Vec<bool>> {
-    if predicate.left.first().is_some() {
+fn indices_matching_predicate(arr: &PrimitiveArray, predicate: &Predicate) -> VortexResult<Bitmap> {
+    if predicate.left.head().is_some() {
         vortex_bail!("Invalid path for primitive array")
     }
     let validity = arr.validity();
     let rhs = match &predicate.right {
         Value::Field(_) => {
-            vortex_bail!("")
+            vortex_bail!("Right-hand-side fields not yet supported.")
         }
         Value::Literal(scalar) => scalar,
     };
 
-    let matching_idxs = match_each_native_ptype!(arr.ptype(), |$T| {
-    let rhs_typed: $T = rhs.try_into().unwrap();
-    let predicate_fn = get_predicate::<$T>(&predicate.op);
+    let matching_idxs: Vec<u32> = match_each_native_ptype!(arr.ptype(), |$T| {
+        let rhs_typed: $T = rhs.try_into().unwrap();
+        let predicate_fn = get_predicate::<$T>(&predicate.op);
+
         arr.typed_data::<$T>().iter().enumerate().filter(|(idx, &v)| {
             predicate_fn(&v, &rhs_typed)
         })
         .filter(|(idx, _)| validity.is_valid(idx.clone()))
-        .map(|(idx, _)| idx )
+        .map(|(idx, _)| idx as u32)
         .collect_vec()
     });
-    let mut bitmap = vec![false; arr.len()];
-    matching_idxs.into_iter().for_each(|idx| bitmap[idx] = true);
+
+    let mut bitmap = Bitmap::with_container_capacity(arr.len() as u32);
+
+    matching_idxs.into_iter().for_each(|idx| bitmap.add(idx));
 
     Ok(bitmap)
 }
@@ -78,26 +72,16 @@ fn get_predicate<T: NativePType>(op: &Operator) -> fn(&T, &T) -> bool {
 }
 
 /// Merge an arbitrary number of boolean iterators
-enum MergeOp {
-    Any(Vec<std::vec::IntoIter<bool>>),
-    All(Vec<std::vec::IntoIter<bool>>),
+enum MergeOp<'a> {
+    Any(&'a mut dyn Iterator<Item = Bitmap>),
+    All(&'a mut dyn Iterator<Item = Bitmap>),
 }
 
-impl Iterator for MergeOp {
-    type Item = bool;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let zipped = match self {
-            MergeOp::Any(vecs) => vecs,
-            MergeOp::All(vecs) => vecs,
-        }
-        .iter_mut()
-        .map(|iter| iter.next())
-        .collect::<Option<Vec<_>>>();
-
+impl MergeOp<'_> {
+    fn merge(self) -> Option<Bitmap> {
         match self {
-            MergeOp::Any(_) => zipped.map(|inner| inner.iter().any(|&v| v)),
-            MergeOp::All(_) => zipped.map(|inner| inner.iter().all(|&v| v)),
+            MergeOp::Any(bitmaps) => bitmaps.reduce(|a, b| a.or(&b)),
+            MergeOp::All(bitmaps) => bitmaps.reduce(|a, b| a.and(&b)),
         }
     }
 }

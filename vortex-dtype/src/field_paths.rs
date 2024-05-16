@@ -12,12 +12,12 @@ impl FieldPath {
         FieldPathBuilder::default()
     }
 
-    pub fn first(&self) -> Option<&FieldIdentifier> {
+    pub fn head(&self) -> Option<&FieldIdentifier> {
         self.field_names.first()
     }
 
     pub fn tail(&self) -> Option<Self> {
-        if self.first().is_none() {
+        if self.head().is_none() {
             None
         } else {
             let new_field_names = self.field_names[1..self.field_names.len()].to_vec();

@@ -9,10 +9,10 @@ pub trait FilterIndicesFn {
 }
 
 pub fn filter_indices(array: &Array, predicate: &Disjunction) -> VortexResult<Array> {
-    if let Some(subtraction_result) =
+    if let Some(matching_indices) =
         array.with_dyn(|c| c.filter_indices().map(|t| t.filter_indices(predicate)))
     {
-        return subtraction_result;
+        return matching_indices;
     }
     // if filter is not implemented for the given array type, but the array has a numeric
     // DType, we can flatten the array and apply filter to the flattened primitive array
