@@ -40,10 +40,15 @@ flatbuffers = [
     "dep:serde",
     "vortex-buffer/flexbuffers",
     "vortex-error/flexbuffers",
+    "vortex-dtype/flatbuffers"
 ]
 proto = [
     "dep:prost",
     "dep:prost-types",
     "vortex-dtype/proto",
 ]
-serde = ["dep:serde", "serde/derive"]
+serde = [
+    "dep:serde",
+    "serde/derive",
+    "vortex-dtype/serde"
+]
