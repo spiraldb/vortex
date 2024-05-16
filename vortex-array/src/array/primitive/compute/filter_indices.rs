@@ -13,7 +13,7 @@ use crate::{Array, ArrayTrait, IntoArray};
 impl FilterIndicesFn for PrimitiveArray {
     fn filter_indices(&self, predicate: &Disjunction) -> VortexResult<Array> {
         let mut conjunction_indices = predicate.conjunctions.iter().flat_map(|conj| {
-            MergeOp::All(
+            BitmapMergeOp::All(
                 &mut conj
                     .predicates
                     .iter()
@@ -21,7 +21,7 @@ impl FilterIndicesFn for PrimitiveArray {
             )
             .merge()
         });
-        let indices = MergeOp::Any(&mut conjunction_indices)
+        let indices = BitmapMergeOp::Any(&mut conjunction_indices)
             .merge()
             .map(|bitmap| bitmap.iter().map(|idx| idx as u64).collect_vec())
             .unwrap_or(Vec::new());
@@ -71,17 +71,17 @@ fn get_predicate<T: NativePType>(op: &Operator) -> fn(&T, &T) -> bool {
     }
 }
 
-/// Merge an arbitrary number of boolean iterators
-enum MergeOp<'a> {
+/// Merge an arbitrary number of bitmaps
+enum BitmapMergeOp<'a> {
     Any(&'a mut dyn Iterator<Item = Bitmap>),
     All(&'a mut dyn Iterator<Item = Bitmap>),
 }
 
-impl MergeOp<'_> {
+impl BitmapMergeOp<'_> {
     fn merge(self) -> Option<Bitmap> {
         match self {
-            MergeOp::Any(bitmaps) => bitmaps.reduce(|a, b| a.or(&b)),
-            MergeOp::All(bitmaps) => bitmaps.reduce(|a, b| a.and(&b)),
+            BitmapMergeOp::Any(bitmaps) => bitmaps.reduce(|a, b| a.or(&b)),
+            BitmapMergeOp::All(bitmaps) => bitmaps.reduce(|a, b| a.and(&b)),
         }
     }
 }
