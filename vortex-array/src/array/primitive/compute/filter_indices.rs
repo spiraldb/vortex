@@ -216,7 +216,8 @@ mod test {
         .flatten_primitive()
         .unwrap();
         let filtered = filtered_primitive.typed_data::<u64>();
-        assert_eq!(filtered, [])
+        let expected: [u64; 0] = [];
+        assert_eq!(filtered, expected)
     }
 
     #[test]
