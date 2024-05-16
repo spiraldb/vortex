@@ -48,3 +48,8 @@ runs:
       run: rye sync --no-lock
       env:
         MATURIN_PEP517_ARGS: "--profile dev"
+
+    - name: Export Path
+      shell: bash
+      run: echo "PATH=$PATH" >> $GITHUB_ENV
+

@@ -19,10 +19,11 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: ./.github/actions/cleanup
+
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
 
-      - uses: ./.github/actions/cleanup
       - uses: ./.github/actions/setup-zig
       - uses: ./.github/actions/setup-rust
       - uses: ./.github/actions/setup-python
