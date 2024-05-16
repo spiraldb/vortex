@@ -1,9 +1,9 @@
-use vortex_dtype::FieldName;
+use vortex_dtype::field_paths::FieldPath;
 use vortex_scalar::Scalar;
 
-use crate::expressions::Value::Field;
 use crate::operators::Operator;
 
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
@@ -27,69 +27,15 @@ pub struct Conjunction {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Value {
     /// A named reference to a qualified field in a dtype.
-    Field(FieldName),
+    Field(FieldPath),
     /// A constant scalar value.
     Literal(Scalar),
-}
-
-impl Value {
-    pub fn field(field_name: impl Into<FieldName>) -> Value {
-        Field(field_name.into())
-    }
-    // comparisons
-    pub fn eq(self, other: Value) -> Predicate {
-        Predicate {
-            left: self,
-            op: Operator::EqualTo,
-            right: other,
-        }
-    }
-
-    pub fn not_eq(self, other: Value) -> Predicate {
-        Predicate {
-            left: self,
-            op: Operator::NotEqualTo,
-            right: other,
-        }
-    }
-
-    pub fn gt(self, other: Value) -> Predicate {
-        Predicate {
-            left: self,
-            op: Operator::GreaterThan,
-            right: other,
-        }
-    }
-
-    pub fn gte(self, other: Value) -> Predicate {
-        Predicate {
-            left: self,
-            op: Operator::GreaterThanOrEqualTo,
-            right: other,
-        }
-    }
-
-    pub fn lt(self, other: Value) -> Predicate {
-        Predicate {
-            left: self,
-            op: Operator::LessThan,
-            right: other,
-        }
-    }
-
-    pub fn lte(self, other: Value) -> Predicate {
-        Predicate {
-            left: self,
-            op: Operator::LessThanOrEqualTo,
-            right: other,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Predicate {
-    pub left: Value,
+    pub left: FieldPath,
     pub op: Operator,
     pub right: Value,
 }
@@ -98,15 +44,74 @@ pub fn lit<T: Into<Scalar>>(n: T) -> Value {
     Value::Literal(n.into())
 }
 
+impl Value {
+    // NB: We rewrite predicates to be Field-op-predicate, so these methods all must
+    // use the inverse operator.
+    pub fn eq(self, field: impl Into<FieldPath>) -> Predicate {
+        Predicate {
+            left: field.into(),
+            op: Operator::EqualTo,
+            right: self,
+        }
+    }
+
+    pub fn not_eq(self, field: impl Into<FieldPath>) -> Predicate {
+        Predicate {
+            left: field.into(),
+            op: Operator::NotEqualTo.inverse(),
+            right: self,
+        }
+    }
+
+    pub fn gt(self, field: impl Into<FieldPath>) -> Predicate {
+        Predicate {
+            left: field.into(),
+            op: Operator::GreaterThan.inverse(),
+            right: self,
+        }
+    }
+
+    pub fn gte(self, field: impl Into<FieldPath>) -> Predicate {
+        Predicate {
+            left: field.into(),
+            op: Operator::GreaterThanOrEqualTo.inverse(),
+            right: self,
+        }
+    }
+
+    pub fn lt(self, field: impl Into<FieldPath>) -> Predicate {
+        Predicate {
+            left: field.into(),
+            op: Operator::LessThan.inverse(),
+            right: self,
+        }
+    }
+
+    pub fn lte(self, field: impl Into<FieldPath>) -> Predicate {
+        Predicate {
+            left: field.into(),
+            op: Operator::LessThanOrEqualTo.inverse(),
+            right: self,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use vortex_dtype::field_paths::field;
+
     use super::*;
 
     #[test]
     fn test_lit() {
         let scalar: Scalar = 1.into();
-        let rhs: Value = lit(scalar);
-        let expr = Value::field("id").eq(rhs);
-        assert_eq!(format!("{}", expr), "(id = 1)");
+        let value: Value = lit(scalar);
+        let field = field("id");
+        let expr = Predicate {
+            left: field,
+            op: Operator::EqualTo,
+            right: value,
+        };
+        assert_eq!(format!("{}", expr), "($id = 1)");
     }
 }
