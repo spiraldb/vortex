@@ -131,19 +131,16 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<BTreeSet<u3
 
 #[cfg(test)]
 mod test {
-    use std::ptr::read;
     use std::sync::Arc;
 
-    use bytes::Bytes;
     use itertools::Itertools;
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::{Context, IntoArray, ViewContext};
+    use vortex::{IntoArray, ViewContext};
     use vortex_dtype::PType;
 
     use crate::chunked_reader::ChunkedArrayReaderBuilder;
-    use crate::stream_writer::{ArrayWriter, StreamLayout};
-    use crate::writer::StreamWriter;
+    use crate::stream_writer::ArrayWriter;
 
     async fn chunked_array() -> ArrayWriter<Vec<u8>> {
         let c = ChunkedArray::try_new(
