@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::compute::scalar_at::scalar_at;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
-use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, Stat};
+use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
@@ -37,11 +37,7 @@ impl REEArray {
             vortex_bail!("incorrect validity {:?}", validity);
         }
 
-        if !ends
-            .statistics()
-            .get_as(Stat::IsStrictSorted)
-            .unwrap_or(true)
-        {
+        if !ends.statistics().compute_is_strict_sorted().unwrap_or(true) {
             vortex_bail!("Ends array must be strictly sorted",);
         }
         let dtype = values.dtype().clone();

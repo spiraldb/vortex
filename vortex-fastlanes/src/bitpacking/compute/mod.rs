@@ -10,7 +10,7 @@ use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::{Array, ArrayDType, ArrayTrait, IntoArray};
-use vortex_dtype::{match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType};
+use vortex_dtype::{match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -43,6 +43,10 @@ impl ScalarAtFn for BitPackedArray {
             if self.bit_width() == 0 || patches.with_dyn(|a| a.is_valid(index)) {
                 return scalar_at(&patches, index)?.cast(self.dtype());
             }
+        } else if self.bit_width() == 0 {
+            match_each_unsigned_integer_ptype!(PType::try_from(self.dtype())?, |$P| {
+                return Ok(Scalar::zero::<$P>(self.dtype().nullability()));
+            });
         }
         unpack_single(self, index)?.cast(self.dtype())
     }
@@ -50,7 +54,7 @@ impl ScalarAtFn for BitPackedArray {
 
 impl TakeFn for BitPackedArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let ptype = self.dtype().try_into()?;
+        let ptype: PType = self.dtype().try_into()?;
         let validity = self.validity();
         let taken_validity = validity.take(indices)?;
         if self.bit_width() == 0 {
@@ -66,7 +70,7 @@ impl TakeFn for BitPackedArray {
         }
 
         let indices = indices.clone().flatten_primitive()?;
-        let taken = match_each_unsigned_integer_ptype!(ptype, |$T| {
+        let taken = match_each_unsigned_integer_ptype!(ptype.to_unsigned(), |$T| {
             PrimitiveArray::from_vec(take_primitive::<$T>(self, &indices)?, taken_validity)
         });
         Ok(taken.reinterpret_cast(ptype).into_array())

@@ -24,12 +24,6 @@ impl TryFromArrowType<&DataType> for PType {
             DataType::Float16 => Ok(Self::F16),
             DataType::Float32 => Ok(Self::F32),
             DataType::Float64 => Ok(Self::F64),
-            DataType::Time32(_) => Ok(Self::I32),
-            DataType::Time64(_) => Ok(Self::I64),
-            DataType::Timestamp(..) => Ok(Self::I64),
-            DataType::Date32 => Ok(Self::I32),
-            DataType::Date64 => Ok(Self::I64),
-            DataType::Duration(_) => Ok(Self::I64),
             _ => Err(vortex_err!(
                 "Arrow datatype {:?} cannot be converted to ptype",
                 value

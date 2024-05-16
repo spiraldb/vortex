@@ -34,9 +34,7 @@ use crate::CTX;
 pub const BATCH_SIZE: usize = 65_536;
 
 pub fn open_vortex(path: &Path) -> VortexResult<Array> {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
+    Runtime::new()
         .unwrap()
         .block_on(async {
             let file = tokio::fs::File::open(path).await.unwrap();
