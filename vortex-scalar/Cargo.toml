@@ -33,7 +33,7 @@ workspace = true
 
 [features]
 # Uncomment for improved IntelliJ support
-default = ["flatbuffers", "proto", "serde"]
+# default = ["flatbuffers", "proto", "serde"]
 flatbuffers = [
     "dep:flatbuffers",
     "dep:flexbuffers",
