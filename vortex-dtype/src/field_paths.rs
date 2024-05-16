@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use vortex_error::{vortex_bail, VortexResult};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FieldPath {
     field_names: Vec<FieldIdentifier>,
@@ -15,7 +15,7 @@ impl FieldPath {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FieldIdentifier {
     Name(String),
@@ -79,12 +79,11 @@ impl From<u64> for FieldIdentifier {
 }
 
 impl Display for FieldIdentifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let formatted = match self {
-            FieldIdentifier::Name(name) => format! {"${name}"},
-            FieldIdentifier::ListIndex(idx) => format! {"[{idx}]"},
-        };
-        write!(f, "{}", formatted)
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            FieldIdentifier::Name(name) => write!(f, "${name}"),
+            FieldIdentifier::ListIndex(idx) => write!(f, "[{idx}]"),
+        }
     }
 }
 

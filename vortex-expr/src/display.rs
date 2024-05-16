@@ -33,8 +33,8 @@ impl Display for Predicate {
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Value::Field(field_path) => field_path.fmt(f),
-            Value::Literal(scalar) => std::fmt::Display::fmt(&scalar, f),
+            Value::Field(field_path) => Display::fmt(field_path, f),
+            Value::Literal(scalar) => Display::fmt(&scalar, f),
         }
     }
 }
@@ -63,10 +63,10 @@ mod tests {
     #[test]
     fn test_predicate_formatting() {
         let f1 = field("field");
-        assert_eq!(format!("{}", lit(1u32).lt(f1.clone())), "($field < 1)");
-        assert_eq!(format!("{}", lit(1u32).gte(f1.clone())), "($field >= 1)");
-        assert_eq!(format!("{}", !lit(1u32).lte(f1.clone())), "($field > 1)");
-        assert_eq!(format!("{}", !f1.lte(lit(1u32))), "($field > 1)");
+        assert_eq!(format!("{}", f1.clone().lt(lit(1u32))), "($field < 1)");
+        assert_eq!(format!("{}", f1.clone().gte(lit(1u32))), "($field >= 1)");
+        assert_eq!(format!("{}", !f1.clone().lte(lit(1u32))), "($field > 1)");
+        assert_eq!(format!("{}", !lit(1u32).lte(f1)), "($field <= 1)");
 
         // nested field path
         let f2 = FieldPath::builder().join("field").join(0).build().unwrap();
@@ -79,7 +79,7 @@ mod tests {
         let d1 = Conjunction {
             predicates: vec![
                 lit(1u32).lt(path.clone()),
-                lit(1u32).gte(path.clone()),
+                path.clone().gte(lit(1u32)),
                 !lit(1u32).lte(path),
             ],
         };
@@ -100,8 +100,8 @@ mod tests {
         print!("{}", string);
         assert_eq!(
             string,
-            "([2].$col1 < 1) AND ([2].$col1 >= 1) AND ([2].$col1 > 1)\nOR \
-            \n($col1.[2] < 2) AND ([2] >= 3) AND ($col2 > 5)"
+            "([2].$col1 >= 1) AND ([2].$col1 >= 1) AND ([2].$col1 <= 1)\nOR \
+            \n($col1.[2] >= 2) AND ([2] < 3) AND ($col2 <= 5)"
         );
     }
 }

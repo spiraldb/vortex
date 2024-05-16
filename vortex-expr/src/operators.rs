@@ -33,3 +33,16 @@ impl ops::Not for Predicate {
         }
     }
 }
+
+impl Operator {
+    pub fn inverse(self) -> Self {
+        match self {
+            Operator::EqualTo => Operator::NotEqualTo,
+            Operator::NotEqualTo => Operator::EqualTo,
+            Operator::GreaterThan => Operator::LessThanOrEqualTo,
+            Operator::GreaterThanOrEqualTo => Operator::LessThan,
+            Operator::LessThan => Operator::GreaterThanOrEqualTo,
+            Operator::LessThanOrEqualTo => Operator::GreaterThan,
+        }
+    }
+}

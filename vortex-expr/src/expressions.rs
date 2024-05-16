@@ -5,24 +5,24 @@ use crate::operators::Operator;
 
 #[cfg_attr(
     feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
+    derive(Debug, serde::Serialize, serde::Deserialize),
     serde(transparent)
 )]
 pub struct Disjunction {
     pub conjunctions: Vec<Conjunction>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(
     feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
+    derive(Debug, serde::Serialize, serde::Deserialize),
     serde(transparent)
 )]
 pub struct Conjunction {
     pub predicates: Vec<Predicate>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Value {
     /// A named reference to a qualified field in a dtype.
@@ -31,7 +31,7 @@ pub enum Value {
     Literal(Scalar),
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Predicate {
     pub left: FieldPath,
@@ -44,7 +44,8 @@ pub fn lit<T: Into<Scalar>>(n: T) -> Value {
 }
 
 impl Value {
-    // comparisons
+    // NB: We rewrite predicates to be Field-op-predicate, so these methods all must
+    // use the inverse operator.
     pub fn eq(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
@@ -56,7 +57,7 @@ impl Value {
     pub fn not_eq(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::NotEqualTo,
+            op: Operator::NotEqualTo.inverse(),
             right: self,
         }
     }
@@ -64,7 +65,7 @@ impl Value {
     pub fn gt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::GreaterThan,
+            op: Operator::GreaterThan.inverse(),
             right: self,
         }
     }
@@ -72,7 +73,7 @@ impl Value {
     pub fn gte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::GreaterThanOrEqualTo,
+            op: Operator::GreaterThanOrEqualTo.inverse(),
             right: self,
         }
     }
@@ -80,7 +81,7 @@ impl Value {
     pub fn lt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::LessThan,
+            op: Operator::LessThan.inverse(),
             right: self,
         }
     }
@@ -88,7 +89,7 @@ impl Value {
     pub fn lte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::LessThanOrEqualTo,
+            op: Operator::LessThanOrEqualTo.inverse(),
             right: self,
         }
     }
