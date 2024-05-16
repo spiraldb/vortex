@@ -7,21 +7,21 @@ use scalar_at::ScalarAtFn;
 use search_sorted::SearchSortedFn;
 use slice::SliceFn;
 use take::TakeFn;
-use crate::compute::filter_indices::FilterIndicesFn;
 
+use crate::compute::filter_indices::FilterIndicesFn;
 use crate::compute::scalar_subtract::SubtractScalarFn;
 
 pub mod as_arrow;
 pub mod as_contiguous;
 pub mod cast;
 pub mod fill;
+pub mod filter_indices;
 pub mod patch;
 pub mod scalar_at;
 pub mod scalar_subtract;
 pub mod search_sorted;
 pub mod slice;
 pub mod take;
-pub mod filter_indices;
 
 pub trait ArrayCompute {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {

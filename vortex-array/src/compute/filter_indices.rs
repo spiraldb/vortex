@@ -1,18 +1,16 @@
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
-use vortex_expr::expressions::{Conjunction, Disjunction, Predicate};
+use vortex_expr::expressions::Disjunction;
 
 use crate::{Array, ArrayDType};
 
 pub trait FilterIndicesFn {
-    fn apply_disjunctive_filter(&self, predicate: &Disjunction) -> VortexResult<Array>;
-    fn apply_conjunctive_filter(&self, predicate: &Conjunction) -> VortexResult<Array>;
-    fn indices_matching_predicate(&self, predicate: &Predicate) -> VortexResult<Vec<bool>>;
+    fn filter_indices(&self, predicate: &Disjunction) -> VortexResult<Array>;
 }
 
-pub fn filter_indices(array: &Array, predicate: &Conjunction) -> VortexResult<Array> {
+pub fn filter_indices(array: &Array, predicate: &Disjunction) -> VortexResult<Array> {
     if let Some(subtraction_result) =
-        array.with_dyn(|c| c.filter_indices().map(|t| t.apply_conjunctive_filter(predicate)))
+        array.with_dyn(|c| c.filter_indices().map(|t| t.filter_indices(predicate)))
     {
         return subtraction_result;
     }
@@ -21,7 +19,7 @@ pub fn filter_indices(array: &Array, predicate: &Conjunction) -> VortexResult<Ar
     match array.dtype() {
         DType::Primitive(..) => {
             let flat = array.clone().flatten_primitive()?;
-            flat.apply_conjunctive_filter(predicate)
+            flat.filter_indices(predicate)
         }
         _ => Err(vortex_err!(
             NotImplemented: "filter_indices",

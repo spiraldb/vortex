@@ -13,8 +13,7 @@ impl FieldPath {
     }
 
     pub fn first(&self) -> Option<&FieldIdentifier> {
-        self.field_names
-            .first()
+        self.field_names.first()
     }
 
     pub fn tail(&self) -> Option<Self> {
