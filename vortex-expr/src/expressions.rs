@@ -3,10 +3,11 @@ use vortex_scalar::Scalar;
 
 use crate::operators::Operator;
 
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(
-    feature = "serde",
-    derive(Debug, serde::Serialize, serde::Deserialize),
-    serde(transparent)
+feature = "serde",
+derive(serde::Serialize, serde::Deserialize),
+serde(transparent)
 )]
 pub struct Disjunction {
     pub conjunctions: Vec<Conjunction>,
@@ -14,9 +15,9 @@ pub struct Disjunction {
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(
-    feature = "serde",
-    derive(Debug, serde::Serialize, serde::Deserialize),
-    serde(transparent)
+feature = "serde",
+derive(serde::Serialize, serde::Deserialize),
+serde(transparent)
 )]
 pub struct Conjunction {
     pub predicates: Vec<Predicate>,
