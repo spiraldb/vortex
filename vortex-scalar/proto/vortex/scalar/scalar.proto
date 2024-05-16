@@ -1,9 +1,9 @@
 syntax = "proto3";
 
-import "google/protobuf/struct.proto";
-import "vortex-dtype/proto/dtype.proto";
-
 package vortex.scalar;
+
+import "google/protobuf/struct.proto";
+import "vortex/dtype/dtype.proto";
 
 message Scalar {
   vortex.dtype.DType dtype = 1;
