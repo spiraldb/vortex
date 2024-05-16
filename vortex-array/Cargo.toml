@@ -36,6 +36,7 @@ rand = { workspace = true }
 vortex-buffer = { path = "../vortex-buffer" }
 vortex-dtype = { path = "../vortex-dtype", features = ["flatbuffers", "serde"] }
 vortex-error = { path = "../vortex-error", features = ["flexbuffers"] }
+vortex-expr = { path = "../vortex-expr" }
 vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 vortex-scalar = { path = "../vortex-scalar", features = ["flatbuffers", "serde"] }
 serde = { workspace = true, features = ["derive"] }
