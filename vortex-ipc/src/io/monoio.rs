@@ -7,7 +7,7 @@ use bytes::BytesMut;
 use futures_util::FutureExt;
 use monoio::buf::IoBufMut;
 use monoio::io::{AsyncReadRent, AsyncReadRentExt, AsyncWriteRent, AsyncWriteRentExt};
-use vortex_buffer::io::IoBuf;
+use vortex_buffer::io_buf::IoBuf;
 
 use crate::io::{VortexRead, VortexWrite};
 

@@ -5,6 +5,7 @@ use bytes::{Buf, BytesMut};
 use flatbuffers::{root, root_unchecked};
 use futures_util::stream::try_unfold;
 use itertools::Itertools;
+use monoio::buf::IoBufMut;
 use vortex::{Array, ArrayView, Context, IntoArray, ToArray, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;

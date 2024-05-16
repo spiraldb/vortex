@@ -3,7 +3,7 @@ use std::io;
 use flatbuffers::FlatBufferBuilder;
 use itertools::Itertools;
 use vortex::{ArrayData, ViewContext};
-use vortex_buffer::io::IoBuf;
+use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
 use vortex_flatbuffers::WriteFlatBuffer;
 
@@ -72,9 +72,9 @@ impl<W: VortexWrite> MessageWriter<W> {
             .zip_eq(buffer_offsets.iter().skip(1))
         {
             let buffer_len = buffer.len();
-            self.write.write_all(buffer).await?;
+            self.write_all(buffer).await?;
             let padding = (buffer_end as usize) - current_offset - buffer_len;
-            self.write.write_all(&ZEROS[0..padding]).await?;
+            self.write_all(&ZEROS[0..padding]).await?;
             current_offset = buffer_end as usize;
         }
 
@@ -85,34 +85,44 @@ impl<W: VortexWrite> MessageWriter<W> {
         // We reuse the scratch buffer each time and then replace it at the end.
         // The scratch buffer may be missing if a previous write failed. We could use scopeguard
         // or similar here if it becomes a problem in practice.
-        let scratch = self.scratch.take().unwrap_or_else(|| vec![]);
+        let mut scratch = self.scratch.take().unwrap_or_else(|| vec![]);
+        scratch.clear();
+
+        // In order for FlatBuffers to use the correct alignment, we insert 4 bytes at the start
+        // of the flatbuffer vector since we will be writing this to the stream later.
+        scratch.extend_from_slice(&[0u8; 4]);
 
         let mut fbb = FlatBufferBuilder::from_vec(scratch);
         let root = flatbuffer.write_flatbuffer(&mut fbb);
         fbb.finish_minimal(root);
 
-        let (buffer, buffer_len) = fbb.collapse();
+        let (buffer, buffer_begin) = fbb.collapse();
+        let buffer_end = buffer.len();
+        let buffer_len = buffer_end - buffer_begin;
 
-        let aligned_size = (buffer_len + (self.alignment - 1)) & !(self.alignment - 1);
-        let padding_bytes = aligned_size - buffer_len;
+        let aligned_size = (4 + buffer_len + (self.alignment - 1)) & !(self.alignment - 1);
+        let padding_bytes = aligned_size - buffer_len - 4;
 
         // Write the size as u32, followed by the buffer, followed by padding.
-        self.write
-            .write_all((aligned_size as u32).to_le_bytes())
+        self.write_all(((aligned_size - 4) as u32).to_le_bytes())
             .await?;
-        self.pos += 4;
         let buffer = self
-            .write
-            .write_all(buffer.slice(0, buffer_len))
+            .write_all(buffer.slice(buffer_begin, buffer_end))
             .await?
             .into_inner();
-        self.pos += buffer_len as u64;
-        self.write.write_all(&ZEROS[0..padding_bytes]).await?;
-        self.pos += padding_bytes as u64;
+        self.write_all(&ZEROS[0..padding_bytes]).await?;
+
+        assert_eq!(self.pos % self.alignment as u64, 0);
 
         // Replace the scratch buffer
         self.scratch = Some(buffer);
 
         Ok(())
+    }
+
+    async fn write_all<B: IoBuf>(&mut self, buf: B) -> io::Result<B> {
+        let buf = self.write.write_all(buf).await?;
+        self.pos += buf.bytes_init() as u64;
+        Ok(buf)
     }
 }

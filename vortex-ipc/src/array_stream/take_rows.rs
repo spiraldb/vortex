@@ -106,7 +106,8 @@ impl<'idx, R: ArrayStream> Stream for TakeRows<'idx, R> {
 
 #[cfg(test)]
 mod test {
-    use futures_util::io::Cursor;
+    use std::io::Cursor;
+
     use futures_util::{pin_mut, StreamExt, TryStreamExt};
     use itertools::Itertools;
     use vortex::array::chunked::ChunkedArray;
@@ -117,33 +118,29 @@ mod test {
 
     use crate::array_stream::{ArrayStreamExt, ArrayStreamFactory};
     use crate::io::FuturesAdapter;
-    use crate::stream_writer::ArrayWriter;
+    use crate::stream_writer::{ArrayWriter, StreamArrayReader};
     use crate::MessageReader;
 
-    async fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
-        let mut writer = ArrayWriter::new(vec![], ViewContext::default());
-        writer.write_context().await.unwrap();
-        writer
-            .write_array_stream(ArrayStreamFactory::from_array(array.into_array()))
+    async fn write_ipc<A: IntoArray>(array: A) -> ArrayWriter<Vec<u8>> {
+        ArrayWriter::new(vec![], ViewContext::default())
+            .write_array(array.into_array())
             .await
-            .unwrap();
-        writer.into_write()
+            .unwrap()
     }
 
     #[tokio::test]
     async fn test_empty_index() -> VortexResult<()> {
         let data = PrimitiveArray::from((0i32..3_000_000).collect_vec());
-        let buffer = write_ipc(data).await;
+        let buffer = write_ipc(data).await.into_write();
 
         let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
 
-        let ctx = Context::default();
-        let mut messages = MessageReader::try_new(FuturesAdapter(Cursor::new(buffer)))
-            .await
-            .unwrap();
-        let reader = messages.array_stream_from_messages(&ctx).await?;
+        let mut reader = StreamArrayReader::try_new(Cursor::new(buffer))
+            .await?
+            .with_view_context(ViewContext::default());
+        let stream = reader.array_stream().await?;
 
-        let result_iter = reader.take_rows(&indices).unwrap();
+        let result_iter = stream.take_rows(&indices).unwrap();
         pin_mut!(result_iter);
 
         let result = result_iter.next().await.unwrap().unwrap();
@@ -164,7 +161,7 @@ mod test {
             PrimitiveArray::from((3_000_000i32..6_000_000).rev().collect_vec()).into_array();
         let chunked = ChunkedArray::try_new(vec![data.clone(), data2], data.dtype().clone())?;
 
-        let buffer = write_ipc(chunked).await;
+        let buffer = write_ipc(chunked).await.into_write();
 
         let mut messages = MessageReader::try_new(FuturesAdapter(buffer.as_slice())).await?;
 

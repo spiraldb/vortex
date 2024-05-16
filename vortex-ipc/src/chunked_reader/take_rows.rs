@@ -141,9 +141,10 @@ mod test {
     use vortex_dtype::PType;
 
     use crate::chunked_reader::ChunkedArrayReaderBuilder;
+    use crate::stream_writer::{ArrayWriter, StreamLayout};
     use crate::writer::StreamWriter;
 
-    fn chunked_array() -> Bytes {
+    async fn chunked_array() -> ArrayWriter<Vec<u8>> {
         let c = ChunkedArray::try_new(
             vec![PrimitiveArray::from((0i32..1000).collect_vec()).into_array(); 10],
             PType::I32.into(),
@@ -151,20 +152,21 @@ mod test {
         .unwrap()
         .into_array();
 
-        let mut buffer = vec![];
-        StreamWriter::try_new(&mut buffer, &Context::default())
+        ArrayWriter::new(vec![], ViewContext::default())
+            .write_context()
+            .await
             .unwrap()
-            .write_array(&c)
-            .unwrap();
-        buffer.into()
+            .write_array(c)
+            .await
+            .unwrap()
     }
 
     #[tokio::test]
     async fn test_take_rows() {
-        let buffer = chunked_array();
+        let buffer = chunked_array().await.into_write();
 
         let reader = ChunkedArrayReaderBuilder::default()
-            .read(buffer.as_ref())
+            .read(buffer)
             .view_context(Arc::new(ViewContext::default()))
             .dtype(PType::I32.into())
             .build()

@@ -1,5 +1,5 @@
 mod flexbuffers;
-pub mod io;
+pub mod io_buf;
 mod string;
 
 use std::cmp::Ordering;

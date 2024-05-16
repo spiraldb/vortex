@@ -41,7 +41,7 @@ unsafe impl IoBuf for &'static [u8] {
 
     #[inline]
     fn bytes_init(&self) -> usize {
-        todo!()
+        <[u8]>::len(self)
     }
 }
 

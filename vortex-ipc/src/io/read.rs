@@ -1,7 +1,11 @@
 use std::future::{ready, Future};
 use std::io;
+use std::io::{Cursor, Read};
+use std::task::ready;
 
 use bytes::BytesMut;
+use monoio::buf::IoBufMut;
+use tokio::io::AsyncReadExt;
 
 pub trait VortexRead {
     fn read_into(&mut self, buffer: BytesMut) -> impl Future<Output = io::Result<BytesMut>>;
@@ -21,7 +25,31 @@ pub trait VortexReadAt {
     }
 }
 
-impl<'a> VortexReadAt for &'a [u8] {
+impl VortexRead for Cursor<Vec<u8>> {
+    async fn read_into(&mut self, mut buffer: BytesMut) -> io::Result<BytesMut> {
+        Read::read_exact(self, buffer.as_mut())?;
+        Ok(buffer)
+    }
+}
+
+impl VortexRead for Cursor<&[u8]> {
+    async fn read_into(&mut self, mut buffer: BytesMut) -> io::Result<BytesMut> {
+        Read::read_exact(self, buffer.as_mut())?;
+        Ok(buffer)
+    }
+}
+
+impl VortexReadAt for Vec<u8> {
+    fn read_at_into(
+        &mut self,
+        pos: u64,
+        buffer: BytesMut,
+    ) -> impl Future<Output = io::Result<BytesMut>> {
+        VortexReadAt::read_at_into(self.as_mut_slice(), pos, buffer)
+    }
+}
+
+impl VortexReadAt for [u8] {
     fn read_at_into(
         &mut self,
         pos: u64,
