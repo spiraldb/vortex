@@ -4,6 +4,7 @@ use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use cargo_metadata::MetadataCommand;
 use flatc::flatc;
 use walkdir::WalkDir;
 
@@ -38,9 +39,26 @@ pub fn build_proto() {
 
     create_dir_all(&proto_out).expect("Failed to create proto output directory");
 
+    // The proto include path contains all $CRATE/proto directories of ourself plus all of our
+    // transitive dependencies.
+    let metadata = MetadataCommand::new()
+        .manifest_path(manifest_dir().join("Cargo.toml"))
+        .exec()
+        .unwrap();
+    let proto_feature = "proto".to_string();
+    let proto_includes = metadata
+        .packages
+        .iter()
+        .filter(|&pkg| {
+            pkg.features.contains_key(&proto_feature)
+                || pkg.id == metadata.root_package().unwrap().id
+        })
+        .map(|pkg| pkg.manifest_path.parent().unwrap().join("proto"))
+        .collect::<Vec<_>>();
+
     prost_build::Config::new()
         .out_dir(&proto_out)
-        .compile_protos(&proto_files, &[&proto_dir, &proto_dir.join("../../")])
+        .compile_protos(&proto_files, proto_includes.as_slice())
         .expect("Failed to compile protos");
 }
 

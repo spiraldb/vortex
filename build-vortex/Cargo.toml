@@ -11,6 +11,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+cargo_metadata = { workspace = true }
 flatc = { workspace = true }
 prost-build = { workspace = true }
 walkdir = { workspace = true }
