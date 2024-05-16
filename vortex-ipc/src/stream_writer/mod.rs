@@ -123,12 +123,12 @@ pub struct StreamLayout {
 
 #[derive(Clone, Debug)]
 pub struct ArrayLayout {
-    dtype: ByteRange,
-    chunks: ChunkLayout,
+    pub dtype: ByteRange,
+    pub chunks: ChunkLayout,
 }
 
 #[derive(Clone, Debug)]
 pub struct ChunkLayout {
-    byte_offsets: Vec<u64>,
-    row_offsets: Vec<u64>,
+    pub byte_offsets: Vec<u64>,
+    pub row_offsets: Vec<u64>,
 }

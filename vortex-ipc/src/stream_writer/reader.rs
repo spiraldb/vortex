@@ -30,6 +30,11 @@ impl<R: VortexRead> StreamArrayReader<R> {
     }
 
     /// Load the view context from the stream.
+    pub(crate) async fn load_view_context_with_default(mut self) -> VortexResult<Self> {
+        self.load_view_context(&Context::default()).await
+    }
+
+    /// Load the view context from the stream.
     pub async fn load_view_context(mut self, ctx: &Context) -> VortexResult<Self> {
         assert!(self.view_context.is_none(), "View context already set");
         self.view_context = Some(self.msgs.read_view_context(ctx).await?);

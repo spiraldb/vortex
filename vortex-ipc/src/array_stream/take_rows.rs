@@ -116,13 +116,16 @@ mod test {
     use vortex::{ArrayDType, Context, IntoArray, ViewContext};
     use vortex_error::VortexResult;
 
-    use crate::array_stream::{ArrayStreamExt, ArrayStreamFactory};
+    use crate::array_stream::ArrayStreamExt;
     use crate::io::FuturesAdapter;
     use crate::stream_writer::{ArrayWriter, StreamArrayReader};
     use crate::MessageReader;
 
     async fn write_ipc<A: IntoArray>(array: A) -> ArrayWriter<Vec<u8>> {
         ArrayWriter::new(vec![], ViewContext::default())
+            .write_context()
+            .await
+            .unwrap()
             .write_array(array.into_array())
             .await
             .unwrap()
@@ -137,7 +140,8 @@ mod test {
 
         let mut reader = StreamArrayReader::try_new(Cursor::new(buffer))
             .await?
-            .with_view_context(ViewContext::default());
+            .load_view_context_with_default()
+            .await?;
         let stream = reader.array_stream().await?;
 
         let result_iter = stream.take_rows(&indices).unwrap();

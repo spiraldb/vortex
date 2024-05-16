@@ -131,6 +131,7 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<BTreeSet<u3
 
 #[cfg(test)]
 mod test {
+    use std::ptr::read;
     use std::sync::Arc;
 
     use bytes::Bytes;
@@ -163,13 +164,39 @@ mod test {
 
     #[tokio::test]
     async fn test_take_rows() {
-        let buffer = chunked_array().await.into_write();
+        let writer = chunked_array().await;
 
-        let reader = ChunkedArrayReaderBuilder::default()
-            .read(buffer)
+        let row_offsets = PrimitiveArray::from(
+            writer
+                .array_layouts()
+                .first()
+                .unwrap()
+                .chunks
+                .row_offsets
+                .clone(),
+        );
+        let byte_offsets = PrimitiveArray::from(
+            writer
+                .array_layouts()
+                .first()
+                .unwrap()
+                .chunks
+                .byte_offsets
+                .clone(),
+        );
+
+        let mut reader = ChunkedArrayReaderBuilder::default()
+            .read(writer.into_write())
             .view_context(Arc::new(ViewContext::default()))
             .dtype(PType::I32.into())
+            .row_offsets(row_offsets.into_array())
+            .byte_offsets(byte_offsets.into_array())
             .build()
+            .unwrap();
+
+        let result = reader
+            .take_rows(&PrimitiveArray::from(vec![0, 10, 100_000]).into_array())
+            .await
             .unwrap();
         unimplemented!()
     }
