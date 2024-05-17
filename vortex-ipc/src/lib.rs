@@ -33,7 +33,6 @@ pub mod flatbuffers {
     }
 }
 
-pub mod chunked_reader;
 pub mod io;
 mod message_reader;
 mod message_writer;
