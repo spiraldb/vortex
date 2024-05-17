@@ -10,7 +10,9 @@ use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::{Array, ArrayDType, ArrayTrait, IntoArray};
-use vortex_dtype::{match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType};
+use vortex_dtype::{
+    match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
+};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
