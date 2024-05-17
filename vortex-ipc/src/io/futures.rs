@@ -32,7 +32,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream() -> VortexResult<()> {
-        let buffer = create_stream();
+        let buffer = create_stream().await;
 
         let stream = futures_util::stream::iter(
             buffer

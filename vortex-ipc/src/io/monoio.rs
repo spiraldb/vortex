@@ -70,7 +70,7 @@ mod tests {
 
     #[monoio::test]
     async fn test_array_stream() -> VortexResult<()> {
-        let buffer = create_stream();
+        let buffer = create_stream().await;
 
         let ctx =
             Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
