@@ -63,7 +63,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
     where
         S: Stream<Item = VortexResult<Array>> + Unpin,
     {
-        let mut byte_offsets = vec![0];
+        let mut byte_offsets = vec![self.msgs.tell()];
         let mut row_offsets = vec![0];
         let mut row_offset = 0;
 
@@ -87,11 +87,9 @@ impl<W: VortexWrite> ArrayWriter<W> {
         mut array_stream: S,
     ) -> VortexResult<Self> {
         let dtype_pos = self.write_dtype(array_stream.dtype()).await?;
-        let chunks_base = self.msgs.tell();
         let chunk_pos = self.write_array_chunks(&mut array_stream).await?;
         self.array_layouts.push(ArrayLayout {
             dtype: dtype_pos,
-            chunks_base,
             chunks: chunk_pos,
         });
         Ok(self)
@@ -115,7 +113,6 @@ pub struct ByteRange {
 #[derive(Clone, Debug)]
 pub struct ArrayLayout {
     pub dtype: ByteRange,
-    pub chunks_base: u64,
     pub chunks: ChunkLayout,
 }
 

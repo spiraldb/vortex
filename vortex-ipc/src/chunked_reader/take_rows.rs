@@ -92,8 +92,8 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
             let stop_chunk = chunk_range.last().unwrap().chunk_idx + 1;
 
             let (start_byte, stop_byte) = (
-                start_bytes.get_as_cast::<u64>(range_idx) + self.base_offset,
-                stop_bytes.get_as_cast::<u64>(range_idx) + self.base_offset,
+                start_bytes.get_as_cast::<u64>(range_idx),
+                stop_bytes.get_as_cast::<u64>(range_idx),
             );
             let range_byte_len = (stop_byte - start_byte) as usize;
             let (start_row, stop_row) = (
@@ -218,7 +218,7 @@ mod test {
     use itertools::Itertools;
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::{IntoArray, ViewContext};
+    use vortex::{ArrayTrait, IntoArray, ViewContext};
     use vortex_buffer::Buffer;
     use vortex_dtype::PType;
     use vortex_error::VortexResult;
@@ -264,7 +264,6 @@ mod test {
             .read(buffer)
             .view_context(view_ctx)
             .dtype(dtype)
-            .base_offset(array_layout.chunks_base)
             .row_offsets(row_offsets.into_array())
             .byte_offsets(byte_offsets.into_array())
             .build()
@@ -272,9 +271,12 @@ mod test {
 
         let result = reader
             .take_rows(&PrimitiveArray::from(vec![0u64, 10, 10_000 - 1]).into_array())
-            .await
-            .unwrap();
+            .await?
+            .flatten_primitive()?;
 
-        unimplemented!()
+        assert_eq!(result.len(), 3);
+        assert_eq!(result.typed_data::<i32>(), &[0, 10, 999]);
+
+        Ok(())
     }
 }
