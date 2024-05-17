@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 use std::collections::HashMap;
+use std::future::ready;
 use std::io::Cursor;
 use std::ops::Deref;
 
 use bytes::BytesMut;
+use futures_util::TryStreamExt;
 use itertools::Itertools;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
@@ -102,42 +104,34 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
             );
             let range_row_len = (stop_row - start_row) as usize;
 
+            // Relativize the indices to these chunks
+            let indices_start =
+                search_sorted(indices, start_row, SearchSortedSide::Left)?.to_index();
+            let indices_stop =
+                search_sorted(indices, stop_row, SearchSortedSide::Right)?.to_index();
+            let relative_indices = slice(indices, indices_start, indices_stop)?;
+            let start_row = Scalar::from(start_row).cast(relative_indices.dtype())?;
+            let relative_indices = subtract_scalar(&relative_indices, &start_row)?;
+
+            // Set up an array reader to read this range of chunks.
             let mut buffer = BytesMut::with_capacity(range_byte_len);
             unsafe { buffer.set_len(range_byte_len) }
-
             // TODO(ngates): instead of reading the whole range into a buffer, we should stream
             //  the byte range (e.g. if its coming from an HTTP endpoint) and wrap that with an
             //  MesssageReader.
             let buffer = self.read.read_at_into(start_byte, buffer).await?;
 
-            // Set up a reader using the context and dtype we already have.
             let mut reader = StreamArrayReader::try_new(Cursor::new(Buffer::from(buffer.freeze())))
                 .await?
                 .with_view_context(self.view_context.deref().clone())
                 .with_dtype(self.dtype.clone());
 
-            let chunked = reader.array_stream().collect_chunked().await?.into_array();
-            println!("Array: {:?}", chunked);
-
-            // Relativize the indices to this chunk
-            let indices_start =
-                search_sorted(indices, start_row, SearchSortedSide::Left)?.to_index();
-            let indices_stop =
-                search_sorted(indices, stop_row, SearchSortedSide::Right)?.to_index();
-
-            let relative_indices = slice(indices, indices_start, indices_stop)?;
-
-            let start_row = Scalar::from(start_row).cast(relative_indices.dtype())?;
-            let relative_indices = subtract_scalar(&relative_indices, &start_row)?;
-
-            let _c = chunked.clone().flatten_primitive()?;
-            let _c2 = format!("{:?}", _c.typed_data::<i32>());
-            let _i = relative_indices.clone().flatten_primitive()?;
-            let _i2 = format!("{:?}", _i.typed_data::<u64>());
-
-            let chunk = take(&chunked, &relative_indices)?;
-
-            chunks.push(chunk);
+            // Take the indices from the stream.
+            reader
+                .array_stream()
+                .take_rows(&relative_indices)?
+                .try_for_each(|chunk| ready(Ok(chunks.push(chunk))))
+                .await?;
         }
 
         Ok(ChunkedArray::try_new(chunks, self.dtype.clone())?.into_array())
