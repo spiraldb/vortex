@@ -1,5 +1,6 @@
 use crate::Buffer;
 
+#[allow(clippy::missing_safety_doc)]
 pub unsafe trait IoBuf: Unpin + 'static {
     /// Returns a raw pointer to the vector’s buffer.
     fn read_ptr(&self) -> *const u8;

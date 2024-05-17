@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -22,11 +21,11 @@ use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
 use vortex::stream::ArrayStreamExt;
-use vortex::{Array, IntoArray, ToArrayData};
+use vortex::{Array, IntoArray, ToArrayData, ViewContext};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_ipc::io::TokioAdapter;
-use vortex_ipc::writer::StreamWriter;
+use vortex_ipc::io::{TokioAdapter, VortexWrite};
+use vortex_ipc::stream_writer::ArrayWriter;
 use vortex_ipc::MessageReader;
 
 use crate::CTX;
@@ -50,14 +49,18 @@ pub fn open_vortex(path: &Path) -> VortexResult<Array> {
         .map(|a| a.into_array())
 }
 
-pub fn rewrite_parquet_as_vortex<W: Write>(
+pub async fn rewrite_parquet_as_vortex<W: VortexWrite>(
     parquet_path: PathBuf,
-    write: &mut W,
+    write: W,
 ) -> VortexResult<()> {
     let chunked = compress_parquet_to_vortex(parquet_path.as_path())?;
 
-    let mut writer = StreamWriter::try_new(write, &CTX).unwrap();
-    writer.write_array(&chunked.into_array()).unwrap();
+    ArrayWriter::new(write, ViewContext::from(&CTX.clone()))
+        .write_context()
+        .await?
+        .write_array(chunked.into_array())
+        .await?;
+
     Ok(())
 }
 

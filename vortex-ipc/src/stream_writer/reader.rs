@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
+use vortex::stream::ArrayStream;
 use vortex::{Context, ViewContext};
 use vortex_error::VortexResult;
 
-use crate::array_stream::ArrayStream;
 use crate::io::VortexRead;
 use crate::MessageReader;
 
@@ -27,11 +27,6 @@ impl<R: VortexRead> StreamArrayReader<R> {
             view_context: Some(Arc::new(view_context)),
             ..self
         }
-    }
-
-    /// Load the view context from the stream.
-    pub(crate) async fn load_view_context_with_default(mut self) -> VortexResult<Self> {
-        self.load_view_context(&Context::default()).await
     }
 
     /// Load the view context from the stream.

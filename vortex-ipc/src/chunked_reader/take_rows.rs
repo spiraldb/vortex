@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
 use std::collections::BTreeSet;
 
 use bytes::BytesMut;

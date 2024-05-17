@@ -755,7 +755,7 @@ dependencies = [
  "csv",
  "enum-iterator",
  "fs_extra",
- "futures-util",
+ "futures",
  "humansize",
  "itertools 0.12.1",
  "lance",

@@ -33,11 +33,7 @@ pub mod flatbuffers {
     }
 }
 
-<<<<<<< HEAD
-pub mod array_stream;
 pub mod chunked_reader;
-=======
->>>>>>> develop
 pub mod io;
 mod message_reader;
 mod message_writer;
@@ -64,7 +60,7 @@ pub mod test {
     use vortex_error::VortexResult;
     use vortex_fastlanes::BitPackedEncoding;
 
-    use crate::io::FuturesVortexRead;
+    use crate::io::FuturesAdapter;
     use crate::writer::StreamWriter;
     use crate::MessageReader;
 
@@ -112,7 +108,7 @@ pub mod test {
         let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
 
         let ctx = Context::default();
-        let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer)))
+        let mut messages = MessageReader::try_new(FuturesAdapter(Cursor::new(buffer)))
             .await
             .unwrap();
         let reader = messages.array_stream_from_messages(&ctx).await?;
@@ -139,7 +135,7 @@ pub mod test {
         let chunked = ChunkedArray::try_new(vec![data.clone(), data2], data.dtype().clone())?;
         let buffer = write_ipc(chunked);
 
-        let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer))).await?;
+        let mut messages = MessageReader::try_new(FuturesAdapter(Cursor::new(buffer))).await?;
 
         let ctx = Context::default();
         let take_iter = messages

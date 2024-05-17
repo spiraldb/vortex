@@ -1,17 +1,15 @@
-use std::io::Cursor;
-
 use criterion::async_executor::FuturesExecutor;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use futures_executor::block_on;
 use futures_util::{pin_mut, TryStreamExt};
 use itertools::Itertools;
+use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::stream::ArrayStreamExt;
+use vortex::validity::Validity;
 use vortex::{Context, IntoArray, ViewContext};
-use vortex_dtype::Nullability;
-use vortex_dtype::{DType, PType};
+use vortex_ipc::io::FuturesAdapter;
 use vortex_ipc::stream_writer::ArrayWriter;
-use vortex_ipc::writer::StreamWriter;
 use vortex_ipc::MessageReader;
 
 // 100 record batches, 100k rows each
@@ -27,25 +25,23 @@ fn ipc_array_reader_take(c: &mut Criterion) {
     let mut group = c.benchmark_group("ipc_array_reader_take");
 
     group.bench_function("vortex", |b| {
+        let array = ChunkedArray::from_iter(
+            (0..100i32)
+                .map(|i| vec![i; 100_000])
+                .map(|vec| PrimitiveArray::from_vec(vec, Validity::AllValid).into_array()),
+        )
+        .into_array();
+
         let buffer = block_on(async {
             ArrayWriter::new(vec![], ViewContext::from(&ctx))
                 .write_context()
                 .await?
-                .write_array()
-        });
+                .write_array(array)
+                .await
+        })
+        .unwrap()
+        .into_write();
 
-        let mut buffer = vec![];
-        {
-            let mut cursor = Cursor::new(&mut buffer);
-            let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
-            writer
-                .write_schema(&DType::Primitive(PType::I32, Nullability::Nullable))
-                .unwrap();
-            (0..100i32).for_each(|i| {
-                let data = PrimitiveArray::from(vec![i; 100_000]).into_array();
-                writer.write_batch(&data).unwrap();
-            });
-        }
         let indices = indices.clone().into_array();
 
         b.to_async(FuturesExecutor).iter(|| async {

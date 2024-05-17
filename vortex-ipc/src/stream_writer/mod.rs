@@ -1,13 +1,13 @@
 mod reader;
 
-use futures_util::{Stream, StreamExt, TryStreamExt};
+use futures_util::{Stream, TryStreamExt};
 pub use reader::*;
 use vortex::array::chunked::ChunkedArray;
+use vortex::stream::{ArrayStream, ArrayStreamFactory};
 use vortex::{Array, IntoArrayData, ViewContext};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::array_stream::{ArrayStream, ArrayStreamFactory};
 use crate::io::VortexWrite;
 use crate::MessageWriter;
 
@@ -98,7 +98,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
         Ok(self)
     }
 
-    pub async fn write_array(mut self, array: Array) -> VortexResult<Self> {
+    pub async fn write_array(self, array: Array) -> VortexResult<Self> {
         if let Ok(chunked) = ChunkedArray::try_from(&array) {
             self.write_array_stream(ArrayStreamFactory::from_chunked_array(&chunked))
                 .await
@@ -113,12 +113,6 @@ impl<W: VortexWrite> ArrayWriter<W> {
 pub struct ByteRange {
     pub begin: u64,
     pub end: u64,
-}
-
-#[derive(Clone, Debug)]
-pub struct StreamLayout {
-    view_context: ByteRange,
-    arrays: Vec<ArrayLayout>,
 }
 
 #[derive(Clone, Debug)]
