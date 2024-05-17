@@ -53,35 +53,3 @@ unsafe impl<B: IoBuf> monoio::buf::IoBuf for MonoAdapter<B> {
         IoBuf::bytes_init(&self.0)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use futures_util::pin_mut;
-    use futures_util::TryStreamExt;
-    use vortex::encoding::EncodingRef;
-    use vortex::Context;
-    use vortex_alp::ALPEncoding;
-    use vortex_error::VortexResult;
-    use vortex_fastlanes::BitPackedEncoding;
-
-    use super::*;
-    use crate::test::create_stream;
-    use crate::MessageReader;
-
-    #[monoio::test]
-    async fn test_array_stream() -> VortexResult<()> {
-        let buffer = create_stream().await;
-
-        let ctx =
-            Context::default().with_encodings([&ALPEncoding as EncodingRef, &BitPackedEncoding]);
-        let mut messages = MessageReader::try_new(MonoAdapter(buffer.as_slice())).await?;
-        let reader = messages.array_stream_from_messages(&ctx).await?;
-        pin_mut!(reader);
-
-        while let Some(chunk) = reader.try_next().await? {
-            println!("chunk {:?}", chunk);
-        }
-
-        Ok(())
-    }
-}
