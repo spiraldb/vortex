@@ -11,7 +11,10 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, ToArrayData};
+use crate::{
+    impl_encoding, ArrayDType, ArrayFlatten, ArrayIterator, ArrayIteratorAdapter, IntoArrayData,
+    ToArrayData,
+};
 
 mod compute;
 mod stats;
@@ -85,11 +88,13 @@ impl ChunkedArray {
         let index_in_chunk = index - chunk_start;
         (index_chunk, index_in_chunk)
     }
-}
 
-impl<'a> ChunkedArray {
-    pub fn chunks(&'a self) -> impl Iterator<Item = Array> + '_ {
+    pub fn chunks(&self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
+    }
+
+    pub fn array_iterator(&self) -> impl ArrayIterator + '_ {
+        ArrayIteratorAdapter::new(self.dtype().clone(), self.chunks().map(Ok))
     }
 }
 
