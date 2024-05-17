@@ -9,6 +9,7 @@ use vortex_dtype::DType;
 use crate::io::VortexReadAt;
 
 /// A reader for a chunked array.
+#[allow(dead_code)]
 #[derive(Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
 pub struct ChunkedArrayReader<R: VortexReadAt> {
@@ -16,6 +17,8 @@ pub struct ChunkedArrayReader<R: VortexReadAt> {
     view_context: Arc<ViewContext>,
     dtype: DType,
 
+    /// An offset added to all the array byte_offsets
+    base_offset: u64,
     // One row per chunk + 1 row for the end of the last chunk.
     byte_offsets: Array,
     row_offsets: Array,

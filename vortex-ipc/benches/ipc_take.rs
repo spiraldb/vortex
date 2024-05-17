@@ -67,7 +67,7 @@ fn ipc_take(c: &mut Criterion) {
                 .await
         })
         .unwrap()
-        .into_write();
+        .into_inner();
 
         let ctx_ref = &ctx;
         let ro_buffer = buffer.as_slice();

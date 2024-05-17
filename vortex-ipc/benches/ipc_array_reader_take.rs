@@ -40,7 +40,7 @@ fn ipc_array_reader_take(c: &mut Criterion) {
                 .await
         })
         .unwrap()
-        .into_write();
+        .into_inner();
 
         let indices = indices.clone().into_array();
 

@@ -86,7 +86,7 @@ pub mod test {
             .write_array(chunked_array)
             .await
             .unwrap()
-            .into_write()
+            .into_inner()
     }
 
     async fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
@@ -97,7 +97,7 @@ pub mod test {
             .write_array(array.into_array())
             .await
             .unwrap()
-            .into_write()
+            .into_inner()
     }
 
     #[tokio::test]

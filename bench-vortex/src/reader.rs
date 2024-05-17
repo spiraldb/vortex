@@ -43,7 +43,7 @@ pub fn open_vortex(path: &Path) -> VortexResult<Array> {
             msgs.array_stream_from_messages(&CTX)
                 .await
                 .unwrap()
-                .into_chunked()
+                .collect_chunked()
                 .await
         })
         .map(|a| a.into_array())

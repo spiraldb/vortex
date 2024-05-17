@@ -1,4 +1,4 @@
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
@@ -35,7 +35,11 @@ impl Array {
     }
 
     pub fn flatten_primitive(self) -> VortexResult<PrimitiveArray> {
-        PrimitiveArray::try_from(self.flatten()?.into_array())
+        PrimitiveArray::try_from(
+            self.flatten()
+                .map_err(|e| vortex_err!("Array doesn't flatten into primitive {}", e))?
+                .into_array(),
+        )
     }
 
     pub fn flatten_varbin(self) -> VortexResult<VarBinArray> {

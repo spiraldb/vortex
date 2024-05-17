@@ -1,21 +1,29 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
-use std::collections::BTreeSet;
+use std::collections::HashMap;
+use std::io::Cursor;
+use std::ops::Deref;
 
 use bytes::BytesMut;
-use futures_util::pin_mut;
 use itertools::Itertools;
+use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compute::cast::cast;
+use vortex::compute::scalar_subtract::subtract_scalar;
+use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
+use vortex::compute::slice::slice;
 use vortex::compute::take::take;
 use vortex::stats::ArrayStatistics;
-use vortex::{Array, IntoArray};
+use vortex::stream::ArrayStreamExt;
+use vortex::{Array, ArrayDType, IntoArray};
+use vortex_buffer::Buffer;
 use vortex_dtype::PType;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::chunked_reader::ChunkedArrayReader;
-use crate::io::{FuturesAdapter, VortexReadAt};
-use crate::MessageReader;
+use crate::io::VortexReadAt;
+use crate::stream_reader::StreamArrayReader;
 
 impl<R: VortexReadAt> ChunkedArrayReader<R> {
     pub async fn take_rows(&mut self, indices: &Array) -> VortexResult<Array> {
@@ -54,13 +62,13 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
         let chunk_idxs = find_chunks(&self.row_offsets, indices)?;
 
         // Coalesce the chunks that we're going to read from.
-        let coalesced_chunks = self.coalesce_chunks(&chunk_idxs);
+        let coalesced_chunks = self.coalesce_chunks(chunk_idxs.as_ref());
 
         // Grab the row and byte offsets for each chunk range.
         let start_chunks = PrimitiveArray::from(
             coalesced_chunks
                 .iter()
-                .map(|chunk_range| chunk_range.start)
+                .map(|chunks| chunks[0].chunk_idx)
                 .collect_vec(),
         )
         .into_array();
@@ -70,7 +78,7 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
         let stop_chunks = PrimitiveArray::from(
             coalesced_chunks
                 .iter()
-                .map(|chunk_range| chunk_range.stop)
+                .map(|chunks| chunks.last().unwrap().chunk_idx + 1)
                 .collect_vec(),
         )
         .into_array();
@@ -78,10 +86,14 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
         let stop_bytes = take(&self.byte_offsets, &stop_chunks)?.flatten_primitive()?;
 
         // For each chunk-range, read the data as an ArrayStream and call take on it.
+        let mut chunks = vec![];
         for (range_idx, chunk_range) in coalesced_chunks.into_iter().enumerate() {
+            let start_chunk = chunk_range.first().unwrap().chunk_idx;
+            let stop_chunk = chunk_range.last().unwrap().chunk_idx + 1;
+
             let (start_byte, stop_byte) = (
-                start_bytes.get_as_cast::<u64>(range_idx),
-                stop_bytes.get_as_cast::<u64>(range_idx),
+                start_bytes.get_as_cast::<u64>(range_idx) + self.base_offset,
+                stop_bytes.get_as_cast::<u64>(range_idx) + self.base_offset,
             );
             let range_byte_len = (stop_byte - start_byte) as usize;
             let (start_row, stop_row) = (
@@ -98,14 +110,37 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
             //  MesssageReader.
             let buffer = self.read.read_at_into(start_byte, buffer).await?;
 
-            let mut msgs = MessageReader::try_new(FuturesAdapter(buffer.as_ref())).await?;
-            let stream = msgs.array_stream(self.view_context.clone(), self.dtype.clone());
-            pin_mut!(stream);
+            // Set up a reader using the context and dtype we already have.
+            let mut reader = StreamArrayReader::try_new(Cursor::new(Buffer::from(buffer.freeze())))
+                .await?
+                .with_view_context(self.view_context.deref().clone())
+                .with_dtype(self.dtype.clone());
 
-            todo!()
+            let chunked = reader.array_stream().collect_chunked().await?.into_array();
+            println!("Array: {:?}", chunked);
+
+            // Relativize the indices to this chunk
+            let indices_start =
+                search_sorted(indices, start_row, SearchSortedSide::Left)?.to_index();
+            let indices_stop =
+                search_sorted(indices, stop_row, SearchSortedSide::Right)?.to_index();
+
+            let relative_indices = slice(indices, indices_start, indices_stop)?;
+
+            let start_row = Scalar::from(start_row).cast(relative_indices.dtype())?;
+            let relative_indices = subtract_scalar(&relative_indices, &start_row)?;
+
+            let _c = chunked.clone().flatten_primitive()?;
+            let _c2 = format!("{:?}", _c.typed_data::<i32>());
+            let _i = relative_indices.clone().flatten_primitive()?;
+            let _i2 = format!("{:?}", _i.typed_data::<u64>());
+
+            let chunk = take(&chunked, &relative_indices)?;
+
+            chunks.push(chunk);
         }
 
-        unimplemented!()
+        Ok(ChunkedArray::try_new(chunks, self.dtype.clone())?.into_array())
     }
 
     /// Coalesce reads for the given chunks.
@@ -114,52 +149,83 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
     /// * The number of bytes between adjacent selected chunks.
     /// * The latency of the underlying storage.
     /// * The throughput of the underlying storage.
-    fn coalesce_chunks(&self, chunk_idxs: &BTreeSet<u32>) -> Vec<ChunkRange> {
+    fn coalesce_chunks(&self, chunk_idxs: &[ChunkIndices]) -> Vec<Vec<ChunkIndices>> {
         let _hint = self.read.performance_hint();
-
-        unimplemented!()
-    }
-}
-
-struct ChunkRange {
-    start: u32,
-    stop: u32, // Exclusive
-}
-
-impl ChunkRange {
-    #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> u32 {
-        self.stop - self.start
+        chunk_idxs
+            .into_iter()
+            .cloned()
+            .map(|chunk_idx| vec![chunk_idx.clone()])
+            .collect_vec()
     }
 }
 
 /// Find the chunks that are relevant to the read operation.
-fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<BTreeSet<u32>> {
+/// Both the row_offsets and indices arrays must be strict-sorted.
+fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIndices>> {
     // TODO(ngates): lots of optimizations to be had here, potentially lots of push-down.
     //  For now, we just flatten everything into primitive arrays and iterate.
     let row_offsets = cast(row_offsets, PType::U64.into())?.flatten_primitive()?;
+    let _rows = format!("{:?}", row_offsets.typed_data::<u64>());
     let indices = cast(indices, PType::U64.into())?.flatten_primitive()?;
+    let _indices = format!("{:?}", indices.typed_data::<u64>());
 
-    let row_offsets_ref = row_offsets.typed_data::<u64>();
-    for idx in indices.typed_data::<u64>() {
-        row_offsets_ref.binary_search(idx);
+    if let (Some(last_idx), Some(num_rows)) = (
+        indices.typed_data::<u64>().last(),
+        row_offsets.typed_data::<u64>().last(),
+    ) {
+        if last_idx >= num_rows {
+            vortex_bail!("Index {} out of bounds {}", last_idx, num_rows);
+        }
     }
 
-    todo!()
+    let mut chunks = HashMap::new();
+
+    let row_offsets_ref = row_offsets.typed_data::<u64>();
+    for (pos, idx) in indices.typed_data::<u64>().iter().enumerate() {
+        let chunk_idx = row_offsets_ref.binary_search(idx).unwrap_or_else(|x| x - 1);
+        chunks
+            .entry(chunk_idx as u32)
+            .and_modify(|chunk_indices: &mut ChunkIndices| {
+                chunk_indices.indices_stop = (pos + 1) as u64;
+            })
+            .or_insert(ChunkIndices {
+                chunk_idx: chunk_idx as u32,
+                indices_start: pos as u64,
+                indices_stop: (pos + 1) as u64,
+            });
+    }
+
+    Ok(chunks
+        .keys()
+        .sorted()
+        .map(|k| chunks.get(k).unwrap())
+        .cloned()
+        .collect_vec())
+}
+
+#[derive(Debug, Clone)]
+struct ChunkIndices {
+    chunk_idx: u32,
+    // The position into the indices array that is covered by this chunk.
+    indices_start: u64,
+    indices_stop: u64,
 }
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
+    use std::io::Cursor;
 
     use itertools::Itertools;
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::{IntoArray, ViewContext};
+    use vortex_buffer::Buffer;
     use vortex_dtype::PType;
+    use vortex_error::VortexResult;
 
     use crate::chunked_reader::ChunkedArrayReaderBuilder;
     use crate::writer::ArrayWriter;
+    use crate::MessageReader;
 
     async fn chunked_array() -> ArrayWriter<Vec<u8>> {
         let c = ChunkedArray::try_new(
@@ -179,41 +245,36 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_take_rows() {
+    async fn test_take_rows() -> VortexResult<()> {
         let writer = chunked_array().await;
 
-        let row_offsets = PrimitiveArray::from(
-            writer
-                .array_layouts()
-                .first()
-                .unwrap()
-                .chunks
-                .row_offsets
-                .clone(),
-        );
-        let byte_offsets = PrimitiveArray::from(
-            writer
-                .array_layouts()
-                .first()
-                .unwrap()
-                .chunks
-                .byte_offsets
-                .clone(),
-        );
+        let array_layout = writer.array_layouts()[0].clone();
+        let row_offsets = PrimitiveArray::from(array_layout.chunks.row_offsets.clone());
+        let byte_offsets = PrimitiveArray::from(array_layout.chunks.byte_offsets.clone());
+
+        let buffer = Buffer::from(writer.into_inner());
+
+        let mut msgs = MessageReader::try_new(Cursor::new(buffer.clone()))
+            .await
+            .unwrap();
+        let view_ctx = msgs.read_view_context(&Default::default()).await.unwrap();
+        let dtype = msgs.read_dtype().await.unwrap();
 
         let mut reader = ChunkedArrayReaderBuilder::default()
-            .read(writer.into_write())
-            .view_context(Arc::new(ViewContext::default()))
-            .dtype(PType::I32.into())
+            .read(buffer)
+            .view_context(view_ctx)
+            .dtype(dtype)
+            .base_offset(array_layout.chunks_base)
             .row_offsets(row_offsets.into_array())
             .byte_offsets(byte_offsets.into_array())
             .build()
             .unwrap();
 
         let result = reader
-            .take_rows(&PrimitiveArray::from(vec![0, 10, 100_000]).into_array())
+            .take_rows(&PrimitiveArray::from(vec![0u64, 10, 10_000 - 1]).into_array())
             .await
             .unwrap();
+
         unimplemented!()
     }
 }

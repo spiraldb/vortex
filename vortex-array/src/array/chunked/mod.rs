@@ -6,6 +6,7 @@ use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
@@ -70,7 +71,9 @@ impl ChunkedArray {
     }
 
     pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
-        assert!(index <= self.len(), "Index out of bounds of the array");
+        if index > self.len() {
+            panic!("Index out of bounds of the array");
+        }
 
         // TODO(ngates): migrate to the new search_sorted API to subtract 1 if not exact match.
         let mut index_chunk = search_sorted(&self.chunk_ends(), index, SearchSortedSide::Left)
@@ -115,7 +118,12 @@ impl FromIterator<Array> for ChunkedArray {
 
 impl ArrayFlatten for ChunkedArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::Chunked(self))
+        let chunks = self.chunks().collect_vec();
+        if chunks.is_empty() {
+            // TODO(ngates): return an empty FlattenedArray with the correct DType.
+            panic!("Cannot yet flatten an empty chunked array");
+        }
+        as_contiguous(chunks.as_slice())?.flatten()
     }
 }
 

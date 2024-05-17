@@ -34,8 +34,8 @@ impl<W: VortexWrite> ArrayWriter<W> {
         &self.array_layouts
     }
 
-    pub fn into_write(self) -> W {
-        self.msgs.into_write()
+    pub fn into_inner(self) -> W {
+        self.msgs.into_inner()
     }
 
     pub async fn write_context(mut self) -> VortexResult<Self> {
@@ -87,9 +87,11 @@ impl<W: VortexWrite> ArrayWriter<W> {
         mut array_stream: S,
     ) -> VortexResult<Self> {
         let dtype_pos = self.write_dtype(array_stream.dtype()).await?;
+        let chunks_base = self.msgs.tell();
         let chunk_pos = self.write_array_chunks(&mut array_stream).await?;
         self.array_layouts.push(ArrayLayout {
             dtype: dtype_pos,
+            chunks_base,
             chunks: chunk_pos,
         });
         Ok(self)
@@ -113,6 +115,7 @@ pub struct ByteRange {
 #[derive(Clone, Debug)]
 pub struct ArrayLayout {
     pub dtype: ByteRange,
+    pub chunks_base: u64,
     pub chunks: ChunkLayout,
 }
 

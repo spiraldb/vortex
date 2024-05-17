@@ -10,7 +10,7 @@ use crate::stream::ArrayStreamAdapter;
 use crate::Array;
 
 pub trait ArrayStreamExt: ArrayStream {
-    fn into_chunked(self) -> impl Future<Output = VortexResult<ChunkedArray>>
+    fn collect_chunked(self) -> impl Future<Output = VortexResult<ChunkedArray>>
     where
         Self: Sized,
     {
