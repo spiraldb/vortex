@@ -4,7 +4,6 @@ use arrow_buffer::BooleanBuffer;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::expressions::{Disjunction, Predicate, Value};
-use vortex_expr::operators::Operator;
 
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
@@ -44,13 +43,16 @@ fn indices_matching_predicate(
 
     let rhs = match &predicate.right {
         Value::Field(_) => {
-            vortex_bail!("Right-hand-side fields not yet supported.")
+            vortex_bail!(
+                "Cannot apply predicate with right-hand-side reference to primitive array."
+            )
         }
         Value::Literal(scalar) => scalar,
     };
+
     let matching_idxs = match_each_native_ptype!(arr.ptype(), |$T| {
         let rhs_typed: $T = rhs.try_into().unwrap();
-        let predicate_fn = get_predicate::<$T>(&predicate.op);
+        let predicate_fn = &predicate.op.to_predicate::<$T>();
         apply_predicate(arr.typed_data::<$T>(), &rhs_typed, predicate_fn)
     });
 
@@ -63,19 +65,7 @@ fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
     f: F,
 ) -> BooleanBuffer {
     let matches = lhs.iter().map(|lhs| f(lhs, rhs));
-
     BooleanBuffer::from_iter(matches)
-}
-
-fn get_predicate<T: NativePType>(op: &Operator) -> fn(&T, &T) -> bool {
-    match op {
-        Operator::EqualTo => PartialEq::eq,
-        Operator::NotEqualTo => PartialEq::ne,
-        Operator::GreaterThan => PartialOrd::gt,
-        Operator::GreaterThanOrEqualTo => PartialOrd::ge,
-        Operator::LessThan => PartialOrd::lt,
-        Operator::LessThanOrEqualTo => PartialOrd::le,
-    }
 }
 
 #[cfg(test)]

@@ -1,5 +1,7 @@
 use std::ops;
 
+use vortex_dtype::NativePType;
+
 use crate::expressions::Predicate;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
@@ -43,6 +45,17 @@ impl Operator {
             Operator::GreaterThanOrEqualTo => Operator::LessThan,
             Operator::LessThan => Operator::GreaterThanOrEqualTo,
             Operator::LessThanOrEqualTo => Operator::GreaterThan,
+        }
+    }
+
+    pub fn to_predicate<T: NativePType>(&self) -> fn(&T, &T) -> bool {
+        match self {
+            Operator::EqualTo => PartialEq::eq,
+            Operator::NotEqualTo => PartialEq::ne,
+            Operator::GreaterThan => PartialOrd::gt,
+            Operator::GreaterThanOrEqualTo => PartialOrd::ge,
+            Operator::LessThan => PartialOrd::lt,
+            Operator::LessThanOrEqualTo => PartialOrd::le,
         }
     }
 }
