@@ -21,6 +21,12 @@ pub struct ChunkedArrayReader<R: VortexReadAt> {
     row_offsets: Array,
 }
 
+impl<R: VortexReadAt> ChunkedArrayReader<R> {
+    pub fn nchunks(&self) -> usize {
+        self.byte_offsets.len()
+    }
+}
+
 impl<R: VortexReadAt> ChunkedArrayReaderBuilder<R> {
     fn validate(&self) -> Result<(), String> {
         if let (Some(byte_offsets), Some(row_offsets)) = (&self.byte_offsets, &self.row_offsets) {
@@ -29,11 +35,5 @@ impl<R: VortexReadAt> ChunkedArrayReaderBuilder<R> {
             }
         }
         Ok(())
-    }
-}
-
-impl<R: VortexReadAt> ChunkedArrayReader<R> {
-    pub fn nchunks(&self) -> usize {
-        self.byte_offsets.len()
     }
 }

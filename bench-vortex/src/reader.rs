@@ -25,7 +25,7 @@ use vortex::{Array, IntoArray, ToArrayData, ViewContext};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_ipc::io::{TokioAdapter, VortexWrite};
-use vortex_ipc::stream_writer::ArrayWriter;
+use vortex_ipc::writer::ArrayWriter;
 use vortex_ipc::MessageReader;
 
 use crate::CTX;

@@ -38,7 +38,8 @@ pub mod io;
 mod message_reader;
 mod message_writer;
 mod messages;
-pub mod stream_writer;
+pub mod stream_reader;
+pub mod writer;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
     move || vortex_err!(InvalidSerde: "missing field: {}", field)
@@ -60,7 +61,7 @@ pub mod test {
     use vortex_fastlanes::BitPackedEncoding;
 
     use crate::io::FuturesAdapter;
-    use crate::stream_writer::ArrayWriter;
+    use crate::writer::ArrayWriter;
     use crate::MessageReader;
 
     pub async fn create_stream() -> Vec<u8> {

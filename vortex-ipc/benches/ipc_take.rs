@@ -16,7 +16,7 @@ use vortex::compress::Compressor;
 use vortex::compute::take::take;
 use vortex::{Context, IntoArray, ViewContext};
 use vortex_ipc::io::FuturesAdapter;
-use vortex_ipc::stream_writer::ArrayWriter;
+use vortex_ipc::writer::ArrayWriter;
 use vortex_ipc::MessageReader;
 
 fn ipc_take(c: &mut Criterion) {

@@ -90,6 +90,10 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
 
             let mut buffer = BytesMut::with_capacity(range_byte_len);
             unsafe { buffer.set_len(range_byte_len) }
+
+            // TODO(ngates): instead of reading the whole range into a buffer, we should stream
+            //  the byte range (e.g. if its coming from an HTTP endpoint) and wrap that with an
+            //  MesssageReader.
             let buffer = self.read.read_at_into(start_byte, buffer).await?;
 
             let mut msgs = MessageReader::try_new(FuturesAdapter(buffer.as_ref())).await?;
@@ -142,7 +146,7 @@ mod test {
     use vortex_dtype::PType;
 
     use crate::chunked_reader::ChunkedArrayReaderBuilder;
-    use crate::stream_writer::ArrayWriter;
+    use crate::writer::ArrayWriter;
 
     async fn chunked_array() -> ArrayWriter<Vec<u8>> {
         let c = ChunkedArray::try_new(

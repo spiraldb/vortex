@@ -1,7 +1,4 @@
-mod reader;
-
 use futures_util::{Stream, TryStreamExt};
-pub use reader::*;
 use vortex::array::chunked::ChunkedArray;
 use vortex::stream::ArrayStream;
 use vortex::{Array, IntoArrayData, ViewContext};

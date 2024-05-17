@@ -9,7 +9,7 @@ use vortex::stream::ArrayStreamExt;
 use vortex::validity::Validity;
 use vortex::{Context, IntoArray, ViewContext};
 use vortex_ipc::io::FuturesAdapter;
-use vortex_ipc::stream_writer::ArrayWriter;
+use vortex_ipc::writer::ArrayWriter;
 use vortex_ipc::MessageReader;
 
 // 100 record batches, 100k rows each
