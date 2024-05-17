@@ -227,26 +227,23 @@ mod test {
     use crate::writer::ArrayWriter;
     use crate::MessageReader;
 
-    async fn chunked_array() -> ArrayWriter<Vec<u8>> {
+    async fn chunked_array() -> VortexResult<ArrayWriter<Vec<u8>>> {
         let c = ChunkedArray::try_new(
             vec![PrimitiveArray::from((0i32..1000).collect_vec()).into_array(); 10],
             PType::I32.into(),
-        )
-        .unwrap()
+        )?
         .into_array();
 
         ArrayWriter::new(vec![], ViewContext::default())
             .write_context()
-            .await
-            .unwrap()
+            .await?
             .write_array(c)
             .await
-            .unwrap()
     }
 
     #[tokio::test]
     async fn test_take_rows() -> VortexResult<()> {
-        let writer = chunked_array().await;
+        let writer = chunked_array().await?;
 
         let array_layout = writer.array_layouts()[0].clone();
         let row_offsets = PrimitiveArray::from(array_layout.chunks.row_offsets.clone());
@@ -254,11 +251,9 @@ mod test {
 
         let buffer = Buffer::from(writer.into_inner());
 
-        let mut msgs = MessageReader::try_new(Cursor::new(buffer.clone()))
-            .await
-            .unwrap();
-        let view_ctx = msgs.read_view_context(&Default::default()).await.unwrap();
-        let dtype = msgs.read_dtype().await.unwrap();
+        let mut msgs = MessageReader::try_new(Cursor::new(buffer.clone())).await?;
+        let view_ctx = msgs.read_view_context(&Default::default()).await?;
+        let dtype = msgs.read_dtype().await?;
 
         let mut reader = ChunkedArrayReaderBuilder::default()
             .read(buffer)
