@@ -130,7 +130,10 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
             reader
                 .array_stream()
                 .take_rows(&relative_indices)?
-                .try_for_each(|chunk| ready(Ok(chunks.push(chunk))))
+                .try_for_each(|chunk| {
+                    chunks.push(chunk);
+                    ready(Ok(()))
+                })
                 .await?;
         }
 
@@ -146,7 +149,7 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
     fn coalesce_chunks(&self, chunk_idxs: &[ChunkIndices]) -> Vec<Vec<ChunkIndices>> {
         let _hint = self.read.performance_hint();
         chunk_idxs
-            .into_iter()
+            .iter()
             .cloned()
             .map(|chunk_idx| vec![chunk_idx.clone()])
             .collect_vec()
