@@ -12,11 +12,12 @@ use crate::{Array, ArrayTrait, IntoArray};
 
 impl FilterIndicesFn for PrimitiveArray {
     fn filter_indices(&self, predicate: &Disjunction) -> VortexResult<Array> {
-        let conjunction_indices = predicate.conjunctions.iter().flat_map(|conj| {
+        let conjunction_indices = predicate.conjunctions.iter().map(|conj| {
             conj.predicates
                 .iter()
-                .map(|pred| indices_matching_predicate(self, pred).unwrap())
-                .reduce(|a, b| a.bitand(&b))
+                .map(|pred| indices_matching_predicate(self, pred))
+                .reduce(|a, b| Ok(a?.bitand(&b?)))
+                .unwrap()
         });
         let present_buf = self
             .validity()
@@ -24,12 +25,12 @@ impl FilterIndicesFn for PrimitiveArray {
             .to_present_null_buffer()?
             .into_inner();
 
-        let bitset = conjunction_indices
-            .reduce(|a, b| a.bitor(&b))
-            .map(|bitset| bitset.bitand(&present_buf))
-            .unwrap_or_else(|| BooleanBuffer::new_set(self.len()));
+        let bitset: VortexResult<BooleanBuffer> = conjunction_indices
+            .reduce(|a, b| Ok(a?.bitor(&b?)))
+            .map(|bitset| Ok(bitset?.bitand(&present_buf)))
+            .unwrap_or_else(|| Ok(BooleanBuffer::new_set(self.len())));
 
-        Ok(BoolArray::from(bitset).into_array())
+        Ok(BoolArray::from(bitset?).into_array())
     }
 }
 
@@ -233,7 +234,7 @@ mod test {
         let arr =
             PrimitiveArray::from_vec(vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10], Validity::AllValid);
         let field = FieldPathBuilder::new().join("some_field").build();
-        let filtered_primitive = apply_conjunctive_filter(
+        apply_conjunctive_filter(
             &arr,
             Conjunction {
                 predicates: vec![field.clone().lt(lit(5u32)), field.clone().gt(lit(5u32))],
