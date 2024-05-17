@@ -168,7 +168,7 @@ mod test {
         .flatten_primitive()
         .unwrap();
         let filtered = filtered_primitive.typed_data::<u64>();
-        assert_eq!(filtered, [5]);
+        assert_eq!(filtered, [5u64]);
 
         let filtered_primitive = apply_conjunctive_filter(
             &arr,
@@ -210,7 +210,7 @@ mod test {
         .flatten_primitive()
         .unwrap();
         let filtered = filtered_primitive.typed_data::<u64>();
-        assert_eq!(filtered, [2, 3])
+        assert_eq!(filtered, [2u64, 3])
     }
 
     #[test]
