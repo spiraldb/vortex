@@ -43,9 +43,7 @@ fn indices_matching_predicate(
 
     let rhs = match &predicate.right {
         Value::Field(_) => {
-            vortex_bail!(
-                "Cannot apply predicate with right-hand-side field reference to primitive array."
-            )
+            vortex_bail!("Cannot apply field reference to primitive array")
         }
         Value::Literal(scalar) => scalar,
     };
@@ -118,9 +116,9 @@ mod test {
                 predicates: vec![field.clone().lt(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+        .unwrap()
+        .flatten_bool()
+        .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [0u64, 1, 2, 3]);
 
@@ -130,9 +128,9 @@ mod test {
                 predicates: vec![field.clone().gt(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+        .unwrap()
+        .flatten_bool()
+        .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [6u64, 7, 8, 10]);
 
@@ -142,9 +140,9 @@ mod test {
                 predicates: vec![field.clone().eq(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+        .unwrap()
+        .flatten_bool()
+        .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [5u64]);
 
@@ -154,9 +152,9 @@ mod test {
                 predicates: vec![field.clone().gte(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+        .unwrap()
+        .flatten_bool()
+        .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [5u64, 6, 7, 8, 10]);
 
@@ -166,9 +164,9 @@ mod test {
                 predicates: vec![field.clone().lte(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+        .unwrap()
+        .flatten_bool()
+        .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [0u64, 1, 2, 3, 5]);
     }
@@ -184,9 +182,9 @@ mod test {
                 predicates: vec![field.clone().lt(lit(5u32)), field.clone().gt(lit(2u32))],
             },
         )
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+        .unwrap()
+        .flatten_bool()
+        .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [2u64, 3])
     }
@@ -202,9 +200,9 @@ mod test {
                 predicates: vec![field.clone().lt(lit(5u32)), field.clone().gt(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+        .unwrap()
+        .flatten_bool()
+        .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         let expected: [u64; 0] = [];
         assert_eq!(filtered, expected)
@@ -228,5 +226,19 @@ mod test {
         let filtered_primitive = arr.filter_indices(&disj).unwrap().flatten_bool().unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [0u64, 1, 2, 3, 5, 6, 7, 8, 9])
+    }
+
+    #[test]
+    fn test_invalid_path_err() {
+        let arr =
+            PrimitiveArray::from_vec(vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10], Validity::AllValid);
+        let field = FieldPathBuilder::new().join("some_field").build();
+        let filtered_primitive = apply_conjunctive_filter(
+            &arr,
+            Conjunction {
+                predicates: vec![field.clone().lt(lit(5u32)), field.clone().gt(lit(5u32))],
+            },
+        )
+        .expect_err("Cannot apply field reference to primitive array");
     }
 }
