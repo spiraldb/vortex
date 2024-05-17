@@ -1,5 +1,6 @@
 use std::ops::{BitAnd, BitOr};
-use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder};
+
+use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::{vortex_bail, VortexResult};
@@ -14,30 +15,31 @@ use crate::{Array, ArrayTrait, IntoArray};
 impl FilterIndicesFn for PrimitiveArray {
     fn filter_indices(&self, predicate: &Disjunction) -> VortexResult<Array> {
         let mut conjunction_indices = predicate.conjunctions.iter().flat_map(|conj| {
-            BooleanBufferMergeOp::All(
+            BooleanBufferMergeOp::All.merge(
                 &mut conj
                     .predicates
                     .iter()
                     .map(|pred| indices_matching_predicate(self, pred).unwrap()),
             )
-                .merge()
         });
-        let indices = BooleanBufferMergeOp::Any(&mut conjunction_indices)
-            .merge()
-            .map(|bitset| bitset.iter()
-                .enumerate()
-                .flat_map(|(idx, v)| if v {
-                    Some(idx as u64)
-                } else {
-                    None
-                })
-                .collect_vec())
-            .unwrap_or(Vec::new());
+        let indices = BooleanBufferMergeOp::Any
+            .merge(&mut conjunction_indices)
+            .map(|bitset| {
+                bitset
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(idx, v)| if v { Some(idx as u64) } else { None })
+                    .collect_vec()
+            })
+            .unwrap_or_default();
         Ok(PrimitiveArray::from_vec(indices, Validity::AllValid).into_array())
     }
 }
 
-fn indices_matching_predicate(arr: &PrimitiveArray, predicate: &Predicate) -> VortexResult<BooleanBuffer> {
+fn indices_matching_predicate(
+    arr: &PrimitiveArray,
+    predicate: &Predicate,
+) -> VortexResult<BooleanBuffer> {
     if predicate.left.head().is_some() {
         vortex_bail!("Invalid path for primitive array")
     }
@@ -49,9 +51,11 @@ fn indices_matching_predicate(arr: &PrimitiveArray, predicate: &Predicate) -> Vo
         Value::Literal(scalar) => scalar,
     };
 
-    let validity_buf = arr.validity()
+    let present_buf = arr
+        .validity()
         .to_logical(arr.len())
-        .to_present_null_buffer()?.into_inner();
+        .to_present_null_buffer()?
+        .into_inner();
 
     let matching_idxs = match_each_native_ptype!(arr.ptype(), |$T| {
         let rhs_typed: $T = rhs.try_into().unwrap();
@@ -59,19 +63,16 @@ fn indices_matching_predicate(arr: &PrimitiveArray, predicate: &Predicate) -> Vo
         apply_predicate(arr.typed_data::<$T>(), &rhs_typed, predicate_fn)
     });
 
-    Ok(matching_idxs.bitand(&validity_buf))
+    Ok(matching_idxs.bitand(&present_buf))
 }
 
-fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(lhs: &[T], rhs: &T, f: F) -> BooleanBuffer {
-    let matches = lhs.iter()
-        .filter(|lhs| f(lhs, rhs))
-        .enumerate()
-        .map(|(idx, _)| idx)
-        .collect_vec();
-    let mut matching_idx_bitset = BooleanBufferBuilder::new(lhs.len());
-    matching_idx_bitset.resize(lhs.len());
-    matches.into_iter().for_each(|idx| matching_idx_bitset.set_bit(idx, true));
-    matching_idx_bitset.finish()
+fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
+    lhs: &[T],
+    rhs: &T,
+    f: F,
+) -> BooleanBuffer {
+    let matches = lhs.iter().map(|lhs| f(lhs, rhs));
+    BooleanBuffer::from_iter(matches)
 }
 
 fn get_predicate<T: NativePType>(op: &Operator) -> fn(&T, &T) -> bool {
@@ -86,20 +87,16 @@ fn get_predicate<T: NativePType>(op: &Operator) -> fn(&T, &T) -> bool {
 }
 
 /// Merge an arbitrary number of bitsets
-enum BooleanBufferMergeOp<'a> {
-    Any(&'a mut dyn Iterator<Item=BooleanBuffer>),
-    All(&'a mut dyn Iterator<Item=BooleanBuffer>),
+enum BooleanBufferMergeOp {
+    Any,
+    All,
 }
 
-impl BooleanBufferMergeOp<'_> {
-    fn merge(self) -> Option<BooleanBuffer> {
+impl BooleanBufferMergeOp {
+    fn merge(self, bitsets: &mut dyn Iterator<Item = BooleanBuffer>) -> Option<BooleanBuffer> {
         match self {
-            BooleanBufferMergeOp::Any(bitsets) => bitsets.reduce(|a, b| {
-                a.bitor(&b)
-            }),
-            BooleanBufferMergeOp::All(bitsets) => bitsets.reduce(|a, b| {
-                a.bitand(&b)
-            }),
+            BooleanBufferMergeOp::Any => bitsets.tree_fold1(|a, b| a.bitor(&b)),
+            BooleanBufferMergeOp::All => bitsets.tree_fold1(|a, b| a.bitand(&b)),
         }
     }
 }
@@ -122,9 +119,15 @@ mod test {
     #[test]
     fn test_basic_filter() {
         let arr = PrimitiveArray::from_nullable_vec(vec![
-            Some(1u32), Some(2), Some(3), Some(4),
+            Some(1u32),
+            Some(2),
+            Some(3),
+            Some(4),
             None,
-            Some(5), Some(6), Some(7), Some(8),
+            Some(5),
+            Some(6),
+            Some(7),
+            Some(8),
             None,
             Some(9),
             None,
@@ -137,9 +140,9 @@ mod test {
                 predicates: vec![field.clone().lt(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_primitive()
-            .unwrap();
+        .unwrap()
+        .flatten_primitive()
+        .unwrap();
         let filtered = filtered_primitive.typed_data::<u64>();
         assert_eq!(filtered, [0u64, 1, 2, 3]);
 
@@ -149,9 +152,9 @@ mod test {
                 predicates: vec![field.clone().gt(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_primitive()
-            .unwrap();
+        .unwrap()
+        .flatten_primitive()
+        .unwrap();
         let filtered = filtered_primitive.typed_data::<u64>();
         assert_eq!(filtered, [6u64, 7, 8, 10]);
 
@@ -161,9 +164,9 @@ mod test {
                 predicates: vec![field.clone().eq(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_primitive()
-            .unwrap();
+        .unwrap()
+        .flatten_primitive()
+        .unwrap();
         let filtered = filtered_primitive.typed_data::<u64>();
         assert_eq!(filtered, [5]);
 
@@ -173,9 +176,9 @@ mod test {
                 predicates: vec![field.clone().gte(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_primitive()
-            .unwrap();
+        .unwrap()
+        .flatten_primitive()
+        .unwrap();
         let filtered = filtered_primitive.typed_data::<u64>();
         assert_eq!(filtered, [5u64, 6, 7, 8, 10]);
 
@@ -185,9 +188,9 @@ mod test {
                 predicates: vec![field.clone().lte(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_primitive()
-            .unwrap();
+        .unwrap()
+        .flatten_primitive()
+        .unwrap();
         let filtered = filtered_primitive.typed_data::<u64>();
         assert_eq!(filtered, [0u64, 1, 2, 3, 5]);
     }
@@ -203,9 +206,9 @@ mod test {
                 predicates: vec![field.clone().lt(lit(5u32)), field.clone().gt(lit(2u32))],
             },
         )
-            .unwrap()
-            .flatten_primitive()
-            .unwrap();
+        .unwrap()
+        .flatten_primitive()
+        .unwrap();
         let filtered = filtered_primitive.typed_data::<u64>();
         assert_eq!(filtered, [2, 3])
     }
@@ -221,9 +224,9 @@ mod test {
                 predicates: vec![field.clone().lt(lit(5u32)), field.clone().gt(lit(5u32))],
             },
         )
-            .unwrap()
-            .flatten_primitive()
-            .unwrap();
+        .unwrap()
+        .flatten_primitive()
+        .unwrap();
         let filtered = filtered_primitive.typed_data::<u64>();
         let expected: [u64; 0] = [];
         assert_eq!(filtered, expected)
