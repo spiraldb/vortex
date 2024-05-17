@@ -1,3 +1,4 @@
+use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{Nullability, PType};
@@ -9,6 +10,7 @@ use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
+use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -93,6 +95,10 @@ impl ChunkedArray {
 
     pub fn array_iterator(&self) -> impl ArrayIterator + '_ {
         ArrayIteratorAdapter::new(self.dtype().clone(), self.chunks().map(Ok))
+    }
+
+    pub fn array_stream(&self) -> impl ArrayStream + '_ {
+        ArrayStreamAdapter::new(self.dtype().clone(), stream::iter(self.chunks().map(Ok)))
     }
 }
 

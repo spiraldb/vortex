@@ -1,18 +1,15 @@
-use std::future::Future;
-use std::io;
-
 mod futures;
 mod monoio;
+pub mod offset;
+mod read;
 mod tokio;
+mod write;
 
-use bytes::BytesMut;
 #[cfg(feature = "futures")]
 pub use futures::*;
 #[cfg(feature = "monoio")]
 pub use monoio::*;
+pub use read::*;
 #[cfg(feature = "tokio")]
 pub use tokio::*;
-
-pub trait VortexRead {
-    fn read_into(&mut self, buffer: BytesMut) -> impl Future<Output = io::Result<BytesMut>>;
-}
+pub use write::*;

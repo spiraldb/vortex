@@ -21,7 +21,7 @@ bzip2 = { workspace = true }
 csv = { workspace = true }
 enum-iterator = { workspace = true }
 fs_extra = { workspace = true }
-futures-util = { workspace = true }
+futures = { workspace = true }
 humansize = { workspace = true }
 itertools = { workspace = true }
 lance = { version = "0.10.16", features = [] }

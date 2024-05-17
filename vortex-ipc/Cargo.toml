@@ -13,6 +13,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 bytes = { workspace = true }
+derive_builder = { workspace = true }
 flatbuffers = { workspace = true }
 futures-util = { workspace = true }
 itertools = { workspace = true }
@@ -31,6 +32,7 @@ build-vortex = { path = "../build-vortex" }
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_futures"] }
+futures-executor = { workspace = true }
 rand = { workspace = true }
 simplelog = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

@@ -1,4 +1,3 @@
-use std::io::Cursor;
 use std::sync::Arc;
 
 use arrow::ipc::reader::StreamReader as ArrowStreamReader;
@@ -8,14 +7,16 @@ use arrow_ipc::{CompressionType, MetadataVersion};
 use arrow_schema::{DataType, Field, Schema};
 use criterion::async_executor::FuturesExecutor;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use futures_executor::block_on;
+use futures_util::io::Cursor;
 use futures_util::{pin_mut, TryStreamExt};
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
-use vortex::{Context, IntoArray};
-use vortex_ipc::io::FuturesVortexRead;
-use vortex_ipc::writer::StreamWriter;
+use vortex::{Context, IntoArray, ViewContext};
+use vortex_ipc::io::FuturesAdapter;
+use vortex_ipc::stream_writer::ArrayWriter;
 use vortex_ipc::MessageReader;
 
 fn ipc_take(c: &mut Criterion) {
@@ -39,7 +40,7 @@ fn ipc_take(c: &mut Criterion) {
         }
 
         b.iter(|| {
-            let mut cursor = Cursor::new(&buffer);
+            let mut cursor = std::io::Cursor::new(&buffer);
             let mut reader = ArrowStreamReader::try_new(&mut cursor, None).unwrap();
             let batch = reader.next().unwrap().unwrap();
             let array_from_batch = batch.column(0);
@@ -58,19 +59,22 @@ fn ipc_take(c: &mut Criterion) {
         let compressed = Compressor::new(&ctx).compress(&uncompressed, None).unwrap();
 
         // Try running take over an ArrayView.
-        let mut buffer = vec![];
-        {
-            let mut cursor = Cursor::new(&mut buffer);
-            let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
-            writer.write_array(&compressed).unwrap();
-        }
+        let buffer = block_on(async {
+            ArrayWriter::new(vec![], ViewContext::from(&ctx))
+                .write_context()
+                .await?
+                .write_array(compressed)
+                .await
+        })
+        .unwrap()
+        .into_write();
 
         let ctx_ref = &ctx;
-        let ro_buffer = buffer.as_ref();
+        let ro_buffer = buffer.as_slice();
         let indices_ref = &indices;
 
         b.to_async(FuturesExecutor).iter(|| async move {
-            let mut msgs = MessageReader::try_new(FuturesVortexRead::from(ro_buffer)).await?;
+            let mut msgs = MessageReader::try_new(FuturesAdapter(Cursor::new(ro_buffer))).await?;
             let reader = msgs.array_stream_from_messages(ctx_ref).await?;
             pin_mut!(reader);
             let array_view = reader.try_next().await?.unwrap();

@@ -1,15 +1,16 @@
 use std::collections::HashMap;
-use std::fs::File;
 use std::hash::Hash;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 use enum_iterator::Sequence;
 use fs_extra::dir::get_size;
+use futures::executor::block_on;
 use humansize::{format_size, DECIMAL};
 use itertools::Itertools;
 use log::info;
 use reqwest::Url;
+use tokio::fs::File;
 use vortex::ArrayTrait;
 use vortex_error::VortexResult;
 
@@ -481,8 +482,9 @@ impl BenchmarkDataset for BenchmarkDatasets {
             let compressed = idempotent(
                 &path_for_file_type(self, output_fname, "vortex"),
                 |output_path| {
-                    let mut write = File::create(output_path).unwrap();
-                    rewrite_parquet_as_vortex(f, &mut write)
+                    block_on(async {
+                        rewrite_parquet_as_vortex(f, File::create(output_path).await.unwrap()).await
+                    })
                 },
             )
             .expect("Failed to compress to vortex");

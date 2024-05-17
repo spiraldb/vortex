@@ -1,6 +1,7 @@
-use std::fs::File;
 use std::path::PathBuf;
 
+use futures::executor::block_on;
+use tokio::fs::File;
 use vortex_error::VortexError;
 
 use crate::data_downloads::{data_vortex_uncompressed, download_data, parquet_to_lance};
@@ -31,9 +32,11 @@ pub fn taxi_data_vortex_uncompressed() -> PathBuf {
 
 pub fn taxi_data_vortex() -> PathBuf {
     idempotent("taxi.vortex", |output_fname| {
-        let mut output_file = File::create(output_fname)?;
-        rewrite_parquet_as_vortex(taxi_data_parquet(), &mut output_file)?;
-        Ok::<PathBuf, VortexError>(output_fname.to_path_buf())
+        block_on(async {
+            let output_file = File::create(output_fname).await?;
+            rewrite_parquet_as_vortex(taxi_data_parquet(), output_file).await?;
+            Ok::<PathBuf, VortexError>(output_fname.to_path_buf())
+        })
     })
     .unwrap()
 }

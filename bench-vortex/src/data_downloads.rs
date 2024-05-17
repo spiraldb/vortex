@@ -10,11 +10,13 @@ use lance::Dataset;
 use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
+use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
-use vortex::{IntoArray, ToArrayData};
+use vortex::{IntoArray, ToArrayData, ViewContext};
 use vortex_dtype::DType;
 use vortex_error::{VortexError, VortexResult};
-use vortex_ipc::writer::StreamWriter;
+use vortex_ipc::io::TokioAdapter;
+use vortex_ipc::stream_writer::ArrayWriter;
 
 use crate::reader::BATCH_SIZE;
 use crate::{idempotent, CTX};
@@ -59,16 +61,32 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
         // FIXME(ngates): #157 the compressor should handle batch size.
         let reader = builder.with_batch_size(BATCH_SIZE).build().unwrap();
 
-        let mut write = File::create(path).unwrap();
-        let mut writer = StreamWriter::try_new(&mut write, &CTX).unwrap();
-
+        // TODO(ngates): create an ArrayStream from an ArrayIterator.
         let dtype = DType::from_arrow(reader.schema());
-        writer.write_schema(&dtype).unwrap();
-        for batch_result in reader {
-            writer
-                .write_batch(&batch_result.unwrap().to_array_data().into_array())
-                .unwrap();
-        }
+        let array = ChunkedArray::try_new(
+            reader
+                .into_iter()
+                .map(|batch_result| batch_result.unwrap().to_array_data().into_array())
+                .collect(),
+            dtype,
+        )
+        .unwrap()
+        .into_array();
+
+        Runtime::new()
+            .unwrap()
+            .block_on(async move {
+                let write = tokio::fs::File::create(path).await.unwrap();
+                ArrayWriter::new(TokioAdapter(write), ViewContext::from(&CTX.clone()))
+                    .write_context()
+                    .await
+                    .unwrap()
+                    .write_array(array)
+                    .await
+                    .unwrap();
+                Ok::<(), VortexError>(())
+            })
+            .unwrap();
 
         Ok::<(), VortexError>(())
     })

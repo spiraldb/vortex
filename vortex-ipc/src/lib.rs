@@ -1,4 +1,7 @@
+extern crate core;
+
 pub use message_reader::*;
+pub use message_writer::*;
 use vortex_error::{vortex_err, VortexError};
 
 pub const ALIGNMENT: usize = 64;
@@ -32,8 +35,9 @@ pub mod flatbuffers {
 
 pub mod io;
 mod message_reader;
+mod message_writer;
 mod messages;
-pub mod writer;
+pub mod stream_writer;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
     move || vortex_err!(InvalidSerde: "missing field: {}", field)
@@ -49,60 +53,60 @@ pub mod test {
     use vortex::encoding::ArrayEncoding;
     use vortex::encoding::EncodingRef;
     use vortex::stream::ArrayStreamExt;
-    use vortex::{ArrayDType, Context, IntoArray};
+    use vortex::{ArrayDType, Context, IntoArray, ViewContext};
     use vortex_alp::ALPEncoding;
     use vortex_error::VortexResult;
     use vortex_fastlanes::BitPackedEncoding;
 
-    use crate::io::FuturesVortexRead;
-    use crate::writer::StreamWriter;
+    use crate::io::FuturesAdapter;
+    use crate::stream_writer::ArrayWriter;
     use crate::MessageReader;
 
-    pub fn create_stream() -> Vec<u8> {
+    pub async fn create_stream() -> Vec<u8> {
         let ctx = Context::default().with_encodings([
             &ALPEncoding as EncodingRef,
             &BitPackedEncoding as EncodingRef,
         ]);
+
         let array = PrimitiveArray::from(vec![0, 1, 2]).into_array();
         let chunked_array =
             ChunkedArray::try_new(vec![array.clone(), array.clone()], array.dtype().clone())
                 .unwrap()
                 .into_array();
 
-        let mut buffer = vec![];
-        let mut cursor = std::io::Cursor::new(&mut buffer);
-        {
-            let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
-            writer.write_array(&array).unwrap();
-            writer.write_array(&chunked_array).unwrap();
-        }
-
-        // Push some extra bytes to test that the reader is well-behaved and doesn't read past the
-        // end of the stream.
-        // let _ = cursor.write(b"hello").unwrap();
-
-        buffer
+        ArrayWriter::new(vec![], ViewContext::from(&ctx))
+            .write_context()
+            .await
+            .unwrap()
+            .write_array(array)
+            .await
+            .unwrap()
+            .write_array(chunked_array)
+            .await
+            .unwrap()
+            .into_write()
     }
 
-    fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
-        let mut buffer = vec![];
-        let mut cursor = std::io::Cursor::new(&mut buffer);
-        {
-            let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
-            writer.write_array(&array.into_array()).unwrap();
-        }
-        buffer
+    async fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
+        ArrayWriter::new(vec![], ViewContext::from(&Context::default()))
+            .write_context()
+            .await
+            .unwrap()
+            .write_array(array.into_array())
+            .await
+            .unwrap()
+            .into_write()
     }
 
     #[tokio::test]
     async fn test_empty_index() -> VortexResult<()> {
         let data = PrimitiveArray::from((0i32..3_000_000).collect_vec());
-        let buffer = write_ipc(data);
+        let buffer = write_ipc(data).await;
 
         let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
 
         let ctx = Context::default();
-        let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer)))
+        let mut messages = MessageReader::try_new(FuturesAdapter(Cursor::new(buffer)))
             .await
             .unwrap();
         let reader = messages.array_stream_from_messages(&ctx).await?;
@@ -127,9 +131,9 @@ pub mod test {
         let data2 =
             PrimitiveArray::from((3_000_000i32..6_000_000).rev().collect_vec()).into_array();
         let chunked = ChunkedArray::try_new(vec![data.clone(), data2], data.dtype().clone())?;
-        let buffer = write_ipc(chunked);
+        let buffer = write_ipc(chunked).await;
 
-        let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer))).await?;
+        let mut messages = MessageReader::try_new(FuturesAdapter(Cursor::new(buffer))).await?;
 
         let ctx = Context::default();
         let take_iter = messages

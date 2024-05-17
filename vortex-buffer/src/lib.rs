@@ -1,4 +1,5 @@
 mod flexbuffers;
+pub mod io_buf;
 mod string;
 
 use std::cmp::Ordering;
@@ -41,7 +42,7 @@ impl Buffer {
         }
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
+    pub fn as_slice(&self) -> &[u8] {
         match self {
             Self::Arrow(b) => b.as_ref(),
             Self::Bytes(b) => b.as_ref(),
@@ -61,13 +62,13 @@ impl Deref for Buffer {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.as_bytes()
+        self.as_slice()
     }
 }
 
 impl AsRef<[u8]> for Buffer {
     fn as_ref(&self) -> &[u8] {
-        self.as_bytes()
+        self.as_slice()
     }
 }
 

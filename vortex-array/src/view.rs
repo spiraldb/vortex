@@ -282,7 +282,7 @@ impl ViewContext {
 
 impl Default for ViewContext {
     fn default() -> Self {
-        todo!("FIXME(ngates): which encodings to enable?")
+        Self::from(&Context::default())
     }
 }
 

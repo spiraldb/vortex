@@ -123,6 +123,12 @@ impl PrimitiveArray {
         }
     }
 
+    pub fn get_as_cast<T: NativePType>(&self, idx: usize) -> T {
+        match_each_native_ptype!(self.ptype(), |$P| {
+            T::from(self.typed_data::<$P>()[idx]).expect("failed to cast")
+        })
+    }
+
     pub fn reinterpret_cast(&self, ptype: PType) -> Self {
         if self.ptype() == ptype {
             return self.clone();
