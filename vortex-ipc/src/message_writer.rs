@@ -43,7 +43,7 @@ impl<W: VortexWrite> MessageWriter<W> {
     }
 
     pub async fn write_view_context(&mut self, view_ctx: &ViewContext) -> io::Result<()> {
-        self.write_message(IPCMessage::Context(IPCContext(&view_ctx)))
+        self.write_message(IPCMessage::Context(IPCContext(view_ctx)))
             .await
     }
 
@@ -85,7 +85,7 @@ impl<W: VortexWrite> MessageWriter<W> {
         // We reuse the scratch buffer each time and then replace it at the end.
         // The scratch buffer may be missing if a previous write failed. We could use scopeguard
         // or similar here if it becomes a problem in practice.
-        let mut scratch = self.scratch.take().unwrap_or_else(|| vec![]);
+        let mut scratch = self.scratch.take().unwrap_or_default();
         scratch.clear();
 
         // In order for FlatBuffers to use the correct alignment, we insert 4 bytes at the start

@@ -39,7 +39,6 @@ mod message_reader;
 mod message_writer;
 mod messages;
 pub mod stream_writer;
-pub mod writer;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
     move || vortex_err!(InvalidSerde: "missing field: {}", field)

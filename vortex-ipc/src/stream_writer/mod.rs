@@ -91,7 +91,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
     ) -> VortexResult<Self> {
         let dtype_pos = self.write_dtype(array_stream.dtype()).await?;
         let chunk_pos = self.write_array_chunks(&mut array_stream).await?;
-        (&mut self).array_layouts.push(ArrayLayout {
+        self.array_layouts.push(ArrayLayout {
             dtype: dtype_pos,
             chunks: chunk_pos,
         });
