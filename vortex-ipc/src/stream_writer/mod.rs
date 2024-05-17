@@ -3,7 +3,7 @@ mod reader;
 use futures_util::{Stream, TryStreamExt};
 pub use reader::*;
 use vortex::array::chunked::ChunkedArray;
-use vortex::stream::{ArrayStream, ArrayStreamFactory};
+use vortex::stream::ArrayStream;
 use vortex::{Array, IntoArrayData, ViewContext};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
@@ -100,11 +100,9 @@ impl<W: VortexWrite> ArrayWriter<W> {
 
     pub async fn write_array(self, array: Array) -> VortexResult<Self> {
         if let Ok(chunked) = ChunkedArray::try_from(&array) {
-            self.write_array_stream(ArrayStreamFactory::from_chunked_array(&chunked))
-                .await
+            self.write_array_stream(chunked.array_stream()).await
         } else {
-            self.write_array_stream(ArrayStreamFactory::from_array(array))
-                .await
+            self.write_array_stream(array.into_array_stream()).await
         }
     }
 }

@@ -21,6 +21,7 @@ mod view;
 pub mod visitor;
 
 use std::fmt::{Debug, Display, Formatter};
+use std::future::ready;
 
 pub use ::paste;
 pub use context::*;
@@ -36,7 +37,9 @@ use vortex_error::VortexResult;
 
 use crate::compute::ArrayCompute;
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
+use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
+use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::ArrayValidity;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
@@ -102,14 +105,23 @@ impl Array {
             Self::View(v) => v.buffer(),
         }
     }
-}
 
-impl Array {
     pub fn into_buffer(self) -> Option<Buffer> {
         match self {
             Self::Data(d) => d.into_buffer(),
             Self::View(v) => v.buffer().cloned(),
         }
+    }
+
+    pub fn into_array_iterator(self) -> impl ArrayIterator {
+        ArrayIteratorAdapter::new(self.dtype().clone(), std::iter::once(Ok(self)))
+    }
+
+    pub fn into_array_stream(self) -> impl ArrayStream {
+        ArrayStreamAdapter::new(
+            self.dtype().clone(),
+            futures_util::stream::once(ready(Ok(self))),
+        )
     }
 }
 
