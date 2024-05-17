@@ -1,7 +1,9 @@
+use std::ops::Deref;
 use std::sync::Arc;
 
 use vortex::stream::ArrayStream;
 use vortex::{Context, ViewContext};
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
 use crate::io::VortexRead;
@@ -10,6 +12,7 @@ use crate::MessageReader;
 pub struct StreamArrayReader<R: VortexRead> {
     msgs: MessageReader<R>,
     view_context: Option<Arc<ViewContext>>,
+    dtype: Option<Arc<DType>>,
 }
 
 impl<R: VortexRead> StreamArrayReader<R> {
@@ -17,6 +20,7 @@ impl<R: VortexRead> StreamArrayReader<R> {
         Ok(Self {
             msgs: MessageReader::try_new(read).await?,
             view_context: None,
+            dtype: None,
         })
     }
 
@@ -36,16 +40,28 @@ impl<R: VortexRead> StreamArrayReader<R> {
         Ok(self)
     }
 
+    pub fn with_dtype(self, dtype: DType) -> Self {
+        assert!(self.dtype.is_none(), "DType already set");
+        Self {
+            dtype: Some(Arc::new(dtype)),
+            ..self
+        }
+    }
+
+    pub async fn load_dtype(mut self) -> VortexResult<Self> {
+        assert!(self.dtype.is_none(), "DType already set");
+        self.dtype = Some(Arc::new(self.msgs.read_dtype().await?));
+        Ok(self)
+    }
+
     /// Reads a single array from the stream.
-    pub async fn array_stream(&mut self) -> VortexResult<impl ArrayStream + '_> {
+    pub fn array_stream(&mut self) -> impl ArrayStream + '_ {
         let view_context = self
             .view_context
             .as_ref()
             .expect("View context not set")
             .clone();
-
-        let dtype = self.msgs.read_dtype().await?;
-
-        Ok(self.msgs.array_stream(view_context, dtype))
+        let dtype = self.dtype.as_ref().expect("DType not set").deref().clone();
+        self.msgs.array_stream(view_context, dtype)
     }
 }

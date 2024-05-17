@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::stats::StatsSet;
 use crate::{Array, ArrayData, ArrayDef, AsArray, IntoArray, ToArray, TryDeserializeArrayMetadata};
@@ -48,7 +48,7 @@ impl<D: ArrayDef> TryFrom<Array> for TypedArray<D> {
 
     fn try_from(array: Array) -> Result<Self, Self::Error> {
         if array.encoding().id() != D::ENCODING.id() {
-            return Err(vortex_err!("incorrect encoding"));
+            vortex_bail!("incorrect encoding");
         }
         let metadata = match &array {
             Array::Data(d) => d

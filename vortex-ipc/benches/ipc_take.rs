@@ -16,7 +16,7 @@ use vortex::compress::Compressor;
 use vortex::compute::take::take;
 use vortex::{Context, IntoArray, ViewContext};
 use vortex_ipc::io::FuturesAdapter;
-use vortex_ipc::stream_writer::ArrayWriter;
+use vortex_ipc::writer::ArrayWriter;
 use vortex_ipc::MessageReader;
 
 fn ipc_take(c: &mut Criterion) {
@@ -67,7 +67,7 @@ fn ipc_take(c: &mut Criterion) {
                 .await
         })
         .unwrap()
-        .into_write();
+        .into_inner();
 
         let ctx_ref = &ctx;
         let ro_buffer = buffer.as_slice();

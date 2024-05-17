@@ -34,7 +34,7 @@ impl<W: VortexWrite> MessageWriter<W> {
         }
     }
 
-    pub fn into_write(self) -> W {
+    pub fn into_inner(self) -> W {
         self.write
     }
 

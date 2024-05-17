@@ -33,11 +33,13 @@ pub mod flatbuffers {
     }
 }
 
+pub mod chunked_reader;
 pub mod io;
 mod message_reader;
 mod message_writer;
 mod messages;
-pub mod stream_writer;
+pub mod stream_reader;
+pub mod writer;
 
 pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
     move || vortex_err!(InvalidSerde: "missing field: {}", field)
@@ -59,7 +61,7 @@ pub mod test {
     use vortex_fastlanes::BitPackedEncoding;
 
     use crate::io::FuturesAdapter;
-    use crate::stream_writer::ArrayWriter;
+    use crate::writer::ArrayWriter;
     use crate::MessageReader;
 
     pub async fn create_stream() -> Vec<u8> {
@@ -84,7 +86,7 @@ pub mod test {
             .write_array(chunked_array)
             .await
             .unwrap()
-            .into_write()
+            .into_inner()
     }
 
     async fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
@@ -95,7 +97,7 @@ pub mod test {
             .write_array(array.into_array())
             .await
             .unwrap()
-            .into_write()
+            .into_inner()
     }
 
     #[tokio::test]

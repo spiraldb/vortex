@@ -1,7 +1,4 @@
-mod reader;
-
 use futures_util::{Stream, TryStreamExt};
-pub use reader::*;
 use vortex::array::chunked::ChunkedArray;
 use vortex::stream::ArrayStream;
 use vortex::{Array, IntoArrayData, ViewContext};
@@ -37,8 +34,8 @@ impl<W: VortexWrite> ArrayWriter<W> {
         &self.array_layouts
     }
 
-    pub fn into_write(self) -> W {
-        self.msgs.into_write()
+    pub fn into_inner(self) -> W {
+        self.msgs.into_inner()
     }
 
     pub async fn write_context(mut self) -> VortexResult<Self> {
@@ -66,7 +63,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
     where
         S: Stream<Item = VortexResult<Array>> + Unpin,
     {
-        let mut byte_offsets = vec![0];
+        let mut byte_offsets = vec![self.msgs.tell()];
         let mut row_offsets = vec![0];
         let mut row_offset = 0;
 
