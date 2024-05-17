@@ -25,7 +25,7 @@ use vortex::{Array, IntoArray, ToArrayData};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_ipc::array_stream::ArrayStreamExt;
-use vortex_ipc::io::TokioVortexRead;
+use vortex_ipc::io::TokioAdapter;
 use vortex_ipc::writer::StreamWriter;
 use vortex_ipc::MessageReader;
 
@@ -40,7 +40,7 @@ pub fn open_vortex(path: &Path) -> VortexResult<Array> {
         .unwrap()
         .block_on(async {
             let file = tokio::fs::File::open(path).await.unwrap();
-            let mut msgs = MessageReader::try_new(TokioVortexRead(file)).await.unwrap();
+            let mut msgs = MessageReader::try_new(TokioAdapter(file)).await.unwrap();
             msgs.array_stream_from_messages(&CTX)
                 .await
                 .unwrap()

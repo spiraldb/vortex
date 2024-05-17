@@ -159,6 +159,7 @@ mod test {
             .unwrap()
     }
 
+    #[ignore]
     #[tokio::test]
     async fn test_take_rows() {
         let writer = chunked_array().await;

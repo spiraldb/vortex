@@ -11,9 +11,7 @@ pub trait VortexWrite {
 
 impl VortexWrite for Vec<u8> {
     fn write_all<B: IoBuf>(&mut self, buffer: B) -> impl Future<Output = io::Result<B>> {
-        let slice =
-            unsafe { std::slice::from_raw_parts::<u8>(buffer.read_ptr(), buffer.bytes_init()) };
-        self.extend_from_slice(slice);
+        self.extend_from_slice(buffer.as_slice());
         ready(Ok(buffer))
     }
 

@@ -5229,6 +5229,7 @@ dependencies = [
  "criterion",
  "derive_builder",
  "flatbuffers",
+ "futures-executor",
  "futures-util",
  "itertools 0.12.1",
  "monoio",

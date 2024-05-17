@@ -7,6 +7,10 @@ pub unsafe trait IoBuf: Unpin + 'static {
     /// Number of initialized bytes.
     fn bytes_init(&self) -> usize;
 
+    fn as_slice(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.read_ptr(), self.bytes_init()) }
+    }
+
     #[inline]
     fn slice(self, begin: usize, end: usize) -> Slice<Self>
     where

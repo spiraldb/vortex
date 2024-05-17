@@ -1,11 +1,8 @@
 use std::future::{ready, Future};
 use std::io;
 use std::io::{Cursor, Read};
-use std::task::ready;
 
 use bytes::BytesMut;
-use monoio::buf::IoBufMut;
-use tokio::io::AsyncReadExt;
 
 pub trait VortexRead {
     fn read_into(&mut self, buffer: BytesMut) -> impl Future<Output = io::Result<BytesMut>>;

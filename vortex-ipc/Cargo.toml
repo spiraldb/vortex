@@ -32,6 +32,7 @@ build-vortex = { path = "../build-vortex" }
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_futures"] }
+futures-executor = { workspace = true }
 rand = { workspace = true }
 simplelog = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
