@@ -7,6 +7,7 @@ use crate::pvalue::PValue;
 use crate::value::ScalarValue;
 use crate::Scalar;
 
+#[derive(Debug, Clone)]
 pub struct PrimitiveScalar<'a> {
     dtype: &'a DType,
     ptype: PType,
@@ -80,6 +81,13 @@ impl Scalar {
         Self {
             dtype: DType::Primitive(T::PTYPE, nullability),
             value: ScalarValue::Primitive(value.into()),
+        }
+    }
+
+    pub fn zero<T: NativePType + Into<PValue>>(nullability: Nullability) -> Self {
+        Self {
+            dtype: DType::Primitive(T::PTYPE, nullability),
+            value: ScalarValue::Primitive(T::zero().into()),
         }
     }
 }
