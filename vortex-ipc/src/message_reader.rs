@@ -4,6 +4,7 @@ use std::sync::Arc;
 use bytes::{Buf, BytesMut};
 use flatbuffers::{root, root_unchecked};
 use futures_util::stream::try_unfold;
+use futures_util::Stream;
 use itertools::Itertools;
 use vortex::stream::{ArrayStream, ArrayStreamAdapter};
 use vortex::{Array, ArrayView, Context, IntoArray, ToArray, ViewContext};
@@ -270,5 +271,34 @@ impl<R: VortexRead> MessageReader<R> {
                 }
             }),
         )
+    }
+
+    pub async fn read_page(&mut self) -> VortexResult<Buffer> {
+        if self.peek().and_then(|m| m.header_as_page()).is_none() {
+            vortex_bail!("Expected page message")
+        }
+        let page_msg = self.next().await?.header_as_page().unwrap();
+
+        let buffer_len = page_msg.buffer_size() as usize;
+        let total_len = buffer_len + (page_msg.padding() as usize);
+
+        let mut buffer = self
+            .read
+            .read_into(BytesMut::with_capacity(total_len))
+            .await?;
+        buffer.truncate(buffer_len);
+        Ok(Buffer::from(buffer.freeze()))
+    }
+
+    pub async fn page_stream(&mut self) -> impl Stream<Item = VortexResult<Buffer>> + '_ {
+        try_unfold(self, |state| async move {
+            if state.peek().and_then(|m| m.header_as_page()).is_none() {
+                return Ok(None);
+            }
+            match state.read_page().await {
+                Ok(page) => Ok(Some((page, state))),
+                Err(e) => Err(e),
+            }
+        })
     }
 }
