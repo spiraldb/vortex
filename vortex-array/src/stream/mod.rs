@@ -2,9 +2,10 @@ pub use adapter::*;
 pub use ext::*;
 use futures_util::Stream;
 pub use take_rows::*;
-use vortex::Array;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
+
+use crate::Array;
 
 mod adapter;
 mod ext;

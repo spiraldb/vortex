@@ -1,15 +1,8 @@
-use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
-use crate::array::chunked::ChunkedArray;
+use crate::iter::ArrayIterator;
 use crate::Array;
-
-/// A stream of array chunks along with a DType.
-/// Analogous to Arrow's RecordBatchReader.
-pub trait ArrayIterator: Iterator<Item = VortexResult<Array>> {
-    fn dtype(&self) -> &DType;
-}
 
 pub struct ArrayIteratorAdapter<I> {
     dtype: DType,
@@ -39,15 +32,5 @@ where
 {
     fn dtype(&self) -> &DType {
         &self.dtype
-    }
-}
-
-pub trait ArrayIteratorExt: ArrayIterator {
-    fn try_into_chunked(self) -> VortexResult<ChunkedArray>
-    where
-        Self: Sized,
-    {
-        let dtype = self.dtype().clone();
-        ChunkedArray::try_new(self.try_collect()?, dtype)
     }
 }

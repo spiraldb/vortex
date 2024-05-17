@@ -8,13 +8,11 @@ use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
+use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{
-    impl_encoding, ArrayDType, ArrayFlatten, ArrayIterator, ArrayIteratorAdapter, IntoArrayData,
-    ToArrayData,
-};
+use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, ToArrayData};
 
 mod compute;
 mod stats;
