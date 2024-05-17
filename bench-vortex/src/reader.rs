@@ -21,10 +21,10 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
 use vortex::compute::take::take;
+use vortex::stream::ArrayStreamExt;
 use vortex::{Array, IntoArray, ToArrayData};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_ipc::array_stream::ArrayStreamExt;
 use vortex_ipc::io::TokioAdapter;
 use vortex_ipc::writer::StreamWriter;
 use vortex_ipc::MessageReader;
@@ -44,9 +44,10 @@ pub fn open_vortex(path: &Path) -> VortexResult<Array> {
             msgs.array_stream_from_messages(&CTX)
                 .await
                 .unwrap()
-                .collect()
+                .into_chunked()
                 .await
         })
+        .map(|a| a.into_array())
 }
 
 pub fn rewrite_parquet_as_vortex<W: Write>(

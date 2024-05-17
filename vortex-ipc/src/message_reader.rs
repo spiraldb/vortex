@@ -5,12 +5,12 @@ use bytes::{Buf, BytesMut};
 use flatbuffers::{root, root_unchecked};
 use futures_util::stream::try_unfold;
 use itertools::Itertools;
+use vortex::stream::{ArrayStream, ArrayStreamAdapter};
 use vortex::{Array, ArrayView, Context, IntoArray, ToArray, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::array_stream::{ArrayStream, ArrayStreamAdapter};
 use crate::flatbuffers::ipc as fb;
 use crate::io::VortexRead;
 use crate::messages::SerdeContextDeserializer;

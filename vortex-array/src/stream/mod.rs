@@ -5,10 +5,11 @@ pub use ext::*;
 use futures_util::Stream;
 use futures_util::{stream, StreamExt};
 pub use take_rows::*;
-use vortex::array::chunked::ChunkedArray;
-use vortex::{Array, ArrayDType};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
+
+use crate::array::chunked::ChunkedArray;
+use crate::{Array, ArrayDType};
 
 mod adapter;
 mod ext;

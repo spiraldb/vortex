@@ -6,13 +6,13 @@ use futures_executor::block_on;
 use futures_util::{pin_mut, TryStreamExt};
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::stream::ArrayStreamExt;
 use vortex::{Context, IntoArray, ViewContext};
 use vortex_dtype::Nullability;
 use vortex_dtype::{DType, PType};
-use vortex_ipc::array_stream::ArrayStreamExt;
-use vortex_ipc::io::FuturesAdapter;
-use vortex_ipc::MessageReader;
 use vortex_ipc::stream_writer::ArrayWriter;
+use vortex_ipc::writer::StreamWriter;
+use vortex_ipc::MessageReader;
 
 // 100 record batches, 100k rows each
 // take from the first 20 batches and last batch
@@ -29,9 +29,10 @@ fn ipc_array_reader_take(c: &mut Criterion) {
     group.bench_function("vortex", |b| {
         let buffer = block_on(async {
             ArrayWriter::new(vec![], ViewContext::from(&ctx))
-                .write_context().await?
+                .write_context()
+                .await?
                 .write_array()
-        })
+        });
 
         let mut buffer = vec![];
         {

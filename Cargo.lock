@@ -755,6 +755,7 @@ dependencies = [
  "csv",
  "enum-iterator",
  "fs_extra",
+ "futures-util",
  "humansize",
  "itertools 0.12.1",
  "lance",
@@ -868,6 +869,7 @@ dependencies = [
 name = "build-vortex"
 version = "0.1.0"
 dependencies = [
+ "cargo_metadata 0.18.1",
  "flatc",
  "prost-build",
  "walkdir",
@@ -963,6 +965,20 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "cargo_metadata"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d886547e41f740c616ae73108f6eb70afe6d940c7bc697cb30f13daec073037"
+dependencies = [
+ "camino",
+ "cargo-platform",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -4438,7 +4454,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16d23b015676c90a0f01c197bfdc786c20342c73a0afdda9025adb0bc42940a8"
 dependencies = [
  "bytecount",
- "cargo_metadata",
+ "cargo_metadata 0.14.2",
  "error-chain",
  "glob",
  "pulldown-cmark",
@@ -5095,6 +5111,7 @@ dependencies = [
  "enum-iterator",
  "flatbuffers",
  "flexbuffers",
+ "futures-util",
  "getrandom",
  "humansize",
  "itertools 0.12.1",
@@ -5103,8 +5120,10 @@ dependencies = [
  "num-traits",
  "num_enum 0.7.2",
  "paste",
+ "pin-project",
  "rand",
  "serde",
+ "tokio",
  "vortex-buffer",
  "vortex-dtype",
  "vortex-error",

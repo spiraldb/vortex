@@ -33,8 +33,11 @@ pub mod flatbuffers {
     }
 }
 
+<<<<<<< HEAD
 pub mod array_stream;
 pub mod chunked_reader;
+=======
+>>>>>>> develop
 pub mod io;
 mod message_reader;
 mod message_writer;
@@ -48,17 +51,22 @@ pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError
 
 #[cfg(test)]
 pub mod test {
-    use std::io::Cursor;
-
+    use futures_util::io::Cursor;
+    use futures_util::{pin_mut, StreamExt, TryStreamExt};
+    use itertools::Itertools;
     use vortex::array::chunked::ChunkedArray;
-    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
+    use vortex::encoding::ArrayEncoding;
     use vortex::encoding::EncodingRef;
-    use vortex::IntoArray;
-    use vortex::{ArrayDType, Context};
+    use vortex::stream::ArrayStreamExt;
+    use vortex::{ArrayDType, Context, IntoArray};
     use vortex_alp::ALPEncoding;
+    use vortex_error::VortexResult;
     use vortex_fastlanes::BitPackedEncoding;
 
+    use crate::io::FuturesVortexRead;
     use crate::writer::StreamWriter;
+    use crate::MessageReader;
 
     pub fn create_stream() -> Vec<u8> {
         let ctx = Context::default().with_encodings([
@@ -72,7 +80,7 @@ pub mod test {
                 .into_array();
 
         let mut buffer = vec![];
-        let mut cursor = Cursor::new(&mut buffer);
+        let mut cursor = std::io::Cursor::new(&mut buffer);
         {
             let mut writer = StreamWriter::try_new(&mut cursor, &ctx).unwrap();
             writer.write_array(&array).unwrap();
@@ -84,5 +92,79 @@ pub mod test {
         // let _ = cursor.write(b"hello").unwrap();
 
         buffer
+    }
+
+    fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
+        let mut buffer = vec![];
+        let mut cursor = std::io::Cursor::new(&mut buffer);
+        {
+            let mut writer = StreamWriter::try_new(&mut cursor, &Context::default()).unwrap();
+            writer.write_array(&array.into_array()).unwrap();
+        }
+        buffer
+    }
+
+    #[tokio::test]
+    async fn test_empty_index() -> VortexResult<()> {
+        let data = PrimitiveArray::from((0i32..3_000_000).collect_vec());
+        let buffer = write_ipc(data);
+
+        let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
+
+        let ctx = Context::default();
+        let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer)))
+            .await
+            .unwrap();
+        let reader = messages.array_stream_from_messages(&ctx).await?;
+
+        let result_iter = reader.take_rows(&indices).unwrap();
+        pin_mut!(result_iter);
+
+        let result = result_iter.next().await.unwrap().unwrap();
+        println!("Taken {:?}", result);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_write_read_chunked() -> VortexResult<()> {
+        let indices = PrimitiveArray::from(vec![
+            10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
+        ])
+        .into_array();
+
+        // NB: the order is reversed here to ensure we aren't grabbing indexes instead of values
+        let data = PrimitiveArray::from((0i32..3_000_000).rev().collect_vec()).into_array();
+        let data2 =
+            PrimitiveArray::from((3_000_000i32..6_000_000).rev().collect_vec()).into_array();
+        let chunked = ChunkedArray::try_new(vec![data.clone(), data2], data.dtype().clone())?;
+        let buffer = write_ipc(chunked);
+
+        let mut messages = MessageReader::try_new(FuturesVortexRead(Cursor::new(buffer))).await?;
+
+        let ctx = Context::default();
+        let take_iter = messages
+            .array_stream_from_messages(&ctx)
+            .await?
+            .take_rows(&indices)?;
+        pin_mut!(take_iter);
+
+        let next = take_iter.try_next().await?.expect("Expected a chunk");
+        assert_eq!(next.encoding().id(), PrimitiveEncoding.id());
+
+        assert_eq!(
+            next.into_primitive().typed_data::<i32>(),
+            vec![2999989, 2999988, 2999987, 2999986, 2899999, 0, 0]
+        );
+        assert_eq!(
+            take_iter
+                .try_next()
+                .await?
+                .expect("Expected a chunk")
+                .into_primitive()
+                .typed_data::<i32>(),
+            vec![5999999]
+        );
+
+        Ok(())
     }
 }

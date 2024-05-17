@@ -33,8 +33,8 @@ impl Display for Predicate {
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Value::Field(expr) => std::fmt::Display::fmt(expr, f),
-            Value::Literal(scalar) => scalar.fmt(f),
+            Value::Field(field_path) => Display::fmt(field_path, f),
+            Value::Literal(scalar) => Display::fmt(&scalar, f),
         }
     }
 }
@@ -55,32 +55,40 @@ impl Display for Operator {
 
 #[cfg(test)]
 mod tests {
+    use vortex_dtype::field_paths::{field, FieldPath};
+
     use crate::expressions::{lit, Conjunction, Disjunction};
+    use crate::field_paths::FieldPathOperations;
 
     #[test]
     fn test_predicate_formatting() {
-        // And
-        assert_eq!(format!("{}", lit(1u32).lt(lit(2u32))), "(1 < 2)");
-        // Or
-        assert_eq!(format!("{}", lit(1u32).gte(lit(2u32))), "(1 >= 2)");
-        // Not
-        assert_eq!(format!("{}", !lit(1u32).lte(lit(2u32))), "(1 > 2)");
+        let f1 = field("field");
+        assert_eq!(format!("{}", f1.clone().lt(lit(1u32))), "($field < 1)");
+        assert_eq!(format!("{}", f1.clone().gte(lit(1u32))), "($field >= 1)");
+        assert_eq!(format!("{}", !f1.clone().lte(lit(1u32))), "($field > 1)");
+        assert_eq!(format!("{}", !lit(1u32).lte(f1)), "($field <= 1)");
+
+        // nested field path
+        let f2 = FieldPath::builder().join("field").join(0).build().unwrap();
+        assert_eq!(format!("{}", !f2.lte(lit(1u32))), "($field.[0] > 1)");
     }
 
     #[test]
     fn test_dnf_formatting() {
+        let path = FieldPath::builder().join(2).join("col1").build().unwrap();
         let d1 = Conjunction {
             predicates: vec![
-                lit(1u32).lt(lit(2u32)),
-                lit(1u32).gte(lit(2u32)),
-                !lit(1u32).lte(lit(2u32)),
+                lit(1u32).lt(path.clone()),
+                path.clone().gte(lit(1u32)),
+                !lit(1u32).lte(path),
             ],
         };
+        let path2 = FieldPath::builder().join("col1").join(2).build().unwrap();
         let d2 = Conjunction {
             predicates: vec![
-                lit(2u32).lt(lit(3u32)),
-                lit(3u32).gte(lit(4u32)),
-                !lit(5u32).lte(lit(6u32)),
+                lit(2u32).lt(path2),
+                lit(3u32).gte(field(2)),
+                !lit(5u32).lte(field("col2")),
             ],
         };
 
@@ -92,7 +100,8 @@ mod tests {
         print!("{}", string);
         assert_eq!(
             string,
-            "(1 < 2) AND (1 >= 2) AND (1 > 2)\nOR \n(2 < 3) AND (3 >= 4) AND (5 > 6)"
+            "([2].$col1 >= 1) AND ([2].$col1 >= 1) AND ([2].$col1 <= 1)\nOR \
+            \n($col1.[2] >= 2) AND ([2] < 3) AND ($col2 <= 5)"
         );
     }
 }
