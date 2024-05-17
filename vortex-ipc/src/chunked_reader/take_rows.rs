@@ -6,9 +6,11 @@ use bytes::BytesMut;
 use futures_util::pin_mut;
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
+use vortex::compute::cast::cast;
 use vortex::compute::take::take;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, IntoArray};
+use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
 use crate::chunked_reader::ChunkedArrayReader;
@@ -131,7 +133,18 @@ impl ChunkRange {
     }
 }
 
+/// Find the chunks that are relevant to the read operation.
 fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<BTreeSet<u32>> {
+    // TODO(ngates): lots of optimizations to be had here, potentially lots of push-down.
+    //  For now, we just flatten everything into primitive arrays and iterate.
+    let row_offsets = cast(row_offsets, PType::U64.into())?.flatten_primitive()?;
+    let indices = cast(indices, PType::U64.into())?.flatten_primitive()?;
+
+    let row_offsets_ref = row_offsets.typed_data::<u64>();
+    for idx in indices.typed_data::<u64>() {
+        row_offsets_ref.binary_search(idx);
+    }
+
     todo!()
 }
 
@@ -165,7 +178,6 @@ mod test {
             .unwrap()
     }
 
-    #[ignore]
     #[tokio::test]
     async fn test_take_rows() {
         let writer = chunked_array().await;
