@@ -1,6 +1,6 @@
-use std::ops::{BitAnd, BitOr};
+use std::ops::{BitAndAssign, BitOrAssign};
 
-use arrow_buffer::BooleanBuffer;
+use croaring::Bitset;
 use itertools::Itertools;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::{vortex_bail, VortexResult};
@@ -15,31 +15,35 @@ use crate::{Array, ArrayTrait, IntoArray};
 impl FilterIndicesFn for PrimitiveArray {
     fn filter_indices(&self, predicate: &Disjunction) -> VortexResult<Array> {
         let mut conjunction_indices = predicate.conjunctions.iter().flat_map(|conj| {
-            BooleanBufferMergeOp::All.merge(
+            BitsetMergeOp::All.merge(
                 &mut conj
                     .predicates
                     .iter()
                     .map(|pred| indices_matching_predicate(self, pred).unwrap()),
             )
         });
-        let indices = BooleanBufferMergeOp::Any
+        let present_buf = Bitset::from_iter(
+            self.validity()
+                .to_logical(self.len())
+                .to_present_null_buffer()?
+                .into_inner()
+                .set_indices(),
+        );
+
+        let indices = BitsetMergeOp::Any
             .merge(&mut conjunction_indices)
-            .map(|bitset| {
+            .map(|mut bitset| {
+                bitset.bitand_assign(&present_buf);
                 bitset
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(idx, v)| if v { Some(idx as u64) } else { None })
-                    .collect_vec()
             })
+            .map(|bitset| bitset.iter().map(|idx| idx as u64).collect_vec())
             .unwrap_or_default();
+
         Ok(PrimitiveArray::from_vec(indices, Validity::AllValid).into_array())
     }
 }
 
-fn indices_matching_predicate(
-    arr: &PrimitiveArray,
-    predicate: &Predicate,
-) -> VortexResult<BooleanBuffer> {
+fn indices_matching_predicate(arr: &PrimitiveArray, predicate: &Predicate) -> VortexResult<Bitset> {
     if predicate.left.head().is_some() {
         vortex_bail!("Invalid path for primitive array")
     }
@@ -50,29 +54,22 @@ fn indices_matching_predicate(
         }
         Value::Literal(scalar) => scalar,
     };
-
-    let present_buf = arr
-        .validity()
-        .to_logical(arr.len())
-        .to_present_null_buffer()?
-        .into_inner();
-
     let matching_idxs = match_each_native_ptype!(arr.ptype(), |$T| {
         let rhs_typed: $T = rhs.try_into().unwrap();
         let predicate_fn = get_predicate::<$T>(&predicate.op);
         apply_predicate(arr.typed_data::<$T>(), &rhs_typed, predicate_fn)
     });
 
-    Ok(matching_idxs.bitand(&present_buf))
+    Ok(matching_idxs)
 }
 
-fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
-    lhs: &[T],
-    rhs: &T,
-    f: F,
-) -> BooleanBuffer {
-    let matches = lhs.iter().map(|lhs| f(lhs, rhs));
-    BooleanBuffer::from_iter(matches)
+fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(lhs: &[T], rhs: &T, f: F) -> Bitset {
+    let matches = lhs
+        .iter()
+        .map(|lhs| f(lhs, rhs))
+        .enumerate()
+        .flat_map(|(idx, v)| if v { Some(idx) } else { None });
+    Bitset::from_iter(matches)
 }
 
 fn get_predicate<T: NativePType>(op: &Operator) -> fn(&T, &T) -> bool {
@@ -87,16 +84,22 @@ fn get_predicate<T: NativePType>(op: &Operator) -> fn(&T, &T) -> bool {
 }
 
 /// Merge an arbitrary number of bitsets
-enum BooleanBufferMergeOp {
+enum BitsetMergeOp {
     Any,
     All,
 }
 
-impl BooleanBufferMergeOp {
-    fn merge(self, bitsets: &mut dyn Iterator<Item = BooleanBuffer>) -> Option<BooleanBuffer> {
+impl BitsetMergeOp {
+    fn merge(self, bitsets: &mut dyn Iterator<Item = Bitset>) -> Option<Bitset> {
         match self {
-            BooleanBufferMergeOp::Any => bitsets.tree_fold1(|a, b| a.bitor(&b)),
-            BooleanBufferMergeOp::All => bitsets.tree_fold1(|a, b| a.bitand(&b)),
+            BitsetMergeOp::Any => bitsets.tree_fold1(|mut a, b| {
+                a.bitor_assign(&b);
+                a
+            }),
+            BitsetMergeOp::All => bitsets.tree_fold1(|mut a, b| {
+                a.bitand_assign(&b);
+                a
+            }),
         }
     }
 }
