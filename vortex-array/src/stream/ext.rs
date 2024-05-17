@@ -1,25 +1,16 @@
 use std::future::Future;
 
-use futures_util::TryFutureExt;
 use futures_util::TryStreamExt;
-use vortex::array::chunked::ChunkedArray;
-use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 
-use crate::array_stream::take_rows::TakeRows;
-use crate::array_stream::ArrayStream;
-use crate::array_stream::ArrayStreamAdapter;
+use crate::array::chunked::ChunkedArray;
+use crate::stream::take_rows::TakeRows;
+use crate::stream::ArrayStream;
+use crate::stream::ArrayStreamAdapter;
+use crate::Array;
 
 pub trait ArrayStreamExt: ArrayStream {
-    fn collect(self) -> impl Future<Output = VortexResult<Array>>
-    where
-        Self: Sized,
-    {
-        self.collect_chunked()
-            .map_ok(|chunked| chunked.into_array())
-    }
-
-    fn collect_chunked(self) -> impl Future<Output = VortexResult<ChunkedArray>>
+    fn into_chunked(self) -> impl Future<Output = VortexResult<ChunkedArray>>
     where
         Self: Sized,
     {
