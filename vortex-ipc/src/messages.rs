@@ -2,6 +2,7 @@ use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex::flatbuffers as fba;
 use vortex::{ArrayData, Context, ViewContext};
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
@@ -14,15 +15,14 @@ pub enum IPCMessage<'a> {
     Context(IPCContext<'a>),
     Schema(IPCSchema<'a>),
     Chunk(IPCChunk<'a>),
+    Page(IPCPage<'a>),
 }
 
 pub struct IPCContext<'a>(pub &'a ViewContext);
-
 pub struct IPCSchema<'a>(pub &'a DType);
-
 pub struct IPCChunk<'a>(pub &'a ViewContext, pub &'a ArrayData);
-
 pub struct IPCArray<'a>(pub &'a ViewContext, pub &'a ArrayData);
+pub struct IPCPage<'a>(pub &'a Buffer);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
 
@@ -37,6 +37,7 @@ impl WriteFlatBuffer for IPCMessage<'_> {
             Self::Context(f) => f.write_flatbuffer(fbb).as_union_value(),
             Self::Schema(f) => f.write_flatbuffer(fbb).as_union_value(),
             Self::Chunk(f) => f.write_flatbuffer(fbb).as_union_value(),
+            Self::Page(f) => f.write_flatbuffer(fbb).as_union_value(),
         };
 
         let mut msg = fb::MessageBuilder::new(fbb);
@@ -45,6 +46,7 @@ impl WriteFlatBuffer for IPCMessage<'_> {
             Self::Context(_) => fb::MessageHeader::Context,
             Self::Schema(_) => fb::MessageHeader::Schema,
             Self::Chunk(_) => fb::MessageHeader::Chunk,
+            Self::Page(_) => fb::MessageHeader::Page,
         });
         msg.add_header(header);
         msg.finish()
@@ -201,6 +203,27 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
                 metadata,
                 stats,
                 children,
+            },
+        )
+    }
+}
+
+impl<'a> WriteFlatBuffer for IPCPage<'a> {
+    type Target<'t> = fb::Page<'t>;
+
+    fn write_flatbuffer<'fb>(
+        &self,
+        fbb: &mut FlatBufferBuilder<'fb>,
+    ) -> WIPOffset<Self::Target<'fb>> {
+        let buffer_size = self.0.len();
+        let aligned_size = (buffer_size + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
+        let padding_size = aligned_size - buffer_size;
+
+        fb::Page::create(
+            fbb,
+            &fb::PageArgs {
+                buffer_size: buffer_size as u32,
+                padding: padding_size as u16,
             },
         )
     }

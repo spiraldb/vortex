@@ -35,10 +35,16 @@ table Chunk {
     buffer_size: uint64;
 }
 
+table Page {
+    buffer_size: uint32;
+    padding: uint16;
+}
+
 union MessageHeader {
   Context,
   Schema,
   Chunk,
+  Page,
 }
 
 table Message {

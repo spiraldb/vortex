@@ -271,4 +271,21 @@ impl<R: VortexRead> MessageReader<R> {
             }),
         )
     }
+
+    pub async fn maybe_read_page(&mut self) -> VortexResult<Option<Buffer>> {
+        if self.peek().and_then(|m| m.header_as_page()).is_none() {
+            return Ok(None);
+        }
+        let page_msg = self.next().await?.header_as_page().unwrap();
+
+        let buffer_len = page_msg.buffer_size() as usize;
+        let total_len = buffer_len + (page_msg.padding() as usize);
+
+        let mut buffer = self
+            .read
+            .read_into(BytesMut::with_capacity(total_len))
+            .await?;
+        buffer.truncate(buffer_len);
+        Ok(Some(Buffer::from(buffer.freeze())))
+    }
 }

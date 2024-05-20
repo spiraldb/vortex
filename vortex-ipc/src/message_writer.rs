@@ -4,11 +4,12 @@ use flatbuffers::FlatBufferBuilder;
 use itertools::Itertools;
 use vortex::{ArrayData, ViewContext};
 use vortex_buffer::io_buf::IoBuf;
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_flatbuffers::WriteFlatBuffer;
 
 use crate::io::VortexWrite;
-use crate::messages::{IPCChunk, IPCContext, IPCMessage, IPCSchema};
+use crate::messages::{IPCChunk, IPCContext, IPCMessage, IPCPage, IPCSchema};
 use crate::ALIGNMENT;
 
 const ZEROS: [u8; 512] = [0u8; 512];
@@ -77,6 +78,19 @@ impl<W: VortexWrite> MessageWriter<W> {
             self.write_all(&ZEROS[0..padding]).await?;
             current_offset = buffer_end as usize;
         }
+
+        Ok(())
+    }
+
+    pub async fn write_page(&mut self, buffer: Buffer) -> io::Result<()> {
+        self.write_message(IPCMessage::Page(IPCPage(&buffer)))
+            .await?;
+        let buffer_len = buffer.len();
+        self.write_all(buffer).await?;
+
+        let aligned_size = (buffer_len + (self.alignment - 1)) & !(self.alignment - 1);
+        let padding = aligned_size - buffer_len;
+        self.write_all(&ZEROS[0..padding]).await?;
 
         Ok(())
     }
