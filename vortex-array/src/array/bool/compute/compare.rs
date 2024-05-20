@@ -58,24 +58,20 @@ mod test {
     }
 
     #[test]
-    fn test_basic_comparison() {
+    fn test_basic_comparison() -> VortexResult<()> {
         let arr = BoolArray::from_vec(
             vec![true, true, false, true, false],
             Validity::Array(BoolArray::from(vec![false, true, true, true, true]).into_array()),
         );
 
         let matches = arr
-            .compare_arrays(&arr.to_array(), Operator::EqualTo)
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+            .compare_arrays(&arr.to_array(), Operator::EqualTo)?
+            .flatten_bool()?;
         assert_eq!(to_int_indices(matches), [1u64, 2, 3, 4]);
 
         let matches = arr
-            .compare_arrays(&arr.to_array(), Operator::NotEqualTo)
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+            .compare_arrays(&arr.to_array(), Operator::NotEqualTo)?
+            .flatten_bool()?;
         let empty: [u64; 0] = [];
         assert_eq!(to_int_indices(matches), empty);
 
@@ -85,31 +81,24 @@ mod test {
         );
 
         let matches = arr
-            .compare_arrays(&other.to_array(), Operator::LessThanOrEqualTo)
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+            .compare_arrays(&other.to_array(), Operator::LessThanOrEqualTo)?
+            .flatten_bool()?;
         assert_eq!(to_int_indices(matches), [2u64, 3, 4]);
 
         let matches = arr
-            .compare_arrays(&other.to_array(), Operator::LessThan)
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+            .compare_arrays(&other.to_array(), Operator::LessThan)?
+            .flatten_bool()?;
         assert_eq!(to_int_indices(matches), [4u64]);
 
         let matches = other
-            .compare_arrays(&arr.to_array(), Operator::GreaterThanOrEqualTo)
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+            .compare_arrays(&arr.to_array(), Operator::GreaterThanOrEqualTo)?
+            .flatten_bool()?;
         assert_eq!(to_int_indices(matches), [2u64, 3, 4]);
 
         let matches = other
-            .compare_arrays(&arr.to_array(), Operator::GreaterThan)
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+            .compare_arrays(&arr.to_array(), Operator::GreaterThan)?
+            .flatten_bool()?;
         assert_eq!(to_int_indices(matches), [4u64]);
+        Ok(())
     }
 }
