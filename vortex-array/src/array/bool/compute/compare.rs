@@ -21,13 +21,14 @@ impl CompareArraysFn for BoolArray {
             Operator::LessThan => lhs.not().bitand(&rhs),
             Operator::LessThanOrEqualTo => lhs.not().bitor(&rhs),
         };
-        let present_buf = self
-            .validity()
-            .to_logical(self.len())
-            .to_present_null_buffer()?
-            .into_inner();
-
-        Ok(BoolArray::from(result_buf.bitand(&present_buf)).into_array())
+        Ok(BoolArray::from(
+            self.validity()
+                .to_logical(self.len())
+                .to_null_buffer()?
+                .map(|nulls| result_buf.bitand(&nulls.into_inner()))
+                .unwrap_or(result_buf),
+        )
+        .into_array())
     }
 }
 
