@@ -61,7 +61,7 @@ mod test {
     }
 
     #[test]
-    fn test_basic_filter() {
+    fn test_basic_comparisons() {
         let arr = PrimitiveArray::from_nullable_vec(vec![
             Some(1i32),
             Some(2),

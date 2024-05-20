@@ -58,7 +58,7 @@ mod test {
     }
 
     #[test]
-    fn test_basic_filter() {
+    fn test_basic_comparison() {
         let arr = BoolArray::from_vec(
             vec![true, true, false, true, false],
             Validity::Array(BoolArray::from(vec![false, true, true, true, true]).into_array()),
