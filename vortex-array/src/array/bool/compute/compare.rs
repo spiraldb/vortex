@@ -16,18 +16,10 @@ impl CompareArraysFn for BoolArray {
             Operator::EqualTo => lhs.bitxor(&rhs).not(),
             Operator::NotEqualTo => lhs.bitxor(&rhs),
 
-            Operator::GreaterThan => lhs.bitand(&rhs).bitxor(&lhs),
-            Operator::GreaterThanOrEqualTo => {
-                let gt = lhs.bitand(&rhs).bitxor(&lhs);
-                let eq = &lhs.bitxor(&rhs).not();
-                gt.bitor(eq)
-            }
-            Operator::LessThan => lhs.bitor(&rhs).bitxor(&lhs),
-            Operator::LessThanOrEqualTo => {
-                let eq = lhs.bitxor(&rhs).not();
-                let lt = lhs.bitor(&rhs).bitxor(&lhs);
-                lt.bitor(&eq)
-            }
+            Operator::GreaterThan => lhs.bitand(&rhs.not()),
+            Operator::GreaterThanOrEqualTo => lhs.bitor(&rhs.not()),
+            Operator::LessThan => lhs.not().bitand(&rhs),
+            Operator::LessThanOrEqualTo => lhs.not().bitor(&rhs),
         };
         let present_buf = self
             .validity()
