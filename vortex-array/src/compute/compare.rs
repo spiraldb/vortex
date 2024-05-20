@@ -15,7 +15,7 @@ pub fn compare_arrays(array: &Array, other: &Array, predicate: Operator) -> Vort
     }) {
         return matching_indices;
     }
-    // if filter is not implemented for the given array type, but the array has a numeric
+    // if compare is not implemented for the given array type, but the array has a numeric
     // DType, we can flatten the array and apply filter to the flattened primitive array
     match array.dtype() {
         DType::Primitive(..) => {

@@ -50,8 +50,8 @@ mod test {
     use super::*;
     use crate::ToArray;
 
-    fn to_int_indices(filtered_primitive: BoolArray) -> Vec<u64> {
-        let filtered = filtered_primitive
+    fn to_int_indices(indices_bits: BoolArray) -> Vec<u64> {
+        let filtered = indices_bits
             .boolean_buffer()
             .iter()
             .enumerate()
