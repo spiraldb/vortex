@@ -58,3 +58,7 @@ harness = false
 [[bench]]
 name = "scalar_subtract"
 harness = false
+
+[[bench]]
+name = "filter_indices"
+harness = false
