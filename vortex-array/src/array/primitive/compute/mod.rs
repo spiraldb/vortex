@@ -14,6 +14,7 @@ mod as_arrow;
 mod as_contiguous;
 mod cast;
 mod fill;
+mod filter_indices;
 mod scalar_at;
 mod search_sorted;
 mod slice;

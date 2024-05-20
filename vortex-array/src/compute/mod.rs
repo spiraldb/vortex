@@ -8,12 +8,14 @@ use search_sorted::SearchSortedFn;
 use slice::SliceFn;
 use take::TakeFn;
 
+use crate::compute::filter_indices::FilterIndicesFn;
 use crate::compute::scalar_subtract::SubtractScalarFn;
 
 pub mod as_arrow;
 pub mod as_contiguous;
 pub mod cast;
 pub mod fill;
+pub mod filter_indices;
 pub mod patch;
 pub mod scalar_at;
 pub mod scalar_subtract;
@@ -35,6 +37,10 @@ pub trait ArrayCompute {
     }
 
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
+        None
+    }
+
+    fn filter_indices(&self) -> Option<&dyn FilterIndicesFn> {
         None
     }
 

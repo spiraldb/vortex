@@ -1,8 +1,6 @@
 use core::fmt;
 use std::fmt::{Display, Formatter};
 
-use vortex_error::{vortex_bail, VortexResult};
-
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FieldPath {
@@ -12,6 +10,19 @@ pub struct FieldPath {
 impl FieldPath {
     pub fn builder() -> FieldPathBuilder {
         FieldPathBuilder::default()
+    }
+
+    pub fn head(&self) -> Option<&FieldIdentifier> {
+        self.field_names.first()
+    }
+
+    pub fn tail(&self) -> Option<Self> {
+        if self.head().is_none() {
+            None
+        } else {
+            let new_field_names = self.field_names[1..self.field_names.len()].to_vec();
+            Some(Self::builder().join_all(new_field_names).build())
+        }
     }
 }
 
@@ -38,13 +49,16 @@ impl FieldPathBuilder {
         self
     }
 
-    pub fn build(self) -> VortexResult<FieldPath> {
-        if self.field_names.is_empty() {
-            vortex_bail!("Cannot build empty path");
-        }
-        Ok(FieldPath {
+    pub fn join_all(mut self, identifiers: Vec<impl Into<FieldIdentifier>>) -> Self {
+        self.field_names
+            .extend(identifiers.into_iter().map(|v| v.into()));
+        self
+    }
+
+    pub fn build(self) -> FieldPath {
+        FieldPath {
             field_names: self.field_names,
-        })
+        }
     }
 }
 

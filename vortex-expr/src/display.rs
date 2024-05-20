@@ -69,13 +69,13 @@ mod tests {
         assert_eq!(format!("{}", !lit(1u32).lte(f1)), "($field <= 1)");
 
         // nested field path
-        let f2 = FieldPath::builder().join("field").join(0).build().unwrap();
+        let f2 = FieldPath::builder().join("field").join(0).build();
         assert_eq!(format!("{}", !f2.lte(lit(1u32))), "($field.[0] > 1)");
     }
 
     #[test]
     fn test_dnf_formatting() {
-        let path = FieldPath::builder().join(2).join("col1").build().unwrap();
+        let path = FieldPath::builder().join(2).join("col1").build();
         let d1 = Conjunction {
             predicates: vec![
                 lit(1u32).lt(path.clone()),
@@ -83,7 +83,7 @@ mod tests {
                 !lit(1u32).lte(path),
             ],
         };
-        let path2 = FieldPath::builder().join("col1").join(2).build().unwrap();
+        let path2 = FieldPath::builder().join("col1").join(2).build();
         let d2 = Conjunction {
             predicates: vec![
                 lit(2u32).lt(path2),
