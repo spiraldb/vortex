@@ -89,7 +89,8 @@ mod test {
             .unwrap()
             .flatten_bool()
             .unwrap();
-        assert_eq!(to_int_indices(matches), []);
+        let empty: [u64; 0] = [];
+        assert_eq!(to_int_indices(matches), empty);
 
         let other = PrimitiveArray::from_nullable_vec(vec![
             Some(1i32),
