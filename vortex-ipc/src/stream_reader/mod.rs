@@ -1,8 +1,11 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use futures_util::stream::try_unfold;
+use futures_util::Stream;
 use vortex::stream::ArrayStream;
 use vortex::{Context, ViewContext};
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
@@ -63,5 +66,20 @@ impl<R: VortexRead> StreamArrayReader<R> {
             .clone();
         let dtype = self.dtype.as_ref().expect("DType not set").deref().clone();
         self.msgs.array_stream(view_context, dtype)
+    }
+
+    /// Reads a single page from the stream.
+    pub async fn next_page(&mut self) -> VortexResult<Option<Buffer>> {
+        self.msgs.maybe_read_page().await
+    }
+
+    /// Reads consecutive pages from the stream until the message type changes.
+    pub async fn page_stream(&mut self) -> impl Stream<Item = VortexResult<Buffer>> + '_ {
+        try_unfold(self, |reader| async {
+            match reader.next_page().await? {
+                Some(page) => Ok(Some((page, reader))),
+                None => Ok(None),
+            }
+        })
     }
 }
