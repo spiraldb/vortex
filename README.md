@@ -6,7 +6,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.76.0%2B-blue.svg?maxAge=3600)](https://github.com/fulcrum-so/vortex)
 
 Vortex is an Apache Arrow-compatible toolkit for working with compressed array data. We are using Vortex to develop a
-next-generation columnar file format for multidimensional arrays called Spiral.
+next-generation columnar file format for multidimensional arrays.
 
 > [!CAUTION]
 > This library is still under rapid development and is very much a work in progress!
