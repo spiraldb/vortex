@@ -67,5 +67,5 @@ name = "filter_indices"
 harness = false
 
 [[bench]]
-name = "compare_arrays"
+name = "compare"
 harness = false

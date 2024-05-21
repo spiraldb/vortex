@@ -4,15 +4,14 @@ use vortex_expr::operators::Operator;
 
 use crate::{Array, ArrayDType};
 
-pub trait CompareArraysFn {
-    fn compare_arrays(&self, array: &Array, predicate: Operator) -> VortexResult<Array>;
+pub trait CompareFn {
+    fn compare(&self, array: &Array, predicate: Operator) -> VortexResult<Array>;
 }
 
-pub fn compare_arrays(array: &Array, other: &Array, predicate: Operator) -> VortexResult<Array> {
-    if let Some(matching_indices) = array.with_dyn(|c| {
-        c.compare_arrays()
-            .map(|t| t.compare_arrays(other, predicate))
-    }) {
+pub fn compare(array: &Array, other: &Array, predicate: Operator) -> VortexResult<Array> {
+    if let Some(matching_indices) =
+        array.with_dyn(|c| c.compare().map(|t| t.compare(other, predicate)))
+    {
         return matching_indices;
     }
     // if compare is not implemented for the given array type, but the array has a numeric
@@ -20,10 +19,10 @@ pub fn compare_arrays(array: &Array, other: &Array, predicate: Operator) -> Vort
     match array.dtype() {
         DType::Primitive(..) => {
             let flat = array.clone().flatten_primitive()?;
-            flat.compare_arrays(other, predicate)
+            flat.compare(other, predicate)
         }
         _ => Err(vortex_err!(
-            NotImplemented: "compare_arrays",
+            NotImplemented: "compare",
             array.encoding().id()
         )),
     }

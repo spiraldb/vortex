@@ -7,11 +7,11 @@ use vortex_expr::operators::Operator;
 
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::compare::CompareArraysFn;
+use crate::compute::compare::CompareFn;
 use crate::{Array, ArrayTrait, IntoArray};
 
-impl CompareArraysFn for PrimitiveArray {
-    fn compare_arrays(&self, other: &Array, predicate: Operator) -> VortexResult<Array> {
+impl CompareFn for PrimitiveArray {
+    fn compare(&self, other: &Array, predicate: Operator) -> VortexResult<Array> {
         let flattened = other.clone().flatten_primitive()?;
 
         let matching_idxs = match_each_native_ptype!(self.ptype(), |$T| {
@@ -48,7 +48,7 @@ mod test {
     use itertools::Itertools;
 
     use super::*;
-    use crate::compute::compare::compare_arrays;
+    use crate::compute::compare::compare;
 
     fn to_int_indices(indices_bits: BoolArray) -> Vec<u64> {
         let filtered = indices_bits
@@ -78,10 +78,10 @@ mod test {
         ])
         .into_array();
 
-        let matches = compare_arrays(&arr, &arr, Operator::EqualTo)?.flatten_bool()?;
+        let matches = compare(&arr, &arr, Operator::EqualTo)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [0u64, 1, 2, 3, 5, 6, 7, 8, 10]);
 
-        let matches = compare_arrays(&arr, &arr, Operator::NotEqualTo)?.flatten_bool()?;
+        let matches = compare(&arr, &arr, Operator::NotEqualTo)?.flatten_bool()?;
         let empty: [u64; 0] = [];
         assert_eq!(to_int_indices(matches), empty);
 
@@ -101,17 +101,16 @@ mod test {
         ])
         .into_array();
 
-        let matches = compare_arrays(&arr, &other, Operator::LessThanOrEqualTo)?.flatten_bool()?;
+        let matches = compare(&arr, &other, Operator::LessThanOrEqualTo)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [0u64, 1, 2, 3, 5, 6, 7, 8, 10]);
 
-        let matches = compare_arrays(&arr, &other, Operator::LessThan)?.flatten_bool()?;
+        let matches = compare(&arr, &other, Operator::LessThan)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [5u64, 6, 7, 8, 10]);
 
-        let matches =
-            compare_arrays(&other, &arr, Operator::GreaterThanOrEqualTo)?.flatten_bool()?;
+        let matches = compare(&other, &arr, Operator::GreaterThanOrEqualTo)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [0u64, 1, 2, 3, 5, 6, 7, 8, 10]);
 
-        let matches = compare_arrays(&other, &arr, Operator::GreaterThan)?.flatten_bool()?;
+        let matches = compare(&other, &arr, Operator::GreaterThan)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [5u64, 6, 7, 8, 10]);
         Ok(())
     }

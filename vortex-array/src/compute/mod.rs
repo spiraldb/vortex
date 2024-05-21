@@ -1,7 +1,7 @@
 use as_arrow::AsArrowArray;
 use as_contiguous::AsContiguousFn;
 use cast::CastFn;
-use compare::CompareArraysFn;
+use compare::CompareFn;
 use fill::FillForwardFn;
 use patch::PatchFn;
 use scalar_at::ScalarAtFn;
@@ -38,7 +38,7 @@ pub trait ArrayCompute {
         None
     }
 
-    fn compare_arrays(&self) -> Option<&dyn CompareArraysFn> {
+    fn compare(&self) -> Option<&dyn CompareFn> {
         None
     }
 

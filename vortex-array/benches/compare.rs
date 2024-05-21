@@ -8,7 +8,7 @@ use vortex_error::VortexError;
 use vortex_expr::operators::Operator;
 
 fn filter_bool_indices(c: &mut Criterion) {
-    let mut group = c.benchmark_group("compare_arrays");
+    let mut group = c.benchmark_group("compare");
 
     let mut rng = thread_rng();
     let range = Uniform::new(0u8, 1);
@@ -27,12 +27,9 @@ fn filter_bool_indices(c: &mut Criterion) {
 
     group.bench_function("compare_bool", |b| {
         b.iter(|| {
-            let indices = vortex::compute::compare::compare_arrays(
-                &arr,
-                &arr2,
-                Operator::GreaterThanOrEqualTo,
-            )
-            .unwrap();
+            let indices =
+                vortex::compute::compare::compare(&arr, &arr2, Operator::GreaterThanOrEqualTo)
+                    .unwrap();
             black_box(indices);
             Ok::<(), VortexError>(())
         });
@@ -40,7 +37,7 @@ fn filter_bool_indices(c: &mut Criterion) {
 }
 
 fn filter_indices(c: &mut Criterion) {
-    let mut group = c.benchmark_group("compare_arrays");
+    let mut group = c.benchmark_group("compare");
 
     let mut rng = thread_rng();
     let range = Uniform::new(0i64, 100_000_000);
@@ -56,12 +53,9 @@ fn filter_indices(c: &mut Criterion) {
 
     group.bench_function("compare_int", |b| {
         b.iter(|| {
-            let indices = vortex::compute::compare::compare_arrays(
-                &arr,
-                &arr2,
-                Operator::GreaterThanOrEqualTo,
-            )
-            .unwrap();
+            let indices =
+                vortex::compute::compare::compare(&arr, &arr2, Operator::GreaterThanOrEqualTo)
+                    .unwrap();
             black_box(indices);
             Ok::<(), VortexError>(())
         });

@@ -1,7 +1,7 @@
 use crate::array::bool::BoolArray;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::AsContiguousFn;
-use crate::compute::compare::CompareArraysFn;
+use crate::compute::compare::CompareFn;
 use crate::compute::fill::FillForwardFn;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::slice::SliceFn;
@@ -26,7 +26,7 @@ impl ArrayCompute for BoolArray {
         Some(self)
     }
 
-    fn compare_arrays(&self) -> Option<&dyn CompareArraysFn> {
+    fn compare(&self) -> Option<&dyn CompareFn> {
         Some(self)
     }
 
