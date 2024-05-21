@@ -2,7 +2,9 @@ use crate::array::primitive::PrimitiveArray;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::as_contiguous::AsContiguousFn;
 use crate::compute::cast::CastFn;
+use crate::compute::compare::CompareFn;
 use crate::compute::fill::FillForwardFn;
+use crate::compute::filter_indices::FilterIndicesFn;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::scalar_subtract::SubtractScalarFn;
 use crate::compute::search_sorted::SearchSortedFn;
@@ -13,6 +15,7 @@ use crate::compute::ArrayCompute;
 mod as_arrow;
 mod as_contiguous;
 mod cast;
+mod compare;
 mod fill;
 mod filter_indices;
 mod scalar_at;
@@ -34,7 +37,14 @@ impl ArrayCompute for PrimitiveArray {
         Some(self)
     }
 
+    fn compare(&self) -> Option<&dyn CompareFn> {
+        Some(self)
+    }
+
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
+        Some(self)
+    }
+    fn filter_indices(&self) -> Option<&dyn FilterIndicesFn> {
         Some(self)
     }
 
