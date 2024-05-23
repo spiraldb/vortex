@@ -1,6 +1,6 @@
 use std::ops::{BitAnd, BitOr, BitXor, Not};
 
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_expr::operators::Operator;
 
 use crate::array::bool::BoolArray;
@@ -9,7 +9,10 @@ use crate::{Array, ArrayTrait, IntoArray};
 
 impl CompareFn for BoolArray {
     fn compare(&self, other: &Array, op: Operator) -> VortexResult<Array> {
-        let flattened = other.clone().flatten_bool()?;
+        let flattened = other
+            .clone()
+            .flatten_bool()
+            .map_err(|_| vortex_err!("Cannot compare boolean array with non-boolean array"))?;
         let lhs = self.boolean_buffer();
         let rhs = flattened.boolean_buffer();
         let result_buf = match op {

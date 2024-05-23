@@ -2,7 +2,7 @@ use std::ops::BitAnd;
 
 use arrow_buffer::BooleanBuffer;
 use vortex_dtype::{match_each_native_ptype, NativePType};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_expr::operators::Operator;
 
 use crate::array::bool::BoolArray;
@@ -12,7 +12,10 @@ use crate::{Array, ArrayTrait, IntoArray};
 
 impl CompareFn for PrimitiveArray {
     fn compare(&self, other: &Array, predicate: Operator) -> VortexResult<Array> {
-        let flattened = other.clone().flatten_primitive()?;
+        let flattened = other
+            .clone()
+            .flatten_primitive()
+            .map_err(|_| vortex_err!("Cannot compare primitive array with non-primitive array"))?;
 
         let matching_idxs = match_each_native_ptype!(self.ptype(), |$T| {
             let predicate_fn = &predicate.to_predicate::<$T>();
