@@ -13,7 +13,7 @@ use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::sampling::stratified_slices;
 use crate::stats::ArrayStatistics;
 use crate::validity::Validity;
-use crate::{compute, Array, ArrayDType, ArrayDef, Context, IntoArray};
+use crate::{compute, Array, ArrayDType, ArrayDef, ArrayTrait, Context, IntoArray};
 
 pub trait EncodingCompression: ArrayEncoding {
     fn cost(&self) -> u8 {
@@ -212,7 +212,7 @@ impl<'a> Compressor<'a> {
                 Ok(StructArray::try_new(
                     strct.names().clone(),
                     compressed_fields,
-                    arr.len(),
+                    strct.len(),
                     validity,
                 )?
                 .into_array())
