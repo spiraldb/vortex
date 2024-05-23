@@ -1,15 +1,15 @@
+use std::ops::{BitAnd, BitOr, BitXor, Not};
+
+use arrow_buffer::BooleanBufferBuilder;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_expr::operators::Operator;
 use vortex_scalar::Scalar;
 
 use crate::array::bool::BoolArray;
-use crate::array::constant::ConstantArray;
-use crate::compute::compare::compare;
 use crate::compute::compare_scalar::CompareScalarFn;
 use crate::{Array, ArrayTrait, IntoArray};
 
-// TODO(@jcasale): benchmark this against comparisons instead of pushing down into const array
 impl CompareScalarFn for BoolArray {
     fn compare_scalar(&self, op: Operator, scalar: &Scalar) -> VortexResult<Array> {
         match scalar.dtype() {
@@ -18,11 +18,32 @@ impl CompareScalarFn for BoolArray {
                 vortex_bail!("Invalid dtype for boolean scalar comparison")
             }
         }
-        compare(
-            &self.clone().into_array(),
-            &ConstantArray::new(scalar.clone(), self.len()).into_array(),
-            op,
-        )
+        let lhs = self.boolean_buffer();
+
+        let scalar_val = scalar
+            .value()
+            .as_bool()?
+            .ok_or_else(|| vortex_err!("Invalid scalar for comparison"))?;
+
+        let mut rhs = BooleanBufferBuilder::new(self.len());
+        rhs.append_n(self.len(), scalar_val);
+        let rhs = rhs.finish();
+        let result_buf = match op {
+            Operator::EqualTo => lhs.bitxor(&rhs).not(),
+            Operator::NotEqualTo => lhs.bitxor(&rhs),
+            Operator::GreaterThan => lhs.bitand(&rhs.not()),
+            Operator::GreaterThanOrEqualTo => lhs.bitor(&rhs.not()),
+            Operator::LessThan => lhs.not().bitand(&rhs),
+            Operator::LessThanOrEqualTo => lhs.not().bitor(&rhs),
+        };
+
+        let present = self
+            .validity()
+            .to_logical(self.len())
+            .to_present_null_buffer()?
+            .into_inner();
+
+        Ok(BoolArray::from(result_buf.bitand(&present)).into_array())
     }
 }
 
