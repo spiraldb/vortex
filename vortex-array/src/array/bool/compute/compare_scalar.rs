@@ -9,6 +9,7 @@ use crate::compute::compare::compare;
 use crate::compute::compare_scalar::CompareScalarFn;
 use crate::{Array, ArrayTrait, IntoArray};
 
+// TODO(@jcasale): benchmark this against comparisons instead of pushing down into const array
 impl CompareScalarFn for BoolArray {
     fn compare_scalar(&self, op: Operator, scalar: &Scalar) -> VortexResult<Array> {
         match scalar.dtype() {
