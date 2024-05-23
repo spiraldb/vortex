@@ -12,7 +12,7 @@ use crate::compute::compare_scalar::CompareScalarFn;
 use crate::{Array, ArrayDType, ArrayTrait, IntoArray};
 
 impl CompareScalarFn for PrimitiveArray {
-    fn compare_scalar(&self, op: Operator, scalar: Scalar) -> VortexResult<Array> {
+    fn compare_scalar(&self, op: Operator, scalar: &Scalar) -> VortexResult<Array> {
         match self.dtype() {
             DType::Primitive(..) => {}
             _ => {
@@ -83,25 +83,25 @@ mod test {
         ])
         .into_array();
 
-        let matches = compare_scalar(&arr, Operator::EqualTo, 5.into())?.flatten_bool()?;
+        let matches = compare_scalar(&arr, Operator::EqualTo, &5.into())?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [5u64]);
 
-        let matches = compare_scalar(&arr, Operator::EqualTo, 11.into())?.flatten_bool()?;
+        let matches = compare_scalar(&arr, Operator::EqualTo, &11.into())?.flatten_bool()?;
         let empty: [u64; 0] = [];
         assert_eq!(to_int_indices(matches), empty);
 
-        let matches = compare_scalar(&arr, Operator::LessThan, 8.into())?.flatten_bool()?;
+        let matches = compare_scalar(&arr, Operator::LessThan, &8.into())?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [0u64, 1, 2, 3, 5, 6, 7]);
 
         let matches =
-            compare_scalar(&arr, Operator::LessThanOrEqualTo, 8.into())?.flatten_bool()?;
+            compare_scalar(&arr, Operator::LessThanOrEqualTo, &8.into())?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [0u64, 1, 2, 3, 5, 6, 7, 8]);
 
-        let matches = compare_scalar(&arr, Operator::GreaterThan, 8.into())?.flatten_bool()?;
+        let matches = compare_scalar(&arr, Operator::GreaterThan, &8.into())?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [10u64]);
 
         let matches =
-            compare_scalar(&arr, Operator::GreaterThanOrEqualTo, 8.into())?.flatten_bool()?;
+            compare_scalar(&arr, Operator::GreaterThanOrEqualTo, &8.into())?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [8u64, 10]);
         Ok(())
     }

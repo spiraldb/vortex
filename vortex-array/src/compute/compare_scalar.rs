@@ -6,13 +6,13 @@ use vortex_scalar::Scalar;
 use crate::{Array, ArrayDType};
 
 pub trait CompareScalarFn {
-    fn compare_scalar(&self, comparator: Operator, scalar: Scalar) -> VortexResult<Array>;
+    fn compare_scalar(&self, comparator: Operator, scalar: &Scalar) -> VortexResult<Array>;
 }
 
-pub fn compare_scalar(array: &Array, comparator: Operator, scalar: Scalar) -> VortexResult<Array> {
+pub fn compare_scalar(array: &Array, comparator: Operator, scalar: &Scalar) -> VortexResult<Array> {
     if let Some(matching_indices) = array.with_dyn(|c| {
         c.compare_scalar()
-            .map(|t| t.compare_scalar(comparator, scalar.clone()))
+            .map(|t| t.compare_scalar(comparator, scalar))
     }) {
         return matching_indices;
     }
@@ -21,7 +21,7 @@ pub fn compare_scalar(array: &Array, comparator: Operator, scalar: Scalar) -> Vo
     match array.dtype() {
         DType::Primitive(..) => {
             let flat = array.clone().flatten_primitive()?;
-            flat.compare_scalar(comparator, scalar.clone())
+            flat.compare_scalar(comparator, scalar)
         }
         _ => Err(vortex_err!(
             NotImplemented: "compare",

@@ -10,7 +10,7 @@ use crate::compute::compare_scalar::CompareScalarFn;
 use crate::{Array, ArrayTrait, IntoArray};
 
 impl CompareScalarFn for BoolArray {
-    fn compare_scalar(&self, op: Operator, scalar: Scalar) -> VortexResult<Array> {
+    fn compare_scalar(&self, op: Operator, scalar: &Scalar) -> VortexResult<Array> {
         match scalar.dtype() {
             DType::Bool(_) => {}
             _ => {
@@ -19,7 +19,7 @@ impl CompareScalarFn for BoolArray {
         }
         compare(
             &self.clone().into_array(),
-            &ConstantArray::new(scalar, self.len()).into_array(),
+            &ConstantArray::new(scalar.clone(), self.len()).into_array(),
             op,
         )
     }
@@ -51,10 +51,10 @@ mod test {
         )
         .into_array();
 
-        let matches = compare_scalar(&arr, Operator::EqualTo, false.into())?.flatten_bool()?;
+        let matches = compare_scalar(&arr, Operator::EqualTo, &false.into())?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [2u64]);
 
-        let matches = compare_scalar(&arr, Operator::NotEqualTo, false.into())?.flatten_bool()?;
+        let matches = compare_scalar(&arr, Operator::NotEqualTo, &false.into())?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [1u64, 3]);
         Ok(())
     }
