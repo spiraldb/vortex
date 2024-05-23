@@ -1,8 +1,7 @@
 use futures_util::{Stream, TryStreamExt};
-
-use vortex::{Array, IntoArrayData, ViewContext};
 use vortex::array::chunked::ChunkedArray;
 use vortex::stream::ArrayStream;
+use vortex::{Array, IntoArrayData, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
@@ -68,8 +67,8 @@ impl<W: VortexWrite> ArrayWriter<W> {
     }
 
     async fn write_array_chunks<S>(&mut self, mut stream: S) -> VortexResult<ChunkLayout>
-        where
-            S: Stream<Item=VortexResult<Array>> + Unpin,
+    where
+        S: Stream<Item = VortexResult<Array>> + Unpin,
     {
         let mut byte_offsets = vec![self.msgs.tell()];
         let mut row_offsets = vec![0];
