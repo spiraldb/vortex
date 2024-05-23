@@ -39,12 +39,6 @@ pub struct Predicate {
     pub op: Operator,
     pub right: Value,
 }
-//
-// impl Predicate {
-//     fn apply<T>(&self, candidate: T) -> bool {
-//
-//     }
-// }
 
 pub fn lit<T: Into<Scalar>>(n: T) -> Value {
     Value::Literal(n.into())
