@@ -12,18 +12,11 @@ fn compare_bool_scalar(c: &mut Criterion) {
     let mut group = c.benchmark_group("compare_scalar");
 
     let mut rng = thread_rng();
-    let range = Uniform::new(0u8, 1);
-    let arr = BoolArray::from(
-        (0..10_000_000)
-            .map(|_| rng.sample(range) == 0)
-            .collect_vec(),
-    )
-    .into_array();
+    let arr = BoolArray::from((0..10_000_000).map(|_| rng.gen()).collect_vec()).into_array();
 
     group.bench_function("compare_bool", |b| {
         b.iter(|| {
-            let indices =
-                compare_scalar(&arr, Operator::GreaterThanOrEqualTo, &false.into()).unwrap();
+            let indices = compare_scalar(&arr, Operator::LessThan, &false.into()).unwrap();
             black_box(indices);
             Ok::<(), VortexError>(())
         });
@@ -42,8 +35,7 @@ fn compare_int_scalar(c: &mut Criterion) {
 
     group.bench_function("compare_int", |b| {
         b.iter(|| {
-            let indices =
-                compare_scalar(&arr, Operator::GreaterThanOrEqualTo, &50_000_000.into()).unwrap();
+            let indices = compare_scalar(&arr, Operator::LessThan, &50_000_000.into()).unwrap();
             black_box(indices);
             Ok::<(), VortexError>(())
         });

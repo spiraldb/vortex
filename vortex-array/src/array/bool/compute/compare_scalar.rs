@@ -1,4 +1,4 @@
-use std::ops::{BitAnd, BitOr, BitXor, Not};
+use std::ops::BitAnd;
 
 use arrow_buffer::BooleanBufferBuilder;
 use vortex_dtype::DType;
@@ -6,20 +6,18 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_expr::operators::Operator;
 use vortex_scalar::Scalar;
 
-use crate::array::bool::BoolArray;
+use crate::array::bool::{apply_comparison_op, BoolArray};
 use crate::compute::compare_scalar::CompareScalarFn;
 use crate::{Array, ArrayTrait, IntoArray};
 
 impl CompareScalarFn for BoolArray {
     fn compare_scalar(&self, op: Operator, scalar: &Scalar) -> VortexResult<Array> {
-        match scalar.dtype() {
-            DType::Bool(_) => {}
-            _ => {
-                vortex_bail!("Invalid dtype for boolean scalar comparison")
-            }
+        if let DType::Bool(_) = scalar.dtype() {
+        } else {
+            vortex_bail!("Invalid dtype for boolean scalar comparison")
         }
-        let lhs = self.boolean_buffer();
 
+        let lhs = self.boolean_buffer();
         let scalar_val = scalar
             .value()
             .as_bool()?
@@ -28,22 +26,14 @@ impl CompareScalarFn for BoolArray {
         let mut rhs = BooleanBufferBuilder::new(self.len());
         rhs.append_n(self.len(), scalar_val);
         let rhs = rhs.finish();
-        let result_buf = match op {
-            Operator::EqualTo => lhs.bitxor(&rhs).not(),
-            Operator::NotEqualTo => lhs.bitxor(&rhs),
-            Operator::GreaterThan => lhs.bitand(&rhs.not()),
-            Operator::GreaterThanOrEqualTo => lhs.bitor(&rhs.not()),
-            Operator::LessThan => lhs.not().bitand(&rhs),
-            Operator::LessThanOrEqualTo => lhs.not().bitor(&rhs),
-        };
+        let comparison_result = apply_comparison_op(lhs, rhs, op);
 
-        let present = self
-            .validity()
-            .to_logical(self.len())
-            .to_present_null_buffer()?
-            .into_inner();
+        let present = self.validity().to_logical(self.len()).to_null_buffer()?;
+        let with_validity_applied = present
+            .map(|p| comparison_result.bitand(&p.into_inner()))
+            .unwrap_or(comparison_result);
 
-        Ok(BoolArray::from(result_buf.bitand(&present)).into_array())
+        Ok(BoolArray::from(with_validity_applied).into_array())
     }
 }
 
@@ -78,6 +68,21 @@ mod test {
 
         let matches = compare_scalar(&arr, Operator::NotEqualTo, &false.into())?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [1u64, 3]);
+
+        let matches = compare_scalar(&arr, Operator::GreaterThan, &false.into())?.flatten_bool()?;
+        assert_eq!(to_int_indices(matches), [1u64, 3]);
+
+        let matches =
+            compare_scalar(&arr, Operator::GreaterThanOrEqualTo, &false.into())?.flatten_bool()?;
+        assert_eq!(to_int_indices(matches), [1u64, 2, 3]);
+
+        let matches = compare_scalar(&arr, Operator::LessThan, &false.into())?.flatten_bool()?;
+        let empty: [u64; 0] = [];
+        assert_eq!(to_int_indices(matches), empty);
+
+        let matches =
+            compare_scalar(&arr, Operator::LessThanOrEqualTo, &false.into())?.flatten_bool()?;
+        assert_eq!(to_int_indices(matches), [2u64]);
         Ok(())
     }
 }

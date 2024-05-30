@@ -9,16 +9,17 @@ use vortex_scalar::Scalar;
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::compare_scalar::CompareScalarFn;
-use crate::{Array, ArrayDType, ArrayTrait, IntoArray};
+use crate::{Array, ArrayTrait, IntoArray};
 
 impl CompareScalarFn for PrimitiveArray {
+    // @TODO(@jcasale) take stats into account here, which may allow us to elide some comparison
+    // work based on sortedness/min/max/etc.
     fn compare_scalar(&self, op: Operator, scalar: &Scalar) -> VortexResult<Array> {
-        match self.dtype() {
-            DType::Primitive(..) => {}
-            _ => {
-                vortex_bail!("Invalid scalar dtype for primitive comparison")
-            }
+        if let DType::Primitive(..) = scalar.dtype() {
+        } else {
+            vortex_bail!("Invalid scalar dtype for boolean scalar comparison")
         }
+
         let p_val = scalar
             .value()
             .as_pvalue()?
@@ -29,13 +30,12 @@ impl CompareScalarFn for PrimitiveArray {
             apply_predicate(self.typed_data::<$T>(), &rhs, predicate_fn)
         });
 
-        let present = self
-            .validity()
-            .to_logical(self.len())
-            .to_present_null_buffer()?
-            .into_inner();
+        let present = self.validity().to_logical(self.len()).to_null_buffer()?;
+        let with_validity_applied = present
+            .map(|p| matching_idxs.bitand(&p.into_inner()))
+            .unwrap_or(matching_idxs);
 
-        Ok(BoolArray::from(matching_idxs.bitand(&present)).into_array())
+        Ok(BoolArray::from(with_validity_applied).into_array())
     }
 }
 
@@ -85,6 +85,9 @@ mod test {
 
         let matches = compare_scalar(&arr, Operator::EqualTo, &5.into())?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [5u64]);
+
+        let matches = compare_scalar(&arr, Operator::NotEqualTo, &5.into())?.flatten_bool()?;
+        assert_eq!(to_int_indices(matches), [0u64, 1, 2, 3, 6, 7, 8, 10]);
 
         let matches = compare_scalar(&arr, Operator::EqualTo, &11.into())?.flatten_bool()?;
         let empty: [u64; 0] = [];

@@ -16,7 +16,7 @@ pub fn compare_scalar(array: &Array, comparator: Operator, scalar: &Scalar) -> V
     }) {
         return matching_indices;
     }
-    // if compare is not implemented for the given array type, but the array has a numeric
+    // if compare_scalar is not implemented for the given array type, but the array has a numeric
     // DType, we can flatten the array and apply filter to the flattened primitive array
     match array.dtype() {
         DType::Primitive(..) => {
@@ -24,7 +24,7 @@ pub fn compare_scalar(array: &Array, comparator: Operator, scalar: &Scalar) -> V
             flat.compare_scalar(comparator, scalar)
         }
         _ => Err(vortex_err!(
-            NotImplemented: "compare",
+            NotImplemented: "compare_scalar",
             array.encoding().id()
         )),
     }

@@ -7,9 +7,7 @@ use arrow_array::{
 use arrow_buffer::BooleanBuffer;
 use arrow_schema::{Field, Fields};
 use itertools::Itertools;
-use vortex_dtype::field_paths::{FieldIdentifier, FieldPath};
-use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::VortexResult;
 use vortex_expr::expressions::{Conjunction, Disjunction, Predicate, Value};
 use vortex_scalar::Scalar;
 
@@ -179,57 +177,41 @@ impl FilterIndicesFn for StructArray {
 }
 
 fn indices_matching_predicate(arr: &StructArray, pred: &Predicate) -> VortexResult<BooleanBuffer> {
-    let inner = resolve_field(arr.clone().into_array(), arr.dtype(), &pred.left)?;
+    let inner = arr
+        .clone()
+        .into_array()
+        .resolve_field(arr.dtype(), &pred.left)?;
 
     match &pred.right {
         Value::Field(rh_field) => {
-            let rhs = resolve_field(arr.clone().into_array(), arr.dtype(), rh_field)?;
+            let rhs = arr
+                .clone()
+                .into_array()
+                .resolve_field(arr.dtype(), rh_field)?;
             Ok(compare(&inner, &rhs, pred.op)?
                 .flatten_bool()?
                 .boolean_buffer())
         }
         Value::Literal(_) => {
-            let conjunction = Conjunction {
+            let conj = Conjunction {
                 predicates: vec![pred.clone()],
             };
-            let d = Disjunction {
-                conjunctions: vec![conjunction],
+            let disj = Disjunction {
+                conjunctions: vec![conj],
             };
-            Ok(filter_indices(&inner, &d)?.flatten_bool()?.boolean_buffer())
+            Ok(filter_indices(&inner, &disj)?
+                .flatten_bool()?
+                .boolean_buffer())
         }
-    }
-}
-
-fn resolve_field(array: Array, dtype: &DType, path: &FieldPath) -> VortexResult<Array> {
-    match dtype {
-        DType::Struct(struct_dtype, _) => {
-            let current = path.head().ok_or_else(|| vortex_err!("<FILL IN>"))?;
-            if let FieldIdentifier::Name(field_name) = current {
-                let idx = struct_dtype
-                    .find_name(field_name.as_str())
-                    .ok_or_else(|| vortex_err!("Query not compatible with dtype"))?;
-                let inner_dtype = struct_dtype.dtypes().get(idx).unwrap();
-                let inner_name = path.tail().ok_or_else(|| vortex_err!("<FILL IN>"))?;
-                resolve_field(
-                    array.child(idx, inner_dtype).unwrap(),
-                    inner_dtype,
-                    &inner_name,
-                )
-            } else {
-                vortex_bail!("Query not compatible with dtype")
-            }
-        }
-        _ => Ok(array),
     }
 }
 
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_dtype::field_paths::field;
-    use vortex_dtype::{Nullability, PType, StructDType};
-    use vortex_expr::expressions::Value::Field;
-    use vortex_expr::operators::Operator;
+    use vortex_dtype::field_paths::{field, FieldPath};
+    use vortex_dtype::{DType, Nullability, PType, StructDType};
+    use vortex_expr::operators::{field_comparison, Operator};
 
     use super::*;
     use crate::array::primitive::PrimitiveArray;
@@ -248,16 +230,8 @@ mod test {
         filtered
     }
 
-    fn comparison(op: Operator, left: FieldPath, right: FieldPath) -> Disjunction {
-        Disjunction {
-            conjunctions: vec![Conjunction {
-                predicates: vec![Predicate {
-                    left,
-                    op,
-                    right: Field(right),
-                }],
-            }],
-        }
+    fn comparison(op: Operator) -> Disjunction {
+        field_comparison(op, field("field_a"), field("field_b"))
     }
 
     #[test]
@@ -273,9 +247,9 @@ mod test {
             Nullability::NonNullable,
         );
 
-        let ints =
+        let ints_a =
             PrimitiveArray::from_nullable_vec(vec![Some(0u64), Some(1), None, Some(3), Some(4)]);
-        let other =
+        let ints_b =
             PrimitiveArray::from_nullable_vec(vec![Some(0u64), Some(2), None, Some(5), Some(1)]);
 
         let structs = StructArray::try_from_parts(
@@ -285,23 +259,11 @@ mod test {
                 validity: ValidityMetadata::AllValid,
             },
             Arc::new([
-                ints.clone().into_array_data(),
-                other.clone().into_array_data(),
+                ints_a.clone().into_array_data(),
+                ints_b.clone().into_array_data(),
             ]),
             StatsSet::new(),
         )?;
-
-        fn comparison(op: Operator) -> Disjunction {
-            Disjunction {
-                conjunctions: vec![Conjunction {
-                    predicates: vec![Predicate {
-                        left: field("field_a"),
-                        op,
-                        right: Field(field("field_b")),
-                    }],
-                }],
-            }
-        }
 
         let matches = FilterIndicesFn::filter_indices(&structs, &comparison(Operator::EqualTo))?
             .flatten_bool()?;
@@ -352,9 +314,9 @@ mod test {
             Nullability::NonNullable,
         );
 
-        let ints =
+        let ints_a =
             PrimitiveArray::from_nullable_vec(vec![Some(0u64), Some(1), None, Some(3), Some(4)]);
-        let other =
+        let other_b =
             PrimitiveArray::from_nullable_vec(vec![Some(0u64), Some(2), None, Some(5), Some(1)]);
 
         let structs = StructArray::try_from_parts(
@@ -364,8 +326,8 @@ mod test {
                 validity: ValidityMetadata::AllValid,
             },
             Arc::new([
-                ints.clone().into_array_data(),
-                other.clone().into_array_data(),
+                ints_a.clone().into_array_data(),
+                other_b.clone().into_array_data(),
             ]),
             StatsSet::new(),
         )?;
@@ -378,7 +340,7 @@ mod test {
             },
             Arc::new([
                 structs.clone().into_array_data(),
-                other.clone().into_array_data(),
+                other_b.clone().into_array_data(),
             ]),
             StatsSet::new(),
         )?;
@@ -393,7 +355,7 @@ mod test {
         let mixed_level_cmp = |op: Operator| -> VortexResult<BoolArray> {
             FilterIndicesFn::filter_indices(
                 top_level_structs,
-                &comparison(
+                &field_comparison(
                     op,
                     FieldPath::builder().join("struct").join("field_a").build(),
                     field("flat"),
@@ -422,7 +384,7 @@ mod test {
         let nested_cmp = |op: Operator| -> VortexResult<BoolArray> {
             FilterIndicesFn::filter_indices(
                 top_level_structs,
-                &comparison(
+                &field_comparison(
                     op,
                     FieldPath::builder().join("struct").join("field_a").build(),
                     FieldPath::builder().join("struct").join("field_b").build(),
