@@ -2,6 +2,7 @@ use futures_util::{Stream, TryStreamExt};
 use vortex::array::chunked::ChunkedArray;
 use vortex::stream::ArrayStream;
 use vortex::{Array, IntoArrayData, ViewContext};
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
@@ -14,6 +15,7 @@ pub struct ArrayWriter<W: VortexWrite> {
 
     view_ctx_range: Option<ByteRange>,
     array_layouts: Vec<ArrayLayout>,
+    page_ranges: Vec<ByteRange>,
 }
 
 impl<W: VortexWrite> ArrayWriter<W> {
@@ -23,6 +25,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
             view_ctx,
             view_ctx_range: None,
             array_layouts: vec![],
+            page_ranges: vec![],
         }
     }
 
@@ -32,6 +35,10 @@ impl<W: VortexWrite> ArrayWriter<W> {
 
     pub fn array_layouts(&self) -> &[ArrayLayout] {
         &self.array_layouts
+    }
+
+    pub fn page_ranges(&self) -> &[ByteRange] {
+        &self.page_ranges
     }
 
     pub fn into_inner(self) -> W {
@@ -101,6 +108,14 @@ impl<W: VortexWrite> ArrayWriter<W> {
         } else {
             self.write_array_stream(array.into_array_stream()).await
         }
+    }
+
+    pub async fn write_page(mut self, buffer: Buffer) -> VortexResult<Self> {
+        let begin = self.msgs.tell();
+        self.msgs.write_page(buffer).await?;
+        let end = self.msgs.tell();
+        self.page_ranges.push(ByteRange { begin, end });
+        Ok(self)
     }
 }
 

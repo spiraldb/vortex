@@ -43,6 +43,11 @@ impl<R: VortexRead> StreamArrayReader<R> {
         Ok(self)
     }
 
+    /// Retrieve the loaded view_context
+    pub fn view_context(&self) -> Option<Arc<ViewContext>> {
+        self.view_context.clone()
+    }
+
     pub fn with_dtype(self, dtype: DType) -> Self {
         assert!(self.dtype.is_none(), "DType already set");
         Self {
