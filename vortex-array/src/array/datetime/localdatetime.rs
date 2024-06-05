@@ -62,7 +62,6 @@ impl TryFrom<LocalDateTimeArray> for ExtensionArray {
     }
 }
 
-
 impl TryFrom<&LocalDateTimeArray> for ExtensionArray {
     type Error = VortexError;
 

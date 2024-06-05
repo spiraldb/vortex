@@ -1,9 +1,9 @@
+use vortex::compute::as_contiguous::AsContiguousFn;
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, ArrayDType, impl_default_as_contiguous_fn, IntoArray};
-use vortex::compute::as_contiguous::AsContiguousFn;
+use vortex::{impl_default_as_contiguous_fn, Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -74,8 +74,9 @@ mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::as_contiguous::AsContiguousFn;
     use vortex::compute::scalar_at::scalar_at;
-    use vortex::IntoArray;
     use vortex::validity::Validity;
+    use vortex::IntoArray;
+
     use crate::ALPArray;
 
     #[test]
@@ -85,16 +86,30 @@ mod test {
         let encoded = ALPArray::encode(primitives.into_array()).unwrap();
         let alp = ALPArray::try_from(&encoded).unwrap();
 
-
         let flat = alp.as_contiguous(&[encoded]).unwrap();
 
-        let a = scalar_at(&flat, 0).unwrap().value().as_pvalue().unwrap().unwrap();
+        let a = scalar_at(&flat, 0)
+            .unwrap()
+            .value()
+            .as_pvalue()
+            .unwrap()
+            .unwrap();
         let a: f64 = a.try_into().unwrap();
 
-        let b = scalar_at(&flat, 1).unwrap().value().as_pvalue().unwrap().unwrap();
+        let b = scalar_at(&flat, 1)
+            .unwrap()
+            .value()
+            .as_pvalue()
+            .unwrap()
+            .unwrap();
         let b: f64 = b.try_into().unwrap();
 
-        let c = scalar_at(&flat, 2).unwrap().value().as_pvalue().unwrap().unwrap();
+        let c = scalar_at(&flat, 2)
+            .unwrap()
+            .value()
+            .as_pvalue()
+            .unwrap()
+            .unwrap();
         let c: f64 = c.try_into().unwrap();
 
         assert_eq!(a, 1.0);

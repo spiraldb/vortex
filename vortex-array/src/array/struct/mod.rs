@@ -70,7 +70,10 @@ impl StructArray {
         }
 
         if fields.iter().any(|a| a.with_dyn(|a| a.len()) != length) {
-            println!("FIELD LENGTHS: {:?}", fields.iter().map(|field| field.len()).collect::<Vec<_>>());
+            println!(
+                "FIELD LENGTHS: {:?}",
+                fields.iter().map(|field| field.len()).collect::<Vec<_>>()
+            );
             vortex_bail!("Expected all struct fields to have length {}", length);
         }
 

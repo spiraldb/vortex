@@ -11,8 +11,8 @@ include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 
-#[lints]
-#workspace = true
+[lints]
+workspace = true
 
 [dependencies]
 arrow-array = { workspace = true }

@@ -123,9 +123,24 @@ pub fn decode_to_localdatetime(array: &Array) -> VortexResult<LocalDateTimeArray
         TimeUnit::S => 1,
     };
 
-    let days_buf = array.days().flatten()?.into_array().as_primitive().scalar_buffer::<i64>();
-    let seconds_buf = array.seconds().flatten()?.into_array().as_primitive().scalar_buffer::<i64>();
-    let subsecond_buf = array.subsecond().flatten()?.into_array().as_primitive().scalar_buffer::<i64>();
+    let days_buf = array
+        .days()
+        .flatten()?
+        .into_array()
+        .as_primitive()
+        .scalar_buffer::<i64>();
+    let seconds_buf = array
+        .seconds()
+        .flatten()?
+        .into_array()
+        .as_primitive()
+        .scalar_buffer::<i64>();
+    let subsecond_buf = array
+        .subsecond()
+        .flatten()?
+        .into_array()
+        .as_primitive()
+        .scalar_buffer::<i64>();
 
     // TODO(aduffy): replace with vectorized implementation?
     let values = days_buf
@@ -137,7 +152,7 @@ pub fn decode_to_localdatetime(array: &Array) -> VortexResult<LocalDateTimeArray
 
     LocalDateTimeArray::try_new(
         time_unit,
-        PrimitiveArray::from_vec(values, array.logical_validity().into_validity()).into_array()
+        PrimitiveArray::from_vec(values, array.logical_validity().into_validity()).into_array(),
     )
 }
 
@@ -157,7 +172,6 @@ impl AsContiguousFn for DateTimePartsArray {
         {
             vortex_bail!(ComputeError: "mismatched dtypes in call to as_contiguous");
         }
-
 
         let mut chunks = Vec::with_capacity(arrays.iter().map(|array| array.len()).sum());
 

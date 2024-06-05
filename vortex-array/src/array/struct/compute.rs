@@ -81,7 +81,8 @@ impl AsContiguousFn for StructArray {
             }
         }
 
-        let fields_len = fields.first()
+        let fields_len = fields
+            .first()
             .map(|field| field.iter().map(|a| a.len()).sum())
             .unwrap_or_default();
 

@@ -1,9 +1,9 @@
+use vortex::compute::as_contiguous::AsContiguousFn;
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, impl_default_as_contiguous_fn, IntoArray};
-use vortex::compute::as_contiguous::AsContiguousFn;
+use vortex::{impl_default_as_contiguous_fn, Array, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 

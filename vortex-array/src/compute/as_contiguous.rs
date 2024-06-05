@@ -3,7 +3,6 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::{Array, ArrayDType};
 
-
 /// Trait for typed array variants which support the process of unfurling to somewhere else.
 pub trait AsContiguousFn {
     fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array>;
@@ -46,7 +45,13 @@ pub fn as_contiguous(arrays: &[Array]) -> VortexResult<Array> {
         vortex_bail!(ComputeError: "No arrays to concatenate");
     }
     if !arrays.iter().map(|chunk| chunk.encoding().id()).all_equal() {
-        println!("ENCODINGS: {:?}", arrays.iter().map(|chunk| chunk.encoding().id()).collect_vec());
+        println!(
+            "ENCODINGS: {:?}",
+            arrays
+                .iter()
+                .map(|chunk| chunk.encoding().id())
+                .collect_vec()
+        );
         vortex_bail!(ComputeError: "Chunks have differing encodings");
     }
     if !arrays.iter().map(|chunk| chunk.dtype()).all_equal() {
