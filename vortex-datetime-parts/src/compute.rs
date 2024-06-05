@@ -223,17 +223,9 @@ mod test {
 
         let elem0: i64 = scalar_at(&local.timestamps(), 0)
             .unwrap()
-            .value()
-            .as_pvalue()
-            .unwrap()
-            .unwrap()
             .try_into()
             .unwrap();
         let elem1: i64 = scalar_at(&local.timestamps(), 1)
-            .unwrap()
-            .value()
-            .as_pvalue()
-            .unwrap()
             .unwrap()
             .try_into()
             .unwrap();
