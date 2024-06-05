@@ -161,7 +161,6 @@ impl<'a> Compressor<'a> {
 
         // Otherwise, attempt to compress the array
         let compressed = self.compress_array(arr)?;
-        if compressed.dtype() != arr.dtype() {}
         Ok(compressed)
     }
 
