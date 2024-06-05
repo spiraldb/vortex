@@ -149,8 +149,6 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
         Validity::NonNullable
     };
 
-    println!("values_validity: {:?}", values_validity);
-
     (
         PrimitiveArray::from(codes),
         PrimitiveArray::from_vec(values, values_validity),

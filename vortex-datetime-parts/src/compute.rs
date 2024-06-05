@@ -184,3 +184,71 @@ impl AsContiguousFn for DateTimePartsArray {
         as_contiguous(chunks.as_slice())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use vortex::array::datetime::{LocalDateTimeArray, TimeUnit};
+    use vortex::array::primitive::PrimitiveArray;
+    use vortex::compute::scalar_at::scalar_at;
+    use vortex::validity::Validity;
+    use vortex::IntoArray;
+    use vortex_dtype::{DType, ExtDType, ExtID, Nullability};
+
+    use crate::compute::decode_to_localdatetime;
+    use crate::DateTimePartsArray;
+
+    #[test]
+    fn test_decode_to_localdatetime() {
+        let nanos = TimeUnit::Ns;
+
+        let days = PrimitiveArray::from_vec(vec![2i64, 3], Validity::NonNullable).into_array();
+        let seconds = PrimitiveArray::from_vec(vec![2i64, 3], Validity::NonNullable).into_array();
+        let subsecond = PrimitiveArray::from_vec(vec![2i64, 3], Validity::NonNullable).into_array();
+
+        let date_times = DateTimePartsArray::try_new(
+            DType::Extension(
+                ExtDType::new(
+                    ExtID::from(LocalDateTimeArray::ID),
+                    Some(nanos.metadata().clone()),
+                ),
+                Nullability::NonNullable,
+            ),
+            days,
+            seconds,
+            subsecond,
+        )
+        .unwrap();
+
+        let local = decode_to_localdatetime(&date_times.into_array()).unwrap();
+
+        let elem0: i64 = scalar_at(&local.timestamps(), 0)
+            .unwrap()
+            .value()
+            .as_pvalue()
+            .unwrap()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let elem1: i64 = scalar_at(&local.timestamps(), 1)
+            .unwrap()
+            .value()
+            .as_pvalue()
+            .unwrap()
+            .unwrap()
+            .try_into()
+            .unwrap();
+
+        assert_eq!(
+            elem0,
+            vec![(2i64 * 86_400 * 1_000_000_000), 2i64 * 1_000_000_000, 2i64,]
+                .into_iter()
+                .sum(),
+        );
+        assert_eq!(
+            elem1,
+            vec![(3i64 * 86_400 * 1_000_000_000), 3i64 * 1_000_000_000, 3i64,]
+                .into_iter()
+                .sum(),
+        );
+    }
+}
