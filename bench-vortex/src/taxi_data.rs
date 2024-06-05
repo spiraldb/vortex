@@ -53,18 +53,14 @@ pub fn taxi_data_vortex() -> PathBuf {
 struct StdFile(std::fs::File);
 
 impl VortexWrite for StdFile {
-    fn write_all<B: IoBuf>(&mut self, buffer: B) -> impl Future<Output = std::io::Result<B>> {
-        async {
-            self.0.write_all(buffer.as_slice())?;
-            Ok(buffer)
-        }
+    async fn write_all<B: IoBuf>(&mut self, buffer: B) -> std::io::Result<B> {
+        self.0.write_all(buffer.as_slice())?;
+        Ok(buffer)
     }
 
-    fn flush(&mut self) -> impl Future<Output = std::io::Result<()>> {
-        async {
-            self.0.flush()?;
-            Ok(())
-        }
+    async fn flush(&mut self) -> std::io::Result<()> {
+        self.0.flush()?;
+        Ok(())
     }
 
     fn shutdown(&mut self) -> impl Future<Output = std::io::Result<()>> {
