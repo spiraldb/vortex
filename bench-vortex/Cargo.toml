@@ -11,8 +11,8 @@ include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 
-[lints]
-workspace = true
+#[lints]
+#workspace = true
 
 [dependencies]
 arrow-array = { workspace = true }
@@ -37,6 +37,7 @@ tokio = { workspace = true }
 uuid = { workspace = true }
 vortex-alp = { path = "../vortex-alp" }
 vortex-array = { path = "../vortex-array" }
+vortex-buffer = { path = "../vortex-buffer" }
 vortex-datetime-parts = { path = "../vortex-datetime-parts" }
 vortex-dict = { path = "../vortex-dict" }
 vortex-dtype = { path = "../vortex-dtype" }

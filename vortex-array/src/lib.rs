@@ -59,6 +59,7 @@ pub mod flatbuffers {
             #[allow(unused_imports)]
             pub use vortex_dtype::flatbuffers as dtype;
         }
+
         pub mod scalar {
             #[allow(unused_imports)]
             pub use vortex_scalar::flatbuffers as scalar;
@@ -177,6 +178,7 @@ pub trait ArrayDType {
 }
 
 struct NBytesVisitor(usize);
+
 impl ArrayVisitor for NBytesVisitor {
     fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
         self.0 += array.with_dyn(|a| a.nbytes());

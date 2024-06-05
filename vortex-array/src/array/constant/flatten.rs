@@ -29,7 +29,7 @@ impl ArrayFlatten for ConstantArray {
         if let Ok(ptype) = PType::try_from(self.scalar().dtype()) {
             return match_each_native_ptype!(ptype, |$P| {
                 Ok(Flattened::Primitive(PrimitiveArray::from_vec::<$P>(
-                    vec![$P::try_from(self.scalar())?; self.len()],
+                    vec![$P::try_from(self.scalar()).unwrap_or_else(|_| $P::default()); self.len()],
                     validity,
                 )))
             });

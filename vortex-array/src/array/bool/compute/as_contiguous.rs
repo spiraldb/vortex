@@ -17,7 +17,7 @@ impl AsContiguousFn for BoolArray {
         let mut bools = Vec::with_capacity(arrays.iter().map(|a| a.len()).sum());
         for buffer in arrays
             .iter()
-            .map(|a| Self::try_from(a.clone()).unwrap().boolean_buffer())
+            .map(|a| Self::try_from(a).unwrap().boolean_buffer())
         {
             bools.extend(buffer.iter())
         }

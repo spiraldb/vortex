@@ -1,5 +1,6 @@
 use vortex_error::VortexResult;
 
+use crate::{Array, IntoArray};
 use crate::array::bool::BoolArray;
 use crate::array::extension::ExtensionArray;
 use crate::array::primitive::PrimitiveArray;
@@ -7,7 +8,6 @@ use crate::array::r#struct::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::encoding::ArrayEncoding;
-use crate::{Array, IntoArray};
 
 /// The set of encodings that can be converted to Arrow with zero-copy.
 pub enum Flattened {
@@ -19,6 +19,12 @@ pub enum Flattened {
     Extension(ExtensionArray),
 }
 
+/// Support trait for decompressing arrays that have been encoded via a [crate::compress::Compressor].
+///
+/// A flattened array is a copying operation, returning new memory holding the same data in
+/// its simplest form.
+///
+/// DType remains the same before and after a flatten operation.
 pub trait ArrayFlatten {
     fn flatten(self) -> VortexResult<Flattened>;
 }

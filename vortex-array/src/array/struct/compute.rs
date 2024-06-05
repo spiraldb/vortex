@@ -16,7 +16,6 @@ use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
 use crate::validity::Validity;
-use crate::ArrayTrait;
 use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for StructArray {
@@ -82,6 +81,10 @@ impl AsContiguousFn for StructArray {
             }
         }
 
+        let fields_len = fields.first()
+            .map(|field| field.iter().map(|a| a.len()).sum())
+            .unwrap_or_default();
+
         let validity = if self.dtype().is_nullable() {
             Validity::from_iter(arrays.iter().map(|a| a.with_dyn(|a| a.logical_validity())))
         } else {
@@ -92,9 +95,19 @@ impl AsContiguousFn for StructArray {
             self.names().clone(),
             fields
                 .iter()
-                .map(|field_arrays| as_contiguous(field_arrays))
+                .map(|field_arrays| {
+                    // Currently, as_contiguous cannot handle sub-arrays with differing encodings.
+                    // So, first flatten each constituent array, then as_contiguous them back into
+                    // a single array.
+                    let flattened = field_arrays
+                        .iter()
+                        .cloned()
+                        .map(|array| array.flatten().unwrap().into_array())
+                        .collect::<Vec<_>>();
+                    as_contiguous(flattened.as_slice())
+                })
                 .try_collect()?,
-            self.len(),
+            fields_len,
             validity,
         )
         .map(|a| a.into_array())

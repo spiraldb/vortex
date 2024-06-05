@@ -54,6 +54,27 @@ impl LocalDateTimeArray {
     }
 }
 
+impl TryFrom<LocalDateTimeArray> for ExtensionArray {
+    type Error = VortexError;
+
+    fn try_from(value: LocalDateTimeArray) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
+
+
+impl TryFrom<&LocalDateTimeArray> for ExtensionArray {
+    type Error = VortexError;
+
+    fn try_from(value: &LocalDateTimeArray) -> Result<Self, Self::Error> {
+        let DType::Extension(ext_dtype, _) = value.dtype().clone() else {
+            vortex_bail!(ComputeError: "expected dtype to be Extension variant");
+        };
+
+        Ok(Self::new(ext_dtype, value.ext.storage()))
+    }
+}
+
 impl TryFrom<&ExtensionArray> for LocalDateTimeArray {
     type Error = VortexError;
 
@@ -93,7 +114,7 @@ impl IntoArrayData for LocalDateTimeArray {
     }
 }
 
-fn try_parse_time_unit(ext_dtype: &ExtDType) -> VortexResult<TimeUnit> {
+pub fn try_parse_time_unit(ext_dtype: &ExtDType) -> VortexResult<TimeUnit> {
     let byte: [u8; 1] = ext_dtype
         .metadata()
         .ok_or_else(|| vortex_err!("Missing metadata"))?

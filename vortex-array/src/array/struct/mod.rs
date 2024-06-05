@@ -70,6 +70,7 @@ impl StructArray {
         }
 
         if fields.iter().any(|a| a.with_dyn(|a| a.len()) != length) {
+            println!("FIELD LENGTHS: {:?}", fields.iter().map(|field| field.len()).collect::<Vec<_>>());
             vortex_bail!("Expected all struct fields to have length {}", length);
         }
 
@@ -123,12 +124,12 @@ impl ArrayTrait for StructArray {
 }
 
 impl ArrayValidity for StructArray {
-    fn is_valid(&self, _index: usize) -> bool {
-        todo!()
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity().is_valid(index)
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        todo!()
+        self.validity().to_logical(self.len())
     }
 }
 

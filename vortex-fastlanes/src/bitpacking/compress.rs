@@ -67,7 +67,8 @@ impl EncodingCompression for BitPackedEncoding {
             return Ok(array.clone());
         }
 
-        let validity = ctx.compress_validity(parray.validity())?;
+        // let validity = ctx.compress_validity(parray.validity())?;
+        let validity = parray.validity();
         let packed = bitpack(&parray, bit_width)?;
         let patches = if num_exceptions > 0 {
             Some(ctx.auxiliary("patches").compress(

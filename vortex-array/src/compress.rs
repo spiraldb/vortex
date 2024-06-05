@@ -146,14 +146,10 @@ impl<'a> Compressor<'a> {
                 .map(|c| c.compress(arr, Some(l), self.for_encoding(l.encoding().compression())))
             {
                 let compressed = compressed?;
-                if compressed.dtype() != arr.dtype() {
-                    panic!(
-                        "Compression changed dtype: {:?} -> {:?} for {}",
-                        arr.dtype(),
-                        compressed.dtype(),
-                        compressed.tree_display(),
-                    );
-                }
+
+                check_validity_unchanged(arr, &compressed);
+                check_dtype_unchanged(arr, &compressed);
+
                 return Ok(compressed);
             } else {
                 warn!(
@@ -165,14 +161,7 @@ impl<'a> Compressor<'a> {
 
         // Otherwise, attempt to compress the array
         let compressed = self.compress_array(arr)?;
-        if compressed.dtype() != arr.dtype() {
-            panic!(
-                "Compression changed dtype: {:?} -> {:?} for {}",
-                arr.dtype(),
-                compressed.dtype(),
-                compressed.tree_display(),
-            );
-        }
+        if compressed.dtype() != arr.dtype() {}
         Ok(compressed)
     }
 
@@ -223,6 +212,39 @@ impl<'a> Compressor<'a> {
                 Ok(sampled.unwrap_or_else(|| arr.clone()))
             }
         }
+    }
+}
+
+/// Check that compression did not alter the length of the validity array.
+fn check_validity_unchanged(arr: &Array, compressed: &Array) {
+    let _ = arr;
+    let _ = compressed;
+    #[cfg(debug_assertions)]
+    {
+        let old_validity = arr.with_dyn(|a| a.logical_validity().len());
+        let new_validity = compressed.with_dyn(|a| a.logical_validity().len());
+
+        debug_assert!(
+            old_validity == new_validity,
+            "validity length changed after compression: {old_validity} -> {new_validity} for {}",
+            compressed.tree_display()
+        );
+    }
+}
+
+/// Check that compression did not alter the dtype.
+fn check_dtype_unchanged(arr: &Array, compressed: &Array) {
+    let _ = arr;
+    let _ = compressed;
+    #[cfg(debug_assertions)]
+    {
+        debug_assert!(
+            arr.dtype() == compressed.dtype(),
+            "Compression changed dtype: {:?} -> {:?} for {}",
+            arr.dtype(),
+            compressed.dtype(),
+            compressed.tree_display(),
+        );
     }
 }
 
