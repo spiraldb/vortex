@@ -23,7 +23,7 @@ macro_rules! impl_default_as_contiguous_fn {
                     vortex_error::vortex_bail!(ComputeError: "mismatched dtypes in call to as_contiguous");
                 }
 
-                let mut chunks = Vec::with_capacity(arrays.iter().map(|array| array.len()).sum());
+                let mut chunks = Vec::with_capacity(arrays.len());
                 for array in arrays {
                     chunks.push(array.clone().flatten()?.into_array());
                 }

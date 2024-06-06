@@ -503,7 +503,6 @@ impl BenchmarkDataset for BenchmarkDatasets {
         self.as_uncompressed();
         for f in self.list_files(FileType::Csv) {
             info!("Compressing {} to lance", f.to_str().unwrap());
-            println!("Compressing {} to lance", f.to_str().unwrap());
             let output_fname = f
                 .file_name()
                 .unwrap()

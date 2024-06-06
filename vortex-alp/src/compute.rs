@@ -88,29 +88,10 @@ mod test {
 
         let flat = alp.as_contiguous(&[encoded]).unwrap();
 
-        let a = scalar_at(&flat, 0)
-            .unwrap()
-            .value()
-            .as_pvalue()
-            .unwrap()
-            .unwrap();
-        let a: f64 = a.try_into().unwrap();
+        let a: f64 = scalar_at(&flat, 0).unwrap().try_into().unwrap();
+        let b: f64 = scalar_at(&flat, 1).unwrap().try_into().unwrap();
 
-        let b = scalar_at(&flat, 1)
-            .unwrap()
-            .value()
-            .as_pvalue()
-            .unwrap()
-            .unwrap();
-        let b: f64 = b.try_into().unwrap();
-
-        let c = scalar_at(&flat, 2)
-            .unwrap()
-            .value()
-            .as_pvalue()
-            .unwrap()
-            .unwrap();
-        let c: f64 = c.try_into().unwrap();
+        let c: f64 = scalar_at(&flat, 2).unwrap().try_into().unwrap();
 
         assert_eq!(a, 1.0);
         assert_eq!(b, 2.0);
