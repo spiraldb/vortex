@@ -9,7 +9,7 @@ use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDType, ArrayFlatten, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_scalar::{Scalar, ScalarValue};
+use vortex_scalar::Scalar;
 
 use crate::DateTimePartsArray;
 
