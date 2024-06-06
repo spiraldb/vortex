@@ -71,23 +71,9 @@ impl ScalarAtFn for DateTimePartsArray {
                     TimeUnit::S => 1,
                 };
 
-                let days = scalar_at(&self.days(), index)?.into_value();
-                let seconds = scalar_at(&self.seconds(), index)?.into_value();
-                let subseconds = scalar_at(&self.subsecond(), index)?.into_value();
-
-                let ScalarValue::Primitive(days_pval) = days else {
-                    panic!("days must be primitive");
-                };
-                let ScalarValue::Primitive(seconds_pval) = seconds else {
-                    panic!("seconds must be primitive");
-                };
-                let ScalarValue::Primitive(subseconds_pval) = subseconds else {
-                    panic!("subsecond must be primitive");
-                };
-
-                let days: i64 = days_pval.try_into().unwrap();
-                let seconds: i64 = seconds_pval.try_into().unwrap();
-                let subseconds: i64 = subseconds_pval.try_into().unwrap();
+                let days: i64 = scalar_at(&self.days(), index)?.try_into()?;
+                let seconds: i64 = scalar_at(&self.seconds(), index)?.try_into()?;
+                let subseconds: i64 = scalar_at(&self.subsecond(), index)?.try_into()?;
 
                 let scalar = days * 86_400 * divisor + seconds * divisor + subseconds;
 
