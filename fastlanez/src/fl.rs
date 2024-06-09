@@ -1,12 +1,13 @@
 use std::mem::size_of;
-use std::ops::BitOrAssign;
 
 use arrayref::array_mut_ref;
-use crunchy::unroll;
-use num_traits::{One, PrimInt, Unsigned, Zero};
+use num_traits::{One, PrimInt, Unsigned};
+use paste::paste;
 use seq_macro::seq;
 
 use crate::{Pred, Satisfied, UnsupportedBitWidth};
+
+pub const ORDER: [u8; 8] = [0, 4, 2, 6, 1, 5, 3, 7];
 
 /// BitPack into a compile-time known bit-width.
 pub trait BitPack2<const W: usize>
@@ -28,48 +29,57 @@ where
     }
 }
 
-impl<const W: usize, T: PrimInt + Unsigned + Zero + BitOrAssign> BitPack2<W> for T
-where
-    Pred<{ W > 0 }>: Satisfied,
-    Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
-    [(); 128 * W / size_of::<Self>()]:,
-{
-    #[inline(never)]
-    fn bitpacker<'a>(input: &[Self; 1024], output_bytes: &'a mut [u8; 128 * W]) {
-        const ORDER: [u8; 8] = [0, 4, 2, 6, 1, 5, 3, 7];
+/// Macro for repeating a code block bit_size_of::<T> times.
+macro_rules! seq_type_width {
+    ($ident:ident in u8 $body:tt) => {{ seq!($ident in 0..8 $body); }};
+    ($ident:ident in u16 $body:tt) => {{ seq!($ident in 0..16 $body); }};
+    ($ident:ident in u32 $body:tt) => {{ seq!($ident in 0..32 $body); }};
+    ($ident:ident in u64 $body:tt) => {{ seq!($ident in 0..64 $body); }};
+}
 
-        let output_ints: &mut [Self; 128 * W / size_of::<Self>()] =
-            unsafe { std::mem::transmute(output_bytes) };
+macro_rules! impl_bitpacking {
+    ($T:ty) => {
+        paste! {
+            impl<const W: usize> BitPack2<W> for $T
+            where
+                Pred<{ W > 0 }>: Satisfied,
+                Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
+                [(); 128 * W / size_of::<Self>()]:,
+            {
+                #[inline(never)]
+                fn bitpacker<'a>(input: &[Self; 1024], output_bytes: &'a mut [u8; 128 * W]) {
+                    let output_ints: &mut [Self; 128 * W / size_of::<Self>()] =
+                        unsafe { std::mem::transmute(output_bytes) };
 
-        // First we loop over each lane in the virtual 1024 bit word.
-        let mut src: T;
-        let mut tmp: T = T::zero();
-        for i in 0..Self::LANES {
-            // Now we inline loop over each of the rows of the lane.
+                    // First we loop over each lane in the virtual 1024 bit word.
+                    let mut src: $T;
+                    let mut tmp: $T = 0;
+                    for i in 0..Self::LANES {
+                        // Now we inline loop over each of the rows of the lane.
+                        seq_type_width!(row in $T {{
+                            src = input[Self::LANES * row + i] & Self::mask();
 
-            // tmp = T::zero();
+                            // Shift the src bits into their position in the tmp output variable.
+                            if row == 0 {
+                                tmp = src;
+                            } else {
+                                tmp |= src << (row * Self::WIDTH) % Self::T;
+                            }
 
-            seq!(row in 0..16 {{ // FIXME
-                src = input[Self::LANES * row + i] & Self::mask();
+                            let curr_out: usize = (row * Self::WIDTH) / Self::T;
+                            let next_out: usize = ((row + 1) * Self::WIDTH) / Self::T;
+                            if next_out > curr_out {
+                                output_ints[Self::LANES * curr_out + i] = tmp;
 
-                // Shift the src bits into their position in the tmp output variable.
-                if row == 0 {
-                    tmp = src;
-                } else {
-                    tmp |= src << (row * Self::WIDTH) % Self::T;
+                                let remaining_bits: usize = ((row + 1) * Self::WIDTH) % Self::T;
+                                tmp = src >> Self::WIDTH - remaining_bits;
+                            }
+                        }});
+                    }
                 }
-
-                let curr_out: usize = (row * Self::WIDTH) / Self::T;
-                let next_out: usize = ((row + 1) * Self::WIDTH) / Self::T;
-                if next_out > curr_out {
-                    output_ints[Self::LANES * curr_out + i] = tmp;
-
-                    let remaining_bits: usize = ((row + 1) * Self::WIDTH) % Self::T;
-                    tmp = src >> Self::WIDTH - remaining_bits;
-                }
-            }});
+            }
         }
-    }
+    };
 }
 
 /// Try to bitpack into a runtime-known bit width.
@@ -102,7 +112,12 @@ impl TryBitPack for u16 {
     }
 }
 
-pub fn pack_u16_u3(input: &[u16; 1024], output: &mut [u8; 384]) {
+impl_bitpacking!(u8);
+impl_bitpacking!(u16);
+impl_bitpacking!(u32);
+impl_bitpacking!(u64);
+
+pub fn pack_u64_u3(input: &[u64; 1024], output: &mut [u8; 384]) {
     BitPack2::<3>::bitpacker(input, output)
 }
 

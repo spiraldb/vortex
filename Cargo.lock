@@ -1161,12 +1161,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "const_for"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b8f6a54c8d1baf6422c062a7b8be16f47d1071989219da6a369b23a934801c8"
-
-[[package]]
 name = "constant_time_eq"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1805,15 +1799,12 @@ name = "fastlanez"
 version = "0.1.0"
 dependencies = [
  "arrayref",
- "const_for",
  "criterion",
- "crunchy",
  "fastlanez-sys",
  "num-traits",
  "paste",
  "seq-macro",
  "uninit",
- "unroll",
 ]
 
 [[package]]
@@ -5043,16 +5034,6 @@ name = "uninit"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "359fdaaabedff944f100847f2e0ea88918d8012fe64baf5b54c191ad010168c9"
-
-[[package]]
-name = "unroll"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ad948c1cb799b1a70f836077721a92a35ac177d4daddf4c20a633786d4cf618"
-dependencies = [
- "quote",
- "syn 1.0.109",
-]
 
 [[package]]
 name = "untrusted"
