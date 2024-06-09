@@ -1,7 +1,7 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
-use std::mem::MaybeUninit;
+use std::mem::{size_of, MaybeUninit};
 
 use arrayref::array_mut_ref;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
@@ -14,10 +14,10 @@ fn bitpacking(c: &mut Criterion) {
         const WIDTH: usize = 3;
         let values = [3u16; 1024];
 
-        let mut packed = vec![0u8; 128 * WIDTH];
+        let mut packed = vec![0; 128 * WIDTH / size_of::<u16>()];
 
         b.iter(|| {
-            BitPack2::<WIDTH>::bitpack(&values, array_mut_ref![packed, 0, 128 * WIDTH]);
+            BitPack2::<WIDTH>::bitpack(&values, array_mut_ref![packed, 0, 192]);
         });
     });
 

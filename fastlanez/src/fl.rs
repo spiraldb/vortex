@@ -1,7 +1,7 @@
 use std::mem::size_of;
 
 use arrayref::array_mut_ref;
-use num_traits::{ConstOne, PrimInt, Unsigned};
+use num_traits::{PrimInt, Unsigned};
 use paste::paste;
 use seq_macro::seq;
 
@@ -12,7 +12,7 @@ pub const ORDER: [u8; 8] = [0, 4, 2, 6, 1, 5, 3, 7];
 /// BitPack into a compile-time known bit-width.
 pub trait BitPack2<const W: usize>
 where
-    Self: Sized + Unsigned + PrimInt + ConstOne,
+    Self: Sized + Unsigned + PrimInt,
     Pred<{ W > 0 }>: Satisfied,
     Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
 {
@@ -20,8 +20,9 @@ where
     const LANES: usize = 1024 / Self::T;
     const WIDTH: usize = W;
 
-    /// Packs 1024 elements into W bits each -> (1024 * W / 8) -> 128 * W bytes
-    fn bitpack(input: &[Self; 1024], output: &mut [u8; 128 * W]);
+    /// Packs 1024 elements into W bits each.
+    /// The output is given as Self to ensure correct alignment.
+    fn bitpack(input: &[Self; 1024], output: &mut [Self; 128 * W / size_of::<Self>()]);
 }
 
 // Macro for repeating a code block bit_size_of::<T> times.
@@ -43,18 +44,18 @@ macro_rules! impl_bitpacking {
                 Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
                 [(); 128 * W / size_of::<Self>()]:,
             {
-                fn bitpack<'a>(input: &[Self; 1024], output_bytes: &'a mut [u8; 128 * W]) {
-                    let output_ints: &mut [Self; 128 * W / size_of::<Self>()] =
-                        unsafe { std::mem::transmute(output_bytes) };
+                #[inline(never)]
+                #[allow(unused_assignments)]
+                fn bitpack<'a>(input: &[Self; 1024], output: &mut [Self; 128 * W / size_of::<Self>()]) {
+                    let mask = ((1 << W) - 1);
 
                     // First we loop over each lane in the virtual 1024 bit word.
-                    let mut src: $T;
-                    let mut tmp: $T = 0;
                     for i in 0..Self::LANES {
+                        let mut tmp: $T = 0;
+
                         // Now we inline loop over each of the rows of the lane.
                         seq_type_width!(row in $T {{
-                            let mask = (1 << W) - 1;
-                            src = input[Self::LANES * row + i] & mask;
+                            let src = input[Self::LANES * row + i] & mask;
 
                             // Shift the src bits into their position in the tmp output variable.
                             if row == 0 {
@@ -63,10 +64,10 @@ macro_rules! impl_bitpacking {
                                 tmp |= src << (row * Self::WIDTH) % Self::T;
                             }
 
-                            let curr_out: usize = (row * Self::WIDTH) / Self::T;
-                            let next_out: usize = ((row + 1) * Self::WIDTH) / Self::T;
-                            if next_out > curr_out {
-                                output_ints[Self::LANES * curr_out + i] = tmp;
+                            let curr_out_pos: usize = (row * Self::WIDTH) / Self::T;
+                            let next_out_pos: usize = ((row + 1) * Self::WIDTH) / Self::T;
+                            if next_out_pos > curr_out_pos {
+                                output[Self::LANES * curr_out_pos + i] = tmp;
 
                                 let remaining_bits: usize = ((row + 1) * Self::WIDTH) % Self::T;
                                 tmp = src >> Self::WIDTH - remaining_bits;
@@ -80,27 +81,27 @@ macro_rules! impl_bitpacking {
 }
 
 /// Try to bitpack into a runtime-known bit width.
-pub trait TryBitPack
+pub trait TryBitPack2
 where
     Self: Sized + Unsigned + PrimInt,
 {
     fn try_pack(
         input: &[Self; 1024],
         width: usize,
-        output: &mut [u8],
+        output: &mut [Self],
     ) -> Result<(), UnsupportedBitWidth>;
 }
 
-impl TryBitPack for u16 {
+impl TryBitPack2 for u16 {
     fn try_pack(
         input: &[Self; 1024],
         width: usize,
-        output: &mut [u8],
+        output: &mut [Self],
     ) -> Result<(), UnsupportedBitWidth> {
         seq!(W in 1..16 {
             match width {
                 #(W => {
-                    BitPack2::<W>::bitpack(input, array_mut_ref![output, 0, 128 * W]);
+                    BitPack2::<W>::bitpack(input, array_mut_ref![output, 0, 128 * W / size_of::<u16>()]);
                     Ok(())
                 })*,
                 _ => Err(UnsupportedBitWidth),
@@ -114,10 +115,6 @@ impl_bitpacking!(u16);
 impl_bitpacking!(u32);
 impl_bitpacking!(u64);
 
-pub fn pack_u64_u3(input: &[u64; 1024], output: &mut [u8; 384]) {
-    BitPack2::<3>::bitpack(input, output)
-}
-
 #[cfg(test)]
 mod test {
     use std::mem::MaybeUninit;
@@ -128,8 +125,9 @@ mod test {
     fn try_pack() {
         const WIDTH: usize = 3;
         let values = [3u16; 1024];
-        let mut packed = [0; 384];
+        let mut packed = [0; 192];
         BitPack2::<WIDTH>::bitpack(&values, &mut packed);
+        let packed: [u8; 384] = unsafe { std::mem::transmute(packed) };
 
         let mut packed2 = [MaybeUninit::new(0u8); WIDTH * 128];
         let packed2 = crate::bitpack::TryBitPack::try_pack(&values, WIDTH, &mut packed2).unwrap();
