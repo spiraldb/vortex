@@ -9,20 +9,26 @@ use crate::{Pred, Satisfied, UnsupportedBitWidth};
 
 pub const ORDER: [u8; 8] = [0, 4, 2, 6, 1, 5, 3, 7];
 
+pub trait FastLanes: Sized + Unsigned + PrimInt {
+    const T: usize = size_of::<Self>() * 8;
+    const LANES: usize = 1024 / Self::T;
+}
+
 /// BitPack into a compile-time known bit-width.
 pub trait BitPack2<const W: usize>
 where
-    Self: Sized + Unsigned + PrimInt,
+    Self: FastLanes,
     Pred<{ W > 0 }>: Satisfied,
     Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
 {
-    const T: usize = size_of::<Self>() * 8;
-    const LANES: usize = 1024 / Self::T;
     const WIDTH: usize = W;
 
     /// Packs 1024 elements into W bits each.
     /// The output is given as Self to ensure correct alignment.
     fn bitpack(input: &[Self; 1024], output: &mut [Self; 128 * W / size_of::<Self>()]);
+
+    /// Unpacks W-bit elements into 1024 elements.
+    fn bitunpack(input: &[Self; 128 * W / size_of::<Self>()], output: &mut [Self; 1024]);
 }
 
 // Macro for repeating a code block bit_size_of::<T> times.
@@ -33,19 +39,124 @@ macro_rules! seq_type_width {
     ($ident:ident in u64 $body:tt) => {seq!($ident in 0..64 $body);};
 }
 
+impl FastLanes for u16 {}
+
+impl<const W: usize> BitPack2<W> for u16
+where
+    Pred<{ W > 0 }>: Satisfied,
+    Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
+    [(); 128 * W / size_of::<Self>()]:,
+{
+    fn bitpack(input: &[Self; 1024], output: &mut [Self; 128 * W / size_of::<Self>()]) {
+        let mask = (1 << W) - 1;
+
+        // First we loop over each lane in the virtual 1024 bit word.
+        for i in 0..Self::LANES {
+            let mut tmp: Self = 0;
+
+            // Inlined loop over each of the rows of the lane.
+            seq_type_width!(row in u16 {{
+                let src = input[Self::LANES * row + i] & mask;
+
+                // Shift the src bits into their position in the tmp output variable.
+                if row == 0 {
+                    tmp = src;
+                } else {
+                    tmp |= src << (row * Self::WIDTH) % Self::T;
+                }
+
+                // If the next input value overlaps with the next output, then we
+                // write out the tmp variable and bring forward the remaining bits.
+                let curr_out: usize = (row * Self::WIDTH) / Self::T;
+                let next_out: usize = ((row + 1) * Self::WIDTH) / Self::T;
+                if next_out > curr_out {
+                    output[Self::LANES * curr_out + i] = tmp;
+
+                    let remaining_bits: usize = ((row + 1) * Self::WIDTH) % Self::T;
+                    tmp = src >> Self::WIDTH - remaining_bits;
+                }
+            }});
+        }
+    }
+
+    fn bitunpack(input: &[Self; 128 * W / size_of::<u16>()], output: &mut [Self; 1024]) {
+        let mut src: Self = 0;
+        let mut tmp: Self = 0;
+        let mut base: Self = 0;
+
+        for i in 0..Self::LANES {
+            src = input[i + 0];
+
+            tmp = (src >> 0) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 0)] = tmp;
+
+            tmp = (src >> 3) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 1)] = tmp;
+
+            tmp = (src >> 6) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 2)] = tmp;
+
+            tmp = (src >> 9) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 3)] = tmp;
+
+            tmp = (src >> 12) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 4)] = tmp;
+
+            tmp = (src >> 15) & ((1 << 1) - 1);
+
+            let curr_in: usize = (1 * Self::WIDTH) / Self::T;
+            src = input[i + 64];
+
+            tmp |= ((src) & ((1 << 2) - 1)) << 1;
+            output[i + (Self::LANES * 5)] = tmp;
+            tmp = (src >> 2) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 6)] = tmp;
+            tmp = (src >> 5) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 7)] = tmp;
+            tmp = (src >> 8) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 8)] = tmp;
+            tmp = (src >> 11) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 9)] = tmp;
+            tmp = (src >> 14) & ((1 << 2) - 1);
+
+            let curr_in: usize = (2 * Self::WIDTH) / Self::T;
+            src = input[i + 128];
+            tmp |= ((src) & ((1 << 1) - 1)) << 2;
+            output[i + (Self::LANES * 10)] = tmp;
+            tmp = (src >> 1) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 11)] = tmp;
+            tmp = (src >> 4) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 12)] = tmp;
+            tmp = (src >> 7) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 13)] = tmp;
+            tmp = (src >> 10) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 14)] = tmp;
+            tmp = (src >> 13) & ((1 << 3) - 1);
+            output[i + (Self::LANES * 15)] = tmp;
+        }
+    }
+}
+
 // We need to use a macro instead of generic impl since we have to know the bit-width of T ahead
 // of time.
 macro_rules! impl_bitpacking {
     ($T:ty) => {
         paste! {
+            impl FastLanes for $T {}
+
+
             impl<const W: usize> BitPack2<W> for $T
             where
                 Pred<{ W > 0 }>: Satisfied,
                 Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
                 [(); 128 * W / size_of::<Self>()]:,
             {
-                #[inline(never)]
-                #[allow(unused_assignments)]
+                fn bitunpack(input: &[Self; 128 * W / size_of::<Self>()], output: &mut [Self; 1024]) {
+                    todo!()
+                }
+
+                #[inline(never)] // Makes it easier to disassemble and validate ASM.
+                #[allow(unused_assignments)] // Inlined loop gives unused assignment on final iteration
                 fn bitpack<'a>(input: &[Self; 1024], output: &mut [Self; 128 * W / size_of::<Self>()]) {
                     let mask = ((1 << W) - 1);
 
@@ -53,7 +164,7 @@ macro_rules! impl_bitpacking {
                     for i in 0..Self::LANES {
                         let mut tmp: $T = 0;
 
-                        // Now we inline loop over each of the rows of the lane.
+                        // Inlined loop over each of the rows of the lane.
                         seq_type_width!(row in $T {{
                             let src = input[Self::LANES * row + i] & mask;
 
@@ -64,10 +175,12 @@ macro_rules! impl_bitpacking {
                                 tmp |= src << (row * Self::WIDTH) % Self::T;
                             }
 
-                            let curr_out_pos: usize = (row * Self::WIDTH) / Self::T;
-                            let next_out_pos: usize = ((row + 1) * Self::WIDTH) / Self::T;
-                            if next_out_pos > curr_out_pos {
-                                output[Self::LANES * curr_out_pos + i] = tmp;
+                            // If the next input value overlaps with the next output, then we
+                            // write out the tmp variable and bring forward the remaining bits.
+                            let curr_out: usize = (row * Self::WIDTH) / Self::T;
+                            let next_out: usize = ((row + 1) * Self::WIDTH) / Self::T;
+                            if next_out > curr_out {
+                                output[Self::LANES * curr_out + i] = tmp;
 
                                 let remaining_bits: usize = ((row + 1) * Self::WIDTH) % Self::T;
                                 tmp = src >> Self::WIDTH - remaining_bits;
@@ -111,7 +224,7 @@ impl TryBitPack2 for u16 {
 }
 
 impl_bitpacking!(u8);
-impl_bitpacking!(u16);
+// impl_bitpacking!(u16);
 impl_bitpacking!(u32);
 impl_bitpacking!(u64);
 
@@ -140,5 +253,20 @@ mod test {
             }
         }
         assert_eq!(&packed, &packed2);
+    }
+
+    #[test]
+    fn try_unpack() {
+        const WIDTH: usize = 3;
+
+        let values = [3u16; 1024];
+        let mut packed = [0; 192];
+        BitPack2::<WIDTH>::bitpack(&values, &mut packed);
+
+        let mut unpacked = [0; 1024];
+        BitPack2::<WIDTH>::bitunpack(&packed, &mut unpacked);
+
+        println!("Unpacked: {:?}", &unpacked);
+        assert_eq!(&unpacked, &values);
     }
 }
