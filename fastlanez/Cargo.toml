@@ -13,7 +13,16 @@ rust-version.workspace = true
 [dependencies]
 fastlanez-sys = { version = "0.1.0", path = "../fastlanez-sys" }
 arrayref = { workspace = true }
+const_for = "0.1.4"
+unroll = "0.1.5"
 num-traits = { workspace = true }
 paste = { workspace = true }
 seq-macro = { workspace = true }
 uninit = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "fastlanes_bitpacking"
+harness = false
