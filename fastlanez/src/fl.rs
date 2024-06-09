@@ -2,6 +2,7 @@ use std::mem::size_of;
 use std::ops::BitOrAssign;
 
 use arrayref::array_mut_ref;
+use crunchy::unroll;
 use num_traits::{One, PrimInt, Unsigned, Zero};
 use seq_macro::seq;
 
@@ -33,6 +34,7 @@ where
     Pred<{ W < 8 * size_of::<Self>() }>: Satisfied,
     [(); 128 * W / size_of::<Self>()]:,
 {
+    #[inline(never)]
     fn bitpacker<'a>(input: &[Self; 1024], output_bytes: &'a mut [u8; 128 * W]) {
         const ORDER: [u8; 8] = [0, 4, 2, 6, 1, 5, 3, 7];
 
@@ -41,16 +43,21 @@ where
 
         // First we loop over each lane in the virtual 1024 bit word.
         let mut src: T;
-        let mut tmp: T;
+        let mut tmp: T = T::zero();
         for i in 0..Self::LANES {
             // Now we inline loop over each of the rows of the lane.
 
-            tmp = T::zero();
-            for row in 0..Self::T {
+            // tmp = T::zero();
+
+            seq!(row in 0..16 {{ // FIXME
                 src = input[Self::LANES * row + i] & Self::mask();
 
                 // Shift the src bits into their position in the tmp output variable.
-                tmp |= src << (row * Self::WIDTH) % Self::T;
+                if row == 0 {
+                    tmp = src;
+                } else {
+                    tmp |= src << (row * Self::WIDTH) % Self::T;
+                }
 
                 let curr_out: usize = (row * Self::WIDTH) / Self::T;
                 let next_out: usize = ((row + 1) * Self::WIDTH) / Self::T;
@@ -60,7 +67,7 @@ where
                     let remaining_bits: usize = ((row + 1) * Self::WIDTH) % Self::T;
                     tmp = src >> Self::WIDTH - remaining_bits;
                 }
-            }
+            }});
         }
     }
 }
@@ -93,6 +100,10 @@ impl TryBitPack for u16 {
             }
         })
     }
+}
+
+pub fn pack_u16_u3(input: &[u16; 1024], output: &mut [u8; 384]) {
+    BitPack2::<3>::bitpacker(input, output)
 }
 
 #[cfg(test)]

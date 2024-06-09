@@ -14,6 +14,7 @@ rust-version.workspace = true
 fastlanez-sys = { version = "0.1.0", path = "../fastlanez-sys" }
 arrayref = { workspace = true }
 const_for = "0.1.4"
+crunchy = "0.2.2"
 unroll = "0.1.5"
 num-traits = { workspace = true }
 paste = { workspace = true }

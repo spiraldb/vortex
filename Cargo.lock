@@ -1807,6 +1807,7 @@ dependencies = [
  "arrayref",
  "const_for",
  "criterion",
+ "crunchy",
  "fastlanez-sys",
  "num-traits",
  "paste",

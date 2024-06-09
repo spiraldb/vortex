@@ -20,17 +20,6 @@ fn bitpacking(c: &mut Criterion) {
         });
     });
 
-    group.bench_function("pack 16 -> 5", |b| {
-        const WIDTH: usize = 5;
-        let values = [3u16; 1024];
-
-        b.iter(|| {
-            let mut packed = [0u8; 128 * WIDTH];
-            BitPack2::<WIDTH>::bitpacker(&values, &mut packed);
-            black_box(packed);
-        });
-    });
-
     group.bench_function("old pack 16 -> 3", |b| {
         const WIDTH: usize = 3;
         let values = [3u16; 1024];
