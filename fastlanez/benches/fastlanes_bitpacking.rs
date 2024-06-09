@@ -10,14 +10,14 @@ use fastlanez::{BitPack, BitPack2};
 fn bitpacking(c: &mut Criterion) {
     let mut group = c.benchmark_group("bitpacking");
 
-    group.bench_function("pack 8 -> 3", |b| {
+    group.bench_function("pack 16 -> 3", |b| {
         const WIDTH: usize = 3;
-        let values = [3u8; 1024];
+        let values = [3u16; 1024];
 
         let mut packed = vec![0u8; 128 * WIDTH];
 
         b.iter(|| {
-            BitPack2::<WIDTH>::bitpacker(&values, array_mut_ref![packed, 0, 128 * WIDTH]);
+            BitPack2::<WIDTH>::bitpack(&values, array_mut_ref![packed, 0, 128 * WIDTH]);
         });
     });
 
