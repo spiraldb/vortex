@@ -51,7 +51,6 @@ macro_rules! impl_bitpacking {
         paste! {
             impl FastLanes for $T {}
 
-
             impl<const W: usize> BitPack2<W> for $T
             where
                 Pred<{ W > 0 }>: Satisfied,
@@ -60,7 +59,7 @@ macro_rules! impl_bitpacking {
             {
                 #[inline(never)] // Makes it easier to disassemble and validate ASM.
                 #[allow(unused_assignments)] // Inlined loop gives unused assignment on final iteration
-                fn bitpack<'a>(input: &[Self; 1024], output: &mut [Self; 128 * W / size_of::<Self>()]) {
+                fn bitpack(input: &[Self; 1024], output: &mut [Self; 128 * W / size_of::<Self>()]) {
                     let mask = ((1 << W) - 1);
 
                     // First we loop over each lane in the virtual 1024 bit word.
@@ -170,43 +169,32 @@ impl_bitpacking!(u64);
 
 #[cfg(test)]
 mod test {
-    use std::mem::MaybeUninit;
-
     use super::*;
 
-    #[test]
-    fn try_pack() {
-        const WIDTH: usize = 3;
-        let values = [3u16; 1024];
-        let mut packed = [0; 192];
-        BitPack2::<WIDTH>::bitpack(&values, &mut packed);
-        let packed: [u8; 384] = unsafe { std::mem::transmute(packed) };
+    macro_rules! test_round_trip {
+        ($T:ty, $W:literal) => {
+            paste! {
+                #[test]
+                fn [<try_round_trip_ $T _ $W>]() {
+                    let mut values: [$T; 1024] = [0; 1024];
+                    for i in 0..1024 {
+                        values[i] = (i % (1 << $W)) as $T;
+                    }
 
-        let mut packed2 = [MaybeUninit::new(0u8); WIDTH * 128];
-        let packed2 = crate::bitpack::TryBitPack::try_pack(&values, WIDTH, &mut packed2).unwrap();
+                    let mut packed = [0; 128 * $W / size_of::<$T>()];
+                    BitPack2::<$W>::bitpack(&values, &mut packed);
 
-        println!("NEW: {:?}", &packed);
-        println!("OLD: {:?}", &packed2);
-        for i in 0..384 {
-            if packed[i] != packed2[i] {
-                panic!("Hmmm {}", i);
+                    let mut unpacked = [0; 1024];
+                    BitPack2::<$W>::bitunpack(&packed, &mut unpacked);
+
+                    assert_eq!(&unpacked, &values);
+                }
             }
-        }
-        assert_eq!(&packed, &packed2);
+        };
     }
 
-    #[test]
-    fn try_unpack() {
-        const WIDTH: usize = 3;
-
-        let values = [3u16; 1024];
-        let mut packed = [0; 192];
-        BitPack2::<WIDTH>::bitpack(&values, &mut packed);
-
-        let mut unpacked = [0; 1024];
-        BitPack2::<WIDTH>::bitunpack(&packed, &mut unpacked);
-
-        println!("Unpacked: {:?}", &unpacked);
-        assert_eq!(&unpacked, &values);
-    }
+    seq!(W in 1..8 { test_round_trip!(u8, W); });
+    seq!(W in 1..16 { test_round_trip!(u16, W); });
+    seq!(W in 1..32 { test_round_trip!(u32, W); });
+    seq!(W in 1..64 { test_round_trip!(u64, W); });
 }
