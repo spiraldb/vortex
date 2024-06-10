@@ -1,16 +1,13 @@
-use vortex::compute::as_contiguous::AsContiguousFn;
+use vortex::{Array, IntoArray};
+use vortex::compute::ArrayCompute;
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
-use vortex::compute::ArrayCompute;
-use vortex::{impl_default_as_contiguous_fn, Array, IntoArray};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{PrimitiveScalar, Scalar, ScalarValue};
 
 use crate::FoRArray;
-
-impl_default_as_contiguous_fn!(FoRArray);
 
 impl ArrayCompute for FoRArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -24,10 +21,6 @@ impl ArrayCompute for FoRArray {
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
-        Some(self)
-    }
 }
 
 impl TakeFn for FoRArray {
@@ -37,7 +30,7 @@ impl TakeFn for FoRArray {
             self.reference().clone(),
             self.shift(),
         )
-        .map(|a| a.into_array())
+            .map(|a| a.into_array())
     }
 }
 
@@ -67,7 +60,7 @@ impl SliceFn for FoRArray {
             self.reference().clone(),
             self.shift(),
         )
-        .map(|a| a.into_array())
+            .map(|a| a.into_array())
     }
 }
 
@@ -75,7 +68,6 @@ impl SliceFn for FoRArray {
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compress::{Compressor, EncodingCompression};
-    use vortex::compute::as_contiguous::as_contiguous;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::Context;
 
@@ -93,32 +85,5 @@ mod test {
         assert_eq!(scalar_at(&forarr, 0).unwrap(), 11.into());
         assert_eq!(scalar_at(&forarr, 1).unwrap(), 15.into());
         assert_eq!(scalar_at(&forarr, 2).unwrap(), 19.into());
-    }
-
-    #[test]
-    fn for_as_contiguous() {
-        let forarr1 = FoREncoding
-            .compress(
-                PrimitiveArray::from(vec![1, 2, 3, 4]).array(),
-                None,
-                Compressor::new(&Context::default()),
-            )
-            .unwrap();
-        let forarr2 = FoREncoding
-            .compress(
-                PrimitiveArray::from(vec![5, 6, 7, 8]).array(),
-                None,
-                Compressor::new(&Context::default()),
-            )
-            .unwrap();
-
-        let flattened = as_contiguous(&[forarr1, forarr2]).unwrap();
-
-        [1, 2, 3, 4, 5, 6, 7, 8]
-            .iter()
-            .enumerate()
-            .for_each(|(idx, value)| {
-                assert_eq!(scalar_at(&flattened, idx).unwrap(), (*value).into());
-            });
     }
 }

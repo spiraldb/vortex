@@ -1,15 +1,12 @@
-use vortex::compute::as_contiguous::AsContiguousFn;
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{impl_default_as_contiguous_fn, Array, ArrayDType, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::{match_each_alp_float_ptype, ALPArray};
-
-impl_default_as_contiguous_fn!(ALPArray);
 
 impl ArrayCompute for ALPArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -21,10 +18,6 @@ impl ArrayCompute for ALPArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
-        Some(self)
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
 }
@@ -72,7 +65,6 @@ impl SliceFn for ALPArray {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::as_contiguous::AsContiguousFn;
     use vortex::compute::scalar_at::scalar_at;
     use vortex::validity::Validity;
     use vortex::IntoArray;

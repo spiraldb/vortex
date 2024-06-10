@@ -1,24 +1,26 @@
 use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+
 use vortex_dtype::{Nullability, PType};
 use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
+use crate::{ArrayDType, ArrayFlatten, impl_encoding, IntoArrayData, ToArrayData};
+use crate::array::chunked::flatten::try_flatten_chunks;
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
-use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
+use crate::validity::Validity::NonNullable;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, ToArrayData};
 
 mod compute;
 mod stats;
+mod flatten;
 
 impl_encoding!("vortex.chunked", Chunked);
 
@@ -116,12 +118,7 @@ impl FromIterator<Array> for ChunkedArray {
 
 impl ArrayFlatten for ChunkedArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        let chunks = self.chunks().collect_vec();
-        if chunks.is_empty() {
-            // TODO(ngates): return an empty FlattenedArray with the correct DType.
-            panic!("Cannot yet flatten an empty chunked array");
-        }
-        as_contiguous(chunks.as_slice())?.flatten()
+        try_flatten_chunks(self.chunks().collect(), self.dtype().clone())
     }
 }
 
@@ -171,10 +168,10 @@ mod test {
     use vortex_dtype::{DType, Nullability};
     use vortex_dtype::{NativePType, PType};
 
+    use crate::{Array, IntoArray, ToArray};
     use crate::array::chunked::ChunkedArray;
     use crate::compute::scalar_subtract::subtract_scalar;
     use crate::compute::slice::slice;
-    use crate::{Array, IntoArray, ToArray};
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(

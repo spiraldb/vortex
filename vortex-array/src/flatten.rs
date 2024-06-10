@@ -19,10 +19,9 @@ pub enum Flattened {
     Extension(ExtensionArray),
 }
 
-/// Support trait for decompressing arrays that have been encoded via a [crate::compress::Compressor].
+/// Support trait for transmuting an array into its [vortex_dtype::DType]'s canonical encoding.
 ///
-/// A flattened array is a copying operation, returning new memory holding the same data in
-/// its simplest form.
+/// Flattening an Array ensures that the array's encoding matches one of the builtin
 ///
 /// DType remains the same before and after a flatten operation.
 pub trait ArrayFlatten {
@@ -32,6 +31,10 @@ pub trait ArrayFlatten {
 impl Array {
     pub fn flatten(self) -> VortexResult<Flattened> {
         ArrayEncoding::flatten(self.encoding(), self)
+    }
+
+    pub fn flatten_extension(self) -> VortexResult<ExtensionArray> {
+        ExtensionArray::try_from(self.flatten()?.into_array())
     }
 
     pub fn flatten_bool(self) -> VortexResult<BoolArray> {

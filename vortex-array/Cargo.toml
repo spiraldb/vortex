@@ -15,8 +15,8 @@ rust-version = { workspace = true }
 name = "vortex"
 path = "src/lib.rs"
 
-[lints]
-workspace = true
+#[lints]
+#workspace = true
 
 [dependencies]
 arrow-array = { workspace = true }

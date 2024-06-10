@@ -2,8 +2,10 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
 use log::{debug, info, warn};
+
 use vortex_error::{vortex_bail, VortexResult};
 
+use crate::{Array, ArrayDef, ArrayDType, ArrayFlatten, ArrayTrait, Context, IntoArray};
 use crate::array::chunked::{Chunked, ChunkedArray};
 use crate::array::constant::{Constant, ConstantArray};
 use crate::array::r#struct::{Struct, StructArray};
@@ -13,7 +15,6 @@ use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::sampling::stratified_slices;
 use crate::stats::ArrayStatistics;
 use crate::validity::Validity;
-use crate::{compute, Array, ArrayDType, ArrayDef, ArrayTrait, Context, IntoArray};
 
 pub trait EncodingCompression: ArrayEncoding {
     fn cost(&self) -> u8 {
@@ -203,7 +204,7 @@ impl<'a> Compressor<'a> {
                     strct.len(),
                     validity,
                 )?
-                .into_array())
+                    .into_array())
             }
             _ => {
                 // Otherwise, we run sampled compression over pluggable encodings
@@ -311,16 +312,18 @@ pub fn sampled_compression(array: &Array, compressor: &Compressor) -> VortexResu
     }
 
     // Take a sample of the array, then ask codecs for their best compression estimate.
-    let sample = compute::as_contiguous::as_contiguous(
-        &stratified_slices(
+    let sample = ChunkedArray::try_new(
+        stratified_slices(
             array.len(),
             compressor.options.sample_size,
             compressor.options.sample_count,
         )
-        .into_iter()
-        .map(|(start, stop)| slice(array, start, stop).unwrap())
-        .collect::<Vec<_>>(),
-    )?;
+            .into_iter()
+            .map(|(start, stop)| slice(array, start, stop))
+            .collect::<VortexResult<Vec<Array>>>()?,
+        array.dtype().clone())?
+        .flatten()?
+        .into_array();
 
     find_best_compression(candidates, &sample, compressor)?
         .map(|(compression, best)| {

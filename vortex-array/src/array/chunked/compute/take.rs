@@ -55,7 +55,6 @@ mod test {
     use itertools::Itertools;
 
     use crate::array::chunked::ChunkedArray;
-    use crate::compute::as_contiguous::as_contiguous;
     use crate::compute::take::take;
     use crate::{ArrayDType, ArrayTrait, AsArray, IntoArray};
 

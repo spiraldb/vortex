@@ -1,15 +1,15 @@
-use arrow_buffer::{BooleanBuffer, NullBuffer};
+use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
 use serde::{Deserialize, Serialize};
+
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 
+use crate::{Array, ArrayData, IntoArray, IntoArrayData, ToArray, ToArrayData};
 use crate::array::bool::BoolArray;
-use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::compute::take::take;
 use crate::stats::ArrayStatistics;
-use crate::{Array, ArrayData, IntoArray, IntoArrayData, ToArray, ToArrayData};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -196,17 +196,17 @@ impl FromIterator<LogicalValidity> for Validity {
             return Self::AllInvalid;
         }
 
-        // Otherwise, map each to a bool array and concatenate them.
-        let arrays = validities
-            .iter()
-            .map(|v| {
-                v.to_present_null_buffer()
-                    .unwrap()
-                    .into_array_data()
-                    .into_array()
-            })
-            .collect::<Vec<_>>();
-        Self::Array(as_contiguous(&arrays).unwrap())
+        // Else, construct the boolean buffer
+        let mut buffer = BooleanBufferBuilder::new(validities.iter().map(|v| v.len()).sum());
+        for validity in validities {
+            let present = validity.to_present_null_buffer()
+                .expect("Validity should expose NullBuffer")
+                .into_inner();
+            buffer.append_buffer(&present);
+        }
+        let bool_array = BoolArray::try_new(buffer.finish(), Validity::NonNullable)
+            .expect("BoolArray::try_new from BooleanBuffer should always succeed");
+        Self::Array(bool_array.into_array())
     }
 }
 

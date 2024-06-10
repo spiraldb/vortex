@@ -1,12 +1,11 @@
 use vortex::array::datetime::{try_parse_time_unit, LocalDateTimeArray, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
 use vortex::validity::ArrayValidity;
-use vortex::{Array, ArrayDType, ArrayFlatten, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -14,19 +13,15 @@ use vortex_scalar::Scalar;
 use crate::DateTimePartsArray;
 
 impl ArrayCompute for DateTimePartsArray {
+    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
     fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
-        Some(self)
-    }
-
-    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
-        Some(self)
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
 }
@@ -140,35 +135,6 @@ pub fn decode_to_localdatetime(array: &Array) -> VortexResult<LocalDateTimeArray
         time_unit,
         PrimitiveArray::from_vec(values, array.logical_validity().into_validity()).into_array(),
     )
-}
-
-impl AsContiguousFn for DateTimePartsArray {
-    /// A contiguous representation of a DateTimePartsArray will map it back into the original
-    /// source type that it was decomposed from.
-    ///
-    /// Returns a [LocalDateTimeArray] containing timestamps at the granularity determined
-    /// by its DType.
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
-        let dtype = self.dtype().clone();
-
-        if !arrays
-            .iter()
-            .map(|array| array.dtype().clone())
-            .all(|dty| dty == dtype)
-        {
-            vortex_bail!(ComputeError: "mismatched dtypes in call to as_contiguous");
-        }
-
-        let mut chunks = Vec::with_capacity(arrays.len());
-
-        for array in arrays {
-            let dt_parts = Self::try_from(array)?;
-            chunks.push(dt_parts.flatten()?.into_array());
-        }
-
-        // Reduces down to as_contiguous on the flattened variants.
-        as_contiguous(chunks.as_slice())
-    }
 }
 
 #[cfg(test)]

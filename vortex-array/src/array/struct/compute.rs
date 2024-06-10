@@ -10,20 +10,14 @@ use vortex_scalar::Scalar;
 
 use crate::array::r#struct::StructArray;
 use crate::compute::as_arrow::{as_arrow, AsArrowArray};
-use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::validity::Validity;
 use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for StructArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        Some(self)
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
 
@@ -65,53 +59,6 @@ impl AsArrowArray for StructArray {
             field_arrays,
             None,
         )))
-    }
-}
-
-impl AsContiguousFn for StructArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
-        let struct_arrays = arrays
-            .iter()
-            .map(Self::try_from)
-            .collect::<VortexResult<Vec<_>>>()?;
-        let mut fields = vec![Vec::new(); self.dtypes().len()];
-        for array in struct_arrays.iter() {
-            for (f, field) in fields.iter_mut().enumerate() {
-                field.push(array.field(f).unwrap());
-            }
-        }
-
-        let fields_len = fields
-            .first()
-            .map(|field| field.iter().map(|a| a.len()).sum())
-            .unwrap_or_default();
-
-        let validity = if self.dtype().is_nullable() {
-            Validity::from_iter(arrays.iter().map(|a| a.with_dyn(|a| a.logical_validity())))
-        } else {
-            Validity::NonNullable
-        };
-
-        Self::try_new(
-            self.names().clone(),
-            fields
-                .iter()
-                .map(|field_arrays| {
-                    // Currently, as_contiguous cannot handle sub-arrays with differing encodings.
-                    // So, first flatten each constituent array, then as_contiguous them back into
-                    // a single array.
-                    let flattened = field_arrays
-                        .iter()
-                        .cloned()
-                        .map(|array| array.flatten().unwrap().into_array())
-                        .collect::<Vec<_>>();
-                    as_contiguous(flattened.as_slice())
-                })
-                .try_collect()?,
-            fields_len,
-            validity,
-        )
-        .map(|a| a.into_array())
     }
 }
 

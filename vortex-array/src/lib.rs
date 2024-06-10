@@ -1,3 +1,13 @@
+//! Core Array and Encoding crate for Vortex.
+//!
+//! At the heart of Vortex are [Arrays](Array) and [encodings](crate::encoding::EncodingCompression).
+//! Arrays are typed views of memory buffers that hold [scalars](vortex_scalar::Scalar). Every data
+//! type recognized by Vortex has a canonical physical encoding format, examples of which are
+//! [crate::array::bool::BoolEncoding] and [crate::array::primitive::PrimitiveEncoding].
+//!
+//! Vortex also supports a number of encodings backed by the latest databases research, including
+//!
+//!
 pub mod accessor;
 pub mod array;
 pub mod arrow;

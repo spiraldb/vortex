@@ -1,15 +1,12 @@
-use vortex::compute::as_contiguous::AsContiguousFn;
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{impl_default_as_contiguous_fn, Array, IntoArray};
+use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::DictArray;
-
-impl_default_as_contiguous_fn!(DictArray);
 
 impl ArrayCompute for DictArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -21,10 +18,6 @@ impl ArrayCompute for DictArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
-        Some(self)
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
 }
