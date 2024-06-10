@@ -33,9 +33,9 @@ fn bitpacking(c: &mut Criterion) {
         group.bench_function("old pack 16 -> 3", |b| {
             const WIDTH: usize = 3;
             let values = [3u16; 1024];
+            let mut packed = [MaybeUninit::new(0u8); 128 * WIDTH];
 
             b.iter(|| {
-                let mut packed = [MaybeUninit::new(0u8); 128 * WIDTH];
                 black_box(BitPack::<WIDTH>::pack(&values, &mut packed));
             });
         });
@@ -43,7 +43,7 @@ fn bitpacking(c: &mut Criterion) {
 
     {
         let mut group = c.benchmark_group("bit-unpacking");
-        group.bench_function("unpack 16 <- 3 heap", |b| {
+        group.bench_function("unpack 16 <- 3 stack", |b| {
             const WIDTH: usize = 3;
             let values = [3u16; 1024];
             let mut packed = [0; 128 * WIDTH / size_of::<u16>()];
@@ -51,6 +51,34 @@ fn bitpacking(c: &mut Criterion) {
 
             let mut unpacked = [0u16; 1024];
             b.iter(|| BitPack2::<WIDTH>::bitunpack(&packed, &mut unpacked));
+        });
+    }
+
+    {
+        let mut group = c.benchmark_group("unpack-single");
+        group.bench_function("unpack single 16 <- 3", |b| {
+            const WIDTH: usize = 3;
+            let values = [3u16; 1024];
+            let mut packed = [0; 128 * WIDTH / size_of::<u16>()];
+            BitPack2::<WIDTH>::bitpack(&values, &mut packed);
+
+            b.iter(|| {
+                for i in 0..1024 {
+                    black_box::<u16>(BitPack2::<WIDTH>::bitunpack_single(&packed, i));
+                }
+            });
+        });
+        group.bench_function("unpack single old 16 <- 3", |b| {
+            const WIDTH: usize = 3;
+            let values = [3u16; 1024];
+            let mut packed = [MaybeUninit::new(0u8); 128 * WIDTH];
+            let packed = BitPack::<WIDTH>::pack(&values, &mut packed);
+
+            b.iter(|| {
+                for i in 0..1024 {
+                    black_box::<u16>(BitPack::<WIDTH>::unpack_single(&packed, i));
+                }
+            });
         });
     }
 }

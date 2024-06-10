@@ -29,6 +29,8 @@ where
 
     /// Unpacks W-bit elements into 1024 elements.
     fn bitunpack(input: &[Self; 128 * W / size_of::<Self>()], output: &mut [Self; 1024]);
+
+    fn bitunpack_single(input: &[Self; 128 * W / size_of::<Self>()], index: usize) -> Self;
 }
 
 // Macro for repeating a code block bit_size_of::<T> times.
@@ -60,7 +62,7 @@ macro_rules! impl_bitpacking {
                 #[inline(never)] // Makes it easier to disassemble and validate ASM.
                 #[allow(unused_assignments)] // Inlined loop gives unused assignment on final iteration
                 fn bitpack(input: &[Self; 1024], output: &mut [Self; 128 * W / size_of::<Self>()]) {
-                    let mask = ((1 << W) - 1);
+                    let mask = (1 << W) - 1;
 
                     // First we loop over each lane in the virtual 1024 bit word.
                     for i in 0..Self::LANES {
@@ -93,7 +95,7 @@ macro_rules! impl_bitpacking {
                     }
                 }
 
-                #[inline(never)] // Makes it easier to disassemble and validate ASM.
+                #[inline(never)]
                 fn bitunpack(input: &[Self; 128 * W / size_of::<Self>()], output: &mut [Self; 1024]) {
                     for i in 0..Self::LANES {
                         let mut src = input[i];
@@ -125,6 +127,34 @@ macro_rules! impl_bitpacking {
                             // Write out the unpacked value
                             output[(Self::LANES * row) + i] = tmp;
                         }});
+                    }
+                }
+
+                #[inline(never)]
+                fn bitunpack_single(input: &[Self; 128 * W / size_of::<Self>()], index: usize) -> Self {
+                    let lane_index = index % Self::LANES;
+                    let lane_start_bit = (index / Self::LANES) * Self::WIDTH;
+
+                    let (lsb, msb) = {
+                        // the value may be split across two words
+                        let lane_start_word = lane_start_bit / Self::T;
+                        let lane_end_word = (lane_start_bit + Self::WIDTH - 1) / Self::T;
+
+                        (
+                            input[lane_start_word * Self::LANES + lane_index],
+                            input[lane_end_word * Self::LANES + lane_index], // this may be a duplicate
+                        )
+                    };
+
+                    let shift = lane_start_bit % Self::T;
+                    if shift == 0 {
+                        (lsb >> shift) & mask::<Self>(Self::WIDTH)
+                    } else {
+                        // If shift == 0, then this shift overflows, instead of shifting to zero.
+                        // This forces us to introduce a branch. Any way to avoid?
+                        let hi = msb << (Self::T - shift);
+                        let lo = (lsb >> shift);
+                        (lo | hi) & mask::<Self>(Self::WIDTH)
                     }
                 }
             }
@@ -188,6 +218,21 @@ mod test {
                     BitPack2::<$W>::bitunpack(&packed, &mut unpacked);
 
                     assert_eq!(&unpacked, &values);
+                }
+
+                #[test]
+                fn [<try_unpack_single_ $T _ $W>]() {
+                    let mut values: [$T; 1024] = [0; 1024];
+                    for i in 0..1024 {
+                        values[i] = (i % (1 << $W)) as $T;
+                    }
+
+                    let mut packed = [0; 128 * $W / size_of::<$T>()];
+                    BitPack2::<$W>::bitpack(&values, &mut packed);
+
+                    for (idx, value) in values.into_iter().enumerate() {
+                        assert_eq!(BitPack2::<$W>::bitunpack_single(&packed, idx), value);
+                    }
                 }
             }
         };

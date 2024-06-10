@@ -118,7 +118,7 @@ macro_rules! bitpack_impl {
                         }
                     }
 
-                    #[inline]
+                    #[inline(never)]
                     fn unpack_single(
                         input: &[u8; 128 * W],
                         index: usize
@@ -233,6 +233,19 @@ mod test {
 
         input.iter().enumerate().for_each(|(i, v)| {
             let decoded = u32::try_unpack_single(&output, 10, i).unwrap();
+            assert_eq!(decoded, *v);
+        });
+    }
+
+    #[test]
+    fn test_unpack_single2() {
+        let input = (0u16..1024).collect::<Vec<_>>();
+        let mut output = Vec::new();
+        TryBitPack::try_pack_into(array_ref![input, 0, 1024], 11, &mut output).unwrap();
+        assert_eq!(output.len(), 1408);
+
+        input.iter().enumerate().for_each(|(i, v)| {
+            let decoded = u16::try_unpack_single(&output, 11, i).unwrap();
             assert_eq!(decoded, *v);
         });
     }
