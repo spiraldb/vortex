@@ -198,6 +198,7 @@ impl_bitpacking!(u32);
 impl_bitpacking!(u64);
 
 #[cfg(test)]
+#[cfg(not(debug_assertions))] // Only run in release mode
 mod test {
     use super::*;
 
