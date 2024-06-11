@@ -121,7 +121,6 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::compute::take_map;
     use crate::array::sparse::SparseArray;
-    use crate::compute::slice::slice;
     use crate::compute::take::take;
     use crate::validity::Validity;
 
@@ -179,39 +178,6 @@ mod test {
             [0.47f64]
         );
         assert_eq!(taken.len(), 2);
-    }
-
-    #[test]
-    fn take_slices_and_reassemble() {
-        let sparse = sparse_array();
-        let slices = (0..10)
-            .map(|i| slice(&sparse, i * 10, (i + 1) * 10).unwrap())
-            .collect_vec();
-
-        let taken = slices
-            .iter()
-            .map(|s| take(s, &(0u64..10).collect_vec().into_array()).unwrap())
-            .collect_vec();
-        for i in [1, 2, 5, 6, 7, 8] {
-            assert_eq!(SparseArray::try_from(&taken[i]).unwrap().indices().len(), 0);
-        }
-        for i in [0, 3, 4, 9] {
-            assert_eq!(SparseArray::try_from(&taken[i]).unwrap().indices().len(), 1);
-        }
-
-        let contiguous = SparseArray::try_from(as_contiguous(&taken).unwrap()).unwrap();
-        assert_eq!(
-            contiguous.indices().into_primitive().typed_data::<u64>(),
-            [0u64, 7, 7, 9] // relative offsets
-        );
-        assert_eq!(
-            contiguous.values().into_primitive().typed_data::<f64>(),
-            SparseArray::try_from(sparse)
-                .unwrap()
-                .values()
-                .into_primitive()
-                .typed_data::<f64>()
-        );
     }
 
     #[test]

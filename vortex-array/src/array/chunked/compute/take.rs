@@ -52,8 +52,6 @@ impl TakeFn for ChunkedArray {
 
 #[cfg(test)]
 mod test {
-    use itertools::Itertools;
-
     use crate::array::chunked::ChunkedArray;
     use crate::compute::take::take;
     use crate::{ArrayDType, ArrayTrait, AsArray, IntoArray};
@@ -67,14 +65,12 @@ mod test {
         assert_eq!(arr.len(), 9);
         let indices = vec![0, 0, 6, 4].into_array();
 
-        let result = as_contiguous(
+        let result =
             &ChunkedArray::try_from(take(arr.as_array_ref(), &indices).unwrap())
                 .unwrap()
-                .chunks()
-                .collect_vec(),
-        )
-        .unwrap()
-        .into_primitive();
+                .into_array()
+                .flatten_primitive()
+                .unwrap();
         assert_eq!(result.typed_data::<i32>(), &[1, 1, 1, 2]);
     }
 }

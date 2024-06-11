@@ -199,9 +199,17 @@ impl FromIterator<LogicalValidity> for Validity {
         // Else, construct the boolean buffer
         let mut buffer = BooleanBufferBuilder::new(validities.iter().map(|v| v.len()).sum());
         for validity in validities {
-            let present = validity.to_present_null_buffer()
-                .expect("Validity should expose NullBuffer")
-                .into_inner();
+            let present = match validity {
+                LogicalValidity::AllValid(count) => {
+                    BooleanBuffer::new_set(count)
+                }
+                LogicalValidity::AllInvalid(count) => {
+                    BooleanBuffer::new_unset(count)
+                }
+                LogicalValidity::Array(array) => {
+                    array.into_array().flatten_bool().expect("validity must flatten to BoolArray").boolean_buffer()
+                }
+            };
             buffer.append_buffer(&present);
         }
         let bool_array = BoolArray::try_new(buffer.finish(), Validity::NonNullable)

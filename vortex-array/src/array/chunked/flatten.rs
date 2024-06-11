@@ -23,7 +23,7 @@ impl ArrayFlatten for ChunkedArray {
     }
 }
 
-pub fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Flattened> {
+pub(crate) fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Flattened> {
     let mismatched = chunks.iter()
         .filter(|chunk| !chunk.dtype().eq(&dtype))
         .collect::<Vec<_>>();

@@ -61,32 +61,3 @@ impl SliceFn for ALPArray {
         .into_array())
     }
 }
-
-#[cfg(test)]
-mod test {
-    use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::scalar_at::scalar_at;
-    use vortex::validity::Validity;
-    use vortex::IntoArray;
-
-    use crate::ALPArray;
-
-    #[test]
-    fn test_as_contiguous() {
-        let values = vec![1.0, 2.0, 3.0];
-        let primitives = PrimitiveArray::from_vec(values, Validity::NonNullable);
-        let encoded = ALPArray::encode(primitives.into_array()).unwrap();
-        let alp = ALPArray::try_from(&encoded).unwrap();
-
-        let flat = alp.as_contiguous(&[encoded]).unwrap();
-
-        let a: f64 = scalar_at(&flat, 0).unwrap().try_into().unwrap();
-        let b: f64 = scalar_at(&flat, 1).unwrap().try_into().unwrap();
-
-        let c: f64 = scalar_at(&flat, 2).unwrap().try_into().unwrap();
-
-        assert_eq!(a, 1.0);
-        assert_eq!(b, 2.0);
-        assert_eq!(c, 3.0);
-    }
-}
