@@ -111,12 +111,12 @@ fn swizzle_struct_chunks(
         field_arrays.push(field_array.into_array());
     }
 
-    Ok(StructArray::try_new(
+    StructArray::try_new(
         struct_dtype.names().clone(),
         field_arrays,
         len,
         validity,
-    )?)
+    )
 }
 
 /// Builds a new [BoolArray] by repacking the values from the chunks in a single contiguous array.
