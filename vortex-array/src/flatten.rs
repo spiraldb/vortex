@@ -8,9 +8,11 @@ use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::encoding::ArrayEncoding;
 use crate::{Array, IntoArray};
+use crate::array::constant::ConstantArray;
 
 /// The set of encodings that can be converted to Arrow with zero-copy.
 pub enum Flattened {
+    Null(ConstantArray),
     Bool(BoolArray),
     Primitive(PrimitiveArray),
     Struct(StructArray),
@@ -54,6 +56,7 @@ impl Array {
 impl IntoArray for Flattened {
     fn into_array(self) -> Array {
         match self {
+            Self::Null(a) => a.into_array(),
             Self::Bool(a) => a.into_array(),
             Self::Primitive(a) => a.into_array(),
             Self::Struct(a) => a.into_array(),
