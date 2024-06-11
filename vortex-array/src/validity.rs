@@ -1,15 +1,14 @@
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
 use serde::{Deserialize, Serialize};
-
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::{Array, ArrayData, IntoArray, IntoArrayData, ToArray, ToArrayData};
 use crate::array::bool::BoolArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::compute::take::take;
 use crate::stats::ArrayStatistics;
+use crate::{Array, ArrayData, IntoArray, IntoArrayData, ToArray, ToArrayData};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -200,15 +199,13 @@ impl FromIterator<LogicalValidity> for Validity {
         let mut buffer = BooleanBufferBuilder::new(validities.iter().map(|v| v.len()).sum());
         for validity in validities {
             let present = match validity {
-                LogicalValidity::AllValid(count) => {
-                    BooleanBuffer::new_set(count)
-                }
-                LogicalValidity::AllInvalid(count) => {
-                    BooleanBuffer::new_unset(count)
-                }
-                LogicalValidity::Array(array) => {
-                    array.into_array().flatten_bool().expect("validity must flatten to BoolArray").boolean_buffer()
-                }
+                LogicalValidity::AllValid(count) => BooleanBuffer::new_set(count),
+                LogicalValidity::AllInvalid(count) => BooleanBuffer::new_unset(count),
+                LogicalValidity::Array(array) => array
+                    .into_array()
+                    .flatten_bool()
+                    .expect("validity must flatten to BoolArray")
+                    .boolean_buffer(),
             };
             buffer.append_buffer(&present);
         }

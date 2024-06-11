@@ -1,18 +1,17 @@
 use std::collections::HashMap;
 
 use itertools::Itertools;
-
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
-use crate::{Array, ArrayDType, IntoArray};
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
-use crate::compute::ArrayCompute;
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
+use crate::compute::ArrayCompute;
+use crate::{Array, ArrayDType, IntoArray};
 
 mod slice;
 
@@ -113,16 +112,15 @@ fn take_search_sorted(
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-
     use vortex_dtype::{DType, Nullability, PType};
     use vortex_scalar::Scalar;
 
-    use crate::{Array, ArrayTrait, IntoArray};
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::compute::take_map;
     use crate::array::sparse::SparseArray;
     use crate::compute::take::take;
     use crate::validity::Validity;
+    use crate::{Array, ArrayTrait, IntoArray};
 
     fn sparse_array() -> Array {
         SparseArray::new(

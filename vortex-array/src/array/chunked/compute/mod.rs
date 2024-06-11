@@ -2,11 +2,11 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
-use crate::compute::ArrayCompute;
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::scalar_subtract::SubtractScalarFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
+use crate::compute::ArrayCompute;
 
 mod slice;
 mod take;

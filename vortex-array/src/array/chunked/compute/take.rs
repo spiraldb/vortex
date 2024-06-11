@@ -65,12 +65,11 @@ mod test {
         assert_eq!(arr.len(), 9);
         let indices = vec![0, 0, 6, 4].into_array();
 
-        let result =
-            &ChunkedArray::try_from(take(arr.as_array_ref(), &indices).unwrap())
-                .unwrap()
-                .into_array()
-                .flatten_primitive()
-                .unwrap();
+        let result = &ChunkedArray::try_from(take(arr.as_array_ref(), &indices).unwrap())
+            .unwrap()
+            .into_array()
+            .flatten_primitive()
+            .unwrap();
         assert_eq!(result.typed_data::<i32>(), &[1, 1, 1, 2]);
     }
 }

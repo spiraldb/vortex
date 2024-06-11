@@ -53,7 +53,7 @@ impl StructArray {
 }
 
 impl<'a> StructArray {
-    pub fn children(&'a self) -> impl Iterator<Item=Array> + '_ {
+    pub fn children(&'a self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nfields()).map(move |idx| self.field(idx).unwrap())
     }
 }

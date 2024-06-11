@@ -1,11 +1,11 @@
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
-use crate::{Array, IntoArray};
 use crate::array::constant::ConstantArray;
-use crate::compute::ArrayCompute;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
+use crate::compute::ArrayCompute;
+use crate::{Array, IntoArray};
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {

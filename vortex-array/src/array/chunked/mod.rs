@@ -1,25 +1,24 @@
 use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-
 use vortex_dtype::{Nullability, PType};
 use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
-use crate::{ArrayDType, impl_encoding, IntoArrayData, ToArrayData};
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
-use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::validity::Validity::NonNullable;
+use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::{impl_encoding, ArrayDType, IntoArrayData, ToArrayData};
 
 mod compute;
-mod stats;
 mod flatten;
+mod stats;
 
 impl_encoding!("vortex.chunked", Chunked);
 
@@ -161,10 +160,10 @@ mod test {
     use vortex_dtype::{DType, Nullability};
     use vortex_dtype::{NativePType, PType};
 
-    use crate::{Array, IntoArray, ToArray};
     use crate::array::chunked::ChunkedArray;
     use crate::compute::scalar_subtract::subtract_scalar;
     use crate::compute::slice::slice;
+    use crate::{Array, IntoArray, ToArray};
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(

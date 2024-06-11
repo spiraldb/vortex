@@ -1,8 +1,8 @@
-use vortex::{Array, IntoArray};
-use vortex::compute::ArrayCompute;
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
+use vortex::compute::ArrayCompute;
+use vortex::{Array, IntoArray};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{PrimitiveScalar, Scalar, ScalarValue};
@@ -30,7 +30,7 @@ impl TakeFn for FoRArray {
             self.reference().clone(),
             self.shift(),
         )
-            .map(|a| a.into_array())
+        .map(|a| a.into_array())
     }
 }
 
@@ -60,7 +60,7 @@ impl SliceFn for FoRArray {
             self.reference().clone(),
             self.shift(),
         )
-            .map(|a| a.into_array())
+        .map(|a| a.into_array())
     }
 }
 
