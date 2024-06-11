@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
-use std::sync::Arc;
 
 use enum_iterator::Sequence;
 pub use statsset::*;
@@ -55,8 +54,6 @@ pub trait Statistics {
     /// Computes the value of the stat if it's not present
     fn compute(&self, stat: Stat) -> Option<Scalar>;
 }
-
-pub type StatisticsRef = Arc<dyn Statistics>;
 
 pub struct EmptyStatistics;
 
