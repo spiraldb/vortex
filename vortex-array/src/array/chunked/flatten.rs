@@ -13,7 +13,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
-use crate::validity::{LogicalValidity, Validity};
+use crate::validity::Validity;
 use crate::{Array, ArrayDType, ArrayFlatten, ArrayTrait, ArrayValidity, Flattened, IntoArray};
 
 impl ArrayFlatten for ChunkedArray {
@@ -120,18 +120,14 @@ fn swizzle_struct_chunks(
 /// been checked to have the same DType already.
 fn pack_bools(chunks: &[Array], nullability: Nullability) -> VortexResult<BoolArray> {
     let len = chunks.iter().map(|chunk| chunk.len()).sum();
-    let mut logical_validities = Vec::new();
+    let validity = validity_from_chunks(chunks, nullability);
     let mut bools = Vec::with_capacity(len);
     for chunk in chunks {
         let chunk = chunk.clone().flatten_bool()?;
-        logical_validities.push(chunk.logical_validity());
         bools.extend(chunk.boolean_buffer().iter());
     }
 
-    BoolArray::try_new(
-        BooleanBuffer::from(bools),
-        validity_from_chunks(logical_validities, nullability),
-    )
+    BoolArray::try_new(BooleanBuffer::from(bools), validity)
 }
 
 /// Builds a new [PrimitiveArray] by repacking the values from the chunks into a single
@@ -145,18 +141,17 @@ fn pack_primitives(
     nullability: Nullability,
 ) -> VortexResult<PrimitiveArray> {
     let len: usize = chunks.iter().map(|chunk| chunk.len()).sum();
-    let mut logical_validities = Vec::new();
+    let validity = validity_from_chunks(chunks, nullability);
     let mut buffer = MutableBuffer::with_capacity(len * ptype.byte_width());
     for chunk in chunks {
         let chunk = chunk.clone().flatten_primitive()?;
-        logical_validities.push(chunk.logical_validity());
         buffer.extend_from_slice(chunk.buffer());
     }
 
     match_each_native_ptype!(ptype, |$T| {
         Ok(PrimitiveArray::try_new(
             ScalarBuffer::<$T>::from(buffer),
-            validity_from_chunks(logical_validities, nullability))?)
+            validity)?)
     })
 }
 
@@ -185,13 +180,13 @@ fn pack_varbin(
     Ok(builder.finish(dtype.clone()))
 }
 
-fn validity_from_chunks(
-    logical_validities: Vec<LogicalValidity>,
-    nullability: Nullability,
-) -> Validity {
+fn validity_from_chunks(chunks: &[Array], nullability: Nullability) -> Validity {
     if nullability == Nullability::NonNullable {
         Validity::NonNullable
     } else {
-        logical_validities.into_iter().collect()
+        chunks
+            .iter()
+            .map(|chunk| chunk.with_dyn(|a| a.logical_validity()))
+            .collect()
     }
 }

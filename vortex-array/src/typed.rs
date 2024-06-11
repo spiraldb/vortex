@@ -48,7 +48,11 @@ impl<D: ArrayDef> TryFrom<Array> for TypedArray<D> {
 
     fn try_from(array: Array) -> Result<Self, Self::Error> {
         if array.encoding().id() != D::ENCODING.id() {
-            vortex_bail!("incorrect encoding");
+            vortex_bail!(
+                "incorrect encoding {}, expected {}",
+                array.encoding().id().as_ref(),
+                D::ENCODING.id().as_ref(),
+            );
         }
         let metadata = match &array {
             Array::Data(d) => d
