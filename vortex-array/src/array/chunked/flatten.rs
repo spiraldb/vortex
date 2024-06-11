@@ -1,7 +1,7 @@
 use arrow_buffer::{BooleanBuffer, MutableBuffer, ScalarBuffer};
 
 use vortex_dtype::{DType, match_each_native_ptype, Nullability, PType, StructDType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{ErrString, vortex_bail, VortexResult};
 
 use itertools::Itertools;
 use crate::{Array, ArrayDType, ArrayFlatten, ArrayTrait, ArrayValidity, Flattened, IntoArray};
@@ -22,6 +22,13 @@ impl ArrayFlatten for ChunkedArray {
 }
 
 pub fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Flattened> {
+    let mismatched = chunks.iter()
+        .filter(|chunk| !chunk.dtype().eq(&dtype))
+        .collect::<Vec<_>>();
+    if !mismatched.is_empty() {
+        vortex_bail!(MismatchedTypes: dtype, ErrString::from(format!("{:?}", mismatched)))
+    }
+
     match &dtype {
         // Structs can have their internal field pointers swizzled to push the chunking down
         // one level internally without copying or decompressing any data.
@@ -30,12 +37,12 @@ pub fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Flat
             Ok(Flattened::Struct(struct_array))
         }
 
-        // Extension arrays contain an internal array, so we can push down a ChunkedArray
-        // to be the storage type of the extension DType.
+        // Extension arrays wrap an internal storage array, which can hold a ChunkedArray until
+        // it is safe to unpack them.
         DType::Extension(ext_dtype, _) => {
             let ext_array = ExtensionArray::new(
                 ext_dtype.clone(),
-                ChunkedArray::try_new(chunks, dtype.clone())?.into_array()
+                ChunkedArray::try_new(chunks, dtype.clone())?.into_array(),
             );
 
             Ok(Flattened::Extension(ext_array))
@@ -70,6 +77,9 @@ pub fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Flat
 
 /// Swizzle the pointers within a ChunkedArray of StructArrays to instead be a single
 /// StructArray pointed at ChunkedArrays of each constituent format.
+///
+/// It is expected this function is only called from [try_flatten_chunks], and thus all chunks have
+/// been checked to have the same DType already.
 fn swizzle_struct_chunks(chunks: &[Array], struct_dtype: &StructDType) -> VortexResult<StructArray> {
     let chunks: Vec<StructArray> = chunks.iter()
         .map(StructArray::try_from)
@@ -81,22 +91,23 @@ fn swizzle_struct_chunks(chunks: &[Array], struct_dtype: &StructDType) -> Vortex
         .collect::<Validity>();
 
     let mut field_arrays = Vec::new();
-    let field_names = struct_dtype.names().clone();
-    let field_dtypes = struct_dtype.dtypes().clone();
 
-    for (field_idx, field_dtype) in field_dtypes.iter().enumerate() {
+    for (field_idx, field_dtype) in struct_dtype.dtypes().iter().enumerate() {
         let mut field_chunks = Vec::new();
         for chunk in &chunks {
-            field_chunks.push(chunk.field(field_idx).expect("structarray should contain field"));
+            field_chunks.push(chunk.field(field_idx).expect("all chunks must have same dtype"));
         }
         let field_array = ChunkedArray::try_new(field_chunks, field_dtype.clone())?;
         field_arrays.push(field_array.into_array());
     }
 
-    Ok(StructArray::try_new(field_names, field_arrays, len, validity)?)
+    Ok(StructArray::try_new(struct_dtype.names().clone(), field_arrays, len, validity)?)
 }
 
 /// Builds a new [BoolArray] by repacking the values from the chunks in a single contiguous array.
+///
+/// It is expected this function is only called from [try_flatten_chunks], and thus all chunks have
+/// been checked to have the same DType already.
 fn pack_bools(chunks: &[Array], nullability: Nullability) -> VortexResult<BoolArray> {
     let len = chunks.iter().map(|chunk| chunk.len()).sum();
     let mut logical_validities = Vec::new();
@@ -115,6 +126,9 @@ fn pack_bools(chunks: &[Array], nullability: Nullability) -> VortexResult<BoolAr
 
 /// Builds a new [PrimitiveArray] by repacking the values from the chunks into a single
 /// contiguous array.
+///
+/// It is expected this function is only called from [try_flatten_chunks], and thus all chunks have
+/// been checked to have the same DType already.
 fn pack_primitives(chunks: &[Array], ptype: PType, nullability: Nullability) -> VortexResult<PrimitiveArray> {
     let len: usize = chunks.iter().map(|chunk| chunk.len()).sum();
     let mut logical_validities = Vec::new();
@@ -132,8 +146,11 @@ fn pack_primitives(chunks: &[Array], ptype: PType, nullability: Nullability) -> 
     })
 }
 
-// TODO(aduffy): This can be slow for really large arrays.
-// TODO(aduffy): this doesn't propagate the validity fully
+/// Builds a new [VarBinArray] by repacking the values from the chunks into a single
+/// contiguous array.
+///
+/// It is expected this function is only called from [try_flatten_chunks], and thus all chunks have
+/// been checked to have the same DType already.
 fn pack_varbin(chunks: &[Array], dtype: &DType, _nullability: Nullability) -> VortexResult<VarBinArray> {
     let len = chunks.iter()
         .map(|chunk| chunk.len())
