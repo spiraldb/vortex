@@ -99,20 +99,9 @@ impl StructArray {
 }
 
 impl ArrayFlatten for StructArray {
+    /// StructEncoding is the canonical form for a [DType::Struct] array, so return self.
     fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::Struct(Self::try_new(
-            self.names().clone(),
-            (0..self.nfields())
-                .map(|i| {
-                    self.field(i)
-                        .expect("Missing child")
-                        .flatten()
-                        .map(|f| f.into_array())
-                })
-                .collect::<VortexResult<Vec<_>>>()?,
-            self.len(),
-            self.validity(),
-        )?))
+        Ok(Flattened::Struct(self))
     }
 }
 

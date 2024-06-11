@@ -300,7 +300,9 @@ pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scala
 /// The caller must ensure the following invariants hold:
 /// * `packed.len() == (length + 1023) / 1024 * 128 * bit_width`
 /// * `index_to_decode < length`
-/// Where `length` is the length of the array/slice backed by `packed` (but is not provided to this function).
+///
+/// Where `length` is the length of the array/slice backed by `packed`
+/// (but is not provided to this function).
 pub unsafe fn unpack_single_primitive<T: NativePType + TryBitPack>(
     packed: &[u8],
     bit_width: usize,

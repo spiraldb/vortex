@@ -4,6 +4,7 @@ use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
+use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDType, ArrayTrait, IntoArray};
 use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
 use vortex_error::{vortex_err, VortexResult};
@@ -26,6 +27,11 @@ impl EncodingCompression for FoREncoding {
 
         // Only supports integers
         if !parray.ptype().is_int() {
+            return None;
+        }
+
+        // For all-null, cannot encode.
+        if parray.logical_validity().all_invalid() {
             return None;
         }
 

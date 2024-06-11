@@ -2,25 +2,20 @@ use std::collections::HashMap;
 
 use itertools::Itertools;
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
-use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::{Array, ArrayDType, ArrayTrait, IntoArray};
+use crate::{Array, ArrayDType, IntoArray};
 
 mod slice;
 
 impl ArrayCompute for SparseArray {
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
-        Some(self)
-    }
-
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -31,27 +26,6 @@ impl ArrayCompute for SparseArray {
 
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
-    }
-}
-
-impl AsContiguousFn for SparseArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
-        let sparse = arrays
-            .iter()
-            .map(|a| Self::try_from(a).unwrap())
-            .collect_vec();
-
-        if !sparse.iter().map(|a| a.fill_value()).all_equal() {
-            vortex_bail!("Cannot concatenate SparseArrays with differing fill values");
-        }
-
-        Ok(Self::new(
-            as_contiguous(&sparse.iter().map(|a| a.indices()).collect_vec())?,
-            as_contiguous(&sparse.iter().map(|a| a.values()).collect_vec())?,
-            sparse.iter().map(|a| a.len()).sum(),
-            self.fill_value().clone(),
-        )
-        .into_array())
     }
 }
 
@@ -144,8 +118,6 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::compute::take_map;
     use crate::array::sparse::SparseArray;
-    use crate::compute::as_contiguous::as_contiguous;
-    use crate::compute::slice::slice;
     use crate::compute::take::take;
     use crate::validity::Validity;
     use crate::{Array, ArrayTrait, IntoArray};
@@ -204,39 +176,6 @@ mod test {
             [0.47f64]
         );
         assert_eq!(taken.len(), 2);
-    }
-
-    #[test]
-    fn take_slices_and_reassemble() {
-        let sparse = sparse_array();
-        let slices = (0..10)
-            .map(|i| slice(&sparse, i * 10, (i + 1) * 10).unwrap())
-            .collect_vec();
-
-        let taken = slices
-            .iter()
-            .map(|s| take(s, &(0u64..10).collect_vec().into_array()).unwrap())
-            .collect_vec();
-        for i in [1, 2, 5, 6, 7, 8] {
-            assert_eq!(SparseArray::try_from(&taken[i]).unwrap().indices().len(), 0);
-        }
-        for i in [0, 3, 4, 9] {
-            assert_eq!(SparseArray::try_from(&taken[i]).unwrap().indices().len(), 1);
-        }
-
-        let contiguous = SparseArray::try_from(as_contiguous(&taken).unwrap()).unwrap();
-        assert_eq!(
-            contiguous.indices().into_primitive().typed_data::<u64>(),
-            [0u64, 7, 7, 9] // relative offsets
-        );
-        assert_eq!(
-            contiguous.values().into_primitive().typed_data::<f64>(),
-            SparseArray::try_from(sparse)
-                .unwrap()
-                .values()
-                .into_primitive()
-                .typed_data::<f64>()
-        );
     }
 
     #[test]

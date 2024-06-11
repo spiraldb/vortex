@@ -107,5 +107,5 @@ zigzag = "0.1.0"
 warnings = "deny"
 
 [workspace.lints.clippy]
-all = "deny"
+all = { level = "deny", priority = -1 }
 or_fun_call = "deny"

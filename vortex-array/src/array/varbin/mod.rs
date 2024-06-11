@@ -41,7 +41,7 @@ impl VarBinArray {
         if !offsets.dtype().is_int() || offsets.dtype().is_nullable() {
             vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype());
         }
-        if !matches!(bytes.dtype(), &DType::BYTES,) {
+        if !matches!(bytes.dtype(), &DType::BYTES) {
             vortex_bail!(MismatchedTypes: "u8", bytes.dtype());
         }
         if !matches!(dtype, DType::Binary(_) | DType::Utf8(_)) {

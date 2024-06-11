@@ -13,7 +13,7 @@ use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::sampling::stratified_slices;
 use crate::stats::ArrayStatistics;
 use crate::validity::Validity;
-use crate::{compute, Array, ArrayDType, ArrayDef, ArrayTrait, Context, IntoArray};
+use crate::{Array, ArrayDType, ArrayDef, ArrayFlatten, ArrayTrait, Context, IntoArray};
 
 pub trait EncodingCompression: ArrayEncoding {
     fn cost(&self) -> u8 {
@@ -311,16 +311,19 @@ pub fn sampled_compression(array: &Array, compressor: &Compressor) -> VortexResu
     }
 
     // Take a sample of the array, then ask codecs for their best compression estimate.
-    let sample = compute::as_contiguous::as_contiguous(
-        &stratified_slices(
+    let sample = ChunkedArray::try_new(
+        stratified_slices(
             array.len(),
             compressor.options.sample_size,
             compressor.options.sample_count,
         )
         .into_iter()
-        .map(|(start, stop)| slice(array, start, stop).unwrap())
-        .collect::<Vec<_>>(),
-    )?;
+        .map(|(start, stop)| slice(array, start, stop))
+        .collect::<VortexResult<Vec<Array>>>()?,
+        array.dtype().clone(),
+    )?
+    .flatten()?
+    .into_array();
 
     find_best_compression(candidates, &sample, compressor)?
         .map(|(compression, best)| {

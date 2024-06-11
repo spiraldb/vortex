@@ -1,15 +1,12 @@
-use vortex::compute::as_contiguous::AsContiguousFn;
 use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::ArrayCompute;
-use vortex::{impl_default_as_contiguous_fn, Array, ArrayDType, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::{match_each_alp_float_ptype, ALPArray};
-
-impl_default_as_contiguous_fn!(ALPArray);
 
 impl ArrayCompute for ALPArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -21,10 +18,6 @@ impl ArrayCompute for ALPArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
-        Some(self)
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
 }
@@ -66,35 +59,5 @@ impl SliceFn for ALPArray {
             self.patches().map(|p| slice(&p, start, end)).transpose()?,
         )?
         .into_array())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::as_contiguous::AsContiguousFn;
-    use vortex::compute::scalar_at::scalar_at;
-    use vortex::validity::Validity;
-    use vortex::IntoArray;
-
-    use crate::ALPArray;
-
-    #[test]
-    fn test_as_contiguous() {
-        let values = vec![1.0, 2.0, 3.0];
-        let primitives = PrimitiveArray::from_vec(values, Validity::NonNullable);
-        let encoded = ALPArray::encode(primitives.into_array()).unwrap();
-        let alp = ALPArray::try_from(&encoded).unwrap();
-
-        let flat = alp.as_contiguous(&[encoded]).unwrap();
-
-        let a: f64 = scalar_at(&flat, 0).unwrap().try_into().unwrap();
-        let b: f64 = scalar_at(&flat, 1).unwrap().try_into().unwrap();
-
-        let c: f64 = scalar_at(&flat, 2).unwrap().try_into().unwrap();
-
-        assert_eq!(a, 1.0);
-        assert_eq!(b, 2.0);
-        assert_eq!(c, 3.0);
     }
 }

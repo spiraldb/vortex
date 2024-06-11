@@ -2,23 +2,21 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
-use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::scalar_subtract::SubtractScalarFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::Array;
 
 mod slice;
 mod take;
 
 impl ArrayCompute for ChunkedArray {
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
+    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
 
-    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+    fn subtract_scalar(&self) -> Option<&dyn SubtractScalarFn> {
         Some(self)
     }
 
@@ -28,23 +26,6 @@ impl ArrayCompute for ChunkedArray {
 
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
-    }
-
-    fn subtract_scalar(&self) -> Option<&dyn SubtractScalarFn> {
-        Some(self)
-    }
-}
-
-impl AsContiguousFn for ChunkedArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
-        // Combine all the chunks into one, then call as_contiguous again.
-        let mut chunks = Vec::with_capacity(self.nchunks());
-        for array in arrays {
-            for chunk in Self::try_from(array).unwrap().chunks() {
-                chunks.push(chunk);
-            }
-        }
-        as_contiguous(&chunks)
     }
 }
 

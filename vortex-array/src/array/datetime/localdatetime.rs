@@ -16,7 +16,7 @@ use crate::validity::ArrayValidity;
 use crate::{Array, ArrayDType, ArrayData, IntoArrayData};
 
 lazy_static! {
-    static ref ID: ExtID = ExtID::from(LocalDateTimeArray::ID);
+    pub static ref ID: ExtID = ExtID::from(LocalDateTimeArray::ID);
 }
 
 pub struct LocalDateTimeArray {
