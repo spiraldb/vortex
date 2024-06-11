@@ -123,6 +123,14 @@ macro_rules! primitive_scalar {
                     .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
             }
         }
+
+        impl TryFrom<Scalar> for $T {
+            type Error = VortexError;
+
+            fn try_from(value: Scalar) -> Result<Self, Self::Error> {
+                <$T>::try_from(&value)
+            }
+        }
     };
 }
 

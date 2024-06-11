@@ -1,6 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
+use crate::array::constant::ConstantArray;
 use crate::array::extension::ExtensionArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
@@ -11,6 +12,7 @@ use crate::{Array, IntoArray};
 
 /// The set of encodings that can be converted to Arrow with zero-copy.
 pub enum Flattened {
+    Null(ConstantArray),
     Bool(BoolArray),
     Primitive(PrimitiveArray),
     Struct(StructArray),
@@ -19,6 +21,12 @@ pub enum Flattened {
     Extension(ExtensionArray),
 }
 
+/// Support trait for transmuting an array into its [vortex_dtype::DType]'s canonical encoding.
+///
+/// Flattening an Array ensures that the array's encoding matches one of the builtin canonical
+/// encodings, each of which has a corresponding [Flattened] variant.
+///
+/// **Important**: DType remains the same before and after a flatten operation.
 pub trait ArrayFlatten {
     fn flatten(self) -> VortexResult<Flattened>;
 }
@@ -26,6 +34,10 @@ pub trait ArrayFlatten {
 impl Array {
     pub fn flatten(self) -> VortexResult<Flattened> {
         ArrayEncoding::flatten(self.encoding(), self)
+    }
+
+    pub fn flatten_extension(self) -> VortexResult<ExtensionArray> {
+        ExtensionArray::try_from(self.flatten()?.into_array())
     }
 
     pub fn flatten_bool(self) -> VortexResult<BoolArray> {
@@ -44,6 +56,7 @@ impl Array {
 impl IntoArray for Flattened {
     fn into_array(self) -> Array {
         match self {
+            Self::Null(a) => a.into_array(),
             Self::Bool(a) => a.into_array(),
             Self::Primitive(a) => a.into_array(),
             Self::Struct(a) => a.into_array(),

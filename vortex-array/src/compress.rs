@@ -13,7 +13,7 @@ use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::sampling::stratified_slices;
 use crate::stats::ArrayStatistics;
 use crate::validity::Validity;
-use crate::{compute, Array, ArrayDType, ArrayDef, ArrayTrait, Context, IntoArray};
+use crate::{Array, ArrayDType, ArrayDef, ArrayFlatten, ArrayTrait, Context, IntoArray};
 
 pub trait EncodingCompression: ArrayEncoding {
     fn cost(&self) -> u8 {
@@ -146,14 +146,10 @@ impl<'a> Compressor<'a> {
                 .map(|c| c.compress(arr, Some(l), self.for_encoding(l.encoding().compression())))
             {
                 let compressed = compressed?;
-                if compressed.dtype() != arr.dtype() {
-                    panic!(
-                        "Compression changed dtype: {:?} -> {:?} for {}",
-                        arr.dtype(),
-                        compressed.dtype(),
-                        compressed.tree_display(),
-                    );
-                }
+
+                check_validity_unchanged(arr, &compressed);
+                check_dtype_unchanged(arr, &compressed);
+
                 return Ok(compressed);
             } else {
                 warn!(
@@ -165,14 +161,6 @@ impl<'a> Compressor<'a> {
 
         // Otherwise, attempt to compress the array
         let compressed = self.compress_array(arr)?;
-        if compressed.dtype() != arr.dtype() {
-            panic!(
-                "Compression changed dtype: {:?} -> {:?} for {}",
-                arr.dtype(),
-                compressed.dtype(),
-                compressed.tree_display(),
-            );
-        }
         Ok(compressed)
     }
 
@@ -223,6 +211,39 @@ impl<'a> Compressor<'a> {
                 Ok(sampled.unwrap_or_else(|| arr.clone()))
             }
         }
+    }
+}
+
+/// Check that compression did not alter the length of the validity array.
+fn check_validity_unchanged(arr: &Array, compressed: &Array) {
+    let _ = arr;
+    let _ = compressed;
+    #[cfg(debug_assertions)]
+    {
+        let old_validity = arr.with_dyn(|a| a.logical_validity().len());
+        let new_validity = compressed.with_dyn(|a| a.logical_validity().len());
+
+        debug_assert!(
+            old_validity == new_validity,
+            "validity length changed after compression: {old_validity} -> {new_validity} for {}",
+            compressed.tree_display()
+        );
+    }
+}
+
+/// Check that compression did not alter the dtype.
+fn check_dtype_unchanged(arr: &Array, compressed: &Array) {
+    let _ = arr;
+    let _ = compressed;
+    #[cfg(debug_assertions)]
+    {
+        debug_assert!(
+            arr.dtype() == compressed.dtype(),
+            "Compression changed dtype: {:?} -> {:?} for {}",
+            arr.dtype(),
+            compressed.dtype(),
+            compressed.tree_display(),
+        );
     }
 }
 
@@ -290,16 +311,19 @@ pub fn sampled_compression(array: &Array, compressor: &Compressor) -> VortexResu
     }
 
     // Take a sample of the array, then ask codecs for their best compression estimate.
-    let sample = compute::as_contiguous::as_contiguous(
-        &stratified_slices(
+    let sample = ChunkedArray::try_new(
+        stratified_slices(
             array.len(),
             compressor.options.sample_size,
             compressor.options.sample_count,
         )
         .into_iter()
-        .map(|(start, stop)| slice(array, start, stop).unwrap())
-        .collect::<Vec<_>>(),
-    )?;
+        .map(|(start, stop)| slice(array, start, stop))
+        .collect::<VortexResult<Vec<Array>>>()?,
+        array.dtype().clone(),
+    )?
+    .flatten()?
+    .into_array();
 
     find_best_compression(candidates, &sample, compressor)?
         .map(|(compression, best)| {

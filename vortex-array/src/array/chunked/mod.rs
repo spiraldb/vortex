@@ -6,7 +6,6 @@ use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::as_contiguous::as_contiguous;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
@@ -15,9 +14,10 @@ use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData, ToArrayData};
+use crate::{impl_encoding, ArrayDType, IntoArrayData, ToArrayData};
 
 mod compute;
+mod flatten;
 mod stats;
 
 impl_encoding!("vortex.chunked", Chunked);
@@ -111,17 +111,6 @@ impl FromIterator<Array> for ChunkedArray {
             .map(|c| c.dtype().clone())
             .expect("Cannot create a chunked array from an empty iterator");
         Self::try_new(chunks, dtype).unwrap()
-    }
-}
-
-impl ArrayFlatten for ChunkedArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        let chunks = self.chunks().collect_vec();
-        if chunks.is_empty() {
-            // TODO(ngates): return an empty FlattenedArray with the correct DType.
-            panic!("Cannot yet flatten an empty chunked array");
-        }
-        as_contiguous(chunks.as_slice())?.flatten()
     }
 }
 

@@ -768,6 +768,7 @@ dependencies = [
  "uuid",
  "vortex-alp",
  "vortex-array",
+ "vortex-buffer",
  "vortex-datetime-parts",
  "vortex-dict",
  "vortex-dtype",

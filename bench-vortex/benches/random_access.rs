@@ -27,6 +27,7 @@ fn random_access(c: &mut Criterion) {
     });
 
     let dataset = BenchmarkDatasets::PBI(Medicare1);
+    dataset.write_as_parquet();
     dataset.write_as_lance();
     // NB: our parquet benchmarks read from a single file, and we (currently) write each
     // file to an individual lance dataset for comparison parity.

@@ -47,6 +47,17 @@ pub fn open_vortex(path: &Path) -> VortexResult<Array> {
         .map(|a| a.into_array())
 }
 
+pub async fn open_vortex_async(path: &Path) -> VortexResult<Array> {
+    let file = tokio::fs::File::open(path).await.unwrap();
+    let mut msgs = MessageReader::try_new(TokioAdapter(file)).await.unwrap();
+    msgs.array_stream_from_messages(&CTX)
+        .await
+        .unwrap()
+        .collect_chunked()
+        .await
+        .map(|a| a.into_array())
+}
+
 pub async fn rewrite_parquet_as_vortex<W: VortexWrite>(
     parquet_path: PathBuf,
     write: W,
@@ -103,7 +114,7 @@ pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<Array> {
     let array = open_vortex(path)?;
     let taken = take(&array, &indices.to_vec().into_array())?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
-    taken.flatten().map(|x| x.into_array())
+    Ok(taken.flatten()?.into_array())
 }
 
 pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {

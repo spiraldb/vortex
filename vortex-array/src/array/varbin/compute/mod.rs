@@ -3,34 +3,27 @@ use std::sync::Arc;
 use arrow_array::{
     ArrayRef as ArrowArrayRef, BinaryArray, LargeBinaryArray, LargeStringArray, StringArray,
 };
-use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::arrow::wrappers::as_offset_buffer;
 use crate::compute::as_arrow::AsArrowArray;
-use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::cast::cast;
 use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
-use crate::validity::{ArrayValidity, Validity};
-use crate::{Array, ArrayDType, IntoArray, ToArray};
+use crate::validity::ArrayValidity;
+use crate::{ArrayDType, ToArray};
 
 mod slice;
 mod take;
 
 impl ArrayCompute for VarBinArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        Some(self)
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
 
@@ -44,41 +37,6 @@ impl ArrayCompute for VarBinArray {
 
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
-    }
-}
-
-impl AsContiguousFn for VarBinArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
-        let bytes_chunks: Vec<Array> = arrays
-            .iter()
-            .map(|a| Self::try_from(a).unwrap().sliced_bytes())
-            .try_collect()?;
-        let bytes = as_contiguous(&bytes_chunks)?;
-
-        let validity = if self.dtype().is_nullable() {
-            Validity::from_iter(arrays.iter().map(|a| a.with_dyn(|a| a.logical_validity())))
-        } else {
-            Validity::NonNullable
-        };
-
-        let mut offsets = Vec::new();
-        offsets.push(0);
-        for a in arrays.iter().map(|a| Self::try_from(a).unwrap()) {
-            let first_offset: u64 = a.first_offset()?;
-            let offsets_array = cast(&a.offsets(), PType::U64.into())?.flatten_primitive()?;
-            let shift = offsets.last().copied().unwrap_or(0);
-            offsets.extend(
-                offsets_array
-                    .typed_data::<u64>()
-                    .iter()
-                    .skip(1) // Ignore the zero offset for each array
-                    .map(|o| o + shift - first_offset),
-            );
-        }
-
-        let offsets_array = PrimitiveArray::from(offsets).into_array();
-
-        Self::try_new(offsets_array, bytes, self.dtype().clone(), validity).map(|a| a.into_array())
     }
 }
 

@@ -5,7 +5,6 @@ use vortex_scalar::Scalar;
 use crate::array::datetime::LocalDateTimeArray;
 use crate::array::extension::ExtensionArray;
 use crate::compute::as_arrow::AsArrowArray;
-use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::cast::CastFn;
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
@@ -15,10 +14,6 @@ use crate::{Array, IntoArray};
 
 impl ArrayCompute for ExtensionArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        Some(self)
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
 
@@ -51,17 +46,6 @@ impl AsArrowArray for ExtensionArray {
             "vortex.localdatetime" => LocalDateTimeArray::try_from(self)?.as_arrow(),
             _ => vortex_bail!("Arrow extension arrays not yet supported"),
         }
-    }
-}
-
-impl AsContiguousFn for ExtensionArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
-        let storage_arrays = arrays
-            .iter()
-            .map(|a| Self::try_from(a).expect("not an extension array").storage())
-            .collect::<Vec<_>>();
-
-        Ok(Self::new(self.ext_dtype().clone(), as_contiguous(&storage_arrays)?).into_array())
     }
 }
 

@@ -1,3 +1,13 @@
+//! Vortex crate containing core logic for encoding and memory representation of [arrays](Array).
+//!
+//! At the heart of Vortex are [arrays](Array) and [encodings](crate::encoding::EncodingCompression).
+//! Arrays are typed views of memory buffers that hold [scalars](vortex_scalar::Scalar). These
+//! buffers can be held in a number of physical encodings to perform lightweight compression that
+//! exploits the particular data distribution of the array's values.
+//!
+//! Every data type recognized by Vortex also has a canonical physical encoding format, which
+//! arrays can be [flattened](Flattened) into for ease of access in compute functions.
+//!
 pub mod accessor;
 pub mod array;
 pub mod arrow;
@@ -59,6 +69,7 @@ pub mod flatbuffers {
             #[allow(unused_imports)]
             pub use vortex_dtype::flatbuffers as dtype;
         }
+
         pub mod scalar {
             #[allow(unused_imports)]
             pub use vortex_scalar::flatbuffers as scalar;
@@ -177,6 +188,7 @@ pub trait ArrayDType {
 }
 
 struct NBytesVisitor(usize);
+
 impl ArrayVisitor for NBytesVisitor {
     fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
         self.0 += array.with_dyn(|a| a.nbytes());

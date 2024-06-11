@@ -1,5 +1,4 @@
 use as_arrow::AsArrowArray;
-use as_contiguous::AsContiguousFn;
 use cast::CastFn;
 use compare::CompareFn;
 use fill::FillForwardFn;
@@ -13,7 +12,6 @@ use crate::compute::filter_indices::FilterIndicesFn;
 use crate::compute::scalar_subtract::SubtractScalarFn;
 
 pub mod as_arrow;
-pub mod as_contiguous;
 pub mod cast;
 pub mod compare;
 pub mod fill;
@@ -27,10 +25,6 @@ pub mod take;
 
 pub trait ArrayCompute {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        None
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         None
     }
 

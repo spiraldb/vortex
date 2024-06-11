@@ -10,21 +10,14 @@ use vortex_scalar::Scalar;
 
 use crate::array::r#struct::StructArray;
 use crate::compute::as_arrow::{as_arrow, AsArrowArray};
-use crate::compute::as_contiguous::{as_contiguous, AsContiguousFn};
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
 use crate::compute::ArrayCompute;
-use crate::validity::Validity;
-use crate::ArrayTrait;
 use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for StructArray {
     fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        Some(self)
-    }
-
-    fn as_contiguous(&self) -> Option<&dyn AsContiguousFn> {
         Some(self)
     }
 
@@ -66,38 +59,6 @@ impl AsArrowArray for StructArray {
             field_arrays,
             None,
         )))
-    }
-}
-
-impl AsContiguousFn for StructArray {
-    fn as_contiguous(&self, arrays: &[Array]) -> VortexResult<Array> {
-        let struct_arrays = arrays
-            .iter()
-            .map(Self::try_from)
-            .collect::<VortexResult<Vec<_>>>()?;
-        let mut fields = vec![Vec::new(); self.dtypes().len()];
-        for array in struct_arrays.iter() {
-            for (f, field) in fields.iter_mut().enumerate() {
-                field.push(array.field(f).unwrap());
-            }
-        }
-
-        let validity = if self.dtype().is_nullable() {
-            Validity::from_iter(arrays.iter().map(|a| a.with_dyn(|a| a.logical_validity())))
-        } else {
-            Validity::NonNullable
-        };
-
-        Self::try_new(
-            self.names().clone(),
-            fields
-                .iter()
-                .map(|field_arrays| as_contiguous(field_arrays))
-                .try_collect()?,
-            self.len(),
-            validity,
-        )
-        .map(|a| a.into_array())
     }
 }
 

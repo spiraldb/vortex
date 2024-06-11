@@ -5,6 +5,8 @@ use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
 use vortex_error::vortex_bail;
 
+use crate::compute::decode_to_localdatetime;
+
 impl_encoding!("vortex.datetimeparts", DateTimeParts);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -81,8 +83,9 @@ impl DateTimePartsArray {
 
 impl ArrayFlatten for DateTimePartsArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        // TODO(ngates): flatten into vortex.localdatetime or appropriate per dtype
-        todo!()
+        Ok(Flattened::Extension(
+            decode_to_localdatetime(&self.into_array())?.try_into()?,
+        ))
     }
 }
 

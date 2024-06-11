@@ -7,7 +7,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn vortex_compress_taxi(c: &mut Criterion) {
     taxi_data_parquet();
-    let mut group = c.benchmark_group("end to end");
+    let mut group = c.benchmark_group("end to end - taxi");
     group.sample_size(10);
     group.bench_function("compress", |b| b.iter(|| black_box(compress_taxi_data())));
     group.finish()
@@ -16,7 +16,7 @@ fn vortex_compress_taxi(c: &mut Criterion) {
 fn vortex_compress_medicare1(c: &mut Criterion) {
     let dataset = BenchmarkDatasets::PBI(Medicare1);
     dataset.as_uncompressed();
-    let mut group = c.benchmark_group("end to end");
+    let mut group = c.benchmark_group("end to end - medicare");
     group.sample_size(10);
     group.bench_function("compress", |b| {
         b.iter(|| black_box(dataset.compress_to_vortex()))
