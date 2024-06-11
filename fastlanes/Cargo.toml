@@ -1,5 +1,5 @@
 [package]
-name = "fastlanez"
+name = "fastlanes"
 version.workspace = true
 homepage.workspace = true
 repository.workspace = true
@@ -11,9 +11,17 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-fastlanez-sys = { version = "0.1.0", path = "../fastlanez-sys" }
 arrayref = { workspace = true }
 num-traits = { workspace = true }
 paste = { workspace = true }
 seq-macro = { workspace = true }
-uninit = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "fastlanes_bitpacking"
+harness = false

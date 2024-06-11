@@ -1,11 +1,11 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
-use std::mem::{size_of, MaybeUninit};
+use std::mem::size_of;
 
 use arrayref::{array_mut_ref, array_ref};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use fastlanez::{BitPack, BitPack2};
+use fastlanes::BitPacking;
 
 fn bitpacking(c: &mut Criterion) {
     {
@@ -16,7 +16,7 @@ fn bitpacking(c: &mut Criterion) {
             let mut packed = vec![0; 128 * WIDTH / size_of::<u16>()];
 
             b.iter(|| {
-                BitPack2::<WIDTH>::bitpack(
+                BitPacking::bitpack::<WIDTH>(
                     array_ref![values, 0, 1024],
                     array_mut_ref![packed, 0, 192],
                 );
@@ -27,17 +27,7 @@ fn bitpacking(c: &mut Criterion) {
             const WIDTH: usize = 3;
             let values = [3u16; 1024];
             let mut packed = [0; 128 * WIDTH / size_of::<u16>()];
-            b.iter(|| BitPack2::<WIDTH>::bitpack(&values, &mut packed));
-        });
-
-        group.bench_function("old pack 16 -> 3", |b| {
-            const WIDTH: usize = 3;
-            let values = [3u16; 1024];
-            let mut packed = [MaybeUninit::new(0u8); 128 * WIDTH];
-
-            b.iter(|| {
-                black_box(BitPack::<WIDTH>::pack(&values, &mut packed));
-            });
+            b.iter(|| BitPacking::bitpack::<WIDTH>(&values, &mut packed));
         });
     }
 
@@ -47,10 +37,10 @@ fn bitpacking(c: &mut Criterion) {
             const WIDTH: usize = 3;
             let values = [3u16; 1024];
             let mut packed = [0; 128 * WIDTH / size_of::<u16>()];
-            BitPack2::<WIDTH>::bitpack(&values, &mut packed);
+            BitPacking::bitpack::<WIDTH>(&values, &mut packed);
 
             let mut unpacked = [0u16; 1024];
-            b.iter(|| BitPack2::<WIDTH>::bitunpack(&packed, &mut unpacked));
+            b.iter(|| BitPacking::bitunpack::<WIDTH>(&packed, &mut unpacked));
         });
     }
 
@@ -60,23 +50,11 @@ fn bitpacking(c: &mut Criterion) {
             const WIDTH: usize = 3;
             let values = [3u16; 1024];
             let mut packed = [0; 128 * WIDTH / size_of::<u16>()];
-            BitPack2::<WIDTH>::bitpack(&values, &mut packed);
+            BitPacking::bitpack::<WIDTH>(&values, &mut packed);
 
             b.iter(|| {
                 for i in 0..1024 {
-                    black_box::<u16>(BitPack2::<WIDTH>::bitunpack_single(&packed, i));
-                }
-            });
-        });
-        group.bench_function("unpack single old 16 <- 3", |b| {
-            const WIDTH: usize = 3;
-            let values = [3u16; 1024];
-            let mut packed = [MaybeUninit::new(0u8); 128 * WIDTH];
-            let packed = BitPack::<WIDTH>::pack(&values, &mut packed);
-
-            b.iter(|| {
-                for i in 0..1024 {
-                    black_box::<u16>(BitPack::<WIDTH>::unpack_single(&packed, i));
+                    black_box::<u16>(BitPacking::bitunpack_single::<WIDTH>(&packed, i));
                 }
             });
         });

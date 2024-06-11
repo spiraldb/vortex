@@ -1795,11 +1795,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "fastlanez"
+name = "fastlanes"
 version = "0.1.0"
 dependencies = [
  "arrayref",
  "criterion",
+ "num-traits",
+ "paste",
+ "seq-macro",
+]
+
+[[package]]
+name = "fastlanez"
+version = "0.1.0"
+dependencies = [
+ "arrayref",
  "fastlanez-sys",
  "num-traits",
  "paste",
