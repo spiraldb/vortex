@@ -25,6 +25,6 @@ The contribution process is outlined below:
     * Make sure the PR passes all CI tests.
 
 3. Open a PR to indicate that the change is ready for review.
-    * Sign the [Contributor License Agreement](https://gist.github.com/lwwmanning/e246ddd906c18ffb79bfef61a888b080) (CLA) when prompted. 
+    * Sign the [Contributor License Agreement](https://cla.spiraldb.com) (CLA) when prompted. 
 
 
