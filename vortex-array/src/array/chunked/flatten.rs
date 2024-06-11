@@ -80,7 +80,7 @@ pub(crate) fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResu
 }
 
 /// Swizzle the pointers within a ChunkedArray of StructArrays to instead be a single
-/// StructArray pointed at ChunkedArrays of each constituent format.
+/// StructArray, where the Array for each Field is a ChunkedArray.
 ///
 /// It is expected this function is only called from [try_flatten_chunks], and thus all chunks have
 /// been checked to have the same DType already.
