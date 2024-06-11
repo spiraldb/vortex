@@ -3,12 +3,10 @@
 
 pub use bitpack::*;
 pub use delta::*;
-pub use fl::*;
 pub use transpose::*;
 
 mod bitpack;
 mod delta;
-mod fl;
 mod transpose;
 
 pub struct Pred<const B: bool>;
