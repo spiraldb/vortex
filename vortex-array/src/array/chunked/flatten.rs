@@ -3,15 +3,23 @@ use arrow_buffer::{BooleanBuffer, MutableBuffer, ScalarBuffer};
 use vortex_dtype::{DType, match_each_native_ptype, Nullability, PType, StructDType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::{Array, ArrayTrait, ArrayValidity, Flattened, IntoArray};
+use itertools::Itertools;
+use crate::{Array, ArrayDType, ArrayFlatten, ArrayTrait, ArrayValidity, Flattened, IntoArray};
 use crate::accessor::ArrayAccessor;
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
+use crate::array::extension::ExtensionArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::validity::{LogicalValidity, Validity};
+
+impl ArrayFlatten for ChunkedArray {
+    fn flatten(self) -> VortexResult<Flattened> {
+        try_flatten_chunks(self.chunks().collect(), self.dtype().clone())
+    }
+}
 
 pub fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Flattened> {
     match &dtype {
@@ -22,10 +30,15 @@ pub fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Flat
             Ok(Flattened::Struct(struct_array))
         }
 
-        // TODO(aduffy): can we pushdown chunks here?
-        DType::Extension(_, _) => {
-            // How can we stitch an unknown type back together?
-            todo!()
+        // Extension arrays contain an internal array, so we can push down a ChunkedArray
+        // to be the storage type of the extension DType.
+        DType::Extension(ext_dtype, _) => {
+            let ext_array = ExtensionArray::new(
+                ext_dtype.clone(),
+                ChunkedArray::try_new(chunks, dtype.clone())?.into_array()
+            );
+
+            Ok(Flattened::Extension(ext_array))
         }
 
         // Lists just flatten into their inner PType
@@ -42,11 +55,11 @@ pub fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Flat
             Ok(Flattened::Primitive(prim_array))
         }
         DType::Utf8(nullability) => {
-            let varbin_array = pack_varbin(chunks.as_slice(), dtype.clone(), *nullability)?;
+            let varbin_array = pack_varbin(chunks.as_slice(), &dtype, *nullability)?;
             Ok(Flattened::VarBin(varbin_array))
         }
         DType::Binary(nullability) => {
-            let varbin_array = pack_varbin(chunks.as_slice(), dtype.clone(), *nullability)?;
+            let varbin_array = pack_varbin(chunks.as_slice(), &dtype, *nullability)?;
             Ok(Flattened::VarBin(varbin_array))
         }
         DType::Null => {
@@ -58,10 +71,9 @@ pub fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Flat
 /// Swizzle the pointers within a ChunkedArray of StructArrays to instead be a single
 /// StructArray pointed at ChunkedArrays of each constituent format.
 fn swizzle_struct_chunks(chunks: &[Array], struct_dtype: &StructDType) -> VortexResult<StructArray> {
-    let chunks = chunks.iter()
+    let chunks: Vec<StructArray> = chunks.iter()
         .map(StructArray::try_from)
-        // Figure out how to unwrap result of things
-        .collect::<VortexResult<Vec<_>>>()?;
+        .try_collect()?;
 
     let len = chunks.iter().map(|chunk| chunk.len()).sum();
     let validity = chunks.iter()
@@ -84,6 +96,7 @@ fn swizzle_struct_chunks(chunks: &[Array], struct_dtype: &StructDType) -> Vortex
     Ok(StructArray::try_new(field_names, field_arrays, len, validity)?)
 }
 
+/// Builds a new [BoolArray] by repacking the values from the chunks in a single contiguous array.
 fn pack_bools(chunks: &[Array], nullability: Nullability) -> VortexResult<BoolArray> {
     let len = chunks.iter().map(|chunk| chunk.len()).sum();
     let mut logical_validities = Vec::new();
@@ -100,6 +113,8 @@ fn pack_bools(chunks: &[Array], nullability: Nullability) -> VortexResult<BoolAr
     )
 }
 
+/// Builds a new [PrimitiveArray] by repacking the values from the chunks into a single
+/// contiguous array.
 fn pack_primitives(chunks: &[Array], ptype: PType, nullability: Nullability) -> VortexResult<PrimitiveArray> {
     let len: usize = chunks.iter().map(|chunk| chunk.len()).sum();
     let mut logical_validities = Vec::new();
@@ -119,7 +134,7 @@ fn pack_primitives(chunks: &[Array], ptype: PType, nullability: Nullability) -> 
 
 // TODO(aduffy): This can be slow for really large arrays.
 // TODO(aduffy): this doesn't propagate the validity fully
-fn pack_varbin(chunks: &[Array], dtype: DType, _nullability: Nullability) -> VortexResult<VarBinArray> {
+fn pack_varbin(chunks: &[Array], dtype: &DType, _nullability: Nullability) -> VortexResult<VarBinArray> {
     let len = chunks.iter()
         .map(|chunk| chunk.len())
         .sum();
@@ -134,7 +149,7 @@ fn pack_varbin(chunks: &[Array], dtype: DType, _nullability: Nullability) -> Vor
         })?;
     }
 
-    Ok(builder.finish(dtype))
+    Ok(builder.finish(dtype.clone()))
 }
 
 fn validity_from_chunks(logical_validities: Vec<LogicalValidity>, nullability: Nullability) -> Validity {

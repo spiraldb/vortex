@@ -6,8 +6,7 @@ use vortex_dtype::{Nullability, PType};
 use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
-use crate::{ArrayDType, ArrayFlatten, impl_encoding, IntoArrayData, ToArrayData};
-use crate::array::chunked::flatten::try_flatten_chunks;
+use crate::{ArrayDType, impl_encoding, IntoArrayData, ToArrayData};
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
@@ -113,12 +112,6 @@ impl FromIterator<Array> for ChunkedArray {
             .map(|c| c.dtype().clone())
             .expect("Cannot create a chunked array from an empty iterator");
         Self::try_new(chunks, dtype).unwrap()
-    }
-}
-
-impl ArrayFlatten for ChunkedArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        try_flatten_chunks(self.chunks().collect(), self.dtype().clone())
     }
 }
 

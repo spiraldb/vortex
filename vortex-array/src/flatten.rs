@@ -21,9 +21,10 @@ pub enum Flattened {
 
 /// Support trait for transmuting an array into its [vortex_dtype::DType]'s canonical encoding.
 ///
-/// Flattening an Array ensures that the array's encoding matches one of the builtin
+/// Flattening an Array ensures that the array's encoding matches one of the builtin canonical
+/// encodings, each of which has a corresponding [Flattened] variant.
 ///
-/// DType remains the same before and after a flatten operation.
+/// **Important**: DType remains the same before and after a flatten operation.
 pub trait ArrayFlatten {
     fn flatten(self) -> VortexResult<Flattened>;
 }
