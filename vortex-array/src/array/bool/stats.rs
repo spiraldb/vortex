@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 
 use arrow_buffer::BooleanBuffer;
-use vortex_dtype::{DType, Nullability};
 use vortex_error::VortexResult;
-use vortex_scalar::Scalar;
 
 use crate::array::bool::BoolArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
-use crate::{ArrayTrait, IntoArray};
+use crate::{ArrayDType, ArrayTrait, IntoArray};
 
 impl ArrayStatisticsCompute for BoolArray {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
@@ -18,7 +16,7 @@ impl ArrayStatisticsCompute for BoolArray {
 
         match self.logical_validity() {
             LogicalValidity::AllValid(_) => self.boolean_buffer().compute_statistics(stat),
-            LogicalValidity::AllInvalid(v) => all_null_stats(v),
+            LogicalValidity::AllInvalid(v) => Ok(StatsSet::nulls(v, self.dtype())),
             LogicalValidity::Array(a) => NullableBools(
                 &self.boolean_buffer(),
                 &a.into_array().flatten_bool()?.boolean_buffer(),
@@ -26,19 +24,6 @@ impl ArrayStatisticsCompute for BoolArray {
             .compute_statistics(stat),
         }
     }
-}
-
-fn all_null_stats(len: usize) -> VortexResult<StatsSet> {
-    Ok(StatsSet::from(HashMap::from([
-        (Stat::Min, Scalar::null(DType::Bool(Nullability::Nullable))),
-        (Stat::Max, Scalar::null(DType::Bool(Nullability::Nullable))),
-        (Stat::IsConstant, true.into()),
-        (Stat::IsSorted, true.into()),
-        (Stat::IsStrictSorted, (len < 2).into()),
-        (Stat::RunCount, 1.into()),
-        (Stat::NullCount, len.into()),
-        (Stat::TrueCount, 0.into()),
-    ])))
 }
 
 struct NullableBools<'a>(&'a BooleanBuffer, &'a BooleanBuffer);
