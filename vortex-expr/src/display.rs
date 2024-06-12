@@ -20,14 +20,14 @@ impl Display for Value {
 
 #[cfg(test)]
 mod tests {
-    use vortex_dtype::field::FieldPath;
+    use vortex_dtype::field::{Field, FieldPath};
 
     use crate::expressions::{lit, Conjunction, Disjunction};
     use crate::field_paths::FieldPathOperations;
 
     #[test]
     fn test_predicate_formatting() {
-        let f1 = field("field");
+        let f1 = Field::from("field");
         assert_eq!(format!("{}", f1.clone().lt(lit(1u32))), "($field < 1)");
         assert_eq!(format!("{}", f1.clone().gte(lit(1u32))), "($field >= 1)");
         assert_eq!(format!("{}", !f1.clone().lte(lit(1u32))), "($field > 1)");
