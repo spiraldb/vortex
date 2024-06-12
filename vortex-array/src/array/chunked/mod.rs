@@ -8,7 +8,7 @@ use vortex_scalar::Scalar;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
-use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
+use crate::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
@@ -73,18 +73,13 @@ impl ChunkedArray {
     pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
-        // TODO(ngates): migrate to the new search_sorted API to subtract 1 if not exact match.
-        let mut index_chunk = search_sorted(&self.chunk_ends(), index, SearchSortedSide::Left)
-            .unwrap()
-            .to_index();
-        let mut chunk_start =
+        let index_chunk =
+            match search_sorted(&self.chunk_ends(), index, SearchSortedSide::Left).unwrap() {
+                SearchResult::Found(i) => i,
+                SearchResult::NotFound(i) => i - 1,
+            };
+        let chunk_start =
             usize::try_from(&scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
-
-        if chunk_start != index {
-            index_chunk -= 1;
-            chunk_start =
-                usize::try_from(&scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
-        }
 
         let index_in_chunk = index - chunk_start;
         (index_chunk, index_in_chunk)
