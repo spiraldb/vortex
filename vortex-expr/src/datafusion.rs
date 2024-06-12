@@ -43,10 +43,10 @@ struct FieldPathWrapper(FieldPath);
 impl From<FieldPathWrapper> for Expr {
     fn from(value: FieldPathWrapper) -> Self {
         let mut field = String::new();
-        for part in value.0.parts() {
+        for part in value.0.path() {
             match part {
                 // TODO(ngates): escape quotes?
-                Field::Name(identifier) => field.push_str(&format!("\"{}\"", identifier)),
+                Field::Name(name) => field.push_str(&format!("\"{}\"", name)),
                 Field::Index(idx) => field.push_str(&format!("[{}]", idx)),
             }
         }
