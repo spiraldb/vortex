@@ -78,10 +78,10 @@ mod test {
         ])
         .into_array();
 
-        let matches = compare(&arr, &arr, Operator::EqualTo)?.flatten_bool()?;
+        let matches = compare(&arr, &arr, Operator::Eq)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [0u64, 1, 2, 3, 5, 6, 7, 8, 10]);
 
-        let matches = compare(&arr, &arr, Operator::NotEqualTo)?.flatten_bool()?;
+        let matches = compare(&arr, &arr, Operator::NotEq)?.flatten_bool()?;
         let empty: [u64; 0] = [];
         assert_eq!(to_int_indices(matches), empty);
 
@@ -101,16 +101,16 @@ mod test {
         ])
         .into_array();
 
-        let matches = compare(&arr, &other, Operator::LessThanOrEqualTo)?.flatten_bool()?;
+        let matches = compare(&arr, &other, Operator::Lte)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [0u64, 1, 2, 3, 5, 6, 7, 8, 10]);
 
-        let matches = compare(&arr, &other, Operator::LessThan)?.flatten_bool()?;
+        let matches = compare(&arr, &other, Operator::Lt)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [5u64, 6, 7, 8, 10]);
 
-        let matches = compare(&other, &arr, Operator::GreaterThanOrEqualTo)?.flatten_bool()?;
+        let matches = compare(&other, &arr, Operator::Gte)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [0u64, 1, 2, 3, 5, 6, 7, 8, 10]);
 
-        let matches = compare(&other, &arr, Operator::GreaterThan)?.flatten_bool()?;
+        let matches = compare(&other, &arr, Operator::Gt)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [5u64, 6, 7, 8, 10]);
         Ok(())
     }

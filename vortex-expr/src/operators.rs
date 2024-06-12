@@ -8,12 +8,12 @@ use crate::expressions::Predicate;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Operator {
     // comparison
-    EqualTo,
-    NotEqualTo,
-    GreaterThan,
-    GreaterThanOrEqualTo,
-    LessThan,
-    LessThanOrEqualTo,
+    Eq,
+    NotEq,
+    Gt,
+    Gte,
+    Lt,
+    Lte,
 }
 
 impl ops::Not for Predicate {
@@ -21,12 +21,12 @@ impl ops::Not for Predicate {
 
     fn not(self) -> Self::Output {
         let inverse_op = match self.op {
-            Operator::EqualTo => Operator::NotEqualTo,
-            Operator::NotEqualTo => Operator::EqualTo,
-            Operator::GreaterThan => Operator::LessThanOrEqualTo,
-            Operator::GreaterThanOrEqualTo => Operator::LessThan,
-            Operator::LessThan => Operator::GreaterThanOrEqualTo,
-            Operator::LessThanOrEqualTo => Operator::GreaterThan,
+            Operator::Eq => Operator::NotEq,
+            Operator::NotEq => Operator::Eq,
+            Operator::Gt => Operator::Lte,
+            Operator::Gte => Operator::Lt,
+            Operator::Lt => Operator::Gte,
+            Operator::Lte => Operator::Gt,
         };
         Predicate {
             left: self.left,
@@ -39,23 +39,23 @@ impl ops::Not for Predicate {
 impl Operator {
     pub fn inverse(self) -> Self {
         match self {
-            Operator::EqualTo => Operator::NotEqualTo,
-            Operator::NotEqualTo => Operator::EqualTo,
-            Operator::GreaterThan => Operator::LessThanOrEqualTo,
-            Operator::GreaterThanOrEqualTo => Operator::LessThan,
-            Operator::LessThan => Operator::GreaterThanOrEqualTo,
-            Operator::LessThanOrEqualTo => Operator::GreaterThan,
+            Operator::Eq => Operator::NotEq,
+            Operator::NotEq => Operator::Eq,
+            Operator::Gt => Operator::Lte,
+            Operator::Gte => Operator::Lt,
+            Operator::Lt => Operator::Gte,
+            Operator::Lte => Operator::Gt,
         }
     }
 
     pub fn to_predicate<T: NativePType>(&self) -> fn(&T, &T) -> bool {
         match self {
-            Operator::EqualTo => PartialEq::eq,
-            Operator::NotEqualTo => PartialEq::ne,
-            Operator::GreaterThan => PartialOrd::gt,
-            Operator::GreaterThanOrEqualTo => PartialOrd::ge,
-            Operator::LessThan => PartialOrd::lt,
-            Operator::LessThanOrEqualTo => PartialOrd::le,
+            Operator::Eq => PartialEq::eq,
+            Operator::NotEq => PartialEq::ne,
+            Operator::Gt => PartialOrd::gt,
+            Operator::Gte => PartialOrd::ge,
+            Operator::Lt => PartialOrd::lt,
+            Operator::Lte => PartialOrd::le,
         }
     }
 }

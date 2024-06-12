@@ -13,13 +13,13 @@ impl CompareFn for BoolArray {
         let lhs = self.boolean_buffer();
         let rhs = flattened.boolean_buffer();
         let result_buf = match op {
-            Operator::EqualTo => lhs.bitxor(&rhs).not(),
-            Operator::NotEqualTo => lhs.bitxor(&rhs),
+            Operator::Eq => lhs.bitxor(&rhs).not(),
+            Operator::NotEq => lhs.bitxor(&rhs),
 
-            Operator::GreaterThan => lhs.bitand(&rhs.not()),
-            Operator::GreaterThanOrEqualTo => lhs.bitor(&rhs.not()),
-            Operator::LessThan => lhs.not().bitand(&rhs),
-            Operator::LessThanOrEqualTo => lhs.not().bitor(&rhs),
+            Operator::Gt => lhs.bitand(&rhs.not()),
+            Operator::Gte => lhs.bitor(&rhs.not()),
+            Operator::Lt => lhs.not().bitand(&rhs),
+            Operator::Lte => lhs.not().bitor(&rhs),
         };
         Ok(BoolArray::from(
             self.validity()
@@ -58,10 +58,10 @@ mod test {
         )
         .into_array();
 
-        let matches = compare(&arr, &arr, Operator::EqualTo)?.flatten_bool()?;
+        let matches = compare(&arr, &arr, Operator::Eq)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [1u64, 2, 3, 4]);
 
-        let matches = compare(&arr, &arr, Operator::NotEqualTo)?.flatten_bool()?;
+        let matches = compare(&arr, &arr, Operator::NotEq)?.flatten_bool()?;
         let empty: [u64; 0] = [];
         assert_eq!(to_int_indices(matches), empty);
 
@@ -71,16 +71,16 @@ mod test {
         )
         .into_array();
 
-        let matches = compare(&arr, &other, Operator::LessThanOrEqualTo)?.flatten_bool()?;
+        let matches = compare(&arr, &other, Operator::Lte)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [2u64, 3, 4]);
 
-        let matches = compare(&arr, &other, Operator::LessThan)?.flatten_bool()?;
+        let matches = compare(&arr, &other, Operator::Lt)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [4u64]);
 
-        let matches = compare(&other, &arr, Operator::GreaterThanOrEqualTo)?.flatten_bool()?;
+        let matches = compare(&other, &arr, Operator::Gte)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [2u64, 3, 4]);
 
-        let matches = compare(&other, &arr, Operator::GreaterThan)?.flatten_bool()?;
+        let matches = compare(&other, &arr, Operator::Gt)?.flatten_bool()?;
         assert_eq!(to_int_indices(matches), [4u64]);
         Ok(())
     }

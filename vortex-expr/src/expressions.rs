@@ -50,7 +50,7 @@ impl Value {
     pub fn eq(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::EqualTo,
+            op: Operator::Eq,
             right: self,
         }
     }
@@ -58,7 +58,7 @@ impl Value {
     pub fn not_eq(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::NotEqualTo.inverse(),
+            op: Operator::NotEq.inverse(),
             right: self,
         }
     }
@@ -66,7 +66,7 @@ impl Value {
     pub fn gt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::GreaterThan.inverse(),
+            op: Operator::Gt.inverse(),
             right: self,
         }
     }
@@ -74,7 +74,7 @@ impl Value {
     pub fn gte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::GreaterThanOrEqualTo.inverse(),
+            op: Operator::Gte.inverse(),
             right: self,
         }
     }
@@ -82,7 +82,7 @@ impl Value {
     pub fn lt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::LessThan.inverse(),
+            op: Operator::Lt.inverse(),
             right: self,
         }
     }
@@ -90,7 +90,7 @@ impl Value {
     pub fn lte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             left: field.into(),
-            op: Operator::LessThanOrEqualTo.inverse(),
+            op: Operator::Lte.inverse(),
             right: self,
         }
     }
@@ -109,7 +109,7 @@ mod test {
         let field = field("id");
         let expr = Predicate {
             left: field,
-            op: Operator::EqualTo,
+            op: Operator::Eq,
             right: value,
         };
         assert_eq!(format!("{}", expr), "($id = 1)");
