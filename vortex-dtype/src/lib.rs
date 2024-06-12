@@ -8,7 +8,7 @@ pub use ptype::*;
 
 mod dtype;
 mod extension;
-pub mod field_paths;
+pub mod field;
 mod nullability;
 mod ptype;
 mod serde;

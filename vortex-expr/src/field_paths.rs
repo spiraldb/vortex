@@ -1,64 +1,64 @@
-use vortex_dtype::field_paths::FieldPath;
+use vortex_dtype::field::FieldPath;
 
 use crate::expressions::{Predicate, Value};
 use crate::operators::Operator;
 
 pub trait FieldPathOperations {
-    fn eq(self, other: Value) -> Predicate;
-    fn not_eq(self, other: Value) -> Predicate;
-    fn gt(self, other: Value) -> Predicate;
-    fn gte(self, other: Value) -> Predicate;
-    fn lt(self, other: Value) -> Predicate;
-    fn lte(self, other: Value) -> Predicate;
+    fn equal(&self, other: Value) -> Predicate;
+    fn not_equal(&self, other: Value) -> Predicate;
+    fn gt(&self, other: Value) -> Predicate;
+    fn gte(&self, other: Value) -> Predicate;
+    fn lt(&self, other: Value) -> Predicate;
+    fn lte(&self, other: Value) -> Predicate;
 }
 
 impl FieldPathOperations for FieldPath {
     // comparisons
-    fn eq(self, other: Value) -> Predicate {
+    fn equal(&self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self.clone(),
             op: Operator::Eq,
-            right: other,
+            rhs: other,
         }
     }
 
-    fn not_eq(self, other: Value) -> Predicate {
+    fn not_equal(&self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self.clone(),
             op: Operator::NotEq,
-            right: other,
+            rhs: other,
         }
     }
 
-    fn gt(self, other: Value) -> Predicate {
+    fn gt(&self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self.clone(),
             op: Operator::Gt,
-            right: other,
+            rhs: other,
         }
     }
 
-    fn gte(self, other: Value) -> Predicate {
+    fn gte(&self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self.clone(),
             op: Operator::Gte,
-            right: other,
+            rhs: other,
         }
     }
 
-    fn lt(self, other: Value) -> Predicate {
+    fn lt(&self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self.clone(),
             op: Operator::Lt,
-            right: other,
+            rhs: other,
         }
     }
 
-    fn lte(self, other: Value) -> Predicate {
+    fn lte(&self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self.clone(),
             op: Operator::Lte,
-            right: other,
+            rhs: other,
         }
     }
 }

@@ -11,10 +11,9 @@ use crate::compute::filter_indices::FilterIndicesFn;
 use crate::{Array, ArrayTrait, IntoArray};
 
 impl FilterIndicesFn for PrimitiveArray {
-    fn filter_indices(&self, predicate: &Disjunction) -> VortexResult<Array> {
-        let conjunction_indices = predicate.conjunctions.iter().map(|conj| {
-            conj.predicates
-                .iter()
+    fn filter_indices(&self, disjunction: &Disjunction) -> VortexResult<Array> {
+        let conjunction_indices = disjunction.iter().map(|conj| {
+            conj.iter()
                 .map(|pred| indices_matching_predicate(self, pred))
                 .reduce(|a, b| Ok(a?.bitand(&b?)))
                 .unwrap()
@@ -38,11 +37,11 @@ fn indices_matching_predicate(
     arr: &PrimitiveArray,
     predicate: &Predicate,
 ) -> VortexResult<BooleanBuffer> {
-    if predicate.left.head().is_some() {
+    if !predicate.lhs.path().is_empty() {
         vortex_bail!("Invalid path for primitive array")
     }
 
-    let rhs = match &predicate.right {
+    let rhs = match &predicate.rhs {
         Value::Field(_) => {
             vortex_bail!("Cannot apply field reference to primitive array")
         }
@@ -70,17 +69,14 @@ fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_dtype::field_paths::FieldPathBuilder;
-    use vortex_expr::FieldPathOperations;
-    use vortex_expr::{lit, Conjunction};
+    use vortex_dtype::field::FieldPath;
+    use vortex_expr::{lit, Conjunction, FieldPathOperations};
 
     use super::*;
     use crate::validity::Validity;
 
     fn apply_conjunctive_filter(arr: &PrimitiveArray, conj: Conjunction) -> VortexResult<Array> {
-        arr.filter_indices(&Disjunction {
-            conjunctions: vec![conj],
-        })
+        arr.filter_indices(&Disjunction::from_iter([conj]))
     }
 
     fn to_int_indices(filtered_primitive: BoolArray) -> Vec<u64> {
@@ -110,64 +106,44 @@ mod test {
             None,
         ]);
 
-        let field = FieldPathBuilder::new().build();
-        let filtered_primitive = apply_conjunctive_filter(
-            &arr,
-            Conjunction {
-                predicates: vec![field.clone().lt(lit(5u32))],
-            },
-        )
-        .unwrap()
-        .flatten_bool()
-        .unwrap();
+        let field = FieldPath::root();
+        let filtered_primitive =
+            apply_conjunctive_filter(&arr, Conjunction::from(field.lt(lit(5u32))))
+                .unwrap()
+                .flatten_bool()
+                .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [0u64, 1, 2, 3]);
 
-        let filtered_primitive = apply_conjunctive_filter(
-            &arr,
-            Conjunction {
-                predicates: vec![field.clone().gt(lit(5u32))],
-            },
-        )
-        .unwrap()
-        .flatten_bool()
-        .unwrap();
+        let filtered_primitive =
+            apply_conjunctive_filter(&arr, Conjunction::from(field.gt(lit(5u32))))
+                .unwrap()
+                .flatten_bool()
+                .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [6u64, 7, 8, 10]);
 
-        let filtered_primitive = apply_conjunctive_filter(
-            &arr,
-            Conjunction {
-                predicates: vec![field.clone().eq(lit(5u32))],
-            },
-        )
-        .unwrap()
-        .flatten_bool()
-        .unwrap();
+        let filtered_primitive =
+            apply_conjunctive_filter(&arr, Conjunction::from(field.equal(lit(5u32))))
+                .unwrap()
+                .flatten_bool()
+                .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [5u64]);
 
-        let filtered_primitive = apply_conjunctive_filter(
-            &arr,
-            Conjunction {
-                predicates: vec![field.clone().gte(lit(5u32))],
-            },
-        )
-        .unwrap()
-        .flatten_bool()
-        .unwrap();
+        let filtered_primitive =
+            apply_conjunctive_filter(&arr, Conjunction::from(field.gte(lit(5u32))))
+                .unwrap()
+                .flatten_bool()
+                .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [5u64, 6, 7, 8, 10]);
 
-        let filtered_primitive = apply_conjunctive_filter(
-            &arr,
-            Conjunction {
-                predicates: vec![field.clone().lte(lit(5u32))],
-            },
-        )
-        .unwrap()
-        .flatten_bool()
-        .unwrap();
+        let filtered_primitive =
+            apply_conjunctive_filter(&arr, Conjunction::from(field.lte(lit(5u32))))
+                .unwrap()
+                .flatten_bool()
+                .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [0u64, 1, 2, 3, 5]);
     }
@@ -176,12 +152,10 @@ mod test {
     fn test_multiple_predicates() {
         let arr =
             PrimitiveArray::from_vec(vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10], Validity::AllValid);
-        let field = FieldPathBuilder::new().build();
+        let field = FieldPath::root();
         let filtered_primitive = apply_conjunctive_filter(
             &arr,
-            Conjunction {
-                predicates: vec![field.clone().lt(lit(5u32)), field.clone().gt(lit(2u32))],
-            },
+            Conjunction::from_iter([field.lt(lit(5u32)), field.gt(lit(2u32))]),
         )
         .unwrap()
         .flatten_bool()
@@ -194,12 +168,10 @@ mod test {
     fn test_disjoint_predicates() {
         let arr =
             PrimitiveArray::from_vec(vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10], Validity::AllValid);
-        let field = FieldPathBuilder::new().build();
+        let field = FieldPath::root();
         let filtered_primitive = apply_conjunctive_filter(
             &arr,
-            Conjunction {
-                predicates: vec![field.clone().lt(lit(5u32)), field.clone().gt(lit(5u32))],
-            },
+            Conjunction::from_iter([field.lt(lit(5u32)), field.gt(lit(5u32))]),
         )
         .unwrap()
         .flatten_bool()
@@ -213,17 +185,11 @@ mod test {
     fn test_disjunctive_predicate() {
         let arr =
             PrimitiveArray::from_vec(vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10], Validity::AllValid);
-        let field = FieldPathBuilder::new().build();
-        let c1 = Conjunction {
-            predicates: vec![field.clone().lt(lit(5u32))],
-        };
-        let c2 = Conjunction {
-            predicates: vec![field.clone().gt(lit(5u32))],
-        };
+        let field = FieldPath::root();
+        let c1 = Conjunction::from(field.lt(lit(5u32)));
+        let c2 = Conjunction::from(field.gt(lit(5u32)));
 
-        let disj = Disjunction {
-            conjunctions: vec![c1, c2],
-        };
+        let disj = Disjunction::from_iter([c1, c2]);
         let filtered_primitive = arr.filter_indices(&disj).unwrap().flatten_bool().unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [0u64, 1, 2, 3, 5, 6, 7, 8, 9])
@@ -233,12 +199,10 @@ mod test {
     fn test_invalid_path_err() {
         let arr =
             PrimitiveArray::from_vec(vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10], Validity::AllValid);
-        let field = FieldPathBuilder::new().join("some_field").build();
+        let field = FieldPath::from_name("some_field");
         apply_conjunctive_filter(
             &arr,
-            Conjunction {
-                predicates: vec![field.clone().lt(lit(5u32)), field.clone().gt(lit(5u32))],
-            },
+            Conjunction::from_iter([field.lt(lit(5u32)), field.gt(lit(5u32))]),
         )
         .expect_err("Cannot apply field reference to primitive array");
     }

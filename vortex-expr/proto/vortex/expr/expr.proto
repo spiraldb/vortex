@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package vortex.expr;
 
-import "vortex/dtype/field_path.proto";
+import "vortex/dtype/dtype.proto";
 import "vortex/scalar/scalar.proto";
 
 message Disjunction {
@@ -14,9 +14,9 @@ message Conjunction {
 }
 
 message Predicate {
-  vortex.dtype.FieldPath left = 1;
+  vortex.dtype.FieldPath lhs = 1;
   Operator op = 2;
-  oneof right {
+  oneof rhs {
     vortex.dtype.FieldPath field = 3;
     vortex.scalar.Scalar scalar = 4;
   }

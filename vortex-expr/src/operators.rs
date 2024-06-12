@@ -45,9 +45,9 @@ impl ops::Not for Predicate {
             Operator::Lte => Operator::Gt,
         };
         Predicate {
-            left: self.left,
+            lhs: self.lhs,
             op: inverse_op,
-            right: self.right,
+            rhs: self.rhs,
         }
     }
 }

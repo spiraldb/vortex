@@ -1,26 +1,104 @@
-use vortex_dtype::field_paths::FieldPath;
+use core::fmt;
+use std::fmt::{Display, Formatter};
+
+use vortex_dtype::field::FieldPath;
 use vortex_scalar::Scalar;
 
 use crate::operators::Operator;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
     serde(transparent)
 )]
 pub struct Disjunction {
-    pub conjunctions: Vec<Conjunction>,
+    conjunctions: Vec<Conjunction>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl Disjunction {
+    pub fn iter(&self) -> impl Iterator<Item = &Conjunction> {
+        self.conjunctions.iter()
+    }
+}
+
+impl From<Conjunction> for Disjunction {
+    fn from(value: Conjunction) -> Self {
+        Self {
+            conjunctions: vec![value],
+        }
+    }
+}
+
+impl FromIterator<Predicate> for Disjunction {
+    fn from_iter<T: IntoIterator<Item = Predicate>>(iter: T) -> Self {
+        Self {
+            conjunctions: iter
+                .into_iter()
+                .map(|predicate| Conjunction::from_iter([predicate]))
+                .collect(),
+        }
+    }
+}
+
+impl FromIterator<Conjunction> for Disjunction {
+    fn from_iter<T: IntoIterator<Item = Conjunction>>(iter: T) -> Self {
+        Self {
+            conjunctions: iter.into_iter().collect(),
+        }
+    }
+}
+
+impl Display for Disjunction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.conjunctions
+            .iter()
+            .map(|v| format!("{}", v))
+            .intersperse("\nOR \n".to_string())
+            .try_for_each(|s| write!(f, "{}", s))
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
     serde(transparent)
 )]
 pub struct Conjunction {
-    pub predicates: Vec<Predicate>,
+    predicates: Vec<Predicate>,
+}
+
+impl Conjunction {
+    pub fn iter(&self) -> impl Iterator<Item = &Predicate> {
+        self.predicates.iter()
+    }
+}
+
+impl From<Predicate> for Conjunction {
+    fn from(value: Predicate) -> Self {
+        Self {
+            predicates: vec![value],
+        }
+    }
+}
+
+impl FromIterator<Predicate> for Conjunction {
+    fn from_iter<T: IntoIterator<Item = Predicate>>(iter: T) -> Self {
+        Self {
+            predicates: iter.into_iter().collect(),
+        }
+    }
+}
+
+impl Display for Conjunction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.predicates
+            .iter()
+            .map(|v| format!("{}", v))
+            .intersperse(" AND ".to_string())
+            .try_for_each(|s| write!(f, "{}", s))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -35,9 +113,9 @@ pub enum Value {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Predicate {
-    pub left: FieldPath,
+    pub lhs: FieldPath,
     pub op: Operator,
-    pub right: Value,
+    pub rhs: Value,
 }
 
 pub fn lit<T: Into<Scalar>>(n: T) -> Value {
@@ -49,56 +127,56 @@ impl Value {
     // use the inverse operator.
     pub fn eq(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            left: field.into(),
+            lhs: field.into(),
             op: Operator::Eq,
-            right: self,
+            rhs: self,
         }
     }
 
     pub fn not_eq(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            left: field.into(),
+            lhs: field.into(),
             op: Operator::NotEq.inverse(),
-            right: self,
+            rhs: self,
         }
     }
 
     pub fn gt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            left: field.into(),
+            lhs: field.into(),
             op: Operator::Gt.inverse(),
-            right: self,
+            rhs: self,
         }
     }
 
     pub fn gte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            left: field.into(),
+            lhs: field.into(),
             op: Operator::Gte.inverse(),
-            right: self,
+            rhs: self,
         }
     }
 
     pub fn lt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            left: field.into(),
+            lhs: field.into(),
             op: Operator::Lt.inverse(),
-            right: self,
+            rhs: self,
         }
     }
 
     pub fn lte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
-            left: field.into(),
+            lhs: field.into(),
             op: Operator::Lte.inverse(),
-            right: self,
+            rhs: self,
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use vortex_dtype::field_paths::field;
+    use vortex_dtype::field::Field;
 
     use super::*;
 
@@ -106,11 +184,11 @@ mod test {
     fn test_lit() {
         let scalar: Scalar = 1.into();
         let value: Value = lit(scalar);
-        let field = field("id");
+        let field = Field::from("id");
         let expr = Predicate {
-            left: field,
+            lhs: FieldPath::from_iter([field]),
             op: Operator::Eq,
-            right: value,
+            rhs: value,
         };
         assert_eq!(format!("{}", expr), "($id = 1)");
     }
