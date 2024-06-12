@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
-use crate::proto::dtype::d_type::Type;
+use crate::field_paths::{FieldPath, FieldPathBuilder};
+use crate::proto::dtype::d_type::DtypeType;
+use crate::proto::dtype::field_path::part::PartType;
 use crate::{proto::dtype as pb, DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
 
 impl TryFrom<&pb::DType> for DType {
@@ -12,17 +14,17 @@ impl TryFrom<&pb::DType> for DType {
 
     fn try_from(value: &pb::DType) -> Result<Self, Self::Error> {
         match value
-            .r#type
+            .dtype_type
             .as_ref()
             .ok_or_else(|| vortex_err!(InvalidSerde: "Unrecognized DType"))?
         {
-            Type::Null(_) => Ok(Self::Null),
-            Type::Bool(b) => Ok(Self::Bool(b.nullable.into())),
-            Type::Primitive(p) => Ok(Self::Primitive(p.r#type().into(), p.nullable.into())),
-            Type::Decimal(_) => todo!("Not Implemented"),
-            Type::Utf8(u) => Ok(Self::Utf8(u.nullable.into())),
-            Type::Binary(b) => Ok(Self::Binary(b.nullable.into())),
-            Type::Struct(s) => Ok(Self::Struct(
+            DtypeType::Null(_) => Ok(Self::Null),
+            DtypeType::Bool(b) => Ok(Self::Bool(b.nullable.into())),
+            DtypeType::Primitive(p) => Ok(Self::Primitive(p.r#type().into(), p.nullable.into())),
+            DtypeType::Decimal(_) => todo!("Not Implemented"),
+            DtypeType::Utf8(u) => Ok(Self::Utf8(u.nullable.into())),
+            DtypeType::Binary(b) => Ok(Self::Binary(b.nullable.into())),
+            DtypeType::Struct(s) => Ok(Self::Struct(
                 StructDType::new(
                     s.names.iter().map(|s| s.as_str().into()).collect(),
                     s.dtypes
@@ -32,7 +34,7 @@ impl TryFrom<&pb::DType> for DType {
                 ),
                 s.nullable.into(),
             )),
-            Type::List(l) => {
+            DtypeType::List(l) => {
                 let nullable = l.nullable.into();
                 Ok(Self::List(
                     l.element_type
@@ -44,7 +46,7 @@ impl TryFrom<&pb::DType> for DType {
                     nullable,
                 ))
             }
-            Type::Extension(e) => Ok(Self::Extension(
+            DtypeType::Extension(e) => Ok(Self::Extension(
                 ExtDType::new(
                     ExtID::from(e.id.as_str()),
                     e.metadata.as_ref().map(|m| ExtMetadata::from(m.as_ref())),
@@ -58,31 +60,31 @@ impl TryFrom<&pb::DType> for DType {
 impl From<&DType> for pb::DType {
     fn from(value: &DType) -> Self {
         Self {
-            r#type: Some(match value {
-                DType::Null => Type::Null(pb::Null {}),
-                DType::Bool(n) => Type::Bool(pb::Bool {
+            dtype_type: Some(match value {
+                DType::Null => DtypeType::Null(pb::Null {}),
+                DType::Bool(n) => DtypeType::Bool(pb::Bool {
                     nullable: (*n).into(),
                 }),
-                DType::Primitive(ptype, n) => Type::Primitive(pb::Primitive {
+                DType::Primitive(ptype, n) => DtypeType::Primitive(pb::Primitive {
                     r#type: pb::PType::from(*ptype).into(),
                     nullable: (*n).into(),
                 }),
-                DType::Utf8(n) => Type::Utf8(pb::Utf8 {
+                DType::Utf8(n) => DtypeType::Utf8(pb::Utf8 {
                     nullable: (*n).into(),
                 }),
-                DType::Binary(n) => Type::Binary(pb::Binary {
+                DType::Binary(n) => DtypeType::Binary(pb::Binary {
                     nullable: (*n).into(),
                 }),
-                DType::Struct(s, n) => Type::Struct(pb::Struct {
+                DType::Struct(s, n) => DtypeType::Struct(pb::Struct {
                     names: s.names().iter().map(|s| s.as_ref().to_string()).collect(),
                     dtypes: s.dtypes().iter().map(Into::into).collect(),
                     nullable: (*n).into(),
                 }),
-                DType::List(l, n) => Type::List(Box::new(pb::List {
+                DType::List(l, n) => DtypeType::List(Box::new(pb::List {
                     element_type: Some(Box::new(l.as_ref().into())),
                     nullable: (*n).into(),
                 })),
-                DType::Extension(e, n) => Type::Extension(pb::Extension {
+                DType::Extension(e, n) => DtypeType::Extension(pb::Extension {
                     id: e.id().as_ref().into(),
                     metadata: e.metadata().map(|m| m.as_ref().into()),
                     nullable: (*n).into(),
@@ -127,5 +129,24 @@ impl From<PType> for pb::PType {
             PType::F32 => F32,
             PType::F64 => F64,
         }
+    }
+}
+
+impl TryFrom<&pb::FieldPath> for FieldPath {
+    type Error = VortexError;
+
+    fn try_from(value: &pb::FieldPath) -> Result<Self, Self::Error> {
+        let mut builder = FieldPathBuilder::new();
+        for part in value.parts.iter() {
+            match part
+                .part_type
+                .as_ref()
+                .ok_or_else(|| vortex_err!(InvalidSerde: "FieldPath part missing type"))?
+            {
+                PartType::Name(name) => builder.push(name.as_str()),
+                PartType::Index(idx) => builder.push(*idx as u64),
+            }
+        }
+        Ok(builder.build())
     }
 }

@@ -5,7 +5,7 @@ use rand::{thread_rng, Rng};
 use vortex::array::bool::BoolArray;
 use vortex::IntoArray;
 use vortex_error::VortexError;
-use vortex_expr::operators::Operator;
+use vortex_expr::Operator;
 
 fn filter_bool_indices(c: &mut Criterion) {
     let mut group = c.benchmark_group("compare");

@@ -59,7 +59,7 @@ message Extension {
 }
 
 message DType {
-  oneof type {
+  oneof dtype_type {
     Null null = 1;
     Bool bool = 2;
     Primitive primitive = 3;

@@ -1,3 +1,5 @@
+use core::fmt;
+use std::fmt::{Display, Formatter};
 use std::ops;
 
 use vortex_dtype::NativePType;
@@ -14,6 +16,20 @@ pub enum Operator {
     Gte,
     Lt,
     Lte,
+}
+
+impl Display for Operator {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let display = match &self {
+            Operator::Eq => "=",
+            Operator::NotEq => "!=",
+            Operator::Gt => ">",
+            Operator::Gte => ">=",
+            Operator::Lt => "<",
+            Operator::Lte => "<=",
+        };
+        write!(f, "{display}")
+    }
 }
 
 impl ops::Not for Predicate {

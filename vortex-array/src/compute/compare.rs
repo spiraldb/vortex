@@ -1,6 +1,6 @@
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
-use vortex_expr::operators::Operator;
+use vortex_expr::Operator;
 
 use crate::{Array, ArrayDType};
 

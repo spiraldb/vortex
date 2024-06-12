@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package vortex.dtype;
+
+message FieldPath {
+  repeated Part parts = 1;
+
+  message Part {
+    oneof part_type {
+      string name = 1;
+      int32 index = 2;
+    }
+  }
+}
