@@ -4,8 +4,7 @@ use std::mem::size_of;
 use arrow_buffer::buffer::BooleanBuffer;
 use num_traits::PrimInt;
 use vortex_dtype::half::f16;
-use vortex_dtype::Nullability::Nullable;
-use vortex_dtype::{match_each_native_ptype, DType, NativePType};
+use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -13,6 +12,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
+use crate::ArrayDType;
 use crate::IntoArray;
 
 trait PStatsType: NativePType + Into<Scalar> + BitWidth {}
@@ -24,7 +24,7 @@ impl ArrayStatisticsCompute for PrimitiveArray {
         match_each_native_ptype!(self.ptype(), |$P| {
             match self.logical_validity() {
                 LogicalValidity::AllValid(_) => self.typed_data::<$P>().compute_statistics(stat),
-                LogicalValidity::AllInvalid(v) => all_null_stats::<$P>(v),
+                LogicalValidity::AllInvalid(v) => Ok(StatsSet::nulls(v, self.dtype())),
                 LogicalValidity::Array(a) => NullableValues(
                     self.typed_data::<$P>(),
                     &a.into_array().flatten_bool()?.boolean_buffer(),
@@ -44,29 +44,6 @@ impl<T: PStatsType> ArrayStatisticsCompute for &[T] {
         self.iter().skip(1).for_each(|next| stats.next(*next));
         Ok(stats.into_map())
     }
-}
-
-fn all_null_stats<T: PStatsType>(len: usize) -> VortexResult<StatsSet> {
-    Ok(StatsSet::from(HashMap::from([
-        (
-            Stat::Min,
-            Scalar::null(DType::Primitive(T::PTYPE, Nullable)),
-        ),
-        (
-            Stat::Max,
-            Scalar::null(DType::Primitive(T::PTYPE, Nullable)),
-        ),
-        (Stat::IsConstant, true.into()),
-        (Stat::IsSorted, true.into()),
-        (Stat::IsStrictSorted, (len < 2).into()),
-        (Stat::RunCount, 1.into()),
-        (Stat::NullCount, len.into()),
-        (Stat::BitWidthFreq, vec![0; size_of::<T>() * 8 + 1].into()),
-        (
-            Stat::TrailingZeroFreq,
-            vec![size_of::<T>() * 8; size_of::<T>() * 8 + 1].into(),
-        ),
-    ])))
 }
 
 struct NullableValues<'a, T: PStatsType>(&'a [T], &'a BooleanBuffer);

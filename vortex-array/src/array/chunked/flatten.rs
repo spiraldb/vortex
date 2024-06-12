@@ -2,13 +2,12 @@ use arrow_buffer::{BooleanBuffer, MutableBuffer, ScalarBuffer};
 use itertools::Itertools;
 use vortex_dtype::{match_each_native_ptype, DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_bail, ErrString, VortexResult};
-use vortex_scalar::Scalar;
 
 use crate::accessor::ArrayAccessor;
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
-use crate::array::constant::ConstantArray;
 use crate::array::extension::ExtensionArray;
+use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
 use crate::array::varbin::builder::VarBinBuilder;
@@ -73,8 +72,8 @@ pub(crate) fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResu
         }
         DType::Null => {
             let len = chunks.iter().map(|chunk| chunk.len()).sum();
-            let const_array = ConstantArray::new(Scalar::null(DType::Null), len);
-            Ok(Flattened::Null(const_array))
+            let null_array = NullArray::new(len);
+            Ok(Flattened::Null(null_array))
         }
     }
 }

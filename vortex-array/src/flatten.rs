@@ -1,8 +1,8 @@
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
-use crate::array::constant::ConstantArray;
 use crate::array::extension::ExtensionArray;
+use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
 use crate::array::varbin::VarBinArray;
@@ -12,7 +12,7 @@ use crate::{Array, IntoArray};
 
 /// The set of encodings that can be converted to Arrow with zero-copy.
 pub enum Flattened {
-    Null(ConstantArray),
+    Null(NullArray),
     Bool(BoolArray),
     Primitive(PrimitiveArray),
     Struct(StructArray),

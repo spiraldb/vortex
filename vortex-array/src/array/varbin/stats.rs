@@ -3,7 +3,6 @@ use std::collections::HashMap;
 
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
-use vortex_scalar::Scalar;
 
 use crate::accessor::ArrayAccessor;
 use crate::array::varbin::{varbin_scalar, VarBinArray};
@@ -37,20 +36,8 @@ pub fn compute_stats(iter: &mut dyn Iterator<Item = Option<&[u8]>>, dtype: &DTyp
         acc.n_nulls(leading_nulls);
         acc.finish(dtype)
     } else {
-        all_null_stats(leading_nulls, dtype)
+        StatsSet::nulls(leading_nulls, dtype)
     }
-}
-
-fn all_null_stats(len: usize, dtype: &DType) -> StatsSet {
-    StatsSet::from(HashMap::from([
-        (Stat::Min, Scalar::null(dtype.clone())),
-        (Stat::Max, Scalar::null(dtype.clone())),
-        (Stat::IsConstant, true.into()),
-        (Stat::IsSorted, true.into()),
-        (Stat::IsStrictSorted, (len < 2).into()),
-        (Stat::RunCount, 1.into()),
-        (Stat::NullCount, len.into()),
-    ]))
 }
 
 pub struct VarBinAccumulator<'a> {
