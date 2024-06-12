@@ -24,6 +24,10 @@ impl FieldPath {
             Some(Self::builder().join_all(new_field_names).build())
         }
     }
+
+    pub fn parts(&self) -> &[FieldIdentifier] {
+        &self.field_names
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

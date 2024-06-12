@@ -4,6 +4,7 @@ use vortex_dtype::DType;
 
 mod binary;
 mod bool;
+mod datafusion;
 mod display;
 mod extension;
 mod list;

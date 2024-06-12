@@ -15,14 +15,16 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
+datafusion-common = { workspace = true, optional = true }
+datafusion-expr = { workspace = true, optional = true }
 vortex-dtype = { path = "../vortex-dtype" }
 vortex-error = { path = "../vortex-error" }
 vortex-scalar = { path = "../vortex-scalar" }
 serde = { workspace = true, optional = true, features = ["derive"] }
 
-
 [dev-dependencies]
 
-
 [features]
+default = []
+datafusion = ["dep:datafusion-common", "dep:datafusion-expr", "vortex-scalar/datafusion"]
 serde = ["dep:serde", "vortex-dtype/serde", "vortex-scalar/serde"]

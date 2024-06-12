@@ -17,7 +17,7 @@ impl FieldPathOperations for FieldPath {
     fn eq(self, other: Value) -> Predicate {
         Predicate {
             left: self,
-            op: Operator::EqualTo,
+            op: Operator::Eq,
             right: other,
         }
     }
@@ -25,7 +25,7 @@ impl FieldPathOperations for FieldPath {
     fn not_eq(self, other: Value) -> Predicate {
         Predicate {
             left: self,
-            op: Operator::NotEqualTo,
+            op: Operator::NotEq,
             right: other,
         }
     }
@@ -33,7 +33,7 @@ impl FieldPathOperations for FieldPath {
     fn gt(self, other: Value) -> Predicate {
         Predicate {
             left: self,
-            op: Operator::GreaterThan,
+            op: Operator::Gt,
             right: other,
         }
     }
@@ -41,7 +41,7 @@ impl FieldPathOperations for FieldPath {
     fn gte(self, other: Value) -> Predicate {
         Predicate {
             left: self,
-            op: Operator::GreaterThanOrEqualTo,
+            op: Operator::Gte,
             right: other,
         }
     }
@@ -49,7 +49,7 @@ impl FieldPathOperations for FieldPath {
     fn lt(self, other: Value) -> Predicate {
         Predicate {
             left: self,
-            op: Operator::LessThan,
+            op: Operator::Lt,
             right: other,
         }
     }
@@ -57,7 +57,7 @@ impl FieldPathOperations for FieldPath {
     fn lte(self, other: Value) -> Predicate {
         Predicate {
             left: self,
-            op: Operator::LessThanOrEqualTo,
+            op: Operator::Lte,
             right: other,
         }
     }

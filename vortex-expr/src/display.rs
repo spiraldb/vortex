@@ -42,12 +42,12 @@ impl Display for Value {
 impl Display for Operator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let display = match &self {
-            Operator::EqualTo => "=",
-            Operator::NotEqualTo => "!=",
-            Operator::GreaterThan => ">",
-            Operator::GreaterThanOrEqualTo => ">=",
-            Operator::LessThan => "<",
-            Operator::LessThanOrEqualTo => "<=",
+            Operator::Eq => "=",
+            Operator::NotEq => "!=",
+            Operator::Gt => ">",
+            Operator::Gte => ">=",
+            Operator::Lt => "<",
+            Operator::Lte => "<=",
         };
         write!(f, "{display}")
     }

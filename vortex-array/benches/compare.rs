@@ -27,9 +27,7 @@ fn filter_bool_indices(c: &mut Criterion) {
 
     group.bench_function("compare_bool", |b| {
         b.iter(|| {
-            let indices =
-                vortex::compute::compare::compare(&arr, &arr2, Operator::GreaterThanOrEqualTo)
-                    .unwrap();
+            let indices = vortex::compute::compare::compare(&arr, &arr2, Operator::Gte).unwrap();
             black_box(indices);
             Ok::<(), VortexError>(())
         });
@@ -53,9 +51,7 @@ fn filter_indices(c: &mut Criterion) {
 
     group.bench_function("compare_int", |b| {
         b.iter(|| {
-            let indices =
-                vortex::compute::compare::compare(&arr, &arr2, Operator::GreaterThanOrEqualTo)
-                    .unwrap();
+            let indices = vortex::compute::compare::compare(&arr, &arr2, Operator::Gte).unwrap();
             black_box(indices);
             Ok::<(), VortexError>(())
         });
