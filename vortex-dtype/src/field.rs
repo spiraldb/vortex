@@ -34,6 +34,10 @@ impl Display for Field {
 pub struct FieldPath(Vec<Field>);
 
 impl FieldPath {
+    pub fn root() -> Self {
+        Self(vec![])
+    }
+
     pub fn from_name(name: &str) -> Self {
         Self(vec![Field::from(name)])
     }
@@ -54,6 +58,12 @@ impl FieldPath {
 impl FromIterator<Field> for FieldPath {
     fn from_iter<T: IntoIterator<Item = Field>>(iter: T) -> Self {
         FieldPath(iter.into_iter().collect())
+    }
+}
+
+impl From<Field> for FieldPath {
+    fn from(value: Field) -> Self {
+        FieldPath(vec![value])
     }
 }
 

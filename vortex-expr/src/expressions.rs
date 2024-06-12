@@ -16,6 +16,39 @@ pub struct Disjunction {
     conjunctions: Vec<Conjunction>,
 }
 
+impl Disjunction {
+    pub fn iter(&self) -> impl Iterator<Item = &Conjunction> {
+        self.conjunctions.iter()
+    }
+}
+
+impl From<Conjunction> for Disjunction {
+    fn from(value: Conjunction) -> Self {
+        Self {
+            conjunctions: vec![value],
+        }
+    }
+}
+
+impl FromIterator<Predicate> for Disjunction {
+    fn from_iter<T: IntoIterator<Item = Predicate>>(iter: T) -> Self {
+        Self {
+            conjunctions: iter
+                .into_iter()
+                .map(|predicate| Conjunction::from_iter([predicate]))
+                .collect(),
+        }
+    }
+}
+
+impl FromIterator<Conjunction> for Disjunction {
+    fn from_iter<T: IntoIterator<Item = Conjunction>>(iter: T) -> Self {
+        Self {
+            conjunctions: iter.into_iter().collect(),
+        }
+    }
+}
+
 impl Display for Disjunction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.conjunctions
@@ -37,8 +70,20 @@ pub struct Conjunction {
 }
 
 impl Conjunction {
+    pub fn new() -> Self {
+        Self { predicates: vec![] }
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &Predicate> {
         self.predicates.iter()
+    }
+}
+
+impl From<Predicate> for Conjunction {
+    fn from(value: Predicate) -> Self {
+        Self {
+            predicates: vec![value],
+        }
     }
 }
 
@@ -135,7 +180,7 @@ impl Value {
 
 #[cfg(test)]
 mod test {
-    use vortex_dtype::field::field;
+    use vortex_dtype::field::Field;
 
     use super::*;
 
@@ -143,9 +188,9 @@ mod test {
     fn test_lit() {
         let scalar: Scalar = 1.into();
         let value: Value = lit(scalar);
-        let field = field("id");
+        let field = Field::from("id");
         let expr = Predicate {
-            lhs: field,
+            lhs: FieldPath::from_iter([field]),
             op: Operator::Eq,
             rhs: value,
         };

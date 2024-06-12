@@ -1,8 +1,5 @@
 #![feature(iter_intersperse)]
 
-extern crate core;
-extern crate core;
-
 mod datafusion;
 mod display;
 mod expressions;

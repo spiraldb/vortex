@@ -18,11 +18,7 @@ fn filter_indices(c: &mut Criterion) {
         .collect_vec()
         .into_array();
 
-    let predicate = Disjunction {
-        conjunctions: vec![Conjunction {
-            predicates: vec![FieldPath::builder().build().lt(lit(50_000_000i64))],
-        }],
-    };
+    let predicate = Disjunction::from(Conjunction::from(FieldPath::root().lt(lit(50_000_000i64))));
 
     group.bench_function("vortex", |b| {
         b.iter(|| {
