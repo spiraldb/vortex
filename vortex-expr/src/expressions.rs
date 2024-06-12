@@ -22,6 +22,14 @@ impl Disjunction {
     }
 }
 
+impl Default for Disjunction {
+    fn default() -> Self {
+        Self {
+            conjunctions: vec![],
+        }
+    }
+}
+
 impl From<Conjunction> for Disjunction {
     fn from(value: Conjunction) -> Self {
         Self {
@@ -70,12 +78,14 @@ pub struct Conjunction {
 }
 
 impl Conjunction {
-    pub fn new() -> Self {
-        Self { predicates: vec![] }
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = &Predicate> {
         self.predicates.iter()
+    }
+}
+
+impl Default for Conjunction {
+    fn default() -> Self {
+        Self { predicates: vec![] }
     }
 }
 
