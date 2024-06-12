@@ -4,19 +4,14 @@
 use std::sync::Arc;
 
 use arrow_array::{ArrayRef as ArrowArrayRef, NullArray as ArrowNullArray};
-use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::VortexResult;
 
 use crate::array::null::NullArray;
 use crate::compute::as_arrow::AsArrowArray;
-use crate::{ArrayDType, ArrayTrait};
+use crate::ArrayTrait;
 
 impl AsArrowArray for NullArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
-        if self.dtype() != &DType::Null {
-            vortex_bail!(InvalidArgument: "only null ConstantArrays convert to arrow");
-        }
-
         let arrow_null = ArrowNullArray::new(self.len());
         Ok(Arc::new(arrow_null))
     }
