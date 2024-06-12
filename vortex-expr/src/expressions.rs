@@ -6,7 +6,7 @@ use vortex_scalar::Scalar;
 
 use crate::operators::Operator;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
@@ -19,14 +19,6 @@ pub struct Disjunction {
 impl Disjunction {
     pub fn iter(&self) -> impl Iterator<Item = &Conjunction> {
         self.conjunctions.iter()
-    }
-}
-
-impl Default for Disjunction {
-    fn default() -> Self {
-        Self {
-            conjunctions: vec![],
-        }
     }
 }
 
@@ -67,7 +59,7 @@ impl Display for Disjunction {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
@@ -80,12 +72,6 @@ pub struct Conjunction {
 impl Conjunction {
     pub fn iter(&self) -> impl Iterator<Item = &Predicate> {
         self.predicates.iter()
-    }
-}
-
-impl Default for Conjunction {
-    fn default() -> Self {
-        Self { predicates: vec![] }
     }
 }
 
