@@ -5,8 +5,8 @@ use rand::{thread_rng, Rng};
 use vortex::IntoArray;
 use vortex_dtype::field_paths::FieldPath;
 use vortex_error::VortexError;
-use vortex_expr::expressions::{lit, Conjunction, Disjunction};
-use vortex_expr::field_paths::FieldPathOperations;
+use vortex_expr::FieldPathOperations;
+use vortex_expr::{lit, Conjunction, Disjunction};
 
 fn filter_indices(c: &mut Criterion) {
     let mut group = c.benchmark_group("filter_indices");

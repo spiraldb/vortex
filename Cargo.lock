@@ -5503,8 +5503,10 @@ dependencies = [
 name = "vortex-expr"
 version = "0.1.0"
 dependencies = [
+ "build-vortex",
  "datafusion-common 39.0.0",
  "datafusion-expr 39.0.0",
+ "prost",
  "serde",
  "vortex-dtype",
  "vortex-error",

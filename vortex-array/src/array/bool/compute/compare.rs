@@ -1,7 +1,7 @@
 use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 use vortex_error::VortexResult;
-use vortex_expr::operators::Operator;
+use vortex_expr::Operator;
 
 use crate::array::bool::BoolArray;
 use crate::compute::compare::CompareFn;

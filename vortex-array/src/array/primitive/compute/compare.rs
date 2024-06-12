@@ -3,7 +3,7 @@ use std::ops::BitAnd;
 use arrow_buffer::BooleanBuffer;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
-use vortex_expr::operators::Operator;
+use vortex_expr::Operator;
 
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;

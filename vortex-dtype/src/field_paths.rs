@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FieldPath {
-    field_names: Vec<FieldIdentifier>,
+    parts: Vec<FieldIdentifier>,
 }
 
 impl FieldPath {
@@ -13,20 +13,20 @@ impl FieldPath {
     }
 
     pub fn head(&self) -> Option<&FieldIdentifier> {
-        self.field_names.first()
+        self.parts.first()
     }
 
     pub fn tail(&self) -> Option<Self> {
         if self.head().is_none() {
             None
         } else {
-            let new_field_names = self.field_names[1..self.field_names.len()].to_vec();
-            Some(Self::builder().join_all(new_field_names).build())
+            let new_parts = self.parts[1..self.parts.len()].to_vec();
+            Some(Self::builder().join_all(new_parts).build())
         }
     }
 
     pub fn parts(&self) -> &[FieldIdentifier] {
-        &self.field_names
+        &self.parts
     }
 }
 
@@ -38,31 +38,30 @@ pub enum FieldIdentifier {
 }
 
 pub struct FieldPathBuilder {
-    field_names: Vec<FieldIdentifier>,
+    parts: Vec<FieldIdentifier>,
 }
 
 impl FieldPathBuilder {
     pub fn new() -> Self {
-        Self {
-            field_names: Vec::new(),
-        }
+        Self { parts: Vec::new() }
+    }
+
+    pub fn push<T: Into<FieldIdentifier>>(&mut self, identifier: T) {
+        self.parts.push(identifier.into());
     }
 
     pub fn join<T: Into<FieldIdentifier>>(mut self, identifier: T) -> Self {
-        self.field_names.push(identifier.into());
+        self.push(identifier);
         self
     }
 
     pub fn join_all(mut self, identifiers: Vec<impl Into<FieldIdentifier>>) -> Self {
-        self.field_names
-            .extend(identifiers.into_iter().map(|v| v.into()));
+        self.parts.extend(identifiers.into_iter().map(|v| v.into()));
         self
     }
 
     pub fn build(self) -> FieldPath {
-        FieldPath {
-            field_names: self.field_names,
-        }
+        FieldPath { parts: self.parts }
     }
 }
 
@@ -78,9 +77,7 @@ pub fn field(x: impl Into<FieldIdentifier>) -> FieldPath {
 
 impl From<FieldIdentifier> for FieldPath {
     fn from(value: FieldIdentifier) -> Self {
-        FieldPath {
-            field_names: vec![value],
-        }
+        FieldPath { parts: vec![value] }
     }
 }
 
@@ -108,7 +105,7 @@ impl Display for FieldIdentifier {
 impl Display for FieldPath {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let formatted = self
-            .field_names
+            .parts
             .iter()
             .map(|fid| format!("{fid}"))
             .collect::<Vec<_>>()

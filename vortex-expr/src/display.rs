@@ -2,7 +2,6 @@ use core::fmt;
 use std::fmt::{Display, Formatter};
 
 use crate::expressions::{Conjunction, Disjunction, Predicate, Value};
-use crate::operators::Operator;
 
 impl Display for Disjunction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -36,20 +35,6 @@ impl Display for Value {
             Value::Field(field_path) => Display::fmt(field_path, f),
             Value::Literal(scalar) => Display::fmt(&scalar, f),
         }
-    }
-}
-
-impl Display for Operator {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let display = match &self {
-            Operator::Eq => "=",
-            Operator::NotEq => "!=",
-            Operator::Gt => ">",
-            Operator::Gte => ">=",
-            Operator::Lt => "<",
-            Operator::Lte => "<=",
-        };
-        write!(f, "{display}")
     }
 }
 

@@ -3,7 +3,7 @@ use std::ops::{BitAnd, BitOr};
 use arrow_buffer::BooleanBuffer;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_expr::expressions::{Disjunction, Predicate, Value};
+use vortex_expr::{Disjunction, Predicate, Value};
 
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
@@ -71,8 +71,8 @@ fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
 mod test {
     use itertools::Itertools;
     use vortex_dtype::field_paths::FieldPathBuilder;
-    use vortex_expr::expressions::{lit, Conjunction};
-    use vortex_expr::field_paths::FieldPathOperations;
+    use vortex_expr::FieldPathOperations;
+    use vortex_expr::{lit, Conjunction};
 
     use super::*;
     use crate::validity::Validity;
