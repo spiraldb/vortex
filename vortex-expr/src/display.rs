@@ -1,31 +1,11 @@
 use core::fmt;
 use std::fmt::{Display, Formatter};
 
-use crate::expressions::{Conjunction, Disjunction, Predicate, Value};
-
-impl Display for Disjunction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.conjunctions
-            .iter()
-            .map(|v| format!("{}", v))
-            .intersperse("\nOR \n".to_string())
-            .try_for_each(|s| write!(f, "{}", s))
-    }
-}
-
-impl Display for Conjunction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.predicates
-            .iter()
-            .map(|v| format!("{}", v))
-            .intersperse(" AND ".to_string())
-            .try_for_each(|s| write!(f, "{}", s))
-    }
-}
+use crate::expressions::{Predicate, Value};
 
 impl Display for Predicate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {} {})", self.left, self.op, self.right)
+        write!(f, "({} {} {})", self.lhs, self.op, self.rhs)
     }
 }
 
@@ -40,7 +20,7 @@ impl Display for Value {
 
 #[cfg(test)]
 mod tests {
-    use vortex_dtype::field_paths::{field, FieldPath};
+    use vortex_dtype::field::FieldPath;
 
     use crate::expressions::{lit, Conjunction, Disjunction};
     use crate::field_paths::FieldPathOperations;

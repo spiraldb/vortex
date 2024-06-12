@@ -3,7 +3,7 @@
 use vortex_error::{vortex_bail, vortex_err, VortexError};
 
 use crate::proto::expr as pb;
-use crate::proto::expr::predicate::Right;
+use crate::proto::expr::predicate::Rhs;
 use crate::{Operator, Predicate, Value};
 
 impl TryFrom<&pb::Predicate> for Predicate {
@@ -11,19 +11,19 @@ impl TryFrom<&pb::Predicate> for Predicate {
 
     fn try_from(value: &pb::Predicate) -> Result<Self, Self::Error> {
         Ok(Predicate {
-            left: value
-                .left
+            lhs: value
+                .lhs
                 .as_ref()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Lhs is missing"))?
                 .try_into()?,
             op: value.op().try_into()?,
-            right: match value
-                .right
+            rhs: match value
+                .rhs
                 .as_ref()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "Rhs is missing"))?
             {
-                Right::Field(f) => Value::Field(f.try_into()?),
-                Right::Scalar(scalar) => Value::Literal(scalar.try_into()?),
+                Rhs::Field(f) => Value::Field(f.try_into()?),
+                Rhs::Scalar(scalar) => Value::Literal(scalar.try_into()?),
             },
         })
     }

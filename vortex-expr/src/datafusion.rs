@@ -1,7 +1,7 @@
 #![cfg(feature = "datafusion")]
 use datafusion_common::Column;
 use datafusion_expr::{BinaryExpr, Expr};
-use vortex_dtype::field_paths::{FieldIdentifier, FieldPath};
+use vortex_dtype::field::{Field, FieldPath};
 use vortex_scalar::Scalar;
 
 use crate::expressions::{Predicate, Value};
@@ -10,9 +10,9 @@ use crate::operators::Operator;
 impl From<Predicate> for Expr {
     fn from(value: Predicate) -> Self {
         Expr::BinaryExpr(BinaryExpr::new(
-            Box::new(FieldPathWrapper(value.left).into()),
+            Box::new(FieldPathWrapper(value.lhs).into()),
             value.op.into(),
-            Box::new(value.right.into()),
+            Box::new(value.rhs.into()),
         ))
     }
 }
@@ -46,8 +46,8 @@ impl From<FieldPathWrapper> for Expr {
         for part in value.0.parts() {
             match part {
                 // TODO(ngates): escape quotes?
-                FieldIdentifier::Name(identifier) => field.push_str(&format!("\"{}\"", identifier)),
-                FieldIdentifier::ListIndex(idx) => field.push_str(&format!("[{}]", idx)),
+                Field::Name(identifier) => field.push_str(&format!("\"{}\"", identifier)),
+                Field::Index(idx) => field.push_str(&format!("[{}]", idx)),
             }
         }
 

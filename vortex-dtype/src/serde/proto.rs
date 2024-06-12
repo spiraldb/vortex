@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
-use crate::field_paths::{FieldPath, FieldPathBuilder};
+use crate::field::{Field, FieldPath};
 use crate::proto::dtype::d_type::DtypeType;
-use crate::proto::dtype::field_path::part::PartType;
+use crate::proto::dtype::field::FieldType;
 use crate::{proto::dtype as pb, DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
 
 impl TryFrom<&pb::DType> for DType {
@@ -136,17 +136,17 @@ impl TryFrom<&pb::FieldPath> for FieldPath {
     type Error = VortexError;
 
     fn try_from(value: &pb::FieldPath) -> Result<Self, Self::Error> {
-        let mut builder = FieldPathBuilder::new();
-        for part in value.parts.iter() {
-            match part
-                .part_type
+        let mut path = Vec::with_capacity(value.path.len());
+        for field in value.path.iter() {
+            match field
+                .field_type
                 .as_ref()
                 .ok_or_else(|| vortex_err!(InvalidSerde: "FieldPath part missing type"))?
             {
-                PartType::Name(name) => builder.push(name.as_str()),
-                PartType::Index(idx) => builder.push(*idx as u64),
+                FieldType::Name(name) => path.push(Field::from(name.as_str())),
+                FieldType::Index(idx) => path.push(Field::from(*idx)),
             }
         }
-        Ok(builder.build())
+        Ok(FieldPath::from(path))
     }
 }

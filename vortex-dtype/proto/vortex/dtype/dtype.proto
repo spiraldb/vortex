@@ -71,3 +71,14 @@ message DType {
     Extension extension = 9;
   }
 }
+
+message Field {
+  oneof field_type {
+    string name = 1;
+    int32 index = 2;
+  }
+}
+
+message FieldPath {
+  repeated Field path = 1;
+}

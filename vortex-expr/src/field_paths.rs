@@ -1,4 +1,4 @@
-use vortex_dtype::field_paths::FieldPath;
+use vortex_dtype::field::FieldPath;
 
 use crate::expressions::{Predicate, Value};
 use crate::operators::Operator;
@@ -16,49 +16,49 @@ impl FieldPathOperations for FieldPath {
     // comparisons
     fn eq(self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self,
             op: Operator::Eq,
-            right: other,
+            rhs: other,
         }
     }
 
     fn not_eq(self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self,
             op: Operator::NotEq,
-            right: other,
+            rhs: other,
         }
     }
 
     fn gt(self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self,
             op: Operator::Gt,
-            right: other,
+            rhs: other,
         }
     }
 
     fn gte(self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self,
             op: Operator::Gte,
-            right: other,
+            rhs: other,
         }
     }
 
     fn lt(self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self,
             op: Operator::Lt,
-            right: other,
+            rhs: other,
         }
     }
 
     fn lte(self, other: Value) -> Predicate {
         Predicate {
-            left: self,
+            lhs: self,
             op: Operator::Lte,
-            right: other,
+            rhs: other,
         }
     }
 }

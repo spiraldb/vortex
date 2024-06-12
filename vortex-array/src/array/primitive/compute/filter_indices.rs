@@ -38,11 +38,11 @@ fn indices_matching_predicate(
     arr: &PrimitiveArray,
     predicate: &Predicate,
 ) -> VortexResult<BooleanBuffer> {
-    if predicate.left.head().is_some() {
+    if !predicate.lhs.path().is_empty() {
         vortex_bail!("Invalid path for primitive array")
     }
 
-    let rhs = match &predicate.right {
+    let rhs = match &predicate.rhs {
         Value::Field(_) => {
             vortex_bail!("Cannot apply field reference to primitive array")
         }
@@ -70,7 +70,7 @@ fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_dtype::field_paths::FieldPathBuilder;
+    use vortex_dtype::field::FieldPathBuilder;
     use vortex_expr::FieldPathOperations;
     use vortex_expr::{lit, Conjunction};
 

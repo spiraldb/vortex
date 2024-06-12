@@ -3,7 +3,7 @@ use itertools::Itertools;
 use rand::distributions::Uniform;
 use rand::{thread_rng, Rng};
 use vortex::IntoArray;
-use vortex_dtype::field_paths::FieldPath;
+use vortex_dtype::field::FieldPath;
 use vortex_error::VortexError;
 use vortex_expr::FieldPathOperations;
 use vortex_expr::{lit, Conjunction, Disjunction};
