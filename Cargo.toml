@@ -41,7 +41,7 @@ rust-version = "1.76"
 ahash = "0.8.11"
 allocator-api2 = "0.2.16"
 arrayref = "0.3.7"
-arrow = { version = "51.0.0", features = ["pyarrow"] }
+arrow = { version = "52.0.0", features = ["pyarrow"] }
 arrow-array = "51.0.0"
 arrow-buffer = "51.0.0"
 arrow-csv = "51.0.0"
