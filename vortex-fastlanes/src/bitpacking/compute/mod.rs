@@ -88,7 +88,7 @@ fn take_primitive<T: NativePType + TryBitPack>(
         indices
             .typed_data::<$P>()
             .iter()
-            .group_by(|idx| (**idx / 1024) as usize)
+            .chunk_by(|idx| (**idx / 1024) as usize)
             .into_iter()
             .map(|(k, g)| (k, g.map(|idx| (*idx % 1024) as u16).collect()))
             .collect()

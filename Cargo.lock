@@ -989,7 +989,7 @@ dependencies = [
  "fs_extra",
  "futures",
  "humansize",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "lance",
  "lazy_static",
  "log",
@@ -2933,6 +2933,15 @@ name = "itertools"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
 ]
@@ -5653,7 +5662,7 @@ name = "vortex-alp"
 version = "0.1.0"
 dependencies = [
  "divan",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "num-traits",
  "serde",
  "vortex-array",
@@ -5677,7 +5686,7 @@ dependencies = [
  "futures-util",
  "getrandom",
  "humansize",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "lazy_static",
  "log",
  "num-traits",
@@ -5741,7 +5750,7 @@ dependencies = [
  "build-vortex",
  "flatbuffers 23.5.26",
  "half",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "num-traits",
  "prost",
  "serde",
@@ -5784,7 +5793,7 @@ dependencies = [
  "arrayref",
  "criterion",
  "fastlanez",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "num-traits",
  "rand",
  "serde",
@@ -5818,7 +5827,7 @@ dependencies = [
  "flatbuffers 23.5.26",
  "futures-executor",
  "futures-util",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "monoio",
  "pin-project",
  "rand",
@@ -5838,7 +5847,7 @@ dependencies = [
 name = "vortex-ree"
 version = "0.1.0"
 dependencies = [
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "num-traits",
  "serde",
  "vortex-array",
@@ -5871,7 +5880,7 @@ dependencies = [
  "datafusion-common 39.0.0",
  "flatbuffers 23.5.26",
  "flexbuffers",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "num-traits",
  "paste",
  "prost",
