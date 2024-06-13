@@ -285,8 +285,8 @@ impl<R: VortexRead> MessageReader<R> {
             .read_into(BytesMut::with_capacity(total_len))
             .await?;
         buffer.truncate(buffer_len);
-        let res = Ok(Some(Buffer::from(buffer.freeze())));
+        let page_buffer = Ok(Some(Buffer::from(buffer.freeze())));
         let _ = self.next().await?;
-        res
+        page_buffer
     }
 }
