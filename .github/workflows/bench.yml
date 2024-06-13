@@ -31,7 +31,7 @@ jobs:
         run: cargo bench | tee bench.txt
 
       - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1.19.3
+        uses: benchmark-action/github-action-benchmark@v1.20.3
         with:
           name: Vortex Benchmarks
           tool: cargo
