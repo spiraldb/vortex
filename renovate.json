@@ -8,6 +8,9 @@
       "matchPackagePrefixes": [
         "arrow"
       ],
+      "matchPackageNames": [
+        "parquet"
+      ],
       "groupName": "arrow"
     },
     {
