@@ -6,7 +6,8 @@
   "packageRules": [
     {
       "matchPackagePrefixes": [
-        "arrow"
+        "arrow",
+        "parquet"
       ],
       "groupName": "arrow"
     },
