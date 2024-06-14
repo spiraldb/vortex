@@ -2,16 +2,20 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef as ArrowArrayRef, BooleanArray as ArrowBoolArray};
 use arrow_buffer::BooleanBufferBuilder;
+use num_traits::AsPrimitive;
+use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use super::{ByteBoolArray, ByteBoolMetadata};
 use crate::{
-    compute::{as_arrow::AsArrowArray, scalar_at::ScalarAtFn, slice::SliceFn, ArrayCompute},
+    compute::{
+        as_arrow::AsArrowArray, scalar_at::ScalarAtFn, slice::SliceFn, take::TakeFn, ArrayCompute,
+    },
     encoding::ArrayEncodingRef,
     stats::StatsSet,
-    validity::ArrayValidity,
-    ArrayDType, ArrayData, ArrayTrait,
+    validity::{ArrayValidity, Validity},
+    ArrayDType, ArrayData, ArrayTrait, IntoArray,
 };
 
 impl ArrayCompute for ByteBoolArray {
@@ -81,8 +85,7 @@ impl AsArrowArray for ByteBoolArray {
 
         let mut builder = BooleanBufferBuilder::new(self.len());
 
-        // Safety: bool and u8 are the same size. We don't care about logically null values here.
-        let bool_slice = unsafe { std::mem::transmute::<_, &[bool]>(self.buffer().as_slice()) };
+        let bool_slice = self.as_bool_slice();
 
         builder.append_slice(bool_slice);
 
@@ -100,7 +103,7 @@ impl SliceFn for ByteBoolArray {
                 let validity = self.validity().slice(start, stop)?;
 
                 let slice_metadata = Arc::new(ByteBoolMetadata {
-                    validity: validity.to_metadata(length).unwrap(),
+                    validity: validity.to_metadata(length)?,
                     length,
                 });
 
@@ -120,4 +123,35 @@ impl SliceFn for ByteBoolArray {
             }
         }
     }
+}
+
+impl TakeFn for ByteBoolArray {
+    fn take(&self, indices: &crate::Array) -> VortexResult<crate::Array> {
+        let validity = self.validity();
+        let indices = indices.clone().flatten_primitive()?;
+
+        let bools = match_each_integer_ptype!(indices.ptype(), |$I| {
+            take_byte_bool(self.as_bool_slice(), validity, indices.typed_data::<$I>())
+        });
+
+        Ok(Self::from(bools).into_array())
+    }
+}
+
+fn take_byte_bool<I: AsPrimitive<usize>>(
+    bools: &[bool],
+    validity: Validity,
+    indices: &[I],
+) -> Vec<Option<bool>> {
+    indices
+        .iter()
+        .map(|&idx| {
+            let idx = idx.as_();
+            if validity.is_valid(idx) {
+                Some(bools[idx])
+            } else {
+                None
+            }
+        })
+        .collect()
 }

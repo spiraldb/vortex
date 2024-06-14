@@ -33,18 +33,24 @@ impl ByteBoolArray {
     pub fn buffer(&self) -> &Buffer {
         self.array().buffer().expect("missing mandatory buffer")
     }
+
+    fn as_bool_slice(&self) -> &[bool] {
+        // Safety: bool and u8 are the same size. We don't care about logically null values here.
+        unsafe { std::mem::transmute(self.buffer().as_slice()) }
+    }
 }
 
 impl From<Vec<bool>> for ByteBoolArray {
     fn from(value: Vec<bool>) -> Self {
         let mut value = ManuallyDrop::new(value);
+        value.shrink_to_fit();
+
         let ptr = value.as_mut_ptr() as *mut u8;
         let length = value.len();
-        let capacity = value.capacity();
 
-        let bytes_vec = unsafe { Vec::from_raw_parts(ptr, length, capacity) };
+        let bytes = unsafe { std::slice::from_raw_parts(ptr, length) };
 
-        let buffer = Buffer::from(bytes_vec);
+        let buffer = Buffer::from(bytes);
         let typed = TypedArray::try_from_parts(
             DType::Bool(Nullability::NonNullable),
             ByteBoolMetadata {
