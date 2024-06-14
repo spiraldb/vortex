@@ -30,7 +30,10 @@ impl ByteBoolArray {
             .to_validity(self.array().child(0, &Validity::DTYPE))
     }
 
-    pub fn from_parts<V: Into<Validity>>(data: Vec<bool>, validity: V) -> VortexResult<Self> {
+    pub fn try_with_validity<V: Into<Validity>>(
+        data: Vec<bool>,
+        validity: V,
+    ) -> VortexResult<Self> {
         let validity = validity.into();
         let mut vec = ManuallyDrop::new(data);
         vec.shrink_to_fit();
@@ -44,7 +47,7 @@ impl ByteBoolArray {
         let typed = TypedArray::try_from_parts(
             DType::Bool(validity.nullability()),
             ByteBoolMetadata {
-                validity: validity.to_metadata(length).unwrap(),
+                validity: validity.to_metadata(length)?,
                 length,
             },
             Some(buffer),
@@ -68,7 +71,7 @@ impl ByteBoolArray {
 impl From<Vec<bool>> for ByteBoolArray {
     fn from(value: Vec<bool>) -> Self {
         let value_len = value.len();
-        Self::from_parts(value, NullBuffer::new_valid(value_len)).unwrap()
+        Self::try_with_validity(value, NullBuffer::new_valid(value_len)).unwrap()
     }
 }
 
@@ -79,7 +82,7 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
         // Safety: Option<bool> and `bool` are the same size
         let casted = unsafe { std::mem::transmute::<&[Option<bool>], &[bool]>(value.as_slice()) };
 
-        Self::from_parts(casted.to_vec(), validity).unwrap()
+        Self::try_with_validity(casted.to_vec(), validity).unwrap()
     }
 }
 
