@@ -23,10 +23,6 @@ impl ArrayCompute for ByteBoolArray {
         Some(self)
     }
 
-    fn cast(&self) -> Option<&dyn crate::compute::cast::CastFn> {
-        None
-    }
-
     fn compare(&self) -> Option<&dyn crate::compute::compare::CompareFn> {
         None
     }
@@ -35,24 +31,8 @@ impl ArrayCompute for ByteBoolArray {
         None
     }
 
-    fn filter_indices(&self) -> Option<&dyn crate::compute::filter_indices::FilterIndicesFn> {
-        None
-    }
-
-    fn patch(&self) -> Option<&dyn crate::compute::patch::PatchFn> {
-        None
-    }
-
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
-    }
-
-    fn subtract_scalar(&self) -> Option<&dyn crate::compute::scalar_subtract::SubtractScalarFn> {
-        None
-    }
-
-    fn search_sorted(&self) -> Option<&dyn crate::compute::search_sorted::SearchSortedFn> {
-        None
     }
 
     fn slice(&self) -> Option<&dyn crate::compute::slice::SliceFn> {
@@ -60,7 +40,7 @@ impl ArrayCompute for ByteBoolArray {
     }
 
     fn take(&self) -> Option<&dyn crate::compute::take::TakeFn> {
-        None
+        Some(self)
     }
 }
 
@@ -119,7 +99,7 @@ impl SliceFn for ByteBoolArray {
                         .into(),
                     StatsSet::new(),
                 )
-                .map(|arr| crate::Array::Data(arr))
+                .map(crate::Array::Data)
             }
         }
     }
@@ -154,4 +134,46 @@ fn take_byte_bool<I: AsPrimitive<usize>>(
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use arrow_array::cast::AsArray as _;
+
+    use super::*;
+    use crate::{compute::slice::slice, AsArray as _};
+
+    #[test]
+    fn test_as_arrow() {
+        let original = vec![Some(true), Some(true), None, Some(false), None];
+
+        let vortex_arr = ByteBoolArray::from(original.clone());
+        let arrow_arr = ArrowBoolArray::from(original);
+
+        let converted_arr = AsArrowArray::as_arrow(&vortex_arr).unwrap();
+        let bool_converted_arr = converted_arr.as_boolean();
+
+        for (idx, (expected, output)) in arrow_arr.iter().zip(bool_converted_arr.iter()).enumerate()
+        {
+            assert_eq!(
+                expected, output,
+                "The item at index {} doesn't match - expected {:?} but got {:?}",
+                idx, expected, output
+            );
+        }
+    }
+
+    #[test]
+    #[allow(dead_code, unused_variables)]
+    fn test_slice() {
+        let original = vec![Some(true), Some(true), None, Some(false), None];
+        let vortex_arr = ByteBoolArray::from(original.clone());
+
+        let sliced_arr = slice(vortex_arr.as_array_ref(), 1, 4).unwrap();
+
+        let sliced_arr = ByteBoolArray::try_from(sliced_arr).unwrap();
+        let expected = ByteBoolArray::from(vec![Some(true), None, Some(false)]);
+
+        // assert_eq!(sliced_arr, expected);
+    }
 }

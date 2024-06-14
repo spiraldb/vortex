@@ -1,9 +1,9 @@
 use std::mem::ManuallyDrop;
 
+use arrow_buffer::NullBuffer;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
-use vortex_dtype::Nullability;
 
 use crate::{
     impl_encoding,
@@ -30,6 +30,31 @@ impl ByteBoolArray {
             .to_validity(self.array().child(0, &Validity::DTYPE))
     }
 
+    pub fn from_parts<V: Into<Validity>>(data: Vec<bool>, validity: V) -> VortexResult<Self> {
+        let validity = validity.into();
+        let mut vec = ManuallyDrop::new(data);
+        vec.shrink_to_fit();
+
+        let ptr = vec.as_mut_ptr() as *mut u8;
+        let length = vec.len();
+
+        let bytes = unsafe { std::slice::from_raw_parts(ptr, length) };
+
+        let buffer = Buffer::from(bytes);
+        let typed = TypedArray::try_from_parts(
+            DType::Bool(validity.nullability()),
+            ByteBoolMetadata {
+                validity: validity.to_metadata(length).unwrap(),
+                length,
+            },
+            Some(buffer),
+            validity.into_array_data().into_iter().collect_vec().into(),
+            StatsSet::new(),
+        )?;
+
+        Ok(typed.into())
+    }
+
     pub fn buffer(&self) -> &Buffer {
         self.array().buffer().expect("missing mandatory buffer")
     }
@@ -42,62 +67,19 @@ impl ByteBoolArray {
 
 impl From<Vec<bool>> for ByteBoolArray {
     fn from(value: Vec<bool>) -> Self {
-        let mut value = ManuallyDrop::new(value);
-        value.shrink_to_fit();
-
-        let ptr = value.as_mut_ptr() as *mut u8;
-        let length = value.len();
-
-        let bytes = unsafe { std::slice::from_raw_parts(ptr, length) };
-
-        let buffer = Buffer::from(bytes);
-        let typed = TypedArray::try_from_parts(
-            DType::Bool(Nullability::NonNullable),
-            ByteBoolMetadata {
-                validity: ValidityMetadata::NonNullable,
-                length,
-            },
-            Some(buffer),
-            Validity::NonNullable
-                .into_array_data()
-                .into_iter()
-                .collect_vec()
-                .into(),
-            StatsSet::new(),
-        )
-        .unwrap();
-
-        typed.into()
+        let value_len = value.len();
+        Self::from_parts(value, NullBuffer::new_valid(value_len)).unwrap()
     }
 }
 
 impl From<Vec<Option<bool>>> for ByteBoolArray {
     fn from(value: Vec<Option<bool>>) -> Self {
-        let mut value = ManuallyDrop::new(value);
-        let ptr = value.as_mut_ptr() as *mut u8;
-        let length = value.len();
-        let capacity = value.capacity();
-
         let validity = Validity::from_iter(value.iter());
 
-        // SAFETY: `Option<bool>` is the same as `bool`, so as long as we keep the validity data the data is still valid.
-        // If we ever want to turn this Array back to a Vec, we might have to do some work
-        let bytes_vec = unsafe { Vec::from_raw_parts(ptr, length, capacity) };
+        // Safety: Option<bool> and `bool` are the same size
+        let casted = unsafe { std::mem::transmute::<&[Option<bool>], &[bool]>(value.as_slice()) };
 
-        let buffer = Buffer::from(bytes_vec);
-        let typed = TypedArray::try_from_parts(
-            DType::Bool(Nullability::Nullable),
-            ByteBoolMetadata {
-                validity: validity.to_metadata(length).unwrap(),
-                length,
-            },
-            Some(buffer),
-            validity.into_array_data().into_iter().collect_vec().into(),
-            StatsSet::new(),
-        )
-        .unwrap();
-
-        typed.into()
+        Self::from_parts(casted.to_vec(), validity).unwrap()
     }
 }
 
