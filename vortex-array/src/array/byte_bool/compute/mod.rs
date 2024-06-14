@@ -81,11 +81,10 @@ impl AsArrowArray for ByteBoolArray {
 
         let mut builder = BooleanBufferBuilder::new(self.len());
 
-        for (idx, v) in self.buffer().as_slice().iter().enumerate() {
-            if self.is_valid(idx) {
-                builder.set_bit(idx, *v == 1)
-            }
-        }
+        // Safety: bool and u8 are the same size. We don't care about logically null values here.
+        let bool_slice = unsafe { std::mem::transmute::<_, &[bool]>(self.buffer().as_slice()) };
+
+        builder.append_slice(bool_slice);
 
         Ok(Arc::new(ArrowBoolArray::new(builder.finish(), nulls)))
     }
