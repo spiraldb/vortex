@@ -98,8 +98,10 @@ impl SliceFn for ByteBoolArray {
                 "{}..{} is an invalid slicing range", start, stop
             ),
             Some(length) => {
+                let validity = self.validity().slice(start, stop)?;
+
                 let slice_metadata = Arc::new(ByteBoolMetadata {
-                    validity: self.validity().to_metadata(length).unwrap(),
+                    validity: validity.to_metadata(length).unwrap(),
                     length,
                 });
 
@@ -108,9 +110,7 @@ impl SliceFn for ByteBoolArray {
                     self.dtype().clone(),
                     slice_metadata,
                     Some(self.buffer().slice(start..stop)),
-                    self.validity()
-                        .slice(start, stop)
-                        .unwrap()
+                    validity
                         .into_array_data()
                         .into_iter()
                         .collect::<Vec<_>>()
