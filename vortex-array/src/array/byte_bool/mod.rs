@@ -1,10 +1,11 @@
 use std::mem::ManuallyDrop;
 
-use arrow_buffer::NullBuffer;
+use arrow_buffer::{BooleanBuffer, NullBuffer};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
 
+use super::bool::BoolArray;
 use crate::{
     impl_encoding,
     validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata},
@@ -94,8 +95,10 @@ impl ArrayTrait for ByteBoolArray {
 
 impl ArrayFlatten for ByteBoolArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        todo!()
-        // Err(VortexError::NotImplemented((), (), ()))
+        let boolean_buffer = BooleanBuffer::from(self.as_bool_slice());
+        let validity = self.validity();
+
+        BoolArray::try_new(boolean_buffer, validity).map(Flattened::Bool)
     }
 }
 
