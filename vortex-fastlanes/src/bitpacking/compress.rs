@@ -1,4 +1,5 @@
 use arrayref::array_ref;
+use fastlanes::BitPacking;
 use fastlanez::TryBitPack;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
@@ -303,7 +304,7 @@ pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scala
 ///
 /// Where `length` is the length of the array/slice backed by `packed`
 /// (but is not provided to this function).
-pub unsafe fn unpack_single_primitive<T: NativePType + TryBitPack>(
+pub unsafe fn unpack_single_primitive<T: NativePType + BitPacking>(
     packed: &[u8],
     bit_width: usize,
     index_to_decode: usize,

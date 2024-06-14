@@ -1,5 +1,6 @@
 use std::cmp::min;
 
+use fastlanes::BitPacking;
 use fastlanez::TryBitPack;
 use itertools::Itertools;
 use vortex::array::constant::ConstantArray;
@@ -79,7 +80,7 @@ impl TakeFn for BitPackedArray {
     }
 }
 
-fn take_primitive<T: NativePType + TryBitPack>(
+fn take_primitive<T: NativePType + BitPacking>(
     array: &BitPackedArray,
     indices: &PrimitiveArray,
 ) -> VortexResult<Vec<T>> {
