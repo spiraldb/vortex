@@ -209,6 +209,7 @@ impl ArrayVisitor for NBytesVisitor {
 }
 
 impl Array {
+    #[inline]
     pub fn with_dyn<R, F>(&self, mut f: F) -> R
     where
         F: FnMut(&dyn ArrayTrait) -> R,

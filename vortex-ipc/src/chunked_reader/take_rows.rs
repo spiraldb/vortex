@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
+
 use std::collections::HashMap;
 use std::future::ready;
 use std::ops::Deref;
@@ -60,7 +61,6 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
 
         // Figure out which chunks are relevant.
         let chunk_idxs = find_chunks(&self.row_offsets, indices)?;
-
         // Coalesce the chunks that we're going to read from.
         let coalesced_chunks = self.coalesce_chunks(chunk_idxs.as_ref());
 
@@ -218,7 +218,7 @@ mod test {
     use vortex_dtype::PType;
     use vortex_error::VortexResult;
 
-    use crate::chunked_reader::ChunkedArrayReaderBuilder;
+    use crate::chunked_reader::ChunkedArrayReader;
     use crate::writer::ArrayWriter;
     use crate::MessageReader;
 
@@ -250,14 +250,14 @@ mod test {
         let view_ctx = msgs.read_view_context(&Default::default()).await?;
         let dtype = msgs.read_dtype().await?;
 
-        let mut reader = ChunkedArrayReaderBuilder::default()
-            .read(buffer)
-            .view_context(view_ctx)
-            .dtype(dtype)
-            .row_offsets(row_offsets.into_array())
-            .byte_offsets(byte_offsets.into_array())
-            .build()
-            .unwrap();
+        let mut reader = ChunkedArrayReader::try_new(
+            buffer,
+            view_ctx,
+            dtype,
+            row_offsets.into_array(),
+            byte_offsets.into_array(),
+        )
+        .unwrap();
 
         let result = reader
             .take_rows(&PrimitiveArray::from(vec![0u64, 10, 10_000 - 1]).into_array())

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -11,18 +12,23 @@ use arrow_array::{
 };
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
+use bytes::{Bytes, BytesMut};
 use itertools::Itertools;
 use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
+use vortex::array::primitive::PrimitiveArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
-use vortex::compute::take::take;
 use vortex::stream::ArrayStreamExt;
 use vortex::{Array, IntoArray, ToArrayData, ViewContext};
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
+use vortex_ipc::chunked_reader::ChunkedArrayReader;
 use vortex_ipc::io::{TokioAdapter, VortexWrite};
 use vortex_ipc::writer::ArrayWriter;
 use vortex_ipc::MessageReader;
@@ -30,6 +36,12 @@ use vortex_ipc::MessageReader;
 use crate::CTX;
 
 pub const BATCH_SIZE: usize = 65_536;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VortexFooter {
+    pub byte_offsets: Vec<u64>,
+    pub row_offsets: Vec<u64>,
+}
 
 pub fn open_vortex(path: &Path) -> VortexResult<Array> {
     Runtime::new()
@@ -63,11 +75,24 @@ pub async fn rewrite_parquet_as_vortex<W: VortexWrite>(
 ) -> VortexResult<()> {
     let chunked = compress_parquet_to_vortex(parquet_path.as_path())?;
 
-    ArrayWriter::new(write, ViewContext::from(&CTX.clone()))
+    let written = ArrayWriter::new(write, ViewContext::from(&CTX.clone()))
         .write_context()
         .await?
-        .write_array(chunked.into_array())
+        .write_array_stream(chunked.array_stream())
         .await?;
+
+    let layout = written.array_layouts()[0].clone();
+    let mut w = written.into_inner();
+    let mut s = flexbuffers::FlexbufferSerializer::new();
+    VortexFooter {
+        byte_offsets: layout.chunks.byte_offsets,
+        row_offsets: layout.chunks.row_offsets,
+    }
+    .serialize(&mut s)?;
+    let footer_bytes = Buffer::Bytes(Bytes::from(s.take_buffer()));
+    let footer_len = footer_bytes.len() as u64;
+    w.write_all(footer_bytes).await?;
+    w.write_all(footer_len.to_le_bytes()).await?;
 
     Ok(())
 }
@@ -109,9 +134,37 @@ pub fn write_csv_as_parquet(csv_path: PathBuf, output_path: &Path) -> VortexResu
     Ok(())
 }
 
-pub fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<Array> {
-    let array = open_vortex(path)?;
-    let taken = take(&array, &indices.to_vec().into_array())?;
+pub async fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<Array> {
+    let mut file = tokio::fs::File::open(path).await?;
+
+    file.seek(SeekFrom::End(-8)).await?;
+    let footer_len = file.read_u64_le().await? as usize;
+
+    file.seek(SeekFrom::End(-(footer_len as i64 + 8))).await?;
+    let mut footer_bytes = BytesMut::with_capacity(footer_len);
+    unsafe { footer_bytes.set_len(footer_len) }
+    file.read_exact(footer_bytes.as_mut()).await?;
+
+    let footer: VortexFooter = VortexFooter::deserialize(
+        flexbuffers::Reader::get_root(footer_bytes.as_ref()).map_err(|e| vortex_err!("{}", e))?,
+    )?;
+
+    file.seek(SeekFrom::Start(0)).await?;
+    let mut reader = MessageReader::try_new(TokioAdapter(file.try_clone().await?)).await?;
+    let view_ctx = reader.read_view_context(&CTX).await?;
+    let dtype = reader.read_dtype().await?;
+
+    file.seek(SeekFrom::Start(0)).await?;
+    let mut reader = ChunkedArrayReader::try_new(
+        TokioAdapter(file),
+        view_ctx,
+        dtype,
+        PrimitiveArray::from(footer.byte_offsets).into_array(),
+        PrimitiveArray::from(footer.row_offsets).into_array(),
+    )?;
+
+    let indices_array = indices.to_vec().into_array();
+    let taken = reader.take_rows(&indices_array).await?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
     Ok(taken.flatten()?.into_array())
 }

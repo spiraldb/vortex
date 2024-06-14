@@ -118,6 +118,7 @@ macro_rules! impl_encoding {
             impl TryFrom<Array> for [<$Name Array>] {
                 type Error = VortexError;
 
+                #[inline]
                 fn try_from(array: Array) -> Result<Self, Self::Error> {
                     TypedArray::<$Name>::try_from(array).map(Self::from)
                 }
@@ -125,6 +126,7 @@ macro_rules! impl_encoding {
             impl TryFrom<&Array> for [<$Name Array>] {
                 type Error = VortexError;
 
+                #[inline]
                 fn try_from(array: &Array) -> Result<Self, Self::Error> {
                     TypedArray::<$Name>::try_from(array).map(Self::from)
                 }
@@ -134,14 +136,17 @@ macro_rules! impl_encoding {
             #[derive(Debug)]
             pub struct [<$Name Encoding>];
             impl ArrayEncoding for [<$Name Encoding>] {
+                #[inline]
                 fn as_any(&self) -> &dyn Any {
                     self
                 }
 
+                #[inline]
                 fn id(&self) -> EncodingId {
                     $Name::ID
                 }
 
+                #[inline]
                 fn flatten(&self, array: Array) -> VortexResult<Flattened> {
                     <Self as ArrayEncodingExt>::flatten(array)
                 }
@@ -155,6 +160,7 @@ macro_rules! impl_encoding {
                     <Self as ArrayEncodingExt>::with_dyn(array, f)
                 }
 
+                #[inline]
                 fn compression(&self) -> &dyn EncodingCompression {
                     self
                 }
@@ -165,10 +171,12 @@ macro_rules! impl_encoding {
 
             /// Implement ArrayMetadata
             impl ArrayMetadata for [<$Name Metadata>] {
+                #[inline]
                 fn as_any(&self) -> &dyn Any {
                     self
                 }
 
+                #[inline]
                 fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
                     self
                 }

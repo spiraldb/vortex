@@ -73,6 +73,7 @@ pub trait ArrayEncodingExt {
         ArrayFlatten::flatten(typed)
     }
 
+    #[inline]
     fn with_dyn<R, F>(array: &Array, mut f: F) -> R
     where
         F: for<'b> FnMut(&'b (dyn ArrayTrait + 'b)) -> R,
