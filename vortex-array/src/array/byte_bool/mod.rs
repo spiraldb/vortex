@@ -81,10 +81,10 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
     fn from(value: Vec<Option<bool>>) -> Self {
         let validity = Validity::from_iter(value.iter());
 
-        // Safety: Option<bool> and `bool` are the same size
-        let casted = unsafe { std::mem::transmute::<&[Option<bool>], &[bool]>(value.as_slice()) };
+        // Safety: Option<bool> and `bool` are the same size. `None` is transmuted into `false`, so this is a lossy change at the binary level.
+        let casted = unsafe { std::mem::transmute::<Vec<Option<bool>>, Vec<bool>>(value) };
 
-        Self::try_with_validity(casted.to_vec(), validity).unwrap()
+        Self::try_with_validity(casted, validity).unwrap()
     }
 }
 
@@ -129,8 +129,11 @@ mod tests {
     #[test]
     fn test_validity_construction() {
         let v = vec![true, false];
+        let v_len = v.len();
 
         let arr = ByteBoolArray::from(v);
+        assert_eq!(v_len, arr.len());
+
         for idx in 0..arr.len() {
             assert!(arr.is_valid(idx));
         }
@@ -143,8 +146,11 @@ mod tests {
         assert_eq!(arr.len(), 3);
 
         let v: Vec<Option<bool>> = vec![None, None];
+        let v_len = v.len();
 
         let arr = ByteBoolArray::from(v);
+        assert_eq!(v_len, arr.len());
+
         for idx in 0..arr.len() {
             assert!(!arr.is_valid(idx));
         }
