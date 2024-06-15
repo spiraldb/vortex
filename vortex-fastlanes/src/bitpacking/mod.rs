@@ -9,7 +9,6 @@ use vortex_error::{vortex_bail, vortex_err};
 
 mod compress;
 mod compute;
-mod try_bitpacking;
 
 impl_encoding!("fastlanes.bitpacked", BitPacked);
 

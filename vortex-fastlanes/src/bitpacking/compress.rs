@@ -14,7 +14,6 @@ use vortex_dtype::{
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::bitpacking::try_bitpacking::TryBitPacking;
 use crate::{BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
