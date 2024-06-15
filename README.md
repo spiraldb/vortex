@@ -169,6 +169,13 @@ git submodule update --init --recursive
 rye sync
 ```
 
+You will also need to install flatbuffer compiler (flatc):
+
+### Mac
+```bash
+brew install flatbuffers
+```
+
 ## License
 
 Licensed under the Apache License, Version 2.0 (the "License").

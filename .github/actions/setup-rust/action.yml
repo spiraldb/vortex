@@ -32,6 +32,13 @@ runs:
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV
 
+    - name: Download flatc
+      shell: bash
+      run: |
+        curl -sL https://github.com/google/flatbuffers/releases/download/v24.3.25/Linux.flatc.binary.clang++-15.zip > ${{ runner.temp }}/flatc.zip
+        unzip ${{ runner.temp }}/flatc.zip -d ${{ runner.temp }}/flatc
+        echo "PATH=${{ runner.temp }}/flatc:$PATH" >> $GITHUB_ENV
+
     - name: Export Path
       shell: bash
       run: echo "PATH=$PATH" >> $GITHUB_ENV
