@@ -9,6 +9,7 @@ use vortex_error::{vortex_bail, vortex_err};
 
 mod compress;
 mod compute;
+mod try_bitpacking;
 
 impl_encoding!("fastlanes.bitpacked", BitPacked);
 
@@ -28,10 +29,9 @@ impl BitPackedArray {
         validity: Validity,
         patches: Option<Array>,
         bit_width: usize,
-        dtype: DType,
         len: usize,
     ) -> VortexResult<Self> {
-        Self::try_new_from_offset(packed, validity, patches, bit_width, dtype, len, 0)
+        Self::try_new_from_offset(packed, validity, patches, bit_width, len, 0)
     }
 
     pub(crate) fn try_new_from_offset(
@@ -39,18 +39,15 @@ impl BitPackedArray {
         validity: Validity,
         patches: Option<Array>,
         bit_width: usize,
-        dtype: DType,
         length: usize,
         offset: usize,
     ) -> VortexResult<Self> {
-        if packed.dtype() != &DType::BYTES {
-            vortex_bail!(MismatchedTypes: DType::BYTES, packed.dtype());
+        let dtype = packed.dtype().clone();
+        if !dtype.is_unsigned_int() {
+            vortex_bail!(MismatchedTypes: "uint", &dtype);
         }
         if bit_width > 64 {
             vortex_bail!("Unsupported bit width {}", bit_width);
-        }
-        if !dtype.is_int() {
-            vortex_bail!(MismatchedTypes: "int", dtype);
         }
 
         let expected_packed_size = ((length + 1023) / 1024) * 128 * bit_width;
@@ -85,7 +82,7 @@ impl BitPackedArray {
     #[inline]
     pub fn packed(&self) -> Array {
         self.array()
-            .child(0, &DType::BYTES)
+            .child(0, self.dtype())
             .expect("Missing packed array")
     }
 

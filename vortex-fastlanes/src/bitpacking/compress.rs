@@ -1,5 +1,4 @@
 use arrayref::array_ref;
-use fastlanes::BitPacking;
 use fastlanez::TryBitPack;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
@@ -15,6 +14,7 @@ use vortex_dtype::{
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
+use crate::bitpacking::try_bitpacking::TryBitPacking;
 use crate::{BitPackedArray, BitPackedEncoding};
 
 impl EncodingCompression for BitPackedEncoding {
@@ -79,15 +79,8 @@ impl EncodingCompression for BitPackedEncoding {
             None
         };
 
-        BitPackedArray::try_new(
-            packed,
-            validity,
-            patches,
-            bit_width,
-            parray.dtype().clone(),
-            parray.len(),
-        )
-        .map(|a| a.into_array())
+        BitPackedArray::try_new(packed, validity, patches, bit_width, parray.len())
+            .map(|a| a.into_array())
     }
 }
 
@@ -112,14 +105,7 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
         None
     };
 
-    BitPackedArray::try_new(
-        packed,
-        array.validity(),
-        patches,
-        bit_width,
-        array.dtype().clone(),
-        array.len(),
-    )
+    BitPackedArray::try_new(packed, array.validity(), patches, bit_width, array.len())
 }
 
 pub fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Array> {
@@ -288,7 +274,7 @@ pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scala
 
     let scalar: Scalar = match_each_unsigned_integer_ptype!(ptype, |$P| {
         unsafe {
-            unpack_single_primitive::<$P>(encoded.typed_data::<u8>(), bit_width, index_in_encoded).map(|v| v.into())
+            unpack_single_primitive::<$P>(encoded.typed_data::<$P>(), bit_width, index_in_encoded).map(|v| v.into())
         }
     })?;
 
@@ -304,17 +290,16 @@ pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scala
 ///
 /// Where `length` is the length of the array/slice backed by `packed`
 /// (but is not provided to this function).
-pub unsafe fn unpack_single_primitive<T: NativePType + BitPacking>(
-    packed: &[u8],
+pub unsafe fn unpack_single_primitive<T: NativePType + TryBitPacking>(
+    packed: &[T],
     bit_width: usize,
     index_to_decode: usize,
 ) -> VortexResult<T> {
-    let bytes_per_chunk = 128 * bit_width;
     let chunk_index = index_to_decode / 1024;
-    let chunk_bytes = &packed[chunk_index * bytes_per_chunk..][0..bytes_per_chunk];
     let index_in_chunk = index_to_decode % 1024;
-
-    T::try_unpack_single(chunk_bytes, bit_width, index_in_chunk)
+    let elems_per_chunk: usize = 1024 * bit_width / T::T;
+    let packed_chunk = &packed[chunk_index * elems_per_chunk..][0..elems_per_chunk];
+    TryBitPacking::try_bitunpack_single(packed_chunk, bit_width, index_in_chunk)
         .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))
 }
 

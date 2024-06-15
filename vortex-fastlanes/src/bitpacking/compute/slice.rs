@@ -1,7 +1,7 @@
 use std::cmp::max;
 
 use vortex::compute::slice::{slice, SliceFn};
-use vortex::{Array, ArrayDType, IntoArray};
+use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::BitPackedArray;
@@ -19,7 +19,6 @@ impl SliceFn for BitPackedArray {
             self.validity().slice(start, stop)?,
             self.patches().map(|p| slice(&p, start, stop)).transpose()?,
             self.bit_width(),
-            self.dtype().clone(),
             stop - start,
             offset,
         )

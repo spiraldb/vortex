@@ -1,6 +1,6 @@
 use std::cmp::min;
+use std::mem::size_of;
 
-use fastlanes::BitPacking;
 use fastlanez::TryBitPack;
 use itertools::Itertools;
 use vortex::array::constant::ConstantArray;
@@ -18,6 +18,7 @@ use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::bitpacking::compress::unpack_single;
+use crate::bitpacking::try_bitpacking::TryBitPacking;
 use crate::{unpack_single_primitive, BitPackedArray};
 
 mod slice;
@@ -80,7 +81,7 @@ impl TakeFn for BitPackedArray {
     }
 }
 
-fn take_primitive<T: NativePType + BitPacking>(
+fn take_primitive<T: NativePType + TryBitPacking + TryBitPack>(
     array: &BitPackedArray,
     indices: &PrimitiveArray,
 ) -> VortexResult<Vec<T>> {
@@ -97,7 +98,7 @@ fn take_primitive<T: NativePType + BitPacking>(
 
     let bit_width = array.bit_width();
     let packed = array.packed().flatten_primitive()?;
-    let packed = packed.typed_data::<u8>();
+    let packed = packed.typed_data::<T>();
 
     let patches = array.patches().map(SparseArray::try_from).transpose()?;
 
@@ -116,7 +117,8 @@ fn take_primitive<T: NativePType + BitPacking>(
     let mut output = Vec::with_capacity(indices.len());
     let mut buffer: Vec<T> = Vec::new();
     for (chunk, offsets) in relative_indices {
-        let packed_chunk = &packed[chunk * 128 * bit_width..][..128 * bit_width];
+        let chunk_size = 128 * bit_width / size_of::<T>();
+        let packed_chunk = &packed[chunk_size..][..chunk_size];
         if offsets.len() > unpack_chunk_threshold {
             buffer.clear();
             TryBitPack::try_unpack_into(packed_chunk, bit_width, &mut buffer)
