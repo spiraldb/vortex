@@ -41,8 +41,9 @@ impl ByteBoolArray {
 
         let ptr = vec.as_mut_ptr() as *mut u8;
         let length = vec.len();
+        let capacity = vec.capacity();
 
-        let bytes = unsafe { std::slice::from_raw_parts(ptr, length) };
+        let bytes = unsafe { Vec::from_raw_parts(ptr, length, capacity) };
 
         let buffer = Buffer::from(bytes);
         let typed = TypedArray::try_from_parts(
