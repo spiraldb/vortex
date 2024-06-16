@@ -2,23 +2,17 @@
 members = [
     "bench-vortex",
     "build-vortex",
+    "encodings/*",
     "fastlanez",
     "fastlanez-sys",
     "pyvortex",
-    "vortex-alp",
     "vortex-array",
     "vortex-buffer",
-    "vortex-datetime-parts",
-    "vortex-dict",
+    "vortex-dtype",
     "vortex-error",
     "vortex-expr",
-    "vortex-fastlanes",
     "vortex-flatbuffers",
     "vortex-ipc",
-    "vortex-ree",
-    "vortex-roaring",
-    "vortex-dtype",
-    "vortex-zigzag",
 ]
 resolver = "2"
 
