@@ -65,7 +65,7 @@ impl SparseArray {
                 len,
                 fill_value,
             },
-            [indices.to_array_data(), values.to_array_data()].into(),
+            [indices.into_array_data(), values.into_array_data()].into(),
             StatsSet::new(),
         )
     }
