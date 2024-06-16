@@ -8,7 +8,7 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, IntoArrayData, ToArrayData};
+use crate::{impl_encoding, ArrayDType, IntoArrayData};
 
 mod compress;
 mod compute;
@@ -65,7 +65,7 @@ impl SparseArray {
                 len,
                 fill_value,
             },
-            [indices.to_array_data(), values.to_array_data()].into(),
+            [indices.into_array_data(), values.into_array_data()].into(),
             StatsSet::new(),
         )
     }

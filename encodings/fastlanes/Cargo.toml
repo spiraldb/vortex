@@ -1,7 +1,7 @@
 [package]
-name = "vortex-dict"
+name = "vortex-fastlanes"
 version = { workspace = true }
-description = "Vortex dictionary array"
+description = "Vortex fastlanes arrays arrays"
 homepage = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
@@ -11,25 +11,29 @@ include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 
-[dependencies]
-ahash = { workspace = true }
-hashbrown = { workspace = true }
-num-traits = { workspace = true }
-serde = { workspace = true }
-vortex-array = { path = "../vortex-array" }
-vortex-error = { path = "../vortex-error" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-scalar = { path = "../vortex-scalar" }
-
 [lints]
 workspace = true
 
+[dependencies]
+arrayref = { workspace = true }
+fastlanez = { path = "../../fastlanez" }
+itertools = { workspace = true }
+num-traits = { workspace = true }
+serde = { workspace = true }
+vortex-array = { path = "../../vortex-array" }
+vortex-error = { path = "../../vortex-error" }
+vortex-dtype = { path = "../../vortex-dtype" }
+vortex-scalar = { path = "../../vortex-scalar" }
+
 [dev-dependencies]
 criterion = { workspace = true }
-log = { workspace = true }
 rand = { workspace = true }
 simplelog = { workspace = true }
 
 [[bench]]
-name = "dict_compress"
+name = "bitpacking"
+harness = false
+
+[[bench]]
+name = "bitpacking_take"
 harness = false

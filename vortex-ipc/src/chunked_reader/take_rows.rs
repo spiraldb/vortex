@@ -2,7 +2,6 @@
 #![allow(unused_variables)]
 use std::collections::HashMap;
 use std::future::ready;
-use std::io::Cursor;
 use std::ops::Deref;
 
 use bytes::BytesMut;
@@ -18,7 +17,6 @@ use vortex::compute::take::take;
 use vortex::stats::ArrayStatistics;
 use vortex::stream::ArrayStreamExt;
 use vortex::{Array, ArrayDType, IntoArray};
-use vortex_buffer::Buffer;
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -121,7 +119,7 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
             //  MesssageReader.
             let buffer = self.read.read_at_into(start_byte, buffer).await?;
 
-            let mut reader = StreamArrayReader::try_new(Cursor::new(Buffer::from(buffer.freeze())))
+            let mut reader = StreamArrayReader::try_new(buffer)
                 .await?
                 .with_view_context(self.view_context.deref().clone())
                 .with_dtype(self.dtype.clone());

@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use cargo_metadata::MetadataCommand;
-use flatc::flatc;
 use walkdir::WalkDir;
 
 fn manifest_dir() -> PathBuf {
@@ -66,7 +65,7 @@ pub fn build_flatbuffers() {
     let flatbuffers_dir = manifest_dir().join("flatbuffers");
     let fbs_files = walk_files(&flatbuffers_dir, "fbs");
     check_call(
-        Command::new(flatc())
+        Command::new("flatc")
             .arg("--rust")
             .arg("--filename-suffix")
             .arg("")
