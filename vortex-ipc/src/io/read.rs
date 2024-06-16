@@ -4,6 +4,7 @@ use std::io::{Cursor, Read};
 
 use bytes::BytesMut;
 use vortex_buffer::Buffer;
+use vortex_error::vortex_err;
 
 pub trait VortexRead {
     fn read_into(&mut self, buffer: BytesMut) -> impl Future<Output = io::Result<BytesMut>>;
@@ -20,6 +21,19 @@ pub trait VortexReadAt {
     //  allowing the caller to make better decisions about how to coalesce reads.
     fn performance_hint(&self) -> usize {
         0
+    }
+}
+
+impl VortexRead for BytesMut {
+    async fn read_into(&mut self, buffer: BytesMut) -> io::Result<BytesMut> {
+        if buffer.len() > self.len() {
+            Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                vortex_err!("unexpected eof"),
+            ))
+        } else {
+            Ok(self.split_to(buffer.len()))
+        }
     }
 }
 
