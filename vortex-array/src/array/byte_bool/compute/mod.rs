@@ -64,10 +64,7 @@ impl AsArrowArray for ByteBoolArray {
         let nulls = self.logical_validity().to_null_buffer()?;
 
         let mut builder = BooleanBufferBuilder::new(self.len());
-
-        let bool_slice = self.as_bool_slice();
-
-        builder.append_slice(bool_slice);
+        builder.append_slice(self.as_ref());
 
         Ok(Arc::new(ArrowBoolArray::new(builder.finish(), nulls)))
     }
@@ -111,7 +108,7 @@ impl TakeFn for ByteBoolArray {
         let indices = indices.clone().flatten_primitive()?;
 
         let bools = match_each_integer_ptype!(indices.ptype(), |$I| {
-            take_byte_bool(self.as_bool_slice(), validity, indices.typed_data::<$I>())
+            take_byte_bool(self.as_ref(), validity, indices.typed_data::<$I>())
         });
 
         Ok(Self::from(bools).into_array())

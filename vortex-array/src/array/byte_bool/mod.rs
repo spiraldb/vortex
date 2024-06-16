@@ -63,11 +63,6 @@ impl ByteBoolArray {
     pub fn buffer(&self) -> &Buffer {
         self.array().buffer().expect("missing mandatory buffer")
     }
-
-    fn as_bool_slice(&self) -> &[bool] {
-        // Safety: bool and u8 are the same size. We don't care about logically null values here.
-        unsafe { std::mem::transmute(self.buffer().as_slice()) }
-    }
 }
 
 impl From<Vec<bool>> for ByteBoolArray {
@@ -88,6 +83,13 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
     }
 }
 
+impl AsRef<[bool]> for ByteBoolArray {
+    fn as_ref(&self) -> &[bool] {
+        // Safety: bool and u8 are the same size. We don't care about logically null values here.
+        unsafe { std::mem::transmute(self.buffer().as_slice()) }
+    }
+}
+
 impl ArrayTrait for ByteBoolArray {
     fn len(&self) -> usize {
         self.metadata().length
@@ -96,7 +98,7 @@ impl ArrayTrait for ByteBoolArray {
 
 impl ArrayFlatten for ByteBoolArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        let boolean_buffer = BooleanBuffer::from(self.as_bool_slice());
+        let boolean_buffer = BooleanBuffer::from(self.as_ref());
         let validity = self.validity();
 
         BoolArray::try_new(boolean_buffer, validity).map(Flattened::Bool)
