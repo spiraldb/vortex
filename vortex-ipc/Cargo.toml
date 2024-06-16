@@ -36,8 +36,8 @@ futures-executor = { workspace = true }
 rand = { workspace = true }
 simplelog = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-vortex-alp = { path = "../vortex-alp" }
-vortex-fastlanes = { path = "../vortex-fastlanes" }
+vortex-alp = { path = "../encodings/alp" }
+vortex-fastlanes = { path = "../encodings/fastlanes" }
 arrow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-ipc = { workspace = true, features = ["lz4"] }

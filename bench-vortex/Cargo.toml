@@ -35,17 +35,17 @@ reqwest = { workspace = true }
 simplelog = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }
-vortex-alp = { path = "../vortex-alp" }
+vortex-alp = { path = "../encodings/alp" }
 vortex-array = { path = "../vortex-array" }
 vortex-buffer = { path = "../vortex-buffer" }
-vortex-datetime-parts = { path = "../vortex-datetime-parts" }
-vortex-dict = { path = "../vortex-dict" }
+vortex-datetime-parts = { path = "../encodings/datetime-parts" }
+vortex-dict = { path = "../encodings/dict" }
 vortex-dtype = { path = "../vortex-dtype" }
 vortex-error = { path = "../vortex-error", features = ["parquet"] }
-vortex-fastlanes = { path = "../vortex-fastlanes" }
+vortex-fastlanes = { path = "../encodings/fastlanes" }
 vortex-ipc = { path = "../vortex-ipc" }
-vortex-ree = { path = "../vortex-ree" }
-vortex-roaring = { path = "../vortex-roaring" }
+vortex-ree = { path = "../encodings/runend" }
+vortex-roaring = { path = "../encodings/roaring" }
 
 [dev-dependencies]
 criterion = { workspace = true }
