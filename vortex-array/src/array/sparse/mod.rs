@@ -8,7 +8,7 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, IntoArrayData, ToArrayData};
+use crate::{impl_encoding, ArrayDType, IntoArrayData};
 
 mod compress;
 mod compute;

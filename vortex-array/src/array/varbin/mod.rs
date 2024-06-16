@@ -9,7 +9,7 @@ use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::validity::{Validity, ValidityMetadata};
-use crate::{impl_encoding, ArrayDType, IntoArrayData, ToArrayData};
+use crate::{impl_encoding, ArrayDType, IntoArrayData};
 
 mod accessor;
 mod array;

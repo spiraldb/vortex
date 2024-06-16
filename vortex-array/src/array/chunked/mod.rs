@@ -14,7 +14,7 @@ use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, IntoArrayData, ToArrayData};
+use crate::{impl_encoding, ArrayDType, IntoArrayData};
 
 mod compute;
 mod flatten;

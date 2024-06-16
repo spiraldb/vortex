@@ -11,7 +11,7 @@ use crate::compute::slice::slice;
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData, IntoArrayData};
+use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
 
 mod accessor;
 mod builder;
