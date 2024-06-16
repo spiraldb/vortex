@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
 use vortex_error::vortex_bail;
 
 use crate::compute::decode_to_localdatetime;
@@ -53,9 +53,9 @@ impl DateTimePartsArray {
                 subseconds_dtype: subsecond.dtype().clone(),
             },
             [
-                days.to_array_data(),
-                seconds.to_array_data(),
-                subsecond.to_array_data(),
+                days.into_array_data(),
+                seconds.into_array_data(),
+                subsecond.into_array_data(),
             ]
             .into(),
             StatsSet::new(),

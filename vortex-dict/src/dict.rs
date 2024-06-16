@@ -6,7 +6,7 @@ use vortex::compute::take::take;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::IntoArrayData;
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::vortex_bail;
 
@@ -27,7 +27,7 @@ impl DictArray {
             DictMetadata {
                 codes_dtype: codes.dtype().clone(),
             },
-            [values.to_array_data(), codes.to_array_data()].into(),
+            [values.into_array_data(), codes.into_array_data()].into(),
             StatsSet::new(),
         )
     }

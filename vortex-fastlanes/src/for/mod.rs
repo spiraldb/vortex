@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, ToArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
 use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
@@ -28,7 +28,7 @@ impl FoRArray {
         Self::try_from_parts(
             child.dtype().clone(),
             FoRMetadata { reference, shift },
-            [child.to_array_data()].into(),
+            [child.into_array_data()].into(),
             StatsSet::new(),
         )
     }
