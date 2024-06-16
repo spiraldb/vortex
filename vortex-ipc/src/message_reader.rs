@@ -250,19 +250,45 @@ impl<R: VortexRead> MessageReader<R> {
     }
 
     pub async fn maybe_read_page(&mut self) -> VortexResult<Option<Buffer>> {
-        if self.peek().and_then(|m| m.header_as_page()).is_none() {
+        let Some(page_msg) = self.peek().and_then(|m| m.header_as_page()) else {
             return Ok(None);
-        }
-        let page_msg = self.next().await?.header_as_page().unwrap();
+        };
 
         let buffer_len = page_msg.buffer_size() as usize;
         let total_len = buffer_len + (page_msg.padding() as usize);
 
-        let mut buffer = self
-            .read
-            .read_into(BytesMut::with_capacity(total_len))
-            .await?;
+        let mut buffer = BytesMut::with_capacity(total_len);
+        unsafe { buffer.set_len(total_len) }
+        buffer = self.read.read_into(buffer).await?;
         buffer.truncate(buffer_len);
-        Ok(Some(Buffer::from(buffer.freeze())))
+        let page_buffer = Ok(Some(Buffer::from(buffer.freeze())));
+        let _ = self.next().await?;
+        page_buffer
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::Cursor;
+
+    use bytes::Bytes;
+    use vortex_buffer::Buffer;
+
+    use crate::{MessageReader, MessageWriter};
+
+    #[tokio::test]
+    async fn read_write_page() {
+        let write = Vec::new();
+        let mut writer = MessageWriter::new(write);
+        writer
+            .write_page(Buffer::Bytes(Bytes::from("somevalue")))
+            .await
+            .unwrap();
+        let written = writer.into_inner();
+        let mut reader = MessageReader::try_new(Cursor::new(written.as_slice()))
+            .await
+            .unwrap();
+        let read_page = reader.maybe_read_page().await.unwrap().unwrap();
+        assert_eq!(read_page, Buffer::Bytes(Bytes::from("somevalue")));
     }
 }
