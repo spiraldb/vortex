@@ -81,7 +81,8 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
     fn from(value: Vec<Option<bool>>) -> Self {
         let validity = Validity::from_iter(value.iter());
 
-        // Safety: Option<bool> and `bool` are the same size. `None` is transmuted into `false`, so this is a lossy change at the binary level.
+        // Safety: Option<bool> and `bool` are the same size. Note that `transmute` must always return a [valid value](https://doc.rust-lang.org/nightly/nomicon/what-unsafe-does.html),
+        // so it mutates `None` to `false`. [This](https://github.com/rust-lang/rust/issues/96140) issue gives a longer explanation.
         let casted = unsafe { std::mem::transmute::<Vec<Option<bool>>, Vec<bool>>(value) };
 
         Self::try_with_validity(casted, validity).unwrap()
