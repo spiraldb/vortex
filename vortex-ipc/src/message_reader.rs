@@ -14,7 +14,6 @@ use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use crate::flatbuffers::ipc as fb;
 use crate::io::VortexRead;
 use crate::messages::SerdeContextDeserializer;
-use crate::ALIGNMENT;
 
 pub struct MessageReader<R> {
     read: R,
@@ -105,37 +104,15 @@ impl<R: VortexRead> MessageReader<R> {
             return Ok(Vec::new());
         };
 
-        // Initialize the column's buffers for a vectored read.
-        // To start with, we include the padding and then truncate the buffers after.
-        // TODO(ngates): improve the flatbuffer format instead of storing offset/len per buffer.
-        let buffers = chunk_msg
-            .buffers()
-            .unwrap_or_default()
-            .iter()
-            .map(|buffer| {
-                // FIXME(ngates): this assumes the next buffer offset == the aligned length of
-                //  the previous buffer. I will fix this by improving the flatbuffer format instead
-                //  of fiddling with the logic here.
-                let len_width_padding =
-                    (buffer.length() as usize + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
-                // TODO(ngates): switch to use uninitialized
-                // TODO(ngates): allocate the entire thing in one go and then split
-                vec![0u8; len_width_padding]
-            })
-            .collect_vec();
-
-        // Just sanity check the above
-        assert_eq!(
-            buffers.iter().map(|b| b.len()).sum::<usize>(),
-            chunk_msg.buffer_size() as usize
-        );
-
         // Issue a single read to grab all buffers
         let mut all_buffers = BytesMut::with_capacity(chunk_msg.buffer_size() as usize);
         unsafe { all_buffers.set_len(chunk_msg.buffer_size() as usize) };
         let mut all_buffers = self.read.read_into(all_buffers).await?;
 
         // Split out into individual buffers
+        // Initialize the column's buffers for a vectored read.
+        // To start with, we include the padding and then truncate the buffers after.
+        // TODO(ngates): improve the flatbuffer format instead of storing offset/len per buffer.
         let buffers = self
             .peek()
             .expect("Checked above in peek")
