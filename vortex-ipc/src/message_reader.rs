@@ -14,7 +14,6 @@ use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use crate::flatbuffers::ipc as fb;
 use crate::io::VortexRead;
 use crate::messages::SerdeContextDeserializer;
-use crate::ALIGNMENT;
 
 pub struct MessageReader<R> {
     read: R,
