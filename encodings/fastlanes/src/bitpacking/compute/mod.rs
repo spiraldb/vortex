@@ -58,8 +58,7 @@ impl TakeFn for BitPackedArray {
         let taken_validity = validity.take(indices)?;
         if self.bit_width() == 0 {
             return if let Some(patches) = self.patches() {
-                let primitive_patches = take(&patches, indices)?.flatten_primitive()?;
-                Ok(primitive_patches.into_array())
+                take(&patches, indices)
             } else {
                 Ok(
                     ConstantArray::new(Scalar::null(self.dtype().as_nullable()), indices.len())
@@ -69,7 +68,7 @@ impl TakeFn for BitPackedArray {
         }
 
         let indices = indices.clone().flatten_primitive()?;
-        let taken = match_each_unsigned_integer_ptype!(ptype.to_unsigned(), |$T| {
+        let taken = match_each_unsigned_integer_ptype!(ptype, |$T| {
             PrimitiveArray::from_vec(take_primitive::<$T>(self, &indices)?, taken_validity)
         });
         Ok(taken.reinterpret_cast(ptype).into_array())
@@ -92,6 +91,7 @@ fn take_primitive<T: NativePType + BitPacking>(
     });
 
     let bit_width = array.bit_width();
+
     let packed = array.packed().flatten_primitive()?;
     let packed = packed.typed_data::<T>();
 
@@ -113,7 +113,7 @@ fn take_primitive<T: NativePType + BitPacking>(
     let mut unpacked = [T::zero(); 1024];
     for (chunk, offsets) in relative_indices {
         let chunk_size = 128 * bit_width / size_of::<T>();
-        let packed_chunk = &packed[chunk_size..][..chunk_size];
+        let packed_chunk = &packed[chunk * chunk_size..][..chunk_size];
         if offsets.len() > unpack_chunk_threshold {
             unsafe {
                 BitPacking::unchecked_bitunpack(bit_width, packed_chunk, &mut unpacked);
@@ -197,16 +197,21 @@ mod test {
 
     #[test]
     fn take_indices() {
-        let indices = PrimitiveArray::from(vec![0, 125, 2047, 2049, 2151, 2790]);
+        let indices = PrimitiveArray::from(vec![0, 125, 2047, 2049, 2151, 2790]).into_array();
+
+        // Create a u8 array modulo 63.
         let unpacked = PrimitiveArray::from((0..4096).map(|i| (i % 63) as u8).collect::<Vec<_>>());
+
         let bitpacked = Compressor::new(&ctx())
             .compress(unpacked.array(), None)
             .unwrap();
-        let result = take(&bitpacked, indices.array()).unwrap();
+
+        let result = take(&bitpacked, &indices).unwrap();
         assert_eq!(result.encoding().id(), Primitive::ID);
 
         let primitive_result = result.flatten_primitive().unwrap();
         let res_bytes = primitive_result.typed_data::<u8>();
+        println!("RESULT {:?}", res_bytes);
         assert_eq!(res_bytes, &[0, 62, 31, 33, 9, 18]);
     }
 

@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use arrayref::{array_mut_ref, array_ref};
 use fastlanes::{Delta, Transpose};
 use num_traits::{WrappingAdd, WrappingSub};
@@ -79,11 +77,7 @@ fn compress_primitive<T: NativePType + Delta + Transpose + WrappingSub>(
     array: &[T],
 ) -> (Vec<T>, Vec<T>)
 where
-    [(); 128 / size_of::<T>()]:,
-    [(); 8 * size_of::<T>()]:,
     [(); T::LANES]:,
-    [(); 1024 * T::T / T::T]:,
-    [(); { T::T <= 8 * size_of::<T>() } as usize]:,
 {
     // How many fastlanes vectors we will process.
     let num_chunks = array.len() / 1024;
@@ -109,12 +103,12 @@ where
             deltas.reserve(1024);
             let delta_len = deltas.len();
             unsafe {
+                deltas.set_len(delta_len + 1024);
                 Delta::delta(
                     &transposed,
                     &mut base,
                     array_mut_ref![deltas[delta_len..], 0, 1024],
                 );
-                deltas.set_len(delta_len + 1024);
             }
         }
     }
@@ -181,7 +175,10 @@ where
             // Initialize the base vector for this chunk
             base.copy_from_slice(&bases[i * lanes..(i + 1) * lanes]);
             Delta::undelta(chunk, &mut base, &mut transposed);
-            Transpose::untranspose(&transposed, array_mut_ref![output, 0, 1024]);
+
+            let output_len = output.len();
+            unsafe { output.set_len(output_len + 1024) }
+            Transpose::untranspose(&transposed, array_mut_ref![output[output_len..], 0, 1024]);
         }
     }
     assert_eq!(output.len() % 1024, 0);
@@ -215,7 +212,7 @@ mod test {
 
     #[test]
     fn test_compress() {
-        do_roundtrip_test(Vec::from_iter(0..10_000));
+        do_roundtrip_test(Vec::from_iter(0u32..10_000));
     }
 
     #[test]
