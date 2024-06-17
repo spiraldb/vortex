@@ -34,7 +34,6 @@ impl Debug for ArrayView {
         f.debug_struct("ArrayView")
             .field("encoding", &self.encoding)
             .field("dtype", &self.dtype)
-            // .field("array", &self.array)
             .field("buffers", &self.buffers)
             .field("ctx", &self.ctx)
             .finish()
