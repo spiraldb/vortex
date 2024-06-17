@@ -1,20 +1,23 @@
+use std::ops::{BitAnd, BitOr, BitXor, Not};
 use std::sync::Arc;
 
 use arrow_array::{ArrayRef as ArrowArrayRef, BooleanArray as ArrowBoolArray};
-use arrow_buffer::BooleanBufferBuilder;
+use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder};
 use num_traits::AsPrimitive;
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
 use super::{ByteBoolArray, ByteBoolMetadata};
 use crate::{
     compute::{
-        as_arrow::AsArrowArray, scalar_at::ScalarAtFn, slice::SliceFn, take::TakeFn, ArrayCompute,
+        as_arrow::AsArrowArray, compare::CompareFn, fill::FillForwardFn, scalar_at::ScalarAtFn,
+        slice::SliceFn, take::TakeFn, ArrayCompute,
     },
     encoding::ArrayEncodingRef,
     stats::StatsSet,
-    validity::{ArrayValidity, Validity},
+    validity::ArrayValidity,
     ArrayDType, ArrayData, ArrayTrait, IntoArray,
 };
 
@@ -24,7 +27,7 @@ impl ArrayCompute for ByteBoolArray {
     }
 
     fn compare(&self) -> Option<&dyn crate::compute::compare::CompareFn> {
-        None
+        Some(self)
     }
 
     fn fill_forward(&self) -> Option<&dyn crate::compute::fill::FillForwardFn> {
@@ -106,31 +109,66 @@ impl TakeFn for ByteBoolArray {
     fn take(&self, indices: &crate::Array) -> VortexResult<crate::Array> {
         let validity = self.validity();
         let indices = indices.clone().flatten_primitive()?;
+        let bools = self.as_ref();
 
         let bools = match_each_integer_ptype!(indices.ptype(), |$I| {
-            take_byte_bool(self.as_ref(), validity, indices.typed_data::<$I>())
+            indices.typed_data::<$I>()
+            .iter()
+            .map(|&idx| {
+                let idx = idx.as_();
+                if validity.is_valid(idx) {
+                    Some(bools[idx])
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<Option<_>>>()
         });
 
         Ok(Self::from(bools).into_array())
     }
 }
 
-fn take_byte_bool<I: AsPrimitive<usize>>(
-    bools: &[bool],
-    validity: Validity,
-    indices: &[I],
-) -> Vec<Option<bool>> {
-    indices
-        .iter()
-        .map(|&idx| {
-            let idx = idx.as_();
-            if validity.is_valid(idx) {
-                Some(bools[idx])
-            } else {
-                None
-            }
-        })
-        .collect()
+impl CompareFn for ByteBoolArray {
+    fn compare(
+        &self,
+        other: &crate::Array,
+        op: vortex_expr::Operator,
+    ) -> VortexResult<crate::Array> {
+        let flattened = other.clone().flatten_bool()?;
+        let lhs = BooleanBuffer::from(self.as_ref());
+        let rhs = flattened.boolean_buffer();
+
+        let result_buf = match op {
+            Operator::Eq => lhs.bitxor(&rhs).not(),
+            Operator::NotEq => lhs.bitxor(&rhs),
+
+            Operator::Gt => lhs.bitand(&rhs.not()),
+            Operator::Gte => lhs.bitor(&rhs.not()),
+            Operator::Lt => lhs.not().bitand(&rhs),
+            Operator::Lte => lhs.not().bitor(&rhs),
+        };
+
+        let mut validity = Vec::with_capacity(self.len());
+
+        let lhs_validity = self.validity();
+        let rhs_validity = flattened.validity();
+
+        for idx in 0..self.len() {
+            let l = lhs_validity.is_valid(idx);
+            let r = rhs_validity.is_valid(idx);
+            validity.push(l & r);
+        }
+
+        ByteBoolArray::try_with_validity(Vec::from_iter(result_buf.iter()), validity)
+            .map(ByteBoolArray::into_array)
+    }
+}
+
+impl FillForwardFn for ByteBoolArray {
+    fn fill_forward(&self) -> VortexResult<crate::Array> {
+        todo!()
+    }
 }
 
 #[cfg(test)]
