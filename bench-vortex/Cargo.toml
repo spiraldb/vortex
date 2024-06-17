@@ -24,7 +24,7 @@ fs_extra = { workspace = true }
 futures = { workspace = true }
 humansize = { workspace = true }
 itertools = { workspace = true }
-lance = { version = "0.12.0", features = [] }
+lance = { workspace = true }
 #TODO(robert): Add this back once lance is behind our version of arrow again
 #lance-arrow-array = { package = "arrow-array", version = "51.0" }
 #lance-parquet = { package = "parquet", version = "51.0", features = [] }
