@@ -211,7 +211,6 @@ mod test {
 
         let primitive_result = result.flatten_primitive().unwrap();
         let res_bytes = primitive_result.typed_data::<u8>();
-        println!("RESULT {:?}", res_bytes);
         assert_eq!(res_bytes, &[0, 62, 31, 33, 9, 18]);
     }
 
