@@ -79,42 +79,28 @@ impl AsArrowArray for ByteBoolArray {
 
 impl SliceFn for ByteBoolArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<crate::Array> {
-        match stop.checked_sub(start) {
-            None => vortex_bail!(ComputeError:
-                "{}..{} is an invalid slicing range", start, stop
-            ),
-            Some(length) => {
-                let validity = self.validity().slice(start, stop)?;
+        let length = stop - start;
 
-                let validity_bools = validity
-                    .to_logical(length)
-                    .to_present_null_buffer()
-                    .unwrap();
+        let validity = self.validity().slice(start, stop)?;
 
-                let x = Vec::from_iter(validity_bools.inner().into_iter());
+        let slice_metadata = Arc::new(ByteBoolMetadata {
+            validity: validity.to_metadata(length)?,
+            length,
+        });
 
-                println!("{x:?}");
-
-                let slice_metadata = Arc::new(ByteBoolMetadata {
-                    validity: validity.to_metadata(length)?,
-                    length,
-                });
-
-                ArrayData::try_new(
-                    self.encoding(),
-                    self.dtype().clone(),
-                    slice_metadata,
-                    Some(self.buffer().slice(start..stop)),
-                    validity
-                        .into_array_data()
-                        .into_iter()
-                        .collect::<Vec<_>>()
-                        .into(),
-                    StatsSet::new(),
-                )
-                .map(crate::Array::Data)
-            }
-        }
+        ArrayData::try_new(
+            self.encoding(),
+            self.dtype().clone(),
+            slice_metadata,
+            Some(self.buffer().slice(start..stop)),
+            validity
+                .into_array_data()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .into(),
+            StatsSet::new(),
+        )
+        .map(crate::Array::Data)
     }
 }
 
@@ -239,33 +225,8 @@ mod tests {
         let original = vec![Some(true), Some(true), None, Some(false), None];
         let vortex_arr = ByteBoolArray::from(original.clone());
 
-        let validity = vortex_arr.validity();
-
-        let validity_bools = validity
-            .to_logical(vortex_arr.len())
-            .to_present_null_buffer()
-            .unwrap();
-
-        let x = Vec::from_iter(validity_bools.inner().into_iter());
-
-        println!("{x:?}");
-
-        println!("--- --- --- --- ---");
-
-        for idx in 0..vortex_arr.len() {
-            let s = scalar_at(vortex_arr.as_array_ref(), idx).unwrap();
-            println!("{s:?}");
-        }
-
         let sliced_arr = slice(vortex_arr.as_array_ref(), 1, 4).unwrap();
         let sliced_arr = ByteBoolArray::try_from(sliced_arr).unwrap();
-
-        println!("--- --- --- --- ---");
-
-        for idx in 0..sliced_arr.len() {
-            let s = scalar_at(sliced_arr.as_array_ref(), idx).unwrap();
-            println!("{s:?}");
-        }
 
         let s = scalar_at(sliced_arr.as_array_ref(), 0).unwrap();
         assert_eq!(s.into_value().as_bool().unwrap(), Some(true));
