@@ -28,8 +28,8 @@ impl EncodingCompression for BitPackedEncoding {
         // Only support primitive arrays
         let parray = PrimitiveArray::try_from(array).ok()?;
 
-        // Only supports ints
-        if !parray.ptype().is_int() {
+        // Only supports unsigned ints
+        if !parray.ptype().is_unsigned_int() {
             return None;
         }
 
