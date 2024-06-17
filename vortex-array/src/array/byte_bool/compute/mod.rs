@@ -55,7 +55,10 @@ impl ScalarAtFn for ByteBoolArray {
         }
 
         let scalar = match self.is_valid(index).then(|| self.buffer()[index] == 1) {
-            Some(b) => b.into(),
+            Some(b) => Scalar::new(
+                vortex_dtype::DType::Bool(self.validity().nullability()),
+                vortex_scalar::ScalarValue::Bool(b),
+            ),
             None => Scalar::null(self.dtype().clone()),
         };
 
@@ -82,6 +85,15 @@ impl SliceFn for ByteBoolArray {
             ),
             Some(length) => {
                 let validity = self.validity().slice(start, stop)?;
+
+                let validity_bools = validity
+                    .to_logical(length)
+                    .to_present_null_buffer()
+                    .unwrap();
+
+                let x = Vec::from_iter(validity_bools.inner().into_iter());
+
+                println!("{x:?}");
 
                 let slice_metadata = Arc::new(ByteBoolMetadata {
                     validity: validity.to_metadata(length)?,
@@ -197,6 +209,10 @@ mod tests {
     use arrow_array::cast::AsArray as _;
 
     use super::*;
+    use crate::{
+        compute::{scalar_at::scalar_at, slice::slice},
+        AsArray,
+    };
 
     #[test]
     fn test_as_arrow() {
@@ -216,5 +232,50 @@ mod tests {
                 idx, expected, output
             );
         }
+    }
+
+    #[test]
+    fn test_slice() {
+        let original = vec![Some(true), Some(true), None, Some(false), None];
+        let vortex_arr = ByteBoolArray::from(original.clone());
+
+        let validity = vortex_arr.validity();
+
+        let validity_bools = validity
+            .to_logical(vortex_arr.len())
+            .to_present_null_buffer()
+            .unwrap();
+
+        let x = Vec::from_iter(validity_bools.inner().into_iter());
+
+        println!("{x:?}");
+
+        println!("--- --- --- --- ---");
+
+        for idx in 0..vortex_arr.len() {
+            let s = scalar_at(vortex_arr.as_array_ref(), idx).unwrap();
+            println!("{s:?}");
+        }
+
+        let sliced_arr = slice(vortex_arr.as_array_ref(), 1, 4).unwrap();
+        let sliced_arr = ByteBoolArray::try_from(sliced_arr).unwrap();
+
+        println!("--- --- --- --- ---");
+
+        for idx in 0..sliced_arr.len() {
+            let s = scalar_at(sliced_arr.as_array_ref(), idx).unwrap();
+            println!("{s:?}");
+        }
+
+        let s = scalar_at(sliced_arr.as_array_ref(), 0).unwrap();
+        assert_eq!(s.into_value().as_bool().unwrap(), Some(true));
+
+        let s = scalar_at(sliced_arr.as_array_ref(), 1).unwrap();
+        assert!(!sliced_arr.is_valid(1));
+        assert!(s.is_null());
+        assert_eq!(s.into_value().as_bool().unwrap(), None);
+
+        let s = scalar_at(sliced_arr.as_array_ref(), 2).unwrap();
+        assert_eq!(s.into_value().as_bool().unwrap(), Some(false));
     }
 }

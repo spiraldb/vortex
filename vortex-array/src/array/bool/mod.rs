@@ -129,4 +129,25 @@ mod tests {
         let scalar = bool::try_from(&scalar_at(&arr, 0).unwrap()).unwrap();
         assert!(scalar);
     }
+
+    #[test]
+    fn test_bool_from_iter() {
+        let arr =
+            BoolArray::from_iter([Some(true), Some(true), None, Some(false), None]).into_array();
+
+        let scalar = bool::try_from(&scalar_at(&arr, 0).unwrap()).unwrap();
+        assert!(scalar);
+
+        let scalar = bool::try_from(&scalar_at(&arr, 1).unwrap()).unwrap();
+        assert!(scalar);
+
+        let scalar = scalar_at(&arr, 2).unwrap();
+        assert!(scalar.is_null());
+
+        let scalar = bool::try_from(&scalar_at(&arr, 3).unwrap()).unwrap();
+        assert!(!scalar);
+
+        let scalar = scalar_at(&arr, 4).unwrap();
+        assert!(scalar.is_null());
+    }
 }

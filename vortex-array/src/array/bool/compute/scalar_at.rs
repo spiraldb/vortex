@@ -9,7 +9,12 @@ use crate::ArrayDType;
 impl ScalarAtFn for BoolArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
-            Ok(self.boolean_buffer().value(index).into())
+            let value = self.boolean_buffer().value(index);
+            let s = Scalar::new(
+                self.dtype().clone(),
+                vortex_scalar::ScalarValue::Bool(value),
+            );
+            Ok(s)
         } else {
             return Ok(Scalar::null(self.dtype().clone()));
         }
