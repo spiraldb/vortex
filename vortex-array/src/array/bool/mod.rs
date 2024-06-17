@@ -37,14 +37,19 @@ impl BoolArray {
 
 impl BoolArray {
     pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
+        let buffer_len = buffer.len();
+        let buffer_offset = buffer.offset();
+
+        let inner = buffer.into_inner().bit_slice(buffer_offset, buffer_len);
+
         Ok(Self {
             typed: TypedArray::try_from_parts(
                 DType::Bool(validity.nullability()),
                 BoolMetadata {
-                    validity: validity.to_metadata(buffer.len())?,
-                    length: buffer.len(),
+                    validity: validity.to_metadata(buffer_len)?,
+                    length: buffer_len,
                 },
-                Some(Buffer::from(buffer.into_inner())),
+                Some(Buffer::from(inner)),
                 validity.into_array_data().into_iter().collect_vec().into(),
                 StatsSet::new(),
             )?,
