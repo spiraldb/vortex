@@ -39,7 +39,6 @@ impl BitPackedArray {
         validity: Validity,
         patches: Option<Array>,
         bit_width: usize,
-        // TODO(ngates): infer length from packed length
         length: usize,
         offset: usize,
     ) -> VortexResult<Self> {
