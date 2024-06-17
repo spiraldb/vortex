@@ -1,15 +1,15 @@
 use std::mem::size_of;
 
-use arrayref::array_ref;
-use fastlanez::{transpose, untranspose_into, Delta};
+use arrayref::{array_mut_ref, array_ref};
+use fastlanes::{Delta, Transpose};
 use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::compute::fill::fill_forward;
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray};
-use vortex_dtype::Nullability;
-use vortex_dtype::{match_each_integer_ptype, NativePType};
+use vortex_dtype::NativePType;
+use vortex_dtype::{match_each_unsigned_integer_ptype, Nullability};
 use vortex_error::VortexResult;
 
 use crate::{DeltaArray, DeltaEncoding};
@@ -24,7 +24,7 @@ impl EncodingCompression for DeltaEncoding {
         let parray = PrimitiveArray::try_from(array).ok()?;
 
         // Only supports ints
-        if !parray.ptype().is_int() {
+        if !parray.ptype().is_unsigned_int() {
             return None;
         }
 
@@ -46,7 +46,7 @@ impl EncodingCompression for DeltaEncoding {
         let filled = fill_forward(array)?.flatten_primitive()?;
 
         // Compress the filled array
-        let (bases, deltas) = match_each_integer_ptype!(parray.ptype(), |$T| {
+        let (bases, deltas) = match_each_unsigned_integer_ptype!(parray.ptype(), |$T| {
             let (bases, deltas) = compress_primitive(filled.typed_data::<$T>());
             let base_validity = (validity.nullability() != Nullability::NonNullable)
                 .then(|| Validity::AllValid)
@@ -75,36 +75,47 @@ impl EncodingCompression for DeltaEncoding {
     }
 }
 
-fn compress_primitive<T: NativePType + Delta + WrappingSub>(array: &[T]) -> (Vec<T>, Vec<T>)
+fn compress_primitive<T: NativePType + Delta + Transpose + WrappingSub>(
+    array: &[T],
+) -> (Vec<T>, Vec<T>)
 where
     [(); 128 / size_of::<T>()]:,
+    [(); 8 * size_of::<T>()]:,
+    [(); T::LANES]:,
+    [(); 1024 * T::T / T::T]:,
+    [(); { T::T <= 8 * size_of::<T>() } as usize]:,
 {
     // How many fastlanes vectors we will process.
     let num_chunks = array.len() / 1024;
 
-    // How long each base vector will be.
-    let lanes = T::lanes();
-
     // Allocate result arrays.
-    let mut bases = Vec::with_capacity(num_chunks * lanes + 1);
+    let mut bases = Vec::with_capacity(num_chunks * T::LANES + 1);
     let mut deltas = Vec::with_capacity(array.len());
 
     // Loop over all the 1024-element chunks.
     if num_chunks > 0 {
         let mut transposed: [T; 1024] = [T::default(); 1024];
-        let mut base = [T::default(); 128 / size_of::<T>()];
-        assert_eq!(base.len(), lanes);
+        let mut base = [T::default(); T::LANES];
 
         for i in 0..num_chunks {
             let start_elem = i * 1024;
             let chunk: &[T; 1024] = array_ref![array, start_elem, 1024];
-            transpose(chunk, &mut transposed);
+            Transpose::transpose(chunk, &mut transposed);
 
             // Initialize and store the base vector for each chunk
-            base.copy_from_slice(&transposed[0..lanes]);
+            base.copy_from_slice(&transposed[0..T::LANES]);
             bases.extend(base);
 
-            Delta::encode_transposed(&transposed, &mut base, &mut deltas);
+            deltas.reserve(1024);
+            let delta_len = deltas.len();
+            unsafe {
+                Delta::delta(
+                    &transposed,
+                    &mut base,
+                    array_mut_ref![deltas[delta_len..], 0, 1024],
+                );
+                deltas.set_len(delta_len + 1024);
+            }
         }
     }
 
@@ -123,7 +134,7 @@ where
 
     assert_eq!(
         bases.len(),
-        num_chunks * lanes + (if remainder_size > 0 { 1 } else { 0 })
+        num_chunks * T::LANES + (if remainder_size > 0 { 1 } else { 0 })
     );
     assert_eq!(deltas.len(), array.len());
 
@@ -133,7 +144,7 @@ where
 pub fn decompress(array: DeltaArray) -> VortexResult<PrimitiveArray> {
     let bases = array.bases().flatten_primitive()?;
     let deltas = array.deltas().flatten_primitive()?;
-    let decoded = match_each_integer_ptype!(deltas.ptype(), |$T| {
+    let decoded = match_each_unsigned_integer_ptype!(deltas.ptype(), |$T| {
         PrimitiveArray::from_vec(
             decompress_primitive::<$T>(bases.typed_data(), deltas.typed_data()),
             array.validity()
@@ -142,15 +153,18 @@ pub fn decompress(array: DeltaArray) -> VortexResult<PrimitiveArray> {
     Ok(decoded)
 }
 
-fn decompress_primitive<T: NativePType + Delta + WrappingAdd>(bases: &[T], deltas: &[T]) -> Vec<T>
+fn decompress_primitive<T: NativePType + Delta + Transpose + WrappingAdd>(
+    bases: &[T],
+    deltas: &[T],
+) -> Vec<T>
 where
-    [(); 128 / size_of::<T>()]:,
+    [(); T::LANES]:,
 {
     // How many fastlanes vectors we will process.
     let num_chunks = deltas.len() / 1024;
 
     // How long each base vector will be.
-    let lanes = T::lanes();
+    let lanes = T::LANES;
 
     // Allocate a result array.
     let mut output = Vec::with_capacity(deltas.len());
@@ -158,8 +172,7 @@ where
     // Loop over all the chunks
     if num_chunks > 0 {
         let mut transposed: [T; 1024] = [T::default(); 1024];
-        let mut base = [T::default(); 128 / size_of::<T>()];
-        assert_eq!(base.len(), lanes);
+        let mut base = [T::default(); T::LANES];
 
         for i in 0..num_chunks {
             let start_elem = i * 1024;
@@ -167,8 +180,8 @@ where
 
             // Initialize the base vector for this chunk
             base.copy_from_slice(&bases[i * lanes..(i + 1) * lanes]);
-            Delta::decode_transposed(chunk, &mut base, &mut transposed);
-            untranspose_into(&transposed, &mut output);
+            Delta::undelta(chunk, &mut base, &mut transposed);
+            Transpose::untranspose(&transposed, array_mut_ref![output, 0, 1024]);
         }
     }
     assert_eq!(output.len() % 1024, 0);

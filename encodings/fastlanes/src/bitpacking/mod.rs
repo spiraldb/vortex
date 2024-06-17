@@ -5,6 +5,7 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use vortex_dtype::PType;
 use vortex_error::{vortex_bail, vortex_err};
 
 mod compress;
@@ -38,6 +39,7 @@ impl BitPackedArray {
         validity: Validity,
         patches: Option<Array>,
         bit_width: usize,
+        // TODO(ngates): infer length from packed length
         length: usize,
         offset: usize,
     ) -> VortexResult<Self> {
@@ -49,7 +51,9 @@ impl BitPackedArray {
             vortex_bail!("Unsupported bit width {}", bit_width);
         }
 
-        let expected_packed_size = ((length + 1023) / 1024) * 128 * bit_width;
+        let ptype: PType = (&dtype).try_into()?;
+        let expected_packed_size =
+            ((length + 1023) / 1024) * (128 * bit_width / ptype.byte_width());
         if packed.len() != expected_packed_size {
             return Err(vortex_err!(
                 "Expected {} packed bytes, got {}",

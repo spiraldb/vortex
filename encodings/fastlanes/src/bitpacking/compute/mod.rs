@@ -1,7 +1,7 @@
 use std::cmp::min;
 use std::mem::size_of;
 
-use fastlanez::TryBitPack;
+use fastlanes::BitPacking;
 use itertools::Itertools;
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
@@ -18,7 +18,6 @@ use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::bitpacking::compress::unpack_single;
-use crate::bitpacking::try_bitpacking::TryBitPacking;
 use crate::{unpack_single_primitive, BitPackedArray};
 
 mod slice;
@@ -47,10 +46,6 @@ impl ScalarAtFn for BitPackedArray {
             if self.bit_width() == 0 || patches.with_dyn(|a| a.is_valid(index)) {
                 return scalar_at(&patches, index)?.cast(self.dtype());
             }
-        } else if self.bit_width() == 0 {
-            match_each_unsigned_integer_ptype!(PType::try_from(self.dtype())?, |$P| {
-                return Ok(Scalar::zero::<$P>(self.dtype().nullability()));
-            });
         }
         unpack_single(self, index)?.cast(self.dtype())
     }
@@ -81,7 +76,7 @@ impl TakeFn for BitPackedArray {
     }
 }
 
-fn take_primitive<T: NativePType + TryBitPacking + TryBitPack>(
+fn take_primitive<T: NativePType + BitPacking>(
     array: &BitPackedArray,
     indices: &PrimitiveArray,
 ) -> VortexResult<Vec<T>> {
@@ -115,16 +110,16 @@ fn take_primitive<T: NativePType + TryBitPacking + TryBitPack>(
     let unpack_chunk_threshold = 8;
 
     let mut output = Vec::with_capacity(indices.len());
-    let mut buffer: Vec<T> = Vec::new();
+    let mut unpacked = [T::zero(); 1024];
     for (chunk, offsets) in relative_indices {
         let chunk_size = 128 * bit_width / size_of::<T>();
         let packed_chunk = &packed[chunk_size..][..chunk_size];
         if offsets.len() > unpack_chunk_threshold {
-            buffer.clear();
-            TryBitPack::try_unpack_into(packed_chunk, bit_width, &mut buffer)
-                .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))?;
+            unsafe {
+                BitPacking::unchecked_bitunpack(bit_width, packed_chunk, &mut unpacked);
+            }
             for index in &offsets {
-                output.push(buffer[*index as usize]);
+                output.push(unpacked[*index as usize]);
             }
         } else {
             for index in &offsets {
@@ -157,7 +152,7 @@ fn take_primitive<T: NativePType + TryBitPacking + TryBitPack>(
     Ok(output)
 }
 
-fn do_patch_for_take_primitive<T: NativePType + TryBitPack>(
+fn do_patch_for_take_primitive<T: NativePType>(
     patches: &SparseArray,
     indices: &PrimitiveArray,
     output: &mut [T],
@@ -209,6 +204,7 @@ mod test {
             .unwrap();
         let result = take(&bitpacked, indices.array()).unwrap();
         assert_eq!(result.encoding().id(), Primitive::ID);
+
         let primitive_result = result.flatten_primitive().unwrap();
         let res_bytes = primitive_result.typed_data::<u8>();
         assert_eq!(res_bytes, &[0, 62, 31, 33, 9, 18]);
