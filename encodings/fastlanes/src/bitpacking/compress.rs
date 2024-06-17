@@ -132,8 +132,8 @@ pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: us
     (0..num_full_chunks).for_each(|i| {
         let start_elem = i * 1024;
 
-        let output_len = output.len();
         output.reserve(packed_len);
+        let output_len = output.len();
         unsafe {
             output.set_len(output_len + packed_len);
             BitPacking::unchecked_pack(

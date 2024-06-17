@@ -97,6 +97,7 @@ where
             Transpose::transpose(chunk, &mut transposed);
 
             // Initialize and store the base vector for each chunk
+            // TODO(ngates): avoid copying the base vector
             base.copy_from_slice(&transposed[0..T::LANES]);
             bases.extend(base);
 
@@ -106,7 +107,7 @@ where
                 deltas.set_len(delta_len + 1024);
                 Delta::delta(
                     &transposed,
-                    &mut base,
+                    &base,
                     array_mut_ref![deltas[delta_len..], 0, 1024],
                 );
             }
@@ -173,8 +174,9 @@ where
             let chunk: &[T; 1024] = array_ref![deltas, start_elem, 1024];
 
             // Initialize the base vector for this chunk
+            // TODO(ngates): avoid copying the bases
             base.copy_from_slice(&bases[i * lanes..(i + 1) * lanes]);
-            Delta::undelta(chunk, &mut base, &mut transposed);
+            Delta::undelta(chunk, &base, &mut transposed);
 
             let output_len = output.len();
             unsafe { output.set_len(output_len + 1024) }
