@@ -4,12 +4,13 @@ use std::sync::Arc;
 use arrow_array::{ArrayRef as ArrowArrayRef, BooleanArray as ArrowBoolArray};
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder};
 use num_traits::AsPrimitive;
-use vortex_dtype::match_each_integer_ptype;
+use vortex_dtype::{match_each_integer_ptype, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
 use super::{ByteBoolArray, ByteBoolMetadata};
+use crate::ToArrayData;
 use crate::{
     compute::{
         as_arrow::AsArrowArray, compare::CompareFn, fill::FillForwardFn, scalar_at::ScalarAtFn,
@@ -167,7 +168,27 @@ impl CompareFn for ByteBoolArray {
 
 impl FillForwardFn for ByteBoolArray {
     fn fill_forward(&self) -> VortexResult<crate::Array> {
-        todo!()
+        if self.dtype().nullability() == Nullability::NonNullable {
+            return Ok(self.to_array_data().into_array());
+        }
+
+        let validity = self.logical_validity().to_null_buffer()?.unwrap();
+        let bools = self.as_ref();
+        let mut last_value = bool::default();
+
+        let filled = bools
+            .iter()
+            .zip(validity.inner().iter())
+            .map(|(&v, is_valid)| {
+                if is_valid {
+                    last_value = v
+                }
+
+                last_value
+            })
+            .collect::<Vec<_>>();
+
+        Ok(Self::from(filled).into_array())
     }
 }
 
