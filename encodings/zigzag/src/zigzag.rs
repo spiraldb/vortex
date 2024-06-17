@@ -12,9 +12,7 @@ use crate::compress::zigzag_encode;
 impl_encoding!("vortex.zigzag", ZigZag);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ZigZagMetadata {
-    encoded_dtype: DType,
-}
+pub struct ZigZagMetadata;
 
 impl ZigZagArray {
     pub fn new(encoded: Array) -> Self {
@@ -23,17 +21,15 @@ impl ZigZagArray {
 
     pub fn try_new(encoded: Array) -> VortexResult<Self> {
         let encoded_dtype = encoded.dtype().clone();
-        let dtype = if encoded_dtype.is_unsigned_int() {
-            DType::from(PType::try_from(&encoded_dtype).unwrap().to_signed())
-                .with_nullability(encoded_dtype.nullability())
-        } else {
-            vortex_bail!(MismatchedTypes: "unsigned int", encoded_dtype)
-        };
+        if !encoded_dtype.is_unsigned_int() {
+            vortex_bail!(MismatchedTypes: "unsigned int", encoded_dtype);
+        }
+
+        let dtype = DType::from(PType::try_from(&encoded_dtype).expect("ptype").to_signed())
+            .with_nullability(encoded_dtype.nullability());
 
         let children = vec![encoded.into_array_data()];
-
-        let metadata = ZigZagMetadata { encoded_dtype };
-        Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
+        Self::try_from_parts(dtype, ZigZagMetadata, children.into(), StatsSet::new())
     }
 
     pub fn encode(array: &Array) -> VortexResult<Array> {
@@ -44,8 +40,10 @@ impl ZigZagArray {
     }
 
     pub fn encoded(&self) -> Array {
+        let ptype = PType::try_from(self.dtype()).expect("ptype");
+        let encoded = DType::from(ptype.to_unsigned()).with_nullability(self.dtype().nullability());
         self.array()
-            .child(0, &self.metadata().encoded_dtype)
+            .child(0, &encoded)
             .expect("Missing encoded array")
     }
 }

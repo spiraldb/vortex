@@ -69,10 +69,14 @@ impl ArrayData {
         match self.children.get(index) {
             None => None,
             Some(child) => {
-                assert_eq!(child.dtype(), dtype);
+                assert_eq!(child.dtype(), dtype, "Child requested with incorrect dtype");
                 Some(child)
             }
         }
+    }
+
+    pub fn nchildren(&self) -> usize {
+        self.children.len()
     }
 
     pub fn children(&self) -> &[Self] {

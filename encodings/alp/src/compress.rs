@@ -178,7 +178,6 @@ mod tests {
     fn test_nullable_compress() {
         let array = PrimitiveArray::from_nullable_vec(vec![None, Some(1.234f32), None]);
         let encoded = alp_encode(&array).unwrap();
-        println!("Encoded {:?}", encoded);
         assert!(encoded.patches().is_none());
         assert_eq!(
             encoded.encoded().into_primitive().typed_data::<i32>(),
@@ -197,7 +196,6 @@ mod tests {
         let values = vec![1.234f64, 2.718, std::f64::consts::PI, 4.0];
         let array = PrimitiveArray::from(values.clone());
         let encoded = alp_encode(&array).unwrap();
-        println!("Encoded {:?}", encoded);
         assert!(encoded.patches().is_some());
         assert_eq!(
             encoded.encoded().into_primitive().typed_data::<i64>(),

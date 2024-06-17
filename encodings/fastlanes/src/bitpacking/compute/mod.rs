@@ -1,6 +1,7 @@
 use std::cmp::min;
+use std::mem::size_of;
 
-use fastlanez::TryBitPack;
+use fastlanes::BitPacking;
 use itertools::Itertools;
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
@@ -45,10 +46,6 @@ impl ScalarAtFn for BitPackedArray {
             if self.bit_width() == 0 || patches.with_dyn(|a| a.is_valid(index)) {
                 return scalar_at(&patches, index)?.cast(self.dtype());
             }
-        } else if self.bit_width() == 0 {
-            match_each_unsigned_integer_ptype!(PType::try_from(self.dtype())?, |$P| {
-                return Ok(Scalar::zero::<$P>(self.dtype().nullability()));
-            });
         }
         unpack_single(self, index)?.cast(self.dtype())
     }
@@ -61,8 +58,7 @@ impl TakeFn for BitPackedArray {
         let taken_validity = validity.take(indices)?;
         if self.bit_width() == 0 {
             return if let Some(patches) = self.patches() {
-                let primitive_patches = take(&patches, indices)?.flatten_primitive()?;
-                Ok(primitive_patches.into_array())
+                take(&patches, indices)
             } else {
                 Ok(
                     ConstantArray::new(Scalar::null(self.dtype().as_nullable()), indices.len())
@@ -72,14 +68,14 @@ impl TakeFn for BitPackedArray {
         }
 
         let indices = indices.clone().flatten_primitive()?;
-        let taken = match_each_unsigned_integer_ptype!(ptype.to_unsigned(), |$T| {
+        let taken = match_each_unsigned_integer_ptype!(ptype, |$T| {
             PrimitiveArray::from_vec(take_primitive::<$T>(self, &indices)?, taken_validity)
         });
         Ok(taken.reinterpret_cast(ptype).into_array())
     }
 }
 
-fn take_primitive<T: NativePType + TryBitPack>(
+fn take_primitive<T: NativePType + BitPacking>(
     array: &BitPackedArray,
     indices: &PrimitiveArray,
 ) -> VortexResult<Vec<T>> {
@@ -95,8 +91,9 @@ fn take_primitive<T: NativePType + TryBitPack>(
     });
 
     let bit_width = array.bit_width();
+
     let packed = array.packed().flatten_primitive()?;
-    let packed = packed.typed_data::<u8>();
+    let packed = packed.typed_data::<T>();
 
     let patches = array.patches().map(SparseArray::try_from).transpose()?;
 
@@ -113,15 +110,16 @@ fn take_primitive<T: NativePType + TryBitPack>(
     let unpack_chunk_threshold = 8;
 
     let mut output = Vec::with_capacity(indices.len());
-    let mut buffer: Vec<T> = Vec::new();
+    let mut unpacked = [T::zero(); 1024];
     for (chunk, offsets) in relative_indices {
-        let packed_chunk = &packed[chunk * 128 * bit_width..][..128 * bit_width];
+        let chunk_size = 128 * bit_width / size_of::<T>();
+        let packed_chunk = &packed[chunk * chunk_size..][..chunk_size];
         if offsets.len() > unpack_chunk_threshold {
-            buffer.clear();
-            TryBitPack::try_unpack_into(packed_chunk, bit_width, &mut buffer)
-                .map_err(|_| vortex_err!("Unsupported bit width {}", bit_width))?;
+            unsafe {
+                BitPacking::unchecked_unpack(bit_width, packed_chunk, &mut unpacked);
+            }
             for index in &offsets {
-                output.push(buffer[*index as usize]);
+                output.push(unpacked[*index as usize]);
             }
         } else {
             for index in &offsets {
@@ -154,7 +152,7 @@ fn take_primitive<T: NativePType + TryBitPack>(
     Ok(output)
 }
 
-fn do_patch_for_take_primitive<T: NativePType + TryBitPack>(
+fn do_patch_for_take_primitive<T: NativePType>(
     patches: &SparseArray,
     indices: &PrimitiveArray,
     output: &mut [T],
@@ -199,13 +197,18 @@ mod test {
 
     #[test]
     fn take_indices() {
-        let indices = PrimitiveArray::from(vec![0, 125, 2047, 2049, 2151, 2790]);
+        let indices = PrimitiveArray::from(vec![0, 125, 2047, 2049, 2151, 2790]).into_array();
+
+        // Create a u8 array modulo 63.
         let unpacked = PrimitiveArray::from((0..4096).map(|i| (i % 63) as u8).collect::<Vec<_>>());
+
         let bitpacked = Compressor::new(&ctx())
             .compress(unpacked.array(), None)
             .unwrap();
-        let result = take(&bitpacked, indices.array()).unwrap();
+
+        let result = take(&bitpacked, &indices).unwrap();
         assert_eq!(result.encoding().id(), Primitive::ID);
+
         let primitive_result = result.flatten_primitive().unwrap();
         let res_bytes = primitive_result.typed_data::<u8>();
         assert_eq!(res_bytes, &[0, 62, 31, 33, 9, 18]);
