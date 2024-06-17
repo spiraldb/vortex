@@ -1,0 +1,24 @@
+[package]
+name = "vortex-datafusion"
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+include.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+vortex-array = { path = "../vortex-array" }
+vortex-dtype = { path = "../vortex-dtype" }
+vortex-error = { path = "../vortex-error" }
+
+async-trait = { workspace = true }
+datafusion = { workspace = true }
+datafusion-common = { workspace = true }
+datafusion-expr = { workspace = true }
+
+[lints]
+workspace = true
