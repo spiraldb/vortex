@@ -12,9 +12,10 @@ rust-version.workspace = true
 
 [dependencies]
 vortex-array = { path = "../vortex-array" }
-vortex-dtype = { path = "../vortex-dtype" }
+vortex-dtype = { path = "../vortex-dtype", features = ["arrow"] }
 vortex-error = { path = "../vortex-error" }
 
+arrow-schema = { workspace = true }
 async-trait = { workspace = true }
 datafusion = { workspace = true }
 datafusion-common = { workspace = true }

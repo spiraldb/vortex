@@ -80,7 +80,8 @@ mod test {
     }
 
     fn to_int_indices(filtered_primitive: BoolArray) -> Vec<u64> {
-        filtered_primitive.boolean_buffer()
+        filtered_primitive
+            .boolean_buffer()
             .set_indices()
             .map(|i| i as u64)
             .collect()
