@@ -116,7 +116,7 @@ fn take_primitive<T: NativePType + BitPacking>(
         let packed_chunk = &packed[chunk * chunk_size..][..chunk_size];
         if offsets.len() > unpack_chunk_threshold {
             unsafe {
-                BitPacking::unchecked_bitunpack(bit_width, packed_chunk, &mut unpacked);
+                BitPacking::unchecked_unpack(bit_width, packed_chunk, &mut unpacked);
             }
             for index in &offsets {
                 output.push(unpacked[*index as usize]);

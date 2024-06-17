@@ -136,7 +136,7 @@ pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: us
         output.reserve(packed_len);
         unsafe {
             output.set_len(output_len + packed_len);
-            BitPacking::unchecked_bitpack(
+            BitPacking::unchecked_pack(
                 bit_width,
                 &array[start_elem..][..1024],
                 &mut output[output_len..][..packed_len],
@@ -154,7 +154,7 @@ pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: us
         let output_len = output.len();
         unsafe {
             output.set_len(output_len + packed_len);
-            BitPacking::unchecked_bitpack(
+            BitPacking::unchecked_pack(
                 bit_width,
                 &last_chunk,
                 &mut output[output_len..][..packed_len],
@@ -253,7 +253,7 @@ pub fn unpack_primitive<T: NativePType + BitPacking>(
     let first_full_chunk = if offset != 0 {
         let chunk: &[T] = &packed[0..elems_per_chunk];
         let mut decoded = [T::zero(); 1024];
-        unsafe { BitPacking::unchecked_bitunpack(bit_width, chunk, &mut decoded) };
+        unsafe { BitPacking::unchecked_unpack(bit_width, chunk, &mut decoded) };
         output.extend_from_slice(&decoded[offset..]);
         1
     } else {
@@ -266,7 +266,7 @@ pub fn unpack_primitive<T: NativePType + BitPacking>(
         unsafe {
             let output_len = output.len();
             output.set_len(output_len + 1024);
-            BitPacking::unchecked_bitunpack(bit_width, chunk, &mut output[output_len..][0..1024]);
+            BitPacking::unchecked_unpack(bit_width, chunk, &mut output[output_len..][0..1024]);
         }
     });
 
@@ -321,7 +321,7 @@ pub unsafe fn unpack_single_primitive<T: NativePType + BitPacking>(
     let elems_per_chunk: usize = 128 * bit_width / size_of::<T>();
 
     let packed_chunk = &packed[chunk_index * elems_per_chunk..][0..elems_per_chunk];
-    Ok(unsafe { BitPacking::unchecked_bitunpack_single(bit_width, packed_chunk, index_in_chunk) })
+    Ok(unsafe { BitPacking::unchecked_unpack_single(bit_width, packed_chunk, index_in_chunk) })
 }
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
