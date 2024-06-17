@@ -197,7 +197,6 @@ mod tests {
     use arrow_array::cast::AsArray as _;
 
     use super::*;
-    use crate::{compute::slice::slice, AsArray as _};
 
     #[test]
     fn test_as_arrow() {
@@ -217,19 +216,5 @@ mod tests {
                 idx, expected, output
             );
         }
-    }
-
-    #[test]
-    #[allow(dead_code, unused_variables)]
-    fn test_slice() {
-        let original = vec![Some(true), Some(true), None, Some(false), None];
-        let vortex_arr = ByteBoolArray::from(original.clone());
-
-        let sliced_arr = slice(vortex_arr.as_array_ref(), 1, 4).unwrap();
-
-        let sliced_arr = ByteBoolArray::try_from(sliced_arr).unwrap();
-        let expected = ByteBoolArray::from(vec![Some(true), None, Some(false)]);
-
-        // assert_eq!(sliced_arr, expected);
     }
 }
