@@ -18,10 +18,10 @@ workspace = true
 itertools = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-vortex-array = { path = "../vortex-array" }
-vortex-error = { path = "../vortex-error" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-scalar = { path = "../vortex-scalar" }
+vortex-array = { path = "../../vortex-array" }
+vortex-error = { path = "../../vortex-error" }
+vortex-dtype = { path = "../../vortex-dtype" }
+vortex-scalar = { path = "../../vortex-scalar" }
 
 [dev-dependencies]
 divan = { workspace = true }

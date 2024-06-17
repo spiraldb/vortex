@@ -9,7 +9,7 @@ use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::validity::{Validity, ValidityMetadata};
-use crate::{impl_encoding, ArrayDType, ToArrayData};
+use crate::{impl_encoding, ArrayDType, IntoArrayData};
 
 mod accessor;
 mod array;
@@ -57,8 +57,8 @@ impl VarBinArray {
         };
 
         let mut children = Vec::with_capacity(3);
-        children.push(offsets.to_array_data());
-        children.push(bytes.to_array_data());
+        children.push(offsets.into_array_data());
+        children.push(bytes.into_array_data());
         if let Some(a) = validity.into_array_data() {
             children.push(a)
         }
