@@ -23,7 +23,7 @@ runs:
         shared-key: "shared" # To allow reuse across jobs
 
     - name: Rust Compile Cache
-      uses: mozilla-actions/sccache-action@v0.0.4
+      uses: mozilla-actions/sccache-action@v0.0.5
     - name: Rust Compile Cache Config
       shell: bash
       # echo "CARGO_LOG=cargo::core::compiler::fingerprint=info" >> $GITHUB_ENV
