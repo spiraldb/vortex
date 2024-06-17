@@ -75,6 +75,10 @@ impl ArrayData {
         }
     }
 
+    pub fn nchildren(&self) -> usize {
+        self.children.len()
+    }
+
     pub fn children(&self) -> &[Self] {
         &self.children
     }

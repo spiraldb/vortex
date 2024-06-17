@@ -15,11 +15,12 @@ impl_encoding!("fastlanes.bitpacked", BitPacked);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BitPackedMetadata {
+    // TODO(ngates): serialize into compact form
     validity: ValidityMetadata,
-    patches_dtype: Option<DType>,
+    patches: bool,
     bit_width: usize,
-    offset: usize,
-    length: usize,
+    offset: usize, // Know to be <1024
+    length: usize, // Store end padding instead <1024
 }
 
 /// NB: All non-null values in the patches array are considered patches
@@ -63,7 +64,7 @@ impl BitPackedArray {
 
         let metadata = BitPackedMetadata {
             validity: validity.to_metadata(length)?,
-            patches_dtype: patches.as_ref().map(|p| p.dtype().as_nullable()),
+            patches: patches.is_some(),
             offset,
             length,
             bit_width,
@@ -95,10 +96,10 @@ impl BitPackedArray {
 
     #[inline]
     pub fn patches(&self) -> Option<Array> {
-        self.metadata().patches_dtype.as_ref().map(|pd| {
+        self.metadata().patches.then(|| {
             self.array()
-                .child(1, pd)
-                .expect("Missing patches with present metadata flag")
+                .child(1, &self.dtype().with_nullability(Nullability::Nullable))
+                .expect("Missing patches array")
         })
     }
 
@@ -109,11 +110,7 @@ impl BitPackedArray {
 
     pub fn validity(&self) -> Validity {
         self.metadata().validity.to_validity(self.array().child(
-            if self.metadata().patches_dtype.is_some() {
-                2
-            } else {
-                1
-            },
+            if self.metadata().patches { 2 } else { 1 },
             &Validity::DTYPE,
         ))
     }
@@ -146,7 +143,7 @@ impl ArrayValidity for BitPackedArray {
 impl AcceptArrayVisitor for BitPackedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("packed", &self.packed())?;
-        if self.metadata().patches_dtype.is_some() {
+        if self.metadata().patches {
             visitor.visit_child(
                 "patches",
                 &self.patches().expect("Expected patches to be present "),

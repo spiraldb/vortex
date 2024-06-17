@@ -139,6 +139,10 @@ impl ArrayView {
         }
     }
 
+    pub fn nchildren(&self) -> usize {
+        self.flatbuffer().children().map(|c| c.len()).unwrap_or(0)
+    }
+
     /// Whether the current Array makes use of a buffer
     pub fn has_buffer(&self) -> bool {
         self.flatbuffer().has_buffer()
