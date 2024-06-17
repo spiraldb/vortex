@@ -5,7 +5,7 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
-use vortex_dtype::PType;
+use vortex_dtype::{Nullability, PType};
 use vortex_error::{vortex_bail, vortex_err};
 
 mod compress;
@@ -42,7 +42,7 @@ impl BitPackedArray {
         length: usize,
         offset: usize,
     ) -> VortexResult<Self> {
-        let dtype = packed.dtype().clone();
+        let dtype = packed.dtype().with_nullability(validity.nullability());
         if !dtype.is_unsigned_int() {
             vortex_bail!(MismatchedTypes: "uint", &dtype);
         }
@@ -84,7 +84,7 @@ impl BitPackedArray {
     #[inline]
     pub fn packed(&self) -> Array {
         self.array()
-            .child(0, self.dtype())
+            .child(0, &self.dtype().with_nullability(Nullability::NonNullable))
             .expect("Missing packed array")
     }
 
