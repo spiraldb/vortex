@@ -15,11 +15,16 @@ vortex-array = { path = "../vortex-array" }
 vortex-dtype = { path = "../vortex-dtype", features = ["arrow"] }
 vortex-error = { path = "../vortex-error" }
 
+arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 async-trait = { workspace = true }
+
 datafusion = { workspace = true }
 datafusion-common = { workspace = true }
 datafusion-expr = { workspace = true }
+datafusion-execution = { workspace = true }
+datafusion-physical-expr = { workspace = true }
+datafusion-physical-plan = { workspace = true }
 futures = { workspace = true }
 pin-project = { workspace = true }
 

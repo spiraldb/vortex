@@ -6,19 +6,19 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+use arrow_array::RecordBatch;
+use arrow_schema::SchemaRef;
 use arrow_schema::{DataType, Field, Schema};
 use async_trait::async_trait;
-use datafusion::arrow::array::RecordBatch;
-use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::datasource::TableProvider;
 use datafusion::execution::context::SessionState;
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
-use datafusion::physical_expr::EquivalenceProperties;
-use datafusion::physical_plan::{
-    DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, Partitioning, PlanProperties,
-};
 use datafusion_common::{exec_datafusion_err, exec_err, DataFusionError, Result as DFResult};
 use datafusion_expr::{Expr, TableProviderFilterPushDown, TableType};
+use datafusion_physical_expr::EquivalenceProperties;
+use datafusion_physical_plan::{
+    DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, Partitioning, PlanProperties,
+};
 use futures::{Stream, StreamExt};
 use pin_project::pin_project;
 use vortex::array::chunked::ChunkedArray;
