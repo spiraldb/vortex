@@ -254,8 +254,8 @@ mod test {
             buffer,
             view_ctx,
             dtype,
-            row_offsets.into_array(),
             byte_offsets.into_array(),
+            row_offsets.into_array(),
         )
         .unwrap();
 
