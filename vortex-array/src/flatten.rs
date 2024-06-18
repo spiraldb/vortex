@@ -37,8 +37,8 @@ pub enum Flattened {
     VarBin(VarBinArray),
     // TODO(aduffy): VarBinView is being disabled until execution engines improve their
     //  support for them, or we build better execution kernels of our own.
-    //  Should re-enable once DataFusion completes support for them, tracked in
-    //  https://github.com/apache/datafusion/issues/10918
+    //  Once DataFusion completes https://github.com/apache/datafusion/issues/10918, we should
+    //  flip this to be the preferred "flat" encoding for all string and binary types.
     // VarBinView(VarBinViewArray),
     Extension(ExtensionArray),
 }

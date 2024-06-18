@@ -325,7 +325,7 @@ mod test {
     use crate::array::varbinview::VarBinViewArray;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::{ArrayTrait, IntoArray};
+    use crate::{ArrayFlatten, ArrayTrait, Flattened, IntoArray};
 
     #[test]
     pub fn varbin_view() {
@@ -358,7 +358,14 @@ mod test {
     }
 
     #[test]
-    pub fn flatten_varbin_array() {
-        // Flattening a varbinview array currently will convert it into a VarBinArray.
+    pub fn flatten_array() {
+        let binary_arr = VarBinViewArray::from(vec!["string1", "string2"]);
+
+        let flattened = binary_arr.flatten().unwrap();
+        assert!(matches!(flattened, Flattened::VarBin(_)));
+
+        let var_bin = flattened.into_array();
+        assert_eq!(scalar_at(&var_bin, 0).unwrap(), Scalar::from("string1"));
+        assert_eq!(scalar_at(&var_bin, 1).unwrap(), Scalar::from("string2"));
     }
 }

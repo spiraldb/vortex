@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use vortex_dtype::{FieldNames, Nullability, StructDType};
 use vortex_error::{vortex_bail, vortex_err};
 
-use crate::array::primitive::PrimitiveArray;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -112,11 +111,6 @@ impl StructArray {
         let mut children = Vec::with_capacity(projection.len());
         let mut names = Vec::with_capacity(projection.len());
 
-        let validity = self.validity().take(
-            &PrimitiveArray::from(projection.iter().map(|idx| *idx as u64).collect::<Vec<_>>())
-                .into_array(),
-        )?;
-
         for column_idx in projection {
             children.push(
                 self.field(*column_idx)
@@ -129,7 +123,7 @@ impl StructArray {
             FieldNames::from(names.as_slice()),
             children,
             self.len(),
-            validity,
+            self.validity(),
         )
     }
 }
