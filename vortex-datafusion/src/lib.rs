@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use arrow_array::{RecordBatch, StructArray as ArrowStructArray};
-use arrow_schema::Schema;
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
 use datafusion::datasource::TableProvider;
@@ -27,6 +26,10 @@ use vortex::{Array, ArrayDType, ArrayFlatten, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
+use crate::datatype::infer_schema;
+
+mod datatype;
+
 /// A [`TableProvider`] that exposes an existing Vortex Array to the DataFusion SQL engine.
 ///
 /// Only arrays that have a top-level [struct type](vortex_dtype::StructDType) can be exposed as
@@ -44,7 +47,7 @@ impl VortexInMemoryTableProvider {
             vortex_bail!(InvalidArgument: "only DType::Struct arrays can produce a table provider");
         }
 
-        let arrow_schema = Schema::try_from(array.dtype())?;
+        let arrow_schema = infer_schema(array.dtype());
         let schema_ref = SchemaRef::new(arrow_schema);
 
         Ok(Self { array, schema_ref })

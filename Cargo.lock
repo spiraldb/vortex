@@ -4070,7 +4070,6 @@ dependencies = [
 name = "vortex-dtype"
 version = "0.1.0"
 dependencies = [
- "arrow-schema",
  "build-vortex",
  "flatbuffers",
  "half",

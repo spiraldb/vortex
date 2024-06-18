@@ -6,6 +6,7 @@ use vortex_dtype::Nullability;
 use vortex_error::vortex_bail;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbinview::builder::VarBinViewBuilder;
 use crate::compute::slice::slice;
 use crate::validity::Validity;
@@ -219,7 +220,25 @@ impl VarBinViewArray {
 
 impl ArrayFlatten for VarBinViewArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        unimplemented!("see https://github.com/spiraldb/vortex/issues/392")
+        // TODO(aduffy): this flatten implementation is relatively expensive, allocating a new
+        //  VarBinArray, and decoding elements from this Array one-at-a-time for insertion.
+        //  In the future, this will be removed because we will provide VarBinViewArray as a
+        //  first-class Flattened variant with zero-copy to Arrow.
+        let mut builder = VarBinBuilder::<u32>::with_capacity(self.len());
+        for idx in 0..self.len() {
+            // If the current value is null, then we push null. Else, we push value.
+            if self.validity().is_valid(idx) {
+                builder.push_value(
+                    self.bytes_at(idx)
+                        .expect("element must be valid")
+                        .as_slice(),
+                );
+            } else {
+                builder.push_null();
+            }
+        }
+
+        Ok(Flattened::VarBin(builder.finish(self.dtype().clone())))
     }
 }
 
@@ -336,5 +355,10 @@ mod test {
             scalar_at(&binary_arr, 0).unwrap(),
             Scalar::from("hello world this is a long string")
         );
+    }
+
+    #[test]
+    pub fn flatten_varbin_array() {
+        // Flattening a varbinview array currently will convert it into a VarBinArray.
     }
 }

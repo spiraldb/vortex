@@ -13,10 +13,6 @@ mod nullability;
 mod ptype;
 mod serde;
 
-/// Optional converters to and from Arrow [Schema] types.
-#[cfg(feature = "arrow")]
-pub mod arrow;
-
 #[cfg(feature = "proto")]
 pub mod proto {
     pub mod dtype {
