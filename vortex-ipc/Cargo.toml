@@ -13,7 +13,6 @@ rust-version = { workspace = true }
 
 [dependencies]
 bytes = { workspace = true }
-derive_builder = { workspace = true }
 flatbuffers = { workspace = true }
 futures-util = { workspace = true }
 itertools = { workspace = true }
