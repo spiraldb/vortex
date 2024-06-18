@@ -190,6 +190,3 @@ benchmarks/.out
 # Scratch
 *.txt
 *.vortex
-
-# Lockfile
-Cargo.lock
