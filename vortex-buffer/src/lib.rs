@@ -5,7 +5,7 @@ mod string;
 use std::cmp::Ordering;
 use std::ops::{Deref, Range};
 
-use arrow_buffer::Buffer as ArrowBuffer;
+use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer};
 pub use string::*;
 
 #[derive(Debug, Clone)]
@@ -49,9 +49,9 @@ impl Buffer {
         }
     }
 
-    pub fn into_vec(self) -> Result<Vec<u8>, Self> {
+    pub fn into_vec<T: ArrowNativeType>(self) -> Result<Vec<T>, Self> {
         match self {
-            Self::Arrow(buffer) => buffer.into_vec::<u8>().map_err(Buffer::Arrow),
+            Self::Arrow(buffer) => buffer.into_vec::<T>().map_err(Buffer::Arrow),
             // Cannot convert bytes into a mutable vec
             Self::Bytes(_) => Err(self),
         }

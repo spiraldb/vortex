@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use num_traits::AsPrimitive;
@@ -93,14 +91,14 @@ impl PrimitiveArray {
             self.ptype(),
         );
 
-        let (prefix, offsets, suffix) = unsafe { self.buffer().as_ref().align_to::<T>() };
+        let (prefix, values, suffix) = unsafe { self.buffer().as_ref().align_to::<T>() };
         assert!(prefix.is_empty() && suffix.is_empty());
-        offsets
+        values
     }
 
     /// Convert the array into a mutable vec of the given type.
     /// If possible, this will be zero-copy.
-    pub fn into_maybe_null_slice<T: NativePType>(self) -> Vec<T> {
+    pub fn into_maybe_null_slice<T: NativePType + ArrowNativeType>(self) -> Vec<T> {
         assert_eq!(
             T::PTYPE,
             self.ptype(),
@@ -108,19 +106,11 @@ impl PrimitiveArray {
             T::PTYPE,
             self.ptype(),
         );
-        let bytes = self
-            .into_buffer()
-            .into_vec()
-            .unwrap_or_else(|b| Vec::from(b.as_ref()));
-
-        unsafe {
-            let mut bytes = std::mem::ManuallyDrop::new(bytes);
-            Vec::from_raw_parts(
-                bytes.as_mut_ptr() as *mut T,
-                bytes.len() / size_of::<T>(),
-                bytes.capacity() / size_of::<T>(),
-            )
-        }
+        self.into_buffer().into_vec::<T>().unwrap_or_else(|b| {
+            let (prefix, values, suffix) = unsafe { b.as_ref().align_to::<T>() };
+            assert!(prefix.is_empty() && suffix.is_empty());
+            Vec::from(values)
+        })
     }
 
     pub fn get_as_cast<T: NativePType>(&self, idx: usize) -> T {
@@ -149,7 +139,7 @@ impl PrimitiveArray {
         })
     }
 
-    pub fn patch<P: AsPrimitive<usize>, T: NativePType>(
+    pub fn patch<P: AsPrimitive<usize>, T: NativePType + ArrowNativeType>(
         self,
         positions: &[P],
         values: &[T],
