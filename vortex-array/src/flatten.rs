@@ -1,3 +1,4 @@
+use arrow_array::ArrayRef;
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
@@ -7,6 +8,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::r#struct::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
+use crate::compute::as_arrow::AsArrowArray;
 use crate::encoding::ArrayEncoding;
 use crate::{Array, IntoArray};
 
@@ -19,6 +21,26 @@ pub enum Flattened {
     VarBin(VarBinArray),
     VarBinView(VarBinViewArray),
     Extension(ExtensionArray),
+}
+
+impl Flattened {
+    /// Convert a flat array into its equivalent [ArrayRef](Arrow array).
+    ///
+    /// Scalar arrays such as Bool and Primitive flattened arrays though should convert with
+    /// zero copies, while more complex variants such as Struct may require allocations if its child
+    /// arrays require decompression.
+    pub fn into_arrow(self) -> ArrayRef {
+        match self {
+            Flattened::Null(a) => a.as_arrow(),
+            Flattened::Bool(a) => a.as_arrow(),
+            Flattened::Primitive(a) => a.as_arrow(),
+            Flattened::Struct(a) => a.as_arrow(),
+            Flattened::VarBin(a) => a.as_arrow(),
+            Flattened::VarBinView(a) => a.as_arrow(),
+            Flattened::Extension(a) => a.as_arrow(),
+        }
+        .expect("flat array must convert to ArrayRef")
+    }
 }
 
 /// Support trait for transmuting an array into its [vortex_dtype::DType]'s canonical encoding.

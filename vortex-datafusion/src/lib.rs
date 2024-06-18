@@ -6,9 +6,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use arrow_array::RecordBatch;
+use arrow_array::{RecordBatch, StructArray as ArrowStructArray};
+use arrow_schema::Schema;
 use arrow_schema::SchemaRef;
-use arrow_schema::{DataType, Field, Schema};
 use async_trait::async_trait;
 use datafusion::datasource::TableProvider;
 use datafusion::execution::context::SessionState;
@@ -23,8 +23,7 @@ use futures::{Stream, StreamExt};
 use pin_project::pin_project;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::r#struct::StructArray;
-use vortex::compute::as_arrow::AsArrowArray;
-use vortex::{Array, ArrayDType, Flattened, IntoArray};
+use vortex::{Array, ArrayDType, ArrayFlatten, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
@@ -68,8 +67,8 @@ impl TableProvider for VortexInMemoryTableProvider {
 
     /// Plan an array scan.
     ///
-    /// Currently, no pushdown is supported. The array is flattened directly into the nearest
-    /// Arrow-compatible encoding, and we emit a single [RecordBatch] of data.
+    /// Currently, projection pushdown is supported, but not filter pushdown.
+    /// The array is flattened directly into the nearest Arrow-compatible encoding.
     async fn scan(
         &self,
         _state: &SessionState,
@@ -128,6 +127,9 @@ impl DisplayAs for VortexMemoryExec {
 
 impl VortexMemoryExec {
     /// Read a single array chunk from the source as a RecordBatch.
+    ///
+    /// `array` must be a [`StructArray`] or flatten into one. Passing a different Array variant
+    /// may cause a panic.
     fn execute_single_chunk(
         array: Array,
         projection: &Option<Vec<usize>>,
@@ -139,8 +141,7 @@ impl VortexMemoryExec {
             .into_array();
 
         // Construct the RecordBatch by flattening each struct field and transmuting to an ArrayRef.
-        let struct_array = StructArray::try_from(data)
-            .map_err(|_| exec_datafusion_err!("top-level array must be Struct encoding"))?;
+        let struct_array = StructArray::try_from(data).expect("array must be StructArray");
 
         let field_order = if let Some(projection) = projection {
             projection.clone()
@@ -148,43 +149,23 @@ impl VortexMemoryExec {
             (0..struct_array.names().len()).collect()
         };
 
-        let mut record_batch = Vec::with_capacity(field_order.len());
-        let mut record_batch_fields = Vec::with_capacity(field_order.len());
-
-        for field_idx in field_order {
-            let field_array = struct_array
-                .field(field_idx)
-                .expect("field array must be present")
+        let projected_struct =
+            struct_array
+                .project(field_order.as_slice())
+                .map_err(|vortex_err| {
+                    exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
+                })?;
+        let batch = RecordBatch::from(
+            projected_struct
                 .flatten()
-                .map_err(|_| exec_datafusion_err!("failed to flatten struct field array"))?;
-
-            let array_ref = match field_array {
-                Flattened::Null(a) => AsArrowArray::as_arrow(&a).unwrap(),
-                Flattened::Bool(a) => AsArrowArray::as_arrow(&a).unwrap(),
-                Flattened::Primitive(a) => AsArrowArray::as_arrow(&a).unwrap(),
-                Flattened::Struct(a) => AsArrowArray::as_arrow(&a).unwrap(),
-                Flattened::VarBin(a) => AsArrowArray::as_arrow(&a).unwrap(),
-                Flattened::VarBinView(a) => AsArrowArray::as_arrow(&a).unwrap(),
-                Flattened::Extension(a) => AsArrowArray::as_arrow(&a).unwrap(),
-            };
-
-            record_batch.push(array_ref);
-
-            let field_dtype = struct_array.dtypes()[field_idx].clone();
-            let field_schema = Field::new(
-                struct_array.names()[field_idx].to_string(),
-                DataType::try_from(&field_dtype)
-                    .map_err(|_| exec_datafusion_err!("datatype could not be mapped from DType"))?,
-                field_dtype.is_nullable(),
-            );
-            record_batch_fields.push(field_schema);
-        }
-
-        let schema = Arc::new(Schema::new(record_batch_fields));
-
-        let batch = RecordBatch::try_new(Arc::clone(&schema), record_batch)?;
+                .expect("struct arrays must flatten")
+                .into_arrow()
+                .as_any()
+                .downcast_ref::<ArrowStructArray>()
+                .expect("vortex StructArray must convert to arrow StructArray"),
+        );
         Ok(Box::pin(VortexRecordBatchStream {
-            schema_ref: Arc::clone(&schema),
+            schema_ref: batch.schema(),
             inner: futures::stream::iter(vec![batch]),
         }))
     }
