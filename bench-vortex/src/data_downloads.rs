@@ -5,8 +5,6 @@ use std::path::{Path, PathBuf};
 
 use arrow_array::RecordBatchReader;
 use bzip2::read::BzDecoder;
-use lance::dataset::WriteParams;
-use lance::Dataset;
 use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
@@ -32,25 +30,6 @@ pub fn download_data(fname: PathBuf, data_url: &str) -> PathBuf {
         response.copy_to(&mut file)
     })
     .unwrap()
-}
-
-pub fn parquet_to_lance(lance_fname: &Path, parquet_file: &Path) -> VortexResult<PathBuf> {
-    let write_params = WriteParams::default();
-    let read = File::open(parquet_file)?;
-    let reader = ParquetRecordBatchReaderBuilder::try_new(read)
-        .unwrap()
-        .build()
-        .unwrap();
-
-    Runtime::new()
-        .unwrap()
-        .block_on(Dataset::write(
-            reader,
-            lance_fname.to_str().unwrap(),
-            Some(write_params),
-        ))
-        .unwrap();
-    Ok(PathBuf::from(lance_fname))
 }
 
 pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> PathBuf {
@@ -118,7 +97,6 @@ pub trait BenchmarkDataset {
     fn compress_to_vortex(&self) -> VortexResult<()>;
     fn write_as_parquet(&self);
     fn write_as_vortex(&self);
-    fn write_as_lance(&self);
     fn list_files(&self, file_type: FileType) -> Vec<PathBuf>;
     fn directory_location(&self) -> PathBuf;
 }
@@ -137,7 +115,6 @@ impl Display for FileType {
             Self::Csv => "csv".to_string(),
             Self::Parquet => "parquet".to_string(),
             Self::Vortex => "vortex".to_string(),
-            Self::Lance => "lance".to_string(),
         };
         write!(f, "{}", str)
     }
