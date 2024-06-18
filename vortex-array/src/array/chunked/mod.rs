@@ -14,7 +14,7 @@ use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, IntoArrayData};
+use crate::{impl_encoding, ArrayDType};
 
 mod compute;
 mod flatten;
@@ -47,8 +47,8 @@ impl ChunkedArray {
             NonNullable,
         );
 
-        let mut children = vec![chunk_ends.into_array_data()];
-        children.extend(chunks.into_iter().map(|a| a.into_array_data()));
+        let mut children = vec![chunk_ends.into_array()];
+        children.extend(chunks);
 
         Self::try_from_parts(dtype, ChunkedMetadata, children.into(), StatsSet::new())
     }

@@ -25,7 +25,6 @@ pub struct TakeRows<'idx, R: ArrayStream> {
 }
 
 impl<'idx, R: ArrayStream> TakeRows<'idx, R> {
-    #[allow(dead_code)]
     pub fn try_new(reader: R, indices: &'idx Array) -> VortexResult<Self> {
         if !indices.is_empty() {
             if !indices.statistics().compute_is_sorted().unwrap_or(false) {

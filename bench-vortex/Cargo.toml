@@ -41,9 +41,12 @@ vortex-fastlanes = { path = "../encodings/fastlanes" }
 vortex-ipc = { path = "../vortex-ipc" }
 vortex-ree = { path = "../encodings/runend" }
 vortex-roaring = { path = "../encodings/roaring" }
+serde = { workspace = true }
+bytes = { workspace = true }
+flexbuffers = { workspace = true }
 
 [dev-dependencies]
-criterion = { workspace = true }
+criterion = { workspace = true, features = ["html_reports", "async_tokio"] }
 
 [[bench]]
 name = "compress_benchmark"

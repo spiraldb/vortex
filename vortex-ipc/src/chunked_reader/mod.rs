@@ -1,17 +1,14 @@
-mod take_rows;
-
 use std::sync::Arc;
 
-use derive_builder::Builder;
 use vortex::{Array, ViewContext};
 use vortex_dtype::DType;
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::io::VortexReadAt;
 
+mod take_rows;
+
 /// A reader for a chunked array.
-#[allow(dead_code)]
-#[derive(Builder)]
-#[builder(build_fn(validate = "Self::validate"))]
 pub struct ChunkedArrayReader<R: VortexReadAt> {
     read: R,
     view_context: Arc<ViewContext>,
@@ -23,17 +20,30 @@ pub struct ChunkedArrayReader<R: VortexReadAt> {
 }
 
 impl<R: VortexReadAt> ChunkedArrayReader<R> {
+    pub fn try_new(
+        read: R,
+        view_context: Arc<ViewContext>,
+        dtype: DType,
+        byte_offsets: Array,
+        row_offsets: Array,
+    ) -> VortexResult<Self> {
+        Self::validate(&byte_offsets, &row_offsets)?;
+        Ok(Self {
+            read,
+            view_context,
+            dtype,
+            byte_offsets,
+            row_offsets,
+        })
+    }
+
     pub fn nchunks(&self) -> usize {
         self.byte_offsets.len()
     }
-}
 
-impl<R: VortexReadAt> ChunkedArrayReaderBuilder<R> {
-    fn validate(&self) -> Result<(), String> {
-        if let (Some(byte_offsets), Some(row_offsets)) = (&self.byte_offsets, &self.row_offsets) {
-            if byte_offsets.len() != row_offsets.len() {
-                return Err("byte_offsets and row_offsets must have the same length".to_string());
-            }
+    fn validate(byte_offsets: &Array, row_offsets: &Array) -> VortexResult<()> {
+        if byte_offsets.len() != row_offsets.len() {
+            vortex_bail!("byte_offsets and row_offsets must have the same length");
         }
         Ok(())
     }

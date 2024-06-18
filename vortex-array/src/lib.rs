@@ -8,6 +8,30 @@
 //! Every data type recognized by Vortex also has a canonical physical encoding format, which
 //! arrays can be [flattened](Flattened) into for ease of access in compute functions.
 //!
+use std::fmt::{Debug, Display, Formatter};
+use std::future::ready;
+
+pub use ::paste;
+pub use context::*;
+pub use data::*;
+pub use flatten::*;
+pub use implementation::*;
+use itertools::Itertools;
+pub use metadata::*;
+pub use typed::*;
+pub use view::*;
+use vortex_buffer::Buffer;
+use vortex_dtype::DType;
+use vortex_error::VortexResult;
+
+use crate::compute::ArrayCompute;
+use crate::encoding::{ArrayEncodingRef, EncodingRef};
+use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
+use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
+use crate::stream::{ArrayStream, ArrayStreamAdapter};
+use crate::validity::ArrayValidity;
+use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+
 pub mod accessor;
 pub mod array;
 pub mod arrow;
@@ -29,29 +53,6 @@ pub mod validity;
 pub mod vendored;
 mod view;
 pub mod visitor;
-
-use std::fmt::{Debug, Display, Formatter};
-use std::future::ready;
-
-pub use ::paste;
-pub use context::*;
-pub use data::*;
-pub use flatten::*;
-pub use implementation::*;
-pub use metadata::*;
-pub use typed::*;
-pub use view::*;
-use vortex_buffer::Buffer;
-use vortex_dtype::DType;
-use vortex_error::VortexResult;
-
-use crate::compute::ArrayCompute;
-use crate::encoding::{ArrayEncodingRef, EncodingRef};
-use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
-use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
-use crate::stream::{ArrayStream, ArrayStreamAdapter};
-use crate::validity::ArrayValidity;
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
 pub mod flatbuffers {
     pub use generated::vortex::array::*;
@@ -105,8 +106,15 @@ impl Array {
 
     pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Self> {
         match self {
-            Self::Data(d) => d.child(idx, dtype).cloned().map(Array::Data),
+            Self::Data(d) => d.child(idx, dtype).cloned(),
             Self::View(v) => v.child(idx, dtype).map(Array::View),
+        }
+    }
+
+    pub fn children(&self) -> Vec<Array> {
+        match self {
+            Array::Data(d) => d.children().iter().cloned().collect_vec(),
+            Array::View(v) => v.children(),
         }
     }
 
@@ -115,6 +123,30 @@ impl Array {
             Self::Data(d) => d.nchildren(),
             Self::View(v) => v.nchildren(),
         }
+    }
+
+    pub fn depth_first_traversal(&self) -> ArrayChildrenIterator {
+        ArrayChildrenIterator::new(self.clone())
+    }
+
+    /// Return the buffer offsets and the total length of all buffers, assuming the given alignment.
+    /// This includes all child buffers.
+    pub fn all_buffer_offsets(&self, alignment: usize) -> Vec<u64> {
+        let mut offsets = vec![];
+        let mut offset = 0;
+
+        for col_data in self.depth_first_traversal() {
+            if let Some(buffer) = col_data.buffer() {
+                offsets.push(offset as u64);
+
+                let buffer_size = buffer.len();
+                let aligned_size = (buffer_size + (alignment - 1)) & !(alignment - 1);
+                offset += aligned_size;
+            }
+        }
+        offsets.push(offset as u64);
+
+        offsets
     }
 
     pub fn buffer(&self) -> Option<&Buffer> {
@@ -140,6 +172,29 @@ impl Array {
             self.dtype().clone(),
             futures_util::stream::once(ready(Ok(self))),
         )
+    }
+}
+
+/// A depth-first pre-order iterator over a ArrayData.
+pub struct ArrayChildrenIterator {
+    stack: Vec<Array>,
+}
+
+impl ArrayChildrenIterator {
+    pub fn new(array: Array) -> Self {
+        Self { stack: vec![array] }
+    }
+}
+
+impl Iterator for ArrayChildrenIterator {
+    type Item = Array;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.stack.pop()?;
+        for child in next.children().into_iter().rev() {
+            self.stack.push(child);
+        }
+        Some(next)
     }
 }
 
@@ -209,6 +264,7 @@ impl ArrayVisitor for NBytesVisitor {
 }
 
 impl Array {
+    #[inline]
     pub fn with_dyn<R, F>(&self, mut f: F) -> R
     where
         F: FnMut(&dyn ArrayTrait) -> R,

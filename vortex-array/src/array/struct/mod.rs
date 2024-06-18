@@ -5,8 +5,8 @@ use vortex_error::{vortex_bail, vortex_err};
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::ArrayFlatten;
 use crate::{impl_encoding, ArrayDType};
-use crate::{ArrayFlatten, IntoArrayData};
 
 mod compute;
 
@@ -77,9 +77,9 @@ impl StructArray {
 
         let validity_metadata = validity.to_metadata(length)?;
 
-        let mut children = vec![];
-        children.extend(fields.into_iter().map(|a| a.into_array_data()));
-        if let Some(v) = validity.into_array_data() {
+        let mut children = Vec::with_capacity(fields.len() + 1);
+        children.extend(fields);
+        if let Some(v) = validity.into_array() {
             children.push(v);
         }
 

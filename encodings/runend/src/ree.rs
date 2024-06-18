@@ -5,7 +5,7 @@ use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
 use vortex_error::vortex_bail;
 
 use crate::compress::{ree_decode, ree_encode};
@@ -49,9 +49,9 @@ impl REEArray {
         };
 
         let mut children = Vec::with_capacity(3);
-        children.push(ends.into_array_data());
-        children.push(values.into_array_data());
-        if let Some(a) = validity.into_array_data() {
+        children.push(ends);
+        children.push(values);
+        if let Some(a) = validity.into_array() {
             children.push(a)
         }
 

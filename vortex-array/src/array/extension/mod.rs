@@ -1,12 +1,12 @@
-mod compute;
-
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{ExtDType, ExtID};
 
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use crate::{impl_encoding, ArrayDType, ArrayFlatten};
+
+mod compute;
 
 impl_encoding!("vortex.ext", Extension);
 
@@ -22,7 +22,7 @@ impl ExtensionArray {
             ExtensionMetadata {
                 storage_dtype: storage.dtype().clone(),
             },
-            [storage.into_array_data()].into(),
+            [storage].into(),
             Default::default(),
         )
         .expect("Invalid ExtensionArray")

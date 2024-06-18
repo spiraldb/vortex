@@ -18,7 +18,7 @@ impl<D: ArrayDef> TypedArray<D> {
         dtype: DType,
         metadata: D::Metadata,
         buffer: Option<Buffer>,
-        children: Arc<[ArrayData]>,
+        children: Arc<[Array]>,
         stats: StatsSet,
     ) -> VortexResult<Self> {
         let array = Array::Data(ArrayData::try_new(

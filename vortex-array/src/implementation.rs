@@ -31,7 +31,6 @@ macro_rules! impl_encoding {
         paste! {
             use $crate::{
                 Array,
-                ArrayData,
                 ArrayDef,
                 ArrayMetadata,
                 ArrayTrait,
@@ -84,7 +83,7 @@ macro_rules! impl_encoding {
                 fn try_from_parts(
                     dtype: DType,
                     metadata: [<$Name Metadata>],
-                    children: Arc<[ArrayData]>,
+                    children: Arc<[Array]>,
                     stats: StatsSet,
                 ) -> VortexResult<Self> {
                     Ok(Self { typed: TypedArray::try_from_parts(dtype, metadata, None, children, stats)? })
@@ -118,6 +117,7 @@ macro_rules! impl_encoding {
             impl TryFrom<Array> for [<$Name Array>] {
                 type Error = VortexError;
 
+                #[inline]
                 fn try_from(array: Array) -> Result<Self, Self::Error> {
                     TypedArray::<$Name>::try_from(array).map(Self::from)
                 }
@@ -125,6 +125,7 @@ macro_rules! impl_encoding {
             impl TryFrom<&Array> for [<$Name Array>] {
                 type Error = VortexError;
 
+                #[inline]
                 fn try_from(array: &Array) -> Result<Self, Self::Error> {
                     TypedArray::<$Name>::try_from(array).map(Self::from)
                 }
@@ -134,14 +135,17 @@ macro_rules! impl_encoding {
             #[derive(Debug)]
             pub struct [<$Name Encoding>];
             impl ArrayEncoding for [<$Name Encoding>] {
+                #[inline]
                 fn as_any(&self) -> &dyn Any {
                     self
                 }
 
+                #[inline]
                 fn id(&self) -> EncodingId {
                     $Name::ID
                 }
 
+                #[inline]
                 fn flatten(&self, array: Array) -> VortexResult<Flattened> {
                     <Self as ArrayEncodingExt>::flatten(array)
                 }
@@ -155,6 +159,7 @@ macro_rules! impl_encoding {
                     <Self as ArrayEncodingExt>::with_dyn(array, f)
                 }
 
+                #[inline]
                 fn compression(&self) -> &dyn EncodingCompression {
                     self
                 }
@@ -165,10 +170,12 @@ macro_rules! impl_encoding {
 
             /// Implement ArrayMetadata
             impl ArrayMetadata for [<$Name Metadata>] {
+                #[inline]
                 fn as_any(&self) -> &dyn Any {
                     self
                 }
 
+                #[inline]
                 fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
                     self
                 }
@@ -218,11 +225,11 @@ impl<T: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoA
             Array::View(_) => {
                 struct Visitor {
                     buffer: Option<Buffer>,
-                    children: Vec<ArrayData>,
+                    children: Vec<Array>,
                 }
                 impl ArrayVisitor for Visitor {
                     fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
-                        self.children.push(array.to_array_data());
+                        self.children.push(array.clone());
                         Ok(())
                     }
 
