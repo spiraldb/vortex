@@ -160,13 +160,13 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIn
     // TODO(ngates): lots of optimizations to be had here, potentially lots of push-down.
     //  For now, we just flatten everything into primitive arrays and iterate.
     let row_offsets = cast(row_offsets, PType::U64.into())?.flatten_primitive()?;
-    let _rows = format!("{:?}", row_offsets.typed_data::<u64>());
+    let _rows = format!("{:?}", row_offsets.maybe_null_slice::<u64>());
     let indices = cast(indices, PType::U64.into())?.flatten_primitive()?;
-    let _indices = format!("{:?}", indices.typed_data::<u64>());
+    let _indices = format!("{:?}", indices.maybe_null_slice::<u64>());
 
     if let (Some(last_idx), Some(num_rows)) = (
-        indices.typed_data::<u64>().last(),
-        row_offsets.typed_data::<u64>().last(),
+        indices.maybe_null_slice::<u64>().last(),
+        row_offsets.maybe_null_slice::<u64>().last(),
     ) {
         if last_idx >= num_rows {
             vortex_bail!("Index {} out of bounds {}", last_idx, num_rows);
@@ -175,8 +175,8 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIn
 
     let mut chunks = HashMap::new();
 
-    let row_offsets_ref = row_offsets.typed_data::<u64>();
-    for (pos, idx) in indices.typed_data::<u64>().iter().enumerate() {
+    let row_offsets_ref = row_offsets.maybe_null_slice::<u64>();
+    for (pos, idx) in indices.maybe_null_slice::<u64>().iter().enumerate() {
         let chunk_idx = row_offsets_ref.binary_search(idx).unwrap_or_else(|x| x - 1);
         chunks
             .entry(chunk_idx as u32)
@@ -265,7 +265,7 @@ mod test {
             .flatten_primitive()?;
 
         assert_eq!(result.len(), 3);
-        assert_eq!(result.typed_data::<i32>(), &[0, 10, 999]);
+        assert_eq!(result.maybe_null_slice::<i32>(), &[0, 10, 999]);
 
         Ok(())
     }

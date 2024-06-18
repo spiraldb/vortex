@@ -84,11 +84,11 @@ impl PrimitiveArray {
         ScalarBuffer::new(self.buffer().clone().into(), 0, self.len())
     }
 
-    pub fn typed_data<T: NativePType>(&self) -> &[T] {
+    pub fn maybe_null_slice<T: NativePType>(&self) -> &[T] {
         assert_eq!(
             T::PTYPE,
             self.ptype(),
-            "Attempted to get typed_data of type {} from array of type {}",
+            "Attempted to get slice of type {} from array of type {}",
             T::PTYPE,
             self.ptype(),
         );
@@ -100,11 +100,11 @@ impl PrimitiveArray {
 
     /// Convert the array into a mutable vec of the given type.
     /// If possible, this will be zero-copy.
-    pub fn into_typed_data<T: NativePType>(self) -> Vec<T> {
+    pub fn into_maybe_null_slice<T: NativePType>(self) -> Vec<T> {
         assert_eq!(
             T::PTYPE,
             self.ptype(),
-            "Attempted to get typed_data of type {} from array of type {}",
+            "Attempted to get maybe_null_slice of type {} from array of type {}",
             T::PTYPE,
             self.ptype(),
         );
@@ -125,7 +125,7 @@ impl PrimitiveArray {
 
     pub fn get_as_cast<T: NativePType>(&self, idx: usize) -> T {
         match_each_native_ptype!(self.ptype(), |$P| {
-            T::from(self.typed_data::<$P>()[idx]).expect("failed to cast")
+            T::from(self.maybe_null_slice::<$P>()[idx]).expect("failed to cast")
         })
     }
 
@@ -160,7 +160,7 @@ impl PrimitiveArray {
 
         let validity = self.validity();
 
-        let mut own_values = self.into_typed_data();
+        let mut own_values = self.into_maybe_null_slice();
         // TODO(robert): Also patch validity
         for (idx, value) in positions.iter().zip_eq(values.iter()) {
             own_values[(*idx).as_()] = *value;

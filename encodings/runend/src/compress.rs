@@ -71,7 +71,7 @@ pub fn ree_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
         Validity::AllValid
     };
     match_each_native_ptype!(array.ptype(), |$P| {
-        let (ends, values) = ree_encode_primitive(array.typed_data::<$P>());
+        let (ends, values) = ree_encode_primitive(array.maybe_null_slice::<$P>());
 
         let mut compressed_values = PrimitiveArray::from_vec(values, validity);
         compressed_values.statistics().set(Stat::IsConstant, false.into());
@@ -128,8 +128,8 @@ pub fn ree_decode(
     match_each_native_ptype!(values.ptype(), |$P| {
         match_each_integer_ptype!(ends.ptype(), |$E| {
             Ok(PrimitiveArray::from_vec(ree_decode_primitive(
-                ends.typed_data::<$E>(),
-                values.typed_data::<$P>(),
+                ends.maybe_null_slice::<$E>(),
+                values.maybe_null_slice::<$P>(),
                 offset,
                 length,
             ), validity))
@@ -175,8 +175,8 @@ mod test {
         let arr = PrimitiveArray::from(vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3]);
         let (ends, values) = ree_encode(&arr);
 
-        assert_eq!(ends.typed_data::<u64>(), vec![2, 5, 10]);
-        assert_eq!(values.typed_data::<i32>(), vec![1, 2, 3]);
+        assert_eq!(ends.maybe_null_slice::<u64>(), vec![2, 5, 10]);
+        assert_eq!(values.maybe_null_slice::<i32>(), vec![1, 2, 3]);
     }
 
     #[test]
@@ -186,7 +186,7 @@ mod test {
         let decoded = ree_decode(&ends, &values, Validity::NonNullable, 0, 10).unwrap();
 
         assert_eq!(
-            decoded.typed_data::<i32>(),
+            decoded.maybe_null_slice::<i32>(),
             vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3]
         );
     }
@@ -216,7 +216,7 @@ mod test {
         .unwrap();
 
         assert_eq!(
-            decoded.typed_data::<i32>(),
+            decoded.maybe_null_slice::<i32>(),
             vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3].as_slice()
         );
         assert_eq!(

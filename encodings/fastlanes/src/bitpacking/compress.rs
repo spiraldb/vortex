@@ -110,7 +110,7 @@ pub fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Array>
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     let parray = parray.reinterpret_cast(parray.ptype().to_unsigned());
     let packed = match_each_unsigned_integer_ptype!(parray.ptype(), |$P| {
-        PrimitiveArray::from(bitpack_primitive(parray.typed_data::<$P>(), bit_width))
+        PrimitiveArray::from(bitpack_primitive(parray.maybe_null_slice::<$P>(), bit_width))
     });
     Ok(packed.into_array())
 }
@@ -169,7 +169,7 @@ fn bitpack_patches(parray: &PrimitiveArray, bit_width: usize, num_exceptions_hin
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
         let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
-        for (i, v) in parray.typed_data::<$T>().iter().enumerate() {
+        for (i, v) in parray.maybe_null_slice::<$T>().iter().enumerate() {
             if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width {
                 indices.push(i as u64);
                 values.push(*v);
@@ -193,7 +193,7 @@ pub fn unpack(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
 
     let mut unpacked = match_each_unsigned_integer_ptype!(ptype, |$P| {
         PrimitiveArray::from_vec(
-            unpack_primitive::<$P>(packed.typed_data::<$P>(), bit_width, offset, length),
+            unpack_primitive::<$P>(packed.maybe_null_slice::<$P>(), bit_width, offset, length),
             array.validity(),
         )
     });
@@ -217,7 +217,7 @@ fn patch_unpacked(array: PrimitiveArray, patches: &Array) -> VortexResult<Primit
                 let typed_patches = SparseArray::try_from(patches).unwrap();
                 array.patch(
                     &typed_patches.resolved_indices(),
-                    typed_patches.values().flatten_primitive()?.typed_data::<$T>())
+                    typed_patches.values().flatten_primitive()?.maybe_null_slice::<$T>())
             })
         }
         _ => panic!("can't patch bitpacked array with {}", patches),
@@ -296,7 +296,7 @@ pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scala
     let index_in_encoded = index + array.offset();
     let scalar: Scalar = match_each_unsigned_integer_ptype!(packed.ptype(), |$P| {
         unsafe {
-            unpack_single_primitive::<$P>(packed.typed_data::<$P>(), bit_width, index_in_encoded).map(|v| v.into())
+            unpack_single_primitive::<$P>(packed.maybe_null_slice::<$P>(), bit_width, index_in_encoded).map(|v| v.into())
         }
     })?;
     // Cast to fix signedness and nullability
@@ -408,10 +408,13 @@ mod test {
             .unwrap();
         let compressed = BitPackedArray::try_from(compressed).unwrap();
         let decompressed = compressed.to_array().flatten_primitive().unwrap();
-        assert_eq!(decompressed.typed_data::<u16>(), values.typed_data::<u16>());
+        assert_eq!(
+            decompressed.maybe_null_slice::<u16>(),
+            values.maybe_null_slice::<u16>()
+        );
 
         values
-            .typed_data::<u16>()
+            .maybe_null_slice::<u16>()
             .iter()
             .enumerate()
             .for_each(|(i, v)| {

@@ -25,7 +25,7 @@ impl ArrayFlatten for SparseArray {
             let values = self.values().flatten_primitive()?;
             match_each_native_ptype!(values.ptype(), |$P| {
                 flatten_sparse_primitives(
-                    values.typed_data::<$P>(),
+                    values.maybe_null_slice::<$P>(),
                     &indices,
                     self.len(),
                     self.fill_value(),

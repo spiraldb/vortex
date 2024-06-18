@@ -82,7 +82,7 @@ fn take_primitive<T: NativePType + BitPacking>(
     // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
     let relative_indices: Vec<(usize, Vec<u16>)> = match_each_integer_ptype!(indices.ptype(), |$P| {
         indices
-            .typed_data::<$P>()
+            .maybe_null_slice::<$P>()
             .iter()
             .chunk_by(|idx| (**idx / 1024) as usize)
             .into_iter()
@@ -93,7 +93,7 @@ fn take_primitive<T: NativePType + BitPacking>(
     let bit_width = array.bit_width();
 
     let packed = array.packed().flatten_primitive()?;
-    let packed = packed.typed_data::<T>();
+    let packed = packed.maybe_null_slice::<T>();
 
     let patches = array.patches().map(SparseArray::try_from).transpose()?;
 
@@ -169,7 +169,7 @@ fn do_patch_for_take_primitive<T: NativePType>(
         .resolved_indices()
         .iter()
         .map(|idx| base_index + *idx)
-        .zip_eq(output_patches.typed_data::<T>())
+        .zip_eq(output_patches.maybe_null_slice::<T>())
         .for_each(|(idx, val)| {
             output[idx] = *val;
         });
@@ -210,7 +210,7 @@ mod test {
         assert_eq!(result.encoding().id(), Primitive::ID);
 
         let primitive_result = result.flatten_primitive().unwrap();
-        let res_bytes = primitive_result.typed_data::<u8>();
+        let res_bytes = primitive_result.maybe_null_slice::<u8>();
         assert_eq!(res_bytes, &[0, 62, 31, 33, 9, 18]);
     }
 
@@ -240,7 +240,7 @@ mod test {
 
         // sanity check
         random_indices
-            .typed_data::<u32>()
+            .maybe_null_slice::<u32>()
             .iter()
             .enumerate()
             .for_each(|(ti, i)| {

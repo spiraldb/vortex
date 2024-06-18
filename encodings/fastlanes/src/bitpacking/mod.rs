@@ -224,7 +224,7 @@ mod test {
             .into_array()
             .flatten_primitive()
             .unwrap()
-            .typed_data::<u64>()
+            .maybe_null_slice::<u64>()
             .to_vec();
         assert_eq!(results, expected);
     }

@@ -10,7 +10,7 @@ impl SearchSortedFn for PrimitiveArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
         match_each_native_ptype!(self.ptype(), |$T| {
             let pvalue: $T = value.try_into()?;
-            Ok(self.typed_data::<$T>().search_sorted(&pvalue, side))
+            Ok(self.maybe_null_slice::<$T>().search_sorted(&pvalue, side))
         })
     }
 }

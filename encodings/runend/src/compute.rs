@@ -35,7 +35,7 @@ impl TakeFn for REEArray {
         let primitive_indices = indices.clone().flatten_primitive()?;
         let physical_indices = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
             primitive_indices
-                .typed_data::<$P>()
+                .maybe_null_slice::<$P>()
                 .iter()
                 .map(|idx| {
                     self.find_physical_index(*idx as usize)
@@ -81,7 +81,7 @@ mod test {
         .unwrap();
         let taken = take(ree.array(), PrimitiveArray::from(vec![9, 8, 1, 3]).array()).unwrap();
         assert_eq!(
-            taken.flatten_primitive().unwrap().typed_data::<i32>(),
+            taken.flatten_primitive().unwrap().maybe_null_slice::<i32>(),
             &[5, 5, 1, 4]
         );
     }
