@@ -1,6 +1,3 @@
-use bench_vortex::data_downloads::BenchmarkDataset;
-use bench_vortex::public_bi_data::BenchmarkDatasets;
-use bench_vortex::public_bi_data::PBIDataset::Medicare1;
 use bench_vortex::reader::{take_parquet, take_vortex};
 use bench_vortex::taxi_data::{taxi_data_parquet, taxi_data_vortex};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
@@ -20,9 +17,6 @@ fn random_access(c: &mut Criterion) {
     group.bench_function("arrow", |b| {
         b.iter(|| black_box(take_parquet(&taxi_parquet, &indices).unwrap()))
     });
-
-    let dataset = BenchmarkDatasets::PBI(Medicare1);
-    dataset.write_as_parquet();
 }
 
 criterion_group!(benches, random_access);
