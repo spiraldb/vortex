@@ -111,7 +111,7 @@ impl SparseArray {
         let flat_indices = self.indices().flatten_primitive().unwrap();
         match_each_integer_ptype!(flat_indices.ptype(), |$P| {
             flat_indices
-                .typed_data::<$P>()
+                .maybe_null_slice::<$P>()
                 .iter()
                 .map(|v| (*v as usize) - self.indices_offset())
                 .collect::<Vec<_>>()

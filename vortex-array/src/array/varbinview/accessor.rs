@@ -24,7 +24,10 @@ impl ArrayAccessor<[u8]> for VarBinViewArray {
                     } else {
                         let offset = unsafe { view._ref.offset as usize };
                         let buffer_idx = unsafe { view._ref.buffer_index as usize };
-                        Some(&bytes[buffer_idx].typed_data::<u8>()[offset..offset + view.size()])
+                        Some(
+                            &bytes[buffer_idx].maybe_null_slice::<u8>()
+                                [offset..offset + view.size()],
+                        )
                     }
                 });
                 Ok(f(&mut iter))
@@ -38,7 +41,8 @@ impl ArrayAccessor<[u8]> for VarBinViewArray {
                             let offset = unsafe { view._ref.offset as usize };
                             let buffer_idx = unsafe { view._ref.buffer_index as usize };
                             Some(
-                                &bytes[buffer_idx].typed_data::<u8>()[offset..offset + view.size()],
+                                &bytes[buffer_idx].maybe_null_slice::<u8>()
+                                    [offset..offset + view.size()],
                             )
                         }
                     } else {

@@ -104,30 +104,16 @@ pub fn decode_to_localdatetime(array: &Array) -> VortexResult<LocalDateTimeArray
         TimeUnit::S => 1,
     };
 
-    let days_buf = array
-        .days()
-        .flatten()?
-        .into_array()
-        .as_primitive()
-        .scalar_buffer::<i64>();
-    let seconds_buf = array
-        .seconds()
-        .flatten()?
-        .into_array()
-        .as_primitive()
-        .scalar_buffer::<i64>();
-    let subsecond_buf = array
-        .subsecond()
-        .flatten()?
-        .into_array()
-        .as_primitive()
-        .scalar_buffer::<i64>();
+    let days_buf = array.days().flatten()?.into_array().as_primitive();
+    let seconds_buf = array.seconds().flatten()?.into_array().as_primitive();
+    let subsecond_buf = array.subsecond().flatten()?.into_array().as_primitive();
 
     // TODO(aduffy): replace with vectorized implementation?
     let values = days_buf
+        .maybe_null_slice::<i64>()
         .iter()
-        .zip(seconds_buf.iter())
-        .zip(subsecond_buf.iter())
+        .zip(seconds_buf.maybe_null_slice::<i64>().iter())
+        .zip(subsecond_buf.maybe_null_slice::<i64>().iter())
         .map(|((d, s), ss)| d * 86_400 * divisor + s * divisor + ss)
         .collect::<Vec<_>>();
 

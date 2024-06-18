@@ -51,7 +51,7 @@ fn indices_matching_predicate(
     let matching_idxs = match_each_native_ptype!(arr.ptype(), |$T| {
         let rhs_typed: $T = rhs.try_into().unwrap();
         let predicate_fn = &predicate.op.to_predicate::<$T>();
-        apply_predicate(arr.typed_data::<$T>(), &rhs_typed, predicate_fn)
+        apply_predicate(arr.maybe_null_slice::<$T>(), &rhs_typed, predicate_fn)
     });
 
     Ok(matching_idxs)

@@ -35,7 +35,7 @@ impl CastFn for PrimitiveArray {
 fn cast<T: NativePType>(array: &PrimitiveArray) -> VortexResult<Vec<T>> {
     match_each_native_ptype!(array.ptype(), |$E| {
         array
-            .typed_data::<$E>()
+            .maybe_null_slice::<$E>()
             .iter()
             // TODO(ngates): allow configurable checked/unchecked casting
             .map(|&v| {
@@ -60,7 +60,7 @@ mod test {
         let p = compute::cast::cast(&arr, PType::U8.into())
             .unwrap()
             .into_primitive();
-        assert_eq!(p.typed_data::<u8>(), vec![0u8, 10, 200]);
+        assert_eq!(p.maybe_null_slice::<u8>(), vec![0u8, 10, 200]);
     }
 
     #[test]
@@ -69,7 +69,7 @@ mod test {
         let u8arr = compute::cast::cast(&arr, PType::F32.into())
             .unwrap()
             .into_primitive();
-        assert_eq!(u8arr.typed_data::<f32>(), vec![0.0f32, 10., 200.]);
+        assert_eq!(u8arr.maybe_null_slice::<f32>(), vec![0.0f32, 10., 200.]);
     }
 
     #[test]

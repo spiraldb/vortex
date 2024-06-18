@@ -178,7 +178,7 @@ mod test {
             .unwrap()
             .chunks()
             .map(|a| a.flatten_primitive().unwrap())
-            .for_each(|a| values.extend_from_slice(a.typed_data::<T>()));
+            .for_each(|a| values.extend_from_slice(a.maybe_null_slice::<T>()));
         assert_eq!(values, slice);
     }
 
@@ -224,7 +224,7 @@ mod test {
             .unwrap()
             .flatten_primitive()
             .unwrap()
-            .typed_data::<u64>()
+            .maybe_null_slice::<u64>()
             .to_vec();
         assert_eq!(results, &[0u64, 1, 2]);
         let results = chunks_out
@@ -232,7 +232,7 @@ mod test {
             .unwrap()
             .flatten_primitive()
             .unwrap()
-            .typed_data::<u64>()
+            .maybe_null_slice::<u64>()
             .to_vec();
         assert_eq!(results, &[3u64, 4, 5]);
         let results = chunks_out
@@ -240,7 +240,7 @@ mod test {
             .unwrap()
             .flatten_primitive()
             .unwrap()
-            .typed_data::<u64>()
+            .maybe_null_slice::<u64>()
             .to_vec();
         assert_eq!(results, &[6u64, 7, 8]);
     }

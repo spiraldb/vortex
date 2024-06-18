@@ -38,7 +38,7 @@ impl SubtractScalarFn for PrimitiveArray {
                 let to_subtract: $T = PrimitiveScalar::try_from(to_subtract)?
                     .typed_value::<$T>()
                     .ok_or_else(|| vortex_err!("expected primitive"))?;
-                let sub_vec : Vec<$T> = self.typed_data::<$T>()
+                let sub_vec : Vec<$T> = self.maybe_null_slice::<$T>()
                 .iter()
                 .map(|&v| v - to_subtract).collect_vec();
                 PrimitiveArray::from(sub_vec)
@@ -82,7 +82,7 @@ fn subtract_scalar_integer<
     let contains_nulls = !subtract_from.logical_validity().all_valid();
     let subtraction_result = if contains_nulls {
         let sub_vec = subtract_from
-            .typed_data()
+            .maybe_null_slice()
             .iter()
             .map(|&v: &T| v.saturating_sub(&to_subtract))
             .collect_vec();
@@ -90,7 +90,7 @@ fn subtract_scalar_integer<
     } else {
         PrimitiveArray::from(
             subtract_from
-                .typed_data::<T>()
+                .maybe_null_slice::<T>()
                 .iter()
                 .map(|&v| v - to_subtract)
                 .collect_vec(),
@@ -115,7 +115,7 @@ mod test {
             .unwrap()
             .flatten_primitive()
             .unwrap()
-            .typed_data::<u16>()
+            .maybe_null_slice::<u16>()
             .to_vec();
         assert_eq!(results, &[0u16, 1, 2]);
     }
@@ -127,7 +127,7 @@ mod test {
             .unwrap()
             .flatten_primitive()
             .unwrap()
-            .typed_data::<i64>()
+            .maybe_null_slice::<i64>()
             .to_vec();
         assert_eq!(results, &[2i64, 3, 4]);
     }
@@ -141,7 +141,7 @@ mod test {
             .flatten_primitive()
             .unwrap();
 
-        let results = flattened.typed_data::<u16>().to_vec();
+        let results = flattened.maybe_null_slice::<u16>().to_vec();
         assert_eq!(results, &[0u16, 1, 0, 2]);
         let valid_indices = flattened
             .validity()
@@ -162,7 +162,7 @@ mod test {
             .unwrap()
             .flatten_primitive()
             .unwrap()
-            .typed_data::<f64>()
+            .maybe_null_slice::<f64>()
             .to_vec();
         assert_eq!(results, &[2.0f64, 3.0, 4.0]);
     }

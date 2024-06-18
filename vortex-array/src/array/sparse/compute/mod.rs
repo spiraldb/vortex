@@ -71,7 +71,7 @@ fn take_map(
         .map(|(i, r)| (*r as u64, i as u64))
         .collect();
     let (positions, patch_indices): (Vec<u64>, Vec<u64>) = match_each_integer_ptype!(indices.ptype(), |$P| {
-        indices.typed_data::<$P>()
+        indices.maybe_null_slice::<$P>()
             .iter()
             .map(|pi| *pi as u64)
             .enumerate()
@@ -90,7 +90,7 @@ fn take_search_sorted(
 ) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
     let resolved = match_each_integer_ptype!(indices.ptype(), |$P| {
         indices
-            .typed_data::<$P>()
+            .maybe_null_slice::<$P>()
             .iter()
             .enumerate()
             .map(|(pos, i)| {
@@ -140,11 +140,11 @@ mod test {
             SparseArray::try_from(take(&sparse, &vec![0, 47, 47, 0, 99].into_array()).unwrap())
                 .unwrap();
         assert_eq!(
-            taken.indices().into_primitive().typed_data::<u64>(),
+            taken.indices().into_primitive().maybe_null_slice::<u64>(),
             [0, 1, 2, 3, 4]
         );
         assert_eq!(
-            taken.values().into_primitive().typed_data::<f64>(),
+            taken.values().into_primitive().maybe_null_slice::<f64>(),
             [1.23f64, 9.99, 9.99, 1.23, 3.5]
         );
     }
@@ -156,12 +156,12 @@ mod test {
         assert!(taken
             .indices()
             .into_primitive()
-            .typed_data::<u64>()
+            .maybe_null_slice::<u64>()
             .is_empty());
         assert!(taken
             .values()
             .into_primitive()
-            .typed_data::<f64>()
+            .maybe_null_slice::<f64>()
             .is_empty());
     }
 
@@ -170,9 +170,12 @@ mod test {
         let sparse = sparse_array();
         let taken =
             SparseArray::try_from(take(&sparse, &vec![69, 37].into_array()).unwrap()).unwrap();
-        assert_eq!(taken.indices().into_primitive().typed_data::<u64>(), [1]);
         assert_eq!(
-            taken.values().into_primitive().typed_data::<f64>(),
+            taken.indices().into_primitive().maybe_null_slice::<u64>(),
+            [1]
+        );
+        assert_eq!(
+            taken.values().into_primitive().maybe_null_slice::<f64>(),
             [0.47f64]
         );
         assert_eq!(taken.len(), 2);
@@ -184,9 +187,9 @@ mod test {
         let indices = PrimitiveArray::from((0u64..100).collect_vec());
         let (positions, patch_indices) = take_map(&sparse, &indices).unwrap();
         assert_eq!(
-            positions.typed_data::<u64>(),
-            sparse.indices().into_primitive().typed_data::<u64>()
+            positions.maybe_null_slice::<u64>(),
+            sparse.indices().into_primitive().maybe_null_slice::<u64>()
         );
-        assert_eq!(patch_indices.typed_data::<u64>(), [0u64, 1, 2, 3]);
+        assert_eq!(patch_indices.maybe_null_slice::<u64>(), [0u64, 1, 2, 3]);
     }
 }

@@ -59,10 +59,10 @@ impl EncodingCompression for RoaringIntEncoding {
 
 pub fn roaring_encode(parray: PrimitiveArray) -> RoaringIntArray {
     match parray.ptype() {
-        PType::U8 => roaring_encode_primitive::<u8>(parray.typed_data()),
-        PType::U16 => roaring_encode_primitive::<u16>(parray.typed_data()),
-        PType::U32 => roaring_encode_primitive::<u32>(parray.typed_data()),
-        PType::U64 => roaring_encode_primitive::<u64>(parray.typed_data()),
+        PType::U8 => roaring_encode_primitive::<u8>(parray.maybe_null_slice()),
+        PType::U16 => roaring_encode_primitive::<u16>(parray.maybe_null_slice()),
+        PType::U32 => roaring_encode_primitive::<u32>(parray.maybe_null_slice()),
+        PType::U64 => roaring_encode_primitive::<u64>(parray.maybe_null_slice()),
         _ => panic!("Unsupported ptype {}", parray.ptype()),
     }
 }

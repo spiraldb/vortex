@@ -84,14 +84,14 @@ fn compress_primitive<T: NativePType + WrappingSub + PrimInt>(
     let values = if shift > 0 {
         let shifted_min = min >> shift as usize;
         parray
-            .typed_data::<T>()
+            .maybe_null_slice::<T>()
             .iter()
             .map(|&v| v >> shift as usize)
             .map(|v| v.wrapping_sub(&shifted_min))
             .collect_vec()
     } else {
         parray
-            .typed_data::<T>()
+            .maybe_null_slice::<T>()
             .iter()
             .map(|&v| v.wrapping_sub(&min))
             .collect_vec()
@@ -107,7 +107,7 @@ pub fn decompress(array: FoRArray) -> VortexResult<PrimitiveArray> {
     Ok(match_each_integer_ptype!(ptype, |$T| {
         let reference: $T = array.reference().try_into()?;
         PrimitiveArray::from_vec(
-            decompress_primitive(encoded.typed_data::<$T>(), reference, shift),
+            decompress_primitive(encoded.maybe_null_slice::<$T>(), reference, shift),
             encoded.validity(),
         )
     }))
@@ -185,7 +185,10 @@ mod test {
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
 
         let decompressed = compressed.flatten_primitive().unwrap();
-        assert_eq!(decompressed.typed_data::<u32>(), array.typed_data::<u32>());
+        assert_eq!(
+            decompressed.maybe_null_slice::<u32>(),
+            array.maybe_null_slice::<u32>()
+        );
     }
 
     #[test]
@@ -199,14 +202,17 @@ mod test {
         assert_eq!(i8::MIN, i8::try_from(compressed.reference()).unwrap());
 
         let encoded = compressed.encoded().flatten_primitive().unwrap();
-        let bitcast: &[u8] = unsafe { std::mem::transmute(encoded.typed_data::<i8>()) };
+        let bitcast: &[u8] = unsafe { std::mem::transmute(encoded.maybe_null_slice::<i8>()) };
         let unsigned: Vec<u8> = (0..u8::MAX).collect_vec();
         assert_eq!(bitcast, unsigned.as_slice());
 
         let decompressed = compressed.array().clone().flatten_primitive().unwrap();
-        assert_eq!(decompressed.typed_data::<i8>(), array.typed_data::<i8>());
+        assert_eq!(
+            decompressed.maybe_null_slice::<i8>(),
+            array.maybe_null_slice::<i8>()
+        );
         array
-            .typed_data::<i8>()
+            .maybe_null_slice::<i8>()
             .iter()
             .enumerate()
             .for_each(|(i, v)| {
