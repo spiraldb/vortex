@@ -213,7 +213,7 @@ impl ExecutionPlan for VortexMemoryExec {
         &self.plan_properties
     }
 
-    fn children(&self) -> Vec<Arc<dyn ExecutionPlan>> {
+    fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
         // Leaf node
         vec![]
     }
@@ -284,7 +284,7 @@ mod test {
 
         ctx.register_table("people", Arc::new(table)).unwrap();
 
-        ctx.sql("SELECT strings FROM people")
+        ctx.sql("SELECT char_length(strings), strings FROM people")
             .await
             .unwrap()
             .show()
