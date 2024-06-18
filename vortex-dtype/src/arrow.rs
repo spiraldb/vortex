@@ -3,17 +3,19 @@
 use arrow_schema::{DataType, Field as ArrowField, Field, FieldRef, Fields, Schema, SchemaBuilder};
 use vortex_error::{vortex_bail, VortexError};
 
-use crate::{DType, PType};
+use crate::{DType, Nullability, PType};
 
-impl TryFrom<DType> for Schema {
+impl TryFrom<&DType> for Schema {
     type Error = VortexError;
 
-    fn try_from(dtype: DType) -> Result<Self, Self::Error> {
-        // What does it mean for the top-level elements of an array to be nullable?
-        // Do we just map that to NULL values for each of the constituent types?
-        let DType::Struct(struct_dtype, _) = dtype else {
+    fn try_from(dtype: &DType) -> Result<Self, Self::Error> {
+        let DType::Struct(struct_dtype, nullable) = dtype else {
             vortex_bail!(InvalidArgument: "only DType::Struct can be converted to arrow schema");
         };
+
+        if *nullable != Nullability::NonNullable {
+            vortex_bail!(InvalidArgument: "top-level struct in Schema must be NonNullable");
+        }
 
         let mut builder = SchemaBuilder::with_capacity(struct_dtype.names().len());
         for (field_name, field_dtype) in struct_dtype
@@ -29,6 +31,14 @@ impl TryFrom<DType> for Schema {
         }
 
         Ok(builder.finish())
+    }
+}
+
+impl TryFrom<DType> for Schema {
+    type Error = VortexError;
+
+    fn try_from(value: DType) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
     }
 }
 
@@ -97,12 +107,12 @@ impl TryFrom<DType> for DataType {
 mod test {
     use std::sync::Arc;
 
-    use arrow_schema::{DataType, Field, FieldRef, Fields};
+    use arrow_schema::{DataType, Field, FieldRef, Fields, Schema};
 
     use crate::{DType, ExtDType, ExtID, FieldName, FieldNames, Nullability, PType, StructDType};
 
     #[test]
-    fn test_all() {
+    fn test_dtype_conversion() {
         assert_eq!(DataType::try_from(DType::Null).unwrap(), DataType::Null);
 
         assert_eq!(
@@ -154,9 +164,40 @@ mod test {
         );
 
         assert!(DataType::try_from(DType::Extension(
-            ExtDType::new(ExtID::from("my-fake-ext-dtype"), None,),
+            ExtDType::new(ExtID::from("my-fake-ext-dtype"), None),
             Nullability::NonNullable,
         ))
         .is_err())
+    }
+
+    #[test]
+    fn test_schema_conversion() {
+        let struct_dtype = StructDType::new(
+            FieldNames::from([
+                FieldName::from("field_a"),
+                FieldName::from("field_b"),
+                FieldName::from("field_c"),
+            ]),
+            vec![
+                DType::Bool(Nullability::NonNullable),
+                DType::Utf8(Nullability::NonNullable),
+                DType::Primitive(PType::I32, Nullability::Nullable),
+            ],
+        );
+
+        let schema_nonnull = DType::Struct(struct_dtype.clone(), Nullability::NonNullable);
+
+        assert_eq!(
+            Schema::try_from(&schema_nonnull).unwrap(),
+            Schema::new(Fields::from(vec![
+                Field::new("field_a", DataType::Boolean, false),
+                Field::new("field_b", DataType::Utf8, false),
+                Field::new("field_c", DataType::Int32, true),
+            ]))
+        );
+
+        let schema_null = DType::Struct(struct_dtype.clone(), Nullability::Nullable);
+
+        assert!(Schema::try_from(&schema_null).is_err());
     }
 }
