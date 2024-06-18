@@ -1,7 +1,3 @@
-//! Types for tracking the null or non-null elements of an [Array].
-//!
-//! The [`validity`] module tracks the.
-
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability};
