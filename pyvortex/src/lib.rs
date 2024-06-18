@@ -13,7 +13,7 @@ mod vortex_arrow;
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn _lib(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _lib(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     pyo3_log::init();
 
     m.add_function(wrap_pyfunction!(encode::encode, m)?)?;
