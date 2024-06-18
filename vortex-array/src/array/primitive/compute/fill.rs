@@ -13,9 +13,9 @@ impl FillForwardFn for PrimitiveArray {
             return Ok(self.to_array_data().into_array());
         };
         match_each_native_ptype!(self.ptype(), |$T| {
-            let typed_data = self.typed_data::<$T>();
+            let maybe_null_slice = self.maybe_null_slice::<$T>();
             let mut last_value = $T::default();
-            let filled = typed_data
+            let filled = maybe_null_slice
                 .iter()
                 .zip(nulls.into_iter())
                 .map(|(v, valid)| {
@@ -42,7 +42,7 @@ mod test {
         let arr = PrimitiveArray::from_nullable_vec(vec![None, Some(8u8), None, Some(10), None])
             .into_array();
         let p = compute::fill::fill_forward(&arr).unwrap().into_primitive();
-        assert_eq!(p.typed_data::<u8>(), vec![0, 8, 8, 10, 10]);
+        assert_eq!(p.maybe_null_slice::<u8>(), vec![0, 8, 8, 10, 10]);
         assert!(p.logical_validity().all_valid());
     }
 
@@ -53,7 +53,7 @@ mod test {
                 .into_array();
 
         let p = compute::fill::fill_forward(&arr).unwrap().into_primitive();
-        assert_eq!(p.typed_data::<u8>(), vec![0, 0, 0, 0, 0]);
+        assert_eq!(p.maybe_null_slice::<u8>(), vec![0, 0, 0, 0, 0]);
         assert!(p.logical_validity().all_valid());
     }
 
@@ -65,7 +65,7 @@ mod test {
         )
         .into_array();
         let p = compute::fill::fill_forward(&arr).unwrap().into_primitive();
-        assert_eq!(p.typed_data::<u8>(), vec![8, 10, 12, 14, 16]);
+        assert_eq!(p.maybe_null_slice::<u8>(), vec![8, 10, 12, 14, 16]);
         assert!(p.logical_validity().all_valid());
     }
 }

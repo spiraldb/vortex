@@ -11,7 +11,7 @@ impl ScalarAtFn for PrimitiveArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         match_each_native_ptype!(self.ptype(), |$T| {
             if self.is_valid(index) {
-                Ok(Scalar::primitive(self.typed_data::<$T>()[index], self.dtype().nullability()))
+                Ok(Scalar::primitive(self.maybe_null_slice::<$T>()[index], self.dtype().nullability()))
             } else {
                 Ok(Scalar::null(self.dtype().clone()))
             }

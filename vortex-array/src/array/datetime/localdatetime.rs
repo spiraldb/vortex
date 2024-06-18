@@ -4,6 +4,7 @@ use arrow_array::{
     ArrayRef as ArrowArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray,
     TimestampNanosecondArray, TimestampSecondArray,
 };
+use arrow_buffer::ScalarBuffer;
 use lazy_static::lazy_static;
 use vortex_dtype::{DType, ExtDType, ExtID, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -13,7 +14,7 @@ use crate::array::extension::ExtensionArray;
 use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::cast::cast;
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, ArrayData, IntoArrayData};
+use crate::{Array, ArrayDType, ArrayData, ArrayTrait, IntoArrayData};
 
 lazy_static! {
     pub static ref ID: ExtID = ExtID::from(LocalDateTimeArray::ID);
@@ -87,7 +88,8 @@ impl AsArrowArray for LocalDateTimeArray {
         // A LocalDateTime maps to an Arrow Timestamp array with no timezone.
         let timestamps = cast(&self.timestamps(), PType::I64.into())?.flatten_primitive()?;
         let validity = timestamps.logical_validity().to_null_buffer()?;
-        let buffer = timestamps.scalar_buffer::<i64>();
+        let timestamps_len = timestamps.len();
+        let buffer = ScalarBuffer::<i64>::new(timestamps.into_buffer().into(), 0, timestamps_len);
 
         Ok(match self.time_unit() {
             TimeUnit::Ns => Arc::new(TimestampNanosecondArray::new(buffer, validity)),

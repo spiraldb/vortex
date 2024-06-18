@@ -16,7 +16,7 @@ impl CompareFn for PrimitiveArray {
 
         let matching_idxs = match_each_native_ptype!(self.ptype(), |$T| {
             let predicate_fn = &predicate.to_predicate::<$T>();
-            apply_predicate(self.typed_data::<$T>(), flattened.typed_data::<$T>(), predicate_fn)
+            apply_predicate(self.maybe_null_slice::<$T>(), flattened.maybe_null_slice::<$T>(), predicate_fn)
         });
 
         let present = self

@@ -149,7 +149,7 @@ impl VarBinViewArray {
             slice::from_raw_parts(
                 PrimitiveArray::try_from(self.views())
                     .expect("Views must be a primitive array")
-                    .typed_data::<u8>()
+                    .maybe_null_slice::<u8>()
                     .as_ptr() as _,
                 self.views().len() / VIEW_SIZE,
             )
@@ -209,7 +209,7 @@ impl VarBinViewArray {
                     (view._ref.size + view._ref.offset) as usize,
                 )?
                 .flatten_primitive()?;
-                Ok(data_buf.typed_data::<u8>().to_vec())
+                Ok(data_buf.maybe_null_slice::<u8>().to_vec())
             } else {
                 Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
             }

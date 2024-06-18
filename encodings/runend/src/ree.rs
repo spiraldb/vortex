@@ -186,7 +186,7 @@ mod test {
         assert_eq!(arr.len(), 5);
 
         assert_eq!(
-            arr.flatten_primitive().unwrap().typed_data::<i32>(),
+            arr.flatten_primitive().unwrap().maybe_null_slice::<i32>(),
             vec![2, 2, 3, 3, 3]
         );
     }
@@ -203,7 +203,7 @@ mod test {
             arr.into_array()
                 .flatten_primitive()
                 .unwrap()
-                .typed_data::<i32>(),
+                .maybe_null_slice::<i32>(),
             vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]
         );
     }

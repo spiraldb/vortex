@@ -12,12 +12,12 @@ impl<T: NativePType> ArrayAccessor<T> for PrimitiveArray {
     {
         match self.logical_validity().to_null_buffer()? {
             None => {
-                let mut iter = self.typed_data::<T>().iter().map(Some);
+                let mut iter = self.maybe_null_slice::<T>().iter().map(Some);
                 Ok(f(&mut iter))
             }
             Some(nulls) => {
                 let mut iter = self
-                    .typed_data::<T>()
+                    .maybe_null_slice::<T>()
                     .iter()
                     .zip(nulls.iter())
                     .map(|(value, valid)| if valid { Some(value) } else { None });

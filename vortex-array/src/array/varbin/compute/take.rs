@@ -27,9 +27,9 @@ impl TakeFn for VarBinArray {
             match_each_integer_ptype!(indices.ptype(), |$I| {
                 Ok(take(
                     self.dtype().clone(),
-                    offsets.typed_data::<$O>(),
-                    data.typed_data::<u8>(),
-                    indices.typed_data::<$I>(),
+                    offsets.maybe_null_slice::<$O>(),
+                    data.maybe_null_slice::<u8>(),
+                    indices.maybe_null_slice::<$I>(),
                     self.validity(),
                 )?.into_array())
             })

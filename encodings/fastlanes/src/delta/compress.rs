@@ -45,7 +45,7 @@ impl EncodingCompression for DeltaEncoding {
 
         // Compress the filled array
         let (bases, deltas) = match_each_unsigned_integer_ptype!(parray.ptype(), |$T| {
-            let (bases, deltas) = compress_primitive(filled.typed_data::<$T>());
+            let (bases, deltas) = compress_primitive(filled.maybe_null_slice::<$T>());
             let base_validity = (validity.nullability() != Nullability::NonNullable)
                 .then(|| Validity::AllValid)
                 .unwrap_or(Validity::NonNullable);
@@ -141,7 +141,7 @@ pub fn decompress(array: DeltaArray) -> VortexResult<PrimitiveArray> {
     let deltas = array.deltas().flatten_primitive()?;
     let decoded = match_each_unsigned_integer_ptype!(deltas.ptype(), |$T| {
         PrimitiveArray::from_vec(
-            decompress_primitive::<$T>(bases.typed_data(), deltas.typed_data()),
+            decompress_primitive::<$T>(bases.maybe_null_slice(), deltas.maybe_null_slice()),
             array.validity()
         )
     });
@@ -237,7 +237,7 @@ mod test {
         let delta = DeltaArray::try_from(compressed).unwrap();
 
         let decompressed = decompress(delta).unwrap();
-        let decompressed_slice = decompressed.typed_data::<T>();
+        let decompressed_slice = decompressed.maybe_null_slice::<T>();
         assert_eq!(decompressed_slice.len(), input.len());
         for (actual, expected) in decompressed_slice.iter().zip(input) {
             assert_eq!(actual, &expected);
