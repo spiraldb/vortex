@@ -246,8 +246,12 @@ impl ExecutionPlan for VortexMemoryExec {
 mod test {
     use std::sync::Arc;
 
+    use arrow_array::builder::StringViewBuilder;
+    use arrow_array::RecordBatch;
+    use arrow_schema::{DataType, Field, SchemaBuilder};
     use datafusion::arrow::array::AsArray;
     use datafusion::arrow::datatypes::UInt64Type;
+    use datafusion::datasource::MemTable;
     use datafusion::prelude::SessionContext;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::r#struct::StructArray;
@@ -257,6 +261,36 @@ mod test {
     use vortex_dtype::{DType, FieldName, Nullability};
 
     use crate::VortexInMemoryTableProvider;
+
+    #[tokio::test]
+    async fn test_datafusion_stringview() {
+        let ctx = SessionContext::new();
+
+        let mut strings = StringViewBuilder::with_capacity(5);
+        strings.append_value("andrew");
+        strings.append_value("nick");
+        strings.append_value("rob");
+        strings.append_value("marko");
+        strings.append_value("will");
+
+        let strings = Arc::new(strings.finish());
+        let mut schema = SchemaBuilder::with_capacity(1);
+        schema.push(Field::new("strings", DataType::Utf8View, false));
+
+        let schema = Arc::new(schema.finish());
+
+        let batch = RecordBatch::try_new(schema.clone(), vec![strings.clone()]).unwrap();
+        let table = MemTable::try_new(schema.clone(), vec![vec![batch]]).unwrap();
+
+        ctx.register_table("people", Arc::new(table)).unwrap();
+
+        ctx.sql("SELECT strings FROM people")
+            .await
+            .unwrap()
+            .show()
+            .await
+            .unwrap();
+    }
 
     #[tokio::test]
     async fn test_datafusion_simple() {
