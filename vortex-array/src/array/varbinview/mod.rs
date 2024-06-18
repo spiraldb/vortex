@@ -11,7 +11,7 @@ use crate::compute::slice::slice;
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use crate::{impl_encoding, ArrayDType, ArrayFlatten};
 
 mod accessor;
 mod builder;
@@ -135,9 +135,9 @@ impl VarBinViewArray {
         };
 
         let mut children = Vec::with_capacity(data.len() + 2);
-        children.push(views.into_array_data());
-        children.extend(data.into_iter().map(|d| d.into_array_data()));
-        if let Some(a) = validity.into_array_data() {
+        children.push(views);
+        children.extend(data);
+        if let Some(a) = validity.into_array() {
             children.push(a)
         }
 

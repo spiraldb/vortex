@@ -3,7 +3,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, vortex_err};
 
@@ -28,7 +28,7 @@ impl ZigZagArray {
         let dtype = DType::from(PType::try_from(&encoded_dtype).expect("ptype").to_signed())
             .with_nullability(encoded_dtype.nullability());
 
-        let children = vec![encoded.into_array_data()];
+        let children = [encoded];
         Self::try_from_parts(dtype, ZigZagMetadata, children.into(), StatsSet::new())
     }
 

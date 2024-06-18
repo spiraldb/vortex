@@ -7,7 +7,7 @@ use vortex_scalar::Scalar;
 
 use crate::encoding::EncodingRef;
 use crate::stats::{Stat, Statistics, StatsSet};
-use crate::{Array, ArrayMetadata, IntoArray, ToArray};
+use crate::{Array, ArrayDType, ArrayMetadata, IntoArray, ToArray};
 
 #[derive(Clone, Debug)]
 pub struct ArrayData {
@@ -15,7 +15,7 @@ pub struct ArrayData {
     dtype: DType, // FIXME(ngates): Arc?
     metadata: Arc<dyn ArrayMetadata>,
     buffer: Option<Buffer>,
-    children: Arc<[ArrayData]>,
+    children: Arc<[Array]>,
     stats_map: Arc<RwLock<StatsSet>>,
 }
 
@@ -25,7 +25,7 @@ impl ArrayData {
         dtype: DType,
         metadata: Arc<dyn ArrayMetadata>,
         buffer: Option<Buffer>,
-        children: Arc<[Self]>,
+        children: Arc<[Array]>,
         statistics: StatsSet,
     ) -> VortexResult<Self> {
         let data = Self {
@@ -65,7 +65,7 @@ impl ArrayData {
         self.buffer
     }
 
-    pub fn child(&self, index: usize, dtype: &DType) -> Option<&Self> {
+    pub fn child(&self, index: usize, dtype: &DType) -> Option<&Array> {
         match self.children.get(index) {
             None => None,
             Some(child) => {
@@ -79,53 +79,12 @@ impl ArrayData {
         self.children.len()
     }
 
-    pub fn children(&self) -> &[Self] {
+    pub fn children(&self) -> &[Array] {
         &self.children
     }
 
     pub fn statistics(&self) -> &dyn Statistics {
         self
-    }
-
-    pub fn depth_first_traversal(&self) -> ArrayDataIterator {
-        ArrayDataIterator { stack: vec![self] }
-    }
-
-    /// Return the buffer offsets and the total length of all buffers, assuming the given alignment.
-    /// This includes all child buffers.
-    pub fn all_buffer_offsets(&self, alignment: usize) -> Vec<u64> {
-        let mut offsets = vec![];
-        let mut offset = 0;
-
-        for col_data in self.depth_first_traversal() {
-            if let Some(buffer) = col_data.buffer() {
-                offsets.push(offset as u64);
-
-                let buffer_size = buffer.len();
-                let aligned_size = (buffer_size + (alignment - 1)) & !(alignment - 1);
-                offset += aligned_size;
-            }
-        }
-        offsets.push(offset as u64);
-
-        offsets
-    }
-}
-
-/// A depth-first pre-order iterator over a ArrayData.
-pub struct ArrayDataIterator<'a> {
-    stack: Vec<&'a ArrayData>,
-}
-
-impl<'a> Iterator for ArrayDataIterator<'a> {
-    type Item = &'a ArrayData;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let next = self.stack.pop()?;
-        for child in next.children.iter().rev() {
-            self.stack.push(child);
-        }
-        Some(next)
     }
 }
 

@@ -31,7 +31,6 @@ macro_rules! impl_encoding {
         paste! {
             use $crate::{
                 Array,
-                ArrayData,
                 ArrayDef,
                 ArrayMetadata,
                 ArrayTrait,
@@ -84,7 +83,7 @@ macro_rules! impl_encoding {
                 fn try_from_parts(
                     dtype: DType,
                     metadata: [<$Name Metadata>],
-                    children: Arc<[ArrayData]>,
+                    children: Arc<[Array]>,
                     stats: StatsSet,
                 ) -> VortexResult<Self> {
                     Ok(Self { typed: TypedArray::try_from_parts(dtype, metadata, None, children, stats)? })
@@ -218,11 +217,11 @@ impl<T: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoA
             Array::View(_) => {
                 struct Visitor {
                     buffer: Option<Buffer>,
-                    children: Vec<ArrayData>,
+                    children: Vec<Array>,
                 }
                 impl ArrayVisitor for Visitor {
                     fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
-                        self.children.push(array.to_array_data());
+                        self.children.push(array.clone());
                         Ok(())
                     }
 

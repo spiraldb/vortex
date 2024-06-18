@@ -3,7 +3,7 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::ValidityMetadata;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
 use vortex_dtype::match_each_unsigned_integer_ptype;
 use vortex_error::vortex_bail;
 
@@ -48,7 +48,7 @@ impl DeltaArray {
                 validity: validity.to_metadata(len)?,
                 len,
             },
-            [bases.into_array_data(), deltas.into_array_data()].into(),
+            [bases, deltas].into(),
             StatsSet::new(),
         )?;
 
