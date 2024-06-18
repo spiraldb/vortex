@@ -110,6 +110,13 @@ impl Array {
         }
     }
 
+    pub fn nchildren(&self) -> usize {
+        match self {
+            Self::Data(d) => d.nchildren(),
+            Self::View(v) => v.nchildren(),
+        }
+    }
+
     pub fn buffer(&self) -> Option<&Buffer> {
         match self {
             Self::Data(d) => d.buffer(),

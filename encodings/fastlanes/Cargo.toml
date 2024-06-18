@@ -16,7 +16,7 @@ workspace = true
 
 [dependencies]
 arrayref = { workspace = true }
-fastlanez = { path = "../../fastlanez" }
+fastlanes = { workspace = true }
 itertools = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
@@ -29,10 +29,6 @@ vortex-scalar = { path = "../../vortex-scalar" }
 criterion = { workspace = true }
 rand = { workspace = true }
 simplelog = { workspace = true }
-
-[[bench]]
-name = "bitpacking"
-harness = false
 
 [[bench]]
 name = "bitpacking_take"

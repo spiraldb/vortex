@@ -3,8 +3,6 @@ members = [
     "bench-vortex",
     "build-vortex",
     "encodings/*",
-    "fastlanez",
-    "fastlanez-sys",
     "pyvortex",
     "vortex-array",
     "vortex-buffer",
@@ -61,6 +59,7 @@ duckdb = { version = "0.10.1", features = ["bundled"] }
 enum-iterator = "2.0.0"
 enum_dispatch = "0.3.13"
 fallible-iterator = "0.3.0"
+fastlanes = "0.1.5"
 flatbuffers = "24.3.25"
 flexbuffers = "2.0.0"
 fs_extra = "1.3.0"
