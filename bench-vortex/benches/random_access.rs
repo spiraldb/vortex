@@ -1,4 +1,4 @@
-use bench_vortex::data_downloads::{BenchmarkDataset, FileType};
+use bench_vortex::data_downloads::BenchmarkDataset;
 use bench_vortex::public_bi_data::BenchmarkDatasets;
 use bench_vortex::public_bi_data::PBIDataset::Medicare1;
 use bench_vortex::reader::{take_parquet, take_vortex};

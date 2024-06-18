@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use arrow_array::RecordBatchReader;
 use bzip2::read::BzDecoder;
@@ -106,7 +106,6 @@ pub enum FileType {
     Csv,
     Parquet,
     Vortex,
-    Lance,
 }
 
 impl Display for FileType {

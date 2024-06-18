@@ -4,7 +4,6 @@ use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 use enum_iterator::Sequence;
-use fs_extra::dir::get_size;
 use futures::executor::block_on;
 use humansize::{format_size, DECIMAL};
 use itertools::Itertools;
