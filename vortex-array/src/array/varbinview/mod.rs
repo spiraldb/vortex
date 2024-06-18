@@ -1,18 +1,24 @@
 use std::fmt::Formatter;
+use std::ops::Deref;
 use std::{mem, slice};
 
 use ::serde::{Deserialize, Serialize};
-use vortex_dtype::Nullability;
+use arrow_array::{ArrayRef, BinaryViewArray, StringViewArray};
+use arrow_buffer::{Buffer, ScalarBuffer};
+use arrow_schema::DataType;
+use itertools::Itertools;
+use vortex_dtype::{Nullability, PType};
 use vortex_error::vortex_bail;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbin::builder::VarBinBuilder;
+use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::builder::VarBinViewBuilder;
+use crate::arrow::FromArrowArray;
 use crate::compute::slice::slice;
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten};
+use crate::{impl_encoding, ArrayDType, ArrayData, ArrayFlatten};
 
 mod accessor;
 mod builder;
@@ -220,25 +226,55 @@ impl VarBinViewArray {
 
 impl ArrayFlatten for VarBinViewArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        // TODO(aduffy): this flatten implementation is relatively expensive, allocating a new
-        //  VarBinArray, and decoding elements from this Array one-at-a-time for insertion.
-        //  In the future, this will be removed because we will provide VarBinViewArray as a
-        //  first-class Flattened variant with zero-copy to Arrow.
-        let mut builder = VarBinBuilder::<u32>::with_capacity(self.len());
-        for idx in 0..self.len() {
-            // If the current value is null, then we push null. Else, we push value.
-            if self.validity().is_valid(idx) {
-                builder.push_value(
-                    self.bytes_at(idx)
-                        .expect("element must be valid")
-                        .as_slice(),
-                );
-            } else {
-                builder.push_null();
-            }
-        }
+        let nullable = self.dtype().is_nullable();
+        let arrow_self = as_arrow(self);
+        let arrow_varbin = arrow_cast::cast(arrow_self.deref(), &DataType::Utf8)
+            .expect("Utf8View must cast to Ut8f");
+        let vortex_array = ArrayData::from_arrow(arrow_varbin, nullable).into_array();
 
-        Ok(Flattened::VarBin(builder.finish(self.dtype().clone())))
+        Ok(Flattened::VarBin(VarBinArray::try_from(&vortex_array)?))
+    }
+}
+
+fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
+    // Views should be buffer of u8
+    let views = var_bin_view
+        .views()
+        .flatten_primitive()
+        .expect("views must be primitive");
+    assert_eq!(views.ptype(), PType::U8);
+    let nulls = var_bin_view
+        .logical_validity()
+        .to_null_buffer()
+        .expect("null buffer");
+
+    let data = (0..var_bin_view.metadata().n_children)
+        .map(|i| var_bin_view.bytes(i).flatten_primitive())
+        .collect::<VortexResult<Vec<_>>>()
+        .expect("bytes arrays must be primitive");
+    if !data.is_empty() {
+        assert_eq!(data[0].ptype(), PType::U8);
+        assert!(data.iter().map(|d| d.ptype()).all_equal());
+    }
+
+    let data = data
+        .iter()
+        .map(|p| Buffer::from(p.buffer()))
+        .collect::<Vec<_>>();
+
+    // Switch on Arrow DType.
+    match var_bin_view.dtype() {
+        DType::Binary(_) => Arc::new(BinaryViewArray::new(
+            ScalarBuffer::<u128>::from(Buffer::from(views.buffer())),
+            data,
+            nulls,
+        )),
+        DType::Utf8(_) => Arc::new(StringViewArray::new(
+            ScalarBuffer::<u128>::from(Buffer::from(views.buffer())),
+            data,
+            nulls,
+        )),
+        _ => panic!("expected utf8 or binary, got {}", var_bin_view.dtype()),
     }
 }
 
