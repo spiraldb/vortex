@@ -138,7 +138,7 @@ impl VortexMemoryExec {
             .map_err(|vortex_error| DataFusionError::Execution(format!("{}", vortex_error)))?
             .into_array();
 
-        // Construct a record batch from each of the values in-turn
+        // Construct the RecordBatch by flattening each struct field and transmuting to an ArrayRef.
         let struct_array = StructArray::try_from(data)
             .map_err(|_| exec_datafusion_err!("top-level array must be Struct encoding"))?;
 
@@ -278,8 +278,7 @@ mod test {
     use crate::VortexInMemoryTableProvider;
 
     #[tokio::test]
-    async fn test_simple() {
-        // Create a new array.
+    async fn test_datafusion_simple() {
         let names = VarBinArray::from_vec(
             vec!["Washington", "Adams", "Jefferson", "Madison", "Monroe"],
             DType::Utf8(Nullability::NonNullable),
