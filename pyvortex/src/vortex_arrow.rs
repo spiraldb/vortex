@@ -1,13 +1,11 @@
-use arrow::array::Array as ArrowArray;
+use arrow::array::{Array as ArrowArray, ArrayRef};
 use arrow::error::ArrowError;
 use arrow::pyarrow::ToPyArrow;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyList};
-use vortex::compute::as_arrow::as_arrow_chunks;
+use vortex::array::chunked::ChunkedArray;
 use vortex::Array;
-
-use crate::error::PyVortexError;
 
 pub fn map_arrow_err(error: ArrowError) -> PyErr {
     PyValueError::new_err(error.to_string())
@@ -16,7 +14,14 @@ pub fn map_arrow_err(error: ArrowError) -> PyErr {
 pub fn export_array<'py>(py: Python<'py>, array: &Array) -> PyResult<Bound<'py, PyAny>> {
     // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
     // NOTE(robert): Return RecordBatchStreamReader always?
-    let chunks = as_arrow_chunks(array).map_err(PyVortexError::map_err)?;
+    let chunks: Vec<ArrayRef> = if let Ok(chunked_array) = ChunkedArray::try_from(array) {
+        chunked_array
+            .chunks()
+            .map(|chunk| chunk.flatten().unwrap().into_arrow())
+            .collect()
+    } else {
+        vec![array.clone().flatten().unwrap().into_arrow()]
+    };
     if chunks.is_empty() {
         return Err(PyValueError::new_err("No chunks in array"));
     }

@@ -219,7 +219,7 @@ impl VarBinViewArray {
 
 impl ArrayFlatten for VarBinViewArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::VarBinView(self))
+        unimplemented!("see https://github.com/spiraldb/vortex/issues/392")
     }
 }
 
@@ -301,11 +301,9 @@ impl EncodingCompression for VarBinViewEncoding {}
 
 #[cfg(test)]
 mod test {
-    use arrow_array::array::StringViewArray as ArrowStringViewArray;
     use vortex_scalar::Scalar;
 
     use crate::array::varbinview::VarBinViewArray;
-    use crate::compute::as_arrow::as_arrow;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
     use crate::{ArrayTrait, IntoArray};
@@ -337,24 +335,6 @@ mod test {
         assert_eq!(
             scalar_at(&binary_arr, 0).unwrap(),
             Scalar::from("hello world this is a long string")
-        );
-    }
-
-    #[test]
-    pub fn iter() {
-        let binary_array =
-            VarBinViewArray::from(vec!["hello world", "hello world this is a long string"]);
-        assert_eq!(
-            as_arrow(binary_array.array())
-                .unwrap()
-                .as_any()
-                .downcast_ref::<ArrowStringViewArray>()
-                .unwrap()
-                .iter()
-                .collect::<Vec<_>>(),
-            ArrowStringViewArray::from(vec!["hello world", "hello world this is a long string",])
-                .iter()
-                .collect::<Vec<_>>()
         );
     }
 }
