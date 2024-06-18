@@ -4,7 +4,6 @@ use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 use enum_iterator::Sequence;
-use fs_extra::dir::get_size;
 use futures::executor::block_on;
 use humansize::{format_size, DECIMAL};
 use itertools::Itertools;
@@ -14,9 +13,7 @@ use tokio::fs::File;
 use vortex::ArrayTrait;
 use vortex_error::VortexResult;
 
-use crate::data_downloads::{
-    decompress_bz2, download_data, parquet_to_lance, BenchmarkDataset, FileType,
-};
+use crate::data_downloads::{decompress_bz2, download_data, BenchmarkDataset, FileType};
 use crate::public_bi_data::PBIDataset::*;
 use crate::reader::{
     compress_parquet_to_vortex, open_vortex, rewrite_parquet_as_vortex, write_csv_as_parquet,
@@ -302,7 +299,6 @@ impl PBIDataset {
             FileType::Csv => "csv",
             FileType::Parquet => "parquet",
             FileType::Vortex => "vortex",
-            FileType::Lance => "lance",
         };
 
         "PBI"
@@ -495,38 +491,6 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 "Vortex size: {}, {}B",
                 format_size(vx_size as u64, DECIMAL),
                 vx_size
-            );
-        }
-    }
-
-    fn write_as_lance(&self) {
-        self.as_uncompressed();
-        for f in self.list_files(FileType::Csv) {
-            info!("Compressing {} to lance", f.to_str().unwrap());
-            let output_fname = f
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .strip_suffix(".csv")
-                .unwrap();
-            let compressed = idempotent(
-                &path_for_file_type(self, output_fname, "lance"),
-                |output_path| {
-                    parquet_to_lance(
-                        output_path,
-                        path_for_file_type(self, output_fname, "parquet").as_path(),
-                    )
-                },
-            )
-            .expect("Failed to compress to lance");
-
-            let lance_dir_bytes_exact = get_size(compressed).unwrap();
-            let lance_dir_size = humansize::format_size(lance_dir_bytes_exact, DECIMAL);
-
-            info!(
-                "Lance directory aggregate size: {}, {}B",
-                lance_dir_size, lance_dir_bytes_exact
             );
         }
     }

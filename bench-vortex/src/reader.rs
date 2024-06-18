@@ -12,7 +12,6 @@ use arrow_array::{
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
 use itertools::Itertools;
-use lance::Dataset;
 use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
@@ -174,15 +173,4 @@ pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {
         .collect_vec();
 
     Ok(concat_batches(&schema, &batches)?)
-}
-
-pub fn take_lance(path: &Path, indices: &[u64]) -> RecordBatch {
-    Runtime::new()
-        .unwrap()
-        .block_on(async_take_lance(path, indices))
-}
-
-async fn async_take_lance(path: &Path, indices: &[u64]) -> RecordBatch {
-    let dataset = Dataset::open(path.to_str().unwrap()).await.unwrap();
-    dataset.take(indices, dataset.schema()).await.unwrap()
 }
