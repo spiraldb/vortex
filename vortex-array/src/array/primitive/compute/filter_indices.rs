@@ -68,7 +68,6 @@ fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
 
 #[cfg(test)]
 mod test {
-    use itertools::Itertools;
     use vortex_dtype::field::FieldPath;
     use vortex_expr::{lit, Conjunction, FieldPathOperations};
 

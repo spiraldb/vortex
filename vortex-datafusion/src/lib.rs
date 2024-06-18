@@ -28,13 +28,18 @@ use vortex::{Array, ArrayDType, Flattened, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
+/// A [`TableProvider`] that exposes an existing Vortex Array to the DataFusion SQL engine.
+///
+/// Only arrays that have a top-level [struct type](vortex_dtype::StructDType) can be exposed as
+/// a table to DataFusion.
 #[derive(Debug, Clone)]
-pub struct VortexInMemoryTableProvider {
+pub(crate) struct VortexInMemoryTableProvider {
     array: Array,
     schema_ref: SchemaRef,
 }
 
 impl VortexInMemoryTableProvider {
+    /// Build a new table provider from an existing [struct type](vortex_dtype::StructDType) array.
     pub fn try_new(array: Array) -> VortexResult<Self> {
         if !matches!(array.dtype(), DType::Struct(_, _)) {
             vortex_bail!(InvalidArgument: "only DType::Struct arrays can produce a table provider");
@@ -46,9 +51,6 @@ impl VortexInMemoryTableProvider {
         Ok(Self { array, schema_ref })
     }
 }
-
-// Create a table provider that is able to perform basic pushdown over
-// the datasources inherent in the stream readers.
 
 #[async_trait]
 impl TableProvider for VortexInMemoryTableProvider {
@@ -65,6 +67,9 @@ impl TableProvider for VortexInMemoryTableProvider {
     }
 
     /// Plan an array scan.
+    ///
+    /// Currently, no pushdown is supported. The array is flattened directly into the nearest
+    /// Arrow-compatible encoding, and we emit a single [RecordBatch] of data.
     async fn scan(
         &self,
         _state: &SessionState,
@@ -177,7 +182,6 @@ impl VortexMemoryExec {
 
         let schema = Arc::new(Schema::new(record_batch_fields));
 
-        println!("returning stream");
         let batch = RecordBatch::try_new(Arc::clone(&schema), record_batch)?;
         Ok(Box::pin(VortexRecordBatchStream {
             schema_ref: Arc::clone(&schema),
@@ -201,7 +205,6 @@ where
     type Item = DFResult<RecordBatch>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        println!("POLLING");
         let mut this = self.project();
         match this.inner.poll_next_unpin(cx) {
             Poll::Ready(Some(batch)) => Poll::Ready(Some(Ok(batch))),
@@ -276,7 +279,6 @@ mod test {
 
     #[tokio::test]
     async fn test_simple() {
-        println!("starting test");
         // Create a new array.
         let names = VarBinArray::from_vec(
             vec!["Washington", "Adams", "Jefferson", "Madison", "Monroe"],
@@ -296,12 +298,10 @@ mod test {
             Arc::new(VortexInMemoryTableProvider::try_new(presidents.into_array()).unwrap());
         let session_ctx = SessionContext::new();
 
-        println!("registering table");
         session_ctx
             .register_table("presidents", presidents_table)
             .unwrap();
 
-        println!("sql query");
         let df_term_start = session_ctx
             .sql("SELECT SUM(term_start) FROM presidents WHERE president <> 'Madison'")
             .await
@@ -316,7 +316,7 @@ mod test {
                 .column(0)
                 .as_primitive::<UInt64Type>()
                 .values()
-                .get(0)
+                .first()
                 .unwrap(),
             vec![1789u64, 1797, 1801, 1817].into_iter().sum::<u64>()
         );

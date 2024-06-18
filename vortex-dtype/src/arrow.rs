@@ -81,7 +81,7 @@ impl TryFrom<&DType> for DataType {
                 Ok(DataType::Struct(Fields::from(fields)))
             }
             DType::List(list_dt, _) => {
-                let dtype: &DType = &(*list_dt);
+                let dtype: &DType = list_dt;
                 Ok(DataType::List(FieldRef::from(Field::new(
                     "element",
                     DataType::try_from(dtype)?,
