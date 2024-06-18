@@ -1,7 +1,8 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex::flatbuffers as fba;
-use vortex::{ArrayData, Context, ViewContext};
+use vortex::stats::ArrayStatistics;
+use vortex::{flatbuffers as fba, Array};
+use vortex::{Context, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};
@@ -20,8 +21,8 @@ pub enum IPCMessage<'a> {
 
 pub struct IPCContext<'a>(pub &'a ViewContext);
 pub struct IPCSchema<'a>(pub &'a DType);
-pub struct IPCChunk<'a>(pub &'a ViewContext, pub &'a ArrayData);
-pub struct IPCArray<'a>(pub &'a ViewContext, pub &'a ArrayData);
+pub struct IPCChunk<'a>(pub &'a ViewContext, pub &'a Array);
+pub struct IPCArray<'a>(pub &'a ViewContext, pub &'a Array);
 pub struct IPCPage<'a>(pub &'a Buffer);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
@@ -174,16 +175,17 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
             // FIXME(ngates): return result from this writer?
             .unwrap_or_else(|| panic!("Encoding not found: {:?}", column_data.encoding()));
 
-        let metadata = Some(
-            fbb.create_vector(
-                column_data
+        let metadata = match column_data {
+            Array::Data(d) => {
+                let metadata = d
                     .metadata()
                     .try_serialize_metadata()
                     // TODO(ngates): should we serialize externally to here?
-                    .unwrap()
-                    .as_ref(),
-            ),
-        );
+                    .unwrap();
+                Some(fbb.create_vector(metadata.as_ref()))
+            }
+            Array::View(v) => Some(fbb.create_vector(v.metadata().unwrap())),
+        };
 
         let children = column_data
             .children()

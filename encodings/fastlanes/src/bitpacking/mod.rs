@@ -4,7 +4,7 @@ use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
 use vortex_dtype::{Nullability, PType};
 use vortex_error::{vortex_bail, vortex_err};
 
@@ -71,11 +71,11 @@ impl BitPackedArray {
         };
 
         let mut children = Vec::with_capacity(3);
-        children.push(packed.into_array_data());
+        children.push(packed);
         if let Some(p) = patches {
-            children.push(p.into_array_data());
+            children.push(p);
         }
-        if let Some(a) = validity.into_array_data() {
+        if let Some(a) = validity.into_array() {
             children.push(a)
         }
 
