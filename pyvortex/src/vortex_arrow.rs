@@ -13,7 +13,7 @@ pub fn map_arrow_err(error: ArrowError) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
 
-pub fn export_array<'py>(py: Python<'py>, array: &Array) -> PyResult<&'py PyAny> {
+pub fn export_array<'py>(py: Python<'py>, array: &Array) -> PyResult<Bound<'py, PyAny>> {
     // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
     // NOTE(robert): Return RecordBatchStreamReader always?
     let chunks = as_arrow_chunks(array).map_err(PyVortexError::map_err)?;
@@ -32,12 +32,12 @@ pub fn export_array<'py>(py: Python<'py>, array: &Array) -> PyResult<&'py PyAny>
         .collect();
 
     // Import pyarrow and its Array class
-    let mod_pyarrow = PyModule::import(py, "pyarrow")?;
+    let mod_pyarrow = PyModule::import_bound(py, "pyarrow")?;
 
     // Combine into a chunked array
     mod_pyarrow.call_method(
         "chunked_array",
-        (PyList::new(py, chunks?),),
-        Some([("type", pa_data_type)].into_py_dict(py)),
+        (PyList::new_bound(py, chunks?),),
+        Some(&[("type", pa_data_type)].into_py_dict_bound(py)),
     )
 }

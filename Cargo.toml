@@ -80,13 +80,13 @@ log = "0.4.21"
 monoio = "0.2.3"
 num-traits = "0.2.18"
 num_enum = "0.7.2"
-parquet = "51.0.0"
+parquet = "52.0.0"
 paste = "1.0.14"
 pin-project = "1.1.5"
 prost = "0.12.4"
 prost-build = "0.12.4"
 prost-types = "0.12.4"
-pyo3 = { version = "0.21.1", features = ["extension-module", "abi3-py311"] }
+pyo3 = { version = "0.21.2", features = ["extension-module", "abi3-py311"] }
 pyo3-log = "0.10.0"
 rand = "0.8.5"
 reqwest = { version = "0.12.0", features = ["blocking"] }
