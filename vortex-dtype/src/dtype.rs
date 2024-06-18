@@ -75,6 +75,10 @@ impl DType {
     pub fn eq_ignore_nullability(&self, other: &Self) -> bool {
         self.as_nullable().eq(&other.as_nullable())
     }
+
+    pub fn is_struct(&self) -> bool {
+        matches!(self, Struct(_, _))
+    }
 }
 
 impl Display for DType {

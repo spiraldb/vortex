@@ -1,4 +1,3 @@
-use as_arrow::AsArrowArray;
 use cast::CastFn;
 use compare::CompareFn;
 use fill::FillForwardFn;
@@ -11,7 +10,6 @@ use take::TakeFn;
 use crate::compute::filter_indices::FilterIndicesFn;
 use crate::compute::scalar_subtract::SubtractScalarFn;
 
-pub mod as_arrow;
 pub mod cast;
 pub mod compare;
 pub mod fill;
@@ -24,10 +22,6 @@ pub mod slice;
 pub mod take;
 
 pub trait ArrayCompute {
-    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        None
-    }
-
     fn cast(&self) -> Option<&dyn CastFn> {
         None
     }

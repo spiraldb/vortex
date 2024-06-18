@@ -1,5 +1,4 @@
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::cast::CastFn;
 use crate::compute::compare::CompareFn;
 use crate::compute::fill::FillForwardFn;
@@ -11,7 +10,6 @@ use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::ArrayCompute;
 
-mod as_arrow;
 mod cast;
 mod compare;
 mod fill;
@@ -23,10 +21,6 @@ mod subtract_scalar;
 mod take;
 
 impl ArrayCompute for PrimitiveArray {
-    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        Some(self)
-    }
-
     fn cast(&self) -> Option<&dyn CastFn> {
         Some(self)
     }

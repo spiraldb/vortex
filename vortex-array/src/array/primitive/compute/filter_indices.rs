@@ -68,7 +68,6 @@ fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
 
 #[cfg(test)]
 mod test {
-    use itertools::Itertools;
     use vortex_dtype::field::FieldPath;
     use vortex_expr::{lit, Conjunction, FieldPathOperations};
 
@@ -80,13 +79,11 @@ mod test {
     }
 
     fn to_int_indices(filtered_primitive: BoolArray) -> Vec<u64> {
-        let filtered = filtered_primitive
+        filtered_primitive
             .boolean_buffer()
-            .iter()
-            .enumerate()
-            .flat_map(|(idx, v)| if v { Some(idx as u64) } else { None })
-            .collect_vec();
-        filtered
+            .set_indices()
+            .map(|i| i as u64)
+            .collect()
     }
 
     #[test]

@@ -1,10 +1,7 @@
-use arrow_array::ArrayRef as ArrowArrayRef;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
-use crate::array::datetime::LocalDateTimeArray;
 use crate::array::extension::ExtensionArray;
-use crate::compute::as_arrow::AsArrowArray;
 use crate::compute::cast::CastFn;
 use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::{slice, SliceFn};
@@ -13,10 +10,6 @@ use crate::compute::ArrayCompute;
 use crate::{Array, IntoArray};
 
 impl ArrayCompute for ExtensionArray {
-    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
-        Some(self)
-    }
-
     fn cast(&self) -> Option<&dyn CastFn> {
         // It's not possible to cast an extension array to another type.
         // TODO(ngates): we should allow some extension arrays to implement a callback
@@ -34,18 +27,6 @@ impl ArrayCompute for ExtensionArray {
 
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
-    }
-}
-
-impl AsArrowArray for ExtensionArray {
-    /// To support full compatability with Arrow, we hard-code the conversion of our datetime
-    /// arrays to Arrow's Timestamp arrays here. For all other extension arrays, we return an
-    /// Arrow extension array with the same definition.
-    fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
-        match self.id().as_ref() {
-            "vortex.localdatetime" => LocalDateTimeArray::try_from(self)?.as_arrow(),
-            _ => vortex_bail!("Arrow extension arrays not yet supported"),
-        }
     }
 }
 

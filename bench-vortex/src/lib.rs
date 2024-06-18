@@ -216,7 +216,6 @@ mod test {
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use vortex::arrow::FromArrowArray;
     use vortex::compress::Compressor;
-    use vortex::compute::as_arrow::as_arrow;
     use vortex::{ArrayData, IntoArray};
 
     use crate::taxi_data::taxi_data_parquet;
@@ -240,7 +239,7 @@ mod test {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
             let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
-            let vortex_as_arrow = as_arrow(&vortex_array).unwrap();
+            let vortex_as_arrow = vortex_array.flatten().unwrap().into_arrow();
             assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
         }
     }
@@ -260,7 +259,7 @@ mod test {
             let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
 
             let compressed = Compressor::new(&CTX).compress(&vortex_array, None).unwrap();
-            let compressed_as_arrow = as_arrow(&compressed).unwrap();
+            let compressed_as_arrow = compressed.flatten().unwrap().into_arrow();
             assert_eq!(compressed_as_arrow.deref(), arrow_array.deref());
         }
     }

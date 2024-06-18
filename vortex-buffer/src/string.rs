@@ -3,12 +3,12 @@ use std::str::Utf8Error;
 
 use crate::Buffer;
 
-/// A wrapper around a `Buffer` that guarantees that the buffer contains valid UTF-8.
+/// A wrapper around a [`Buffer`] that guarantees that the buffer contains valid UTF-8.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd)]
 pub struct BufferString(Buffer);
 
 impl BufferString {
-    /// Creates a new `BufferString` from a `Buffer`.
+    /// Creates a new `BufferString` from a [`Buffer`].
     ///
     /// # Safety
     /// Assumes that the buffer contains valid UTF-8.

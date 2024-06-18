@@ -28,7 +28,7 @@ log = { workspace = true }
 parquet = { workspace = true, features = [] }
 reqwest = { workspace = true }
 simplelog = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 uuid = { workspace = true, features = ["v4"] }
 vortex-alp = { path = "../encodings/alp" }
 vortex-array = { path = "../vortex-array" }

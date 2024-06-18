@@ -1,20 +1,10 @@
-use std::sync::Arc;
-
-use arrow_array::{
-    ArrayRef as ArrowArrayRef, TimestampMicrosecondArray, TimestampMillisecondArray,
-    TimestampNanosecondArray, TimestampSecondArray,
-};
-use arrow_buffer::ScalarBuffer;
 use lazy_static::lazy_static;
-use vortex_dtype::{DType, ExtDType, ExtID, PType};
+use vortex_dtype::{DType, ExtDType, ExtID};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::array::datetime::TimeUnit;
 use crate::array::extension::ExtensionArray;
-use crate::compute::as_arrow::AsArrowArray;
-use crate::compute::cast::cast;
-use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, ArrayData, ArrayTrait, IntoArrayData};
+use crate::{Array, ArrayDType, ArrayData, IntoArrayData};
 
 lazy_static! {
     pub static ref ID: ExtID = ExtID::from(LocalDateTimeArray::ID);
@@ -80,23 +70,6 @@ impl TryFrom<&ExtensionArray> for LocalDateTimeArray {
 
     fn try_from(value: &ExtensionArray) -> Result<Self, Self::Error> {
         Self::try_new(try_parse_time_unit(value.ext_dtype())?, value.storage())
-    }
-}
-
-impl AsArrowArray for LocalDateTimeArray {
-    fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
-        // A LocalDateTime maps to an Arrow Timestamp array with no timezone.
-        let timestamps = cast(&self.timestamps(), PType::I64.into())?.flatten_primitive()?;
-        let validity = timestamps.logical_validity().to_null_buffer()?;
-        let timestamps_len = timestamps.len();
-        let buffer = ScalarBuffer::<i64>::new(timestamps.into_buffer().into(), 0, timestamps_len);
-
-        Ok(match self.time_unit() {
-            TimeUnit::Ns => Arc::new(TimestampNanosecondArray::new(buffer, validity)),
-            TimeUnit::Us => Arc::new(TimestampMicrosecondArray::new(buffer, validity)),
-            TimeUnit::Ms => Arc::new(TimestampMillisecondArray::new(buffer, validity)),
-            TimeUnit::S => Arc::new(TimestampSecondArray::new(buffer, validity)),
-        })
     }
 }
 
