@@ -152,28 +152,22 @@ In Arrow, `RunLengthArray` and `DictionaryArray` are separate incompatible types
 
 ## Contributing
 
-While we hope to turn Vortex into a community project, its current rapid rate of change makes taking contributions
-without prior discussion infeasible. If you are interested in contributing, please open an issue to discuss your ideas.
+Please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Setup
 
-This repo uses submodules for non-Rust dependencies (e.g., for the zig fastlanez repo). Before building make sure to run
-
-```bash
-git submodule update --init --recursive
-
-# Install the zig version required by fastlanez
-./zigup
-
-# Install Rye from https://rye-up.com, and setup the virtualenv
-rye sync
-```
-
-You will also need to install flatbuffer compiler (flatc):
+In order to build vortex, you may also need to install the flatbuffer compiler (flatc):
 
 ### Mac
 ```bash
 brew install flatbuffers
+```
+
+This repo uses rye to manage the combined Rust/Python monorepo build. First, make sure to run:
+
+```bash
+# Install Rye from https://rye-up.com, and setup the virtualenv
+rye sync
 ```
 
 ## License
