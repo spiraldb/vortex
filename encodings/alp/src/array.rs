@@ -65,6 +65,7 @@ impl ALPArray {
             .expect("Missing encoded array")
     }
 
+    #[inline]
     pub fn exponents(&self) -> &Exponents {
         &self.metadata().exponents
     }
@@ -75,6 +76,11 @@ impl ALPArray {
                 .child(1, dt)
                 .expect("Missing patches with present metadata flag")
         })
+    }
+
+    #[inline]
+    pub fn ptype(&self) -> PType {
+        self.dtype().try_into().unwrap()
     }
 }
 

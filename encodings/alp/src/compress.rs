@@ -5,7 +5,7 @@ use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray, IntoArrayVariant};
 use vortex_dtype::{NativePType, PType};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::alp::ALPFloat;
@@ -17,12 +17,11 @@ macro_rules! match_each_alp_float_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
         use vortex_dtype::PType;
-        use vortex_error::vortex_err;
         let ptype = $self;
         match ptype {
-            PType::F32 => Ok(__with__! { f32 }),
-            PType::F64 => Ok(__with__! { f64 }),
-            _ => Err(vortex_err!("ALP can only encode f32 and f64")),
+            PType::F32 => __with__! { f32 },
+            PType::F64 => __with__! { f64 },
+            _ => panic!("ALP can only encode f32 and f64"),
         }
     })
 }
@@ -61,7 +60,7 @@ impl EncodingCompression for ALPEncoding {
         let (exponents, encoded, patches) = match_each_alp_float_ptype!(
             parray.ptype(), |$T| {
             encode_to_array::<$T>(&parray, like_exponents.as_ref())
-        })?;
+        });
 
         let compressed_encoded = ctx
             .named("packed")
@@ -123,7 +122,7 @@ pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
             decompress_primitive::<$T>(encoded.maybe_null_slice(), array.exponents()),
             encoded.validity(),
         )
-    })?;
+    });
 
     if let Some(patches) = array.patches() {
         patch_decoded(decoded, &patches)
@@ -139,7 +138,7 @@ fn patch_decoded(array: PrimitiveArray, patches: &Array) -> VortexResult<Primiti
                 let typed_patches = SparseArray::try_from(patches).unwrap();
                 array.patch(
                     &typed_patches.resolved_indices(),
-                    typed_patches.values().into_primitive()?.maybe_null_slice::<$T>())?
+                    typed_patches.values().into_primitive()?.maybe_null_slice::<$T>())
             })
         }
         _ => panic!("can't patch ALP array with {}", patches),

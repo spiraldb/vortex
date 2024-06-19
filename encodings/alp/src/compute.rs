@@ -2,10 +2,11 @@ use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, ArrayDType, IntoArray};
+use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
+use crate::ALPFloat;
 use crate::{match_each_alp_float_ptype, ALPArray};
 
 impl ArrayCompute for ALPArray {
@@ -27,14 +28,13 @@ impl ScalarAtFn for ALPArray {
         if let Some(patch) = self.patches().and_then(|p| scalar_at(&p, index).ok()) {
             return Ok(patch);
         }
-        use crate::ALPFloat;
         let encoded_val = scalar_at(&self.encoded(), index)?;
-        match_each_alp_float_ptype!(self.dtype().try_into().unwrap(), |$T| {
+        match_each_alp_float_ptype!(self.ptype(), |$T| {
             let encoded_val: <$T as ALPFloat>::ALPInt = encoded_val.as_ref().try_into().unwrap();
-            Scalar::from(<$T as ALPFloat>::decode_single(
+            Ok(Scalar::from(<$T as ALPFloat>::decode_single(
                 encoded_val,
                 self.exponents(),
-            ))
+            )))
         })
     }
 }

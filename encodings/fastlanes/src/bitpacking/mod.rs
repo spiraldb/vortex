@@ -122,6 +122,11 @@ impl BitPackedArray {
             vortex_bail!("Bitpacking can only encode primitive arrays");
         }
     }
+
+    #[inline]
+    pub fn ptype(&self) -> PType {
+        self.dtype().try_into().unwrap()
+    }
 }
 
 impl IntoCanonical for BitPackedArray {

@@ -77,27 +77,40 @@ pub trait ALPFloat: Float + 'static {
             .iter()
             .enumerate()
             .map(|(i, v)| {
-                let encoded =
-                    (*v * Self::F10[exp.e as usize] * Self::IF10[exp.f as usize]).fast_round();
-                let decoded = encoded * Self::F10[exp.f as usize] * Self::IF10[exp.e as usize];
-
-                if decoded == *v {
-                    if let Some(e) = encoded.as_int() {
-                        prev = e;
-                        return e;
+                match Self::encode_single(*v, &exp) {
+                    Ok(fi) => {
+                        prev = fi;
+                        fi
+                    }
+                    Err(exc) => {
+                        exc_pos.push(i as u64);
+                        exc_value.push(exc);
+                        // Emit the last known good value. This helps with run-end encoding.
+                        prev
                     }
                 }
-
-                exc_pos.push(i as u64);
-                exc_value.push(*v);
-                // Emit the last known good value. This helps with run-end encoding.
-                prev
             })
             .collect_vec();
 
         (exp, encoded, exc_pos, exc_value)
     }
 
+    #[inline]
+    fn encode_single(value: Self, exponents: &Exponents) -> Result<Self::ALPInt, Self> {
+        let encoded = (value * Self::F10[exponents.e as usize] * Self::IF10[exponents.f as usize])
+            .fast_round();
+        let decoded = encoded * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize];
+
+        if decoded == value {
+            if let Some(e) = encoded.as_int() {
+                return Ok(e);
+            }
+        }
+
+        Err(value)
+    }
+
+    #[inline]
     fn decode_single(encoded: Self::ALPInt, exponents: &Exponents) -> Self {
         let encoded_float: Self = Self::from(encoded).unwrap();
         encoded_float * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize]

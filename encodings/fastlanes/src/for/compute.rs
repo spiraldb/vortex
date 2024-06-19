@@ -1,8 +1,11 @@
+use vortex::compute::search_sorted::{
+    search_sorted, SearchResult, SearchSortedFn, SearchSortedSide,
+};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{PrimitiveScalar, Scalar, ScalarValue};
@@ -11,6 +14,10 @@ use crate::FoRArray;
 
 impl ArrayCompute for FoRArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
         Some(self)
     }
 
@@ -64,10 +71,27 @@ impl SliceFn for FoRArray {
     }
 }
 
+impl SearchSortedFn for FoRArray {
+    fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
+        match_each_integer_ptype!(self.ptype(), |$P| {
+            let min: $P = self.reference().try_into().unwrap();
+            let shifted_min = min >> self.shift();
+            let unwrapped_value: $P = value.cast(self.dtype())?.try_into().unwrap();
+            let shifted_value: $P = unwrapped_value >> self.shift();
+            if shifted_value < shifted_min {
+                return Ok(SearchResult::NotFound(0));
+            }
+            let translated_scalar = Scalar::primitive(shifted_value.wrapping_sub(shifted_min), value.dtype().nullability());
+            search_sorted(&self.encoded(), translated_scalar, side)
+        })
+    }
+}
+
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compress::{Compressor, EncodingCompression};
+    use vortex::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
     use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::Context;
 
@@ -85,5 +109,28 @@ mod test {
         assert_eq!(scalar_at(&forarr, 0).unwrap(), 11.into());
         assert_eq!(scalar_at(&forarr, 1).unwrap(), 15.into());
         assert_eq!(scalar_at(&forarr, 2).unwrap(), 19.into());
+    }
+
+    #[test]
+    fn for_search() {
+        let forarr = FoREncoding
+            .compress(
+                PrimitiveArray::from(vec![11, 15, 19]).array(),
+                None,
+                Compressor::new(&Context::default()),
+            )
+            .unwrap();
+        assert_eq!(
+            search_sorted(&forarr, 15, SearchSortedSide::Left).unwrap(),
+            SearchResult::Found(1)
+        );
+        assert_eq!(
+            search_sorted(&forarr, 20, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(3)
+        );
+        assert_eq!(
+            search_sorted(&forarr, 10, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(0)
+        );
     }
 }
