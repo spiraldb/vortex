@@ -152,7 +152,8 @@ In Arrow, `RunLengthArray` and `DictionaryArray` are separate incompatible types
 
 ### Usage
 
-For best performance we recommend using [MiMalloc](https://github.com/microsoft/mimalloc) as the applications allocator.
+For best performance we recommend using [MiMalloc](https://github.com/microsoft/mimalloc) as the application's
+allocator.
 
 ```rust
 #[global_allocator]
