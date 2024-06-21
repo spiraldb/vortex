@@ -42,6 +42,15 @@ impl EncodingCompression for FoREncoding {
             return None;
         }
 
+        match_each_integer_ptype!(parray.ptype(), |$P| {
+            let min: $P = parray.statistics().compute_min()?;
+            let max: $P = parray.statistics().compute_max()?;
+            let _subbed = max.wrapping_sub(min);
+            if max.wrapping_sub(min) < max {
+                return None;
+            }
+        });
+
         Some(self)
     }
 
@@ -200,9 +209,11 @@ mod test {
 
     #[test]
     fn test_overflow() {
-        // Create a range offset by a million
-        let array = PrimitiveArray::from((i8::MIN..i8::MAX).collect_vec());
-        let compressed = FoREncoding {}
+        let array = PrimitiveArray::from((i8::MIN..=i8::MAX).collect_vec());
+        assert!(FoREncoding
+            .can_compress(array.array(), &CompressConfig::default())
+            .is_none());
+        let compressed = FoREncoding
             .compress(array.array(), None, Compressor::new(&ctx()))
             .unwrap();
         let compressed = FoRArray::try_from(compressed).unwrap();
