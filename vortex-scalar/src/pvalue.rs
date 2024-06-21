@@ -1,6 +1,8 @@
+use std::mem;
+
 use num_traits::NumCast;
 use vortex_dtype::half::f16;
-use vortex_dtype::PType;
+use vortex_dtype::{NativePType, PType};
 use vortex_error::vortex_err;
 use vortex_error::VortexError;
 
@@ -33,6 +35,31 @@ impl PValue {
             Self::F16(_) => PType::F16,
             Self::F32(_) => PType::F32,
             Self::F64(_) => PType::F64,
+        }
+    }
+
+    pub fn reinterpret_cast<T: NativePType + Into<PValue>>(&self) -> Self {
+        if T::PTYPE == self.ptype() {
+            return *self;
+        }
+
+        assert!(T::PTYPE.is_int(), "Can only reinterpret cast integers");
+
+        assert_eq!(
+            T::PTYPE.byte_width(),
+            self.ptype().byte_width(),
+            "Cannot reinterpret cast between types of different widths"
+        );
+        match self {
+            PValue::U8(v) => unsafe { mem::transmute::<u8, i8>(*v) }.into(),
+            PValue::U16(v) => unsafe { mem::transmute::<u16, i16>(*v) }.into(),
+            PValue::U32(v) => unsafe { mem::transmute::<u32, i32>(*v) }.into(),
+            PValue::U64(v) => unsafe { mem::transmute::<u64, i64>(*v) }.into(),
+            PValue::I8(v) => unsafe { mem::transmute::<i8, u8>(*v) }.into(),
+            PValue::I16(v) => unsafe { mem::transmute::<i16, u16>(*v) }.into(),
+            PValue::I32(v) => unsafe { mem::transmute::<i32, u32>(*v) }.into(),
+            PValue::I64(v) => unsafe { mem::transmute::<i64, u64>(*v) }.into(),
+            _ => unreachable!("Can't reinterpret cast floats"),
         }
     }
 }
