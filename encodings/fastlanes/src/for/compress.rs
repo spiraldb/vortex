@@ -45,8 +45,7 @@ impl EncodingCompression for FoREncoding {
         match_each_integer_ptype!(parray.ptype(), |$P| {
             let min: $P = parray.statistics().compute_min()?;
             let max: $P = parray.statistics().compute_max()?;
-            let _subbed = max.wrapping_sub(min);
-            if max.wrapping_sub(min) < max {
+            if max.wrapping_sub(min) < 0 {
                 return None;
             }
         });
