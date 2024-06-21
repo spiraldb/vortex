@@ -1,10 +1,13 @@
 use std::cmp::Ordering;
+use std::cmp::Ordering::Greater;
 
 use fastlanes::BitPacking;
+use vortex::array::primitive::PrimitiveArray;
+use vortex::array::sparse::SparseArray;
 use vortex::compute::search_sorted::{
     search_sorted, IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide,
 };
-use vortex::{ArrayDType, IntoArrayVariant};
+use vortex::{ArrayDType, ArrayTrait, IntoArrayVariant};
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
@@ -20,10 +23,10 @@ impl SearchSortedFn for BitPackedArray {
                 if (unwrapped_value.leading_zeros() as usize) < ptype.bit_width() - self.bit_width() {
                     search_sorted(&patches_array, value.clone(), side)
                 } else {
-                    Ok(SearchSorted::search_sorted(&BitPackedSearch(self), &unwrapped_value, side))
+                    Ok(SearchSorted::search_sorted(&BitPackedSearch::new(self), &unwrapped_value, side))
                 }
             } else {
-                Ok(SearchSorted::search_sorted(&BitPackedSearch(self), &unwrapped_value, side))
+                Ok(SearchSorted::search_sorted(&BitPackedSearch::new(self), &unwrapped_value, side))
             }
         })
     }
@@ -31,30 +34,47 @@ impl SearchSortedFn for BitPackedArray {
 
 /// This wrapper exists, so that you can't invoke SearchSorted::search_sorted directly on BitPackedArray as it omits searching patches
 #[derive(Debug)]
-struct BitPackedSearch<'a>(&'a BitPackedArray);
+struct BitPackedSearch {
+    packed: PrimitiveArray,
+    length: usize,
+    bit_width: usize,
+    min_patch_offset: Option<usize>,
+}
 
-impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch<'_> {
+impl BitPackedSearch {
+    pub fn new(array: &BitPackedArray) -> Self {
+        Self {
+            packed: array.packed().flatten_primitive().unwrap(),
+            length: array.len(),
+            bit_width: array.bit_width(),
+            min_patch_offset: array.patches().map(|p| {
+                SparseArray::try_from(p)
+                    .expect("Only Sparse patches are supported")
+                    .min_index()
+            }),
+        }
+    }
+}
+
+impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch {
     fn index_cmp(&self, idx: usize, elem: &T) -> Option<Ordering> {
+        if let Some(min_patch) = self.min_patch_offset {
+            if idx >= min_patch {
+                return Some(Greater);
+            }
+        }
         // SAFETY: Used in search_sorted_by which ensures that idx is within bounds
         let val: T = unsafe {
-            unpack_single_primitive(
-                self.0
-                    .packed()
-                    .into_primitive()
-                    .unwrap()
-                    .maybe_null_slice::<T>(),
-                self.0.bit_width(),
-                idx,
-            )
-            .unwrap()
+            unpack_single_primitive(self.packed.maybe_null_slice::<T>(), self.bit_width, idx)
+                .unwrap()
         };
         val.partial_cmp(elem)
     }
 }
 
-impl Len for BitPackedSearch<'_> {
+impl Len for BitPackedSearch {
     fn len(&self) -> usize {
-        self.0.metadata().length
+        self.length
     }
 }
 
