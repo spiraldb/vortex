@@ -429,6 +429,7 @@ dependencies = [
  "enum-iterator",
  "flexbuffers",
  "futures",
+ "futures-executor",
  "humansize",
  "itertools 0.13.0",
  "lazy_static",

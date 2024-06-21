@@ -27,7 +27,7 @@ use crate::array::bool::BoolArray;
 use crate::array::datetime::LocalDateTimeArray;
 use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::r#struct::StructArray;
+use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::VarBinViewArray;
 use crate::arrow::FromArrowArray;

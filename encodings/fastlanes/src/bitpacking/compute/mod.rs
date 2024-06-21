@@ -6,11 +6,11 @@ use itertools::Itertools;
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
+use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, ArrayDType, ArrayTrait, IntoArray};
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, IntoCanonical};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
@@ -67,7 +67,7 @@ impl TakeFn for BitPackedArray {
             };
         }
 
-        let indices = indices.clone().flatten_primitive()?;
+        let indices = indices.clone().into_canonical()?.into_primitive()?;
         let taken = match_each_unsigned_integer_ptype!(ptype, |$T| {
             PrimitiveArray::from_vec(take_primitive::<$T>(self, &indices)?, taken_validity)
         });
@@ -92,7 +92,7 @@ fn take_primitive<T: NativePType + BitPacking>(
 
     let bit_width = array.bit_width();
 
-    let packed = array.packed().flatten_primitive()?;
+    let packed = array.packed().into_canonical()?.into_primitive()?;
     let packed = packed.maybe_null_slice::<T>();
 
     let patches = array.patches().map(SparseArray::try_from).transpose()?;
@@ -163,7 +163,8 @@ fn do_patch_for_take_primitive<T: NativePType>(
     let base_index = output.len() - indices.len();
     let output_patches = taken_patches
         .values()
-        .flatten_primitive()?
+        .into_canonical()?
+        .into_primitive()?
         .reinterpret_cast(T::PTYPE);
     taken_patches
         .resolved_indices()
@@ -185,9 +186,9 @@ mod test {
     use vortex::array::primitive::{Primitive, PrimitiveArray};
     use vortex::array::sparse::SparseArray;
     use vortex::compress::Compressor;
-    use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::take::take;
-    use vortex::{ArrayDef, Context, IntoArray};
+    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::{ArrayDef, Context, IntoArray, IntoCanonical};
 
     use crate::{BitPackedArray, BitPackedEncoding};
 
@@ -209,7 +210,7 @@ mod test {
         let result = take(&bitpacked, &indices).unwrap();
         assert_eq!(result.encoding().id(), Primitive::ID);
 
-        let primitive_result = result.flatten_primitive().unwrap();
+        let primitive_result = result.into_canonical().unwrap().into_primitive().unwrap();
         let res_bytes = primitive_result.maybe_null_slice::<u8>();
         assert_eq!(res_bytes, &[0, 62, 31, 33, 9, 18]);
     }

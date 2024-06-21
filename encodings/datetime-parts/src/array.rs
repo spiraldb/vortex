@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_error::vortex_bail;
 
 use crate::compute::decode_to_localdatetime;
@@ -76,9 +76,9 @@ impl DateTimePartsArray {
     }
 }
 
-impl ArrayFlatten for DateTimePartsArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::Extension(
+impl IntoCanonical for DateTimePartsArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        Ok(Canonical::Extension(
             decode_to_localdatetime(&self.into_array())?.try_into()?,
         ))
     }

@@ -1,4 +1,4 @@
-use vortex::compute::scalar_at::ScalarAtFn;
+use vortex::compute::unary::scalar_at::ScalarAtFn;
 use vortex::compute::ArrayCompute;
 use vortex_dtype::PType;
 use vortex_error::VortexResult;

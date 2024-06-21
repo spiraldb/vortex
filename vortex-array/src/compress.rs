@@ -6,14 +6,14 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::chunked::{Chunked, ChunkedArray};
 use crate::array::constant::{Constant, ConstantArray};
-use crate::array::r#struct::{Struct, StructArray};
-use crate::compute::scalar_at::scalar_at;
+use crate::array::struct_::{Struct, StructArray};
 use crate::compute::slice::slice;
+use crate::compute::unary::scalar_at::scalar_at;
 use crate::encoding::{ArrayEncoding, EncodingRef};
 use crate::sampling::stratified_slices;
 use crate::stats::ArrayStatistics;
 use crate::validity::Validity;
-use crate::{Array, ArrayDType, ArrayDef, ArrayFlatten, ArrayTrait, Context, IntoArray};
+use crate::{Array, ArrayDType, ArrayDef, ArrayTrait, Context, IntoArray, IntoCanonical};
 
 pub trait EncodingCompression: ArrayEncoding {
     fn cost(&self) -> u8 {
@@ -322,7 +322,7 @@ pub fn sampled_compression(array: &Array, compressor: &Compressor) -> VortexResu
         .collect::<VortexResult<Vec<Array>>>()?,
         array.dtype().clone(),
     )?
-    .flatten()?
+    .into_canonical()?
     .into_array();
 
     find_best_compression(candidates, &sample, compressor)?

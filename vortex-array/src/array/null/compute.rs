@@ -3,11 +3,11 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::null::NullArray;
-use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
+use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
-use crate::{Array, ArrayTrait, IntoArray};
+use crate::{Array, ArrayTrait, IntoArray, IntoCanonical};
 
 impl ArrayCompute for NullArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -40,7 +40,7 @@ impl ScalarAtFn for NullArray {
 
 impl TakeFn for NullArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let indices = indices.clone().flatten_primitive()?;
+        let indices = indices.clone().into_canonical()?.into_primitive()?;
 
         // Enforce all indices are valid
         match_each_integer_ptype!(indices.ptype(), |$T| {
@@ -58,9 +58,9 @@ mod test {
     use vortex_dtype::DType;
 
     use crate::array::null::NullArray;
-    use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
     use crate::compute::take::take;
+    use crate::compute::unary::scalar_at::scalar_at;
     use crate::validity::{ArrayValidity, LogicalValidity};
     use crate::{ArrayTrait, IntoArray};
 

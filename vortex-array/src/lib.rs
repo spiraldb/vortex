@@ -6,15 +6,15 @@
 //! exploits the particular data distribution of the array's values.
 //!
 //! Every data type recognized by Vortex also has a canonical physical encoding format, which
-//! arrays can be [flattened](Flattened) into for ease of access in compute functions.
+//! arrays can be [flattened](Canonical) into for ease of access in compute functions.
 //!
 use std::fmt::{Debug, Display, Formatter};
 use std::future::ready;
 
 pub use ::paste;
+pub use canonical::*;
 pub use context::*;
 pub use data::*;
-pub use flatten::*;
 pub use implementation::*;
 use itertools::Itertools;
 pub use metadata::*;
@@ -35,12 +35,12 @@ use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 pub mod accessor;
 pub mod array;
 pub mod arrow;
+mod canonical;
 pub mod compress;
 pub mod compute;
 mod context;
 mod data;
 pub mod encoding;
-mod flatten;
 mod implementation;
 pub mod iter;
 mod metadata;
@@ -223,7 +223,7 @@ pub trait ArrayTrait:
     ArrayEncodingRef
     + ArrayCompute
     + ArrayDType
-    + ArrayFlatten
+    + IntoCanonical
     + ArrayValidity
     + AcceptArrayVisitor
     + ArrayStatistics

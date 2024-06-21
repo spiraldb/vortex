@@ -6,8 +6,9 @@ use vortex_buffer::Buffer;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayFlatten};
+use crate::{impl_encoding, Canonical, IntoCanonical};
 
+mod accessors;
 mod compute;
 mod stats;
 
@@ -92,9 +93,9 @@ impl ArrayTrait for BoolArray {
     }
 }
 
-impl ArrayFlatten for BoolArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::Bool(self))
+impl IntoCanonical for BoolArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        Ok(Canonical::Bool(self))
     }
 }
 
@@ -120,7 +121,7 @@ impl EncodingCompression for BoolEncoding {}
 #[cfg(test)]
 mod tests {
     use crate::array::bool::BoolArray;
-    use crate::compute::scalar_at::scalar_at;
+    use crate::compute::unary::scalar_at::scalar_at;
     use crate::IntoArray;
 
     #[test]

@@ -8,7 +8,7 @@ use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType};
+use crate::{impl_encoding, ArrayDType, IntoCanonical};
 
 mod compress;
 mod compute;
@@ -26,7 +26,7 @@ pub struct SparseMetadata {
 }
 
 impl SparseArray {
-    pub fn new(indices: Array, values: Array, len: usize, fill_value: Scalar) -> Self {
+    pub fn new_unchecked(indices: Array, values: Array, len: usize, fill_value: Scalar) -> Self {
         Self::try_new(indices, values, len, fill_value).unwrap()
     }
 
@@ -108,7 +108,12 @@ impl SparseArray {
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        let flat_indices = self.indices().flatten_primitive().unwrap();
+        let flat_indices = self
+            .indices()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
+            .unwrap();
         match_each_integer_ptype!(flat_indices.ptype(), |$P| {
             flat_indices
                 .maybe_null_slice::<$P>()
@@ -181,10 +186,10 @@ mod test {
 
     use crate::accessor::ArrayAccessor;
     use crate::array::sparse::SparseArray;
-    use crate::compute::cast::cast;
-    use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::{Array, IntoArray};
+    use crate::compute::unary::cast::try_cast;
+    use crate::compute::unary::scalar_at::scalar_at;
+    use crate::{Array, IntoArray, IntoCanonical};
 
     fn nullable_fill() -> Scalar {
         Scalar::null(DType::Primitive(PType::I32, Nullable))
@@ -198,14 +203,20 @@ mod test {
     fn sparse_array(fill_value: Scalar) -> Array {
         // merged array: [null, null, 100, null, null, 200, null, null, 300, null]
         let mut values = vec![100i32, 200, 300].into_array();
-        values = cast(&values, fill_value.dtype()).unwrap();
+        values = try_cast(&values, fill_value.dtype()).unwrap();
 
-        SparseArray::new(vec![2u64, 5, 8].into_array(), values, 10, fill_value).into_array()
+        SparseArray::new_unchecked(vec![2u64, 5, 8].into_array(), values, 10, fill_value)
+            .into_array()
     }
 
     fn assert_sparse_array(sparse: &Array, values: &[Option<i32>]) {
         let sparse_arrow = ArrayAccessor::<i32>::with_iterator(
-            &sparse.clone().flatten_primitive().unwrap(),
+            &sparse
+                .clone()
+                .into_canonical()
+                .unwrap()
+                .into_primitive()
+                .unwrap(),
             |iter| iter.map(|v| v.cloned()).collect_vec(),
         )
         .unwrap();

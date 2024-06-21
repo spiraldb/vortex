@@ -1,8 +1,8 @@
 use vortex::array::datetime::{LocalDateTimeArray, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
-use vortex::compute::cast::cast;
-use vortex::{Array, ArrayTrait, IntoArray};
+use vortex::compute::unary::cast::try_cast;
+use vortex::{Array, ArrayTrait, IntoArray, IntoCanonical};
 use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
@@ -39,7 +39,9 @@ fn compress_localdatetime(
     like: Option<DateTimePartsArray>,
     ctx: Compressor,
 ) -> VortexResult<Array> {
-    let timestamps = cast(&array.timestamps(), PType::I64.into())?.flatten_primitive()?;
+    let timestamps = try_cast(&array.timestamps(), PType::I64.into())?
+        .into_canonical()?
+        .into_primitive()?;
 
     let divisor = match array.time_unit() {
         TimeUnit::Ns => 1_000_000_000,

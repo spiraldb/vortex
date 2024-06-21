@@ -9,6 +9,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::canonical::IntoCanonical;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
@@ -26,7 +27,7 @@ impl ArrayStatisticsCompute for PrimitiveArray {
                 LogicalValidity::AllInvalid(v) => Ok(StatsSet::nulls(v, self.dtype())),
                 LogicalValidity::Array(a) => NullableValues(
                     self.maybe_null_slice::<$P>(),
-                    &a.clone().flatten_bool()?.boolean_buffer(),
+                    &a.clone().into_canonical()?.into_bool()?.boolean_buffer(),
                 )
                 .compute_statistics(stat),
             }

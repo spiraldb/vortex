@@ -5,11 +5,11 @@ use vortex_expr::Operator;
 
 use crate::array::bool::BoolArray;
 use crate::compute::compare::CompareFn;
-use crate::{Array, ArrayTrait, IntoArray};
+use crate::{Array, ArrayTrait, IntoArray, IntoCanonical};
 
 impl CompareFn for BoolArray {
     fn compare(&self, other: &Array, op: Operator) -> VortexResult<Array> {
-        let flattened = other.clone().flatten_bool()?;
+        let flattened = other.clone().into_canonical()?.into_bool()?;
         let lhs = self.boolean_buffer();
         let rhs = flattened.boolean_buffer();
         let result_buf = match op {
@@ -58,10 +58,14 @@ mod test {
         )
         .into_array();
 
-        let matches = compare(&arr, &arr, Operator::Eq)?.flatten_bool()?;
+        let matches = compare(&arr, &arr, Operator::Eq)?
+            .into_canonical()?
+            .into_bool()?;
         assert_eq!(to_int_indices(matches), [1u64, 2, 3, 4]);
 
-        let matches = compare(&arr, &arr, Operator::NotEq)?.flatten_bool()?;
+        let matches = compare(&arr, &arr, Operator::NotEq)?
+            .into_canonical()?
+            .into_bool()?;
         let empty: [u64; 0] = [];
         assert_eq!(to_int_indices(matches), empty);
 
@@ -71,16 +75,24 @@ mod test {
         )
         .into_array();
 
-        let matches = compare(&arr, &other, Operator::Lte)?.flatten_bool()?;
+        let matches = compare(&arr, &other, Operator::Lte)?
+            .into_canonical()?
+            .into_bool()?;
         assert_eq!(to_int_indices(matches), [2u64, 3, 4]);
 
-        let matches = compare(&arr, &other, Operator::Lt)?.flatten_bool()?;
+        let matches = compare(&arr, &other, Operator::Lt)?
+            .into_canonical()?
+            .into_bool()?;
         assert_eq!(to_int_indices(matches), [4u64]);
 
-        let matches = compare(&other, &arr, Operator::Gte)?.flatten_bool()?;
+        let matches = compare(&other, &arr, Operator::Gte)?
+            .into_canonical()?
+            .into_bool()?;
         assert_eq!(to_int_indices(matches), [2u64, 3, 4]);
 
-        let matches = compare(&other, &arr, Operator::Gt)?.flatten_bool()?;
+        let matches = compare(&other, &arr, Operator::Gt)?
+            .into_canonical()?
+            .into_bool()?;
         assert_eq!(to_int_indices(matches), [4u64]);
         Ok(())
     }

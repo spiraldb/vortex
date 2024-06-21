@@ -20,7 +20,11 @@ arrow-select = { workspace = true }
 bzip2 = { workspace = true }
 csv = { workspace = true }
 enum-iterator = { workspace = true }
-futures = { workspace = true }
+
+# Do not use workspace, so we can use the default features
+futures = "0.3.30"
+futures-executor = "0.3.30"
+
 humansize = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }

@@ -10,14 +10,14 @@ use futures_util::TryStreamExt;
 use itertools::Itertools;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compute::cast::cast;
-use vortex::compute::scalar_subtract::subtract_scalar;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::slice::slice;
 use vortex::compute::take::take;
+use vortex::compute::unary::cast::try_cast;
+use vortex::compute::unary::scalar_subtract::subtract_scalar;
 use vortex::stats::ArrayStatistics;
 use vortex::stream::ArrayStreamExt;
-use vortex::{Array, ArrayDType, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray, IntoCanonical};
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -72,8 +72,12 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
                 .collect_vec(),
         )
         .into_array();
-        let start_rows = take(&self.row_offsets, &start_chunks)?.flatten_primitive()?;
-        let start_bytes = take(&self.byte_offsets, &start_chunks)?.flatten_primitive()?;
+        let start_rows = take(&self.row_offsets, &start_chunks)?
+            .into_canonical()?
+            .into_primitive()?;
+        let start_bytes = take(&self.byte_offsets, &start_chunks)?
+            .into_canonical()?
+            .into_primitive()?;
 
         let stop_chunks = PrimitiveArray::from(
             coalesced_chunks
@@ -82,8 +86,12 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
                 .collect_vec(),
         )
         .into_array();
-        let stop_rows = take(&self.row_offsets, &stop_chunks)?.flatten_primitive()?;
-        let stop_bytes = take(&self.byte_offsets, &stop_chunks)?.flatten_primitive()?;
+        let stop_rows = take(&self.row_offsets, &stop_chunks)?
+            .into_canonical()?
+            .into_primitive()?;
+        let stop_bytes = take(&self.byte_offsets, &stop_chunks)?
+            .into_canonical()?
+            .into_primitive()?;
 
         // For each chunk-range, read the data as an ArrayStream and call take on it.
         let mut chunks = vec![];
@@ -159,9 +167,13 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
 fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIndices>> {
     // TODO(ngates): lots of optimizations to be had here, potentially lots of push-down.
     //  For now, we just flatten everything into primitive arrays and iterate.
-    let row_offsets = cast(row_offsets, PType::U64.into())?.flatten_primitive()?;
+    let row_offsets = try_cast(row_offsets, PType::U64.into())?
+        .into_canonical()?
+        .into_primitive()?;
     let _rows = format!("{:?}", row_offsets.maybe_null_slice::<u64>());
-    let indices = cast(indices, PType::U64.into())?.flatten_primitive()?;
+    let indices = try_cast(indices, PType::U64.into())?
+        .into_canonical()?
+        .into_primitive()?;
     let _indices = format!("{:?}", indices.maybe_null_slice::<u64>());
 
     if let (Some(last_idx), Some(num_rows)) = (
@@ -213,7 +225,7 @@ mod test {
     use itertools::Itertools;
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::{ArrayTrait, IntoArray, ViewContext};
+    use vortex::{ArrayTrait, IntoArray, IntoCanonical, ViewContext};
     use vortex_buffer::Buffer;
     use vortex_dtype::PType;
     use vortex_error::VortexResult;
@@ -262,7 +274,8 @@ mod test {
         let result = reader
             .take_rows(&PrimitiveArray::from(vec![0u64, 10, 10_000 - 1]).into_array())
             .await?
-            .flatten_primitive()?;
+            .into_canonical()?
+            .into_primitive()?;
 
         assert_eq!(result.len(), 3);
         assert_eq!(result.maybe_null_slice::<i32>(), &[0, 10, 999]);

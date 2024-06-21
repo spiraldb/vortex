@@ -1,3 +1,6 @@
+//! First-class chunked arrays.
+//!
+//! Vortex is a chunked array library that's able to
 use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -6,9 +9,9 @@ use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::scalar_at::scalar_at;
-use crate::compute::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
+use crate::compute::unary::scalar_at::scalar_at;
+use crate::compute::unary::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
@@ -16,8 +19,8 @@ use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayDType};
 
+mod canonical;
 mod compute;
-mod flatten;
 mod stats;
 
 impl_encoding!("vortex.chunked", Chunked);
@@ -156,9 +159,9 @@ mod test {
     use vortex_dtype::{NativePType, PType};
 
     use crate::array::chunked::ChunkedArray;
-    use crate::compute::scalar_subtract::subtract_scalar;
     use crate::compute::slice::slice;
-    use crate::{Array, IntoArray, ToArray};
+    use crate::compute::unary::scalar_subtract::subtract_scalar;
+    use crate::{Array, IntoArray, IntoCanonical, ToArray};
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(
@@ -177,7 +180,7 @@ mod test {
         ChunkedArray::try_from(arr)
             .unwrap()
             .chunks()
-            .map(|a| a.flatten_primitive().unwrap())
+            .map(|a| a.into_canonical().unwrap().into_primitive().unwrap())
             .for_each(|a| values.extend_from_slice(a.maybe_null_slice::<T>()));
         assert_eq!(values, slice);
     }
@@ -222,7 +225,9 @@ mod test {
         let results = chunks_out
             .next()
             .unwrap()
-            .flatten_primitive()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
             .unwrap()
             .maybe_null_slice::<u64>()
             .to_vec();
@@ -230,7 +235,9 @@ mod test {
         let results = chunks_out
             .next()
             .unwrap()
-            .flatten_primitive()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
             .unwrap()
             .maybe_null_slice::<u64>()
             .to_vec();
@@ -238,7 +245,9 @@ mod test {
         let results = chunks_out
             .next()
             .unwrap()
-            .flatten_primitive()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
             .unwrap()
             .maybe_null_slice::<u64>()
             .to_vec();

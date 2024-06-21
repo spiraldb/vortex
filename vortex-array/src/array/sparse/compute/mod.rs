@@ -7,11 +7,11 @@ use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
-use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
+use crate::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
-use crate::{Array, ArrayDType, IntoArray};
+use crate::{Array, ArrayDType, IntoArray, IntoCanonical};
 
 mod slice;
 
@@ -40,7 +40,7 @@ impl ScalarAtFn for SparseArray {
 
 impl TakeFn for SparseArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let flat_indices = indices.clone().flatten_primitive()?;
+        let flat_indices = indices.clone().into_canonical()?.into_primitive()?;
         // if we are taking a lot of values we should build a hashmap
         let (positions, physical_take_indices) = if indices.len() > 128 {
             take_map(self, &flat_indices)?
@@ -50,7 +50,7 @@ impl TakeFn for SparseArray {
 
         let taken_values = take(&self.values(), &physical_take_indices.into_array())?;
 
-        Ok(Self::new(
+        Ok(Self::new_unchecked(
             positions.into_array(),
             taken_values,
             indices.len(),
@@ -123,7 +123,7 @@ mod test {
     use crate::{Array, ArrayTrait, IntoArray};
 
     fn sparse_array() -> Array {
-        SparseArray::new(
+        SparseArray::new_unchecked(
             PrimitiveArray::from(vec![0u64, 37, 47, 99]).into_array(),
             PrimitiveArray::from_vec(vec![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid)
                 .into_array(),

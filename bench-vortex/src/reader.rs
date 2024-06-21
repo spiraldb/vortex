@@ -24,7 +24,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::Compressor;
 use vortex::stream::ArrayStreamExt;
-use vortex::{Array, IntoArray, ToArrayData, ViewContext};
+use vortex::{Array, IntoArray, IntoCanonical, ToArrayData, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
@@ -166,7 +166,7 @@ pub async fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<Array> {
     let indices_array = indices.to_vec().into_array();
     let taken = reader.take_rows(&indices_array).await?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
-    Ok(taken.flatten()?.into_array())
+    Ok(taken.into_canonical()?.into_array())
 }
 
 pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {

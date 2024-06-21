@@ -1,13 +1,13 @@
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::cast::CastFn;
 use crate::compute::compare::CompareFn;
-use crate::compute::fill::FillForwardFn;
 use crate::compute::filter_indices::FilterIndicesFn;
-use crate::compute::scalar_at::ScalarAtFn;
-use crate::compute::scalar_subtract::SubtractScalarFn;
 use crate::compute::search_sorted::SearchSortedFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
+use crate::compute::unary::cast::CastFn;
+use crate::compute::unary::fill_forward::FillForwardFn;
+use crate::compute::unary::scalar_at::ScalarAtFn;
+use crate::compute::unary::scalar_subtract::SubtractScalarFn;
 use crate::compute::ArrayCompute;
 
 mod cast;

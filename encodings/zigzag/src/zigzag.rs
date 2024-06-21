@@ -3,7 +3,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, vortex_err};
 
@@ -66,8 +66,8 @@ impl AcceptArrayVisitor for ZigZagArray {
 
 impl ArrayStatisticsCompute for ZigZagArray {}
 
-impl ArrayFlatten for ZigZagArray {
-    fn flatten(self) -> VortexResult<Flattened> {
+impl IntoCanonical for ZigZagArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
         todo!("ZigZagArray::flatten")
     }
 }

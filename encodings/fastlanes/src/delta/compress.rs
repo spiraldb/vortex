@@ -3,9 +3,9 @@ use fastlanes::{Delta, Transpose};
 use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
-use vortex::compute::fill::fill_forward;
+use vortex::compute::unary::fill_forward::fill_forward;
 use vortex::validity::Validity;
-use vortex::{Array, IntoArray};
+use vortex::{Array, IntoArray, IntoCanonical};
 use vortex_dtype::NativePType;
 use vortex_dtype::{match_each_unsigned_integer_ptype, Nullability};
 use vortex_error::VortexResult;
@@ -41,7 +41,7 @@ impl EncodingCompression for DeltaEncoding {
         let validity = ctx.compress_validity(parray.validity())?;
 
         // Fill forward nulls
-        let filled = fill_forward(array)?.flatten_primitive()?;
+        let filled = fill_forward(array)?.into_canonical()?.into_primitive()?;
 
         // Compress the filled array
         let (bases, deltas) = match_each_unsigned_integer_ptype!(parray.ptype(), |$T| {
@@ -137,8 +137,8 @@ where
 }
 
 pub fn decompress(array: DeltaArray) -> VortexResult<PrimitiveArray> {
-    let bases = array.bases().flatten_primitive()?;
-    let deltas = array.deltas().flatten_primitive()?;
+    let bases = array.bases().into_canonical()?.into_primitive()?;
+    let deltas = array.deltas().into_canonical()?.into_primitive()?;
     let decoded = match_each_unsigned_integer_ptype!(deltas.ptype(), |$T| {
         PrimitiveArray::from_vec(
             decompress_primitive::<$T>(bases.maybe_null_slice(), deltas.maybe_null_slice()),

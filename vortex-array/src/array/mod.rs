@@ -6,6 +6,6 @@ pub mod extension;
 pub mod null;
 pub mod primitive;
 pub mod sparse;
-pub mod r#struct;
+pub mod struct_;
 pub mod varbin;
 pub mod varbinview;

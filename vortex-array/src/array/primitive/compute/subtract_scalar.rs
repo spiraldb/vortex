@@ -8,7 +8,7 @@ use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::scalar_subtract::SubtractScalarFn;
+use crate::compute::unary::scalar_subtract::SubtractScalarFn;
 use crate::stats::{ArrayStatistics, Stat};
 use crate::validity::ArrayValidity;
 use crate::{Array, ArrayDType, ArrayTrait, IntoArray};
@@ -105,15 +105,17 @@ mod test {
     use vortex_scalar::Scalar;
 
     use crate::array::primitive::PrimitiveArray;
-    use crate::compute::scalar_subtract::subtract_scalar;
-    use crate::{ArrayTrait, IntoArray};
+    use crate::compute::unary::scalar_subtract::subtract_scalar;
+    use crate::{ArrayTrait, IntoArray, IntoCanonical};
 
     #[test]
     fn test_scalar_subtract_unsigned() {
         let values = vec![1u16, 2, 3].into_array();
         let results = subtract_scalar(&values, &1u16.into())
             .unwrap()
-            .flatten_primitive()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
             .unwrap()
             .maybe_null_slice::<u16>()
             .to_vec();
@@ -125,7 +127,9 @@ mod test {
         let values = vec![1i64, 2, 3].into_array();
         let results = subtract_scalar(&values, &(-1i64).into())
             .unwrap()
-            .flatten_primitive()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
             .unwrap()
             .maybe_null_slice::<i64>()
             .to_vec();
@@ -138,7 +142,9 @@ mod test {
             .into_array();
         let flattened = subtract_scalar(&values, &Some(1u16).into())
             .unwrap()
-            .flatten_primitive()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
             .unwrap();
 
         let results = flattened.maybe_null_slice::<u16>().to_vec();
@@ -160,7 +166,9 @@ mod test {
         let to_subtract = -1f64;
         let results = subtract_scalar(&values, &to_subtract.into())
             .unwrap()
-            .flatten_primitive()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
             .unwrap()
             .maybe_null_slice::<f64>()
             .to_vec();
