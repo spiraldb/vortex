@@ -1,5 +1,5 @@
-use bench_vortex::reader::take_vortex;
-use bench_vortex::taxi_data::taxi_data_vortex;
+use bench_vortex::reader::{take_parquet, take_vortex};
+use bench_vortex::taxi_data::{taxi_data_parquet, taxi_data_vortex};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mimalloc::MiMalloc;
 use tokio::runtime::Runtime;
@@ -18,10 +18,10 @@ fn random_access(c: &mut Criterion) {
             .iter(|| async { black_box(take_vortex(&taxi_vortex, &indices).await.unwrap()) })
     });
 
-    // let taxi_parquet = taxi_data_parquet();
-    // group.sample_size(10).bench_function("arrow", |b| {
-    //     b.iter(|| black_box(take_parquet(&taxi_parquet, &indices).unwrap()))
-    // });
+    let taxi_parquet = taxi_data_parquet();
+    group.sample_size(10).bench_function("arrow", |b| {
+        b.iter(|| black_box(take_parquet(&taxi_parquet, &indices).unwrap()))
+    });
 }
 
 criterion_group!(benches, random_access);
