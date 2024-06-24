@@ -16,11 +16,10 @@ use crate::{unpack_single_primitive, BitPackedArray};
 
 impl SearchSortedFn for BitPackedArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
-        let ptype = self.ptype();
-        match_each_unsigned_integer_ptype!(ptype, |$P| {
+        match_each_unsigned_integer_ptype!(self.ptype(), |$P| {
             let unwrapped_value: $P = value.cast(self.dtype())?.try_into().unwrap();
-            if let Some(patches_array) = self.patches() {
-                if (unwrapped_value.leading_zeros() as usize) < ptype.bit_width() - self.bit_width() {
+                if let Some(patches_array) = self.patches() {
+                if unwrapped_value as usize >= self.max_packed_value() {
                     search_sorted(&patches_array, value.clone(), side)
                 } else {
                     Ok(SearchSorted::search_sorted(&BitPackedSearch::new(self), &unwrapped_value, side))

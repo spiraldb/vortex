@@ -127,6 +127,11 @@ impl BitPackedArray {
     pub fn ptype(&self) -> PType {
         self.dtype().try_into().unwrap()
     }
+
+    #[inline]
+    pub fn max_packed_value(&self) -> usize {
+        1 << self.bit_width()
+    }
 }
 
 impl IntoCanonical for BitPackedArray {
