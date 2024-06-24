@@ -8,9 +8,9 @@ pub trait CompareFn {
     fn compare(&self, array: &Array, predicate: Operator) -> VortexResult<Array>;
 }
 
-pub fn compare(left: &Array, right: &Array, predicate: Operator) -> VortexResult<Array> {
+pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<Array> {
     if let Some(matching_indices) =
-        left.with_dyn(|lhs| lhs.compare().map(|rhs| rhs.compare(right, predicate)))
+        left.with_dyn(|lhs| lhs.compare().map(|rhs| rhs.compare(right, operator)))
     {
         return matching_indices;
     }
@@ -20,7 +20,7 @@ pub fn compare(left: &Array, right: &Array, predicate: Operator) -> VortexResult
     match left.dtype() {
         DType::Primitive(..) => {
             let flat = left.clone().into_primitive()?;
-            flat.compare(right, predicate)
+            flat.compare(right, operator)
         }
         _ => Err(vortex_err!(
             NotImplemented: "compare",

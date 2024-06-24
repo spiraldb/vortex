@@ -18,6 +18,7 @@ impl_encoding!("vortex.bool", Bool);
 pub struct BoolMetadata {
     validity: ValidityMetadata,
     length: usize,
+    bit_offset: usize,
 }
 
 impl BoolArray {
@@ -26,7 +27,11 @@ impl BoolArray {
     }
 
     pub fn boolean_buffer(&self) -> BooleanBuffer {
-        BooleanBuffer::new(self.buffer().clone().into(), 0, self.len())
+        BooleanBuffer::new(
+            self.buffer().clone().into(),
+            self.metadata().bit_offset,
+            self.len(),
+        )
     }
 
     pub fn validity(&self) -> Validity {
@@ -38,14 +43,24 @@ impl BoolArray {
 
 impl BoolArray {
     pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
+        let buffer_len = buffer.len();
+        let buffer_offset = buffer.offset();
+        let last_byte_bit_offset = buffer_offset % 8;
+        let buffer_byte_offset = buffer_offset - last_byte_bit_offset;
+
+        let inner = buffer
+            .into_inner()
+            .bit_slice(buffer_byte_offset, buffer_len);
+
         Ok(Self {
             typed: TypedArray::try_from_parts(
                 DType::Bool(validity.nullability()),
                 BoolMetadata {
-                    validity: validity.to_metadata(buffer.len())?,
-                    length: buffer.len(),
+                    validity: validity.to_metadata(buffer_len)?,
+                    length: buffer_len,
+                    bit_offset: last_byte_bit_offset,
                 },
-                Some(Buffer::from(buffer.into_inner())),
+                Some(Buffer::from(inner)),
                 validity.into_array().into_iter().collect_vec().into(),
                 StatsSet::new(),
             )?,
@@ -129,5 +144,26 @@ mod tests {
         let arr = BoolArray::from(vec![true, false, true]).into_array();
         let scalar = bool::try_from(&scalar_at(&arr, 0).unwrap()).unwrap();
         assert!(scalar);
+    }
+
+    #[test]
+    fn test_bool_from_iter() {
+        let arr =
+            BoolArray::from_iter([Some(true), Some(true), None, Some(false), None]).into_array();
+
+        let scalar = bool::try_from(&scalar_at(&arr, 0).unwrap()).unwrap();
+        assert!(scalar);
+
+        let scalar = bool::try_from(&scalar_at(&arr, 1).unwrap()).unwrap();
+        assert!(scalar);
+
+        let scalar = scalar_at(&arr, 2).unwrap();
+        assert!(scalar.is_null());
+
+        let scalar = bool::try_from(&scalar_at(&arr, 3).unwrap()).unwrap();
+        assert!(!scalar);
+
+        let scalar = scalar_at(&arr, 4).unwrap();
+        assert!(scalar.is_null());
     }
 }

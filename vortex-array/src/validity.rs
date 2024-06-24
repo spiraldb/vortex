@@ -169,7 +169,7 @@ impl From<Vec<bool>> for Validity {
         } else if !bools.iter().any(|b| *b) {
             Self::AllInvalid
         } else {
-            Self::Array(BoolArray::from_vec(bools, Self::NonNullable).into_array())
+            Self::Array(BoolArray::from(bools).into_array())
         }
     }
 }
