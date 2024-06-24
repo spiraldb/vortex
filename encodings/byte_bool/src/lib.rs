@@ -1,6 +1,6 @@
 use std::mem::ManuallyDrop;
 
-use arrow_buffer::{BooleanBuffer, NullBuffer};
+use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
 use vortex::array::bool::BoolArray;
 use vortex::{
@@ -68,8 +68,7 @@ impl ByteBoolArray {
 
 impl From<Vec<bool>> for ByteBoolArray {
     fn from(value: Vec<bool>) -> Self {
-        let value_len = value.len();
-        Self::try_with_validity(value, NullBuffer::new_valid(value_len)).unwrap()
+        Self::try_with_validity(value, Validity::AllValid).unwrap()
     }
 }
 
