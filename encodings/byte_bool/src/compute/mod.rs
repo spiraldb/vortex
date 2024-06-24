@@ -4,18 +4,18 @@ use std::sync::Arc;
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
 use vortex::validity::Validity;
-use vortex::Array;
 use vortex::ToArrayData;
 use vortex::{
     compute::{
-        compare::CompareFn, fill::FillForwardFn, scalar_at::ScalarAtFn, slice::SliceFn,
-        take::TakeFn, ArrayCompute,
+        compare::CompareFn, slice::SliceFn, take::TakeFn, unary::fill_forward::FillForwardFn,
+        unary::scalar_at::ScalarAtFn, ArrayCompute,
     },
     encoding::ArrayEncodingRef,
     stats::StatsSet,
     validity::ArrayValidity,
     ArrayDType, ArrayData, ArrayTrait, IntoArray,
 };
+use vortex::{Array, IntoCanonical};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::Operator;
@@ -85,7 +85,7 @@ impl SliceFn for ByteBoolArray {
 impl TakeFn for ByteBoolArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         let validity = self.validity();
-        let indices = indices.clone().flatten_primitive()?;
+        let indices = indices.clone().as_primitive();
         let bools = self.maybe_null_slice();
 
         let arr = match validity {
@@ -129,9 +129,9 @@ impl TakeFn for ByteBoolArray {
 
 impl CompareFn for ByteBoolArray {
     fn compare(&self, other: &Array, op: Operator) -> VortexResult<Array> {
-        let flattened = other.clone().flatten_bool()?;
+        let canonical = other.clone().into_canonical()?.into_bool()?;
         let lhs = BooleanBuffer::from(self.maybe_null_slice());
-        let rhs = flattened.boolean_buffer();
+        let rhs = canonical.boolean_buffer();
 
         let result_buf = match op {
             Operator::Eq => lhs.bitxor(&rhs).not(),
@@ -146,7 +146,7 @@ impl CompareFn for ByteBoolArray {
         let mut validity = Vec::with_capacity(self.len());
 
         let lhs_validity = self.validity();
-        let rhs_validity = flattened.validity();
+        let rhs_validity = canonical.validity();
 
         for idx in 0..self.len() {
             let l = lhs_validity.is_valid(idx);
@@ -188,7 +188,7 @@ impl FillForwardFn for ByteBoolArray {
 #[cfg(test)]
 mod tests {
     use vortex::{
-        compute::{compare::compare, scalar_at::scalar_at, slice::slice},
+        compute::{compare::compare, slice::slice, unary::scalar_at::scalar_at},
         AsArray as _,
     };
 
@@ -219,14 +219,11 @@ mod tests {
         let lhs = ByteBoolArray::from(vec![true; 5]);
         let rhs = ByteBoolArray::from(vec![true; 5]);
 
-        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq)
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq).unwrap();
 
         for i in 0..arr.len() {
-            assert!(arr.is_valid(i));
             let s = scalar_at(arr.as_array_ref(), i).unwrap();
+            assert!(s.is_valid());
             assert_eq!(s.value(), &ScalarValue::Bool(true));
         }
     }
@@ -236,14 +233,11 @@ mod tests {
         let lhs = ByteBoolArray::from(vec![false; 5]);
         let rhs = ByteBoolArray::from(vec![true; 5]);
 
-        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq)
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq).unwrap();
 
         for i in 0..arr.len() {
-            assert!(arr.is_valid(i));
-            let s = scalar_at(arr.as_array_ref(), i).unwrap();
+            let s = scalar_at(&arr, i).unwrap();
+            assert!(s.is_valid());
             assert_eq!(s.value(), &ScalarValue::Bool(false));
         }
     }
@@ -253,21 +247,19 @@ mod tests {
         let lhs = ByteBoolArray::from(vec![true; 5]);
         let rhs = ByteBoolArray::from(vec![Some(true), Some(true), Some(true), Some(false), None]);
 
-        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq)
-            .unwrap()
-            .flatten_bool()
-            .unwrap();
+        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq).unwrap();
 
         for i in 0..3 {
-            assert!(arr.is_valid(i));
-            let s = scalar_at(arr.as_array_ref(), i).unwrap();
+            let s = scalar_at(&arr, i).unwrap();
+            assert!(s.is_valid());
             assert_eq!(s.value(), &ScalarValue::Bool(true));
         }
 
-        assert!(arr.is_valid(3));
-        let s = scalar_at(arr.as_array_ref(), 3).unwrap();
+        let s = scalar_at(&arr, 3).unwrap();
+        assert!(s.is_valid());
         assert_eq!(s.value(), &ScalarValue::Bool(false));
 
-        assert!(!arr.is_valid(4));
+        let s = scalar_at(&arr, 4).unwrap();
+        assert!(s.is_null());
     }
 }

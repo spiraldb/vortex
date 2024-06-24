@@ -83,6 +83,10 @@ impl Scalar {
         self.value
     }
 
+    pub fn is_valid(&self) -> bool {
+        !self.value.is_null()
+    }
+
     pub fn is_null(&self) -> bool {
         self.value.is_null()
     }

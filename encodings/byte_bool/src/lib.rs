@@ -7,8 +7,8 @@ use vortex::{
     impl_encoding,
     validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata},
     visitor::{AcceptArrayVisitor, ArrayVisitor},
-    ArrayFlatten,
 };
+use vortex::{Canonical, IntoCanonical};
 use vortex_buffer::Buffer;
 
 mod compute;
@@ -89,12 +89,12 @@ impl ArrayTrait for ByteBoolArray {
     }
 }
 
-impl ArrayFlatten for ByteBoolArray {
-    fn flatten(self) -> VortexResult<Flattened> {
+impl IntoCanonical for ByteBoolArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
         let boolean_buffer = BooleanBuffer::from(self.maybe_null_slice());
         let validity = self.validity();
 
-        BoolArray::try_new(boolean_buffer, validity).map(Flattened::Bool)
+        BoolArray::try_new(boolean_buffer, validity).map(Canonical::Bool)
     }
 }
 

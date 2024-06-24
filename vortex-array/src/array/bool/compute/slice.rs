@@ -21,7 +21,7 @@ mod tests {
     use crate::compute::slice::slice;
     use crate::validity::ArrayValidity;
     use crate::ArrayTrait;
-    use crate::{compute::scalar_at::scalar_at, AsArray};
+    use crate::{compute::unary::scalar_at::scalar_at, AsArray};
 
     #[test]
     fn test_slice() {
