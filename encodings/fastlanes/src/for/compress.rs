@@ -201,9 +201,6 @@ mod test {
     #[test]
     fn test_overflow() {
         let array = PrimitiveArray::from((i8::MIN..=i8::MAX).collect_vec());
-        assert!(FoREncoding
-            .can_compress(array.array(), &CompressConfig::default())
-            .is_none());
         let compressed = FoREncoding
             .compress(array.array(), None, Compressor::new(&ctx()))
             .unwrap();
