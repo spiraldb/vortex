@@ -161,7 +161,7 @@ mod test {
     use crate::array::chunked::ChunkedArray;
     use crate::compute::slice::slice;
     use crate::compute::unary::scalar_subtract::subtract_scalar;
-    use crate::{Array, IntoArray, IntoCanonical, ToArray};
+    use crate::{Array, IntoArray, IntoArrayVariant, IntoCanonical, ToArray};
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(
@@ -180,7 +180,7 @@ mod test {
         ChunkedArray::try_from(arr)
             .unwrap()
             .chunks()
-            .map(|a| a.into_canonical().unwrap().into_primitive().unwrap())
+            .map(|a| a.into_primitive().unwrap())
             .for_each(|a| values.extend_from_slice(a.maybe_null_slice::<T>()));
         assert_eq!(values, slice);
     }

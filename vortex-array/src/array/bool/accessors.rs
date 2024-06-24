@@ -4,7 +4,7 @@ use vortex_error::VortexResult;
 use crate::accessor::ArrayAccessor;
 use crate::array::bool::BoolArray;
 use crate::validity::Validity;
-use crate::{ArrayTrait, IntoCanonical};
+use crate::{ArrayTrait, IntoArrayVariant};
 
 static TRUE: bool = true;
 static FALSE: bool = false;
@@ -21,7 +21,7 @@ impl ArrayAccessor<bool> for BoolArray {
                 .map(|b| Some(if b { &TRUE } else { &FALSE })))),
             Validity::AllInvalid => Ok(f(&mut (0..self.len()).map(|_| None))),
             Validity::Array(valid) => {
-                let valids = valid.into_canonical()?.into_bool()?.boolean_buffer();
+                let valids = valid.into_bool()?.boolean_buffer();
                 println!("nulls: {:?}", valids.iter().collect_vec());
                 let mut iter = valids.iter().zip(bools.iter()).map(|(is_valid, value)| {
                     if is_valid {

@@ -5,7 +5,7 @@ use vortex::compute::unary::scalar_at::scalar_at;
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
 use vortex_error::vortex_bail;
 
 use crate::compress::{ree_decode, ree_encode};
@@ -109,8 +109,8 @@ impl ArrayValidity for REEArray {
 
 impl IntoCanonical for REEArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        let pends = self.ends().into_canonical()?.into_primitive()?;
-        let pvalues = self.values().into_canonical()?.into_primitive()?;
+        let pends = self.ends().into_primitive()?;
+        let pvalues = self.values().into_primitive()?;
         ree_decode(&pends, &pvalues, self.validity(), self.offset(), self.len())
             .map(Canonical::Primitive)
     }

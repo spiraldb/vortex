@@ -4,7 +4,7 @@ use vortex_error::VortexResult;
 use crate::accessor::ArrayAccessor;
 use crate::array::varbin::VarBinArray;
 use crate::validity::ArrayValidity;
-use crate::IntoCanonical;
+use crate::IntoArrayVariant;
 
 impl ArrayAccessor<[u8]> for VarBinArray {
     fn with_iterator<F, R>(&self, f: F) -> VortexResult<R>
@@ -12,8 +12,8 @@ impl ArrayAccessor<[u8]> for VarBinArray {
         F: for<'a> FnOnce(&mut (dyn Iterator<Item = Option<&'a [u8]>>)) -> R,
     {
         // TODO(ngates): what happens if bytes is much larger than sliced_bytes?
-        let primitive = self.bytes().into_canonical()?.into_primitive()?;
-        let offsets = self.offsets().into_canonical()?.into_primitive()?;
+        let primitive = self.bytes().into_primitive()?;
+        let offsets = self.offsets().into_primitive()?;
         let validity = self.logical_validity().to_null_buffer()?;
 
         match_each_integer_ptype!(offsets.ptype(), |$T| {

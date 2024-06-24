@@ -3,7 +3,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray, IntoArrayVariant};
 use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
@@ -116,7 +116,7 @@ pub fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
 }
 
 pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
-    let encoded = array.encoded().into_canonical()?.into_primitive()?;
+    let encoded = array.encoded().into_primitive()?;
 
     let decoded = match_each_alp_float_ptype!(array.dtype().try_into().unwrap(), |$T| {
         PrimitiveArray::from_vec(
@@ -139,7 +139,7 @@ fn patch_decoded(array: PrimitiveArray, patches: &Array) -> VortexResult<Primiti
                 let typed_patches = SparseArray::try_from(patches).unwrap();
                 array.patch(
                     &typed_patches.resolved_indices(),
-                    typed_patches.values().into_canonical()?.into_primitive()?.maybe_null_slice::<$T>())?
+                    typed_patches.values().into_primitive()?.maybe_null_slice::<$T>())?
             })
         }
         _ => panic!("can't patch ALP array with {}", patches),

@@ -8,9 +8,9 @@ use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::compute::take::TakeFn;
 use crate::validity::Validity;
-use crate::ArrayDType;
+use crate::Array;
 use crate::IntoArray;
-use crate::{Array, IntoCanonical};
+use crate::{ArrayDType, IntoArrayVariant};
 
 impl TakeFn for VarBinArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
@@ -20,9 +20,9 @@ impl TakeFn for VarBinArray {
             "indices.len() must be less than i32::MAX"
         );
 
-        let offsets = self.offsets().into_canonical()?.into_primitive()?;
-        let data = self.bytes().into_canonical()?.into_primitive()?;
-        let indices = indices.clone().into_canonical()?.into_primitive()?;
+        let offsets = self.offsets().into_primitive()?;
+        let data = self.bytes().into_primitive()?;
+        let indices = indices.clone().into_primitive()?;
         match_each_integer_ptype!(offsets.ptype(), |$O| {
             match_each_integer_ptype!(indices.ptype(), |$I| {
                 Ok(take(

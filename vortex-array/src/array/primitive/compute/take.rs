@@ -5,13 +5,13 @@ use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::take::TakeFn;
-use crate::IntoArray;
-use crate::{Array, IntoCanonical};
+use crate::Array;
+use crate::{IntoArray, IntoArrayVariant};
 
 impl TakeFn for PrimitiveArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         let validity = self.validity();
-        let indices = indices.clone().into_canonical()?.into_primitive()?;
+        let indices = indices.clone().into_primitive()?;
         match_each_native_ptype!(self.ptype(), |$T| {
             match_each_integer_ptype!(indices.ptype(), |$I| {
                 Ok(PrimitiveArray::from_vec(

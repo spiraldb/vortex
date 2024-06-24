@@ -7,7 +7,7 @@ use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
-use crate::{Array, ArrayTrait, IntoArray, IntoCanonical};
+use crate::{Array, ArrayTrait, IntoArray, IntoArrayVariant};
 
 impl ArrayCompute for NullArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -40,7 +40,7 @@ impl ScalarAtFn for NullArray {
 
 impl TakeFn for NullArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let indices = indices.clone().into_canonical()?.into_primitive()?;
+        let indices = indices.clone().into_primitive()?;
 
         // Enforce all indices are valid
         match_each_integer_ptype!(indices.ptype(), |$T| {

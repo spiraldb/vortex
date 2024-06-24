@@ -11,7 +11,7 @@ use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
 use crate::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
-use crate::{Array, ArrayDType, IntoArray, IntoCanonical};
+use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 
 mod slice;
 
@@ -40,7 +40,7 @@ impl ScalarAtFn for SparseArray {
 
 impl TakeFn for SparseArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let flat_indices = indices.clone().into_canonical()?.into_primitive()?;
+        let flat_indices = indices.clone().into_primitive()?;
         // if we are taking a lot of values we should build a hashmap
         let (positions, physical_take_indices) = if indices.len() > 128 {
             take_map(self, &flat_indices)?

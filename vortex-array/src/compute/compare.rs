@@ -2,7 +2,7 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_expr::Operator;
 
-use crate::{Array, ArrayDType, IntoCanonical};
+use crate::{Array, ArrayDType, IntoArrayVariant};
 
 pub trait CompareFn {
     fn compare(&self, array: &Array, predicate: Operator) -> VortexResult<Array>;
@@ -19,7 +19,7 @@ pub fn compare(left: &Array, right: &Array, predicate: Operator) -> VortexResult
     // DType, we can flatten the array and apply filter to the flattened primitive array
     match left.dtype() {
         DType::Primitive(..) => {
-            let flat = left.clone().into_canonical()?.into_primitive()?;
+            let flat = left.clone().into_primitive()?;
             flat.compare(right, predicate)
         }
         _ => Err(vortex_err!(

@@ -5,7 +5,7 @@ use vortex::compute::take::{take, TakeFn};
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
 use vortex::validity::ArrayValidity;
-use vortex::{Array, ArrayDType, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -104,9 +104,9 @@ pub fn decode_to_localdatetime(array: &Array) -> VortexResult<LocalDateTimeArray
         TimeUnit::S => 1,
     };
 
-    let days_buf = array.days().into_canonical()?.into_array().as_primitive();
-    let seconds_buf = array.seconds().into_canonical()?.into_primitive()?;
-    let subsecond_buf = array.subsecond().into_canonical()?.into_primitive()?;
+    let days_buf = array.days().into_primitive()?;
+    let seconds_buf = array.seconds().into_primitive()?;
+    let subsecond_buf = array.subsecond().into_primitive()?;
 
     // TODO(aduffy): replace with vectorized implementation?
     let values = days_buf

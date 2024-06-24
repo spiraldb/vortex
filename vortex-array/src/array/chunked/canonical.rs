@@ -13,7 +13,10 @@ use crate::array::struct_::StructArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::validity::Validity;
-use crate::{Array, ArrayDType, ArrayTrait, ArrayValidity, Canonical, IntoArray, IntoCanonical};
+use crate::{
+    Array, ArrayDType, ArrayTrait, ArrayValidity, Canonical, IntoArray, IntoArrayVariant,
+    IntoCanonical,
+};
 
 impl IntoCanonical for ChunkedArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
@@ -122,7 +125,7 @@ fn pack_bools(chunks: &[Array], nullability: Nullability) -> VortexResult<BoolAr
     let validity = validity_from_chunks(chunks, nullability);
     let mut bools = Vec::with_capacity(len);
     for chunk in chunks {
-        let chunk = chunk.clone().into_canonical()?.into_bool()?;
+        let chunk = chunk.clone().into_bool()?;
         bools.extend(chunk.boolean_buffer().iter());
     }
 
@@ -143,7 +146,7 @@ fn pack_primitives(
     let validity = validity_from_chunks(chunks, nullability);
     let mut buffer = MutableBuffer::with_capacity(len * ptype.byte_width());
     for chunk in chunks {
-        let chunk = chunk.clone().into_canonical()?.into_primitive()?;
+        let chunk = chunk.clone().into_primitive()?;
         buffer.extend_from_slice(chunk.buffer());
     }
 
@@ -168,7 +171,7 @@ fn pack_varbin(
     let mut builder = VarBinBuilder::<i32>::with_capacity(len);
 
     for chunk in chunks {
-        let chunk = chunk.clone().into_canonical()?.into_varbin()?;
+        let chunk = chunk.clone().into_varbin()?;
         chunk.with_iterator(|iter| {
             for datum in iter {
                 builder.push(datum);

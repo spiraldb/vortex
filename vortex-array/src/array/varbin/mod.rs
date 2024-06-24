@@ -12,7 +12,7 @@ use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::slice::slice;
 use crate::compute::unary::scalar_at::scalar_at;
 use crate::validity::{Validity, ValidityMetadata};
-use crate::{impl_encoding, ArrayDType, IntoCanonical};
+use crate::{impl_encoding, ArrayDType, IntoArrayVariant};
 
 mod accessor;
 mod array;
@@ -153,7 +153,7 @@ impl VarBinArray {
         let start = self.offset_at(index);
         let end = self.offset_at(index + 1);
         let sliced = slice(&self.bytes(), start, end)?;
-        Ok(sliced.into_canonical()?.into_primitive()?.buffer().clone())
+        Ok(sliced.into_primitive()?.buffer().clone())
     }
 }
 

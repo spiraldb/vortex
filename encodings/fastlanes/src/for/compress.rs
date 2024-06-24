@@ -5,7 +5,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::ArrayValidity;
-use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
@@ -103,7 +103,7 @@ fn compress_primitive<T: NativePType + WrappingSub + PrimInt>(
 pub fn decompress(array: FoRArray) -> VortexResult<PrimitiveArray> {
     let shift = array.shift();
     let ptype: PType = array.dtype().try_into()?;
-    let encoded = array.encoded().into_canonical()?.into_primitive()?;
+    let encoded = array.encoded().into_primitive()?;
     Ok(match_each_integer_ptype!(ptype, |$T| {
         let reference: $T = array.reference().try_into()?;
         PrimitiveArray::from_vec(
@@ -150,7 +150,7 @@ fn trailing_zeros(array: &Array) -> u8 {
 mod test {
     use vortex::compute::unary::scalar_at::ScalarAtFn;
     use vortex::encoding::{ArrayEncoding, EncodingRef};
-    use vortex::Context;
+    use vortex::{Context, IntoArrayVariant};
 
     use super::*;
     use crate::BitPackedEncoding;
@@ -184,11 +184,7 @@ mod test {
             .unwrap();
         assert_eq!(compressed.encoding().id(), FoREncoding.id());
 
-        let decompressed = compressed
-            .into_canonical()
-            .unwrap()
-            .into_primitive()
-            .unwrap();
+        let decompressed = compressed.into_primitive().unwrap();
         assert_eq!(
             decompressed.maybe_null_slice::<u32>(),
             array.maybe_null_slice::<u32>()
@@ -205,23 +201,12 @@ mod test {
         let compressed = FoRArray::try_from(compressed).unwrap();
         assert_eq!(i8::MIN, i8::try_from(compressed.reference()).unwrap());
 
-        let encoded = compressed
-            .encoded()
-            .into_canonical()
-            .unwrap()
-            .into_primitive()
-            .unwrap();
+        let encoded = compressed.encoded().into_primitive().unwrap();
         let bitcast: &[u8] = unsafe { std::mem::transmute(encoded.maybe_null_slice::<i8>()) };
         let unsigned: Vec<u8> = (0..u8::MAX).collect_vec();
         assert_eq!(bitcast, unsigned.as_slice());
 
-        let decompressed = compressed
-            .array()
-            .clone()
-            .into_canonical()
-            .unwrap()
-            .into_primitive()
-            .unwrap();
+        let decompressed = compressed.array().clone().into_primitive().unwrap();
         assert_eq!(
             decompressed.maybe_null_slice::<i8>(),
             array.maybe_null_slice::<i8>()

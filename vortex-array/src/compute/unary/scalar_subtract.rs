@@ -2,7 +2,7 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::{Array, ArrayDType, IntoCanonical};
+use crate::{Array, ArrayDType, IntoArrayVariant};
 
 pub trait SubtractScalarFn {
     fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array>;
@@ -20,7 +20,7 @@ pub fn subtract_scalar(array: &Array, to_subtract: &Scalar) -> VortexResult<Arra
         DType::Primitive(..) => {
             // TODO(@jcasale): pass array instead of ref to get rid of clone?
             // downside is that subtract_scalar then consumes the array, which is not great
-            let flat = array.clone().into_canonical()?.into_primitive()?;
+            let flat = array.clone().into_primitive()?;
             flat.subtract_scalar(to_subtract)
         }
         _ => Err(vortex_err!(

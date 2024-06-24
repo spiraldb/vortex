@@ -6,7 +6,7 @@ use vortex::array::sparse::{Sparse, SparseArray};
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
-use vortex::IntoCanonical;
+use vortex::IntoArrayVariant;
 use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
@@ -189,7 +189,7 @@ pub fn unpack(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
     let offset = array.offset();
-    let packed = array.packed().into_canonical()?.into_primitive()?;
+    let packed = array.packed().into_primitive()?;
     let ptype = packed.ptype();
 
     let mut unpacked = match_each_unsigned_integer_ptype!(ptype, |$P| {
@@ -218,7 +218,7 @@ fn patch_unpacked(array: PrimitiveArray, patches: &Array) -> VortexResult<Primit
                 let typed_patches = SparseArray::try_from(patches).unwrap();
                 array.patch(
                     &typed_patches.resolved_indices(),
-                    typed_patches.values().into_canonical()?.into_primitive()?.maybe_null_slice::<$T>())
+                    typed_patches.values().into_primitive()?.maybe_null_slice::<$T>())
             })
         }
         _ => panic!("can't patch bitpacked array with {}", patches),
@@ -293,7 +293,7 @@ pub fn unpack_primitive<T: NativePType + BitPacking>(
 
 pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
     let bit_width = array.bit_width();
-    let packed = array.packed().into_canonical()?.into_primitive()?;
+    let packed = array.packed().into_primitive()?;
     let index_in_encoded = index + array.offset();
     let scalar: Scalar = match_each_unsigned_integer_ptype!(packed.ptype(), |$P| {
         unsafe {
@@ -365,6 +365,7 @@ fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 #[cfg(test)]
 mod test {
     use vortex::encoding::ArrayEncoding;
+    use vortex::IntoArrayVariant;
     use vortex::{Context, ToArray};
     use vortex_scalar::PrimitiveScalar;
 
@@ -408,12 +409,7 @@ mod test {
             .compress(values.array(), None)
             .unwrap();
         let compressed = BitPackedArray::try_from(compressed).unwrap();
-        let decompressed = compressed
-            .to_array()
-            .into_canonical()
-            .unwrap()
-            .into_primitive()
-            .unwrap();
+        let decompressed = compressed.to_array().into_primitive().unwrap();
         assert_eq!(
             decompressed.maybe_null_slice::<u16>(),
             values.maybe_null_slice::<u16>()

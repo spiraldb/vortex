@@ -8,7 +8,7 @@ use crate::compute::slice::slice;
 use crate::compute::take::take;
 use crate::compute::unary::scalar_at::scalar_at;
 use crate::stats::ArrayStatistics;
-use crate::{Array, Canonical, IntoArray, IntoCanonical};
+use crate::{Array, Canonical, IntoArray, IntoArrayVariant, IntoCanonical};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -245,7 +245,7 @@ impl LogicalValidity {
             Self::AllValid(_) => Ok(None),
             Self::AllInvalid(l) => Ok(Some(NullBuffer::new_null(*l))),
             Self::Array(a) => Ok(Some(NullBuffer::new(
-                a.clone().into_canonical()?.into_bool()?.boolean_buffer(),
+                a.clone().into_bool()?.boolean_buffer(),
             ))),
         }
     }
@@ -254,9 +254,7 @@ impl LogicalValidity {
         match self {
             Self::AllValid(l) => Ok(NullBuffer::new_valid(*l)),
             Self::AllInvalid(l) => Ok(NullBuffer::new_null(*l)),
-            Self::Array(a) => Ok(NullBuffer::new(
-                a.clone().into_canonical()?.into_bool()?.boolean_buffer(),
-            )),
+            Self::Array(a) => Ok(NullBuffer::new(a.clone().into_bool()?.boolean_buffer())),
         }
     }
 
