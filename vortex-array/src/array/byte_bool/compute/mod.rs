@@ -7,9 +7,10 @@ use num_traits::AsPrimitive;
 use vortex_dtype::{match_each_integer_ptype, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::Operator;
-use vortex_scalar::Scalar;
+use vortex_scalar::{Scalar, ScalarValue};
 
 use super::{ByteBoolArray, ByteBoolMetadata};
+use crate::validity::Validity;
 use crate::ToArrayData;
 use crate::{
     compute::{
@@ -23,15 +24,15 @@ use crate::{
 };
 
 impl ArrayCompute for ByteBoolArray {
-    fn as_arrow(&self) -> Option<&dyn crate::compute::as_arrow::AsArrowArray> {
+    fn as_arrow(&self) -> Option<&dyn AsArrowArray> {
         Some(self)
     }
 
-    fn compare(&self) -> Option<&dyn crate::compute::compare::CompareFn> {
+    fn compare(&self) -> Option<&dyn CompareFn> {
         Some(self)
     }
 
-    fn fill_forward(&self) -> Option<&dyn crate::compute::fill::FillForwardFn> {
+    fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
         None
     }
 
@@ -39,11 +40,11 @@ impl ArrayCompute for ByteBoolArray {
         Some(self)
     }
 
-    fn slice(&self) -> Option<&dyn crate::compute::slice::SliceFn> {
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
-    fn take(&self) -> Option<&dyn crate::compute::take::TakeFn> {
+    fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
 }
@@ -55,10 +56,7 @@ impl ScalarAtFn for ByteBoolArray {
         }
 
         let scalar = match self.is_valid(index).then(|| self.buffer()[index] == 1) {
-            Some(b) => Scalar::new(
-                vortex_dtype::DType::Bool(self.validity().nullability()),
-                vortex_scalar::ScalarValue::Bool(b),
-            ),
+            Some(b) => Scalar::new(self.dtype().clone(), ScalarValue::Bool(b)),
             None => Scalar::null(self.dtype().clone()),
         };
 
@@ -68,10 +66,12 @@ impl ScalarAtFn for ByteBoolArray {
 
 impl AsArrowArray for ByteBoolArray {
     fn as_arrow(&self) -> VortexResult<ArrowArrayRef> {
+        let mut builder = BooleanBufferBuilder::new(self.len());
         let nulls = self.logical_validity().to_null_buffer()?;
 
-        let mut builder = BooleanBufferBuilder::new(self.len());
-        builder.append_slice(self.as_ref());
+        // Safety: This is a buffer containing byte-sized bools
+        let bool_buffer: &[bool] = unsafe { std::mem::transmute(self.buffer().as_slice()) };
+        builder.append_slice(bool_buffer);
 
         Ok(Arc::new(ArrowBoolArray::new(builder.finish(), nulls)))
     }
@@ -85,7 +85,6 @@ impl SliceFn for ByteBoolArray {
 
         let slice_metadata = Arc::new(ByteBoolMetadata {
             validity: validity.to_metadata(length)?,
-            length,
         });
 
         ArrayData::try_new(
@@ -108,23 +107,44 @@ impl TakeFn for ByteBoolArray {
     fn take(&self, indices: &crate::Array) -> VortexResult<crate::Array> {
         let validity = self.validity();
         let indices = indices.clone().flatten_primitive()?;
-        let bools = self.as_ref();
+        let bools = self.maybe_null_slice();
 
-        let bools = match_each_integer_ptype!(indices.ptype(), |$I| {
-            indices.typed_data::<$I>()
-            .iter()
-            .map(|&idx| {
-                let idx = idx.as_();
-                if validity.is_valid(idx) {
-                    Some(bools[idx])
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<Option<_>>>()
-        });
+        let arr = match validity {
+            Validity::AllValid | Validity::NonNullable => {
+                let bools = match_each_integer_ptype!(indices.ptype(), |$I| {
+                    indices.typed_data::<$I>()
+                    .iter()
+                    .map(|&idx| {
+                        let idx: usize = idx.as_();
+                        bools[idx]
+                    })
+                    .collect::<Vec<_>>()
+                });
 
-        Ok(Self::from(bools).into_array())
+                Self::from(bools).into_array()
+            }
+            Validity::AllInvalid => Self::from(vec![None; indices.len()]).into_array(),
+
+            Validity::Array(_) => {
+                let bools = match_each_integer_ptype!(indices.ptype(), |$I| {
+                    indices.typed_data::<$I>()
+                    .iter()
+                    .map(|&idx| {
+                        let idx = idx.as_();
+                        if validity.is_valid(idx) {
+                            Some(bools[idx])
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Option<_>>>()
+                });
+
+                Self::from(bools).into_array()
+            }
+        };
+
+        Ok(arr)
     }
 }
 
@@ -135,7 +155,7 @@ impl CompareFn for ByteBoolArray {
         op: vortex_expr::Operator,
     ) -> VortexResult<crate::Array> {
         let flattened = other.clone().flatten_bool()?;
-        let lhs = BooleanBuffer::from(self.as_ref());
+        let lhs = BooleanBuffer::from(self.maybe_null_slice());
         let rhs = flattened.boolean_buffer();
 
         let result_buf = match op {
@@ -171,7 +191,7 @@ impl FillForwardFn for ByteBoolArray {
         }
 
         let validity = self.logical_validity().to_null_buffer()?.unwrap();
-        let bools = self.as_ref();
+        let bools = self.maybe_null_slice();
         let mut last_value = bool::default();
 
         let filled = bools

@@ -1,7 +1,6 @@
 use std::mem::ManuallyDrop;
 
 use arrow_buffer::{BooleanBuffer, NullBuffer};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
 
@@ -21,7 +20,6 @@ impl_encoding!("vortex.byte_bool", ByteBool);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ByteBoolMetadata {
     validity: ValidityMetadata,
-    length: usize,
 }
 
 impl ByteBoolArray {
@@ -50,10 +48,13 @@ impl ByteBoolArray {
             DType::Bool(validity.nullability()),
             ByteBoolMetadata {
                 validity: validity.to_metadata(length)?,
-                length,
             },
             Some(buffer),
-            validity.into_array_data().into_iter().collect_vec().into(),
+            validity
+                .into_array_data()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .into(),
             StatsSet::new(),
         )?;
 
@@ -62,6 +63,11 @@ impl ByteBoolArray {
 
     pub fn buffer(&self) -> &Buffer {
         self.array().buffer().expect("missing mandatory buffer")
+    }
+
+    fn maybe_null_slice(&self) -> &[bool] {
+        // Safety: The internal buffer contains byte-sized bools
+        unsafe { std::mem::transmute(self.buffer().as_slice()) }
     }
 }
 
@@ -83,22 +89,15 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
     }
 }
 
-impl AsRef<[bool]> for ByteBoolArray {
-    fn as_ref(&self) -> &[bool] {
-        // Safety: bool and u8 are the same size. We don't care about logically null values here.
-        unsafe { std::mem::transmute(self.buffer().as_slice()) }
-    }
-}
-
 impl ArrayTrait for ByteBoolArray {
     fn len(&self) -> usize {
-        self.metadata().length
+        self.buffer().len()
     }
 }
 
 impl ArrayFlatten for ByteBoolArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        let boolean_buffer = BooleanBuffer::from(self.as_ref());
+        let boolean_buffer = BooleanBuffer::from(self.maybe_null_slice());
         let validity = self.validity();
 
         BoolArray::try_new(boolean_buffer, validity).map(Flattened::Bool)
