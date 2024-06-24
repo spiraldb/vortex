@@ -150,6 +150,16 @@ Vortex to model more complex arrays while still exposing a logical interface. Fo
 `ChunkedArray` where the first chunk is run-length encoded and the second chunk is dictionary encoded.
 In Arrow, `RunLengthArray` and `DictionaryArray` are separate incompatible types, and so cannot be combined in this way.
 
+### Usage
+
+For best performance we recommend using [MiMalloc](https://github.com/microsoft/mimalloc) as the application's
+allocator.
+
+```rust
+#[global_allocator]
+static GLOBAL_ALLOC: MiMalloc = MiMalloc;
+```
+
 ## Contributing
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -159,6 +169,7 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md).
 In order to build vortex, you may also need to install the flatbuffer compiler (flatc):
 
 ### Mac
+
 ```bash
 brew install flatbuffers
 ```

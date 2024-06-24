@@ -17,20 +17,20 @@ workspace = true
 [dependencies]
 arrow-array = { workspace = true }
 arrow-select = { workspace = true }
+bytes = { workspace = true }
 bzip2 = { workspace = true }
 csv = { workspace = true }
 enum-iterator = { workspace = true }
-
-# Do not use workspace, so we can use the default features
-futures = "0.3.30"
-futures-executor = "0.3.30"
-
+flexbuffers = { workspace = true }
+futures = { workspace = true }
 humansize = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
+mimalloc = { workspace = true }
 parquet = { workspace = true, features = [] }
 reqwest = { workspace = true }
+serde = { workspace = true }
 simplelog = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 uuid = { workspace = true, features = ["v4"] }
@@ -45,9 +45,6 @@ vortex-fastlanes = { path = "../encodings/fastlanes" }
 vortex-ipc = { path = "../vortex-ipc" }
 vortex-ree = { path = "../encodings/runend" }
 vortex-roaring = { path = "../encodings/roaring" }
-serde = { workspace = true }
-bytes = { workspace = true }
-flexbuffers = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["html_reports", "async_tokio"] }
