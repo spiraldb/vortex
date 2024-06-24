@@ -6,7 +6,7 @@ use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, IntoArrayVariant};
-use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
+use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -109,7 +109,7 @@ fn compress_primitive<T: NativePType + WrappingSub + PrimInt>(
 
 pub fn decompress(array: FoRArray) -> VortexResult<PrimitiveArray> {
     let shift = array.shift();
-    let ptype: PType = array.dtype().try_into()?;
+    let ptype = array.ptype();
     let encoded = array.encoded().into_primitive()?.reinterpret_cast(ptype);
     Ok(match_each_integer_ptype!(ptype, |$T| {
         let reference: $T = array.reference().try_into()?;
