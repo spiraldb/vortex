@@ -31,14 +31,17 @@ impl ByteBoolArray {
     pub fn try_new(buffer: Buffer, validity: Validity) -> VortexResult<Self> {
         let length = buffer.len();
 
-        Self::try_from_parts(
+        let typed = TypedArray::try_from_parts(
             DType::Bool(validity.nullability()),
             ByteBoolMetadata {
                 validity: validity.to_metadata(length)?,
             },
+            Some(buffer),
             validity.into_array().into_iter().collect::<Vec<_>>().into(),
             StatsSet::new(),
-        )
+        )?;
+
+        Ok(typed.into())
     }
 
     pub fn try_from_vec<V: Into<Validity>>(data: Vec<bool>, validity: V) -> VortexResult<Self> {
