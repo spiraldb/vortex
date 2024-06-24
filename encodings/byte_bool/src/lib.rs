@@ -28,10 +28,20 @@ impl ByteBoolArray {
             .to_validity(self.array().child(0, &Validity::DTYPE))
     }
 
-    pub fn try_with_validity<V: Into<Validity>>(
-        data: Vec<bool>,
-        validity: V,
-    ) -> VortexResult<Self> {
+    pub fn try_new(buffer: Buffer, validity: Validity) -> VortexResult<Self> {
+        let length = buffer.len();
+
+        Self::try_from_parts(
+            DType::Bool(validity.nullability()),
+            ByteBoolMetadata {
+                validity: validity.to_metadata(length)?,
+            },
+            validity.into_array().into_iter().collect::<Vec<_>>().into(),
+            StatsSet::new(),
+        )
+    }
+
+    pub fn try_from_vec<V: Into<Validity>>(data: Vec<bool>, validity: V) -> VortexResult<Self> {
         let validity = validity.into();
         let mut vec = ManuallyDrop::new(data);
         vec.shrink_to_fit();
@@ -43,17 +53,8 @@ impl ByteBoolArray {
         let bytes = unsafe { Vec::from_raw_parts(ptr, length, capacity) };
 
         let buffer = Buffer::from(bytes);
-        let typed = TypedArray::try_from_parts(
-            DType::Bool(validity.nullability()),
-            ByteBoolMetadata {
-                validity: validity.to_metadata(length)?,
-            },
-            Some(buffer),
-            validity.into_array().into_iter().collect::<Vec<_>>().into(),
-            StatsSet::new(),
-        )?;
 
-        Ok(typed.into())
+        Self::try_new(buffer, validity)
     }
 
     pub fn buffer(&self) -> &Buffer {
@@ -68,7 +69,7 @@ impl ByteBoolArray {
 
 impl From<Vec<bool>> for ByteBoolArray {
     fn from(value: Vec<bool>) -> Self {
-        Self::try_with_validity(value, Validity::AllValid).unwrap()
+        Self::try_from_vec(value, Validity::AllValid).unwrap()
     }
 }
 
@@ -79,7 +80,7 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
         // This doesn't reallocate, and the compiler even vectorizes it
         let data = value.into_iter().map(|b| b.unwrap_or_default()).collect();
 
-        Self::try_with_validity(data, validity).unwrap()
+        Self::try_from_vec(data, validity).unwrap()
     }
 }
 

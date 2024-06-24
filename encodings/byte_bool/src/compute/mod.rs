@@ -154,7 +154,7 @@ impl CompareFn for ByteBoolArray {
             validity.push(l & r);
         }
 
-        ByteBoolArray::try_with_validity(Vec::from_iter(result_buf.iter()), validity)
+        ByteBoolArray::try_from_vec(Vec::from_iter(result_buf.iter()), validity)
             .map(ByteBoolArray::into_array)
     }
 }

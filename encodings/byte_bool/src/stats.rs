@@ -12,6 +12,7 @@ impl ArrayStatisticsCompute for ByteBoolArray {
             return Ok(StatsSet::new());
         }
 
+        // TODO(adamgs): This is slightly wasteful and could be optimized in the future
         let bools = self.as_array_ref().clone().into_canonical()?.into_bool()?;
         bools.compute_statistics(stat)
     }
