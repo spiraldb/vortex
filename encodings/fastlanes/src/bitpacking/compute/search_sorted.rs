@@ -44,7 +44,7 @@ struct BitPackedSearch {
 impl BitPackedSearch {
     pub fn new(array: &BitPackedArray) -> Self {
         Self {
-            packed: array.packed().flatten_primitive().unwrap(),
+            packed: array.packed().into_primitive().unwrap(),
             length: array.len(),
             bit_width: array.bit_width(),
             min_patch_offset: array.patches().map(|p| {

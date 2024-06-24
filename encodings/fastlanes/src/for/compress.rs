@@ -42,14 +42,6 @@ impl EncodingCompression for FoREncoding {
             return None;
         }
 
-        match_each_integer_ptype!(parray.ptype(), |$P| {
-            let min: $P = parray.statistics().compute_min()?;
-            let max: $P = parray.statistics().compute_max()?;
-            if max.wrapping_sub(min) < 0 {
-                return None;
-            }
-        });
-
         Some(self)
     }
 

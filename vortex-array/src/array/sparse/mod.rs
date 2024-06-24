@@ -4,8 +4,8 @@ use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
-use crate::compute::scalar_at::scalar_at;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
+use crate::compute::unary::scalar_at::scalar_at;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};

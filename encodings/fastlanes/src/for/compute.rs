@@ -78,10 +78,16 @@ impl SearchSortedFn for FoRArray {
             let shifted_min = min >> self.shift();
             let unwrapped_value: $P = value.cast(self.dtype())?.try_into().unwrap();
             let shifted_value: $P = unwrapped_value >> self.shift();
+            // Make sure that smaller values are still smaller and not larger than (which they would be after wrapping_sub)
             if shifted_value < shifted_min {
                 return Ok(SearchResult::NotFound(0));
             }
-            let translated_scalar = Scalar::primitive(shifted_value.wrapping_sub(shifted_min), value.dtype().nullability());
+
+            let translated_scalar = Scalar::primitive(
+                shifted_value.wrapping_sub(shifted_min),
+                value.dtype().nullability(),
+            )
+            .reinterpret_cast(self.ptype().to_unsigned());
             search_sorted(&self.encoded(), translated_scalar, side)
         })
     }
