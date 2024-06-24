@@ -37,10 +37,12 @@ impl EncodingCompression for FoREncoding {
 
         // Nothing for us to do if the min is already zero and tz == 0
         let shift = trailing_zeros(array);
-        let min = parray.statistics().compute_as_cast::<i64>(Stat::Min)?;
-        if min == 0 && shift == 0 {
-            return None;
-        }
+        match_each_integer_ptype!(parray.ptype(), |$P| {
+            let min: $P = parray.statistics().compute_min()?;
+            if min == 0 && shift == 0 {
+                return None;
+            }
+        });
 
         Some(self)
     }
