@@ -189,11 +189,3 @@ impl TryFrom<&Scalar> for usize {
         .map(|v| v as Self)
     }
 }
-
-impl TryFrom<Scalar> for usize {
-    type Error = VortexError;
-
-    fn try_from(value: Scalar) -> Result<Self, Self::Error> {
-        usize::try_from(&value)
-    }
-}
