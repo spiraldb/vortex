@@ -5,6 +5,7 @@ use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
+use crate::compute::unary::scalar_at::scalar_at;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -117,6 +118,15 @@ impl SparseArray {
                 .map(|v| (*v as usize) - self.indices_offset())
                 .collect::<Vec<_>>()
         })
+    }
+
+    pub fn min_index(&self) -> usize {
+        let min_index: usize = scalar_at(&self.indices(), 0)
+            .unwrap()
+            .as_ref()
+            .try_into()
+            .unwrap();
+        min_index - self.indices_offset()
     }
 }
 

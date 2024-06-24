@@ -200,9 +200,8 @@ mod test {
 
     #[test]
     fn test_overflow() {
-        // Create a range offset by a million
-        let array = PrimitiveArray::from((i8::MIN..i8::MAX).collect_vec());
-        let compressed = FoREncoding {}
+        let array = PrimitiveArray::from((i8::MIN..=i8::MAX).collect_vec());
+        let compressed = FoREncoding
             .compress(array.array(), None, Compressor::new(&ctx()))
             .unwrap();
         let compressed = FoRArray::try_from(compressed).unwrap();
@@ -210,7 +209,7 @@ mod test {
 
         let encoded = compressed.encoded().into_primitive().unwrap();
         let encoded_bytes: &[u8] = encoded.maybe_null_slice::<u8>();
-        let unsigned: Vec<u8> = (0..u8::MAX).collect_vec();
+        let unsigned: Vec<u8> = (0..=u8::MAX).collect_vec();
         assert_eq!(encoded_bytes, unsigned.as_slice());
 
         let decompressed = compressed.array().clone().into_primitive().unwrap();

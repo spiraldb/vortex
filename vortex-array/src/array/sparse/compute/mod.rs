@@ -1,22 +1,25 @@
-use std::collections::HashMap;
-
-use itertools::Itertools;
-use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
-use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
+use crate::compute::search_sorted::{
+    search_sorted, SearchResult, SearchSortedFn, SearchSortedSide,
+};
 use crate::compute::slice::SliceFn;
-use crate::compute::take::{take, TakeFn};
+use crate::compute::take::TakeFn;
 use crate::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
-use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
+use crate::ArrayDType;
 
 mod slice;
+mod take;
 
 impl ArrayCompute for SparseArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn search_sorted(&self) -> Option<&dyn SearchSortedFn> {
         Some(self)
     }
 
@@ -38,160 +41,65 @@ impl ScalarAtFn for SparseArray {
     }
 }
 
-impl TakeFn for SparseArray {
-    fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let flat_indices = indices.clone().into_primitive()?;
-        // if we are taking a lot of values we should build a hashmap
-        let (positions, physical_take_indices) = if indices.len() > 128 {
-            take_map(self, &flat_indices)?
-        } else {
-            take_search_sorted(self, &flat_indices)?
-        };
-
-        let taken_values = take(&self.values(), &physical_take_indices.into_array())?;
-
-        Ok(Self::try_new(
-            positions.into_array(),
-            taken_values,
-            indices.len(),
-            self.fill_value().clone(),
-        )
-        .unwrap()
-        .into_array())
+impl SearchSortedFn for SparseArray {
+    fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
+        search_sorted(&self.values(), value.clone(), side).and_then(|sr| match sr {
+            SearchResult::Found(i) => {
+                let index: usize = scalar_at(&self.indices(), i)?.as_ref().try_into().unwrap();
+                Ok(SearchResult::Found(index))
+            }
+            SearchResult::NotFound(i) => {
+                let index: usize = scalar_at(&self.indices(), if i == 0 { 0 } else { i - 1 })?
+                    .as_ref()
+                    .try_into()
+                    .unwrap();
+                Ok(SearchResult::NotFound(if i == 0 {
+                    index
+                } else {
+                    index + 1
+                }))
+            }
+        })
     }
-}
-
-fn take_map(
-    array: &SparseArray,
-    indices: &PrimitiveArray,
-) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
-    let indices_map: HashMap<u64, u64> = array
-        .resolved_indices()
-        .iter()
-        .enumerate()
-        .map(|(i, r)| (*r as u64, i as u64))
-        .collect();
-    let (positions, patch_indices): (Vec<u64>, Vec<u64>) = match_each_integer_ptype!(indices.ptype(), |$P| {
-        indices.maybe_null_slice::<$P>()
-            .iter()
-            .map(|pi| *pi as u64)
-            .enumerate()
-            .filter_map(|(i, pi)| indices_map.get(&pi).map(|phy_idx| (i as u64, phy_idx)))
-            .unzip()
-    });
-    Ok((
-        PrimitiveArray::from(positions),
-        PrimitiveArray::from(patch_indices),
-    ))
-}
-
-fn take_search_sorted(
-    array: &SparseArray,
-    indices: &PrimitiveArray,
-) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
-    let resolved = match_each_integer_ptype!(indices.ptype(), |$P| {
-        indices
-            .maybe_null_slice::<$P>()
-            .iter()
-            .enumerate()
-            .map(|(pos, i)| {
-                array
-                    .find_index(*i as usize)
-                    .map(|r| r.map(|ii| (pos as u64, ii as u64)))
-            })
-            .filter_map_ok(|r| r)
-            .collect::<VortexResult<Vec<_>>>()?
-    });
-
-    let (positions, patch_indices): (Vec<u64>, Vec<u64>) = resolved.into_iter().unzip();
-    Ok((
-        PrimitiveArray::from(positions),
-        PrimitiveArray::from(patch_indices),
-    ))
 }
 
 #[cfg(test)]
 mod test {
-    use itertools::Itertools;
     use vortex_dtype::{DType, Nullability, PType};
     use vortex_scalar::Scalar;
 
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::sparse::compute::take_map;
     use crate::array::sparse::SparseArray;
-    use crate::compute::take::take;
+    use crate::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
     use crate::validity::Validity;
-    use crate::{Array, ArrayTrait, IntoArray};
+    use crate::{Array, IntoArray};
 
-    fn sparse_array() -> Array {
+    fn array() -> Array {
         SparseArray::try_new(
-            PrimitiveArray::from(vec![0u64, 37, 47, 99]).into_array(),
-            PrimitiveArray::from_vec(vec![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid)
-                .into_array(),
-            100,
-            Scalar::null(DType::Primitive(PType::F64, Nullability::Nullable)),
+            PrimitiveArray::from(vec![2u64, 9, 15]).into_array(),
+            PrimitiveArray::from_vec(vec![33, 44, 55], Validity::AllValid).into_array(),
+            20,
+            Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable)),
         )
         .unwrap()
         .into_array()
     }
 
     #[test]
-    fn sparse_take() {
-        let sparse = sparse_array();
-        let taken =
-            SparseArray::try_from(take(&sparse, &vec![0, 47, 47, 0, 99].into_array()).unwrap())
-                .unwrap();
-        assert_eq!(
-            taken.indices().as_primitive().maybe_null_slice::<u64>(),
-            [0, 1, 2, 3, 4]
-        );
-        assert_eq!(
-            taken.values().as_primitive().maybe_null_slice::<f64>(),
-            [1.23f64, 9.99, 9.99, 1.23, 3.5]
-        );
+    pub fn search_larger_than() {
+        let res = search_sorted(&array(), 66, SearchSortedSide::Left).unwrap();
+        assert_eq!(res, SearchResult::NotFound(16));
     }
 
     #[test]
-    fn nonexistent_take() {
-        let sparse = sparse_array();
-        let taken = SparseArray::try_from(take(&sparse, &vec![69].into_array()).unwrap()).unwrap();
-        assert!(taken
-            .indices()
-            .as_primitive()
-            .maybe_null_slice::<u64>()
-            .is_empty());
-        assert!(taken
-            .values()
-            .as_primitive()
-            .maybe_null_slice::<f64>()
-            .is_empty());
+    pub fn search_less_than() {
+        let res = search_sorted(&array(), 22, SearchSortedSide::Left).unwrap();
+        assert_eq!(res, SearchResult::NotFound(2));
     }
 
     #[test]
-    fn ordered_take() {
-        let sparse = sparse_array();
-        let taken =
-            SparseArray::try_from(take(&sparse, &vec![69, 37].into_array()).unwrap()).unwrap();
-        assert_eq!(
-            taken.indices().as_primitive().maybe_null_slice::<u64>(),
-            [1]
-        );
-        assert_eq!(
-            taken.values().as_primitive().maybe_null_slice::<f64>(),
-            [0.47f64]
-        );
-        assert_eq!(taken.len(), 2);
-    }
-
-    #[test]
-    fn test_take_map() {
-        let sparse = SparseArray::try_from(sparse_array()).unwrap();
-        let indices = PrimitiveArray::from((0u64..100).collect_vec());
-        let (positions, patch_indices) = take_map(&sparse, &indices).unwrap();
-        assert_eq!(
-            positions.maybe_null_slice::<u64>(),
-            sparse.indices().as_primitive().maybe_null_slice::<u64>()
-        );
-        assert_eq!(patch_indices.maybe_null_slice::<u64>(), [0u64, 1, 2, 3]);
+    pub fn search_found() {
+        let res = search_sorted(&array(), 44, SearchSortedSide::Left).unwrap();
+        assert_eq!(res, SearchResult::Found(9));
     }
 }
