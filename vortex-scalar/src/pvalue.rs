@@ -44,12 +44,12 @@ impl PValue {
         }
 
         assert!(T::PTYPE.is_int(), "Can only reinterpret cast integers");
-
         assert_eq!(
             T::PTYPE.byte_width(),
             self.ptype().byte_width(),
             "Cannot reinterpret cast between types of different widths"
         );
+
         match self {
             PValue::U8(v) => unsafe { mem::transmute::<u8, i8>(*v) }.into(),
             PValue::U16(v) => unsafe { mem::transmute::<u16, i16>(*v) }.into(),
