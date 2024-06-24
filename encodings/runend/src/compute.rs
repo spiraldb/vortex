@@ -1,9 +1,9 @@
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
+use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
-use vortex::{Array, IntoArray};
+use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
@@ -32,7 +32,7 @@ impl ScalarAtFn for REEArray {
 
 impl TakeFn for REEArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let primitive_indices = indices.clone().flatten_primitive()?;
+        let primitive_indices = indices.clone().into_primitive()?;
         let physical_indices = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
             primitive_indices
                 .maybe_null_slice::<$P>()
@@ -69,7 +69,7 @@ impl SliceFn for REEArray {
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::take::take;
-    use vortex::ToArray;
+    use vortex::{IntoCanonical, ToArray};
 
     use crate::REEArray;
 
@@ -81,7 +81,12 @@ mod test {
         .unwrap();
         let taken = take(ree.array(), PrimitiveArray::from(vec![9, 8, 1, 3]).array()).unwrap();
         assert_eq!(
-            taken.flatten_primitive().unwrap().maybe_null_slice::<i32>(),
+            taken
+                .into_canonical()
+                .unwrap()
+                .into_primitive()
+                .unwrap()
+                .maybe_null_slice::<i32>(),
             &[5, 5, 1, 4]
         );
     }

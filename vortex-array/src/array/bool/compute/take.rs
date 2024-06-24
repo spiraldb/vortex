@@ -6,13 +6,13 @@ use vortex_error::VortexResult;
 use crate::array::bool::BoolArray;
 use crate::compute::take::TakeFn;
 use crate::Array;
-use crate::AsArray;
 use crate::IntoArray;
+use crate::{AsArray, IntoArrayVariant};
 
 impl TakeFn for BoolArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         let validity = self.validity();
-        let indices = indices.clone().flatten_primitive()?;
+        let indices = indices.clone().into_primitive()?;
         match_each_integer_ptype!(indices.ptype(), |$I| {
             Ok(BoolArray::from_vec(
                 take_bool(&self.boolean_buffer(), indices.maybe_null_slice::<$I>()),

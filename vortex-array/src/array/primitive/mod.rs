@@ -8,8 +8,8 @@ use vortex_error::vortex_bail;
 
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::ArrayFlatten;
 use crate::{impl_encoding, ArrayDType};
+use crate::{Canonical, IntoCanonical};
 
 mod accessor;
 mod compute;
@@ -177,9 +177,9 @@ impl<T: NativePType> IntoArray for Vec<T> {
     }
 }
 
-impl ArrayFlatten for PrimitiveArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::Primitive(self))
+impl IntoCanonical for PrimitiveArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        Ok(Canonical::Primitive(self))
     }
 }
 
@@ -207,10 +207,6 @@ impl AcceptArrayVisitor for PrimitiveArray {
 }
 
 impl Array {
-    pub fn into_primitive(self) -> PrimitiveArray {
-        PrimitiveArray::try_from(self).expect("expected primitive array")
-    }
-
     pub fn as_primitive(&self) -> PrimitiveArray {
         PrimitiveArray::try_from(self).expect("expected primitive array")
     }

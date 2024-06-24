@@ -3,7 +3,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray};
+use vortex::{Array, ArrayDType, ArrayDef, AsArray, IntoArray, IntoArrayVariant};
 use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
@@ -94,12 +94,13 @@ where
         exponents,
         PrimitiveArray::from_vec(encoded, values.validity()).into_array(),
         (!exc.is_empty()).then(|| {
-            SparseArray::new(
+            SparseArray::try_new(
                 PrimitiveArray::from(exc_pos).into_array(),
                 PrimitiveArray::from_vec(exc, Validity::AllValid).into_array(),
                 len,
                 Scalar::null(values.dtype().as_nullable()),
             )
+            .unwrap()
             .into_array()
         }),
     )
@@ -115,7 +116,7 @@ pub fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
 }
 
 pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
-    let encoded = array.encoded().flatten_primitive()?;
+    let encoded = array.encoded().into_primitive()?;
 
     let decoded = match_each_alp_float_ptype!(array.dtype().try_into().unwrap(), |$T| {
         PrimitiveArray::from_vec(
@@ -138,7 +139,7 @@ fn patch_decoded(array: PrimitiveArray, patches: &Array) -> VortexResult<Primiti
                 let typed_patches = SparseArray::try_from(patches).unwrap();
                 array.patch(
                     &typed_patches.resolved_indices(),
-                    typed_patches.values().flatten_primitive()?.maybe_null_slice::<$T>())?
+                    typed_patches.values().into_primitive()?.maybe_null_slice::<$T>())?
             })
         }
         _ => panic!("can't patch ALP array with {}", patches),
@@ -165,7 +166,7 @@ mod tests {
         let encoded = alp_encode(&array).unwrap();
         assert!(encoded.patches().is_none());
         assert_eq!(
-            encoded.encoded().into_primitive().maybe_null_slice::<i32>(),
+            encoded.encoded().as_primitive().maybe_null_slice::<i32>(),
             vec![1234; 1025]
         );
         assert_eq!(encoded.exponents(), &Exponents { e: 4, f: 1 });
@@ -183,7 +184,7 @@ mod tests {
         let encoded = alp_encode(&array).unwrap();
         assert!(encoded.patches().is_none());
         assert_eq!(
-            encoded.encoded().into_primitive().maybe_null_slice::<i32>(),
+            encoded.encoded().as_primitive().maybe_null_slice::<i32>(),
             vec![0, 1234, 0]
         );
         assert_eq!(encoded.exponents(), &Exponents { e: 4, f: 1 });
@@ -201,7 +202,7 @@ mod tests {
         let encoded = alp_encode(&array).unwrap();
         assert!(encoded.patches().is_some());
         assert_eq!(
-            encoded.encoded().into_primitive().maybe_null_slice::<i64>(),
+            encoded.encoded().as_primitive().maybe_null_slice::<i64>(),
             vec![1234i64, 2718, 2718, 4000] // fill forward
         );
         assert_eq!(encoded.exponents(), &Exponents { e: 3, f: 0 });

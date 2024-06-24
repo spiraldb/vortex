@@ -5,7 +5,7 @@ use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayFlatten};
+use vortex::{impl_encoding, Canonical, IntoCanonical};
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::PType;
@@ -71,17 +71,17 @@ impl RoaringIntArray {
 }
 
 impl ArrayValidity for RoaringIntArray {
-    fn logical_validity(&self) -> LogicalValidity {
-        LogicalValidity::AllValid(self.bitmap().iter().count())
-    }
-
     fn is_valid(&self, _index: usize) -> bool {
         true
     }
+
+    fn logical_validity(&self) -> LogicalValidity {
+        LogicalValidity::AllValid(self.bitmap().iter().count())
+    }
 }
 
-impl ArrayFlatten for RoaringIntArray {
-    fn flatten(self) -> VortexResult<Flattened> {
+impl IntoCanonical for RoaringIntArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
         todo!()
     }
 }
@@ -103,7 +103,7 @@ impl ArrayTrait for RoaringIntArray {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::IntoArray;
     use vortex_error::VortexResult;
 

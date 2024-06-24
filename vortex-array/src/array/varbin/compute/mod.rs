@@ -2,9 +2,9 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::varbin::{varbin_scalar, VarBinArray};
-use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
+use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::validity::ArrayValidity;
 use crate::ArrayDType;

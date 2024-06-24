@@ -9,9 +9,11 @@ use std::task::{Context, Poll};
 use arrow_array::{RecordBatch, StructArray as ArrowStructArray};
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
+use datafusion::dataframe::DataFrame;
 use datafusion::datasource::TableProvider;
 use datafusion::execution::context::SessionState;
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
+use datafusion::prelude::SessionContext;
 use datafusion_common::{exec_datafusion_err, exec_err, DataFusionError, Result as DFResult};
 use datafusion_expr::{Expr, TableProviderFilterPushDown, TableType};
 use datafusion_physical_expr::EquivalenceProperties;
@@ -21,14 +23,32 @@ use datafusion_physical_plan::{
 use futures::{Stream, StreamExt};
 use pin_project::pin_project;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::r#struct::StructArray;
-use vortex::{Array, ArrayDType, ArrayFlatten, IntoArray};
+use vortex::array::struct_::StructArray;
+use vortex::{Array, ArrayDType, IntoArray, IntoCanonical};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::datatype::infer_schema;
 
 mod datatype;
+
+pub trait SessionContextExt {
+    fn read_vortex(&self, array: Array) -> DFResult<DataFrame>;
+}
+
+impl SessionContextExt for SessionContext {
+    fn read_vortex(&self, array: Array) -> DFResult<DataFrame> {
+        assert!(
+            matches!(array.dtype(), DType::Struct(_, _)),
+            "Vortex arrays must have struct type"
+        );
+
+        let vortex_table = VortexInMemoryTableProvider::try_new(array)
+            .map_err(|error| DataFusionError::Internal(format!("vortex error: {error}")))?;
+
+        self.read_table(Arc::new(vortex_table))
+    }
+}
 
 /// A [`TableProvider`] that exposes an existing Vortex Array to the DataFusion SQL engine.
 ///
@@ -139,7 +159,7 @@ impl VortexMemoryExec {
         _context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
         let data = array
-            .flatten()
+            .into_canonical()
             .map_err(|vortex_error| DataFusionError::Execution(format!("{}", vortex_error)))?
             .into_array();
 
@@ -160,7 +180,7 @@ impl VortexMemoryExec {
                 })?;
         let batch = RecordBatch::from(
             projected_struct
-                .flatten()
+                .into_canonical()
                 .expect("struct arrays must flatten")
                 .into_arrow()
                 .as_any()
@@ -247,61 +267,66 @@ impl ExecutionPlan for VortexMemoryExec {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-
+    use arrow_array::types::Int64Type;
     use datafusion::arrow::array::AsArray;
-    use datafusion::arrow::datatypes::UInt64Type;
     use datafusion::prelude::SessionContext;
+    use datafusion_expr::{col, count_distinct, lit};
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::r#struct::StructArray;
+    use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::validity::Validity;
     use vortex::IntoArray;
-    use vortex_dtype::{DType, FieldName, Nullability};
+    use vortex_dtype::{DType, Nullability};
 
-    use crate::VortexInMemoryTableProvider;
+    use crate::SessionContextExt;
 
     #[tokio::test]
     async fn test_datafusion_simple() {
         let names = VarBinArray::from_vec(
-            vec!["Washington", "Adams", "Jefferson", "Madison", "Monroe"],
+            vec![
+                "Washington",
+                "Adams",
+                "Jefferson",
+                "Madison",
+                "Monroe",
+                "Adams",
+            ],
             DType::Utf8(Nullability::NonNullable),
         );
-        let term_start =
-            PrimitiveArray::from_vec(vec![1789u16, 1797, 1801, 1809, 1817], Validity::NonNullable);
-        let presidents = StructArray::try_new(
-            Arc::new([FieldName::from("president"), FieldName::from("term_start")]),
-            vec![names.into_array(), term_start.into_array()],
-            5,
+        let term_start = PrimitiveArray::from_vec(
+            vec![1789u16, 1797, 1801, 1809, 1817, 1825],
             Validity::NonNullable,
-        )
-        .unwrap();
+        );
 
-        let presidents_table =
-            Arc::new(VortexInMemoryTableProvider::try_new(presidents.into_array()).unwrap());
-        let session_ctx = SessionContext::new();
+        let presidents = StructArray::from_fields(&[
+            ("president", names.into_array()),
+            ("term_start", term_start.into_array()),
+        ])
+        .into_array();
 
-        session_ctx
-            .register_table("presidents", presidents_table)
-            .unwrap();
+        let ctx = SessionContext::new();
 
-        let df_term_start = session_ctx
-            .sql("SELECT SUM(term_start) FROM presidents WHERE president <> 'Madison'")
-            .await
+        let df = ctx.read_vortex(presidents).unwrap();
+
+        let distinct_names = df
+            .filter(col("term_start").gt_eq(lit(1795)))
+            .unwrap()
+            .aggregate(vec![], vec![count_distinct(col("president"))])
             .unwrap()
             .collect()
             .await
             .unwrap();
 
-        assert_eq!(df_term_start.len(), 1);
+        assert_eq!(distinct_names.len(), 1);
+
         assert_eq!(
-            *df_term_start[0]
+            *distinct_names[0]
                 .column(0)
-                .as_primitive::<UInt64Type>()
+                .as_primitive::<Int64Type>()
                 .values()
                 .first()
                 .unwrap(),
-            vec![1789u64, 1797, 1801, 1817].into_iter().sum::<u64>()
+            4i64
         );
     }
 }

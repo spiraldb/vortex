@@ -73,6 +73,7 @@ mod test {
 
     use super::*;
     use crate::validity::Validity;
+    use crate::IntoCanonical;
 
     fn apply_conjunctive_filter(arr: &PrimitiveArray, conj: Conjunction) -> VortexResult<Array> {
         arr.filter_indices(&Disjunction::from_iter([conj]))
@@ -107,7 +108,9 @@ mod test {
         let filtered_primitive =
             apply_conjunctive_filter(&arr, Conjunction::from(field.lt(lit(5u32))))
                 .unwrap()
-                .flatten_bool()
+                .into_canonical()
+                .unwrap()
+                .into_bool()
                 .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [0u64, 1, 2, 3]);
@@ -115,7 +118,9 @@ mod test {
         let filtered_primitive =
             apply_conjunctive_filter(&arr, Conjunction::from(field.gt(lit(5u32))))
                 .unwrap()
-                .flatten_bool()
+                .into_canonical()
+                .unwrap()
+                .into_bool()
                 .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [6u64, 7, 8, 10]);
@@ -123,7 +128,9 @@ mod test {
         let filtered_primitive =
             apply_conjunctive_filter(&arr, Conjunction::from(field.equal(lit(5u32))))
                 .unwrap()
-                .flatten_bool()
+                .into_canonical()
+                .unwrap()
+                .into_bool()
                 .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [5u64]);
@@ -131,7 +138,9 @@ mod test {
         let filtered_primitive =
             apply_conjunctive_filter(&arr, Conjunction::from(field.gte(lit(5u32))))
                 .unwrap()
-                .flatten_bool()
+                .into_canonical()
+                .unwrap()
+                .into_bool()
                 .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [5u64, 6, 7, 8, 10]);
@@ -139,7 +148,9 @@ mod test {
         let filtered_primitive =
             apply_conjunctive_filter(&arr, Conjunction::from(field.lte(lit(5u32))))
                 .unwrap()
-                .flatten_bool()
+                .into_canonical()
+                .unwrap()
+                .into_bool()
                 .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [0u64, 1, 2, 3, 5]);
@@ -155,7 +166,9 @@ mod test {
             Conjunction::from_iter([field.lt(lit(5u32)), field.gt(lit(2u32))]),
         )
         .unwrap()
-        .flatten_bool()
+        .into_canonical()
+        .unwrap()
+        .into_bool()
         .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [2u64, 3])
@@ -171,7 +184,9 @@ mod test {
             Conjunction::from_iter([field.lt(lit(5u32)), field.gt(lit(5u32))]),
         )
         .unwrap()
-        .flatten_bool()
+        .into_canonical()
+        .unwrap()
+        .into_bool()
         .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         let expected: [u64; 0] = [];
@@ -187,7 +202,13 @@ mod test {
         let c2 = Conjunction::from(field.gt(lit(5u32)));
 
         let disj = Disjunction::from_iter([c1, c2]);
-        let filtered_primitive = arr.filter_indices(&disj).unwrap().flatten_bool().unwrap();
+        let filtered_primitive = arr
+            .filter_indices(&disj)
+            .unwrap()
+            .into_canonical()
+            .unwrap()
+            .into_bool()
+            .unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [0u64, 1, 2, 3, 5, 6, 7, 8, 9])
     }

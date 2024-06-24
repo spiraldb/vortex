@@ -7,7 +7,7 @@ use vortex::array::bool::{Bool, BoolArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::Nullability::Nullable;
@@ -86,8 +86,8 @@ impl ArrayValidity for RoaringBoolArray {
     }
 }
 
-impl ArrayFlatten for RoaringBoolArray {
-    fn flatten(self) -> VortexResult<Flattened> {
+impl IntoCanonical for RoaringBoolArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
         // TODO(ngates): benchmark the fastest conversion from BitMap.
         //  Via bitset requires two copies.
         let bitset = self
@@ -97,7 +97,7 @@ impl ArrayFlatten for RoaringBoolArray {
 
         let bytes = &bitset.as_slice()[0..bitset.size_in_bytes()];
         let buffer = ArrowBuffer::from_slice_ref(bytes);
-        Ok(Flattened::Bool(BoolArray::try_new(
+        Ok(Canonical::Bool(BoolArray::try_new(
             BooleanBuffer::new(buffer, 0, bitset.size_in_bits()),
             match self.dtype().nullability() {
                 NonNullable => Validity::NonNullable,
@@ -110,7 +110,7 @@ impl ArrayFlatten for RoaringBoolArray {
 #[cfg(test)]
 mod test {
     use vortex::array::bool::BoolArray;
-    use vortex::compute::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::IntoArray;
     use vortex_error::VortexResult;
     use vortex_scalar::Scalar;

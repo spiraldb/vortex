@@ -18,7 +18,7 @@ use crate::compute::slice::slice;
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayData, ArrayFlatten};
+use crate::{impl_encoding, ArrayDType, ArrayData, Canonical, IntoCanonical};
 
 mod accessor;
 mod builder;
@@ -215,7 +215,8 @@ impl VarBinViewArray {
                     view._ref.offset as usize,
                     (view._ref.size + view._ref.offset) as usize,
                 )?
-                .flatten_primitive()?;
+                .into_canonical()?
+                .into_primitive()?;
                 Ok(data_buf.maybe_null_slice::<u8>().to_vec())
             } else {
                 Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
@@ -224,15 +225,15 @@ impl VarBinViewArray {
     }
 }
 
-impl ArrayFlatten for VarBinViewArray {
-    fn flatten(self) -> VortexResult<Flattened> {
+impl IntoCanonical for VarBinViewArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
         let nullable = self.dtype().is_nullable();
         let arrow_self = as_arrow(self);
         let arrow_varbin = arrow_cast::cast(arrow_self.deref(), &DataType::Utf8)
             .expect("Utf8View must cast to Ut8f");
         let vortex_array = ArrayData::from_arrow(arrow_varbin, nullable).into_array();
 
-        Ok(Flattened::VarBin(VarBinArray::try_from(&vortex_array)?))
+        Ok(Canonical::VarBin(VarBinArray::try_from(&vortex_array)?))
     }
 }
 
@@ -240,7 +241,9 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
     // Views should be buffer of u8
     let views = var_bin_view
         .views()
-        .flatten_primitive()
+        .into_canonical()
+        .expect("into_canonical")
+        .into_primitive()
         .expect("views must be primitive");
     assert_eq!(views.ptype(), PType::U8);
     let nulls = var_bin_view
@@ -249,7 +252,12 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
         .expect("null buffer");
 
     let data = (0..var_bin_view.metadata().n_children)
-        .map(|i| var_bin_view.bytes(i).flatten_primitive())
+        .map(|i| {
+            var_bin_view
+                .bytes(i)
+                .into_canonical()
+                .and_then(Canonical::into_primitive)
+        })
         .collect::<VortexResult<Vec<_>>>()
         .expect("bytes arrays must be primitive");
     if !data.is_empty() {
@@ -359,9 +367,9 @@ mod test {
     use vortex_scalar::Scalar;
 
     use crate::array::varbinview::VarBinViewArray;
-    use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::{ArrayFlatten, ArrayTrait, Flattened, IntoArray};
+    use crate::compute::unary::scalar_at::scalar_at;
+    use crate::{ArrayTrait, Canonical, IntoArray, IntoCanonical};
 
     #[test]
     pub fn varbin_view() {
@@ -397,8 +405,8 @@ mod test {
     pub fn flatten_array() {
         let binary_arr = VarBinViewArray::from(vec!["string1", "string2"]);
 
-        let flattened = binary_arr.flatten().unwrap();
-        assert!(matches!(flattened, Flattened::VarBin(_)));
+        let flattened = binary_arr.into_canonical().unwrap();
+        assert!(matches!(flattened, Canonical::VarBin(_)));
 
         let var_bin = flattened.into_array();
         assert_eq!(scalar_at(&var_bin, 0).unwrap(), Scalar::from("string1"));

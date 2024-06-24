@@ -2,8 +2,8 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
-use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::take::TakeFn;
+use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::{Array, IntoArray};
 

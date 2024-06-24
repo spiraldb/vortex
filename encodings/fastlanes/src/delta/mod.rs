@@ -3,7 +3,7 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::ValidityMetadata;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::match_each_unsigned_integer_ptype;
 use vortex_error::vortex_bail;
 
@@ -94,9 +94,9 @@ impl DeltaArray {
     }
 }
 
-impl ArrayFlatten for DeltaArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        decompress(self).map(Flattened::Primitive)
+impl IntoCanonical for DeltaArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        decompress(self).map(Canonical::Primitive)
     }
 }
 

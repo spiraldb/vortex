@@ -4,7 +4,7 @@ use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::{Nullability, PType};
 use vortex_error::{vortex_bail, vortex_err};
 
@@ -124,9 +124,9 @@ impl BitPackedArray {
     }
 }
 
-impl ArrayFlatten for BitPackedArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        unpack(self).map(Flattened::Primitive)
+impl IntoCanonical for BitPackedArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        unpack(self).map(Canonical::Primitive)
     }
 }
 
@@ -170,9 +170,9 @@ impl ArrayTrait for BitPackedArray {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::scalar_at::scalar_at;
     use vortex::compute::slice::slice;
-    use vortex::IntoArray;
+    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::{IntoArray, IntoCanonical};
 
     use crate::BitPackedArray;
 
@@ -222,7 +222,9 @@ mod test {
         let expected = &[1, 0, 1, 0, 1, 0, u64::MAX];
         let results = packed
             .into_array()
-            .flatten_primitive()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
             .unwrap()
             .maybe_null_slice::<u64>()
             .to_vec();

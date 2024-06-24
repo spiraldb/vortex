@@ -9,19 +9,22 @@ use crate::array::chunked::ChunkedArray;
 use crate::array::extension::ExtensionArray;
 use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::r#struct::StructArray;
+use crate::array::struct_::StructArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::validity::Validity;
-use crate::{Array, ArrayDType, ArrayFlatten, ArrayTrait, ArrayValidity, Flattened, IntoArray};
+use crate::{
+    Array, ArrayDType, ArrayTrait, ArrayValidity, Canonical, IntoArray, IntoArrayVariant,
+    IntoCanonical,
+};
 
-impl ArrayFlatten for ChunkedArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        try_flatten_chunks(self.chunks().collect(), self.dtype().clone())
+impl IntoCanonical for ChunkedArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        try_canonicalize_chunks(self.chunks().collect(), self.dtype().clone())
     }
 }
 
-pub(crate) fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Flattened> {
+pub(crate) fn try_canonicalize_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResult<Canonical> {
     let mismatched = chunks
         .iter()
         .filter(|chunk| !chunk.dtype().eq(&dtype))
@@ -35,7 +38,7 @@ pub(crate) fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResu
         // one level internally without copying or decompressing any data.
         DType::Struct(struct_dtype, _) => {
             let struct_array = swizzle_struct_chunks(chunks.as_slice(), struct_dtype)?;
-            Ok(Flattened::Struct(struct_array))
+            Ok(Canonical::Struct(struct_array))
         }
 
         // Extension arrays wrap an internal storage array, which can hold a ChunkedArray until
@@ -46,34 +49,34 @@ pub(crate) fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResu
                 ChunkedArray::try_new(chunks, dtype.clone())?.into_array(),
             );
 
-            Ok(Flattened::Extension(ext_array))
+            Ok(Canonical::Extension(ext_array))
         }
 
-        // Lists just flatten into their inner PType
+        // TODO(aduffy): better list support
         DType::List(..) => {
             todo!()
         }
 
         DType::Bool(nullability) => {
             let bool_array = pack_bools(chunks.as_slice(), *nullability)?;
-            Ok(Flattened::Bool(bool_array))
+            Ok(Canonical::Bool(bool_array))
         }
         DType::Primitive(ptype, nullability) => {
             let prim_array = pack_primitives(chunks.as_slice(), *ptype, *nullability)?;
-            Ok(Flattened::Primitive(prim_array))
+            Ok(Canonical::Primitive(prim_array))
         }
         DType::Utf8(nullability) => {
             let varbin_array = pack_varbin(chunks.as_slice(), &dtype, *nullability)?;
-            Ok(Flattened::VarBin(varbin_array))
+            Ok(Canonical::VarBin(varbin_array))
         }
         DType::Binary(nullability) => {
             let varbin_array = pack_varbin(chunks.as_slice(), &dtype, *nullability)?;
-            Ok(Flattened::VarBin(varbin_array))
+            Ok(Canonical::VarBin(varbin_array))
         }
         DType::Null => {
             let len = chunks.iter().map(|chunk| chunk.len()).sum();
             let null_array = NullArray::new(len);
-            Ok(Flattened::Null(null_array))
+            Ok(Canonical::Null(null_array))
         }
     }
 }
@@ -81,7 +84,7 @@ pub(crate) fn try_flatten_chunks(chunks: Vec<Array>, dtype: DType) -> VortexResu
 /// Swizzle the pointers within a ChunkedArray of StructArrays to instead be a single
 /// StructArray, where the Array for each Field is a ChunkedArray.
 ///
-/// It is expected this function is only called from [try_flatten_chunks], and thus all chunks have
+/// It is expected this function is only called from [try_canonicalize_chunks], and thus all chunks have
 /// been checked to have the same DType already.
 fn swizzle_struct_chunks(
     chunks: &[Array],
@@ -115,14 +118,14 @@ fn swizzle_struct_chunks(
 
 /// Builds a new [BoolArray] by repacking the values from the chunks in a single contiguous array.
 ///
-/// It is expected this function is only called from [try_flatten_chunks], and thus all chunks have
+/// It is expected this function is only called from [try_canonicalize_chunks], and thus all chunks have
 /// been checked to have the same DType already.
 fn pack_bools(chunks: &[Array], nullability: Nullability) -> VortexResult<BoolArray> {
     let len = chunks.iter().map(|chunk| chunk.len()).sum();
     let validity = validity_from_chunks(chunks, nullability);
     let mut bools = Vec::with_capacity(len);
     for chunk in chunks {
-        let chunk = chunk.clone().flatten_bool()?;
+        let chunk = chunk.clone().into_bool()?;
         bools.extend(chunk.boolean_buffer().iter());
     }
 
@@ -132,7 +135,7 @@ fn pack_bools(chunks: &[Array], nullability: Nullability) -> VortexResult<BoolAr
 /// Builds a new [PrimitiveArray] by repacking the values from the chunks into a single
 /// contiguous array.
 ///
-/// It is expected this function is only called from [try_flatten_chunks], and thus all chunks have
+/// It is expected this function is only called from [try_canonicalize_chunks], and thus all chunks have
 /// been checked to have the same DType already.
 fn pack_primitives(
     chunks: &[Array],
@@ -143,7 +146,7 @@ fn pack_primitives(
     let validity = validity_from_chunks(chunks, nullability);
     let mut buffer = MutableBuffer::with_capacity(len * ptype.byte_width());
     for chunk in chunks {
-        let chunk = chunk.clone().flatten_primitive()?;
+        let chunk = chunk.clone().into_primitive()?;
         buffer.extend_from_slice(chunk.buffer());
     }
 
@@ -157,7 +160,7 @@ fn pack_primitives(
 /// Builds a new [VarBinArray] by repacking the values from the chunks into a single
 /// contiguous array.
 ///
-/// It is expected this function is only called from [try_flatten_chunks], and thus all chunks have
+/// It is expected this function is only called from [try_canonicalize_chunks], and thus all chunks have
 /// been checked to have the same DType already.
 fn pack_varbin(
     chunks: &[Array],
@@ -168,7 +171,7 @@ fn pack_varbin(
     let mut builder = VarBinBuilder::<i32>::with_capacity(len);
 
     for chunk in chunks {
-        let chunk = chunk.clone().flatten_varbin()?;
+        let chunk = chunk.clone().into_varbin()?;
         chunk.with_iterator(|iter| {
             for datum in iter {
                 builder.push(datum);

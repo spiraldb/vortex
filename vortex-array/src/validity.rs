@@ -4,11 +4,11 @@ use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::bool::BoolArray;
-use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::compute::take::take;
+use crate::compute::unary::scalar_at::scalar_at;
 use crate::stats::ArrayStatistics;
-use crate::{Array, IntoArray};
+use crate::{Array, Canonical, IntoArray, IntoArrayVariant, IntoCanonical};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -144,8 +144,18 @@ impl PartialEq for Validity {
             (Self::AllValid, Self::AllValid) => true,
             (Self::AllInvalid, Self::AllInvalid) => true,
             (Self::Array(a), Self::Array(b)) => {
-                a.clone().flatten_bool().unwrap().boolean_buffer()
-                    == b.clone().flatten_bool().unwrap().boolean_buffer()
+                a.clone()
+                    .into_canonical()
+                    .unwrap()
+                    .into_bool()
+                    .unwrap()
+                    .boolean_buffer()
+                    == b.clone()
+                        .into_canonical()
+                        .unwrap()
+                        .into_bool()
+                        .unwrap()
+                        .boolean_buffer()
             }
             _ => false,
         }
@@ -202,7 +212,8 @@ impl FromIterator<LogicalValidity> for Validity {
                 LogicalValidity::AllValid(count) => BooleanBuffer::new_set(count),
                 LogicalValidity::AllInvalid(count) => BooleanBuffer::new_unset(count),
                 LogicalValidity::Array(array) => array
-                    .flatten_bool()
+                    .into_canonical()
+                    .and_then(Canonical::into_bool)
                     .expect("validity must flatten to BoolArray")
                     .boolean_buffer(),
             };
@@ -234,7 +245,7 @@ impl LogicalValidity {
             Self::AllValid(_) => Ok(None),
             Self::AllInvalid(l) => Ok(Some(NullBuffer::new_null(*l))),
             Self::Array(a) => Ok(Some(NullBuffer::new(
-                a.clone().flatten_bool()?.boolean_buffer(),
+                a.clone().into_bool()?.boolean_buffer(),
             ))),
         }
     }
@@ -243,7 +254,7 @@ impl LogicalValidity {
         match self {
             Self::AllValid(l) => Ok(NullBuffer::new_valid(*l)),
             Self::AllInvalid(l) => Ok(NullBuffer::new_null(*l)),
-            Self::Array(a) => Ok(NullBuffer::new(a.clone().flatten_bool()?.boolean_buffer())),
+            Self::Array(a) => Ok(NullBuffer::new(a.clone().into_bool()?.boolean_buffer())),
         }
     }
 

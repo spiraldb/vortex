@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::stats::{ArrayStatisticsCompute, Stat};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayFlatten};
+use crate::{impl_encoding, Canonical, IntoCanonical};
 
 mod compute;
 
@@ -26,9 +26,9 @@ impl NullArray {
     }
 }
 
-impl ArrayFlatten for NullArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::Null(self))
+impl IntoCanonical for NullArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        Ok(Canonical::Null(self))
     }
 }
 

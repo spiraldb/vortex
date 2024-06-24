@@ -207,8 +207,8 @@ mod test {
         .unwrap();
 
         let decoded = ree_decode(
-            &arr.ends().into_primitive(),
-            &arr.values().into_primitive(),
+            &arr.ends().as_primitive(),
+            &arr.values().as_primitive(),
             arr.validity(),
             0,
             arr.len(),

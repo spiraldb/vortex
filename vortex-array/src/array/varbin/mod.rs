@@ -9,10 +9,10 @@ use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::builder::VarBinBuilder;
-use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
+use crate::compute::unary::scalar_at::scalar_at;
 use crate::validity::{Validity, ValidityMetadata};
-use crate::{impl_encoding, ArrayDType};
+use crate::{impl_encoding, ArrayDType, IntoArrayVariant};
 
 mod accessor;
 mod array;
@@ -153,7 +153,7 @@ impl VarBinArray {
         let start = self.offset_at(index);
         let end = self.offset_at(index + 1);
         let sliced = slice(&self.bytes(), start, end)?;
-        Ok(sliced.flatten_primitive()?.buffer().clone())
+        Ok(sliced.into_primitive()?.buffer().clone())
     }
 }
 
@@ -222,8 +222,8 @@ mod test {
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;
-    use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
+    use crate::compute::unary::scalar_at::scalar_at;
     use crate::validity::Validity;
     use crate::{Array, IntoArray};
 

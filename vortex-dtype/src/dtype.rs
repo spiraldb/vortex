@@ -13,6 +13,10 @@ pub type FieldNames = Arc<[FieldName]>;
 
 pub type Metadata = Vec<u8>;
 
+/// Array logical types.
+///
+/// Vortex arrays preserve a single logical type, while the encodings allow for multiple
+/// physical types to encode that type.
 #[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DType {

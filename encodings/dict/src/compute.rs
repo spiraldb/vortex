@@ -1,6 +1,6 @@
-use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
+use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
 use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
@@ -50,7 +50,7 @@ impl SliceFn for DictArray {
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::{IntoArray, ToArray};
+    use vortex::{IntoArray, IntoCanonical, ToArray};
     use vortex_dtype::{DType, Nullability};
 
     use crate::{dict_encode_typed_primitive, dict_encode_varbin, DictArray};
@@ -67,7 +67,12 @@ mod test {
         ]);
         let (codes, values) = dict_encode_typed_primitive::<i32>(&reference);
         let dict = DictArray::try_new(codes.into_array(), values.into_array()).unwrap();
-        let flattened_dict = dict.to_array().flatten_primitive().unwrap();
+        let flattened_dict = dict
+            .to_array()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
+            .unwrap();
         assert_eq!(flattened_dict.buffer(), reference.buffer());
     }
 
@@ -79,18 +84,43 @@ mod test {
         );
         let (codes, values) = dict_encode_varbin(&reference);
         let dict = DictArray::try_new(codes.into_array(), values.into_array()).unwrap();
-        let flattened_dict = dict.to_array().flatten_varbin().unwrap();
+        let flattened_dict = dict
+            .to_array()
+            .into_canonical()
+            .unwrap()
+            .into_varbin()
+            .unwrap();
         assert_eq!(
             flattened_dict
                 .offsets()
-                .flatten_primitive()
+                .into_canonical()
+                .unwrap()
+                .into_primitive()
                 .unwrap()
                 .buffer(),
-            reference.offsets().flatten_primitive().unwrap().buffer()
+            reference
+                .offsets()
+                .into_canonical()
+                .unwrap()
+                .into_primitive()
+                .unwrap()
+                .buffer()
         );
         assert_eq!(
-            flattened_dict.bytes().flatten_primitive().unwrap().buffer(),
-            reference.bytes().flatten_primitive().unwrap().buffer()
+            flattened_dict
+                .bytes()
+                .into_canonical()
+                .unwrap()
+                .into_primitive()
+                .unwrap()
+                .buffer(),
+            reference
+                .bytes()
+                .into_canonical()
+                .unwrap()
+                .into_primitive()
+                .unwrap()
+                .buffer()
         );
     }
 }

@@ -25,7 +25,7 @@ impl EncodingCompression for SparseEncoding {
     ) -> VortexResult<Array> {
         let sparse_array = SparseArray::try_from(array)?;
         let sparse_like = like.map(|la| SparseArray::try_from(la).unwrap());
-        Ok(SparseArray::new(
+        Ok(SparseArray::try_new(
             ctx.auxiliary("indices").compress(
                 &sparse_array.indices(),
                 sparse_like.as_ref().map(|sa| sa.indices()).as_ref(),
@@ -37,6 +37,7 @@ impl EncodingCompression for SparseEncoding {
             sparse_array.len(),
             sparse_array.fill_value().clone(),
         )
+        .unwrap()
         .into_array())
     }
 }

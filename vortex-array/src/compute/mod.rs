@@ -1,25 +1,20 @@
-use cast::CastFn;
 use compare::CompareFn;
-use fill::FillForwardFn;
-use patch::PatchFn;
-use scalar_at::ScalarAtFn;
 use search_sorted::SearchSortedFn;
 use slice::SliceFn;
 use take::TakeFn;
 
-use crate::compute::filter_indices::FilterIndicesFn;
-use crate::compute::scalar_subtract::SubtractScalarFn;
+use self::filter_indices::FilterIndicesFn;
+use self::unary::cast::CastFn;
+use self::unary::fill_forward::FillForwardFn;
+use self::unary::scalar_at::ScalarAtFn;
+use self::unary::scalar_subtract::SubtractScalarFn;
 
-pub mod cast;
 pub mod compare;
-pub mod fill;
 pub mod filter_indices;
-pub mod patch;
-pub mod scalar_at;
-pub mod scalar_subtract;
 pub mod search_sorted;
 pub mod slice;
 pub mod take;
+pub mod unary;
 
 pub trait ArrayCompute {
     fn cast(&self) -> Option<&dyn CastFn> {
@@ -35,10 +30,6 @@ pub trait ArrayCompute {
     }
 
     fn filter_indices(&self) -> Option<&dyn FilterIndicesFn> {
-        None
-    }
-
-    fn patch(&self) -> Option<&dyn PatchFn> {
         None
     }
 

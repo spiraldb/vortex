@@ -147,7 +147,7 @@ pub mod test {
         assert_eq!(next.encoding().id(), PrimitiveEncoding.id());
 
         assert_eq!(
-            next.into_primitive().maybe_null_slice::<i32>(),
+            next.as_primitive().maybe_null_slice::<i32>(),
             vec![2999989, 2999988, 2999987, 2999986, 2899999, 0, 0]
         );
         assert_eq!(
@@ -155,7 +155,7 @@ pub mod test {
                 .try_next()
                 .await?
                 .expect("Expected a chunk")
-                .into_primitive()
+                .as_primitive()
                 .maybe_null_slice::<i32>(),
             vec![5999999]
         );

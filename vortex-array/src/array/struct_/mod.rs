@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
-use vortex_dtype::{FieldNames, Nullability, StructDType};
+use vortex_dtype::{FieldName, FieldNames, Nullability, StructDType};
 use vortex_error::{vortex_bail, vortex_err};
 
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::ArrayFlatten;
 use crate::{impl_encoding, ArrayDType};
+use crate::{Canonical, IntoCanonical};
 
 mod compute;
 
@@ -96,6 +96,18 @@ impl StructArray {
             StatsSet::new(),
         )
     }
+
+    pub fn from_fields<N: AsRef<str>>(items: &[(N, Array)]) -> Self {
+        let names: Vec<FieldName> = items
+            .iter()
+            .map(|(name, _)| FieldName::from(name.as_ref()))
+            .collect();
+        let fields: Vec<Array> = items.iter().map(|(_, array)| array.clone()).collect();
+        let len = fields.first().unwrap().len();
+
+        Self::try_new(FieldNames::from(names), fields, len, Validity::NonNullable)
+            .expect("building StructArray with helper")
+    }
 }
 
 impl StructArray {
@@ -128,10 +140,10 @@ impl StructArray {
     }
 }
 
-impl ArrayFlatten for StructArray {
+impl IntoCanonical for StructArray {
     /// StructEncoding is the canonical form for a [DType::Struct] array, so return self.
-    fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::Struct(self))
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        Ok(Canonical::Struct(self))
     }
 }
 
@@ -171,7 +183,7 @@ mod test {
 
     use crate::array::bool::BoolArray;
     use crate::array::primitive::PrimitiveArray;
-    use crate::array::r#struct::StructArray;
+    use crate::array::struct_::StructArray;
     use crate::array::varbin::VarBinArray;
     use crate::validity::Validity;
     use crate::{ArrayTrait, IntoArray};

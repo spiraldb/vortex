@@ -1,11 +1,11 @@
 use vortex::array::datetime::{try_parse_time_unit, LocalDateTimeArray, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compute::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
+use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
 use vortex::validity::ArrayValidity;
-use vortex::{Array, ArrayDType, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -104,9 +104,9 @@ pub fn decode_to_localdatetime(array: &Array) -> VortexResult<LocalDateTimeArray
         TimeUnit::S => 1,
     };
 
-    let days_buf = array.days().flatten()?.into_array().as_primitive();
-    let seconds_buf = array.seconds().flatten()?.into_array().as_primitive();
-    let subsecond_buf = array.subsecond().flatten()?.into_array().as_primitive();
+    let days_buf = array.days().into_primitive()?;
+    let seconds_buf = array.seconds().into_primitive()?;
+    let subsecond_buf = array.subsecond().into_primitive()?;
 
     // TODO(aduffy): replace with vectorized implementation?
     let values = days_buf
@@ -127,7 +127,7 @@ pub fn decode_to_localdatetime(array: &Array) -> VortexResult<LocalDateTimeArray
 mod test {
     use vortex::array::datetime::{LocalDateTimeArray, TimeUnit};
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::validity::Validity;
     use vortex::IntoArray;
     use vortex_dtype::{DType, ExtDType, ExtID, Nullability};

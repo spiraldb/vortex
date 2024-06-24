@@ -6,7 +6,7 @@ use vortex_error::VortexResult;
 use crate::array::bool::BoolArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
-use crate::{ArrayDType, ArrayTrait};
+use crate::{ArrayDType, ArrayTrait, IntoArrayVariant};
 
 impl ArrayStatisticsCompute for BoolArray {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
@@ -19,7 +19,7 @@ impl ArrayStatisticsCompute for BoolArray {
             LogicalValidity::AllInvalid(v) => Ok(StatsSet::nulls(v, self.dtype())),
             LogicalValidity::Array(a) => NullableBools(
                 &self.boolean_buffer(),
-                &a.clone().flatten_bool()?.boolean_buffer(),
+                &a.clone().into_bool()?.boolean_buffer(),
             )
             .compute_statistics(stat),
         }

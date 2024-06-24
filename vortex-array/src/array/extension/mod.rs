@@ -4,7 +4,7 @@ use vortex_dtype::{ExtDType, ExtID};
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten};
+use crate::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 
 mod compute;
 
@@ -49,9 +49,9 @@ impl ExtensionArray {
     }
 }
 
-impl ArrayFlatten for ExtensionArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::Extension(self))
+impl IntoCanonical for ExtensionArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        Ok(Canonical::Extension(self))
     }
 }
 
