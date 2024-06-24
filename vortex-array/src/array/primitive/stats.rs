@@ -12,7 +12,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
-use crate::ArrayDType;
+use crate::{ArrayDType, IntoArrayVariant};
 
 trait PStatsType: NativePType + Into<Scalar> + BitWidth {}
 
@@ -26,7 +26,7 @@ impl ArrayStatisticsCompute for PrimitiveArray {
                 LogicalValidity::AllInvalid(v) => Ok(StatsSet::nulls(v, self.dtype())),
                 LogicalValidity::Array(a) => NullableValues(
                     self.maybe_null_slice::<$P>(),
-                    &a.clone().flatten_bool()?.boolean_buffer(),
+                    &a.clone().into_bool()?.boolean_buffer(),
                 )
                 .compute_statistics(stat),
             }

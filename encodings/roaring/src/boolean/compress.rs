@@ -1,7 +1,7 @@
 use croaring::Bitmap;
 use vortex::array::bool::BoolArray;
 use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
-use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray};
+use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, IntoArrayVariant};
 use vortex_dtype::DType;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_error::VortexResult;
@@ -37,7 +37,7 @@ impl EncodingCompression for RoaringBoolEncoding {
         _like: Option<&Array>,
         _ctx: Compressor,
     ) -> VortexResult<Array> {
-        roaring_encode(array.clone().flatten_bool()?).map(move |a| a.into_array())
+        roaring_encode(array.clone().into_bool()?).map(move |a| a.into_array())
     }
 }
 

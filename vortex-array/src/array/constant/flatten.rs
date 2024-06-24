@@ -7,10 +7,10 @@ use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::validity::Validity;
 use crate::{ArrayDType, ArrayTrait};
-use crate::{ArrayFlatten, Flattened};
+use crate::{Canonical, IntoCanonical};
 
-impl ArrayFlatten for ConstantArray {
-    fn flatten(self) -> VortexResult<Flattened> {
+impl IntoCanonical for ConstantArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
         let validity = match self.dtype().nullability() {
             Nullability::NonNullable => Validity::NonNullable,
             Nullability::Nullable => match self.scalar().is_null() {
@@ -20,7 +20,7 @@ impl ArrayFlatten for ConstantArray {
         };
 
         if let Ok(b) = BoolScalar::try_from(self.scalar()) {
-            return Ok(Flattened::Bool(BoolArray::from_vec(
+            return Ok(Canonical::Bool(BoolArray::from_vec(
                 vec![b.value().unwrap_or_default(); self.len()],
                 validity,
             )));
@@ -28,7 +28,7 @@ impl ArrayFlatten for ConstantArray {
 
         if let Ok(ptype) = PType::try_from(self.scalar().dtype()) {
             return match_each_native_ptype!(ptype, |$P| {
-                Ok(Flattened::Primitive(PrimitiveArray::from_vec::<$P>(
+                Ok(Canonical::Primitive(PrimitiveArray::from_vec::<$P>(
                     vec![$P::try_from(self.scalar()).unwrap_or_else(|_| $P::default()); self.len()],
                     validity,
                 )))

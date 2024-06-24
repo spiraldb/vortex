@@ -7,11 +7,11 @@ use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
-use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::slice::SliceFn;
 use crate::compute::take::{take, TakeFn};
+use crate::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
-use crate::{Array, ArrayDType, IntoArray};
+use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 
 mod slice;
 
@@ -40,7 +40,7 @@ impl ScalarAtFn for SparseArray {
 
 impl TakeFn for SparseArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let flat_indices = indices.clone().flatten_primitive()?;
+        let flat_indices = indices.clone().into_primitive()?;
         // if we are taking a lot of values we should build a hashmap
         let (positions, physical_take_indices) = if indices.len() > 128 {
             take_map(self, &flat_indices)?
@@ -50,12 +50,13 @@ impl TakeFn for SparseArray {
 
         let taken_values = take(&self.values(), &physical_take_indices.into_array())?;
 
-        Ok(Self::new(
+        Ok(Self::try_new(
             positions.into_array(),
             taken_values,
             indices.len(),
             self.fill_value().clone(),
         )
+        .unwrap()
         .into_array())
     }
 }
@@ -123,13 +124,14 @@ mod test {
     use crate::{Array, ArrayTrait, IntoArray};
 
     fn sparse_array() -> Array {
-        SparseArray::new(
+        SparseArray::try_new(
             PrimitiveArray::from(vec![0u64, 37, 47, 99]).into_array(),
             PrimitiveArray::from_vec(vec![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid)
                 .into_array(),
             100,
             Scalar::null(DType::Primitive(PType::F64, Nullability::Nullable)),
         )
+        .unwrap()
         .into_array()
     }
 
@@ -140,11 +142,11 @@ mod test {
             SparseArray::try_from(take(&sparse, &vec![0, 47, 47, 0, 99].into_array()).unwrap())
                 .unwrap();
         assert_eq!(
-            taken.indices().into_primitive().maybe_null_slice::<u64>(),
+            taken.indices().as_primitive().maybe_null_slice::<u64>(),
             [0, 1, 2, 3, 4]
         );
         assert_eq!(
-            taken.values().into_primitive().maybe_null_slice::<f64>(),
+            taken.values().as_primitive().maybe_null_slice::<f64>(),
             [1.23f64, 9.99, 9.99, 1.23, 3.5]
         );
     }
@@ -155,12 +157,12 @@ mod test {
         let taken = SparseArray::try_from(take(&sparse, &vec![69].into_array()).unwrap()).unwrap();
         assert!(taken
             .indices()
-            .into_primitive()
+            .as_primitive()
             .maybe_null_slice::<u64>()
             .is_empty());
         assert!(taken
             .values()
-            .into_primitive()
+            .as_primitive()
             .maybe_null_slice::<f64>()
             .is_empty());
     }
@@ -171,11 +173,11 @@ mod test {
         let taken =
             SparseArray::try_from(take(&sparse, &vec![69, 37].into_array()).unwrap()).unwrap();
         assert_eq!(
-            taken.indices().into_primitive().maybe_null_slice::<u64>(),
+            taken.indices().as_primitive().maybe_null_slice::<u64>(),
             [1]
         );
         assert_eq!(
-            taken.values().into_primitive().maybe_null_slice::<f64>(),
+            taken.values().as_primitive().maybe_null_slice::<f64>(),
             [0.47f64]
         );
         assert_eq!(taken.len(), 2);
@@ -188,7 +190,7 @@ mod test {
         let (positions, patch_indices) = take_map(&sparse, &indices).unwrap();
         assert_eq!(
             positions.maybe_null_slice::<u64>(),
-            sparse.indices().into_primitive().maybe_null_slice::<u64>()
+            sparse.indices().as_primitive().maybe_null_slice::<u64>()
         );
         assert_eq!(patch_indices.maybe_null_slice::<u64>(), [0u64, 1, 2, 3]);
     }

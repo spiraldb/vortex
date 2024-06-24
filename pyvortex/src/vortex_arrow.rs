@@ -5,7 +5,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyList};
 use vortex::array::chunked::ChunkedArray;
-use vortex::Array;
+use vortex::{Array, IntoCanonical};
 
 pub fn map_arrow_err(error: ArrowError) -> PyErr {
     PyValueError::new_err(error.to_string())
@@ -17,10 +17,10 @@ pub fn export_array<'py>(py: Python<'py>, array: &Array) -> PyResult<Bound<'py, 
     let chunks: Vec<ArrayRef> = if let Ok(chunked_array) = ChunkedArray::try_from(array) {
         chunked_array
             .chunks()
-            .map(|chunk| chunk.flatten().unwrap().into_arrow())
+            .map(|chunk| chunk.into_canonical().unwrap().into_arrow())
             .collect()
     } else {
-        vec![array.clone().flatten().unwrap().into_arrow()]
+        vec![array.clone().into_canonical().unwrap().into_arrow()]
     };
     if chunks.is_empty() {
         return Err(PyValueError::new_err("No chunks in array"));

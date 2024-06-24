@@ -3,7 +3,7 @@ use std::os::unix::prelude::MetadataExt;
 use std::path::Path;
 
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::r#struct::StructArray;
+use vortex::array::struct_::StructArray;
 use vortex::ArrayDType;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;

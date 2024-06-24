@@ -1,10 +1,10 @@
 use vortex_error::VortexResult;
 
 use crate::array::varbin::VarBinArray;
-use crate::{ArrayFlatten, Flattened};
+use crate::{Canonical, IntoCanonical};
 
-impl ArrayFlatten for VarBinArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::VarBin(self))
+impl IntoCanonical for VarBinArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        Ok(Canonical::VarBin(self))
     }
 }

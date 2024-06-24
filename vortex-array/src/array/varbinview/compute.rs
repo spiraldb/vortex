@@ -3,8 +3,8 @@ use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
-use crate::compute::scalar_at::ScalarAtFn;
 use crate::compute::slice::{slice, SliceFn};
+use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::validity::ArrayValidity;
 use crate::{Array, ArrayDType, IntoArray, IntoArrayData};

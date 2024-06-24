@@ -35,7 +35,6 @@ macro_rules! impl_encoding {
                 ArrayMetadata,
                 ArrayTrait,
                 AsArray,
-                Flattened,
                 GetArrayMetadata,
                 IntoArray,
                 ToArray,
@@ -146,8 +145,8 @@ macro_rules! impl_encoding {
                 }
 
                 #[inline]
-                fn flatten(&self, array: Array) -> VortexResult<Flattened> {
-                    <Self as ArrayEncodingExt>::flatten(array)
+                fn canonicalize(&self, array: Array) -> VortexResult<$crate::Canonical> {
+                    <Self as ArrayEncodingExt>::into_canonical(array)
                 }
 
                 #[inline]

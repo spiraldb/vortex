@@ -4,8 +4,8 @@ use std::hash::{Hash, Hasher};
 
 use vortex_error::VortexResult;
 
+use crate::canonical::{Canonical, IntoCanonical};
 use crate::compress::EncodingCompression;
-use crate::flatten::{ArrayFlatten, Flattened};
 use crate::ArrayDef;
 use crate::{Array, ArrayTrait};
 
@@ -39,7 +39,7 @@ pub trait ArrayEncoding: 'static + Sync + Send + Debug {
     fn id(&self) -> EncodingId;
 
     /// Flatten the given array.
-    fn flatten(&self, array: Array) -> VortexResult<Flattened>;
+    fn canonicalize(&self, array: Array) -> VortexResult<Canonical>;
 
     /// Unwrap the provided array into an implementation of ArrayTrait
     fn with_dyn(
@@ -68,9 +68,9 @@ impl Hash for dyn ArrayEncoding + '_ {
 pub trait ArrayEncodingExt {
     type D: ArrayDef;
 
-    fn flatten(array: Array) -> VortexResult<Flattened> {
+    fn into_canonical(array: Array) -> VortexResult<Canonical> {
         let typed = <<Self::D as ArrayDef>::Array as TryFrom<Array>>::try_from(array)?;
-        ArrayFlatten::flatten(typed)
+        IntoCanonical::into_canonical(typed)
     }
 
     #[inline]

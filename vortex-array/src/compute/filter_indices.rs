@@ -2,7 +2,7 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_expr::Disjunction;
 
-use crate::{Array, ArrayDType};
+use crate::{Array, ArrayDType, IntoArrayVariant};
 
 pub trait FilterIndicesFn {
     fn filter_indices(&self, predicate: &Disjunction) -> VortexResult<Array>;
@@ -18,7 +18,7 @@ pub fn filter_indices(array: &Array, predicate: &Disjunction) -> VortexResult<Ar
     // DType, we can flatten the array and apply filter to the flattened primitive array
     match array.dtype() {
         DType::Primitive(..) => {
-            let flat = array.clone().flatten_primitive()?;
+            let flat = array.clone().into_primitive()?;
             flat.filter_indices(predicate)
         }
         _ => Err(vortex_err!(

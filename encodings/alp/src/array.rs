@@ -3,7 +3,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::PType;
 use vortex_error::vortex_bail;
 
@@ -88,9 +88,9 @@ impl ArrayValidity for ALPArray {
     }
 }
 
-impl ArrayFlatten for ALPArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        decompress(self).map(Flattened::Primitive)
+impl IntoCanonical for ALPArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        decompress(self).map(Canonical::Primitive)
     }
 }
 

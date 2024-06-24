@@ -2,8 +2,9 @@ use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
-use crate::compute::cast::cast;
+use crate::array::primitive::PrimitiveArray;
 use crate::compute::take::{take, TakeFn};
+use crate::compute::unary::cast::try_cast;
 use crate::{Array, IntoArray, ToArray};
 use crate::{ArrayDType, ArrayTrait};
 
@@ -13,7 +14,7 @@ impl TakeFn for ChunkedArray {
             return Ok(self.to_array());
         }
 
-        let indices = cast(indices, PType::U64.into())?.flatten_primitive()?;
+        let indices = PrimitiveArray::try_from(try_cast(indices, PType::U64.into())?)?;
 
         // While the chunk idx remains the same, accumulate a list of chunk indices.
         let mut chunks = Vec::new();
@@ -54,7 +55,7 @@ impl TakeFn for ChunkedArray {
 mod test {
     use crate::array::chunked::ChunkedArray;
     use crate::compute::take::take;
-    use crate::{ArrayDType, ArrayTrait, AsArray, IntoArray};
+    use crate::{ArrayDType, ArrayTrait, AsArray, IntoArray, IntoCanonical};
 
     #[test]
     fn test_take() {
@@ -68,7 +69,9 @@ mod test {
         let result = &ChunkedArray::try_from(take(arr.as_array_ref(), &indices).unwrap())
             .unwrap()
             .into_array()
-            .flatten_primitive()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
             .unwrap();
         assert_eq!(result.maybe_null_slice::<i32>(), &[1, 1, 1, 2]);
     }

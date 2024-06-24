@@ -103,6 +103,7 @@ uuid = "1.8.0"
 walkdir = "2.5.0"
 worker = "0.3.0"
 zigzag = "0.1.0"
+mimalloc = "0.1.42"
 
 [workspace.lints.rust]
 warnings = "deny"

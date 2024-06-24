@@ -8,10 +8,10 @@ use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
 use crate::validity::Validity;
-use crate::{ArrayDType, ArrayFlatten, ArrayTrait, Flattened};
+use crate::{ArrayDType, ArrayTrait, Canonical, IntoArrayVariant, IntoCanonical};
 
-impl ArrayFlatten for SparseArray {
-    fn flatten(self) -> VortexResult<Flattened> {
+impl IntoCanonical for SparseArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
         // Resolve our indices into a vector of usize applying the offset
         let indices = self.resolved_indices();
 
@@ -19,12 +19,16 @@ impl ArrayFlatten for SparseArray {
         validity.append_n(self.len(), false);
 
         if matches!(self.dtype(), DType::Bool(_)) {
-            let values = self.values().flatten_bool()?.boolean_buffer();
-            flatten_sparse_bools(values, &indices, self.len(), self.fill_value(), validity)
+            let values = self
+                .values()
+                .into_canonical()?
+                .into_bool()?
+                .boolean_buffer();
+            canonicalize_sparse_bools(values, &indices, self.len(), self.fill_value(), validity)
         } else {
-            let values = self.values().flatten_primitive()?;
+            let values = self.values().into_primitive()?;
             match_each_native_ptype!(values.ptype(), |$P| {
-                flatten_sparse_primitives(
+                canonicalize_sparse_primitives(
                     values.maybe_null_slice::<$P>(),
                     &indices,
                     self.len(),
@@ -36,13 +40,13 @@ impl ArrayFlatten for SparseArray {
     }
 }
 
-fn flatten_sparse_bools(
+fn canonicalize_sparse_bools(
     values: BooleanBuffer,
     indices: &[usize],
     len: usize,
     fill_value: &Scalar,
     mut validity: BooleanBufferBuilder,
-) -> VortexResult<Flattened> {
+) -> VortexResult<Canonical> {
     let fill_bool: bool = if fill_value.is_null() {
         bool::default()
     } else {
@@ -57,16 +61,18 @@ fn flatten_sparse_bools(
     let validity = Validity::from(validity.finish());
     let bool_values = BoolArray::from_vec(flat_bools, validity);
 
-    Ok(Flattened::Bool(bool_values))
+    Ok(Canonical::Bool(bool_values))
 }
 
-fn flatten_sparse_primitives<T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
+fn canonicalize_sparse_primitives<
+    T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>,
+>(
     values: &[T],
     indices: &[usize],
     len: usize,
     fill_value: &Scalar,
     mut validity: BooleanBufferBuilder,
-) -> VortexResult<Flattened> {
+) -> VortexResult<Canonical> {
     let primitive_fill = if fill_value.is_null() {
         T::default()
     } else {
@@ -85,7 +91,7 @@ fn flatten_sparse_primitives<T: NativePType + for<'a> TryFrom<&'a Scalar, Error 
     } else {
         PrimitiveArray::from(result)
     };
-    Ok(Flattened::Primitive(array))
+    Ok(Canonical::Primitive(array))
 }
 
 #[cfg(test)]
@@ -95,15 +101,15 @@ mod test {
     use crate::array::bool::BoolArray;
     use crate::array::sparse::SparseArray;
     use crate::validity::Validity;
-    use crate::{ArrayDType, ArrayFlatten, Flattened, IntoArray};
+    use crate::{ArrayDType, Canonical, IntoArray, IntoCanonical};
 
     #[test]
     fn test_sparse_bool() {
         let indices = vec![0u64].into_array();
         let values = BoolArray::from_vec(vec![true], Validity::NonNullable).into_array();
-        let sparse_bools = SparseArray::new(indices, values, 10, true.into());
+        let sparse_bools = SparseArray::try_new(indices, values, 10, true.into()).unwrap();
         assert_eq!(*sparse_bools.dtype(), DType::Bool(Nullability::NonNullable));
-        let flat_bools = sparse_bools.flatten().unwrap();
-        assert!(matches!(flat_bools, Flattened::Bool(_)));
+        let flat_bools = sparse_bools.into_canonical().unwrap();
+        assert!(matches!(flat_bools, Canonical::Bool(_)));
     }
 }

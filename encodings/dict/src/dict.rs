@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 use vortex::accessor::ArrayAccessor;
 use vortex::array::bool::BoolArray;
-use vortex::compute::scalar_at::scalar_at;
 use vortex::compute::take::take;
+use vortex::compute::unary::scalar_at::scalar_at;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::vortex_bail;
 
@@ -44,9 +44,9 @@ impl DictArray {
     }
 }
 
-impl ArrayFlatten for DictArray {
-    fn flatten(self) -> VortexResult<Flattened> {
-        take(&self.values(), &self.codes())?.flatten()
+impl IntoCanonical for DictArray {
+    fn into_canonical(self) -> VortexResult<Canonical> {
+        take(&self.values(), &self.codes())?.into_canonical()
     }
 }
 
@@ -62,7 +62,12 @@ impl ArrayValidity for DictArray {
 
     fn logical_validity(&self) -> LogicalValidity {
         if self.dtype().is_nullable() {
-            let primitive_codes = self.codes().flatten_primitive().unwrap();
+            let primitive_codes = self
+                .codes()
+                .into_canonical()
+                .unwrap()
+                .into_primitive()
+                .unwrap();
             match_each_integer_ptype!(primitive_codes.ptype(), |$P| {
                 ArrayAccessor::<$P>::with_iterator(&primitive_codes, |iter| {
                     LogicalValidity::Array(

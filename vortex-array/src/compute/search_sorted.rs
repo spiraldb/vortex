@@ -4,7 +4,7 @@ use std::cmp::Ordering::{Equal, Greater, Less};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::compute::scalar_at::scalar_at;
+use crate::compute::unary::scalar_at::scalar_at;
 use crate::{Array, ArrayDType};
 
 #[derive(Debug, Copy, Clone)]

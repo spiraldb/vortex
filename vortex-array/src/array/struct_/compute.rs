@@ -2,10 +2,10 @@ use itertools::Itertools;
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
-use crate::array::r#struct::StructArray;
-use crate::compute::scalar_at::{scalar_at, ScalarAtFn};
+use crate::array::struct_::StructArray;
 use crate::compute::slice::{slice, SliceFn};
 use crate::compute::take::{take, TakeFn};
+use crate::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::{Array, ArrayDType, IntoArray};
 

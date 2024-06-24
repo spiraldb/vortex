@@ -7,7 +7,10 @@ pub trait CastFn {
     fn cast(&self, dtype: &DType) -> VortexResult<Array>;
 }
 
-pub fn cast(array: &Array, dtype: &DType) -> VortexResult<Array> {
+/// Attempt to cast an array to a desired DType.
+///
+/// Some array support the ability to narrow or upcast.
+pub fn try_cast(array: &Array, dtype: &DType) -> VortexResult<Array> {
     if array.dtype() == dtype {
         return Ok(array.clone());
     }

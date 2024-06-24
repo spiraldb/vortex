@@ -3,7 +3,7 @@ use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::cast::CastFn;
+use crate::compute::unary::cast::CastFn;
 use crate::validity::Validity;
 use crate::IntoArray;
 use crate::{Array, ArrayDType};
@@ -57,25 +57,27 @@ mod test {
     #[test]
     fn cast_u32_u8() {
         let arr = vec![0u32, 10, 200].into_array();
-        let p = compute::cast::cast(&arr, PType::U8.into())
+        let p = compute::unary::cast::try_cast(&arr, PType::U8.into())
             .unwrap()
-            .into_primitive();
+            .as_primitive();
         assert_eq!(p.maybe_null_slice::<u8>(), vec![0u8, 10, 200]);
     }
 
     #[test]
     fn cast_u32_f32() {
         let arr = vec![0u32, 10, 200].into_array();
-        let u8arr = compute::cast::cast(&arr, PType::F32.into())
+        let u8arr = compute::unary::cast::try_cast(&arr, PType::F32.into())
             .unwrap()
-            .into_primitive();
+            .as_primitive();
         assert_eq!(u8arr.maybe_null_slice::<f32>(), vec![0.0f32, 10., 200.]);
     }
 
     #[test]
     fn cast_i32_u32() {
         let arr = vec![-1i32].into_array();
-        let error = compute::cast::cast(&arr, PType::U32.into()).err().unwrap();
+        let error = compute::unary::cast::try_cast(&arr, PType::U32.into())
+            .err()
+            .unwrap();
         let VortexError::ComputeError(s, _) = error else {
             unreachable!()
         };
