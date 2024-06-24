@@ -7,7 +7,7 @@ use vortex_buffer::io_buf::IoBuf;
 use vortex_error::VortexError;
 use vortex_ipc::io::VortexWrite;
 
-use crate::data_downloads::{data_vortex_uncompressed, download_data, parquet_to_lance};
+use crate::data_downloads::{data_vortex_uncompressed, download_data};
 use crate::reader::rewrite_parquet_as_vortex;
 use crate::{idempotent, IdempotentPath};
 
@@ -20,13 +20,6 @@ fn download_taxi_data() -> PathBuf {
 
 pub fn taxi_data_parquet() -> PathBuf {
     download_taxi_data()
-}
-
-pub fn taxi_data_lance() -> PathBuf {
-    idempotent("taxi_lance", |output_fname| {
-        parquet_to_lance(output_fname, taxi_data_parquet().as_path())
-    })
-    .unwrap()
 }
 
 pub fn taxi_data_vortex_uncompressed() -> PathBuf {

@@ -8,7 +8,7 @@ use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::compute::take::take;
 use crate::stats::ArrayStatistics;
-use crate::{Array, ArrayData, IntoArray, IntoArrayData, ToArray, ToArrayData};
+use crate::{Array, IntoArray};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -48,9 +48,9 @@ pub enum Validity {
 impl Validity {
     pub const DTYPE: DType = DType::Bool(Nullability::NonNullable);
 
-    pub fn into_array_data(self) -> Option<ArrayData> {
+    pub fn into_array(self) -> Option<Array> {
         match self {
-            Self::Array(a) => Some(a.into_array_data()),
+            Self::Array(a) => Some(a),
             _ => None,
         }
     }
@@ -130,7 +130,7 @@ impl Validity {
                 {
                     LogicalValidity::AllInvalid(length)
                 } else {
-                    LogicalValidity::Array(a.to_array_data())
+                    LogicalValidity::Array(a.clone())
                 }
             }
         }
@@ -202,7 +202,6 @@ impl FromIterator<LogicalValidity> for Validity {
                 LogicalValidity::AllValid(count) => BooleanBuffer::new_set(count),
                 LogicalValidity::AllInvalid(count) => BooleanBuffer::new_unset(count),
                 LogicalValidity::Array(array) => array
-                    .into_array()
                     .flatten_bool()
                     .expect("validity must flatten to BoolArray")
                     .boolean_buffer(),
@@ -226,7 +225,7 @@ impl<'a, E> FromIterator<&'a Option<E>> for Validity {
 pub enum LogicalValidity {
     AllValid(usize),
     AllInvalid(usize),
-    Array(ArrayData),
+    Array(Array),
 }
 
 impl LogicalValidity {
@@ -235,7 +234,7 @@ impl LogicalValidity {
             Self::AllValid(_) => Ok(None),
             Self::AllInvalid(l) => Ok(Some(NullBuffer::new_null(*l))),
             Self::Array(a) => Ok(Some(NullBuffer::new(
-                a.to_array().flatten_bool()?.boolean_buffer(),
+                a.clone().flatten_bool()?.boolean_buffer(),
             ))),
         }
     }
@@ -244,9 +243,7 @@ impl LogicalValidity {
         match self {
             Self::AllValid(l) => Ok(NullBuffer::new_valid(*l)),
             Self::AllInvalid(l) => Ok(NullBuffer::new_null(*l)),
-            Self::Array(a) => Ok(NullBuffer::new(
-                a.to_array().flatten_bool()?.boolean_buffer(),
-            )),
+            Self::Array(a) => Ok(NullBuffer::new(a.clone().flatten_bool()?.boolean_buffer())),
         }
     }
 
@@ -262,7 +259,7 @@ impl LogicalValidity {
         match self {
             Self::AllValid(n) => *n,
             Self::AllInvalid(n) => *n,
-            Self::Array(a) => a.to_array().len(),
+            Self::Array(a) => a.len(),
         }
     }
 
@@ -270,7 +267,7 @@ impl LogicalValidity {
         match self {
             Self::AllValid(n) => *n == 0,
             Self::AllInvalid(n) => *n == 0,
-            Self::Array(a) => a.to_array().is_empty(),
+            Self::Array(a) => a.is_empty(),
         }
     }
 
@@ -278,7 +275,7 @@ impl LogicalValidity {
         match self {
             Self::AllValid(_) => Validity::AllValid,
             Self::AllInvalid(_) => Validity::AllInvalid,
-            Self::Array(a) => Validity::Array(a.into_array()),
+            Self::Array(a) => Validity::Array(a),
         }
     }
 }
@@ -288,7 +285,7 @@ impl IntoArray for LogicalValidity {
         match self {
             Self::AllValid(len) => BoolArray::from(vec![true; len]).into_array(),
             Self::AllInvalid(len) => BoolArray::from(vec![false; len]).into_array(),
-            Self::Array(a) => a.into_array(),
+            Self::Array(a) => a,
         }
     }
 }

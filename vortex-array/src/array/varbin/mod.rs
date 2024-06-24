@@ -1,15 +1,18 @@
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
+pub use stats::compute_stats;
+use vortex_buffer::Buffer;
 use vortex_dtype::Nullability;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
+use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::scalar_at::scalar_at;
 use crate::compute::slice::slice;
 use crate::validity::{Validity, ValidityMetadata};
-use crate::{impl_encoding, ArrayDType, IntoArrayData};
+use crate::{impl_encoding, ArrayDType};
 
 mod accessor;
 mod array;
@@ -17,11 +20,6 @@ pub mod builder;
 mod compute;
 mod flatten;
 mod stats;
-
-pub use stats::compute_stats;
-use vortex_buffer::Buffer;
-
-use crate::array::primitive::PrimitiveArray;
 
 impl_encoding!("vortex.varbin", VarBin);
 
@@ -57,9 +55,9 @@ impl VarBinArray {
         };
 
         let mut children = Vec::with_capacity(3);
-        children.push(offsets.into_array_data());
-        children.push(bytes.into_array_data());
-        if let Some(a) = validity.into_array_data() {
+        children.push(offsets);
+        children.push(bytes);
+        if let Some(a) = validity.into_array() {
             children.push(a)
         }
 
@@ -139,7 +137,7 @@ impl VarBinArray {
             .ok()
             .map(|p| {
                 match_each_native_ptype!(p.ptype(), |$P| {
-                    p.typed_data::<$P>()[index].as_()
+                    p.maybe_null_slice::<$P>()[index].as_()
                 })
             })
             .unwrap_or_else(|| {

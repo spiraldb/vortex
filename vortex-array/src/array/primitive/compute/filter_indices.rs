@@ -51,7 +51,7 @@ fn indices_matching_predicate(
     let matching_idxs = match_each_native_ptype!(arr.ptype(), |$T| {
         let rhs_typed: $T = rhs.try_into().unwrap();
         let predicate_fn = &predicate.op.to_predicate::<$T>();
-        apply_predicate(arr.typed_data::<$T>(), &rhs_typed, predicate_fn)
+        apply_predicate(arr.maybe_null_slice::<$T>(), &rhs_typed, predicate_fn)
     });
 
     Ok(matching_idxs)
@@ -68,7 +68,6 @@ fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
 
 #[cfg(test)]
 mod test {
-    use itertools::Itertools;
     use vortex_dtype::field::FieldPath;
     use vortex_expr::{lit, Conjunction, FieldPathOperations};
 
@@ -80,13 +79,11 @@ mod test {
     }
 
     fn to_int_indices(filtered_primitive: BoolArray) -> Vec<u64> {
-        let filtered = filtered_primitive
+        filtered_primitive
             .boolean_buffer()
-            .iter()
-            .enumerate()
-            .flat_map(|(idx, v)| if v { Some(idx as u64) } else { None })
-            .collect_vec();
-        filtered
+            .set_indices()
+            .map(|i| i as u64)
+            .collect()
     }
 
     #[test]

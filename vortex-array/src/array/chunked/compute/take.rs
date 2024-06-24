@@ -19,9 +19,9 @@ impl TakeFn for ChunkedArray {
         let mut chunks = Vec::new();
         let mut indices_in_chunk = Vec::new();
         let mut prev_chunk_idx = self
-            .find_chunk_idx(indices.typed_data::<u64>()[0] as usize)
+            .find_chunk_idx(indices.maybe_null_slice::<u64>()[0] as usize)
             .0;
-        for idx in indices.typed_data::<u64>() {
+        for idx in indices.maybe_null_slice::<u64>() {
             let (chunk_idx, idx_in_chunk) = self.find_chunk_idx(*idx as usize);
 
             if chunk_idx != prev_chunk_idx {
@@ -70,6 +70,6 @@ mod test {
             .into_array()
             .flatten_primitive()
             .unwrap();
-        assert_eq!(result.typed_data::<i32>(), &[1, 1, 1, 2]);
+        assert_eq!(result.maybe_null_slice::<i32>(), &[1, 1, 1, 2]);
     }
 }

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
+
 use std::collections::HashMap;
 use std::future::ready;
 use std::ops::Deref;
@@ -60,7 +61,6 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
 
         // Figure out which chunks are relevant.
         let chunk_idxs = find_chunks(&self.row_offsets, indices)?;
-
         // Coalesce the chunks that we're going to read from.
         let coalesced_chunks = self.coalesce_chunks(chunk_idxs.as_ref());
 
@@ -160,13 +160,13 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIn
     // TODO(ngates): lots of optimizations to be had here, potentially lots of push-down.
     //  For now, we just flatten everything into primitive arrays and iterate.
     let row_offsets = cast(row_offsets, PType::U64.into())?.flatten_primitive()?;
-    let _rows = format!("{:?}", row_offsets.typed_data::<u64>());
+    let _rows = format!("{:?}", row_offsets.maybe_null_slice::<u64>());
     let indices = cast(indices, PType::U64.into())?.flatten_primitive()?;
-    let _indices = format!("{:?}", indices.typed_data::<u64>());
+    let _indices = format!("{:?}", indices.maybe_null_slice::<u64>());
 
     if let (Some(last_idx), Some(num_rows)) = (
-        indices.typed_data::<u64>().last(),
-        row_offsets.typed_data::<u64>().last(),
+        indices.maybe_null_slice::<u64>().last(),
+        row_offsets.maybe_null_slice::<u64>().last(),
     ) {
         if last_idx >= num_rows {
             vortex_bail!("Index {} out of bounds {}", last_idx, num_rows);
@@ -175,8 +175,8 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIn
 
     let mut chunks = HashMap::new();
 
-    let row_offsets_ref = row_offsets.typed_data::<u64>();
-    for (pos, idx) in indices.typed_data::<u64>().iter().enumerate() {
+    let row_offsets_ref = row_offsets.maybe_null_slice::<u64>();
+    for (pos, idx) in indices.maybe_null_slice::<u64>().iter().enumerate() {
         let chunk_idx = row_offsets_ref.binary_search(idx).unwrap_or_else(|x| x - 1);
         chunks
             .entry(chunk_idx as u32)
@@ -218,7 +218,7 @@ mod test {
     use vortex_dtype::PType;
     use vortex_error::VortexResult;
 
-    use crate::chunked_reader::ChunkedArrayReaderBuilder;
+    use crate::chunked_reader::ChunkedArrayReader;
     use crate::writer::ArrayWriter;
     use crate::MessageReader;
 
@@ -250,14 +250,14 @@ mod test {
         let view_ctx = msgs.read_view_context(&Default::default()).await?;
         let dtype = msgs.read_dtype().await?;
 
-        let mut reader = ChunkedArrayReaderBuilder::default()
-            .read(buffer)
-            .view_context(view_ctx)
-            .dtype(dtype)
-            .row_offsets(row_offsets.into_array())
-            .byte_offsets(byte_offsets.into_array())
-            .build()
-            .unwrap();
+        let mut reader = ChunkedArrayReader::try_new(
+            buffer,
+            view_ctx,
+            dtype,
+            byte_offsets.into_array(),
+            row_offsets.into_array(),
+        )
+        .unwrap();
 
         let result = reader
             .take_rows(&PrimitiveArray::from(vec![0u64, 10, 10_000 - 1]).into_array())
@@ -265,7 +265,7 @@ mod test {
             .flatten_primitive()?;
 
         assert_eq!(result.len(), 3);
-        assert_eq!(result.typed_data::<i32>(), &[0, 10, 999]);
+        assert_eq!(result.maybe_null_slice::<i32>(), &[0, 10, 999]);
 
         Ok(())
     }

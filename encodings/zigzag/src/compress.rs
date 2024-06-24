@@ -51,10 +51,10 @@ impl EncodingCompression for ZigZagEncoding {
 
 pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
     let encoded = match parray.ptype() {
-        PType::I8 => zigzag_encode_primitive::<i8>(parray.typed_data(), parray.validity()),
-        PType::I16 => zigzag_encode_primitive::<i16>(parray.typed_data(), parray.validity()),
-        PType::I32 => zigzag_encode_primitive::<i32>(parray.typed_data(), parray.validity()),
-        PType::I64 => zigzag_encode_primitive::<i64>(parray.typed_data(), parray.validity()),
+        PType::I8 => zigzag_encode_primitive::<i8>(parray.maybe_null_slice(), parray.validity()),
+        PType::I16 => zigzag_encode_primitive::<i16>(parray.maybe_null_slice(), parray.validity()),
+        PType::I32 => zigzag_encode_primitive::<i32>(parray.maybe_null_slice(), parray.validity()),
+        PType::I64 => zigzag_encode_primitive::<i64>(parray.maybe_null_slice(), parray.validity()),
         _ => panic!("Unsupported ptype {}", parray.ptype()),
     };
     ZigZagArray::try_new(encoded.into_array())
@@ -75,10 +75,10 @@ where
 #[allow(dead_code)]
 pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
     match parray.ptype() {
-        PType::U8 => zigzag_decode_primitive::<i8>(parray.typed_data(), parray.validity()),
-        PType::U16 => zigzag_decode_primitive::<i16>(parray.typed_data(), parray.validity()),
-        PType::U32 => zigzag_decode_primitive::<i32>(parray.typed_data(), parray.validity()),
-        PType::U64 => zigzag_decode_primitive::<i64>(parray.typed_data(), parray.validity()),
+        PType::U8 => zigzag_decode_primitive::<i8>(parray.maybe_null_slice(), parray.validity()),
+        PType::U16 => zigzag_decode_primitive::<i16>(parray.maybe_null_slice(), parray.validity()),
+        PType::U32 => zigzag_decode_primitive::<i32>(parray.maybe_null_slice(), parray.validity()),
+        PType::U64 => zigzag_decode_primitive::<i64>(parray.maybe_null_slice(), parray.validity()),
         _ => panic!("Unsupported ptype {}", parray.ptype()),
     }
 }

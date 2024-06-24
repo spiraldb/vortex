@@ -5,7 +5,6 @@ use crate::validity::{ArrayValidity, LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayFlatten};
 
-mod as_arrow;
 mod compute;
 
 impl_encoding!("vortex.null", Null);

@@ -12,6 +12,7 @@ use vortex_scalar::{PValue, Scalar, ScalarValue};
 use crate::encoding::{EncodingId, EncodingRef};
 use crate::flatbuffers as fb;
 use crate::stats::{Stat, Statistics, StatsSet};
+use crate::visitor::ArrayVisitor;
 use crate::Context;
 use crate::{Array, IntoArray, ToArray};
 
@@ -34,7 +35,6 @@ impl Debug for ArrayView {
         f.debug_struct("ArrayView")
             .field("encoding", &self.encoding)
             .field("dtype", &self.dtype)
-            // .field("array", &self.array)
             .field("buffers", &self.buffers)
             .field("ctx", &self.ctx)
             .finish()
@@ -139,6 +139,18 @@ impl ArrayView {
         }
     }
 
+    pub fn nchildren(&self) -> usize {
+        self.flatbuffer().children().map(|c| c.len()).unwrap_or(0)
+    }
+
+    pub fn children(&self) -> Vec<Array> {
+        let mut collector = ChildrenCollector::default();
+        Array::View(self.clone())
+            .with_dyn(|a| a.accept(&mut collector))
+            .unwrap();
+        collector.children
+    }
+
     /// Whether the current Array makes use of a buffer
     pub fn has_buffer(&self) -> bool {
         self.flatbuffer().has_buffer()
@@ -159,6 +171,18 @@ impl ArrayView {
 
     pub fn statistics(&self) -> &dyn Statistics {
         self
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct ChildrenCollector {
+    children: Vec<Array>,
+}
+
+impl ArrayVisitor for ChildrenCollector {
+    fn visit_child(&mut self, _name: &str, array: &Array) -> VortexResult<()> {
+        self.children.push(array.clone());
+        Ok(())
     }
 }
 

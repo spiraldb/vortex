@@ -4,7 +4,8 @@ use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
+use vortex_dtype::{Nullability, PType};
 use vortex_error::{vortex_bail, vortex_err};
 
 mod compress;
@@ -14,11 +15,12 @@ impl_encoding!("fastlanes.bitpacked", BitPacked);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BitPackedMetadata {
+    // TODO(ngates): serialize into compact form
     validity: ValidityMetadata,
-    patches_dtype: Option<DType>,
+    patches: bool,
     bit_width: usize,
-    offset: usize,
-    length: usize,
+    offset: usize, // Know to be <1024
+    length: usize, // Store end padding instead <1024
 }
 
 /// NB: All non-null values in the patches array are considered patches
@@ -28,10 +30,9 @@ impl BitPackedArray {
         validity: Validity,
         patches: Option<Array>,
         bit_width: usize,
-        dtype: DType,
         len: usize,
     ) -> VortexResult<Self> {
-        Self::try_new_from_offset(packed, validity, patches, bit_width, dtype, len, 0)
+        Self::try_new_from_offset(packed, validity, patches, bit_width, len, 0)
     }
 
     pub(crate) fn try_new_from_offset(
@@ -39,21 +40,20 @@ impl BitPackedArray {
         validity: Validity,
         patches: Option<Array>,
         bit_width: usize,
-        dtype: DType,
         length: usize,
         offset: usize,
     ) -> VortexResult<Self> {
-        if packed.dtype() != &DType::BYTES {
-            vortex_bail!(MismatchedTypes: DType::BYTES, packed.dtype());
+        let dtype = packed.dtype().with_nullability(validity.nullability());
+        if !dtype.is_unsigned_int() {
+            vortex_bail!(MismatchedTypes: "uint", &dtype);
         }
         if bit_width > 64 {
             vortex_bail!("Unsupported bit width {}", bit_width);
         }
-        if !dtype.is_int() {
-            vortex_bail!(MismatchedTypes: "int", dtype);
-        }
 
-        let expected_packed_size = ((length + 1023) / 1024) * 128 * bit_width;
+        let ptype: PType = (&dtype).try_into()?;
+        let expected_packed_size =
+            ((length + 1023) / 1024) * (128 * bit_width / ptype.byte_width());
         if packed.len() != expected_packed_size {
             return Err(vortex_err!(
                 "Expected {} packed bytes, got {}",
@@ -64,18 +64,18 @@ impl BitPackedArray {
 
         let metadata = BitPackedMetadata {
             validity: validity.to_metadata(length)?,
-            patches_dtype: patches.as_ref().map(|p| p.dtype().as_nullable()),
+            patches: patches.is_some(),
             offset,
             length,
             bit_width,
         };
 
         let mut children = Vec::with_capacity(3);
-        children.push(packed.into_array_data());
+        children.push(packed);
         if let Some(p) = patches {
-            children.push(p.into_array_data());
+            children.push(p);
         }
-        if let Some(a) = validity.into_array_data() {
+        if let Some(a) = validity.into_array() {
             children.push(a)
         }
 
@@ -85,7 +85,7 @@ impl BitPackedArray {
     #[inline]
     pub fn packed(&self) -> Array {
         self.array()
-            .child(0, &DType::BYTES)
+            .child(0, &self.dtype().with_nullability(Nullability::NonNullable))
             .expect("Missing packed array")
     }
 
@@ -96,10 +96,10 @@ impl BitPackedArray {
 
     #[inline]
     pub fn patches(&self) -> Option<Array> {
-        self.metadata().patches_dtype.as_ref().map(|pd| {
+        self.metadata().patches.then(|| {
             self.array()
-                .child(1, pd)
-                .expect("Missing patches with present metadata flag")
+                .child(1, &self.dtype().with_nullability(Nullability::Nullable))
+                .expect("Missing patches array")
         })
     }
 
@@ -110,11 +110,7 @@ impl BitPackedArray {
 
     pub fn validity(&self) -> Validity {
         self.metadata().validity.to_validity(self.array().child(
-            if self.metadata().patches_dtype.is_some() {
-                2
-            } else {
-                1
-            },
+            if self.metadata().patches { 2 } else { 1 },
             &Validity::DTYPE,
         ))
     }
@@ -147,7 +143,7 @@ impl ArrayValidity for BitPackedArray {
 impl AcceptArrayVisitor for BitPackedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("packed", &self.packed())?;
-        if self.metadata().patches_dtype.is_some() {
+        if self.metadata().patches {
             visitor.visit_child(
                 "patches",
                 &self.patches().expect("Expected patches to be present "),
@@ -228,7 +224,7 @@ mod test {
             .into_array()
             .flatten_primitive()
             .unwrap()
-            .typed_data::<u64>()
+            .maybe_null_slice::<u64>()
             .to_vec();
         assert_eq!(results, expected);
     }

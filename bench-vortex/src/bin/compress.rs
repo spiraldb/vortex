@@ -40,5 +40,4 @@ fn compress_pbi(which_pbi: PBIDataset) {
     let dataset = PBI(which_pbi);
     dataset.write_as_vortex();
     dataset.write_as_parquet();
-    dataset.write_as_lance();
 }

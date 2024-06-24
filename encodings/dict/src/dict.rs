@@ -5,7 +5,6 @@ use vortex::compute::scalar_at::scalar_at;
 use vortex::compute::take::take;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::IntoArrayData;
 use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::vortex_bail;
@@ -27,7 +26,7 @@ impl DictArray {
             DictMetadata {
                 codes_dtype: codes.dtype().clone(),
             },
-            [values.into_array_data(), codes.into_array_data()].into(),
+            [values, codes].into(),
             StatsSet::new(),
         )
     }
@@ -68,7 +67,7 @@ impl ArrayValidity for DictArray {
                 ArrayAccessor::<$P>::with_iterator(&primitive_codes, |iter| {
                     LogicalValidity::Array(
                         BoolArray::from(iter.flatten().map(|c| *c != 0).collect::<Vec<_>>())
-                            .into_array_data(),
+                            .into_array(),
                     )
                 })
                 .unwrap()

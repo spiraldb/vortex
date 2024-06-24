@@ -3,8 +3,8 @@ use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::ValidityMetadata;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
-use vortex_dtype::match_each_integer_ptype;
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
+use vortex_dtype::match_each_unsigned_integer_ptype;
 use vortex_error::vortex_bail;
 
 use crate::delta::compress::decompress;
@@ -48,7 +48,7 @@ impl DeltaArray {
                 validity: validity.to_metadata(len)?,
                 len,
             },
-            [bases.into_array_data(), deltas.into_array_data()].into(),
+            [bases, deltas].into(),
             StatsSet::new(),
         )?;
 
@@ -82,8 +82,8 @@ impl DeltaArray {
     #[inline]
     fn lanes(&self) -> usize {
         let ptype = self.dtype().try_into().unwrap();
-        match_each_integer_ptype!(ptype, |$T| {
-            <$T as fastlanez::Delta>::lanes()
+        match_each_unsigned_integer_ptype!(ptype, |$T| {
+            <$T as fastlanes::FastLanes>::LANES
         })
     }
 

@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use arrow_buffer::{ArrowNativeType, ScalarBuffer};
 use itertools::Itertools;
 use num_traits::AsPrimitive;
@@ -37,7 +35,7 @@ impl PrimitiveArray {
                     validity: validity.to_metadata(buffer.len())?,
                 },
                 Some(Buffer::from(buffer.into_inner())),
-                validity.into_array_data().into_iter().collect_vec().into(),
+                validity.into_array().into_iter().collect_vec().into(),
                 StatsSet::new(),
             )?,
         })
@@ -84,48 +82,40 @@ impl PrimitiveArray {
         ScalarBuffer::new(self.buffer().clone().into(), 0, self.len())
     }
 
-    pub fn typed_data<T: NativePType>(&self) -> &[T] {
+    pub fn maybe_null_slice<T: NativePType>(&self) -> &[T] {
         assert_eq!(
             T::PTYPE,
             self.ptype(),
-            "Attempted to get typed_data of type {} from array of type {}",
+            "Attempted to get slice of type {} from array of type {}",
             T::PTYPE,
             self.ptype(),
         );
 
-        let (prefix, offsets, suffix) = unsafe { self.buffer().as_ref().align_to::<T>() };
+        let (prefix, values, suffix) = unsafe { self.buffer().as_ref().align_to::<T>() };
         assert!(prefix.is_empty() && suffix.is_empty());
-        offsets
+        values
     }
 
     /// Convert the array into a mutable vec of the given type.
     /// If possible, this will be zero-copy.
-    pub fn into_typed_data<T: NativePType>(self) -> Vec<T> {
+    pub fn into_maybe_null_slice<T: NativePType + ArrowNativeType>(self) -> Vec<T> {
         assert_eq!(
             T::PTYPE,
             self.ptype(),
-            "Attempted to get typed_data of type {} from array of type {}",
+            "Attempted to get maybe_null_slice of type {} from array of type {}",
             T::PTYPE,
             self.ptype(),
         );
-        let bytes = self
-            .into_buffer()
-            .into_vec()
-            .unwrap_or_else(|b| Vec::from(b.as_ref()));
-
-        unsafe {
-            let mut bytes = std::mem::ManuallyDrop::new(bytes);
-            Vec::from_raw_parts(
-                bytes.as_mut_ptr() as *mut T,
-                bytes.len() / size_of::<T>(),
-                bytes.capacity() / size_of::<T>(),
-            )
-        }
+        self.into_buffer().into_vec::<T>().unwrap_or_else(|b| {
+            let (prefix, values, suffix) = unsafe { b.as_ref().align_to::<T>() };
+            assert!(prefix.is_empty() && suffix.is_empty());
+            Vec::from(values)
+        })
     }
 
     pub fn get_as_cast<T: NativePType>(&self, idx: usize) -> T {
         match_each_native_ptype!(self.ptype(), |$P| {
-            T::from(self.typed_data::<$P>()[idx]).expect("failed to cast")
+            T::from(self.maybe_null_slice::<$P>()[idx]).expect("failed to cast")
         })
     }
 
@@ -149,7 +139,7 @@ impl PrimitiveArray {
         })
     }
 
-    pub fn patch<P: AsPrimitive<usize>, T: NativePType>(
+    pub fn patch<P: AsPrimitive<usize>, T: NativePType + ArrowNativeType>(
         self,
         positions: &[P],
         values: &[T],
@@ -160,7 +150,7 @@ impl PrimitiveArray {
 
         let validity = self.validity();
 
-        let mut own_values = self.into_typed_data();
+        let mut own_values = self.into_maybe_null_slice();
         // TODO(robert): Also patch validity
         for (idx, value) in positions.iter().zip_eq(values.iter()) {
             own_values[(*idx).as_()] = *value;

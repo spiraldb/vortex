@@ -3,7 +3,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use vortex::{impl_encoding, ArrayDType, ArrayFlatten};
 use vortex_dtype::PType;
 use vortex_error::vortex_bail;
 
@@ -34,9 +34,9 @@ impl ALPArray {
 
         let patches_dtype = patches.as_ref().map(|a| a.dtype().as_nullable());
         let mut children = Vec::with_capacity(2);
-        children.push(encoded.into_array_data());
+        children.push(encoded);
         if let Some(patch) = patches {
-            children.push(patch.into_array_data());
+            children.push(patch);
         }
 
         Self::try_from_parts(

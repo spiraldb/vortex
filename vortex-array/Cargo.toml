@@ -21,6 +21,7 @@ workspace = true
 [dependencies]
 arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
+arrow-cast = { workspace = true }
 arrow-schema = { workspace = true }
 enum-iterator = { workspace = true }
 flatbuffers = { workspace = true }

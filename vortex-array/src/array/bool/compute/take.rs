@@ -15,7 +15,7 @@ impl TakeFn for BoolArray {
         let indices = indices.clone().flatten_primitive()?;
         match_each_integer_ptype!(indices.ptype(), |$I| {
             Ok(BoolArray::from_vec(
-                take_bool(&self.boolean_buffer(), indices.typed_data::<$I>()),
+                take_bool(&self.boolean_buffer(), indices.maybe_null_slice::<$I>()),
                 validity.take(indices.as_array_ref())?,
             ).into_array())
         })

@@ -13,7 +13,6 @@ use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::ArrayValidity;
 use crate::validity::LogicalValidity;
 use crate::ArrayDType;
-use crate::IntoArray;
 
 trait PStatsType: NativePType + Into<Scalar> + BitWidth {}
 
@@ -23,11 +22,11 @@ impl ArrayStatisticsCompute for PrimitiveArray {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
         match_each_native_ptype!(self.ptype(), |$P| {
             match self.logical_validity() {
-                LogicalValidity::AllValid(_) => self.typed_data::<$P>().compute_statistics(stat),
+                LogicalValidity::AllValid(_) => self.maybe_null_slice::<$P>().compute_statistics(stat),
                 LogicalValidity::AllInvalid(v) => Ok(StatsSet::nulls(v, self.dtype())),
                 LogicalValidity::Array(a) => NullableValues(
-                    self.typed_data::<$P>(),
-                    &a.into_array().flatten_bool()?.boolean_buffer(),
+                    self.maybe_null_slice::<$P>(),
+                    &a.clone().flatten_bool()?.boolean_buffer(),
                 )
                 .compute_statistics(stat),
             }

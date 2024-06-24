@@ -1,7 +1,7 @@
 use futures_util::{Stream, TryStreamExt};
 use vortex::array::chunked::ChunkedArray;
 use vortex::stream::ArrayStream;
-use vortex::{Array, IntoArrayData, ViewContext};
+use vortex::{Array, ViewContext};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
@@ -77,9 +77,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
         while let Some(chunk) = stream.try_next().await? {
             row_offset += chunk.len() as u64;
             row_offsets.push(row_offset);
-            self.msgs
-                .write_chunk(&self.view_ctx, chunk.into_array_data())
-                .await?;
+            self.msgs.write_chunk(&self.view_ctx, chunk).await?;
             byte_offsets.push(self.msgs.tell());
         }
 

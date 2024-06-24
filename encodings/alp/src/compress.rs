@@ -88,7 +88,7 @@ where
     T: ALPFloat + NativePType,
     T::ALPInt: NativePType,
 {
-    let (exponents, encoded, exc_pos, exc) = T::encode(values.typed_data::<T>(), exponents);
+    let (exponents, encoded, exc_pos, exc) = T::encode(values.maybe_null_slice::<T>(), exponents);
     let len = encoded.len();
     (
         exponents,
@@ -119,7 +119,7 @@ pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
 
     let decoded = match_each_alp_float_ptype!(array.dtype().try_into().unwrap(), |$T| {
         PrimitiveArray::from_vec(
-            decompress_primitive::<$T>(encoded.typed_data(), array.exponents()),
+            decompress_primitive::<$T>(encoded.maybe_null_slice(), array.exponents()),
             encoded.validity(),
         )
     })?;
@@ -138,7 +138,7 @@ fn patch_decoded(array: PrimitiveArray, patches: &Array) -> VortexResult<Primiti
                 let typed_patches = SparseArray::try_from(patches).unwrap();
                 array.patch(
                     &typed_patches.resolved_indices(),
-                    typed_patches.values().flatten_primitive()?.typed_data::<$T>())?
+                    typed_patches.values().flatten_primitive()?.maybe_null_slice::<$T>())?
             })
         }
         _ => panic!("can't patch ALP array with {}", patches),
@@ -165,30 +165,32 @@ mod tests {
         let encoded = alp_encode(&array).unwrap();
         assert!(encoded.patches().is_none());
         assert_eq!(
-            encoded.encoded().into_primitive().typed_data::<i32>(),
+            encoded.encoded().into_primitive().maybe_null_slice::<i32>(),
             vec![1234; 1025]
         );
         assert_eq!(encoded.exponents(), &Exponents { e: 4, f: 1 });
 
         let decoded = decompress(encoded).unwrap();
-        assert_eq!(array.typed_data::<f32>(), decoded.typed_data::<f32>());
+        assert_eq!(
+            array.maybe_null_slice::<f32>(),
+            decoded.maybe_null_slice::<f32>()
+        );
     }
 
     #[test]
     fn test_nullable_compress() {
         let array = PrimitiveArray::from_nullable_vec(vec![None, Some(1.234f32), None]);
         let encoded = alp_encode(&array).unwrap();
-        println!("Encoded {:?}", encoded);
         assert!(encoded.patches().is_none());
         assert_eq!(
-            encoded.encoded().into_primitive().typed_data::<i32>(),
+            encoded.encoded().into_primitive().maybe_null_slice::<i32>(),
             vec![0, 1234, 0]
         );
         assert_eq!(encoded.exponents(), &Exponents { e: 4, f: 1 });
 
         let decoded = decompress(encoded).unwrap();
         let expected = vec![0f32, 1.234f32, 0f32];
-        assert_eq!(decoded.typed_data::<f32>(), expected.as_slice());
+        assert_eq!(decoded.maybe_null_slice::<f32>(), expected.as_slice());
     }
 
     #[test]
@@ -197,15 +199,14 @@ mod tests {
         let values = vec![1.234f64, 2.718, std::f64::consts::PI, 4.0];
         let array = PrimitiveArray::from(values.clone());
         let encoded = alp_encode(&array).unwrap();
-        println!("Encoded {:?}", encoded);
         assert!(encoded.patches().is_some());
         assert_eq!(
-            encoded.encoded().into_primitive().typed_data::<i64>(),
+            encoded.encoded().into_primitive().maybe_null_slice::<i64>(),
             vec![1234i64, 2718, 2718, 4000] // fill forward
         );
         assert_eq!(encoded.exponents(), &Exponents { e: 3, f: 0 });
 
         let decoded = decompress(encoded).unwrap();
-        assert_eq!(values, decoded.typed_data::<f64>());
+        assert_eq!(values, decoded.maybe_null_slice::<f64>());
     }
 }

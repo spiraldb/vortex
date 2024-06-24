@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{FieldNames, Nullability, StructDType};
-use vortex_error::vortex_bail;
+use vortex_error::{vortex_bail, vortex_err};
 
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::ArrayFlatten;
 use crate::{impl_encoding, ArrayDType};
-use crate::{ArrayFlatten, IntoArrayData};
 
 mod compute;
 
@@ -77,9 +77,9 @@ impl StructArray {
 
         let validity_metadata = validity.to_metadata(length)?;
 
-        let mut children = vec![];
-        children.extend(fields.into_iter().map(|a| a.into_array_data()));
-        if let Some(v) = validity.into_array_data() {
+        let mut children = Vec::with_capacity(fields.len() + 1);
+        children.extend(fields);
+        if let Some(v) = validity.into_array() {
             children.push(v);
         }
 
@@ -94,6 +94,36 @@ impl StructArray {
             },
             children.into(),
             StatsSet::new(),
+        )
+    }
+}
+
+impl StructArray {
+    /// Return a new StructArray with the given projection applied.
+    ///
+    /// Projection does not copy data arrays. Projection is defined by an ordinal array slice
+    /// which specifies the new ordering of columns in the struct. The projection can be used to
+    /// perform column re-ordering, deletion, or duplication at a logical level, without any data
+    /// copying.
+    ///
+    /// This function will return an error if the projection includes invalid column IDs.
+    pub fn project(self, projection: &[usize]) -> VortexResult<Self> {
+        let mut children = Vec::with_capacity(projection.len());
+        let mut names = Vec::with_capacity(projection.len());
+
+        for column_idx in projection {
+            children.push(
+                self.field(*column_idx)
+                    .ok_or_else(|| vortex_err!(InvalidArgument: "column index out of bounds"))?,
+            );
+            names.push(self.names()[*column_idx].clone());
+        }
+
+        StructArray::try_new(
+            FieldNames::from(names.as_slice()),
+            children,
+            self.len(),
+            self.validity(),
         )
     }
 }
@@ -134,3 +164,53 @@ impl AcceptArrayVisitor for StructArray {
 impl ArrayStatisticsCompute for StructArray {}
 
 impl EncodingCompression for StructEncoding {}
+
+#[cfg(test)]
+mod test {
+    use vortex_dtype::{DType, FieldName, FieldNames, Nullability};
+
+    use crate::array::bool::BoolArray;
+    use crate::array::primitive::PrimitiveArray;
+    use crate::array::r#struct::StructArray;
+    use crate::array::varbin::VarBinArray;
+    use crate::validity::Validity;
+    use crate::{ArrayTrait, IntoArray};
+
+    #[test]
+    fn test_project() {
+        let xs = PrimitiveArray::from_vec(vec![0i64, 1, 2, 3, 4], Validity::NonNullable);
+        let ys = VarBinArray::from_vec(
+            vec!["a", "b", "c", "d", "e"],
+            DType::Utf8(Nullability::NonNullable),
+        );
+        let zs = BoolArray::from_vec(vec![true, true, true, false, false], Validity::NonNullable);
+
+        let struct_a = StructArray::try_new(
+            FieldNames::from(["xs".into(), "ys".into(), "zs".into()]),
+            vec![xs.into_array(), ys.into_array(), zs.into_array()],
+            5,
+            Validity::NonNullable,
+        )
+        .unwrap();
+
+        let struct_b = struct_a.project(&[2usize, 0]).unwrap();
+        assert_eq!(
+            struct_b.names().to_vec(),
+            vec![FieldName::from("zs"), FieldName::from("xs")],
+        );
+
+        assert_eq!(struct_b.len(), 5);
+
+        let bools = BoolArray::try_from(struct_b.field(0).unwrap()).unwrap();
+        assert_eq!(
+            bools.boolean_buffer().iter().collect::<Vec<_>>(),
+            vec![true, true, true, false, false]
+        );
+
+        let prims = PrimitiveArray::try_from(struct_b.field(1).unwrap()).unwrap();
+        assert_eq!(
+            prims.scalar_buffer::<i64>().to_vec(),
+            vec![0i64, 1, 2, 3, 4]
+        );
+    }
+}

@@ -2,7 +2,7 @@ use std::io;
 
 use flatbuffers::FlatBufferBuilder;
 use itertools::Itertools;
-use vortex::{ArrayData, ViewContext};
+use vortex::{Array, ViewContext};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
@@ -57,7 +57,7 @@ impl<W: VortexWrite> MessageWriter<W> {
         &mut self,
         view_ctx: &ViewContext,
         // TODO(ngates): should we support writing from an ArrayView?
-        chunk: ArrayData,
+        chunk: Array,
     ) -> io::Result<()> {
         let buffer_offsets = chunk.all_buffer_offsets(self.alignment);
 

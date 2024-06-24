@@ -1,17 +1,24 @@
 use std::fmt::Formatter;
+use std::ops::Deref;
 use std::{mem, slice};
 
 use ::serde::{Deserialize, Serialize};
-use vortex_dtype::Nullability;
+use arrow_array::{ArrayRef, BinaryViewArray, StringViewArray};
+use arrow_buffer::{Buffer, ScalarBuffer};
+use arrow_schema::DataType;
+use itertools::Itertools;
+use vortex_dtype::{Nullability, PType};
 use vortex_error::vortex_bail;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::builder::VarBinViewBuilder;
+use crate::arrow::FromArrowArray;
 use crate::compute::slice::slice;
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayFlatten, IntoArrayData};
+use crate::{impl_encoding, ArrayDType, ArrayData, ArrayFlatten};
 
 mod accessor;
 mod builder;
@@ -135,9 +142,9 @@ impl VarBinViewArray {
         };
 
         let mut children = Vec::with_capacity(data.len() + 2);
-        children.push(views.into_array_data());
-        children.extend(data.into_iter().map(|d| d.into_array_data()));
-        if let Some(a) = validity.into_array_data() {
+        children.push(views);
+        children.extend(data);
+        if let Some(a) = validity.into_array() {
             children.push(a)
         }
 
@@ -149,7 +156,7 @@ impl VarBinViewArray {
             slice::from_raw_parts(
                 PrimitiveArray::try_from(self.views())
                     .expect("Views must be a primitive array")
-                    .typed_data::<u8>()
+                    .maybe_null_slice::<u8>()
                     .as_ptr() as _,
                 self.views().len() / VIEW_SIZE,
             )
@@ -209,7 +216,7 @@ impl VarBinViewArray {
                     (view._ref.size + view._ref.offset) as usize,
                 )?
                 .flatten_primitive()?;
-                Ok(data_buf.typed_data::<u8>().to_vec())
+                Ok(data_buf.maybe_null_slice::<u8>().to_vec())
             } else {
                 Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
             }
@@ -219,7 +226,55 @@ impl VarBinViewArray {
 
 impl ArrayFlatten for VarBinViewArray {
     fn flatten(self) -> VortexResult<Flattened> {
-        Ok(Flattened::VarBinView(self))
+        let nullable = self.dtype().is_nullable();
+        let arrow_self = as_arrow(self);
+        let arrow_varbin = arrow_cast::cast(arrow_self.deref(), &DataType::Utf8)
+            .expect("Utf8View must cast to Ut8f");
+        let vortex_array = ArrayData::from_arrow(arrow_varbin, nullable).into_array();
+
+        Ok(Flattened::VarBin(VarBinArray::try_from(&vortex_array)?))
+    }
+}
+
+fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
+    // Views should be buffer of u8
+    let views = var_bin_view
+        .views()
+        .flatten_primitive()
+        .expect("views must be primitive");
+    assert_eq!(views.ptype(), PType::U8);
+    let nulls = var_bin_view
+        .logical_validity()
+        .to_null_buffer()
+        .expect("null buffer");
+
+    let data = (0..var_bin_view.metadata().n_children)
+        .map(|i| var_bin_view.bytes(i).flatten_primitive())
+        .collect::<VortexResult<Vec<_>>>()
+        .expect("bytes arrays must be primitive");
+    if !data.is_empty() {
+        assert_eq!(data[0].ptype(), PType::U8);
+        assert!(data.iter().map(|d| d.ptype()).all_equal());
+    }
+
+    let data = data
+        .iter()
+        .map(|p| Buffer::from(p.buffer()))
+        .collect::<Vec<_>>();
+
+    // Switch on Arrow DType.
+    match var_bin_view.dtype() {
+        DType::Binary(_) => Arc::new(BinaryViewArray::new(
+            ScalarBuffer::<u128>::from(Buffer::from(views.buffer())),
+            data,
+            nulls,
+        )),
+        DType::Utf8(_) => Arc::new(StringViewArray::new(
+            ScalarBuffer::<u128>::from(Buffer::from(views.buffer())),
+            data,
+            nulls,
+        )),
+        _ => panic!("expected utf8 or binary, got {}", var_bin_view.dtype()),
     }
 }
 
@@ -301,14 +356,12 @@ impl EncodingCompression for VarBinViewEncoding {}
 
 #[cfg(test)]
 mod test {
-    use arrow_array::array::StringViewArray as ArrowStringViewArray;
     use vortex_scalar::Scalar;
 
     use crate::array::varbinview::VarBinViewArray;
-    use crate::compute::as_arrow::as_arrow;
     use crate::compute::scalar_at::scalar_at;
     use crate::compute::slice::slice;
-    use crate::{ArrayTrait, IntoArray};
+    use crate::{ArrayFlatten, ArrayTrait, Flattened, IntoArray};
 
     #[test]
     pub fn varbin_view() {
@@ -341,20 +394,14 @@ mod test {
     }
 
     #[test]
-    pub fn iter() {
-        let binary_array =
-            VarBinViewArray::from(vec!["hello world", "hello world this is a long string"]);
-        assert_eq!(
-            as_arrow(binary_array.array())
-                .unwrap()
-                .as_any()
-                .downcast_ref::<ArrowStringViewArray>()
-                .unwrap()
-                .iter()
-                .collect::<Vec<_>>(),
-            ArrowStringViewArray::from(vec!["hello world", "hello world this is a long string",])
-                .iter()
-                .collect::<Vec<_>>()
-        );
+    pub fn flatten_array() {
+        let binary_arr = VarBinViewArray::from(vec!["string1", "string2"]);
+
+        let flattened = binary_arr.flatten().unwrap();
+        assert!(matches!(flattened, Flattened::VarBin(_)));
+
+        let var_bin = flattened.into_array();
+        assert_eq!(scalar_at(&var_bin, 0).unwrap(), Scalar::from("string1"));
+        assert_eq!(scalar_at(&var_bin, 1).unwrap(), Scalar::from("string2"));
     }
 }
