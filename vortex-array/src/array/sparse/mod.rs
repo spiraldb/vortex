@@ -26,10 +26,6 @@ pub struct SparseMetadata {
 }
 
 impl SparseArray {
-    pub fn new_unchecked(indices: Array, values: Array, len: usize, fill_value: Scalar) -> Self {
-        Self::try_new(indices, values, len, fill_value).unwrap()
-    }
-
     pub fn try_new(
         indices: Array,
         values: Array,
@@ -205,7 +201,8 @@ mod test {
         let mut values = vec![100i32, 200, 300].into_array();
         values = try_cast(&values, fill_value.dtype()).unwrap();
 
-        SparseArray::new_unchecked(vec![2u64, 5, 8].into_array(), values, 10, fill_value)
+        SparseArray::try_new(vec![2u64, 5, 8].into_array(), values, 10, fill_value)
+            .unwrap()
             .into_array()
     }
 

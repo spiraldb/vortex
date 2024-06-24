@@ -43,7 +43,7 @@ mod test {
             .into_array();
         let p = compute::unary::fill_forward::fill_forward(&arr)
             .unwrap()
-            .into_primitive();
+            .as_primitive();
         assert_eq!(p.maybe_null_slice::<u8>(), vec![0, 8, 8, 10, 10]);
         assert!(p.logical_validity().all_valid());
     }
@@ -56,7 +56,7 @@ mod test {
 
         let p = compute::unary::fill_forward::fill_forward(&arr)
             .unwrap()
-            .into_primitive();
+            .as_primitive();
         assert_eq!(p.maybe_null_slice::<u8>(), vec![0, 0, 0, 0, 0]);
         assert!(p.logical_validity().all_valid());
     }
@@ -70,7 +70,7 @@ mod test {
         .into_array();
         let p = compute::unary::fill_forward::fill_forward(&arr)
             .unwrap()
-            .into_primitive();
+            .as_primitive();
         assert_eq!(p.maybe_null_slice::<u8>(), vec![8, 10, 12, 14, 16]);
         assert!(p.logical_validity().all_valid());
     }

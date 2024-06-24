@@ -9,7 +9,6 @@ use self::unary::fill_forward::FillForwardFn;
 use self::unary::scalar_at::ScalarAtFn;
 use self::unary::scalar_subtract::SubtractScalarFn;
 
-mod arith;
 pub mod compare;
 pub mod filter_indices;
 pub mod search_sorted;

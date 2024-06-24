@@ -107,7 +107,7 @@ mod test {
     fn test_sparse_bool() {
         let indices = vec![0u64].into_array();
         let values = BoolArray::from_vec(vec![true], Validity::NonNullable).into_array();
-        let sparse_bools = SparseArray::new_unchecked(indices, values, 10, true.into());
+        let sparse_bools = SparseArray::try_new(indices, values, 10, true.into()).unwrap();
         assert_eq!(*sparse_bools.dtype(), DType::Bool(Nullability::NonNullable));
         let flat_bools = sparse_bools.into_canonical().unwrap();
         assert!(matches!(flat_bools, Canonical::Bool(_)));

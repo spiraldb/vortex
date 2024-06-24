@@ -1,20 +1,22 @@
 use std::sync::Arc;
 
-use arrow_array::types::{
-    Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
-    UInt32Type, UInt64Type, UInt8Type,
-};
 use arrow_array::{
     ArrayRef, ArrowPrimitiveType, BinaryArray, BooleanArray as ArrowBoolArray, LargeBinaryArray,
     LargeStringArray, NullArray as ArrowNullArray, PrimitiveArray as ArrowPrimitiveArray,
     StringArray, StructArray as ArrowStructArray, TimestampMicrosecondArray,
     TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
 };
+use arrow_array::types::{
+    Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
+    UInt32Type, UInt64Type, UInt8Type,
+};
 use arrow_buffer::ScalarBuffer;
 use arrow_schema::{Field, Fields};
+
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
+use crate::{Array, ArrayDType, ArrayTrait, IntoArray, ToArray};
 use crate::array::bool::BoolArray;
 use crate::array::datetime::{LocalDateTimeArray, TimeUnit};
 use crate::array::extension::ExtensionArray;
@@ -26,7 +28,6 @@ use crate::arrow::wrappers::as_offset_buffer;
 use crate::compute::unary::cast::try_cast;
 use crate::encoding::ArrayEncoding;
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, ArrayTrait, IntoArray, ToArray};
 
 /// The set of canonical array encodings, also the set of encodings that can be transferred to
 /// Arrow with zero-copy.
@@ -309,12 +310,71 @@ pub trait IntoCanonical {
     fn into_canonical(self) -> VortexResult<Canonical>;
 }
 
+/// Trait for types that can be converted from an owned type into an owned array variant.
+///
+/// # Canonicalization
+///
+/// This trait has a blanket implementation for all types implementing [IntoCanonical].
+pub trait IntoArrayVariant {
+    fn into_null(self) -> VortexResult<NullArray>;
+
+    fn into_bool(self) -> VortexResult<BoolArray>;
+
+    fn into_primitive(self) -> VortexResult<PrimitiveArray>;
+
+    fn into_struct(self) -> VortexResult<StructArray>;
+
+    fn into_varbin(self) -> VortexResult<VarBinArray>;
+
+    fn into_extension(self) -> VortexResult<ExtensionArray>;
+}
+
+impl<T> IntoArrayVariant for T
+where
+    T: IntoCanonical,
+{
+    fn into_null(self) -> VortexResult<NullArray> {
+        self.into_canonical()?.into_null()
+    }
+
+    fn into_bool(self) -> VortexResult<BoolArray> {
+        self.into_canonical()?.into_bool()
+    }
+
+    fn into_primitive(self) -> VortexResult<PrimitiveArray> {
+        self.into_canonical()?.into_primitive()
+    }
+
+    fn into_struct(self) -> VortexResult<StructArray> {
+        self.into_canonical()?.into_struct()
+    }
+
+    fn into_varbin(self) -> VortexResult<VarBinArray> {
+        self.into_canonical()?.into_varbin()
+    }
+
+    fn into_extension(self) -> VortexResult<ExtensionArray> {
+        self.into_canonical()?.into_extension()
+    }
+}
+
+/// IntoCanonical implementation for Array.
+///
+/// Canonicalizing an array requires potentially decompressing, so this requires a roundtrip through
+/// the array's internal codec.
 impl IntoCanonical for Array {
     fn into_canonical(self) -> VortexResult<Canonical> {
         ArrayEncoding::canonicalize(self.encoding(), self)
     }
 }
 
+/// Implement the IntoArray for the [Canonical] type.
+///
+/// This conversion is always "free" and should not touch underlying data. All it does is create an
+/// owned pointer to the underlying concrete array type.
+///
+/// This combined with the above [IntoCanonical] impl for [Array] allows simple two-way conversions
+/// between arbitrary Vortex encodings and canonical Arrow-compatible encodings.
 impl IntoArray for Canonical {
     fn into_array(self) -> Array {
         match self {
@@ -330,18 +390,19 @@ impl IntoArray for Canonical {
 
 #[cfg(test)]
 mod test {
-    use arrow_array::types::{Int64Type, UInt64Type};
     use arrow_array::{
         Array, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
     };
+    use arrow_array::types::{Int64Type, UInt64Type};
+
     use vortex_dtype::Nullability;
     use vortex_scalar::Scalar;
 
+    use crate::{IntoArray, IntoCanonical};
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::SparseArray;
     use crate::array::struct_::StructArray;
     use crate::validity::Validity;
-    use crate::{IntoArray, IntoCanonical};
 
     #[test]
     fn test_canonicalize_nested_struct() {
@@ -359,12 +420,13 @@ mod test {
                     //   [100i64, 100i64, 100i64]
                     // SparseArray is not a canonical type, so converting `into_arrow()` should map
                     // this to the nearest canonical type (PrimitiveArray).
-                    SparseArray::new_unchecked(
+                    SparseArray::try_new(
                         PrimitiveArray::from_vec(vec![0u64; 1], Validity::NonNullable).into_array(),
                         PrimitiveArray::from_vec(vec![100i64], Validity::NonNullable).into_array(),
                         1,
                         Scalar::primitive(0i64, Nullability::NonNullable),
                     )
+                    .unwrap()
                     .into_array(),
                 )])
                 .into_array(),

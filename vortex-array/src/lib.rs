@@ -6,7 +6,7 @@
 //! exploits the particular data distribution of the array's values.
 //!
 //! Every data type recognized by Vortex also has a canonical physical encoding format, which
-//! arrays can be [flattened](Canonical) into for ease of access in compute functions.
+//! arrays can be [canonicalized](Canonical) into for ease of access in compute functions.
 //!
 use std::fmt::{Debug, Display, Formatter};
 use std::future::ready;

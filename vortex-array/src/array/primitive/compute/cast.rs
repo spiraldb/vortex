@@ -59,7 +59,7 @@ mod test {
         let arr = vec![0u32, 10, 200].into_array();
         let p = compute::unary::cast::try_cast(&arr, PType::U8.into())
             .unwrap()
-            .into_primitive();
+            .as_primitive();
         assert_eq!(p.maybe_null_slice::<u8>(), vec![0u8, 10, 200]);
     }
 
@@ -68,7 +68,7 @@ mod test {
         let arr = vec![0u32, 10, 200].into_array();
         let u8arr = compute::unary::cast::try_cast(&arr, PType::F32.into())
             .unwrap()
-            .into_primitive();
+            .as_primitive();
         assert_eq!(u8arr.maybe_null_slice::<f32>(), vec![0.0f32, 10., 200.]);
     }
 
