@@ -60,9 +60,12 @@ impl EncodingCompression for FoREncoding {
 
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
             if shift == <$T>::PTYPE.bit_width() as u8 {
-                let unsigned_dtype =
-                    DType::Primitive(parray.ptype().to_unsigned(), parray.dtype().nullability());
-                ConstantArray::new(Scalar::zero::<$T>(parray.dtype().nullability()).cast(&unsigned_dtype).unwrap(), parray.len()).into_array()
+                ConstantArray::new(
+                    Scalar::zero::<$T>(parray.dtype().nullability())
+                        .reinterpret_cast(parray.ptype().to_unsigned()),
+                    parray.len(),
+                )
+                .into_array()
             } else {
                 compress_primitive::<$T>(&parray, shift, $T::try_from(&min)?)
                     .reinterpret_cast(parray.ptype().to_unsigned())
