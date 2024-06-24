@@ -209,7 +209,7 @@ mod test {
 
         let encoded = compressed.encoded().into_primitive().unwrap();
         let encoded_bytes: &[u8] = encoded.maybe_null_slice::<u8>();
-        let unsigned: Vec<u8> = (0..u8::MAX).collect_vec();
+        let unsigned: Vec<u8> = (0..=u8::MAX).collect_vec();
         assert_eq!(encoded_bytes, unsigned.as_slice());
 
         let decompressed = compressed.array().clone().into_primitive().unwrap();
