@@ -40,13 +40,8 @@ impl FoRArray {
 
     #[inline]
     pub fn encoded(&self) -> Array {
-        let dtype = if self.reference().dtype().is_signed_int() {
-            &DType::Primitive(
-                PType::try_from(self.reference().dtype())
-                    .unwrap()
-                    .to_unsigned(),
-                self.reference().dtype().nullability(),
-            )
+        let dtype = if self.ptype().is_signed_int() {
+            &DType::Primitive(self.ptype().to_unsigned(), self.dtype().nullability())
         } else {
             self.dtype()
         };
