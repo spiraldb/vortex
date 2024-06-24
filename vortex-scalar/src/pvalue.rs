@@ -2,7 +2,7 @@ use std::mem;
 
 use num_traits::NumCast;
 use vortex_dtype::half::f16;
-use vortex_dtype::{NativePType, PType};
+use vortex_dtype::PType;
 use vortex_error::vortex_err;
 use vortex_error::VortexError;
 
@@ -38,28 +38,65 @@ impl PValue {
         }
     }
 
-    pub fn reinterpret_cast<T: NativePType + Into<PValue>>(&self) -> Self {
-        if T::PTYPE == self.ptype() {
+    pub fn reinterpret_cast(&self, ptype: PType) -> Self {
+        if ptype == self.ptype() {
             return *self;
         }
 
-        assert!(T::PTYPE.is_int(), "Can only reinterpret cast integers");
         assert_eq!(
-            T::PTYPE.byte_width(),
+            ptype.byte_width(),
             self.ptype().byte_width(),
             "Cannot reinterpret cast between types of different widths"
         );
 
         match self {
             PValue::U8(v) => unsafe { mem::transmute::<u8, i8>(*v) }.into(),
-            PValue::U16(v) => unsafe { mem::transmute::<u16, i16>(*v) }.into(),
-            PValue::U32(v) => unsafe { mem::transmute::<u32, i32>(*v) }.into(),
-            PValue::U64(v) => unsafe { mem::transmute::<u64, i64>(*v) }.into(),
+            PValue::U16(v) => match ptype {
+                PType::I16 => unsafe { mem::transmute::<u16, i16>(*v) }.into(),
+                PType::F16 => f16::from_bits(*v).into(),
+                _ => unreachable!("Only same width type are allowed to be reinterpreted"),
+            },
+            PValue::U32(v) => match ptype {
+                PType::I32 => unsafe { mem::transmute::<u32, i32>(*v) }.into(),
+                PType::F32 => f32::from_bits(*v).into(),
+                _ => unreachable!("Only same width type are allowed to be reinterpreted"),
+            },
+            PValue::U64(v) => match ptype {
+                PType::I64 => unsafe { mem::transmute::<u64, i64>(*v) }.into(),
+                PType::F64 => f64::from_bits(*v).into(),
+                _ => unreachable!("Only same width type are allowed to be reinterpreted"),
+            },
             PValue::I8(v) => unsafe { mem::transmute::<i8, u8>(*v) }.into(),
-            PValue::I16(v) => unsafe { mem::transmute::<i16, u16>(*v) }.into(),
-            PValue::I32(v) => unsafe { mem::transmute::<i32, u32>(*v) }.into(),
-            PValue::I64(v) => unsafe { mem::transmute::<i64, u64>(*v) }.into(),
-            _ => unreachable!("Can't reinterpret cast floats"),
+            PValue::I16(v) => match ptype {
+                PType::U16 => unsafe { mem::transmute::<i16, u16>(*v) }.into(),
+                PType::F16 => f16::from_bits(unsafe { mem::transmute::<i16, u16>(*v) }).into(),
+                _ => unreachable!("Only same width type are allowed to be reinterpreted"),
+            },
+            PValue::I32(v) => match ptype {
+                PType::U32 => unsafe { mem::transmute::<i32, u32>(*v) }.into(),
+                PType::F32 => f32::from_bits(unsafe { mem::transmute::<i32, u32>(*v) }).into(),
+                _ => unreachable!("Only same width type are allowed to be reinterpreted"),
+            },
+            PValue::I64(v) => match ptype {
+                PType::U64 => unsafe { mem::transmute::<i64, u64>(*v) }.into(),
+                PType::F64 => f64::from_bits(unsafe { mem::transmute::<i64, u64>(*v) }).into(),
+                _ => unreachable!("Only same width type are allowed to be reinterpreted"),
+            },
+            PValue::F16(v) => match ptype {
+                PType::U16 => v.to_bits().into(),
+                PType::I16 => unsafe { mem::transmute::<u16, i16>(v.to_bits()) }.into(),
+                _ => unreachable!("Only same width type are allowed to be reinterpreted"),
+            },
+            PValue::F32(v) => match ptype {
+                PType::U32 => v.to_bits().into(),
+                PType::I32 => unsafe { mem::transmute::<u32, i32>(v.to_bits()) }.into(),
+                _ => unreachable!("Only same width type are allowed to be reinterpreted"),
+            },
+            PValue::F64(v) => match ptype {
+                PType::U64 => v.to_bits().into(),
+                PType::I64 => unsafe { mem::transmute::<u64, i64>(v.to_bits()) }.into(),
+                _ => unreachable!("Only same width type are allowed to be reinterpreted"),
+            },
         }
     }
 }
