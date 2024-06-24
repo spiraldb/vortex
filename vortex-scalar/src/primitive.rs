@@ -96,14 +96,14 @@ impl Scalar {
             "can't reinterpret cast between integers of two different widths"
         );
 
-        Self {
-            dtype: DType::Primitive(ptype, self.dtype.nullability()),
-            value: primitive
+        Scalar::new(
+            DType::Primitive(ptype, self.dtype.nullability()),
+            primitive
                 .pvalue
                 .map(|p| p.reinterpret_cast(ptype))
                 .map(ScalarValue::Primitive)
                 .unwrap_or_else(|| ScalarValue::Null),
-        }
+        )
     }
 
     pub fn zero<T: NativePType + Into<PValue>>(nullability: Nullability) -> Self {
