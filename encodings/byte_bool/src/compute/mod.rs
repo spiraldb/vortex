@@ -188,7 +188,7 @@ impl FillForwardFn for ByteBoolArray {
 #[cfg(test)]
 mod tests {
     use vortex::{
-        compute::{scalar_at::scalar_at, slice::slice},
+        compute::{compare::compare, scalar_at::scalar_at, slice::slice},
         AsArray as _,
     };
 
@@ -212,5 +212,62 @@ mod tests {
 
         let s = scalar_at(sliced_arr.as_array_ref(), 2).unwrap();
         assert_eq!(s.into_value().as_bool().unwrap(), Some(false));
+    }
+
+    #[test]
+    fn test_compare_all_equal() {
+        let lhs = ByteBoolArray::from(vec![true; 5]);
+        let rhs = ByteBoolArray::from(vec![true; 5]);
+
+        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq)
+            .unwrap()
+            .flatten_bool()
+            .unwrap();
+
+        for i in 0..arr.len() {
+            assert!(arr.is_valid(i));
+            let s = scalar_at(arr.as_array_ref(), i).unwrap();
+            assert_eq!(s.value(), &ScalarValue::Bool(true));
+        }
+    }
+
+    #[test]
+    fn test_compare_all_different() {
+        let lhs = ByteBoolArray::from(vec![false; 5]);
+        let rhs = ByteBoolArray::from(vec![true; 5]);
+
+        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq)
+            .unwrap()
+            .flatten_bool()
+            .unwrap();
+
+        for i in 0..arr.len() {
+            assert!(arr.is_valid(i));
+            let s = scalar_at(arr.as_array_ref(), i).unwrap();
+            assert_eq!(s.value(), &ScalarValue::Bool(false));
+        }
+    }
+
+    #[test]
+    fn test_compare_with_nulls() {
+        let lhs = ByteBoolArray::from(vec![true; 5]);
+        let rhs = ByteBoolArray::from(vec![Some(true), Some(true), Some(true), Some(false), None]);
+
+        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq)
+            .unwrap()
+            .flatten_bool()
+            .unwrap();
+
+        for i in 0..3 {
+            assert!(arr.is_valid(i));
+            let s = scalar_at(arr.as_array_ref(), i).unwrap();
+            assert_eq!(s.value(), &ScalarValue::Bool(true));
+        }
+
+        assert!(arr.is_valid(3));
+        let s = scalar_at(arr.as_array_ref(), 3).unwrap();
+        assert_eq!(s.value(), &ScalarValue::Bool(false));
+
+        assert!(!arr.is_valid(4));
     }
 }
