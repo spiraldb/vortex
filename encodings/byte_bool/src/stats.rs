@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use vortex_error::VortexResult;
-
-use super::ByteBoolArray;
-use crate::{
+use vortex::{
     stats::{ArrayStatisticsCompute, Stat, StatsSet},
     validity::{ArrayValidity, LogicalValidity},
     ArrayDType, ArrayTrait, AsArray,
 };
+use vortex_error::VortexResult;
+
+use super::ByteBoolArray;
 
 impl ArrayStatisticsCompute for ByteBoolArray {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {

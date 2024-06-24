@@ -2,15 +2,14 @@ use std::mem::ManuallyDrop;
 
 use arrow_buffer::{BooleanBuffer, NullBuffer};
 use serde::{Deserialize, Serialize};
-use vortex_buffer::Buffer;
-
-use super::bool::BoolArray;
-use crate::{
+use vortex::array::bool::BoolArray;
+use vortex::{
     impl_encoding,
     validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata},
     visitor::{AcceptArrayVisitor, ArrayVisitor},
     ArrayFlatten,
 };
+use vortex_buffer::Buffer;
 
 mod compute;
 mod stats;
@@ -50,11 +49,7 @@ impl ByteBoolArray {
                 validity: validity.to_metadata(length)?,
             },
             Some(buffer),
-            validity
-                .into_array_data()
-                .into_iter()
-                .collect::<Vec<_>>()
-                .into(),
+            validity.into_array().into_iter().collect::<Vec<_>>().into(),
             StatsSet::new(),
         )?;
 

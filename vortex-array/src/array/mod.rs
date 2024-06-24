@@ -1,5 +1,4 @@
 pub mod bool;
-pub mod byte_bool;
 pub mod chunked;
 pub mod constant;
 pub mod datetime;

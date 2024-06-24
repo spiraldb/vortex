@@ -3797,6 +3797,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-bytebool"
+version = "0.1.0"
+dependencies = [
+ "arrow-array",
+ "arrow-buffer",
+ "divan",
+ "itertools 0.13.0",
+ "num-traits",
+ "serde",
+ "vortex-array",
+ "vortex-buffer",
+ "vortex-dtype",
+ "vortex-error",
+ "vortex-expr",
+ "vortex-scalar",
+]
+
+[[package]]
 name = "vortex-datafusion"
 version = "0.1.0"
 dependencies = [
