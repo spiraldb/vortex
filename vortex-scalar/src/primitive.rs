@@ -84,6 +84,28 @@ impl Scalar {
         }
     }
 
+    pub fn reinterpret_cast(&self, ptype: PType) -> Self {
+        let primitive = PrimitiveScalar::try_from(self).unwrap();
+        if primitive.ptype() == ptype {
+            return self.clone();
+        }
+
+        assert_eq!(
+            primitive.ptype().byte_width(),
+            ptype.byte_width(),
+            "can't reinterpret cast between integers of two different widths"
+        );
+
+        Scalar::new(
+            DType::Primitive(ptype, self.dtype.nullability()),
+            primitive
+                .pvalue
+                .map(|p| p.reinterpret_cast(ptype))
+                .map(ScalarValue::Primitive)
+                .unwrap_or_else(|| ScalarValue::Null),
+        )
+    }
+
     pub fn zero<T: NativePType + Into<PValue>>(nullability: Nullability) -> Self {
         Self {
             dtype: DType::Primitive(T::PTYPE, nullability),

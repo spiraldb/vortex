@@ -36,7 +36,7 @@ impl TakeFn for FoRArray {
 
 impl ScalarAtFn for FoRArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let encoded_scalar = scalar_at(&self.encoded(), index)?;
+        let encoded_scalar = scalar_at(&self.encoded(), index)?.reinterpret_cast(self.ptype());
         let encoded = PrimitiveScalar::try_from(&encoded_scalar)?;
         let reference = PrimitiveScalar::try_from(self.reference())?;
 

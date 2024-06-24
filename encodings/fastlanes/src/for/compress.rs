@@ -6,7 +6,7 @@ use vortex::compress::{CompressConfig, Compressor, EncodingCompression};
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, IntoArrayVariant};
-use vortex_dtype::{match_each_integer_ptype, NativePType, PType};
+use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -60,9 +60,16 @@ impl EncodingCompression for FoREncoding {
 
         let child = match_each_integer_ptype!(parray.ptype(), |$T| {
             if shift == <$T>::PTYPE.bit_width() as u8 {
-                ConstantArray::new(Scalar::zero::<$T>(parray.dtype().nullability()), parray.len()).into_array()
+                ConstantArray::new(
+                    Scalar::zero::<$T>(parray.dtype().nullability())
+                        .reinterpret_cast(parray.ptype().to_unsigned()),
+                    parray.len(),
+                )
+                .into_array()
             } else {
-                compress_primitive::<$T>(parray, shift, $T::try_from(&min)?).into_array()
+                compress_primitive::<$T>(&parray, shift, $T::try_from(&min)?)
+                    .reinterpret_cast(parray.ptype().to_unsigned())
+                    .into_array()
             }
         });
         let for_like = like.map(|like_arr| FoRArray::try_from(like_arr).unwrap());
@@ -76,7 +83,7 @@ impl EncodingCompression for FoREncoding {
 }
 
 fn compress_primitive<T: NativePType + WrappingSub + PrimInt>(
-    parray: PrimitiveArray,
+    parray: &PrimitiveArray,
     shift: u8,
     min: T,
 ) -> PrimitiveArray {
@@ -102,8 +109,8 @@ fn compress_primitive<T: NativePType + WrappingSub + PrimInt>(
 
 pub fn decompress(array: FoRArray) -> VortexResult<PrimitiveArray> {
     let shift = array.shift();
-    let ptype: PType = array.dtype().try_into()?;
-    let encoded = array.encoded().into_primitive()?;
+    let ptype = array.ptype();
+    let encoded = array.encoded().into_primitive()?.reinterpret_cast(ptype);
     Ok(match_each_integer_ptype!(ptype, |$T| {
         let reference: $T = array.reference().try_into()?;
         PrimitiveArray::from_vec(
@@ -202,9 +209,9 @@ mod test {
         assert_eq!(i8::MIN, i8::try_from(compressed.reference()).unwrap());
 
         let encoded = compressed.encoded().into_primitive().unwrap();
-        let bitcast: &[u8] = unsafe { std::mem::transmute(encoded.maybe_null_slice::<i8>()) };
+        let encoded_bytes: &[u8] = encoded.maybe_null_slice::<u8>();
         let unsigned: Vec<u8> = (0..u8::MAX).collect_vec();
-        assert_eq!(bitcast, unsigned.as_slice());
+        assert_eq!(encoded_bytes, unsigned.as_slice());
 
         let decompressed = compressed.array().clone().into_primitive().unwrap();
         assert_eq!(
