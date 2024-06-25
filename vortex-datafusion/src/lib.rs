@@ -10,17 +10,13 @@ use std::task::{Context, Poll};
 use arrow_array::{RecordBatch, StructArray as ArrowStructArray};
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
-use datafusion::arrow::buffer::NullBuffer;
 use datafusion::dataframe::DataFrame;
 use datafusion::datasource::TableProvider;
 use datafusion::execution::context::SessionState;
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
-use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion::prelude::SessionContext;
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion, TreeNodeVisitor};
 use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult, ToDFSchema};
-use datafusion_expr::execution_props::ExecutionProps;
-use datafusion_expr::simplify::SimplifyContext;
 use datafusion_expr::{Expr, Operator, TableProviderFilterPushDown, TableType};
 use datafusion_physical_expr::EquivalenceProperties;
 use datafusion_physical_plan::{
@@ -29,7 +25,6 @@ use datafusion_physical_plan::{
 use futures::{Stream, StreamExt};
 use itertools::Itertools;
 use pin_project::pin_project;
-use vortex::array::bool::BoolArray;
 use vortex::array::chunked::ChunkedArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::DType;
@@ -38,6 +33,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use crate::datatype::infer_schema;
 
 mod datatype;
+mod expr;
 mod plans;
 
 pub trait SessionContextExt {
@@ -144,8 +140,8 @@ impl TableProvider for VortexInMemoryTableProvider {
 
         match (filter_exprs, filter_projection) {
             // If there is a filter expression, we execute in two phases, first performing a filter
-            // on the input to get back row indices, and then taking the remaning struct columns
-            // using the calculcated indices from the filter.
+            // on the input to get back row indices, and then taking the remaining struct columns
+            // using the calculated indices from the filter.
             (Some(filter_exprs), Some(filter_projection)) => Ok(make_filter_then_take_plan(
                 self.schema_ref.clone(),
                 filter_exprs,
@@ -300,63 +296,6 @@ fn get_column_references(expr: &Expr) -> HashSet<String> {
     .unwrap();
 
     references
-}
-
-/// A mask determining the rows in an Array that should be treated as valid for query processing.
-/// The vector is used to determine the take order of a set of things, or otherwise we determine
-/// that we want to perform cross-filtering of the larger columns, if we so choose.
-pub(crate) struct RowSelection {
-    selection: NullBuffer,
-}
-
-impl RowSelection {
-    /// Construct a new RowSelection with all elements initialized to selected (true).
-    pub(crate) fn new_selected(len: usize) -> Self {
-        Self {
-            selection: NullBuffer::new_valid(len),
-        }
-    }
-
-    /// Construct a new RowSelection with all elements initialized to unselected (false).
-    pub(crate) fn new_unselected(len: usize) -> Self {
-        Self {
-            selection: NullBuffer::new_null(len),
-        }
-    }
-}
-
-impl RowSelection {
-    // Based on the boolean array outputs of the other vector here.
-    // We want to be careful when comparing things based on the infra for pushdown here.
-    pub(crate) fn refine(&mut self, matches: &BoolArray) -> &mut Self {
-        let matches = matches.boolean_buffer();
-
-        // If nothing matches, we return a new value to set to false here.
-        if matches.count_set_bits() == 0 {
-            return self;
-        }
-
-        // Use an internal BoolArray to perform the logic here.
-        // Once we have this setup, it might just work this way.
-        self
-    }
-}
-
-/// Convert a set of expressions that must all match into a single AND expression.
-///
-/// # Returns
-///
-/// If conversion is successful, the result will be a
-/// [binary expression node][datafusion_expr::Expr::BinaryExpr] containing the conjunction.
-fn make_simplified(expr: &Expr, schema: SchemaRef) -> DFResult<Expr> {
-    let schema = schema.to_dfschema_ref()?;
-
-    // simplify the expression.
-    let props = ExecutionProps::new();
-    let context = SimplifyContext::new(&props).with_schema(schema);
-    let simplifier = ExprSimplifier::new(context);
-
-    simplifier.simplify(expr.clone())
 }
 
 /// Physical plan node for scans against an in-memory, possibly chunked Vortex Array.

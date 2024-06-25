@@ -3,7 +3,6 @@ use std::collections::HashMap;
 
 use enum_iterator::all;
 use itertools::Itertools;
-
 use vortex_dtype::DType;
 use vortex_error::VortexError;
 use vortex_scalar::Scalar;

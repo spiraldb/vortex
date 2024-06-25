@@ -2,19 +2,29 @@
 
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
-use arrow_array::RecordBatch;
+use arrow_array::cast::AsArray;
+use arrow_array::{ArrayRef, RecordBatch, UInt64Array};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
-use datafusion_common::Result as DFResult;
-use datafusion_execution::{SendableRecordBatchStream, TaskContext};
+use datafusion::prelude::SessionContext;
+use datafusion_common::{DFSchema, Result as DFResult};
+use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion_expr::Expr;
 use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
 use datafusion_physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, PlanProperties,
 };
+use futures::{ready, Stream};
 use lazy_static::lazy_static;
 use vortex::array::struct_::StructArray;
+use vortex::{ArrayDType, IntoCanonical};
+
+use crate::datatype::infer_schema;
+use crate::expr::{make_conjunction, simplify_expr};
 
 /// Physical plan operator that applies a set of [filters][Expr] against the input, producing a
 /// row mask that can be used downstream to force a take against the corresponding struct array
@@ -107,7 +117,103 @@ impl ExecutionPlan for RowSelectorExec {
             "single partitioning only supported by TakeOperator"
         );
 
-        todo!("need to implement this")
+        let stream_schema = Arc::new(infer_schema(self.filter_struct.dtype()));
+
+        let filter_struct = self.filter_struct.clone();
+        let inner = Box::pin(async move {
+            let arrow_array = filter_struct.into_canonical().unwrap().into_arrow();
+            Ok(RecordBatch::from(arrow_array.as_struct()))
+        });
+
+        let conjunction_expr = simplify_expr(
+            &make_conjunction(&self.filter_exprs)?,
+            stream_schema.clone(),
+        )?;
+
+        Ok(Box::pin(RowIndicesStream {
+            inner,
+            polled_inner: false,
+            conjunction_expr,
+            schema_ref: stream_schema,
+        }))
+    }
+}
+
+/// [RecordBatchStream] of row indices, emitted by the [RowSelectorExec] physical plan node.
+#[pin_project::pin_project]
+struct RowIndicesStream<F> {
+    /// The inner future that returns `DFResult<RecordBatch>`.
+    #[pin]
+    inner: F,
+
+    polled_inner: bool,
+
+    conjunction_expr: Expr,
+    schema_ref: SchemaRef,
+}
+
+impl<F> Stream for RowIndicesStream<F>
+where
+    F: Future<Output = DFResult<RecordBatch>>,
+{
+    type Item = DFResult<RecordBatch>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        println!("BEGIN poll_next");
+        // Get access to a single record batch of values in the upstream system.
+        let this = self.project();
+
+        if *this.polled_inner {
+            println!("EXIT");
+            return Poll::Ready(None);
+        }
+
+        // Get the unfiltered record batch.
+        // Since this is a one-shot, we only want to poll the inner future once, to create the
+        // initial batch for us to process.
+        //
+        // We want to avoid ever calling it again.
+        println!("POLL record_batch");
+        let record_batch = ready!(this.inner.poll(cx))?;
+        *this.polled_inner = true;
+
+        // Using a local SessionContext, generate a physical plan to execute the conjunction query
+        // against the filter columns.
+        //
+        // The result of a conjunction expression is a BooleanArray containing `true` for rows
+        // where the conjunction was satisfied, and `false` otherwise.
+        println!("CREATE session");
+        let session = SessionContext::new();
+        let df_schema = DFSchema::try_from(this.schema_ref.clone())?;
+        let physical_expr =
+            session.create_physical_expr(this.conjunction_expr.clone(), &df_schema)?;
+        let selection = physical_expr
+            .evaluate(&record_batch)?
+            .into_array(record_batch.num_rows())?;
+
+        // Convert the `selection` BooleanArray into a UInt64Array of indices.
+        let selection_indices: Vec<u64> = selection
+            .as_boolean()
+            .clone()
+            .values()
+            .set_indices()
+            .map(|idx| idx as u64)
+            .collect();
+
+        let indices: ArrayRef = Arc::new(UInt64Array::from(selection_indices));
+        let indices_batch = RecordBatch::try_new(ROW_SELECTOR_SCHEMA_REF.clone(), vec![indices])?;
+
+        println!("RETURNING Poll::Ready");
+        Poll::Ready(Some(Ok(indices_batch)))
+    }
+}
+
+impl<F> RecordBatchStream for RowIndicesStream<F>
+where
+    F: Future<Output = DFResult<RecordBatch>>,
+{
+    fn schema(&self) -> SchemaRef {
+        self.schema_ref.clone()
     }
 }
 
@@ -201,5 +307,62 @@ impl ExecutionPlan for TakeRowsExec {
         );
 
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use arrow_array::{BooleanArray, RecordBatch, UInt64Array};
+    use arrow_schema::{DataType, Field, Schema};
+    use datafusion_expr::{and, col, lit};
+    use itertools::Itertools;
+
+    use crate::plans::{RowIndicesStream, ROW_SELECTOR_SCHEMA_REF};
+
+    #[tokio::test]
+    async fn test_filtering_stream() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("a", DataType::UInt64, false),
+            Field::new("b", DataType::Boolean, false),
+        ]));
+
+        let _schema = schema.clone();
+        let inner = Box::pin(async move {
+            Ok(RecordBatch::try_new(
+                _schema,
+                vec![
+                    Arc::new(UInt64Array::from(vec![0u64, 1, 2])),
+                    Arc::new(BooleanArray::from(vec![false, false, true])),
+                ],
+            )
+            .unwrap())
+        });
+
+        let _schema = schema.clone();
+        let filtering_stream = RowIndicesStream {
+            inner,
+            polled_inner: false,
+            conjunction_expr: and((col("a") % lit(2)).eq(lit(0)), col("b").is_true()),
+            schema_ref: _schema,
+        };
+
+        let rows: Vec<RecordBatch> = futures::executor::block_on_stream(filtering_stream)
+            .try_collect()
+            .unwrap();
+
+        assert_eq!(rows.len(), 1);
+
+        // The output of row selection is a RecordBatch of indices that can be used as selectors
+        // against the original RecordBatch.
+        assert_eq!(
+            rows[0],
+            RecordBatch::try_new(
+                ROW_SELECTOR_SCHEMA_REF.clone(),
+                vec![Arc::new(UInt64Array::from(vec![2u64])),]
+            )
+            .unwrap()
+        );
     }
 }
