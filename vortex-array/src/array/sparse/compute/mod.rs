@@ -46,18 +46,16 @@ impl SearchSortedFn for SparseArray {
         search_sorted(&self.values(), value.clone(), side).and_then(|sr| match sr {
             SearchResult::Found(i) => {
                 let index: usize = scalar_at(&self.indices(), i)?.as_ref().try_into().unwrap();
-                Ok(SearchResult::Found(index))
+                Ok(SearchResult::Found(index - self.indices_offset()))
             }
             SearchResult::NotFound(i) => {
                 let index: usize = scalar_at(&self.indices(), if i == 0 { 0 } else { i - 1 })?
                     .as_ref()
                     .try_into()
                     .unwrap();
-                Ok(SearchResult::NotFound(if i == 0 {
-                    index
-                } else {
-                    index + 1
-                }))
+                Ok(SearchResult::NotFound(
+                    if i == 0 { index } else { index + 1 } - self.indices_offset(),
+                ))
             }
         })
     }
@@ -71,6 +69,7 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::SparseArray;
     use crate::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
+    use crate::compute::slice::slice;
     use crate::validity::Validity;
     use crate::{Array, IntoArray};
 
@@ -101,5 +100,14 @@ mod test {
     pub fn search_found() {
         let res = search_sorted(&array(), 44, SearchSortedSide::Left).unwrap();
         assert_eq!(res, SearchResult::Found(9));
+    }
+
+    #[test]
+    pub fn search_sliced() {
+        let array = slice(&array(), 7, 20).unwrap();
+        assert_eq!(
+            search_sorted(&array, 22, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(2)
+        );
     }
 }
