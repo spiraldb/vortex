@@ -35,6 +35,7 @@ impl SearchSortedFn for BitPackedArray {
 #[derive(Debug)]
 struct BitPackedSearch {
     packed: PrimitiveArray,
+    offset: usize,
     length: usize,
     bit_width: usize,
     min_patch_offset: Option<usize>,
@@ -44,6 +45,7 @@ impl BitPackedSearch {
     pub fn new(array: &BitPackedArray) -> Self {
         Self {
             packed: array.packed().into_primitive().unwrap(),
+            offset: array.offset(),
             length: array.len(),
             bit_width: array.bit_width(),
             min_patch_offset: array.patches().map(|p| {
@@ -64,8 +66,12 @@ impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch {
         }
         // SAFETY: Used in search_sorted_by which ensures that idx is within bounds
         let val: T = unsafe {
-            unpack_single_primitive(self.packed.maybe_null_slice::<T>(), self.bit_width, idx)
-                .unwrap()
+            unpack_single_primitive(
+                self.packed.maybe_null_slice::<T>(),
+                self.bit_width,
+                idx + self.offset,
+            )
+            .unwrap()
         };
         val.partial_cmp(elem)
     }
@@ -81,6 +87,7 @@ impl Len for BitPackedSearch {
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
+    use vortex::compute::slice::slice;
     use vortex::IntoArray;
 
     use crate::BitPackedArray;
@@ -108,6 +115,25 @@ mod test {
         assert_eq!(
             search_sorted(&bitpacked, 0, SearchSortedSide::Left).unwrap(),
             SearchResult::NotFound(0)
+        );
+    }
+
+    #[test]
+    fn search_sliced() {
+        let bitpacked = slice(
+            &BitPackedArray::encode(
+                &PrimitiveArray::from(vec![1u32, 2, 3, 4, 5]).into_array(),
+                2,
+            )
+            .unwrap()
+            .into_array(),
+            3,
+            5,
+        )
+        .unwrap();
+        assert_eq!(
+            search_sorted(&bitpacked, 4, SearchSortedSide::Left).unwrap(),
+            SearchResult::Found(0)
         );
     }
 }
