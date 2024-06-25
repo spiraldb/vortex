@@ -30,6 +30,7 @@ impl SliceFn for BitPackedArray {
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::slice::slice;
+    use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::{ArrayTrait, IntoArray};
 
     use crate::BitPackedArray;
@@ -37,12 +38,17 @@ mod test {
     #[test]
     pub fn slice_block() {
         let arr = BitPackedArray::encode(
-            &PrimitiveArray::from((0u32..2048).map(|v| v % 64).collect::<Vec<_>>()).into_array(),
+            PrimitiveArray::from((0u32..2048).map(|v| v % 64).collect::<Vec<_>>()).array(),
             6,
         )
         .unwrap()
         .into_array();
         let sliced = BitPackedArray::try_from(slice(&arr, 1024, 2048).unwrap()).unwrap();
+        assert_eq!(scalar_at(sliced.array(), 0).unwrap(), (1024u32 % 64).into());
+        assert_eq!(
+            scalar_at(sliced.array(), 1023).unwrap(),
+            (2047u32 % 64).into()
+        );
         assert_eq!(sliced.offset(), 0);
         assert_eq!(sliced.len(), 1024);
     }
@@ -50,13 +56,56 @@ mod test {
     #[test]
     pub fn slice_within_block() {
         let arr = BitPackedArray::encode(
-            &PrimitiveArray::from((0u32..2048).map(|v| v % 64).collect::<Vec<_>>()).into_array(),
+            PrimitiveArray::from((0u32..2048).map(|v| v % 64).collect::<Vec<_>>()).array(),
             6,
         )
         .unwrap()
         .into_array();
         let sliced = BitPackedArray::try_from(slice(&arr, 512, 1434).unwrap()).unwrap();
+        assert_eq!(scalar_at(sliced.array(), 0).unwrap(), (512u32 % 64).into());
+        assert_eq!(
+            scalar_at(sliced.array(), 921).unwrap(),
+            (1433u32 % 64).into()
+        );
         assert_eq!(sliced.offset(), 512);
         assert_eq!(sliced.len(), 922);
+    }
+
+    #[test]
+    fn slice_within_block_u8s() {
+        let packed = BitPackedArray::encode(
+            PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).array(),
+            7,
+        )
+        .unwrap();
+
+        let compressed = slice(packed.array(), 768, 9999).unwrap();
+        assert_eq!(
+            scalar_at(&compressed, 0).unwrap(),
+            ((768 % 63) as u8).into()
+        );
+        assert_eq!(
+            scalar_at(&compressed, compressed.len() - 1).unwrap(),
+            ((9998 % 63) as u8).into()
+        );
+    }
+
+    #[test]
+    fn slice_block_boundary_u8s() {
+        let packed = BitPackedArray::encode(
+            PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).array(),
+            7,
+        )
+        .unwrap();
+
+        let compressed = slice(packed.array(), 7168, 9216).unwrap();
+        assert_eq!(
+            scalar_at(&compressed, 0).unwrap(),
+            ((7168 % 63) as u8).into()
+        );
+        assert_eq!(
+            scalar_at(&compressed, compressed.len() - 1).unwrap(),
+            ((9215 % 63) as u8).into()
+        );
     }
 }
