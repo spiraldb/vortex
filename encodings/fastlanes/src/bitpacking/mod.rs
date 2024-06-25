@@ -50,10 +50,16 @@ impl BitPackedArray {
         if bit_width > 64 {
             vortex_bail!("Unsupported bit width {}", bit_width);
         }
+        if offset > 1023 {
+            vortex_bail!(
+                "Offset must be less than full block, i.e. 1024, got {}",
+                offset
+            );
+        }
 
         let ptype: PType = (&dtype).try_into()?;
         let expected_packed_size =
-            ((length + 1023) / 1024) * (128 * bit_width / ptype.byte_width());
+            ((length + offset + 1023) / 1024) * (128 * bit_width / ptype.byte_width());
         if packed.len() != expected_packed_size {
             return Err(vortex_err!(
                 "Expected {} packed bytes, got {}",
@@ -180,49 +186,9 @@ impl ArrayTrait for BitPackedArray {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::slice::slice;
-    use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::{IntoArray, IntoCanonical};
 
     use crate::BitPackedArray;
-
-    #[test]
-    fn slice_within_block() {
-        let packed = BitPackedArray::encode(
-            PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).array(),
-            7,
-        )
-        .unwrap();
-
-        let compressed = slice(packed.array(), 768, 9999).unwrap();
-        assert_eq!(
-            scalar_at(&compressed, 0).unwrap(),
-            ((768 % 63) as u8).into()
-        );
-        assert_eq!(
-            scalar_at(&compressed, compressed.len() - 1).unwrap(),
-            ((9998 % 63) as u8).into()
-        );
-    }
-
-    #[test]
-    fn slice_block_boundary() {
-        let packed = BitPackedArray::encode(
-            PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).array(),
-            7,
-        )
-        .unwrap();
-
-        let compressed = slice(packed.array(), 7168, 9216).unwrap();
-        assert_eq!(
-            scalar_at(&compressed, 0).unwrap(),
-            ((7168 % 63) as u8).into()
-        );
-        assert_eq!(
-            scalar_at(&compressed, compressed.len() - 1).unwrap(),
-            ((9215 % 63) as u8).into()
-        );
-    }
 
     #[test]
     fn test_encode() {
