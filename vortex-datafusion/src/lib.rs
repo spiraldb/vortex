@@ -1,7 +1,8 @@
 //! Connectors to enable DataFusion to read Vortex data.
 
 use std::any::Any;
-use std::fmt::Formatter;
+use std::collections::HashSet;
+use std::fmt::{Debug, Formatter};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -16,28 +17,28 @@ use datafusion::execution::context::SessionState;
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion::prelude::SessionContext;
-use datafusion_common::{
-    exec_datafusion_err, DataFusionError, Result as DFResult, ScalarValue, ToDFSchema,
-};
-use datafusion_common::tree_node::{TreeNodeRecursion, TreeNodeVisitor};
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion, TreeNodeVisitor};
+use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult, ToDFSchema};
 use datafusion_expr::execution_props::ExecutionProps;
 use datafusion_expr::simplify::SimplifyContext;
-use datafusion_expr::{BinaryExpr, Expr, Operator, TableProviderFilterPushDown, TableType};
+use datafusion_expr::{Expr, Operator, TableProviderFilterPushDown, TableType};
 use datafusion_physical_expr::EquivalenceProperties;
 use datafusion_physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, Partitioning, PlanProperties,
 };
 use futures::{Stream, StreamExt};
+use itertools::Itertools;
 use pin_project::pin_project;
+use vortex::array::bool::BoolArray;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::struct_::StructArray;
-use vortex::{Array, ArrayDType, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::datatype::infer_schema;
 
 mod datatype;
+mod plans;
 
 pub trait SessionContextExt {
     fn read_vortex(&self, array: Array) -> DFResult<DataFrame>;
@@ -106,16 +107,28 @@ impl TableProvider for VortexInMemoryTableProvider {
         filters: &[Expr],
         _limit: Option<usize>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
-        let filter_expr = if filters.is_empty() {
+        fn get_filter_projection(exprs: &[Expr], schema: SchemaRef) -> Vec<usize> {
+            let referenced_columns: HashSet<String> =
+                exprs.iter().flat_map(get_column_references).collect();
+
+            let projection: Vec<usize> = referenced_columns
+                .iter()
+                .map(|col_name| schema.column_with_name(col_name).unwrap().0)
+                .sorted()
+                .collect();
+
+            projection
+        }
+
+        let filter_exprs: Option<Vec<Expr>> = if filters.is_empty() {
             None
         } else {
-            Some(make_simplified_conjunction(
-                filters,
-                self.schema_ref.clone(),
-            )?)
+            Some(filters.iter().cloned().collect())
         };
 
-        println!("simplified filter: {filter_expr:?}");
+        let filter_projection = filter_exprs
+            .clone()
+            .map(|exprs| get_filter_projection(exprs.as_slice(), self.schema_ref.clone()));
 
         let partitioning = if let Ok(chunked_array) = ChunkedArray::try_from(&self.array) {
             Partitioning::RoundRobinBatch(chunked_array.nchunks())
@@ -129,56 +142,164 @@ impl TableProvider for VortexInMemoryTableProvider {
             ExecutionMode::Bounded,
         );
 
-        Ok(Arc::new(VortexMemoryExec {
-            array: self.array.clone(),
-            projection: projection.cloned(),
-            filter_expr,
-            plan_properties,
-        }))
+        match (filter_exprs, filter_projection) {
+            // If there is a filter expression, we execute in two phases, first performing a filter
+            // on the input to get back row indices, and then taking the remaning struct columns
+            // using the calculcated indices from the filter.
+            (Some(filter_exprs), Some(filter_projection)) => Ok(make_filter_then_take_plan(
+                self.schema_ref.clone(),
+                filter_exprs,
+                filter_projection,
+                self.array.clone(),
+                projection.clone(),
+                plan_properties,
+            )),
+
+            // If no filters were pushed down, we materialize the entire StructArray into a
+            // RecordBatch and let DataFusion process the entire query.
+            _ => Ok(Arc::new(VortexScanExec {
+                array: self.array.clone(),
+                filter_exprs: None,
+                filter_projection: None,
+                scan_projection: projection.cloned(),
+                plan_properties,
+            })),
+        }
     }
 
     fn supports_filters_pushdown(
         &self,
         filters: &[&Expr],
     ) -> DFResult<Vec<TableProviderFilterPushDown>> {
-        // TODO(aduffy): add support for filter pushdown
-        Ok(filters
+        // Get the set of column filters supported.
+        let schema_columns: HashSet<String> = self
+            .schema_ref
+            .fields
+            .iter()
+            .map(|field| field.name().clone())
+            .collect();
+
+        filters
             .iter()
             .map(|expr| {
-                match expr {
-                    // Several expressions can be pushed down.
-                    Expr::BinaryExpr(_)
-                    | Expr::IsNotNull(_)
-                    | Expr::IsNull(_)
-                    | Expr::IsTrue(_)
-                    | Expr::IsFalse(_)
-                    | Expr::IsNotTrue(_)
-                    | Expr::IsNotFalse(_)
-                    | Expr::Cast(_) => TableProviderFilterPushDown::Exact,
-
-                    // All other expressions should be handled outside of the TableProvider
-                    // via the normal DataFusion operator chain.
-                    _ => TableProviderFilterPushDown::Unsupported,
+                if can_be_pushed_down(*expr, &schema_columns)? {
+                    Ok(TableProviderFilterPushDown::Exact)
+                } else {
+                    Ok(TableProviderFilterPushDown::Unsupported)
                 }
-
-                TableProviderFilterPushDown::Exact
             })
-            .collect())
+            .try_collect()
     }
 }
 
-struct ValidationVisitor {}
+/// Construct an operator plan that executes in two stages.
+///
+/// The first plan stage only materializes the columns related to the provided set of filter
+/// expressions. It evaluates the filters into a row selection.
+///
+/// The second stage receives the row selection above and dispatches a `take` on the remaining
+/// columns.
+fn make_filter_then_take_plan(
+    _schema: SchemaRef,
+    _filter_exprs: Vec<Expr>,
+    _filter_projection: Vec<usize>,
+    _array: Array,
+    _output_projection: Option<&Vec<usize>>,
+    _plan_properties: PlanProperties,
+) -> Arc<dyn ExecutionPlan> {
+    // Create a struct array necessary to run the filter operations.
 
-impl ValidationVisitor {
-
+    todo!()
 }
 
-impl TreeNodeVisitor for ValidationVisitor {
-    type Node = Expr;
-
-    fn f_down(&mut self, node: &Self::Node) -> DFResult<TreeNodeRecursion> {
-
+/// Check if the given expression tree can be pushed down into the scan.
+fn can_be_pushed_down(expr: &Expr, schema_columns: &HashSet<String>) -> DFResult<bool> {
+    // If the filter references a column not known to our schema, we reject the filter for pushdown.
+    // TODO(aduffy): is this necessary? Under what conditions would this happen?
+    let column_refs = get_column_references(expr);
+    if !column_refs.is_subset(&schema_columns) {
+        return Ok(false);
     }
+
+    fn is_supported(expr: &Expr) -> bool {
+        match expr {
+            Expr::BinaryExpr(binary_expr) => {
+                // Both the left and right sides must be column expressions, scalars, or casts.
+
+                match binary_expr.op {
+                    // Initially, we will only support pushdown for basic boolean operators
+                    Operator::Eq
+                    | Operator::NotEq
+                    | Operator::Lt
+                    | Operator::LtEq
+                    | Operator::Gt
+                    | Operator::GtEq => true,
+
+                    // TODO(aduffy): add support for LIKE
+                    // TODO(aduffy): add support for basic mathematical ops +-*/
+                    // TODO(aduffy): add support for conjunctions, assuming all of the
+                    //  left and right are valid expressions.
+                    _ => false,
+                }
+            }
+            Expr::IsNotNull(_)
+            | Expr::IsNull(_)
+            | Expr::IsTrue(_)
+            | Expr::IsFalse(_)
+            | Expr::IsNotTrue(_)
+            | Expr::IsNotFalse(_)
+            // TODO(aduffy): ensure that cast can be pushed down.
+            | Expr::Cast(_) => true,
+            _ => false,
+        }
+    }
+
+    // Visitor that traverses the expression tree and tracks if any unsupported expressions were
+    // encountered.
+    struct IsSupportedVisitor {
+        supported_expressions_only: bool,
+    }
+
+    impl TreeNodeVisitor<'_> for IsSupportedVisitor {
+        type Node = Expr;
+
+        fn f_down(&mut self, node: &Self::Node) -> DFResult<TreeNodeRecursion> {
+            if !is_supported(node) {
+                self.supported_expressions_only = false;
+                return Ok(TreeNodeRecursion::Stop);
+            }
+
+            Ok(TreeNodeRecursion::Continue)
+        }
+    }
+
+    let mut visitor = IsSupportedVisitor {
+        supported_expressions_only: true,
+    };
+
+    // Traverse the tree.
+    // At the end of the traversal, the internal state of `visitor` will indicate if there were
+    // unsupported expressions encountered.
+    expr.visit(&mut visitor)?;
+
+    Ok(visitor.supported_expressions_only)
+}
+
+/// Extract out the columns from our table referenced by the expression.
+fn get_column_references(expr: &Expr) -> HashSet<String> {
+    let mut references = HashSet::new();
+
+    expr.apply(|node| match node {
+        Expr::Column(col) => {
+            references.insert(col.name.clone());
+
+            Ok(TreeNodeRecursion::Continue)
+        }
+        _ => Ok(TreeNodeRecursion::Continue),
+    })
+    .unwrap();
+
+    references
 }
 
 /// A mask determining the rows in an Array that should be treated as valid for query processing.
@@ -188,29 +309,46 @@ pub(crate) struct RowSelection {
     selection: NullBuffer,
 }
 
+impl RowSelection {
+    /// Construct a new RowSelection with all elements initialized to selected (true).
+    pub(crate) fn new_selected(len: usize) -> Self {
+        Self {
+            selection: NullBuffer::new_valid(len),
+        }
+    }
+
+    /// Construct a new RowSelection with all elements initialized to unselected (false).
+    pub(crate) fn new_unselected(len: usize) -> Self {
+        Self {
+            selection: NullBuffer::new_null(len),
+        }
+    }
+}
+
+impl RowSelection {
+    // Based on the boolean array outputs of the other vector here.
+    // We want to be careful when comparing things based on the infra for pushdown here.
+    pub(crate) fn refine(&mut self, matches: &BoolArray) -> &mut Self {
+        let matches = matches.boolean_buffer();
+
+        // If nothing matches, we return a new value to set to false here.
+        if matches.count_set_bits() == 0 {
+            return self;
+        }
+
+        // Use an internal BoolArray to perform the logic here.
+        // Once we have this setup, it might just work this way.
+        self
+    }
+}
+
 /// Convert a set of expressions that must all match into a single AND expression.
 ///
 /// # Returns
 ///
 /// If conversion is successful, the result will be a
 /// [binary expression node][datafusion_expr::Expr::BinaryExpr] containing the conjunction.
-///
-/// Note that the set of operators must be provided here instead.
-///
-/// # Simplification
-///
-/// Simplification will occur as part of this process, so constant folding and similar optimizations
-/// will be applied before returning the final expression.
-fn make_simplified_conjunction(filters: &[Expr], schema: SchemaRef) -> DFResult<Expr> {
-    let init = Box::new(Expr::Literal(ScalarValue::Boolean(Some(true))));
-    let conjunction = filters.iter().fold(init, |conj, item| {
-        Box::new(Expr::BinaryExpr(BinaryExpr::new(
-            conj,
-            Operator::And,
-            Box::new(item.clone()),
-        )))
-    });
-
+fn make_simplified(expr: &Expr, schema: SchemaRef) -> DFResult<Expr> {
     let schema = schema.to_dfschema_ref()?;
 
     // simplify the expression.
@@ -218,72 +356,72 @@ fn make_simplified_conjunction(filters: &[Expr], schema: SchemaRef) -> DFResult<
     let context = SimplifyContext::new(&props).with_schema(schema);
     let simplifier = ExprSimplifier::new(context);
 
-    simplifier.simplify(*conjunction)
+    simplifier.simplify(expr.clone())
 }
 
 /// Physical plan node for scans against an in-memory, possibly chunked Vortex Array.
 #[derive(Debug, Clone)]
-struct VortexMemoryExec {
+struct VortexScanExec {
     array: Array,
-    filter_expr: Option<Expr>,
-    projection: Option<Vec<usize>>,
+    filter_exprs: Option<Vec<Expr>>,
+    filter_projection: Option<Vec<usize>>,
+    scan_projection: Option<Vec<usize>>,
     plan_properties: PlanProperties,
 }
 
-impl DisplayAs for VortexMemoryExec {
+impl DisplayAs for VortexScanExec {
     fn fmt_as(&self, _display_type: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl VortexMemoryExec {
-    /// Read a single array chunk from the source as a RecordBatch.
-    ///
-    /// `array` must be a [`StructArray`] or flatten into one. Passing a different Array variant
-    /// may cause a panic.
-    fn execute_single_chunk(
-        array: Array,
-        projection: &Option<Vec<usize>>,
-        _context: Arc<TaskContext>,
-    ) -> DFResult<SendableRecordBatchStream> {
-        let data = array
+/// Read a single array chunk from the source as a RecordBatch.
+///
+/// # Errors
+/// This function will return an Error if `array` is not struct-typed. It will also return an
+/// error if the projection references columns
+fn execute_unfiltered(
+    array: &Array,
+    projection: &Option<Vec<usize>>,
+) -> DFResult<SendableRecordBatchStream> {
+    // Construct the RecordBatch by flattening each struct field and transmuting to an ArrayRef.
+    let struct_array = array
+        .clone()
+        .into_struct()
+        .map_err(|vortex_error| DataFusionError::Execution(format!("{}", vortex_error)))?;
+
+    let field_order = if let Some(projection) = projection {
+        projection.clone()
+    } else {
+        (0..struct_array.names().len()).collect()
+    };
+
+    let projected_struct = struct_array
+        .project(field_order.as_slice())
+        .map_err(|vortex_err| {
+            exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
+        })?;
+    let batch = RecordBatch::from(
+        projected_struct
             .into_canonical()
-            .map_err(|vortex_error| DataFusionError::Execution(format!("{}", vortex_error)))?
-            .into_array();
-
-        // Construct the RecordBatch by flattening each struct field and transmuting to an ArrayRef.
-        let struct_array = StructArray::try_from(data).expect("array must be StructArray");
-
-        let field_order = if let Some(projection) = projection {
-            projection.clone()
-        } else {
-            (0..struct_array.names().len()).collect()
-        };
-
-        let projected_struct =
-            struct_array
-                .project(field_order.as_slice())
-                .map_err(|vortex_err| {
-                    exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
-                })?;
-        let batch = RecordBatch::from(
-            projected_struct
-                .into_canonical()
-                .expect("struct arrays must flatten")
-                .into_arrow()
-                .as_any()
-                .downcast_ref::<ArrowStructArray>()
-                .expect("vortex StructArray must convert to arrow StructArray"),
-        );
-        Ok(Box::pin(VortexRecordBatchStream {
-            schema_ref: batch.schema(),
-            inner: futures::stream::iter(vec![batch]),
-        }))
-    }
+            .expect("struct arrays must canonicalize")
+            .into_arrow()
+            .as_any()
+            .downcast_ref::<ArrowStructArray>()
+            .expect("vortex StructArray must convert to arrow StructArray"),
+    );
+    Ok(Box::pin(VortexRecordBatchStream {
+        schema_ref: batch.schema(),
+        inner: futures::stream::iter(vec![batch]),
+    }))
 }
 
+// Row selector stream.
+// I.e., send a stream of RowSelector which allows us to pass in a bunch of binary arrays
+// back down to the other systems here instead.
+
 #[pin_project]
-struct VortexRecordBatchStream<I> {
+pub(crate) struct VortexRecordBatchStream<I> {
     schema_ref: SchemaRef,
 
     #[pin]
@@ -315,7 +453,7 @@ where
     }
 }
 
-impl ExecutionPlan for VortexMemoryExec {
+impl ExecutionPlan for VortexScanExec {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -339,7 +477,7 @@ impl ExecutionPlan for VortexMemoryExec {
     fn execute(
         &self,
         partition: usize,
-        context: Arc<TaskContext>,
+        _context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
         let chunk = if let Ok(chunked_array) = ChunkedArray::try_from(&self.array) {
             chunked_array
@@ -349,7 +487,7 @@ impl ExecutionPlan for VortexMemoryExec {
             self.array.clone()
         };
 
-        Self::execute_single_chunk(chunk, &self.projection, context)
+        execute_unfiltered(&chunk, &self.scan_projection)
     }
 }
 

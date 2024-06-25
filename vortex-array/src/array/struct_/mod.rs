@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{FieldName, FieldNames, Nullability, StructDType};
-use vortex_error::{vortex_bail, vortex_err};
+use vortex_error::vortex_bail;
 
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
@@ -25,6 +25,15 @@ impl StructArray {
         };
         let dtype = st.dtypes().get(idx)?;
         self.array().child(idx, dtype)
+    }
+
+    pub fn field_by_name(&self, name: &str) -> Option<Array> {
+        let field_idx = self
+            .names()
+            .iter()
+            .position(|field_name| field_name.as_ref() == name);
+
+        field_idx.and_then(|field_idx| self.field(field_idx))
     }
 
     pub fn names(&self) -> &FieldNames {
@@ -126,7 +135,7 @@ impl StructArray {
         for column_idx in projection {
             children.push(
                 self.field(*column_idx)
-                    .ok_or_else(|| vortex_err!(InvalidArgument: "column index out of bounds"))?,
+                    .expect("column must not exceed bounds"),
             );
             names.push(self.names()[*column_idx].clone());
         }
