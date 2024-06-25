@@ -3848,11 +3848,15 @@ dependencies = [
  "datafusion-physical-expr",
  "datafusion-physical-plan",
  "futures",
+ "itertools 0.13.0",
+ "lazy_static",
  "pin-project",
  "tokio",
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-expr",
+ "vortex-scalar",
 ]
 
 [[package]]
