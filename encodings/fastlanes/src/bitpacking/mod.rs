@@ -58,7 +58,12 @@ impl BitPackedArray {
         }
 
         let ptype: PType = (&dtype).try_into()?;
-        let expected_packed_size = (((length + 1023) / 1024) + if offset == 0 { 0 } else { 1 })
+        let expected_packed_size = (((length + 1023) / 1024)
+            + if offset > 0 && offset + length > 1024 {
+                1
+            } else {
+                0
+            })
             * (128 * bit_width / ptype.byte_width());
         if packed.len() != expected_packed_size {
             return Err(vortex_err!(

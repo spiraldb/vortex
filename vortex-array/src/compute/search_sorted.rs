@@ -33,6 +33,13 @@ impl SearchResult {
             Self::NotFound(i) => i,
         }
     }
+
+    pub fn map<F: FnOnce(usize) -> usize>(self, f: F) -> Self {
+        match self {
+            Self::Found(i) => Self::Found(f(i)),
+            Self::NotFound(i) => Self::NotFound(f(i)),
+        }
+    }
 }
 
 pub trait SearchSortedFn {

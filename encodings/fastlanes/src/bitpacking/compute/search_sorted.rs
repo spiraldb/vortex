@@ -20,7 +20,7 @@ impl SearchSortedFn for BitPackedArray {
             let unwrapped_value: $P = value.cast(self.dtype())?.try_into().unwrap();
                 if let Some(patches_array) = self.patches() {
                 if unwrapped_value as usize >= self.max_packed_value() {
-                    search_sorted(&patches_array, value.clone(), side)
+                    Ok(search_sorted(&patches_array, value.clone(), side)?.map(|i| i - self.offset()))
                 } else {
                     Ok(SearchSorted::search_sorted(&BitPackedSearch::new(self), &unwrapped_value, side))
                 }
@@ -127,13 +127,17 @@ mod test {
             )
             .unwrap()
             .into_array(),
-            3,
-            5,
+            2,
+            4,
         )
         .unwrap();
         assert_eq!(
-            search_sorted(&bitpacked, 4, SearchSortedSide::Left).unwrap(),
+            search_sorted(&bitpacked, 3, SearchSortedSide::Left).unwrap(),
             SearchResult::Found(0)
+        );
+        assert_eq!(
+            search_sorted(&bitpacked, 4, SearchSortedSide::Left).unwrap(),
+            SearchResult::Found(1)
         );
     }
 }
