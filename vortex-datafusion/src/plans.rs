@@ -53,10 +53,7 @@ lazy_static! {
 }
 
 impl RowSelectorExec {
-    pub(crate) fn new(
-        filter_exprs: &[Expr],
-        filter_struct: &StructArray,
-    ) -> Self {
+    pub(crate) fn new(filter_exprs: &[Expr], filter_struct: &StructArray) -> Self {
         let cached_plan_props = PlanProperties::new(
             EquivalenceProperties::new(ROW_SELECTOR_SCHEMA_REF.clone()),
             Partitioning::RoundRobinBatch(1),

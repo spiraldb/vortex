@@ -12,11 +12,11 @@ use arrow_schema::SchemaRef;
 use async_trait::async_trait;
 use datafusion::dataframe::DataFrame;
 use datafusion::datasource::TableProvider;
-use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::execution::context::SessionState;
+use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::prelude::SessionContext;
-use datafusion_common::{DataFusionError, exec_datafusion_err, Result as DFResult};
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion, TreeNodeVisitor};
+use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult};
 use datafusion_expr::{Expr, Operator, TableProviderFilterPushDown, TableType};
 use datafusion_physical_expr::EquivalenceProperties;
 use datafusion_physical_plan::{
@@ -25,12 +25,11 @@ use datafusion_physical_plan::{
 use futures::{Stream, StreamExt};
 use itertools::Itertools;
 use pin_project::pin_project;
-
-use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::struct_::StructArray;
+use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::VortexResult;
 
 use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
@@ -39,18 +38,40 @@ mod datatype;
 mod expr;
 mod plans;
 
+/// Optional configurations to pass when loading a [VortexMemTable].
+#[derive(Default, Debug, Clone)]
+pub struct VortexMemTableOptions {
+    pub disable_pushdown: bool,
+}
+
+impl VortexMemTableOptions {
+    pub fn with_disable_pushdown(&mut self, disable_pushdown: bool) -> &mut Self {
+        self.disable_pushdown = disable_pushdown;
+        self
+    }
+}
+
 pub trait SessionContextExt {
-    fn read_vortex(&self, array: Array) -> DFResult<DataFrame>;
+    fn read_vortex(&self, array: Array) -> DFResult<DataFrame> {
+        self.read_vortex_opts(array, VortexMemTableOptions::default())
+    }
+
+    fn read_vortex_opts(&self, array: Array, options: VortexMemTableOptions)
+        -> DFResult<DataFrame>;
 }
 
 impl SessionContextExt for SessionContext {
-    fn read_vortex(&self, array: Array) -> DFResult<DataFrame> {
+    fn read_vortex_opts(
+        &self,
+        array: Array,
+        options: VortexMemTableOptions,
+    ) -> DFResult<DataFrame> {
         assert!(
             matches!(array.dtype(), DType::Struct(_, _)),
             "Vortex arrays must have struct type"
         );
 
-        let vortex_table = VortexInMemoryTableProvider::try_new(array)
+        let vortex_table = VortexMemTable::try_new(array, options)
             .map_err(|error| DataFusionError::Internal(format!("vortex error: {error}")))?;
 
         self.read_table(Arc::new(vortex_table))
@@ -62,27 +83,32 @@ impl SessionContextExt for SessionContext {
 /// Only arrays that have a top-level [struct type](vortex_dtype::StructDType) can be exposed as
 /// a table to DataFusion.
 #[derive(Debug, Clone)]
-pub(crate) struct VortexInMemoryTableProvider {
+pub(crate) struct VortexMemTable {
     array: Array,
     schema_ref: SchemaRef,
+    options: VortexMemTableOptions,
 }
 
-impl VortexInMemoryTableProvider {
+impl VortexMemTable {
     /// Build a new table provider from an existing [struct type](vortex_dtype::StructDType) array.
-    pub fn try_new(array: Array) -> VortexResult<Self> {
-        if !matches!(array.dtype(), DType::Struct(_, _)) {
-            vortex_bail!(InvalidArgument: "only DType::Struct arrays can produce a table provider");
-        }
-
+    ///
+    /// # Panics
+    ///
+    /// Creation will panic if the provided array is not of `DType::Struct` type.
+    pub fn try_new(array: Array, options: VortexMemTableOptions) -> VortexResult<Self> {
         let arrow_schema = infer_schema(array.dtype());
         let schema_ref = SchemaRef::new(arrow_schema);
 
-        Ok(Self { array, schema_ref })
+        Ok(Self {
+            array,
+            schema_ref,
+            options,
+        })
     }
 }
 
 #[async_trait]
-impl TableProvider for VortexInMemoryTableProvider {
+impl TableProvider for VortexMemTable {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -172,7 +198,19 @@ impl TableProvider for VortexInMemoryTableProvider {
         &self,
         filters: &[&Expr],
     ) -> DFResult<Vec<TableProviderFilterPushDown>> {
-        // Get the set of column filters supported.
+        // In the case the caller has configured this provider with filter pushdown disabled,
+        // do not attempt to apply any filters at scan time.
+        if self.options.disable_pushdown {
+            return Ok(filters
+                .iter()
+                .map(|_| TableProviderFilterPushDown::Unsupported)
+                .collect());
+        }
+
+        // Verify for each filter whether its expression tree consists solely of operations we know
+        // how to pushdown, and that they only reference columns in our source.
+        // TODO(aduffy): figure out if we actually need to do this, or what guarantees about the
+        //  filters that DataFusion provides.
         let schema_columns: HashSet<String> = self
             .schema_ref
             .fields
@@ -443,12 +481,11 @@ mod test {
     use datafusion::arrow::array::AsArray;
     use datafusion::prelude::SessionContext;
     use datafusion_expr::{col, count_distinct, lit};
-
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::IntoArray;
     use vortex::validity::Validity;
+    use vortex::IntoArray;
     use vortex_dtype::{DType, Nullability};
 
     use crate::SessionContextExt;
