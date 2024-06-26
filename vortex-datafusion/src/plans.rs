@@ -12,11 +12,10 @@ use arrow_array::types::UInt64Type;
 use arrow_array::{ArrayRef, RecordBatch, RecordBatchOptions, UInt64Array};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use datafusion::arrow::compute::cast;
-use datafusion::execution::context::SessionState;
 use datafusion_common::{DFSchema, Result as DFResult};
 use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion_expr::Expr;
-use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
+use datafusion_physical_expr::{create_physical_expr, EquivalenceProperties, Partitioning};
 use datafusion_physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, PlanProperties,
 };
@@ -183,13 +182,9 @@ where
         //
         // The result of a conjunction expression is a BooleanArray containing `true` for rows
         // where the conjunction was satisfied, and `false` otherwise.
-        let session_state = SessionState::new_with_config_rt(
-            this.context.session_config().clone(),
-            this.context.runtime_env().clone(),
-        );
         let df_schema = DFSchema::try_from(this.schema_ref.clone())?;
         let physical_expr =
-            session_state.create_physical_expr(this.conjunction_expr.clone(), &df_schema)?;
+            create_physical_expr(this.conjunction_expr, &df_schema, &Default::default())?;
         let selection = physical_expr
             .evaluate(&record_batch)?
             .into_array(record_batch.num_rows())?;
