@@ -45,7 +45,7 @@ pub struct VortexMemTableOptions {
 }
 
 impl VortexMemTableOptions {
-    pub fn with_disable_pushdown(&mut self, disable_pushdown: bool) -> &mut Self {
+    pub fn with_disable_pushdown(mut self, disable_pushdown: bool) -> Self {
         self.disable_pushdown = disable_pushdown;
         self
     }
@@ -83,7 +83,7 @@ impl SessionContextExt for SessionContext {
 /// Only arrays that have a top-level [struct type](vortex_dtype::StructDType) can be exposed as
 /// a table to DataFusion.
 #[derive(Debug, Clone)]
-pub(crate) struct VortexMemTable {
+pub struct VortexMemTable {
     array: Array,
     schema_ref: SchemaRef,
     options: VortexMemTableOptions,
@@ -297,6 +297,8 @@ fn can_be_pushed_down(expr: &Expr, schema_columns: &HashSet<String>) -> DFResult
             | Expr::IsFalse(_)
             | Expr::IsNotTrue(_)
             | Expr::IsNotFalse(_)
+            | Expr::Column(_)
+            | Expr::Literal(_)
             // TODO(aduffy): ensure that cast can be pushed down.
             | Expr::Cast(_) => true,
             _ => false,
@@ -374,17 +376,20 @@ fn execute_unfiltered(
     array: &Array,
     projection: &Vec<usize>,
 ) -> DFResult<SendableRecordBatchStream> {
+    println!("EXECUTE_UNFILTERED");
     // Construct the RecordBatch by flattening each struct field and transmuting to an ArrayRef.
     let struct_array = array
         .clone()
         .into_struct()
         .map_err(|vortex_error| DataFusionError::Execution(format!("{}", vortex_error)))?;
 
+    println!("PROJECTION: {:?}", projection);
     let projected_struct = struct_array
         .project(projection.as_slice())
         .map_err(|vortex_err| {
             exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
         })?;
+    println!("PROJECTED SCHEMA: {:?}", projected_struct.dtype());
     let batch = RecordBatch::from(
         projected_struct
             .into_canonical()
@@ -463,6 +468,7 @@ impl ExecutionPlan for VortexScanExec {
         partition: usize,
         _context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
+        println!("EXECUTE VortexScanExec");
         let chunk = if let Ok(chunked_array) = ChunkedArray::try_from(&self.array) {
             chunked_array
                 .chunk(partition)
@@ -485,13 +491,12 @@ mod test {
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
     use vortex::validity::Validity;
-    use vortex::IntoArray;
+    use vortex::{Array, IntoArray};
     use vortex_dtype::{DType, Nullability};
 
-    use crate::SessionContextExt;
+    use crate::{SessionContextExt, VortexMemTableOptions};
 
-    #[tokio::test]
-    async fn test_datafusion_simple() {
+    fn presidents_array() -> Array {
         let names = VarBinArray::from_vec(
             vec![
                 "Washington",
@@ -508,15 +513,53 @@ mod test {
             Validity::NonNullable,
         );
 
-        let presidents = StructArray::from_fields(&[
+        StructArray::from_fields(&[
             ("president", names.into_array()),
             ("term_start", term_start.into_array()),
         ])
-        .into_array();
+        .into_array()
+    }
 
+    #[tokio::test]
+    async fn test_datafusion_pushdown() {
         let ctx = SessionContext::new();
 
-        let df = ctx.read_vortex(presidents).unwrap();
+        let df = ctx.read_vortex(presidents_array()).unwrap();
+
+        let distinct_names = df
+            .filter(col("term_start").gt_eq(lit(1795)))
+            .unwrap()
+            .aggregate(vec![], vec![count_distinct(col("president"))])
+            .unwrap()
+            .collect()
+            .await
+            .unwrap();
+
+        assert_eq!(distinct_names.len(), 1);
+
+        assert_eq!(
+            *distinct_names[0]
+                .column(0)
+                .as_primitive::<Int64Type>()
+                .values()
+                .first()
+                .unwrap(),
+            4i64
+        );
+    }
+
+    #[tokio::test]
+    async fn test_datafusion_no_pushdown() {
+        let ctx = SessionContext::new();
+
+        let df = ctx
+            .read_vortex_opts(
+                presidents_array(),
+                // Disable pushdown. We run this test to make sure that the naive codepath also
+                // produces correct results and does not panic anywhere.
+                VortexMemTableOptions::default().with_disable_pushdown(true),
+            )
+            .unwrap();
 
         let distinct_names = df
             .filter(col("term_start").gt_eq(lit(1795)))

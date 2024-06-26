@@ -9,8 +9,9 @@ use std::task::{Context, Poll};
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::UInt64Type;
-use arrow_array::{ArrayRef, RecordBatch, UInt64Array};
+use arrow_array::{ArrayRef, RecordBatch, RecordBatchOptions, UInt64Array};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
+use datafusion::arrow::compute::cast;
 use datafusion::prelude::SessionContext;
 use datafusion_common::{DFSchema, Result as DFResult};
 use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
@@ -70,7 +71,9 @@ impl RowSelectorExec {
 
 impl Debug for RowSelectorExec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RowSelectorExec").finish()
+        f.debug_struct("RowSelectorExec")
+            .field("filter_exprs", &self.filter_exprs)
+            .finish()
     }
 }
 
@@ -102,7 +105,7 @@ impl ExecutionPlan for RowSelectorExec {
         self: Arc<Self>,
         _children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
-        panic!("with_new_children not supported for RowSelectorExec")
+        Ok(self)
     }
 
     fn execute(
@@ -171,13 +174,11 @@ where
     type Item = DFResult<RecordBatch>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        println!("BEGIN poll_next");
         let this = self.project();
 
         // If we have already polled the one-shot future with the filter records, indicate
         // that the stream has finished.
         if *this.polled_inner {
-            println!("EXIT");
             return Poll::Ready(None);
         }
 
@@ -186,7 +187,6 @@ where
         // initial batch for us to process.
         //
         // We want to avoid ever calling it again.
-        println!("POLL record_batch");
         let record_batch = ready!(this.inner.poll(cx))?;
         *this.polled_inner = true;
 
@@ -195,7 +195,6 @@ where
         //
         // The result of a conjunction expression is a BooleanArray containing `true` for rows
         // where the conjunction was satisfied, and `false` otherwise.
-        println!("CREATE session");
         let session = SessionContext::new();
         let df_schema = DFSchema::try_from(this.schema_ref.clone())?;
         let physical_expr =
@@ -216,7 +215,6 @@ where
         let indices: ArrayRef = Arc::new(UInt64Array::from(selection_indices));
         let indices_batch = RecordBatch::try_new(ROW_SELECTOR_SCHEMA_REF.clone(), vec![indices])?;
 
-        println!("RETURNING Poll::Ready");
         Poll::Ready(Some(Ok(indices_batch)))
     }
 }
@@ -274,7 +272,10 @@ impl TakeRowsExec {
 
 impl Debug for TakeRowsExec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Take").finish()
+        f.debug_struct("TakeRowsExec")
+            .field("projection", &self.projection)
+            .field("output_schema", &self.output_schema)
+            .finish()
     }
 }
 
@@ -301,7 +302,7 @@ impl ExecutionPlan for TakeRowsExec {
         self: Arc<Self>,
         _children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
-        panic!("unsupported with_new_children for {:?}", &self)
+        Ok(self)
     }
 
     fn execute(
@@ -374,22 +375,36 @@ where
             ArrayData::from_arrow(record_batch.column(0).as_primitive::<UInt64Type>(), false)
                 .into_array();
 
+        // If no columns in the output projection, we send back a RecordBatch with empty schema.
+        // This is common for COUNT queries.
+        if this.output_projection.is_empty() {
+            let opts = RecordBatchOptions::new().with_row_count(Some(row_indices.len()));
+            return Poll::Ready(Some(Ok(RecordBatch::try_new_with_options(
+                Arc::new(Schema::empty()),
+                vec![],
+                &opts,
+            )
+            .unwrap())));
+        }
+
         // Assemble the output columns using the row indices.
         // NOTE(aduffy): this re-decodes the fields from the filter schema, which is unnecessary.
         let mut columns = Vec::new();
-        for field_idx in this.output_projection {
-            let encoded = this.vortex_array.field(*field_idx).unwrap();
+        for (output_idx, src_idx) in this.output_projection.iter().enumerate() {
+            let encoded = this.vortex_array.field(*src_idx).expect("field access");
             let decoded = take(&encoded, &row_indices)
-                .unwrap()
+                .expect("take")
                 .into_canonical()
-                .unwrap()
+                .expect("into_canonical")
                 .into_arrow();
+            let data_type = this.output_schema.field(output_idx).data_type();
 
-            columns.push(decoded);
+            columns.push(cast(&decoded, data_type).expect("cast"));
         }
 
-        // Send back a single record batch of the decoded data
-        let output_batch = RecordBatch::try_new(this.output_schema.clone(), columns).unwrap();
+        // Send back a single record batch of the decoded data.
+        let output_batch = RecordBatch::try_new(this.output_schema.clone(), columns)
+            .expect("RecordBatch::try_new");
 
         Poll::Ready(Some(Ok(output_batch)))
     }
