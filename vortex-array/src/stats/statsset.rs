@@ -27,36 +27,6 @@ impl StatsSet {
         }
     }
 
-    // pub fn constant(len: usize, scalar: &Scalar) -> Self {
-    //     let mut stats = HashMap::from([
-    //         (Stat::Max, scalar.clone()),
-    //         (Stat::Min, scalar.clone()),
-    //         (Stat::IsConstant, true.into()),
-    //         (Stat::IsSorted, true.into()),
-    //         (Stat::RunCount, 1.into()),
-    //     ]);
-    //
-    //     match scalar.dtype() {
-    //         DType::Bool(_) => {
-    //             stats.insert(Stat::TrueCount, 0.into());
-    //         }
-    //         DType::Primitive(ptype, _) => {
-    //             ptype.byte_width();
-    //             stats.insert(
-    //                 Stat::BitWidthFreq,
-    //                 vec![0; ptype.byte_width() * 8 + 1].into(),
-    //             );
-    //             stats.insert(
-    //                 Stat::TrailingZeroFreq,
-    //                 vec![ptype.byte_width() * 8; ptype.byte_width() * 8 + 1].into(),
-    //             );
-    //         }
-    //         _ => {}
-    //     }
-    //
-    //     Self::from(stats)
-    // }
-
     /// Specialized constructor for the case where the StatsSet represents
     /// an array consisting entirely of [null](vortex_dtype::DType::Null) values.
     pub fn nulls(len: usize, dtype: &DType) -> Self {

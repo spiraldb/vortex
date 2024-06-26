@@ -8,9 +8,8 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkGroup, Crit
 use datafusion::common::Result as DFResult;
 use datafusion::datasource::{MemTable, TableProvider};
 use datafusion::execution::memory_pool::human_readable_size;
-use datafusion::functions_aggregate::expr_fn::sum;
 use datafusion::logical_expr::lit;
-use datafusion::prelude::{col, DataFrame, SessionContext};
+use datafusion::prelude::{col, count_distinct, DataFrame, SessionContext};
 use lazy_static::lazy_static;
 use vortex::compress::Compressor;
 use vortex::encoding::EncodingRef;
@@ -87,7 +86,7 @@ fn filter_agg_query(df: DataFrame) -> DFResult<DataFrame> {
     // SELECT SUM(scores) FROM table WHERE scores >= 3000 AND scores <= 4000
     df.filter(col("scores").gt_eq(lit(3_000)))?
         .filter(col("scores").lt_eq(lit(4_000)))?
-        .aggregate(vec![], vec![sum(col("scores"))])
+        .aggregate(vec![], vec![count_distinct(col("names"))])
 }
 
 fn measure_provider<M: Measurement>(
