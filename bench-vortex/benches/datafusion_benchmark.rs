@@ -16,12 +16,13 @@ use vortex::compress::Compressor;
 use vortex::encoding::EncodingRef;
 use vortex::{Array, Context, IntoArray, ToArrayData};
 use vortex_datafusion::{VortexMemTable, VortexMemTableOptions};
+use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
 
 lazy_static! {
     pub static ref CTX: Context = Context::default().with_encodings([
         &BitPackedEncoding as EncodingRef,
-        // &DictEncoding,
+        &DictEncoding,
         &FoREncoding,
         &DeltaEncoding,
     ]);
