@@ -7,8 +7,8 @@ use crate::impl_encoding;
 use crate::stats::Stat;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+mod canonical;
 mod compute;
-mod flatten;
 mod stats;
 
 impl_encoding!("vortex.constant", Constant);

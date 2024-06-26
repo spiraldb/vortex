@@ -2,6 +2,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
+use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
@@ -9,6 +10,10 @@ use crate::{Array, IntoArray};
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+        Some(self)
+    }
+
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
@@ -26,5 +31,11 @@ impl ScalarAtFn for ConstantArray {
 impl TakeFn for ConstantArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         Ok(Self::new(self.scalar().clone(), indices.len()).into_array())
+    }
+}
+
+impl SliceFn for ConstantArray {
+    fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
+        Ok(Self::new(self.scalar().clone(), stop - start).into_array())
     }
 }
