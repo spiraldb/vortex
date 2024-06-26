@@ -189,14 +189,11 @@ impl<R: VortexRead> MessageReader<R> {
             dtype,
             flatbuffer,
             |flatbuffer| {
-                root::<fb::Message>(flatbuffer)
-                    .map_err(VortexError::from)
-                    .map(|msg| msg.header_as_chunk().unwrap())
-                    .and_then(|chunk| {
-                        chunk
-                            .array()
-                            .ok_or_else(|| vortex_err!("Chunk missing Array"))
-                    })
+                unsafe { root_unchecked::<fb::Message>(flatbuffer) }
+                    .header_as_chunk()
+                    .unwrap()
+                    .array()
+                    .ok_or_else(|| vortex_err!("Chunk missing Array"))
             },
             buffers,
         )?;
