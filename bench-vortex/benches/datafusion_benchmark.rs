@@ -177,7 +177,7 @@ fn bench_datafusion(c: &mut Criterion) {
 
     // compress=true, pushdown disabled
     bench_vortex(
-        c.benchmark_group("vortex-nopushdown-uncompressed"),
+        c.benchmark_group("vortex-nopushdown-compressed"),
         &SessionContext::new(),
         true,
         true,
