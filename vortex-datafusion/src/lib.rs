@@ -145,10 +145,10 @@ impl TableProvider for VortexMemTable {
             projection
         }
 
-        let filter_exprs: Option<Vec<Expr>> = if filters.is_empty() {
+        let filter_exprs = if filters.is_empty() {
             None
         } else {
-            Some(filters.to_vec())
+            Some(filters)
         };
 
         let partitioning = if let Ok(chunked_array) = ChunkedArray::try_from(&self.array) {
@@ -168,7 +168,7 @@ impl TableProvider for VortexMemTable {
             // using the calculated indices from the filter.
             Some(filter_exprs) => {
                 let filter_projection =
-                    get_filter_projection(filter_exprs.as_slice(), self.schema_ref.clone());
+                    get_filter_projection(filter_exprs, self.schema_ref.clone());
 
                 Ok(make_filter_then_take_plan(
                     self.schema_ref.clone(),
@@ -216,21 +216,10 @@ impl TableProvider for VortexMemTable {
                 .collect());
         }
 
-        // Verify for each filter whether its expression tree consists solely of operations we know
-        // how to pushdown, and that they only reference columns in our source.
-        // TODO(aduffy): figure out if we actually need to do this, or what guarantees about the
-        //  filters that DataFusion provides.
-        let schema_columns: HashSet<String> = self
-            .schema_ref
-            .fields
-            .iter()
-            .map(|field| field.name().clone())
-            .collect();
-
         filters
             .iter()
             .map(|expr| {
-                if can_be_pushed_down(expr, &schema_columns)? {
+                if can_be_pushed_down(expr)? {
                     Ok(TableProviderFilterPushDown::Exact)
                 } else {
                     Ok(TableProviderFilterPushDown::Unsupported)
@@ -249,7 +238,7 @@ impl TableProvider for VortexMemTable {
 /// columns.
 fn make_filter_then_take_plan(
     schema: SchemaRef,
-    filter_exprs: Vec<Expr>,
+    filter_exprs: &[Expr],
     filter_projection: Vec<usize>,
     array: Array,
     output_projection: Vec<usize>,
@@ -261,7 +250,7 @@ fn make_filter_then_take_plan(
         .project(filter_projection.as_slice())
         .expect("projecting filter struct");
 
-    let row_selector_op = Arc::new(RowSelectorExec::new(&filter_exprs, &filter_struct));
+    let row_selector_op = Arc::new(RowSelectorExec::new(filter_exprs, &filter_struct));
 
     Arc::new(TakeRowsExec::new(
         schema.clone(),
@@ -272,14 +261,8 @@ fn make_filter_then_take_plan(
 }
 
 /// Check if the given expression tree can be pushed down into the scan.
-fn can_be_pushed_down(expr: &Expr, schema_columns: &HashSet<String>) -> DFResult<bool> {
+fn can_be_pushed_down(expr: &Expr) -> DFResult<bool> {
     // If the filter references a column not known to our schema, we reject the filter for pushdown.
-    // TODO(aduffy): is this necessary? Under what conditions would this happen?
-    let column_refs = get_column_references(expr);
-    if !column_refs.is_subset(schema_columns) {
-        return Ok(false);
-    }
-
     fn is_supported(expr: &Expr) -> bool {
         match expr {
             Expr::BinaryExpr(binary_expr) => {
@@ -383,7 +366,7 @@ impl DisplayAs for VortexScanExec {
 /// This function will return an Error if `array` is not struct-typed. It will also return an
 /// error if the projection references columns
 fn execute_unfiltered(
-    array: &Array,
+    array: Array,
     projection: &Vec<usize>,
 ) -> DFResult<SendableRecordBatchStream> {
     // Construct the RecordBatch by flattening each struct field and transmuting to an ArrayRef.
@@ -483,7 +466,7 @@ impl ExecutionPlan for VortexScanExec {
             self.array.clone()
         };
 
-        execute_unfiltered(&chunk, &self.scan_projection)
+        execute_unfiltered(chunk, &self.scan_projection)
     }
 }
 
