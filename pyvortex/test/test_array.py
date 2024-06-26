@@ -18,10 +18,9 @@ def test_varbin_array_round_trip():
 
 def test_varbin_array_take():
     a = vortex.encode(pa.array(["a", "b", "c", "d"]))
-    # TODO(ngates): ensure we correctly round-trip to a string and not large_string
     assert a.take(vortex.encode(pa.array([0, 2]))).to_pyarrow().combine_chunks() == pa.array(
         ["a", "c"],
-        type=pa.large_utf8(),
+        type=pa.utf8(),
     )
 
 
