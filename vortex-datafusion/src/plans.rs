@@ -12,7 +12,7 @@ use arrow_array::types::UInt64Type;
 use arrow_array::{ArrayRef, RecordBatch, RecordBatchOptions, UInt64Array};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use datafusion::arrow::compute::cast;
-use datafusion::prelude::SessionContext;
+use datafusion::execution::context::SessionState;
 use datafusion_common::{DFSchema, Result as DFResult};
 use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion_expr::Expr;
@@ -111,7 +111,7 @@ impl ExecutionPlan for RowSelectorExec {
     fn execute(
         &self,
         partition: usize,
-        _context: Arc<TaskContext>,
+        context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
         assert_eq!(
             partition, 0,
@@ -136,6 +136,7 @@ impl ExecutionPlan for RowSelectorExec {
             polled_inner: false,
             conjunction_expr,
             schema_ref: stream_schema,
+            context: context.clone(),
         }))
     }
 }
@@ -151,20 +152,7 @@ pub(crate) struct RowIndicesStream<F> {
 
     conjunction_expr: Expr,
     schema_ref: SchemaRef,
-}
-
-impl<F> RowIndicesStream<F>
-where
-    F: Future<Output = DFResult<RecordBatch>>,
-{
-    pub fn new(record_batch_fut: F, conjunction_expr: Expr, schema_ref: SchemaRef) -> Self {
-        Self {
-            inner: record_batch_fut,
-            polled_inner: false,
-            conjunction_expr,
-            schema_ref,
-        }
-    }
+    context: Arc<TaskContext>,
 }
 
 impl<F> Stream for RowIndicesStream<F>
@@ -195,10 +183,13 @@ where
         //
         // The result of a conjunction expression is a BooleanArray containing `true` for rows
         // where the conjunction was satisfied, and `false` otherwise.
-        let session = SessionContext::new();
+        let session_state = SessionState::new_with_config_rt(
+            this.context.session_config().clone(),
+            this.context.runtime_env().clone(),
+        );
         let df_schema = DFSchema::try_from(this.schema_ref.clone())?;
         let physical_expr =
-            session.create_physical_expr(this.conjunction_expr.clone(), &df_schema)?;
+            session_state.create_physical_expr(this.conjunction_expr.clone(), &df_schema)?;
         let selection = physical_expr
             .evaluate(&record_batch)?
             .into_array(record_batch.num_rows())?;
@@ -455,6 +446,7 @@ mod test {
             polled_inner: false,
             conjunction_expr: and((col("a") % lit(2)).eq(lit(0)), col("b").is_true()),
             schema_ref: _schema,
+            context: Arc::new(Default::default()),
         };
 
         let rows: Vec<RecordBatch> = futures::executor::block_on_stream(filtering_stream)

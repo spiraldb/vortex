@@ -127,7 +127,7 @@ impl TableProvider for VortexMemTable {
     /// The array is flattened directly into the nearest Arrow-compatible encoding.
     async fn scan(
         &self,
-        _state: &SessionState,
+        state: &SessionState,
         projection: Option<&Vec<usize>>,
         filters: &[Expr],
         _limit: Option<usize>,
@@ -151,46 +151,55 @@ impl TableProvider for VortexMemTable {
             Some(filters.to_vec())
         };
 
-        let filter_projection = filter_exprs
-            .clone()
-            .map(|exprs| get_filter_projection(exprs.as_slice(), self.schema_ref.clone()));
-
         let partitioning = if let Ok(chunked_array) = ChunkedArray::try_from(&self.array) {
             Partitioning::RoundRobinBatch(chunked_array.nchunks())
         } else {
             Partitioning::UnknownPartitioning(1)
         };
 
-        let plan_properties = PlanProperties::new(
-            EquivalenceProperties::new(self.schema_ref.clone()),
-            partitioning,
-            ExecutionMode::Bounded,
-        );
-
         let output_projection: Vec<usize> = match projection {
             None => (0..self.schema_ref.fields().len()).collect(),
             Some(proj) => proj.clone(),
         };
 
-        match (filter_exprs, filter_projection) {
+        match filter_exprs {
             // If there is a filter expression, we execute in two phases, first performing a filter
             // on the input to get back row indices, and then taking the remaining struct columns
             // using the calculated indices from the filter.
-            (Some(filter_exprs), Some(filter_projection)) => Ok(make_filter_then_take_plan(
-                self.schema_ref.clone(),
-                filter_exprs,
-                filter_projection,
-                self.array.clone(),
-                output_projection.clone(),
-            )),
+            Some(filter_exprs) => {
+                let filter_projection =
+                    get_filter_projection(filter_exprs.as_slice(), self.schema_ref.clone());
+
+                Ok(make_filter_then_take_plan(
+                    self.schema_ref.clone(),
+                    filter_exprs,
+                    filter_projection,
+                    self.array.clone(),
+                    output_projection.clone(),
+                    state,
+                ))
+            }
 
             // If no filters were pushed down, we materialize the entire StructArray into a
             // RecordBatch and let DataFusion process the entire query.
-            _ => Ok(Arc::new(VortexScanExec {
-                array: self.array.clone(),
-                scan_projection: output_projection.clone(),
-                plan_properties,
-            })),
+            _ => {
+                let output_schema = Arc::new(
+                    self.schema_ref
+                        .project(output_projection.as_slice())
+                        .expect("project output schema"),
+                );
+                let plan_properties = PlanProperties::new(
+                    EquivalenceProperties::new(output_schema),
+                    partitioning,
+                    ExecutionMode::Bounded,
+                );
+
+                Ok(Arc::new(VortexScanExec {
+                    array: self.array.clone(),
+                    scan_projection: output_projection.clone(),
+                    plan_properties,
+                }))
+            }
         }
     }
 
@@ -244,6 +253,7 @@ fn make_filter_then_take_plan(
     filter_projection: Vec<usize>,
     array: Array,
     output_projection: Vec<usize>,
+    _session_state: &SessionState,
 ) -> Arc<dyn ExecutionPlan> {
     let struct_array = StructArray::try_from(array).unwrap();
 
@@ -376,20 +386,17 @@ fn execute_unfiltered(
     array: &Array,
     projection: &Vec<usize>,
 ) -> DFResult<SendableRecordBatchStream> {
-    println!("EXECUTE_UNFILTERED");
     // Construct the RecordBatch by flattening each struct field and transmuting to an ArrayRef.
     let struct_array = array
         .clone()
         .into_struct()
         .map_err(|vortex_error| DataFusionError::Execution(format!("{}", vortex_error)))?;
 
-    println!("PROJECTION: {:?}", projection);
     let projected_struct = struct_array
         .project(projection.as_slice())
         .map_err(|vortex_err| {
             exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
         })?;
-    println!("PROJECTED SCHEMA: {:?}", projected_struct.dtype());
     let batch = RecordBatch::from(
         projected_struct
             .into_canonical()
@@ -468,7 +475,6 @@ impl ExecutionPlan for VortexScanExec {
         partition: usize,
         _context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
-        println!("EXECUTE VortexScanExec");
         let chunk = if let Ok(chunked_array) = ChunkedArray::try_from(&self.array) {
             chunked_array
                 .chunk(partition)
@@ -563,6 +569,8 @@ mod test {
 
         let distinct_names = df
             .filter(col("term_start").gt_eq(lit(1795)))
+            .unwrap()
+            .filter(col("term_start").lt(lit(2000)))
             .unwrap()
             .aggregate(vec![], vec![count_distinct(col("president"))])
             .unwrap()
