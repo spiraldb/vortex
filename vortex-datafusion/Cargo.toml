@@ -35,6 +35,5 @@ pin-project = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 
-# TODO(aduffy): re-enable
-#[lints]
-#workspace = true
+[lints]
+workspace = true

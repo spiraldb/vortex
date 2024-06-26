@@ -12,11 +12,11 @@ use arrow_schema::SchemaRef;
 use async_trait::async_trait;
 use datafusion::dataframe::DataFrame;
 use datafusion::datasource::TableProvider;
-use datafusion::execution::context::SessionState;
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
+use datafusion::execution::context::SessionState;
 use datafusion::prelude::SessionContext;
+use datafusion_common::{DataFusionError, exec_datafusion_err, Result as DFResult};
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion, TreeNodeVisitor};
-use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult, ToDFSchema};
 use datafusion_expr::{Expr, Operator, TableProviderFilterPushDown, TableType};
 use datafusion_physical_expr::EquivalenceProperties;
 use datafusion_physical_plan::{
@@ -25,12 +25,15 @@ use datafusion_physical_plan::{
 use futures::{Stream, StreamExt};
 use itertools::Itertools;
 use pin_project::pin_project;
-use vortex::array::chunked::ChunkedArray;
+
 use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
+use vortex::array::chunked::ChunkedArray;
+use vortex::array::struct_::StructArray;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::datatype::infer_schema;
+use crate::plans::{RowSelectorExec, TakeRowsExec};
 
 mod datatype;
 mod expr;
@@ -119,7 +122,7 @@ impl TableProvider for VortexInMemoryTableProvider {
         let filter_exprs: Option<Vec<Expr>> = if filters.is_empty() {
             None
         } else {
-            Some(filters.iter().cloned().collect())
+            Some(filters.to_vec())
         };
 
         let filter_projection = filter_exprs
@@ -138,6 +141,11 @@ impl TableProvider for VortexInMemoryTableProvider {
             ExecutionMode::Bounded,
         );
 
+        let output_projection: Vec<usize> = match projection {
+            None => (0..self.schema_ref.fields().len()).collect(),
+            Some(proj) => proj.clone(),
+        };
+
         match (filter_exprs, filter_projection) {
             // If there is a filter expression, we execute in two phases, first performing a filter
             // on the input to get back row indices, and then taking the remaining struct columns
@@ -147,17 +155,14 @@ impl TableProvider for VortexInMemoryTableProvider {
                 filter_exprs,
                 filter_projection,
                 self.array.clone(),
-                projection.clone(),
-                plan_properties,
+                output_projection.clone(),
             )),
 
             // If no filters were pushed down, we materialize the entire StructArray into a
             // RecordBatch and let DataFusion process the entire query.
             _ => Ok(Arc::new(VortexScanExec {
                 array: self.array.clone(),
-                filter_exprs: None,
-                filter_projection: None,
-                scan_projection: projection.cloned(),
+                scan_projection: output_projection.clone(),
                 plan_properties,
             })),
         }
@@ -178,7 +183,7 @@ impl TableProvider for VortexInMemoryTableProvider {
         filters
             .iter()
             .map(|expr| {
-                if can_be_pushed_down(*expr, &schema_columns)? {
+                if can_be_pushed_down(expr, &schema_columns)? {
                     Ok(TableProviderFilterPushDown::Exact)
                 } else {
                     Ok(TableProviderFilterPushDown::Unsupported)
@@ -196,16 +201,26 @@ impl TableProvider for VortexInMemoryTableProvider {
 /// The second stage receives the row selection above and dispatches a `take` on the remaining
 /// columns.
 fn make_filter_then_take_plan(
-    _schema: SchemaRef,
-    _filter_exprs: Vec<Expr>,
-    _filter_projection: Vec<usize>,
-    _array: Array,
-    _output_projection: Option<&Vec<usize>>,
-    _plan_properties: PlanProperties,
+    schema: SchemaRef,
+    filter_exprs: Vec<Expr>,
+    filter_projection: Vec<usize>,
+    array: Array,
+    output_projection: Vec<usize>,
 ) -> Arc<dyn ExecutionPlan> {
-    // Create a struct array necessary to run the filter operations.
+    let struct_array = StructArray::try_from(array).unwrap();
 
-    todo!()
+    let filter_struct = struct_array
+        .project(filter_projection.as_slice())
+        .expect("projecting filter struct");
+
+    let row_selector_op = Arc::new(RowSelectorExec::new(&filter_exprs, &filter_struct));
+
+    Arc::new(TakeRowsExec::new(
+        schema.clone(),
+        &output_projection,
+        row_selector_op.clone(),
+        &struct_array,
+    ))
 }
 
 /// Check if the given expression tree can be pushed down into the scan.
@@ -213,7 +228,7 @@ fn can_be_pushed_down(expr: &Expr, schema_columns: &HashSet<String>) -> DFResult
     // If the filter references a column not known to our schema, we reject the filter for pushdown.
     // TODO(aduffy): is this necessary? Under what conditions would this happen?
     let column_refs = get_column_references(expr);
-    if !column_refs.is_subset(&schema_columns) {
+    if !column_refs.is_subset(schema_columns) {
         return Ok(false);
     }
 
@@ -302,9 +317,7 @@ fn get_column_references(expr: &Expr) -> HashSet<String> {
 #[derive(Debug, Clone)]
 struct VortexScanExec {
     array: Array,
-    filter_exprs: Option<Vec<Expr>>,
-    filter_projection: Option<Vec<usize>>,
-    scan_projection: Option<Vec<usize>>,
+    scan_projection: Vec<usize>,
     plan_properties: PlanProperties,
 }
 
@@ -321,7 +334,7 @@ impl DisplayAs for VortexScanExec {
 /// error if the projection references columns
 fn execute_unfiltered(
     array: &Array,
-    projection: &Option<Vec<usize>>,
+    projection: &Vec<usize>,
 ) -> DFResult<SendableRecordBatchStream> {
     // Construct the RecordBatch by flattening each struct field and transmuting to an ArrayRef.
     let struct_array = array
@@ -329,14 +342,8 @@ fn execute_unfiltered(
         .into_struct()
         .map_err(|vortex_error| DataFusionError::Execution(format!("{}", vortex_error)))?;
 
-    let field_order = if let Some(projection) = projection {
-        projection.clone()
-    } else {
-        (0..struct_array.names().len()).collect()
-    };
-
     let projected_struct = struct_array
-        .project(field_order.as_slice())
+        .project(projection.as_slice())
         .map_err(|vortex_err| {
             exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
         })?;
@@ -436,11 +443,12 @@ mod test {
     use datafusion::arrow::array::AsArray;
     use datafusion::prelude::SessionContext;
     use datafusion_expr::{col, count_distinct, lit};
+
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::validity::Validity;
     use vortex::IntoArray;
+    use vortex::validity::Validity;
     use vortex_dtype::{DType, Nullability};
 
     use crate::SessionContextExt;

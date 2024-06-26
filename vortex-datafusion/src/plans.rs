@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use arrow_array::cast::AsArray;
+use arrow_array::types::UInt64Type;
 use arrow_array::{ArrayRef, RecordBatch, UInt64Array};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use datafusion::prelude::SessionContext;
@@ -20,8 +21,11 @@ use datafusion_physical_plan::{
 };
 use futures::{ready, Stream};
 use lazy_static::lazy_static;
+use pin_project::pin_project;
 use vortex::array::struct_::StructArray;
-use vortex::{ArrayDType, IntoCanonical};
+use vortex::arrow::FromArrowArray;
+use vortex::compute::take::take;
+use vortex::{ArrayDType, ArrayData, IntoArray, IntoCanonical};
 
 use crate::datatype::infer_schema;
 use crate::expr::{make_conjunction, simplify_expr};
@@ -31,7 +35,6 @@ use crate::expr::{make_conjunction, simplify_expr};
 /// chunks but for different columns.
 pub(crate) struct RowSelectorExec {
     filter_exprs: Vec<Expr>,
-    filter_projection: Vec<usize>,
 
     // cached PlanProperties object. We do not make use of this.
     cached_plan_props: PlanProperties,
@@ -51,8 +54,7 @@ lazy_static! {
 
 impl RowSelectorExec {
     pub(crate) fn new(
-        filter_exprs: &Vec<Expr>,
-        filter_projection: &Vec<usize>,
+        filter_exprs: &[Expr],
         filter_struct: &StructArray,
     ) -> Self {
         let cached_plan_props = PlanProperties::new(
@@ -62,8 +64,7 @@ impl RowSelectorExec {
         );
 
         Self {
-            filter_exprs: filter_exprs.clone(),
-            filter_projection: filter_projection.clone(),
+            filter_exprs: filter_exprs.to_owned(),
             filter_struct: filter_struct.clone(),
             cached_plan_props,
         }
@@ -141,7 +142,7 @@ impl ExecutionPlan for RowSelectorExec {
 
 /// [RecordBatchStream] of row indices, emitted by the [RowSelectorExec] physical plan node.
 #[pin_project::pin_project]
-struct RowIndicesStream<F> {
+pub(crate) struct RowIndicesStream<F> {
     /// The inner future that returns `DFResult<RecordBatch>`.
     #[pin]
     inner: F,
@@ -152,6 +153,20 @@ struct RowIndicesStream<F> {
     schema_ref: SchemaRef,
 }
 
+impl<F> RowIndicesStream<F>
+where
+    F: Future<Output = DFResult<RecordBatch>>,
+{
+    pub fn new(record_batch_fut: F, conjunction_expr: Expr, schema_ref: SchemaRef) -> Self {
+        Self {
+            inner: record_batch_fut,
+            polled_inner: false,
+            conjunction_expr,
+            schema_ref,
+        }
+    }
+}
+
 impl<F> Stream for RowIndicesStream<F>
 where
     F: Future<Output = DFResult<RecordBatch>>,
@@ -160,9 +175,10 @@ where
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         println!("BEGIN poll_next");
-        // Get access to a single record batch of values in the upstream system.
         let this = self.project();
 
+        // If we have already polled the one-shot future with the filter records, indicate
+        // that the stream has finished.
         if *this.polled_inner {
             println!("EXIT");
             return Poll::Ready(None);
@@ -230,11 +246,6 @@ pub(crate) struct TakeRowsExec {
 
     output_schema: SchemaRef,
 
-    // A record batch holding the fields that were relevant to executing the upstream filter expression.
-    // These fields have already been decoded, so we hold them separately and "paste" them together
-    // with the fields we decode from `table` below.
-    filter_struct: RecordBatch,
-
     // The original Vortex array holding the fields we have not decoded yet.
     table: StructArray,
 }
@@ -242,10 +253,9 @@ pub(crate) struct TakeRowsExec {
 impl TakeRowsExec {
     pub(crate) fn new(
         schema_ref: SchemaRef,
-        projection: &Vec<usize>,
+        projection: &[usize],
         row_indices: Arc<dyn ExecutionPlan>,
-        output_schema: SchemaRef,
-        table: StructArray,
+        table: &StructArray,
     ) -> Self {
         let plan_properties = PlanProperties::new(
             EquivalenceProperties::new(schema_ref.clone()),
@@ -253,13 +263,14 @@ impl TakeRowsExec {
             ExecutionMode::Bounded,
         );
 
+        let output_schema = Arc::new(schema_ref.project(projection).unwrap());
+
         Self {
             plan_properties,
-            projection: projection.clone(),
+            projection: projection.to_owned(),
             input: row_indices,
             output_schema: output_schema.clone(),
-            filter_struct: RecordBatch::new_empty(output_schema.clone()),
-            table,
+            table: table.clone(),
         }
     }
 }
@@ -299,14 +310,100 @@ impl ExecutionPlan for TakeRowsExec {
     fn execute(
         &self,
         partition: usize,
-        _context: Arc<TaskContext>,
+        context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
         assert_eq!(
             partition, 0,
             "single partitioning only supported by TakeOperator"
         );
 
-        todo!()
+        let row_indices_stream = self.input.execute(partition, context)?;
+
+        Ok(Box::pin(TakeRowsStream {
+            row_indices_stream,
+            completed: false,
+            output_projection: self.projection.clone(),
+            output_schema: self.output_schema.clone(),
+            vortex_array: self.table.clone(),
+        }))
+    }
+}
+
+/// Stream of outputs emitted by the [TakeRowsExec] physical operator.
+#[pin_project]
+pub(crate) struct TakeRowsStream<F> {
+    // Stream of row indices arriving from upstream operator.
+    #[pin]
+    row_indices_stream: F,
+
+    completed: bool,
+
+    // Projection based on the schema here
+    output_projection: Vec<usize>,
+    output_schema: SchemaRef,
+
+    // The original Vortex array we're taking from
+    vortex_array: StructArray,
+}
+
+impl<F> Stream for TakeRowsStream<F>
+where
+    F: Stream<Item = DFResult<RecordBatch>>,
+{
+    type Item = DFResult<RecordBatch>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+
+        // If `poll_next` has already fired, return None indicating end of the stream.
+        if *this.completed {
+            return Poll::Ready(None);
+        }
+
+        // Get the indices provided by the upstream operator.
+        let record_batch = match ready!(this.row_indices_stream.poll_next(cx)) {
+            None => {
+                // Row indices stream is complete, we are also complete.
+                // This should never happen right now given we only emit one recordbatch upstream.
+                return Poll::Ready(None);
+            }
+            Some(result) => {
+                *this.completed = true;
+                result?
+            }
+        };
+
+        let row_indices =
+            ArrayData::from_arrow(record_batch.column(0).as_primitive::<UInt64Type>(), false)
+                .into_array();
+
+        // Assemble the output columns using the row indices.
+        // NOTE(aduffy): this re-decodes the fields from the filter schema, which is unnecessary.
+        let mut columns = Vec::new();
+        for field_idx in this.output_projection {
+            let encoded = this.vortex_array.field(*field_idx).unwrap();
+            let decoded = take(&encoded, &row_indices)
+                .unwrap()
+                .into_canonical()
+                .unwrap()
+                .into_arrow();
+
+            columns.push(decoded);
+        }
+
+        // Send back a single record batch of the decoded data
+        let output_batch = RecordBatch::try_new(this.output_schema.clone(), columns).unwrap();
+
+        Poll::Ready(Some(Ok(output_batch)))
+    }
+}
+
+impl<F> RecordBatchStream for TakeRowsStream<F>
+where
+    F: Stream<Item = DFResult<RecordBatch>>,
+{
+    fn schema(&self) -> SchemaRef {
+        self.output_schema.clone()
     }
 }
 

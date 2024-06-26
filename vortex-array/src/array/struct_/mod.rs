@@ -128,7 +128,7 @@ impl StructArray {
     /// copying.
     ///
     /// This function will return an error if the projection includes invalid column IDs.
-    pub fn project(self, projection: &[usize]) -> VortexResult<Self> {
+    pub fn project(&self, projection: &[usize]) -> VortexResult<Self> {
         let mut children = Vec::with_capacity(projection.len());
         let mut names = Vec::with_capacity(projection.len());
 
