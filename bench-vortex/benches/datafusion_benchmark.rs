@@ -3,8 +3,8 @@ use std::sync::Arc;
 use arrow_array::builder::{StringBuilder, UInt32Builder};
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Field, Schema};
-use criterion::{BenchmarkGroup, black_box, Criterion, criterion_group, criterion_main};
 use criterion::measurement::Measurement;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkGroup, Criterion};
 use datafusion::common::Result as DFResult;
 use datafusion::datasource::{MemTable, TableProvider};
 use datafusion::execution::memory_pool::human_readable_size;
@@ -12,10 +12,9 @@ use datafusion::functions_aggregate::expr_fn::sum;
 use datafusion::logical_expr::lit;
 use datafusion::prelude::{col, DataFrame, SessionContext};
 use lazy_static::lazy_static;
-
-use vortex::{Array, Context, IntoArray, ToArrayData};
 use vortex::compress::Compressor;
 use vortex::encoding::EncodingRef;
+use vortex::{Array, Context, IntoArray, ToArrayData};
 use vortex_datafusion::{VortexMemTable, VortexMemTableOptions};
 use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
 
@@ -43,9 +42,9 @@ fn toy_dataset_arrow() -> RecordBatch {
         "Gabriella",
     ];
 
-    let mut col1 = StringBuilder::with_capacity(64_000, 64_000_000);
-    let mut col2 = UInt32Builder::with_capacity(64_000);
-    for i in 0..64_000 {
+    let mut col1 = StringBuilder::with_capacity(640_000, 64_000_000);
+    let mut col2 = UInt32Builder::with_capacity(640_000);
+    for i in 0..640_000 {
         col1.append_value(names[i % 8]);
         col2.append_value(u32::try_from(i).unwrap());
     }
