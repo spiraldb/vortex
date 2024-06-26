@@ -25,6 +25,8 @@ impl ConstantArray {
         Scalar: From<S>,
     {
         let scalar: Scalar = scalar.into();
+        // TODO(aduffy): add stats for bools, ideally there should be a
+        //  StatsSet::constant(Scalar) constructor that does this for us, like StatsSet::nulls.
         let stats = StatsSet::from(HashMap::from([
             (Stat::Max, scalar.clone()),
             (Stat::Min, scalar.clone()),

@@ -49,7 +49,7 @@ fn take<I: NativePType, O: NativePType>(
         return Ok(take_nullable(dtype, offsets, data, indices, v));
     }
 
-    let mut builder = VarBinBuilder::<I>::with_capacity(indices.len());
+    let mut builder = VarBinBuilder::<O>::with_capacity(indices.len());
     for &idx in indices {
         let idx = idx.to_usize().unwrap();
         let start = offsets[idx].to_usize().unwrap();

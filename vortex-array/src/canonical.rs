@@ -209,8 +209,7 @@ fn struct_to_arrow(struct_array: StructArray) -> ArrayRef {
 fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
     let offsets = varbin_array
         .offsets()
-        .into_canonical()
-        .and_then(Canonical::into_primitive)
+        .into_primitive()
         .expect("flatten_primitive");
     let offsets = match offsets.ptype() {
         PType::I32 | PType::I64 => offsets,

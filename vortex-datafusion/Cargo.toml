@@ -13,7 +13,9 @@ rust-version.workspace = true
 [dependencies]
 vortex-array = { path = "../vortex-array" }
 vortex-dtype = { path = "../vortex-dtype" }
+vortex-expr = { path = "../vortex-expr" }
 vortex-error = { path = "../vortex-error" }
+vortex-scalar = { path = "../vortex-scalar" }
 
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
@@ -26,6 +28,8 @@ datafusion-execution = { workspace = true }
 datafusion-physical-expr = { workspace = true }
 datafusion-physical-plan = { workspace = true }
 futures = { workspace = true }
+itertools = { workspace = true }
+lazy_static = { workspace = true }
 pin-project = { workspace = true }
 
 [dev-dependencies]

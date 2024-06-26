@@ -16,10 +16,12 @@ workspace = true
 
 [dependencies]
 arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
 arrow-select = { workspace = true }
 bytes = { workspace = true }
 bzip2 = { workspace = true }
 csv = { workspace = true }
+datafusion = { workspace = true }
 enum-iterator = { workspace = true }
 flexbuffers = { workspace = true }
 futures = { workspace = true }
@@ -29,6 +31,7 @@ lazy_static = { workspace = true }
 log = { workspace = true }
 mimalloc = { workspace = true }
 parquet = { workspace = true, features = [] }
+rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 simplelog = { workspace = true }
@@ -37,6 +40,7 @@ uuid = { workspace = true, features = ["v4"] }
 vortex-alp = { path = "../encodings/alp" }
 vortex-array = { path = "../vortex-array" }
 vortex-buffer = { path = "../vortex-buffer" }
+vortex-datafusion = { path = "../vortex-datafusion" }
 vortex-datetime-parts = { path = "../encodings/datetime-parts" }
 vortex-dict = { path = "../encodings/dict" }
 vortex-dtype = { path = "../vortex-dtype" }
@@ -55,4 +59,8 @@ harness = false
 
 [[bench]]
 name = "random_access"
+harness = false
+
+[[bench]]
+name = "datafusion_benchmark"
 harness = false

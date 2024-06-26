@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use vortex_error::VortexResult;
 
 use crate::accessor::ArrayAccessor;
@@ -22,7 +21,6 @@ impl ArrayAccessor<bool> for BoolArray {
             Validity::AllInvalid => Ok(f(&mut (0..self.len()).map(|_| None))),
             Validity::Array(valid) => {
                 let valids = valid.into_bool()?.boolean_buffer();
-                println!("nulls: {:?}", valids.iter().collect_vec());
                 let mut iter = valids.iter().zip(bools.iter()).map(|(is_valid, value)| {
                     if is_valid {
                         Some(if value { &TRUE } else { &FALSE })

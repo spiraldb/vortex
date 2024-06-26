@@ -421,11 +421,13 @@ name = "bench-vortex"
 version = "0.1.0"
 dependencies = [
  "arrow-array",
+ "arrow-schema",
  "arrow-select",
  "bytes",
  "bzip2",
  "criterion",
  "csv",
+ "datafusion",
  "enum-iterator",
  "flexbuffers",
  "futures",
@@ -435,6 +437,7 @@ dependencies = [
  "log",
  "mimalloc",
  "parquet",
+ "rand",
  "reqwest",
  "serde",
  "simplelog",
@@ -443,6 +446,7 @@ dependencies = [
  "vortex-alp",
  "vortex-array",
  "vortex-buffer",
+ "vortex-datafusion",
  "vortex-datetime-parts",
  "vortex-dict",
  "vortex-dtype",
@@ -3848,11 +3852,15 @@ dependencies = [
  "datafusion-physical-expr",
  "datafusion-physical-plan",
  "futures",
+ "itertools 0.13.0",
+ "lazy_static",
  "pin-project",
  "tokio",
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-expr",
+ "vortex-scalar",
 ]
 
 [[package]]
