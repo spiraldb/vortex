@@ -120,6 +120,8 @@ impl StructArray {
 }
 
 impl StructArray {
+    // TODO(aduffy): Add equivalent function to support field masks for nested column access.
+
     /// Return a new StructArray with the given projection applied.
     ///
     /// Projection does not copy data arrays. Projection is defined by an ordinal array slice
@@ -127,7 +129,9 @@ impl StructArray {
     /// perform column re-ordering, deletion, or duplication at a logical level, without any data
     /// copying.
     ///
-    /// This function will return an error if the projection includes invalid column IDs.
+    /// # Panics
+    /// This function will panic an error if the projection references columns not within the
+    /// schema boundaries.
     pub fn project(&self, projection: &[usize]) -> VortexResult<Self> {
         let mut children = Vec::with_capacity(projection.len());
         let mut names = Vec::with_capacity(projection.len());

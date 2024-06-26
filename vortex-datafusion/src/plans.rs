@@ -439,7 +439,7 @@ mod test {
         let filtering_stream = RowIndicesStream {
             inner,
             polled_inner: false,
-            conjunction_expr: and((col("a") % lit(2)).eq(lit(0)), col("b").is_true()),
+            conjunction_expr: and((col("a") % lit(2u64)).eq(lit(0u64)), col("b").is_true()),
             schema_ref: _schema,
             context: Arc::new(Default::default()),
         };

@@ -63,8 +63,12 @@ fn toy_dataset_arrow() -> RecordBatch {
     .unwrap()
 }
 
-fn toy_dataset_vortex() -> Array {
+fn toy_dataset_vortex(compress: bool) -> Array {
     let uncompressed = toy_dataset_arrow().to_array_data().into_array();
+
+    if !compress {
+        return uncompressed;
+    }
 
     println!(
         "uncompressed size: {:?}",
@@ -134,41 +138,57 @@ fn bench_arrow<M: Measurement>(mut group: BenchmarkGroup<M>, session: &SessionCo
     measure_provider(&mut group, session, arrow_table);
 }
 
-fn bench_vortex_pushdown_enabled<M: Measurement>(
+fn bench_vortex<M: Measurement>(
     mut group: BenchmarkGroup<M>,
     session: &SessionContext,
+    disable_pushdown: bool,
+    compress: bool,
 ) {
-    let vortex_dataset = toy_dataset_vortex();
-    let vortex_table_pushdown = Arc::new(
-        VortexMemTable::try_new(vortex_dataset, VortexMemTableOptions::default()).unwrap(),
-    );
-
-    measure_provider(&mut group, session, vortex_table_pushdown);
-}
-
-fn bench_vortex_pushdown_disabled<M: Measurement>(
-    mut group: BenchmarkGroup<M>,
-    session: &SessionContext,
-) {
-    let vortex_dataset = toy_dataset_vortex();
-    let vortex_table_no_pushdown = Arc::new(
+    let vortex_dataset = toy_dataset_vortex(compress);
+    let vortex_table = Arc::new(
         VortexMemTable::try_new(
             vortex_dataset,
-            VortexMemTableOptions::default().with_disable_pushdown(true),
+            VortexMemTableOptions::default().with_disable_pushdown(disable_pushdown),
         )
         .unwrap(),
     );
 
-    measure_provider(&mut group, session, vortex_table_no_pushdown);
+    measure_provider(&mut group, session, vortex_table);
 }
 
 fn bench_datafusion(c: &mut Criterion) {
     bench_arrow(c.benchmark_group("arrow"), &SessionContext::new());
-    bench_vortex_pushdown_enabled(c.benchmark_group("vortex-pushdown"), &SessionContext::new());
 
-    bench_vortex_pushdown_disabled(
-        c.benchmark_group("vortex-no_pushdown"),
+    // compress=true, pushdown enabled
+    bench_vortex(
+        c.benchmark_group("vortex-pushdown-compressed"),
         &SessionContext::new(),
+        false,
+        true,
+    );
+
+    // compress=false, pushdown enabled
+    bench_vortex(
+        c.benchmark_group("vortex-pushdown-uncompressed"),
+        &SessionContext::new(),
+        false,
+        false,
+    );
+
+    // compress=true, pushdown disabled
+    bench_vortex(
+        c.benchmark_group("vortex-nopushdown-uncompressed"),
+        &SessionContext::new(),
+        true,
+        true,
+    );
+
+    // compress=false, pushdown disabled
+    bench_vortex(
+        c.benchmark_group("vortex-nopushdown-uncompressed"),
+        &SessionContext::new(),
+        true,
+        false,
     );
 }
 
