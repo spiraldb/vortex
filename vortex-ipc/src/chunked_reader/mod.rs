@@ -9,7 +9,6 @@ use crate::io::VortexReadAt;
 mod take_rows;
 
 /// A reader for a chunked array.
-#[derive(Debug, Clone)]
 pub struct ChunkedArrayReader<R: VortexReadAt> {
     read: R,
     view_context: Arc<ViewContext>,
