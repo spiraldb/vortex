@@ -47,7 +47,7 @@ impl EncodingCompressor for FoRCompressor {
         &'a self,
         array: &Array,
         like: Option<CompressionTree<'a>>,
-        ctx: SamplingCompressor,
+        ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         let (child, min, shift) = for_compress(&PrimitiveArray::try_from(array)?)?;
 

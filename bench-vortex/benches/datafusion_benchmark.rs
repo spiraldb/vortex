@@ -35,8 +35,8 @@ lazy_static! {
 }
 
 lazy_static! {
-    pub static ref COMPRESSORS: HashSet<CompressorRef> = [
-        &BitPackedCompressor as CompressorRef,
+    pub static ref COMPRESSORS: HashSet<CompressorRef<'static>> = [
+        &BitPackedCompressor as CompressorRef<'static>,
         &DictCompressor,
         &FoRCompressor,
         &DeltaCompressor

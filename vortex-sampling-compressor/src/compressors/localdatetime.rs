@@ -25,7 +25,7 @@ impl EncodingCompressor for DateTimePartsCompressor {
         &'a self,
         array: &Array,
         like: Option<CompressionTree<'a>>,
-        ctx: SamplingCompressor,
+        ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         let (days, seconds, subseconds) =
             compress_localdatetime(LocalDateTimeArray::try_from(array)?)?;

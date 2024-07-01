@@ -8,8 +8,12 @@ use vortex_runend::{RunEnd, RunEndArray};
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
 
+pub const DEFAULT_RUN_END_COMPRESSOR: RunEndCompressor = RunEndCompressor { ree_threshold: 2.0 };
+
 #[derive(Debug, Clone, Copy)]
-pub struct RunEndCompressor;
+pub struct RunEndCompressor {
+    ree_threshold: f32,
+}
 
 impl EncodingCompressor for RunEndCompressor {
     fn id(&self) -> &str {
@@ -30,8 +34,7 @@ impl EncodingCompressor for RunEndCompressor {
                 .statistics()
                 .compute_run_count()
                 .unwrap_or(array.len()) as f32;
-        // TODO(robert): Figure out how to pass this value as a config
-        if avg_run_length < 2.0 {
+        if avg_run_length < self.ree_threshold {
             return None;
         }
 
@@ -42,7 +45,7 @@ impl EncodingCompressor for RunEndCompressor {
         &'a self,
         array: &Array,
         like: Option<CompressionTree<'a>>,
-        ctx: SamplingCompressor,
+        ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         let primitive_array = array.as_primitive();
 
@@ -52,7 +55,7 @@ impl EncodingCompressor for RunEndCompressor {
             .compress(&ends.into_array(), like.as_ref().and_then(|l| l.child(0)))?;
         let compressed_values = ctx
             .named("values")
-            .excluding(&Self)
+            .excluding(self)
             .compress(&values.into_array(), like.as_ref().and_then(|l| l.child(1)))?;
 
         Ok(CompressedArray::new(

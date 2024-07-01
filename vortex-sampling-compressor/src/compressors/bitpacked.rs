@@ -40,7 +40,7 @@ impl EncodingCompressor for BitPackedCompressor {
         &'a self,
         array: &Array,
         like: Option<CompressionTree<'a>>,
-        ctx: SamplingCompressor,
+        ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         let parray = array.as_primitive();
         let bit_width_freq = parray

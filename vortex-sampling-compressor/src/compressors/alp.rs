@@ -31,7 +31,7 @@ impl EncodingCompressor for ALPCompressor {
         &'a self,
         array: &Array,
         like: Option<CompressionTree<'a>>,
-        ctx: SamplingCompressor,
+        ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         // TODO(robert): Fill forward nulls?
         let parray = array.as_primitive();

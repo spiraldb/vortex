@@ -31,7 +31,7 @@ use vortex_sampling_compressor::compressors::dict::DictCompressor;
 use vortex_sampling_compressor::compressors::localdatetime::DateTimePartsCompressor;
 use vortex_sampling_compressor::compressors::r#for::FoRCompressor;
 use vortex_sampling_compressor::compressors::roaring_bool::RoaringBoolCompressor;
-use vortex_sampling_compressor::compressors::runend::RunEndCompressor;
+use vortex_sampling_compressor::compressors::runend::DEFAULT_RUN_END_COMPRESSOR;
 use vortex_sampling_compressor::compressors::sparse::SparseCompressor;
 use vortex_sampling_compressor::compressors::CompressorRef;
 use vortex_sampling_compressor::SamplingCompressor;
@@ -64,13 +64,13 @@ lazy_static! {
 }
 
 lazy_static! {
-    pub static ref COMPRESSORS: HashSet<CompressorRef> = [
-        &ALPCompressor as CompressorRef,
+    pub static ref COMPRESSORS: HashSet<CompressorRef<'static>> = [
+        &ALPCompressor as CompressorRef<'static>,
         &DictCompressor,
         &BitPackedCompressor,
         &FoRCompressor,
         &DateTimePartsCompressor,
-        &RunEndCompressor,
+        &DEFAULT_RUN_END_COMPRESSOR,
         &RoaringBoolCompressor,
         &SparseCompressor
     ]

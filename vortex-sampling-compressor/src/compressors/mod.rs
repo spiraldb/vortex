@@ -32,11 +32,11 @@ pub trait EncodingCompressor: Sync + Send + Debug {
         &'a self,
         array: &Array,
         like: Option<CompressionTree<'a>>,
-        ctx: SamplingCompressor,
+        ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>>;
 }
 
-pub type CompressorRef = &'static dyn EncodingCompressor;
+pub type CompressorRef<'a> = &'a dyn EncodingCompressor;
 
 impl PartialEq for dyn EncodingCompressor + '_ {
     fn eq(&self, other: &Self) -> bool {
@@ -85,7 +85,7 @@ impl<'a> CompressionTree<'a> {
     pub fn compress_unchecked(
         &self,
         array: &Array,
-        ctx: &SamplingCompressor,
+        ctx: &SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         self.compressor.compress(
             array,
@@ -97,7 +97,7 @@ impl<'a> CompressionTree<'a> {
     pub fn compress(
         &self,
         array: &Array,
-        ctx: &SamplingCompressor,
+        ctx: &SamplingCompressor<'a>,
     ) -> Option<VortexResult<CompressedArray<'a>>> {
         self.compressor
             .can_compress(array)

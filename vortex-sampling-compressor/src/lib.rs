@@ -19,7 +19,7 @@ use crate::compressors::localdatetime::DateTimePartsCompressor;
 use crate::compressors::r#for::FoRCompressor;
 use crate::compressors::roaring_bool::RoaringBoolCompressor;
 use crate::compressors::roaring_int::RoaringIntCompressor;
-use crate::compressors::runend::RunEndCompressor;
+use crate::compressors::runend::DEFAULT_RUN_END_COMPRESSOR;
 use crate::compressors::sparse::SparseCompressor;
 use crate::compressors::zigzag::ZigZagCompressor;
 use crate::compressors::{CompressedArray, CompressionTree, CompressorRef, EncodingCompressor};
@@ -51,29 +51,29 @@ impl Default for CompressConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct SamplingCompressor {
-    compressors: HashSet<CompressorRef>,
+pub struct SamplingCompressor<'a> {
+    compressors: HashSet<CompressorRef<'a>>,
     options: CompressConfig,
 
     path: Vec<String>,
     depth: u8,
     /// A set of encodings disabled for this ctx.
-    disabled_compressors: HashSet<CompressorRef>,
+    disabled_compressors: HashSet<CompressorRef<'a>>,
 }
 
-impl Display for SamplingCompressor {
+impl Display for SamplingCompressor<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{}|{}]", self.depth, self.path.join("."))
     }
 }
 
-impl CompressionStrategy for SamplingCompressor {
+impl CompressionStrategy for SamplingCompressor<'_> {
     fn compress(&self, array: &Array) -> VortexResult<Array> {
         Self::compress(self, array, None).map(|c| c.into_array())
     }
 }
 
-impl Default for SamplingCompressor {
+impl Default for SamplingCompressor<'_> {
     fn default() -> Self {
         Self::new(HashSet::from([
             &ALPCompressor as CompressorRef,
@@ -85,19 +85,22 @@ impl Default for SamplingCompressor {
             &DateTimePartsCompressor,
             &RoaringBoolCompressor,
             &RoaringIntCompressor,
-            &RunEndCompressor,
+            &DEFAULT_RUN_END_COMPRESSOR,
             &SparseCompressor,
             &ZigZagCompressor,
         ]))
     }
 }
 
-impl SamplingCompressor {
-    pub fn new(compressors: HashSet<CompressorRef>) -> Self {
+impl<'a> SamplingCompressor<'a> {
+    pub fn new(compressors: HashSet<CompressorRef<'a>>) -> Self {
         Self::new_with_options(compressors, Default::default())
     }
 
-    pub fn new_with_options(compressors: HashSet<CompressorRef>, options: CompressConfig) -> Self {
+    pub fn new_with_options(
+        compressors: HashSet<CompressorRef<'a>>,
+        options: CompressConfig,
+    ) -> Self {
         Self {
             compressors,
             options,
@@ -133,17 +136,17 @@ impl SamplingCompressor {
         &self.options
     }
 
-    pub fn excluding(&self, compressor: CompressorRef) -> Self {
+    pub fn excluding(&self, compressor: CompressorRef<'a>) -> Self {
         let mut cloned = self.clone();
         cloned.disabled_compressors.insert(compressor);
         cloned
     }
 
-    pub fn compress<'b>(
+    pub fn compress(
         &self,
         arr: &Array,
-        like: Option<&CompressionTree<'b>>,
-    ) -> VortexResult<CompressedArray<'b>> {
+        like: Option<&CompressionTree<'a>>,
+    ) -> VortexResult<CompressedArray<'a>> {
         if arr.is_empty() {
             return Ok(CompressedArray::uncompressed(arr.clone()));
         }
@@ -179,7 +182,7 @@ impl SamplingCompressor {
         }
     }
 
-    fn compress_array<'b>(&self, arr: &Array) -> VortexResult<CompressedArray<'b>> {
+    fn compress_array(&self, arr: &Array) -> VortexResult<CompressedArray<'a>> {
         match arr.encoding().id() {
             Chunked::ID => {
                 // For chunked arrays, we compress each chunk individually
@@ -225,7 +228,7 @@ impl SamplingCompressor {
 
 fn sampled_compression<'a>(
     array: &Array,
-    compressor: &SamplingCompressor,
+    compressor: &SamplingCompressor<'a>,
 ) -> VortexResult<Option<CompressedArray<'a>>> {
     // First, we try constant compression and shortcut any sampling.
     if let Some(cc) = ConstantCompressor.can_compress(array) {
@@ -310,7 +313,7 @@ fn sampled_compression<'a>(
 fn find_best_compression<'a>(
     candidates: Vec<&'a dyn EncodingCompressor>,
     sample: &Array,
-    ctx: &SamplingCompressor,
+    ctx: &SamplingCompressor<'a>,
 ) -> VortexResult<CompressedArray<'a>> {
     let mut best = None;
     let mut best_ratio = 1.0;

@@ -24,7 +24,7 @@ impl EncodingCompressor for ConstantCompressor {
         &'a self,
         array: &Array,
         _like: Option<CompressionTree<'a>>,
-        _ctx: SamplingCompressor,
+        _ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         Ok(CompressedArray::new(
             ConstantArray::new(scalar_at(array, 0)?, array.len()).into_array(),

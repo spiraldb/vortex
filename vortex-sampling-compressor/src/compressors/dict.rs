@@ -39,7 +39,7 @@ impl EncodingCompressor for DictCompressor {
         &'a self,
         array: &Array,
         like: Option<CompressionTree<'a>>,
-        ctx: SamplingCompressor,
+        ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         let (codes, values) = match array.encoding().id() {
             Primitive::ID => {

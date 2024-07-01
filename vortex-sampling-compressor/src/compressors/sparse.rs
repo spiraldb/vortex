@@ -25,7 +25,7 @@ impl EncodingCompressor for SparseCompressor {
         &'a self,
         array: &Array,
         like: Option<CompressionTree<'a>>,
-        ctx: SamplingCompressor,
+        ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         let sparse_array = SparseArray::try_from(array)?;
         let indices = ctx.auxiliary("indices").compress(

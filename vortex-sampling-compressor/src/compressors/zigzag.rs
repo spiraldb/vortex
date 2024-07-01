@@ -41,7 +41,7 @@ impl EncodingCompressor for ZigZagCompressor {
         &'a self,
         array: &Array,
         like: Option<CompressionTree<'a>>,
-        ctx: SamplingCompressor,
+        ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         let encoded = zigzag_encode(&array.as_primitive())?;
         let compressed =
