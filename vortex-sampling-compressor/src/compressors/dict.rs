@@ -58,10 +58,10 @@ impl EncodingCompressor for DictCompressor {
 
         let (codes, values) = (
             ctx.auxiliary("codes")
-                .excluding(&Self)
+                .excluding(self)
                 .compress(&codes, like.as_ref().and_then(|l| l.child(0)))?,
             ctx.named("values")
-                .excluding(&Self)
+                .excluding(self)
                 .compress(&values, like.as_ref().and_then(|l| l.child(1)))?,
         );
 

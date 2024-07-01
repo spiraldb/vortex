@@ -53,7 +53,7 @@ impl EncodingCompressor for FoRCompressor {
 
         let compressed_child = ctx
             .named("for")
-            .excluding(&Self)
+            .excluding(self)
             .compress(&child, like.as_ref().and_then(|l| l.child(0)))?;
         Ok(CompressedArray::new(
             FoRArray::try_new(compressed_child.array, min, shift).map(|a| a.into_array())?,

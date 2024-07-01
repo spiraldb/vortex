@@ -43,13 +43,13 @@ impl EncodingCompressor for ALPCompressor {
 
         let compressed_encoded = ctx
             .named("packed")
-            .excluding(&Self)
+            .excluding(self)
             .compress(&encoded, like.as_ref().and_then(|l| l.child(0)))?;
 
         let compressed_patches = patches
             .map(|p| {
                 ctx.auxiliary("patches")
-                    .excluding(&Self)
+                    .excluding(self)
                     .compress(&p, like.as_ref().and_then(|l| l.child(1)))
             })
             .transpose()?;
