@@ -103,19 +103,19 @@ mod test {
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
 
-        let (compressed, ..) = for_compress(&array).unwrap();
-        assert_eq!(
-            u32::try_from(FoRArray::try_from(compressed).unwrap().reference()).unwrap(),
-            1_000_000u32
-        );
+        let (_, reference, _) = for_compress(&array).unwrap();
+        assert_eq!(u32::try_from(reference).unwrap(), 1_000_000u32);
     }
 
     #[test]
     fn test_decompress() {
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
-        let (compressed, ..) = for_compress(&array).unwrap();
-        let decompressed = compressed.into_primitive().unwrap();
+        let (compressed, reference, shift) = for_compress(&array).unwrap();
+        let decompressed = FoRArray::try_new(compressed, reference, shift)
+            .unwrap()
+            .into_primitive()
+            .unwrap();
         assert_eq!(
             decompressed.maybe_null_slice::<u32>(),
             array.maybe_null_slice::<u32>()
@@ -125,8 +125,8 @@ mod test {
     #[test]
     fn test_overflow() {
         let array = PrimitiveArray::from((i8::MIN..=i8::MAX).collect_vec());
-        let (compressed, ..) = for_compress(&array).unwrap();
-        let compressed = FoRArray::try_from(compressed).unwrap();
+        let (compressed, reference, shift) = for_compress(&array).unwrap();
+        let compressed = FoRArray::try_new(compressed, reference, shift).unwrap();
         assert_eq!(i8::MIN, i8::try_from(compressed.reference()).unwrap());
 
         let encoded = compressed.encoded().into_primitive().unwrap();
