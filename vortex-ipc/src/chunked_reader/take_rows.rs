@@ -100,7 +100,7 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
                 );
                 self.take_from_chunk(indices, start_byte..stop_byte, start_row..stop_row)
             })
-            .buffered(2)
+            .buffered(10)
             .try_flatten()
             .try_collect()
             .await?;
