@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::fs::File;
+use std::future::Future;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
@@ -96,7 +97,7 @@ pub trait BenchmarkDataset {
     fn as_uncompressed(&self);
     fn compress_to_vortex(&self) -> VortexResult<()>;
     fn write_as_parquet(&self);
-    fn write_as_vortex(&self);
+    fn write_as_vortex(&self) -> impl Future<Output = ()>;
     fn list_files(&self, file_type: FileType) -> Vec<PathBuf>;
     fn directory_location(&self) -> PathBuf;
 }

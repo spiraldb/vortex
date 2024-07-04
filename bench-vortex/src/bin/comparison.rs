@@ -5,37 +5,38 @@ use bench_vortex::public_bi_data::PBIDataset;
 use bench_vortex::setup_logger;
 use bench_vortex::vortex_utils::vortex_chunk_sizes;
 use csv::Writer;
-use itertools::Itertools;
+use futures::stream;
 use log::LevelFilter;
+use stream::StreamExt;
 
-pub fn main() {
+#[tokio::main]
+pub async fn main() {
     setup_logger(LevelFilter::Info);
-    export_comparison_info(PBIDataset::Medicare1);
+    export_comparison_info(PBIDataset::Medicare1).await;
 }
 
-fn export_comparison_info(which_pbi: PBIDataset) {
+async fn export_comparison_info(which_pbi: PBIDataset) {
     let dataset = PBI(which_pbi);
-    dataset.write_as_vortex();
-    dataset.write_as_parquet();
-    let comparison = dataset
-        .list_files(FileType::Vortex)
-        .into_iter()
-        .flat_map(|file| {
-            vortex_chunk_sizes(file.as_path())
-                .unwrap()
-                .to_results(which_pbi.dataset_name().to_string())
-        })
-        .chain(
+    dataset.write_as_vortex().await;
+
+    let comparison = stream::iter(dataset.list_files(FileType::Vortex).into_iter())
+        .map(vortex_chunk_sizes)
+        .buffer_unordered(10)
+        .chain(stream::iter(
             dataset
                 .list_files(FileType::Parquet)
                 .into_iter()
-                .flat_map(|file| {
-                    sum_column_chunk_sizes(file.as_path())
-                        .unwrap()
-                        .to_results(which_pbi.dataset_name().to_string())
-                }),
-        )
-        .collect_vec();
+                .map(|file| sum_column_chunk_sizes(file.as_path())),
+        ))
+        .flat_map(|results| {
+            stream::iter(
+                results
+                    .unwrap()
+                    .to_results(which_pbi.dataset_name().to_string()),
+            )
+        })
+        .collect::<Vec<_>>()
+        .await;
 
     let mut writer =
         Writer::from_path(dataset.directory_location().join("comparison_results.csv")).unwrap();
@@ -52,7 +53,7 @@ fn export_comparison_info(which_pbi: PBIDataset) {
         .unwrap();
 
     for result in comparison {
-        let record: Vec<String> = vec![
+        let record = vec![
             result.dataset_name,
             result.file_name,
             result.file_type.to_string(),

@@ -17,13 +17,14 @@ flatbuffers = { workspace = true }
 futures-util = { workspace = true }
 itertools = { workspace = true }
 monoio = { workspace = true, optional = true, features = ["bytes"] }
+object_store = { workspace = true, optional = true }
 pin-project = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "fs"], optional = true }
 vortex-array = { path = "../vortex-array" }
 vortex-buffer = { path = "../vortex-buffer" }
-vortex-error = { path = "../vortex-error" }
-vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 vortex-dtype = { path = "../vortex-dtype" }
+vortex-error = { path = "../vortex-error", features = ["object_store"] }
+vortex-flatbuffers = { path = "../vortex-flatbuffers" }
 vortex-scalar = { path = "../vortex-scalar" }
 
 [build-dependencies]

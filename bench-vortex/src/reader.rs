@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::SeekFrom;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -13,12 +13,15 @@ use arrow_array::{
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
 use bytes::{Bytes, BytesMut};
+use futures::stream;
 use itertools::Itertools;
 use log::info;
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use object_store::local::LocalFileSystem;
+use object_store::ObjectStore;
+use parquet::arrow::arrow_reader::{ArrowReaderOptions, ParquetRecordBatchReaderBuilder};
+use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
-use tokio::runtime::Runtime;
+use stream::StreamExt;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::arrow::FromArrowType;
@@ -29,7 +32,8 @@ use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_ipc::chunked_reader::ChunkedArrayReader;
-use vortex_ipc::io::{TokioAdapter, VortexWrite};
+use vortex_ipc::io::ObjectStoreExt;
+use vortex_ipc::io::{TokioAdapter, VortexReadAt, VortexWrite};
 use vortex_ipc::writer::ArrayWriter;
 use vortex_ipc::MessageReader;
 use vortex_sampling_compressor::SamplingCompressor;
@@ -42,24 +46,10 @@ pub const BATCH_SIZE: usize = 65_536;
 pub struct VortexFooter {
     pub byte_offsets: Vec<u64>,
     pub row_offsets: Vec<u64>,
+    pub view_context_dtype_range: Range<u64>,
 }
 
-pub fn open_vortex(path: &Path) -> VortexResult<Array> {
-    Runtime::new()
-        .unwrap()
-        .block_on(async {
-            let file = tokio::fs::File::open(path).await.unwrap();
-            let mut msgs = MessageReader::try_new(TokioAdapter(file)).await.unwrap();
-            msgs.array_stream_from_messages(&CTX)
-                .await
-                .unwrap()
-                .collect_chunked()
-                .await
-        })
-        .map(|a| a.into_array())
-}
-
-pub async fn open_vortex_async(path: &Path) -> VortexResult<Array> {
+pub async fn open_vortex(path: &Path) -> VortexResult<Array> {
     let file = tokio::fs::File::open(path).await.unwrap();
     let mut msgs = MessageReader::try_new(TokioAdapter(file)).await.unwrap();
     msgs.array_stream_from_messages(&CTX)
@@ -82,12 +72,14 @@ pub async fn rewrite_parquet_as_vortex<W: VortexWrite>(
         .write_array_stream(chunked.array_stream())
         .await?;
 
+    let view_ctx_range = written.view_context_range().unwrap();
     let layout = written.array_layouts()[0].clone();
     let mut w = written.into_inner();
     let mut s = flexbuffers::FlexbufferSerializer::new();
     VortexFooter {
         byte_offsets: layout.chunks.byte_offsets,
         row_offsets: layout.chunks.row_offsets,
+        view_context_dtype_range: view_ctx_range.begin..layout.dtype.end,
     }
     .serialize(&mut s)?;
     let footer_bytes = Buffer::Bytes(Bytes::from(s.take_buffer()));
@@ -136,47 +128,77 @@ pub fn write_csv_as_parquet(csv_path: PathBuf, output_path: &Path) -> VortexResu
     Ok(())
 }
 
-pub async fn take_vortex(path: &Path, indices: &[u64]) -> VortexResult<Array> {
-    let mut file = tokio::fs::File::open(path).await?;
+pub async fn read_vortex_footer_format<R: VortexReadAt>(
+    reader: R,
+    len: u64,
+) -> VortexResult<ChunkedArrayReader<R>> {
+    let mut buf = BytesMut::with_capacity(8);
+    unsafe { buf.set_len(8) }
+    buf = reader.read_at_into(len - 8, buf).await?;
+    let footer_len = u64::from_le_bytes(buf.as_ref().try_into().unwrap()) as usize;
 
-    file.seek(SeekFrom::End(-8)).await?;
-    let footer_len = file.read_u64_le().await? as usize;
-
-    file.seek(SeekFrom::End(-(footer_len as i64 + 8))).await?;
-    let mut footer_bytes = BytesMut::with_capacity(footer_len);
-    unsafe { footer_bytes.set_len(footer_len) }
-    file.read_exact(footer_bytes.as_mut()).await?;
+    buf.reserve(footer_len - buf.len());
+    unsafe { buf.set_len(footer_len) }
+    buf = reader
+        .read_at_into(len - footer_len as u64 - 8, buf)
+        .await?;
 
     let footer: VortexFooter = VortexFooter::deserialize(
-        flexbuffers::Reader::get_root(footer_bytes.as_ref()).map_err(|e| vortex_err!("{}", e))?,
+        flexbuffers::Reader::get_root(buf.as_ref()).map_err(|e| vortex_err!("{}", e))?,
     )?;
 
-    file.seek(SeekFrom::Start(0)).await?;
-    let mut reader = MessageReader::try_new(TokioAdapter(file.try_clone().await?)).await?;
-    let view_ctx = reader.read_view_context(&CTX).await?;
-    let dtype = reader.read_dtype().await?;
+    let header_len =
+        (footer.view_context_dtype_range.end - footer.view_context_dtype_range.start) as usize;
+    buf.reserve(header_len - buf.len());
+    unsafe { buf.set_len(header_len) }
+    buf = reader
+        .read_at_into(footer.view_context_dtype_range.start, buf)
+        .await?;
+    let mut header_reader = MessageReader::try_new(buf).await?;
+    let view_ctx = header_reader.read_view_context(&CTX).await?;
+    let dtype = header_reader.read_dtype().await?;
 
-    file.seek(SeekFrom::Start(0)).await?;
-    let mut reader = ChunkedArrayReader::try_new(
-        TokioAdapter(file),
+    ChunkedArrayReader::try_new(
+        reader,
         view_ctx,
         dtype,
         PrimitiveArray::from(footer.byte_offsets).into_array(),
         PrimitiveArray::from(footer.row_offsets).into_array(),
-    )?;
+    )
+}
 
+pub async fn take_vortex_object_store(path: &Path, indices: &[u64]) -> VortexResult<Array> {
+    let fs = LocalFileSystem::new();
+    let ob_path = object_store::path::Path::from_filesystem_path(path).unwrap();
+    let head = fs.head(&ob_path).await?;
     let indices_array = indices.to_vec().into_array();
-    let taken = reader.take_rows(&indices_array).await?;
+    let taken = read_vortex_footer_format(fs.vortex_reader(&ob_path), head.size as u64)
+        .await?
+        .take_rows(&indices_array)
+        .await?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
     Ok(taken.into_canonical()?.into_array())
 }
 
-pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {
-    let file = File::open(path)?;
+pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Array> {
+    let len = File::open(path)?.metadata()?.len();
+    let indices_array = indices.to_vec().into_array();
+    let taken = read_vortex_footer_format(TokioAdapter(tokio::fs::File::open(path).await?), len)
+        .await?
+        .take_rows(&indices_array)
+        .await?;
+    // For equivalence.... we flatten to make sure we're not cheating too much.
+    Ok(taken.into_canonical()?.into_array())
+}
 
-    // TODO(ngates): enable read_page_index
-    let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
+pub async fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {
+    let file = tokio::fs::File::open(path).await?;
 
+    let builder = ParquetRecordBatchStreamBuilder::new_with_options(
+        file,
+        ArrowReaderOptions::new().with_page_index(true),
+    )
+    .await?;
     // We figure out which row groups we need to read and a selection filter for each of them.
     let mut row_groups = HashMap::new();
     let mut row_group_offsets = vec![0];
@@ -214,10 +236,9 @@ pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {
         .build()
         .unwrap();
 
-    let schema = reader.schema();
+    let schema = reader.schema().clone();
 
     let batches = reader
-        .into_iter()
         .enumerate()
         .map(|(idx, batch)| {
             let batch = batch.unwrap();
@@ -225,7 +246,8 @@ pub fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {
             let indices_array: ArrowArrayRef = Arc::new(indices);
             take_record_batch(&batch, &indices_array).unwrap()
         })
-        .collect_vec();
+        .collect::<Vec<_>>()
+        .await;
 
     Ok(concat_batches(&schema, &batches)?)
 }
