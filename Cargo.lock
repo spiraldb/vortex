@@ -830,19 +830,18 @@ dependencies = [
 
 [[package]]
 name = "croaring"
-version = "1.1.0"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "611eaefca84c93e431ad82dfb848f6e05a99e25148384f45a3852b0fbe1c8086"
+checksum = "a0e46816d88255a7b8e5425d66654e69e6acd259550cba8b626b970c731bc643"
 dependencies = [
- "byteorder",
  "croaring-sys",
 ]
 
 [[package]]
 name = "croaring-sys"
-version = "2.0.0"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab5260027c04c33d67f405589d9c26e1e991fe062fb165f3094c9836e6c3b17f"
+checksum = "d7292fe1b0fa8de30e53cddcb858ee86aadacfbab95c3fac3dd8caebe2817c8d"
 dependencies = [
  "cc",
 ]
