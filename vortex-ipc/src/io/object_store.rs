@@ -13,7 +13,6 @@ use vortex_error::VortexResult;
 
 use crate::io::{VortexRead, VortexReadAt, VortexWrite};
 
-#[allow(dead_code)]
 pub trait ObjectStoreExt {
     fn vortex_read(
         &self,
