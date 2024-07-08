@@ -6,14 +6,13 @@ use flatbuffers::{root, root_unchecked};
 use futures_util::stream::try_unfold;
 use itertools::Itertools;
 use vortex::stream::{ArrayStream, ArrayStreamAdapter};
-use vortex::{Array, ArrayView, Context, IntoArray, ToArray, ViewContext};
+use vortex::{Array, ArrayView, Context, IntoArray, ToArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::flatbuffers::ipc as fb;
 use crate::io::VortexRead;
-use crate::messages::SerdeContextDeserializer;
 
 pub struct MessageReader<R> {
     read: R,
@@ -138,23 +137,6 @@ impl<R: VortexRead> MessageReader<R> {
         Ok(buffers)
     }
 
-    pub async fn read_view_context<'a>(
-        &'a mut self,
-        ctx: &'a Context,
-    ) -> VortexResult<Arc<ViewContext>> {
-        if self.peek().and_then(|m| m.header_as_context()).is_none() {
-            vortex_bail!("Expected context message");
-        }
-
-        let view_ctx: ViewContext = SerdeContextDeserializer {
-            fb: self.next().await?.header_as_context().unwrap(),
-            ctx,
-        }
-        .try_into()?;
-
-        Ok(view_ctx.into())
-    }
-
     pub async fn read_dtype(&mut self) -> VortexResult<DType> {
         if self.peek().and_then(|m| m.header_as_schema()).is_none() {
             vortex_bail!("Expected schema message")
@@ -174,7 +156,7 @@ impl<R: VortexRead> MessageReader<R> {
 
     pub async fn maybe_read_chunk(
         &mut self,
-        view_ctx: Arc<ViewContext>,
+        ctx: Arc<Context>,
         dtype: DType,
     ) -> VortexResult<Option<Array>> {
         if self.peek().and_then(|m| m.header_as_chunk()).is_none() {
@@ -185,7 +167,7 @@ impl<R: VortexRead> MessageReader<R> {
         let flatbuffer = self.next_raw().await?;
 
         let view = ArrayView::try_new(
-            view_ctx,
+            ctx,
             dtype,
             flatbuffer,
             |flatbuffer| {
@@ -207,27 +189,22 @@ impl<R: VortexRead> MessageReader<R> {
     /// Construct an ArrayStream pulling the ViewContext and DType from the stream.
     pub async fn array_stream_from_messages(
         &mut self,
-        ctx: &Context,
+        ctx: Arc<Context>,
     ) -> VortexResult<impl ArrayStream + '_> {
-        let view_context = self.read_view_context(ctx).await?;
         let dtype = self.read_dtype().await?;
-        Ok(self.array_stream(view_context, dtype))
+        Ok(self.array_stream(ctx, dtype))
     }
 
-    pub fn array_stream(
-        &mut self,
-        view_context: Arc<ViewContext>,
-        dtype: DType,
-    ) -> impl ArrayStream + '_ {
+    pub fn array_stream(&mut self, ctx: Arc<Context>, dtype: DType) -> impl ArrayStream + '_ {
         struct State<'a, R: VortexRead> {
             msgs: &'a mut MessageReader<R>,
-            view_context: Arc<ViewContext>,
+            ctx: Arc<Context>,
             dtype: DType,
         }
 
         let init = State {
             msgs: self,
-            view_context,
+            ctx,
             dtype: dtype.clone(),
         };
 
@@ -236,7 +213,7 @@ impl<R: VortexRead> MessageReader<R> {
             try_unfold(init, |state| async move {
                 match state
                     .msgs
-                    .maybe_read_chunk(state.view_context.clone(), state.dtype.clone())
+                    .maybe_read_chunk(state.ctx.clone(), state.dtype.clone())
                     .await?
                 {
                     None => Ok(None),
@@ -246,20 +223,16 @@ impl<R: VortexRead> MessageReader<R> {
         )
     }
 
-    pub fn into_array_stream(
-        self,
-        view_context: Arc<ViewContext>,
-        dtype: DType,
-    ) -> impl ArrayStream {
+    pub fn into_array_stream(self, ctx: Arc<Context>, dtype: DType) -> impl ArrayStream {
         struct State<R: VortexRead> {
             msgs: MessageReader<R>,
-            view_context: Arc<ViewContext>,
+            ctx: Arc<Context>,
             dtype: DType,
         }
 
         let init = State {
             msgs: self,
-            view_context,
+            ctx,
             dtype: dtype.clone(),
         };
 
@@ -268,7 +241,7 @@ impl<R: VortexRead> MessageReader<R> {
             try_unfold(init, |mut state| async move {
                 match state
                     .msgs
-                    .maybe_read_chunk(state.view_context.clone(), state.dtype.clone())
+                    .maybe_read_chunk(state.ctx.clone(), state.dtype.clone())
                     .await?
                 {
                     None => Ok(None),

@@ -8,7 +8,7 @@ use crate::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 
 mod compute;
 
-impl_encoding!("vortex.ext", Extension);
+impl_encoding!("vortex.ext", 16u16, Extension);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionMetadata {

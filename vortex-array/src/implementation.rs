@@ -25,7 +25,7 @@ pub trait ArrayDef {
 
 #[macro_export]
 macro_rules! impl_encoding {
-    ($id:literal, $Name:ident) => {
+    ($id:literal, $code:literal, $Name:ident) => {
         use $crate::vendored::paste::paste;
 
         paste! {
@@ -58,7 +58,7 @@ macro_rules! impl_encoding {
             #[derive(Debug, Clone)]
             pub struct $Name;
             impl ArrayDef for $Name {
-                const ID: EncodingId = EncodingId::new($id);
+                const ID: EncodingId = EncodingId::new($id, $code);
                 const ENCODING: EncodingRef = &[<$Name Encoding>];
                 type Array = [<$Name Array>];
                 type Metadata = [<$Name Metadata>];

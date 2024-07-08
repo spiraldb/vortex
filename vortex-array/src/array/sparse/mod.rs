@@ -14,7 +14,7 @@ use crate::{impl_encoding, ArrayDType, IntoCanonical};
 mod compute;
 mod flatten;
 
-impl_encoding!("vortex.sparse", Sparse);
+impl_encoding!("vortex.sparse", 9u16, Sparse);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseMetadata {

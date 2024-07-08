@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::ops::{Deref, Range};
+use std::ops::Range;
 
 use bytes::BytesMut;
 use futures_util::{stream, StreamExt, TryStreamExt};
@@ -148,9 +148,8 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
         //  MesssageReader.
         let buffer = self.read.read_at_into(byte_range.start, buffer).await?;
 
-        let reader = StreamArrayReader::try_new(buffer)
+        let reader = StreamArrayReader::try_new(buffer, self.context.clone())
             .await?
-            .with_view_context(self.view_context.deref().clone())
             .with_dtype(self.dtype.clone());
 
         // Take the indices from the stream.
@@ -218,11 +217,12 @@ struct ChunkIndices {
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
+    use std::sync::Arc;
 
     use itertools::Itertools;
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::{ArrayTrait, IntoArray, IntoCanonical, ViewContext};
+    use vortex::{ArrayTrait, Context, IntoArray, IntoCanonical};
     use vortex_buffer::Buffer;
     use vortex_dtype::PType;
     use vortex_error::VortexResult;
@@ -238,11 +238,7 @@ mod test {
         )?
         .into_array();
 
-        ArrayWriter::new(vec![], ViewContext::default())
-            .write_context()
-            .await?
-            .write_array(c)
-            .await
+        ArrayWriter::new(vec![]).write_array(c).await
     }
 
     #[tokio::test]
@@ -256,12 +252,11 @@ mod test {
         let buffer = Buffer::from(writer.into_inner());
 
         let mut msgs = MessageReader::try_new(Cursor::new(buffer.clone())).await?;
-        let view_ctx = msgs.read_view_context(&Default::default()).await?;
         let dtype = msgs.read_dtype().await?;
 
         let mut reader = ChunkedArrayReader::try_new(
             buffer,
-            view_ctx,
+            Arc::new(Context::default()),
             dtype,
             byte_offsets.into_array(),
             row_offsets.into_array(),

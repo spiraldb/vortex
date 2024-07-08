@@ -10,7 +10,7 @@ use vortex_error::vortex_bail;
 use crate::alp::Exponents;
 use crate::compress::{alp_encode, decompress};
 
-impl_encoding!("vortex.alp", ALP);
+impl_encoding!("vortex.alp", 13u16, ALP);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ALPMetadata {

@@ -11,7 +11,7 @@ use vortex_error::{vortex_bail, vortex_err};
 mod compress;
 mod compute;
 
-impl_encoding!("fastlanes.bitpacked", BitPacked);
+impl_encoding!("fastlanes.bitpacked", 14u16, BitPacked);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BitPackedMetadata {

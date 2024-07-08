@@ -21,7 +21,7 @@ mod compute;
 mod flatten;
 mod stats;
 
-impl_encoding!("vortex.varbin", VarBin);
+impl_encoding!("vortex.varbin", 4u16, VarBin);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VarBinMetadata {

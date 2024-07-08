@@ -8,11 +8,15 @@ use crate::ArrayDef;
 use crate::{Array, ArrayTrait};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub struct EncodingId(&'static str);
+pub struct EncodingId(&'static str, u16);
 
 impl EncodingId {
-    pub const fn new(id: &'static str) -> Self {
-        Self(id)
+    pub const fn new(id: &'static str, code: u16) -> Self {
+        Self(id, code)
+    }
+
+    pub const fn code(&self) -> u16 {
+        self.1
     }
 }
 
@@ -66,7 +70,6 @@ pub trait ArrayEncodingExt {
         IntoCanonical::into_canonical(typed)
     }
 
-    #[inline]
     fn with_dyn<R, F>(array: &Array, mut f: F) -> R
     where
         F: for<'b> FnMut(&'b (dyn ArrayTrait + 'b)) -> R,

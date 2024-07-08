@@ -1,36 +1,28 @@
 use futures_util::{Stream, TryStreamExt};
 use vortex::array::chunked::ChunkedArray;
 use vortex::stream::ArrayStream;
-use vortex::{Array, ViewContext};
+use vortex::Array;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::VortexResult;
 
 use crate::io::VortexWrite;
 use crate::MessageWriter;
 
 pub struct ArrayWriter<W: VortexWrite> {
     msgs: MessageWriter<W>,
-    view_ctx: ViewContext,
 
-    view_ctx_range: Option<ByteRange>,
     array_layouts: Vec<ArrayLayout>,
     page_ranges: Vec<ByteRange>,
 }
 
 impl<W: VortexWrite> ArrayWriter<W> {
-    pub fn new(write: W, view_ctx: ViewContext) -> Self {
+    pub fn new(write: W) -> Self {
         Self {
             msgs: MessageWriter::new(write),
-            view_ctx,
-            view_ctx_range: None,
             array_layouts: vec![],
             page_ranges: vec![],
         }
-    }
-
-    pub fn view_context_range(&self) -> Option<ByteRange> {
-        self.view_ctx_range
     }
 
     pub fn array_layouts(&self) -> &[ArrayLayout] {
@@ -43,20 +35,6 @@ impl<W: VortexWrite> ArrayWriter<W> {
 
     pub fn into_inner(self) -> W {
         self.msgs.into_inner()
-    }
-
-    pub async fn write_context(mut self) -> VortexResult<Self> {
-        if self.view_ctx_range.is_some() {
-            vortex_bail!("View context already written");
-        }
-
-        let begin = self.msgs.tell();
-        self.msgs.write_view_context(&self.view_ctx).await?;
-        let end = self.msgs.tell();
-
-        self.view_ctx_range = Some(ByteRange { begin, end });
-
-        Ok(self)
     }
 
     async fn write_dtype(&mut self, dtype: &DType) -> VortexResult<ByteRange> {
@@ -77,7 +55,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
         while let Some(chunk) = stream.try_next().await? {
             row_offset += chunk.len() as u64;
             row_offsets.push(row_offset);
-            self.msgs.write_chunk(&self.view_ctx, chunk).await?;
+            self.msgs.write_chunk(chunk).await?;
             byte_offsets.push(self.msgs.tell());
         }
 

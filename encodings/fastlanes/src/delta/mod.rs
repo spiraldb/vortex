@@ -11,7 +11,7 @@ use vortex_error::vortex_bail;
 mod compress;
 mod compute;
 
-impl_encoding!("fastlanes.delta", Delta);
+impl_encoding!("fastlanes.delta", 16u16, Delta);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeltaMetadata {

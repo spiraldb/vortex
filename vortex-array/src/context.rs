@@ -13,18 +13,18 @@ use crate::encoding::EncodingRef;
 
 #[derive(Debug, Clone)]
 pub struct Context {
-    encodings: HashMap<String, EncodingRef>,
+    encodings: HashMap<u16, EncodingRef>,
 }
 
 impl Context {
     pub fn with_encoding(mut self, encoding: EncodingRef) -> Self {
-        self.encodings.insert(encoding.id().to_string(), encoding);
+        self.encodings.insert(encoding.id().code(), encoding);
         self
     }
 
     pub fn with_encodings<E: IntoIterator<Item = EncodingRef>>(mut self, encodings: E) -> Self {
         self.encodings
-            .extend(encodings.into_iter().map(|e| (e.id().to_string(), e)));
+            .extend(encodings.into_iter().map(|e| (e.id().code(), e)));
         self
     }
 
@@ -32,8 +32,8 @@ impl Context {
         self.encodings.values().cloned()
     }
 
-    pub fn lookup_encoding(&self, encoding_id: &str) -> Option<EncodingRef> {
-        self.encodings.get(encoding_id).cloned()
+    pub fn lookup_encoding(&self, encoding_code: u16) -> Option<EncodingRef> {
+        self.encodings.get(&encoding_code).cloned()
     }
 }
 
@@ -53,7 +53,7 @@ impl Default for Context {
                     &VarBinViewEncoding,
                 ]
                 .into_iter()
-                .map(|e| (e.id().to_string(), e)),
+                .map(|e| (e.id().code(), e)),
             ),
         }
     }

@@ -1,6 +1,6 @@
 pub use message_reader::*;
 pub use message_writer::*;
-use vortex_error::{vortex_err, VortexError};
+
 pub mod chunked_reader;
 pub mod io;
 mod message_reader;
@@ -38,45 +38,32 @@ pub mod flatbuffers {
     }
 }
 
-pub(crate) const fn missing(field: &'static str) -> impl FnOnce() -> VortexError {
-    move || vortex_err!(InvalidSerde: "missing field: {}", field)
-}
-
 #[cfg(test)]
 pub mod test {
+    use std::sync::Arc;
+
     use futures_util::io::Cursor;
     use futures_util::{pin_mut, StreamExt, TryStreamExt};
     use itertools::Itertools;
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::ArrayEncoding;
-    use vortex::encoding::EncodingRef;
     use vortex::stream::ArrayStreamExt;
-    use vortex::{ArrayDType, Context, IntoArray, ViewContext};
-    use vortex_alp::ALPEncoding;
+    use vortex::{ArrayDType, Context, IntoArray};
     use vortex_error::VortexResult;
-    use vortex_fastlanes::BitPackedEncoding;
 
     use crate::io::FuturesAdapter;
     use crate::writer::ArrayWriter;
     use crate::MessageReader;
 
     pub async fn create_stream() -> Vec<u8> {
-        let ctx = Context::default().with_encodings([
-            &ALPEncoding as EncodingRef,
-            &BitPackedEncoding as EncodingRef,
-        ]);
-
         let array = PrimitiveArray::from(vec![0, 1, 2]).into_array();
         let chunked_array =
             ChunkedArray::try_new(vec![array.clone(), array.clone()], array.dtype().clone())
                 .unwrap()
                 .into_array();
 
-        ArrayWriter::new(vec![], ViewContext::from(&ctx))
-            .write_context()
-            .await
-            .unwrap()
+        ArrayWriter::new(vec![])
             .write_array(array)
             .await
             .unwrap()
@@ -87,10 +74,7 @@ pub mod test {
     }
 
     async fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
-        ArrayWriter::new(vec![], ViewContext::from(&Context::default()))
-            .write_context()
-            .await
-            .unwrap()
+        ArrayWriter::new(vec![])
             .write_array(array.into_array())
             .await
             .unwrap()
@@ -104,11 +88,11 @@ pub mod test {
 
         let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
 
-        let ctx = Context::default();
+        let ctx = Arc::new(Context::default());
         let mut messages = MessageReader::try_new(FuturesAdapter(Cursor::new(buffer)))
             .await
             .unwrap();
-        let reader = messages.array_stream_from_messages(&ctx).await?;
+        let reader = messages.array_stream_from_messages(ctx).await?;
 
         let result_iter = reader.take_rows(indices).unwrap();
         pin_mut!(result_iter);
@@ -134,9 +118,9 @@ pub mod test {
 
         let mut messages = MessageReader::try_new(FuturesAdapter(Cursor::new(buffer))).await?;
 
-        let ctx = Context::default();
+        let ctx = Arc::new(Context::default());
         let take_iter = messages
-            .array_stream_from_messages(&ctx)
+            .array_stream_from_messages(ctx)
             .await?
             .take_rows(indices)?;
         pin_mut!(take_iter);

@@ -10,7 +10,7 @@ use crate::{Canonical, IntoCanonical};
 
 mod compute;
 
-impl_encoding!("vortex.struct", Struct);
+impl_encoding!("vortex.struct", 8u16, Struct);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StructMetadata {

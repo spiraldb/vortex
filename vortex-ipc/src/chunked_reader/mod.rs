@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use vortex::{Array, ViewContext};
+use vortex::{Array, Context};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
@@ -11,7 +11,7 @@ mod take_rows;
 /// A reader for a chunked array.
 pub struct ChunkedArrayReader<R: VortexReadAt> {
     read: R,
-    view_context: Arc<ViewContext>,
+    context: Arc<Context>,
     dtype: DType,
 
     // One row per chunk + 1 row for the end of the last chunk.
@@ -22,7 +22,7 @@ pub struct ChunkedArrayReader<R: VortexReadAt> {
 impl<R: VortexReadAt> ChunkedArrayReader<R> {
     pub fn try_new(
         read: R,
-        view_context: Arc<ViewContext>,
+        context: Arc<Context>,
         dtype: DType,
         byte_offsets: Array,
         row_offsets: Array,
@@ -30,7 +30,7 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
         Self::validate(&byte_offsets, &row_offsets)?;
         Ok(Self {
             read,
-            view_context,
+            context,
             dtype,
             byte_offsets,
             row_offsets,
