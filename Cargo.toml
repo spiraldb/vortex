@@ -52,6 +52,7 @@ cargo_metadata = "0.18.1"
 criterion = { version = "0.5.1", features = ["html_reports"] }
 croaring = "2.0.0"
 csv = "1.3.0"
+object_store = "0.10.1"
 datafusion = "39.0.0"
 datafusion-common = "39.0.0"
 datafusion-execution = "39.0.0"

@@ -128,6 +128,13 @@ pub enum VortexError {
         #[backtrace]
         worker::Error,
     ),
+    #[cfg(feature = "object_store")]
+    #[error(transparent)]
+    ObjectStore(
+        #[from]
+        #[backtrace]
+        object_store::Error,
+    ),
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;

@@ -1,5 +1,3 @@
-extern crate core;
-
 pub use message_reader::*;
 pub use message_writer::*;
 use vortex_error::{vortex_err, VortexError};

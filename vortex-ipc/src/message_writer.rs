@@ -53,12 +53,7 @@ impl<W: VortexWrite> MessageWriter<W> {
             .await
     }
 
-    pub async fn write_chunk(
-        &mut self,
-        view_ctx: &ViewContext,
-        // TODO(ngates): should we support writing from an ArrayView?
-        chunk: Array,
-    ) -> io::Result<()> {
+    pub async fn write_chunk(&mut self, view_ctx: &ViewContext, chunk: Array) -> io::Result<()> {
         let buffer_offsets = chunk.all_buffer_offsets(self.alignment);
 
         // Serialize the Chunk message.
@@ -69,7 +64,7 @@ impl<W: VortexWrite> MessageWriter<W> {
         let mut current_offset = 0;
         for (buffer, &buffer_end) in chunk
             .depth_first_traversal()
-            .flat_map(|data| data.buffer().cloned().into_iter())
+            .flat_map(|data| data.into_buffer().into_iter())
             .zip_eq(buffer_offsets.iter().skip(1))
         {
             let buffer_len = buffer.len();

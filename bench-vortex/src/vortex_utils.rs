@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::os::unix::prelude::MetadataExt;
-use std::path::Path;
+use std::path::PathBuf;
 
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::struct_::StructArray;
@@ -12,10 +12,10 @@ use crate::data_downloads::FileType;
 use crate::reader::open_vortex;
 use crate::CompressionRunStats;
 
-pub fn vortex_chunk_sizes(path: &Path) -> VortexResult<CompressionRunStats> {
-    let file = File::open(path)?;
+pub async fn vortex_chunk_sizes(path: PathBuf) -> VortexResult<CompressionRunStats> {
+    let file = File::open(path.as_path())?;
     let total_compressed_size = file.metadata()?.size();
-    let vortex = open_vortex(path)?;
+    let vortex = open_vortex(path.as_path()).await?;
     let DType::Struct(st, _) = vortex.dtype() else {
         unreachable!()
     };

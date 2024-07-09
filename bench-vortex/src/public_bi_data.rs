@@ -463,7 +463,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
         }
     }
 
-    fn write_as_vortex(&self) {
+    async fn write_as_vortex(&self) {
         self.write_as_parquet();
         for f in self.list_files(FileType::Parquet) {
             info!("Compressing and writing {} to vortex", f.to_str().unwrap());
@@ -484,7 +484,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 },
             )
             .expect("Failed to compress to vortex");
-            let from_vortex = open_vortex(&compressed).unwrap();
+            let from_vortex = open_vortex(&compressed).await.unwrap();
             let vx_size = from_vortex.nbytes();
 
             info!(
