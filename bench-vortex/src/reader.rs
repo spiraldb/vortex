@@ -22,7 +22,7 @@ use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::arrow::FromArrowType;
-use vortex::compress::Compressor;
+use vortex::compress::CompressionStrategy;
 use vortex::stream::ArrayStreamExt;
 use vortex::{Array, IntoArray, IntoCanonical, ToArrayData, ViewContext};
 use vortex_buffer::Buffer;
@@ -107,8 +107,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
 
     let dtype = DType::from_arrow(reader.schema());
 
-    let strategy = SamplingCompressor::new(COMPRESSORS.clone());
-    let compressor = Compressor::new(&strategy);
+    let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {

@@ -15,7 +15,7 @@ use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
-use vortex::compress::Compressor;
+use vortex::compress::CompressionStrategy;
 use vortex::encoding::EncodingRef;
 use vortex::{Array, Context, IntoArray, ToArrayData};
 use vortex_alp::ALPEncoding;
@@ -164,15 +164,14 @@ pub fn compress_taxi_data() -> Array {
 
     let schema = reader.schema();
     let mut uncompressed_size: usize = 0;
+    let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
     let chunks = reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
         .map(|batch| batch.to_array_data().into_array())
         .map(|array| {
             uncompressed_size += array.nbytes();
-            Compressor::new(&SamplingCompressor::new(COMPRESSORS.clone()))
-                .compress(&array)
-                .unwrap()
+            compressor.compress(&array).unwrap()
         })
         .collect_vec();
 
@@ -242,7 +241,7 @@ mod test {
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use vortex::arrow::FromArrowArray;
-    use vortex::compress::Compressor;
+    use vortex::compress::CompressionStrategy;
     use vortex::{ArrayData, IntoArray, IntoCanonical};
     use vortex_sampling_compressor::SamplingCompressor;
 
@@ -280,15 +279,14 @@ mod test {
         let file = File::open(taxi_data_parquet()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
         let reader = builder.with_limit(1).build().unwrap();
+        let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
 
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
             let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
 
-            let compressed = Compressor::new(&SamplingCompressor::new(COMPRESSORS.clone()))
-                .compress(&vortex_array)
-                .unwrap();
+            let compressed = compressor.compress(&vortex_array).unwrap();
             let compressed_as_arrow = compressed.into_canonical().unwrap().into_arrow();
             assert_eq!(compressed_as_arrow.deref(), arrow_array.deref());
         }

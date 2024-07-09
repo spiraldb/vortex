@@ -6,23 +6,6 @@ pub trait CompressionStrategy {
     fn compress(&self, array: &Array) -> VortexResult<Array>;
 }
 
-pub struct Compressor<'a> {
-    strategy: &'a dyn CompressionStrategy,
-}
-
-impl<'a> Compressor<'a> {
-    pub fn new(strategy: &'a dyn CompressionStrategy) -> Self {
-        Self { strategy }
-    }
-
-    pub fn compress(&self, array: &Array) -> VortexResult<Array> {
-        let compressed = self.strategy.compress(array)?;
-        check_dtype_unchanged(array, &compressed);
-        check_validity_unchanged(array, &compressed);
-        Ok(compressed)
-    }
-}
-
 /// Check that compression did not alter the length of the validity array.
 pub fn check_validity_unchanged(arr: &Array, compressed: &Array) {
     let _ = arr;
