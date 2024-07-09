@@ -21,12 +21,17 @@ runs:
       with:
         save-if: ${{ github.ref == 'refs/heads/develop' }}
         shared-key: "shared" # To allow reuse across jobs
+        cache-targets: false
+
+    - name: Cargo clean
+      shell: bash
+      run: |
+        cargo clean
 
     - name: Rust Compile Cache
       uses: mozilla-actions/sccache-action@v0.0.5
     - name: Rust Compile Cache Config
       shell: bash
-      # echo "CARGO_LOG=cargo::core::compiler::fingerprint=info" >> $GITHUB_ENV
       run: |
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
