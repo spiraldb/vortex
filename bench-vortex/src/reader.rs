@@ -22,7 +22,7 @@ use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::arrow::FromArrowType;
-use vortex::compress::Compressor;
+use vortex::compress::CompressionStrategy;
 use vortex::stream::ArrayStreamExt;
 use vortex::{Array, IntoArray, IntoCanonical, ToArrayData, ViewContext};
 use vortex_buffer::Buffer;
@@ -32,8 +32,9 @@ use vortex_ipc::chunked_reader::ChunkedArrayReader;
 use vortex_ipc::io::{TokioAdapter, VortexWrite};
 use vortex_ipc::writer::ArrayWriter;
 use vortex_ipc::MessageReader;
+use vortex_sampling_compressor::SamplingCompressor;
 
-use crate::CTX;
+use crate::{COMPRESSORS, CTX};
 
 pub const BATCH_SIZE: usize = 65_536;
 
@@ -106,11 +107,12 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
 
     let dtype = DType::from_arrow(reader.schema());
 
+    let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
             let vortex_array = record_batch.to_array_data().into_array();
-            Compressor::new(&CTX).compress(&vortex_array, None).unwrap()
+            compressor.compress(&vortex_array).unwrap()
         })
         .collect_vec();
     ChunkedArray::try_new(chunks, dtype)

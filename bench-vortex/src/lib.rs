@@ -1,5 +1,6 @@
 #![feature(exit_status_error)]
 
+use std::collections::HashSet;
 use std::env::temp_dir;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
@@ -14,7 +15,7 @@ use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
-use vortex::compress::Compressor;
+use vortex::compress::CompressionStrategy;
 use vortex::encoding::EncodingRef;
 use vortex::{Array, Context, IntoArray, ToArrayData};
 use vortex_alp::ALPEncoding;
@@ -22,8 +23,18 @@ use vortex_datetime_parts::DateTimePartsEncoding;
 use vortex_dict::DictEncoding;
 use vortex_dtype::DType;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
-use vortex_ree::REEEncoding;
 use vortex_roaring::RoaringBoolEncoding;
+use vortex_runend::RunEndEncoding;
+use vortex_sampling_compressor::compressors::alp::ALPCompressor;
+use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
+use vortex_sampling_compressor::compressors::dict::DictCompressor;
+use vortex_sampling_compressor::compressors::localdatetime::DateTimePartsCompressor;
+use vortex_sampling_compressor::compressors::r#for::FoRCompressor;
+use vortex_sampling_compressor::compressors::roaring_bool::RoaringBoolCompressor;
+use vortex_sampling_compressor::compressors::runend::DEFAULT_RUN_END_COMPRESSOR;
+use vortex_sampling_compressor::compressors::sparse::SparseCompressor;
+use vortex_sampling_compressor::compressors::CompressorRef;
+use vortex_sampling_compressor::SamplingCompressor;
 
 use crate::data_downloads::FileType;
 use crate::reader::BATCH_SIZE;
@@ -44,12 +55,26 @@ lazy_static! {
         &FoREncoding,
         &DateTimePartsEncoding,
         // &DeltaEncoding,  Blows up the search space too much.
-        &REEEncoding,
+        &RunEndEncoding,
         &RoaringBoolEncoding,
         // &RoaringIntEncoding,
         // Doesn't offer anything more than FoR really
         // &ZigZagEncoding,
     ]);
+}
+
+lazy_static! {
+    pub static ref COMPRESSORS: HashSet<CompressorRef<'static>> = [
+        &ALPCompressor as CompressorRef<'static>,
+        &DictCompressor,
+        &BitPackedCompressor,
+        &FoRCompressor,
+        &DateTimePartsCompressor,
+        &DEFAULT_RUN_END_COMPRESSOR,
+        &RoaringBoolCompressor,
+        &SparseCompressor
+    ]
+    .into();
 }
 
 /// Creates a file if it doesn't already exist.
@@ -139,13 +164,14 @@ pub fn compress_taxi_data() -> Array {
 
     let schema = reader.schema();
     let mut uncompressed_size: usize = 0;
+    let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
     let chunks = reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
         .map(|batch| batch.to_array_data().into_array())
         .map(|array| {
             uncompressed_size += array.nbytes();
-            Compressor::new(&CTX).compress(&array, None).unwrap()
+            compressor.compress(&array).unwrap()
         })
         .collect_vec();
 
@@ -215,11 +241,12 @@ mod test {
     use log::LevelFilter;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use vortex::arrow::FromArrowArray;
-    use vortex::compress::Compressor;
+    use vortex::compress::CompressionStrategy;
     use vortex::{ArrayData, IntoArray, IntoCanonical};
+    use vortex_sampling_compressor::SamplingCompressor;
 
     use crate::taxi_data::taxi_data_parquet;
-    use crate::{compress_taxi_data, setup_logger, CTX};
+    use crate::{compress_taxi_data, setup_logger, COMPRESSORS};
 
     #[ignore]
     #[test]
@@ -252,13 +279,14 @@ mod test {
         let file = File::open(taxi_data_parquet()).unwrap();
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
         let reader = builder.with_limit(1).build().unwrap();
+        let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
 
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
             let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
 
-            let compressed = Compressor::new(&CTX).compress(&vortex_array, None).unwrap();
+            let compressed = compressor.compress(&vortex_array).unwrap();
             let compressed_as_arrow = compressed.into_canonical().unwrap().into_arrow();
             assert_eq!(compressed_as_arrow.deref(), arrow_array.deref());
         }

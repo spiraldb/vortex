@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use arrow_array::builder::{StringBuilder, UInt32Builder};
@@ -11,20 +12,36 @@ use datafusion::execution::memory_pool::human_readable_size;
 use datafusion::logical_expr::lit;
 use datafusion::prelude::{col, count_distinct, DataFrame, SessionContext};
 use lazy_static::lazy_static;
-use vortex::compress::Compressor;
+use vortex::compress::CompressionStrategy;
 use vortex::encoding::EncodingRef;
 use vortex::{Array, Context, IntoArray, ToArrayData};
 use vortex_datafusion::{VortexMemTable, VortexMemTableOptions};
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
+use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
+use vortex_sampling_compressor::compressors::delta::DeltaCompressor;
+use vortex_sampling_compressor::compressors::dict::DictCompressor;
+use vortex_sampling_compressor::compressors::r#for::FoRCompressor;
+use vortex_sampling_compressor::compressors::CompressorRef;
+use vortex_sampling_compressor::SamplingCompressor;
 
 lazy_static! {
     pub static ref CTX: Context = Context::default().with_encodings([
         &BitPackedEncoding as EncodingRef,
         &DictEncoding,
         &FoREncoding,
-        &DeltaEncoding,
+        &DeltaEncoding
     ]);
+}
+
+lazy_static! {
+    pub static ref COMPRESSORS: HashSet<CompressorRef<'static>> = [
+        &BitPackedCompressor as CompressorRef<'static>,
+        &DictCompressor,
+        &FoRCompressor,
+        &DeltaCompressor
+    ]
+    .into();
 }
 
 fn toy_dataset_arrow() -> RecordBatch {
@@ -73,8 +90,8 @@ fn toy_dataset_vortex(compress: bool) -> Array {
         "uncompressed size: {:?}",
         human_readable_size(uncompressed.nbytes())
     );
-    let compressor = Compressor::new(&CTX);
-    let compressed = compressor.compress(&uncompressed, None).unwrap();
+    let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
+    let compressed = compressor.compress(&uncompressed).unwrap();
     println!(
         "vortex compressed size: {:?}",
         human_readable_size(compressed.nbytes())
