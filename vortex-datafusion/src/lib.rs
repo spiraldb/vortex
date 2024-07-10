@@ -29,7 +29,6 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::array::struct_::StructArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
 
 use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
@@ -52,6 +51,17 @@ impl VortexMemTableOptions {
 }
 
 pub trait SessionContextExt {
+    fn register_vortex<S: AsRef<str>>(&self, name: S, array: Array) -> DFResult<()> {
+        self.register_vortex_opts(name, array, VortexMemTableOptions::default())
+    }
+
+    fn register_vortex_opts<S: AsRef<str>>(
+        &self,
+        name: S,
+        array: Array,
+        options: VortexMemTableOptions,
+    ) -> DFResult<()>;
+
     fn read_vortex(&self, array: Array) -> DFResult<DataFrame> {
         self.read_vortex_opts(array, VortexMemTableOptions::default())
     }
@@ -61,6 +71,22 @@ pub trait SessionContextExt {
 }
 
 impl SessionContextExt for SessionContext {
+    fn register_vortex_opts<S: AsRef<str>>(
+        &self,
+        name: S,
+        array: Array,
+        options: VortexMemTableOptions,
+    ) -> DFResult<()> {
+        assert!(
+            matches!(array.dtype(), DType::Struct(_, _)),
+            "Vortex arrays must have struct type"
+        );
+
+        let vortex_table = VortexMemTable::new(array, options);
+        self.register_table(name.as_ref(), Arc::new(vortex_table))
+            .map(|_| ())
+    }
+
     fn read_vortex_opts(
         &self,
         array: Array,
@@ -71,8 +97,7 @@ impl SessionContextExt for SessionContext {
             "Vortex arrays must have struct type"
         );
 
-        let vortex_table = VortexMemTable::try_new(array, options)
-            .map_err(|error| DataFusionError::Internal(format!("vortex error: {error}")))?;
+        let vortex_table = VortexMemTable::new(array, options);
 
         self.read_table(Arc::new(vortex_table))
     }
@@ -95,15 +120,15 @@ impl VortexMemTable {
     /// # Panics
     ///
     /// Creation will panic if the provided array is not of `DType::Struct` type.
-    pub fn try_new(array: Array, options: VortexMemTableOptions) -> VortexResult<Self> {
+    pub fn new(array: Array, options: VortexMemTableOptions) -> Self {
         let arrow_schema = infer_schema(array.dtype());
         let schema_ref = SchemaRef::new(arrow_schema);
 
-        Ok(Self {
+        Self {
             array,
             schema_ref,
             options,
-        })
+        }
     }
 }
 
