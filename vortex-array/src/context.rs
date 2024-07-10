@@ -40,21 +40,20 @@ impl Context {
 impl Default for Context {
     fn default() -> Self {
         Self {
-            encodings: HashMap::from_iter(
-                [
-                    &BoolEncoding as EncodingRef,
-                    &ChunkedEncoding,
-                    &ConstantEncoding,
-                    &ExtensionEncoding,
-                    &PrimitiveEncoding,
-                    &SparseEncoding,
-                    &StructEncoding,
-                    &VarBinEncoding,
-                    &VarBinViewEncoding,
-                ]
-                .into_iter()
-                .map(|e| (e.id().code(), e)),
-            ),
+            encodings: [
+                &BoolEncoding as EncodingRef,
+                &ChunkedEncoding,
+                &ConstantEncoding,
+                &ExtensionEncoding,
+                &PrimitiveEncoding,
+                &SparseEncoding,
+                &StructEncoding,
+                &VarBinEncoding,
+                &VarBinViewEncoding,
+            ]
+            .into_iter()
+            .map(|e| (e.id().code(), e))
+            .collect(),
         }
     }
 }

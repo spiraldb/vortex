@@ -7,6 +7,13 @@ use crate::canonical::{Canonical, IntoCanonical};
 use crate::ArrayDef;
 use crate::{Array, ArrayTrait};
 
+// TODO(robert): Outline how you create a well known encoding id
+/// EncodingId is a unique name and numerical code of the array
+///
+/// 0x0000 - reserved marker encoding
+/// 0x0001 - 0x04FF - vortex internal encodings
+/// 0x0401 - 0x7FFF - well known extension encodings
+/// 0x8000 - 0xFFFF - custom extension encodings
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct EncodingId(&'static str, u16);
 
@@ -22,7 +29,7 @@ impl EncodingId {
 
 impl Display for EncodingId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(self.0, f)
+        write!(f, "{}({:#04x})", self.0, self.1)
     }
 }
 
