@@ -227,6 +227,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_take_rows() -> VortexResult<()> {
         let writer = chunked_array().await?;
 

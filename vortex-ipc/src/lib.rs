@@ -82,6 +82,7 @@ pub mod test {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_empty_index() -> VortexResult<()> {
         let data = PrimitiveArray::from((0i32..3_000_000).collect_vec());
         let buffer = write_ipc(data).await;
@@ -103,6 +104,7 @@ pub mod test {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_write_read_chunked() -> VortexResult<()> {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,

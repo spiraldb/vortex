@@ -111,6 +111,7 @@ mod test {
     use crate::RoaringIntArray;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     pub fn test_scalar_at() -> VortexResult<()> {
         let ints = PrimitiveArray::from(vec![2u32, 12, 22, 32]).into_array();
         let array = RoaringIntArray::encode(ints)?;

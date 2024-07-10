@@ -287,6 +287,7 @@ mod test {
     use crate::{MessageReader, MessageWriter};
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn read_write_page() {
         let write = Vec::new();
         let mut writer = MessageWriter::new(write);

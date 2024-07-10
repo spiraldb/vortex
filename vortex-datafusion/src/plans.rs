@@ -414,6 +414,7 @@ mod test {
     use crate::plans::{RowIndicesStream, ROW_SELECTOR_SCHEMA_REF};
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_filtering_stream() {
         let chunk = StructArray::try_new(
             Arc::new([FieldName::from("a"), FieldName::from("b")]),
