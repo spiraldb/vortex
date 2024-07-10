@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
-use mimalloc::MiMalloc;
-use object_store::aws::AmazonS3Builder;
-use object_store::local::LocalFileSystem;
-use tokio::runtime::Runtime;
-
 use bench_vortex::reader::{
     take_parquet, take_parquet_object_store, take_vortex_object_store, take_vortex_tokio,
 };
 use bench_vortex::taxi_data::{taxi_data_parquet, taxi_data_vortex};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use mimalloc::MiMalloc;
+use object_store::aws::AmazonS3Builder;
+use object_store::local::LocalFileSystem;
+use tokio::runtime::Runtime;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
