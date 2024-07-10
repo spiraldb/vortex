@@ -16,9 +16,9 @@ use bytes::{Bytes, BytesMut};
 use futures::stream;
 use itertools::Itertools;
 use log::info;
-use object_store::local::LocalFileSystem;
 use object_store::ObjectStore;
 use parquet::arrow::arrow_reader::{ArrowReaderOptions, ParquetRecordBatchReaderBuilder};
+use parquet::arrow::async_reader::{AsyncFileReader, ParquetObjectReader};
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use serde::{Deserialize, Serialize};
 use stream::StreamExt;
@@ -167,12 +167,14 @@ pub async fn read_vortex_footer_format<R: VortexReadAt>(
     )
 }
 
-pub async fn take_vortex_object_store(path: &Path, indices: &[u64]) -> VortexResult<Array> {
-    let fs = LocalFileSystem::new();
-    let ob_path = object_store::path::Path::from_filesystem_path(path).unwrap();
-    let head = fs.head(&ob_path).await?;
+pub async fn take_vortex_object_store<O: ObjectStore>(
+    fs: &O,
+    path: &object_store::path::Path,
+    indices: &[u64],
+) -> VortexResult<Array> {
+    let head = fs.head(path).await?;
     let indices_array = indices.to_vec().into_array();
-    let taken = read_vortex_footer_format(fs.vortex_reader(&ob_path), head.size as u64)
+    let taken = read_vortex_footer_format(fs.vortex_reader(path), head.size as u64)
         .await?
         .take_rows(&indices_array)
         .await?;
@@ -191,14 +193,31 @@ pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Arr
     Ok(taken.into_canonical()?.into_array())
 }
 
+pub async fn take_parquet_object_store(
+    fs: Arc<dyn ObjectStore>,
+    path: &object_store::path::Path,
+    indices: &[u64],
+) -> VortexResult<RecordBatch> {
+    let meta = fs.head(path).await?;
+    let reader = ParquetObjectReader::new(fs, meta);
+    parquet_take_from_stream(reader, indices).await
+}
+
 pub async fn take_parquet(path: &Path, indices: &[u64]) -> VortexResult<RecordBatch> {
     let file = tokio::fs::File::open(path).await?;
+    parquet_take_from_stream(file, indices).await
+}
 
+async fn parquet_take_from_stream<T: AsyncFileReader + Unpin + Send + 'static>(
+    async_reader: T,
+    indices: &[u64],
+) -> VortexResult<RecordBatch> {
     let builder = ParquetRecordBatchStreamBuilder::new_with_options(
-        file,
+        async_reader,
         ArrowReaderOptions::new().with_page_index(true),
     )
     .await?;
+
     // We figure out which row groups we need to read and a selection filter for each of them.
     let mut row_groups = HashMap::new();
     let mut row_group_offsets = vec![0];
