@@ -13,6 +13,7 @@ rust-version.workspace = true
 [dependencies]
 anyhow = "1.0.86"
 clap = { version = "4.5.9", features = ["derive"] }
+itertools.workspace = true
 xshell = "0.2.6"
 
 
