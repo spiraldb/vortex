@@ -46,6 +46,7 @@ pub mod parquet_utils;
 pub mod public_bi_data;
 pub mod reader;
 pub mod taxi_data;
+pub mod tpch;
 pub mod vortex_utils;
 
 lazy_static! {

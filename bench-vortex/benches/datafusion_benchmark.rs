@@ -161,13 +161,10 @@ fn bench_vortex<M: Measurement>(
     compress: bool,
 ) {
     let vortex_dataset = toy_dataset_vortex(compress);
-    let vortex_table = Arc::new(
-        VortexMemTable::try_new(
-            vortex_dataset,
-            VortexMemTableOptions::default().with_disable_pushdown(disable_pushdown),
-        )
-        .unwrap(),
-    );
+    let vortex_table = Arc::new(VortexMemTable::new(
+        vortex_dataset,
+        VortexMemTableOptions::default().with_disable_pushdown(disable_pushdown),
+    ));
 
     measure_provider(&mut group, session, vortex_table);
 }

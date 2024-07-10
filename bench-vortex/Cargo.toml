@@ -15,6 +15,7 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
+anyhow = "1.0"
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 arrow-select = { workspace = true }
@@ -51,6 +52,7 @@ vortex-ipc = { path = "../vortex-ipc", features = ["object_store"] }
 vortex-roaring = { path = "../encodings/roaring" }
 vortex-runend = { path = "../encodings/runend" }
 vortex-sampling-compressor = { path = "../vortex-sampling-compressor" }
+xshell = "0.2.6"
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["html_reports", "async_tokio"] }
