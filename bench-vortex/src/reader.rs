@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
+use arrow_array::types::Int64Type;
 use arrow_array::{
     ArrayRef as ArrowArrayRef, PrimitiveArray as ArrowPrimitiveArray, RecordBatch,
     RecordBatchReader,
 };
-use arrow_array::types::Int64Type;
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
 use bytes::{Bytes, BytesMut};
@@ -22,21 +22,20 @@ use parquet::arrow::async_reader::{AsyncFileReader, ParquetObjectReader};
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use serde::{Deserialize, Serialize};
 use stream::StreamExt;
-
-use vortex::{Array, IntoArray, IntoCanonical, ToArrayData};
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
 use vortex::stream::ArrayStreamExt;
+use vortex::{Array, IntoArray, IntoCanonical, ToArrayData};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_ipc::chunked_reader::ChunkedArrayReader;
-use vortex_ipc::io::{TokioAdapter, VortexReadAt, VortexWrite};
 use vortex_ipc::io::ObjectStoreExt;
-use vortex_ipc::MessageReader;
+use vortex_ipc::io::{TokioAdapter, VortexReadAt, VortexWrite};
 use vortex_ipc::writer::ArrayWriter;
+use vortex_ipc::MessageReader;
 use vortex_sampling_compressor::SamplingCompressor;
 
 use crate::{COMPRESSORS, CTX};

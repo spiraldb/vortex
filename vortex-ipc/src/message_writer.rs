@@ -2,16 +2,15 @@ use std::io;
 
 use flatbuffers::FlatBufferBuilder;
 use itertools::Itertools;
-
 use vortex::Array;
-use vortex_buffer::Buffer;
 use vortex_buffer::io_buf::IoBuf;
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_flatbuffers::WriteFlatBuffer;
 
-use crate::ALIGNMENT;
 use crate::io::VortexWrite;
 use crate::messages::{IPCChunk, IPCMessage, IPCPage, IPCSchema};
+use crate::ALIGNMENT;
 
 const ZEROS: [u8; 512] = [0u8; 512];
 
