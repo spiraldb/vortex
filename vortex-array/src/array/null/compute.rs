@@ -44,7 +44,7 @@ impl TakeFn for NullArray {
 
         // Enforce all indices are valid
         match_each_integer_ptype!(indices.ptype(), |$T| {
-            for index in indices.scalar_buffer::<$T>().iter() {
+            for index in indices.maybe_null_slice::<$T>() {
                 assert!((*index as usize) < self.len(), "cannot take past end of the array");
             }
         });

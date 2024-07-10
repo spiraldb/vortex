@@ -217,8 +217,8 @@ mod test {
 
         let struct_b = struct_a.project(&[2usize, 0]).unwrap();
         assert_eq!(
-            struct_b.names().to_vec(),
-            vec![FieldName::from("zs"), FieldName::from("xs")],
+            struct_b.names().as_ref(),
+            [FieldName::from("zs"), FieldName::from("xs")],
         );
 
         assert_eq!(struct_b.len(), 5);
@@ -230,9 +230,6 @@ mod test {
         );
 
         let prims = PrimitiveArray::try_from(struct_b.field(1).unwrap()).unwrap();
-        assert_eq!(
-            prims.scalar_buffer::<i64>().to_vec(),
-            vec![0i64, 1, 2, 3, 4]
-        );
+        assert_eq!(prims.maybe_null_slice::<i64>(), [0i64, 1, 2, 3, 4]);
     }
 }
