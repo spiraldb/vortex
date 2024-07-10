@@ -14,8 +14,7 @@ use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::validity::Validity;
 use crate::{
-    Array, ArrayDType, ArrayTrait, ArrayValidity, Canonical, IntoArray, IntoArrayVariant,
-    IntoCanonical,
+    Array, ArrayDType, ArrayValidity, Canonical, IntoArray, IntoArrayVariant, IntoCanonical,
 };
 
 impl IntoCanonical for ChunkedArray {

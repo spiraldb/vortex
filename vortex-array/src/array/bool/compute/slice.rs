@@ -20,7 +20,6 @@ mod tests {
     use super::*;
     use crate::compute::slice::slice;
     use crate::validity::ArrayValidity;
-    use crate::ArrayTrait;
     use crate::{compute::unary::scalar_at::scalar_at, AsArray};
 
     #[test]

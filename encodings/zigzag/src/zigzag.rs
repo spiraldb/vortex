@@ -28,8 +28,10 @@ impl ZigZagArray {
         let dtype = DType::from(PType::try_from(&encoded_dtype).expect("ptype").to_signed())
             .with_nullability(encoded_dtype.nullability());
 
+        let len = encoded.len();
         let children = [encoded];
-        Self::try_from_parts(dtype, ZigZagMetadata, children.into(), StatsSet::new())
+
+        Self::try_from_parts(dtype, len, ZigZagMetadata, children.into(), StatsSet::new())
     }
 
     pub fn encode(array: &Array) -> VortexResult<Array> {
@@ -43,10 +45,12 @@ impl ZigZagArray {
         let ptype = PType::try_from(self.dtype()).expect("ptype");
         let encoded = DType::from(ptype.to_unsigned()).with_nullability(self.dtype().nullability());
         self.array()
-            .child(0, &encoded)
+            .child(0, &encoded, self.len())
             .expect("Missing encoded array")
     }
 }
+
+impl ArrayTrait for ZigZagArray {}
 
 impl ArrayValidity for ZigZagArray {
     fn is_valid(&self, index: usize) -> bool {
@@ -69,11 +73,5 @@ impl ArrayStatisticsCompute for ZigZagArray {}
 impl IntoCanonical for ZigZagArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
         todo!("ZigZagArray::flatten")
-    }
-}
-
-impl ArrayTrait for ZigZagArray {
-    fn len(&self) -> usize {
-        self.encoded().len()
     }
 }

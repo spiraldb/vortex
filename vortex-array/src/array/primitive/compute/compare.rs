@@ -8,7 +8,7 @@ use vortex_expr::Operator;
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::compare::CompareFn;
-use crate::{Array, ArrayTrait, IntoArray, IntoArrayVariant};
+use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for PrimitiveArray {
     fn compare(&self, other: &Array, predicate: Operator) -> VortexResult<Array> {

@@ -31,7 +31,7 @@ mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::slice::slice;
     use vortex::compute::unary::scalar_at::scalar_at;
-    use vortex::{ArrayTrait, IntoArray};
+    use vortex::IntoArray;
 
     use crate::BitPackedArray;
 

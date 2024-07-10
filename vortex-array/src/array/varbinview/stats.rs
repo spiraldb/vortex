@@ -4,7 +4,7 @@ use crate::accessor::ArrayAccessor;
 use crate::array::varbin::compute_stats;
 use crate::array::varbinview::VarBinViewArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
-use crate::{ArrayDType, ArrayTrait};
+use crate::ArrayDType;
 
 impl ArrayStatisticsCompute for VarBinViewArray {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {

@@ -8,7 +8,7 @@ use vortex_expr::{Disjunction, Predicate, Value};
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::filter_indices::FilterIndicesFn;
-use crate::{Array, ArrayTrait, IntoArray};
+use crate::{Array, IntoArray};
 
 impl FilterIndicesFn for PrimitiveArray {
     fn filter_indices(&self, disjunction: &Disjunction) -> VortexResult<Array> {

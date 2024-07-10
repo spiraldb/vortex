@@ -6,7 +6,7 @@ use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::validity::Validity;
-use crate::{ArrayDType, ArrayTrait};
+use crate::ArrayDType;
 use crate::{Canonical, IntoCanonical};
 
 impl IntoCanonical for ConstantArray {

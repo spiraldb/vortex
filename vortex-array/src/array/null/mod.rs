@@ -18,6 +18,7 @@ impl NullArray {
     pub fn new(len: usize) -> Self {
         Self::try_from_parts(
             DType::Null,
+            len,
             NullMetadata { len },
             Arc::new([]),
             StatsSet::nulls(len, &DType::Null),
@@ -55,10 +56,6 @@ impl AcceptArrayVisitor for NullArray {
 }
 
 impl ArrayTrait for NullArray {
-    fn len(&self) -> usize {
-        self.metadata().len
-    }
-
     fn nbytes(&self) -> usize {
         0
     }

@@ -27,6 +27,7 @@ impl_encoding!("vortex.varbin", 4u16, VarBin);
 pub struct VarBinMetadata {
     validity: ValidityMetadata,
     offsets_dtype: DType,
+    bytes_len: usize,
 }
 
 impl VarBinArray {
@@ -49,9 +50,12 @@ impl VarBinArray {
             vortex_bail!("incorrect validity {:?}", validity);
         }
 
+        let length = offsets.len() - 1;
+
         let metadata = VarBinMetadata {
             validity: validity.to_metadata(offsets.len() - 1)?,
             offsets_dtype: offsets.dtype().clone(),
+            bytes_len: bytes.len(),
         };
 
         let mut children = Vec::with_capacity(3);
@@ -61,13 +65,13 @@ impl VarBinArray {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
+        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
     }
 
     #[inline]
     pub fn offsets(&self) -> Array {
         self.array()
-            .child(0, &self.metadata().offsets_dtype)
+            .child(0, &self.metadata().offsets_dtype, self.len() + 1)
             .expect("missing offsets")
     }
 
@@ -82,13 +86,15 @@ impl VarBinArray {
 
     #[inline]
     pub fn bytes(&self) -> Array {
-        self.array().child(1, &DType::BYTES).expect("missing bytes")
+        self.array()
+            .child(1, &DType::BYTES, self.metadata().bytes_len)
+            .expect("missing bytes")
     }
 
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(2, &Validity::DTYPE))
+            .to_validity(self.array().child(2, &Validity::DTYPE, self.len()))
     }
 
     pub fn sliced_bytes(&self) -> VortexResult<Array> {
@@ -156,6 +162,8 @@ impl VarBinArray {
         Ok(sliced.into_primitive()?.buffer().clone())
     }
 }
+
+impl ArrayTrait for VarBinArray {}
 
 impl From<Vec<&[u8]>> for VarBinArray {
     fn from(value: Vec<&[u8]>) -> Self {

@@ -62,7 +62,7 @@ impl Validity {
             Self::AllInvalid => Ok(ValidityMetadata::AllInvalid),
             Self::Array(a) => {
                 // We force the caller to validate the length here.
-                let validity_len = a.with_dyn(|a| a.len());
+                let validity_len = a.len();
                 if validity_len != length {
                     vortex_bail!(
                         "Validity array length {} doesn't match array length {}",

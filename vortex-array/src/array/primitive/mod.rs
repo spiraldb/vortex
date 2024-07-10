@@ -31,6 +31,7 @@ impl PrimitiveArray {
         Ok(Self {
             typed: TypedArray::try_from_parts(
                 DType::from(T::PTYPE).with_nullability(validity.nullability()),
+                buffer.len(),
                 PrimitiveMetadata {
                     validity: validity.to_metadata(buffer.len())?,
                 },
@@ -58,7 +59,7 @@ impl PrimitiveArray {
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(0, &Validity::DTYPE))
+            .to_validity(self.array().child(0, &Validity::DTYPE, self.len()))
     }
 
     pub fn ptype(&self) -> PType {
@@ -165,6 +166,8 @@ impl PrimitiveArray {
     }
 }
 
+impl ArrayTrait for PrimitiveArray {}
+
 impl<T: NativePType> From<Vec<T>> for PrimitiveArray {
     fn from(values: Vec<T>) -> Self {
         Self::from_vec(values, Validity::NonNullable)
@@ -180,12 +183,6 @@ impl<T: NativePType> IntoArray for Vec<T> {
 impl IntoCanonical for PrimitiveArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
         Ok(Canonical::Primitive(self))
-    }
-}
-
-impl ArrayTrait for PrimitiveArray {
-    fn len(&self) -> usize {
-        self.buffer().len() / self.ptype().byte_width()
     }
 }
 

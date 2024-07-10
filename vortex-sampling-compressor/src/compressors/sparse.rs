@@ -1,5 +1,5 @@
 use vortex::array::sparse::{Sparse, SparseArray};
-use vortex::{Array, ArrayDef, ArrayTrait, IntoArray};
+use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};

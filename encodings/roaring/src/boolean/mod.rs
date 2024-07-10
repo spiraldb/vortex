@@ -31,6 +31,7 @@ impl RoaringBoolArray {
             Ok(Self {
                 typed: TypedArray::try_from_parts(
                     DType::Bool(NonNullable),
+                    length,
                     RoaringBoolMetadata { length },
                     Some(Buffer::from(bitmap.serialize::<Portable>())),
                     vec![].into(),
@@ -58,6 +59,9 @@ impl RoaringBoolArray {
         }
     }
 }
+
+impl ArrayTrait for RoaringBoolArray {}
+
 impl AcceptArrayVisitor for RoaringBoolArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         // TODO(ngates): should we store a buffer in memory? Or delay serialization?
@@ -65,12 +69,6 @@ impl AcceptArrayVisitor for RoaringBoolArray {
         //  the wire without copying into FlatBuffers. But if we need to allocate to serialize
         //  the bitmap anyway, then may as well shove it into metadata.
         todo!()
-    }
-}
-
-impl ArrayTrait for RoaringBoolArray {
-    fn len(&self) -> usize {
-        self.metadata().length
     }
 }
 

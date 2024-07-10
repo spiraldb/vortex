@@ -3,7 +3,6 @@ use vortex_error::VortexResult;
 use crate::array::varbin::VarBinArray;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::ArrayTrait;
 
 impl ArrayValidity for VarBinArray {
     fn is_valid(&self, index: usize) -> bool {
@@ -20,11 +19,5 @@ impl AcceptArrayVisitor for VarBinArray {
         visitor.visit_child("offsets", &self.offsets())?;
         visitor.visit_child("bytes", &self.bytes())?;
         visitor.visit_validity(&self.validity())
-    }
-}
-
-impl ArrayTrait for VarBinArray {
-    fn len(&self) -> usize {
-        self.offsets().len() - 1
     }
 }

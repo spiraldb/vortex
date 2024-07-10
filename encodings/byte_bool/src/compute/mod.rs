@@ -13,7 +13,7 @@ use vortex::{
     encoding::ArrayEncodingRef,
     stats::StatsSet,
     validity::ArrayValidity,
-    ArrayDType, ArrayData, ArrayTrait, IntoArray,
+    ArrayDType, ArrayData, IntoArray,
 };
 use vortex::{Array, IntoCanonical};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
@@ -73,6 +73,7 @@ impl SliceFn for ByteBoolArray {
         ArrayData::try_new(
             self.encoding(),
             self.dtype().clone(),
+            length,
             slice_metadata,
             Some(self.buffer().slice(start..stop)),
             validity.into_array().into_iter().collect::<Vec<_>>().into(),

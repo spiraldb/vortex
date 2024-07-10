@@ -3,7 +3,7 @@ use num_traits::{PrimInt, WrappingAdd, WrappingSub};
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::{trailing_zeros, ArrayStatistics, Stat};
-use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;

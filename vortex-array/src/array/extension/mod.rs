@@ -19,6 +19,7 @@ impl ExtensionArray {
     pub fn new(ext_dtype: ExtDType, storage: Array) -> Self {
         Self::try_from_parts(
             DType::Extension(ext_dtype, storage.dtype().nullability()),
+            storage.len(),
             ExtensionMetadata {
                 storage_dtype: storage.dtype().clone(),
             },
@@ -30,7 +31,7 @@ impl ExtensionArray {
 
     pub fn storage(&self) -> Array {
         self.array()
-            .child(0, &self.metadata().storage_dtype)
+            .child(0, &self.metadata().storage_dtype, self.len())
             .expect("Missing storage array")
     }
 
@@ -48,6 +49,8 @@ impl ExtensionArray {
         ext
     }
 }
+
+impl ArrayTrait for ExtensionArray {}
 
 impl IntoCanonical for ExtensionArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
@@ -73,10 +76,4 @@ impl AcceptArrayVisitor for ExtensionArray {
 
 impl ArrayStatisticsCompute for ExtensionArray {
     // TODO(ngates): pass through stats to the underlying and cast the scalars.
-}
-
-impl ArrayTrait for ExtensionArray {
-    fn len(&self) -> usize {
-        self.storage().len()
-    }
 }

@@ -108,7 +108,7 @@ impl_encoding!("vortex.varbinview", 5u16, VarBinView);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VarBinViewMetadata {
     validity: ValidityMetadata,
-    n_children: usize,
+    data_lens: Vec<usize>,
 }
 
 impl VarBinViewArray {
@@ -136,9 +136,11 @@ impl VarBinViewArray {
             vortex_bail!("incorrect validity {:?}", validity);
         }
 
+        let length = views.len() / VIEW_SIZE;
+
         let metadata = VarBinViewMetadata {
             validity: validity.to_metadata(views.len() / VIEW_SIZE)?,
-            n_children: data.len(),
+            data_lens: data.iter().map(|a| a.len()).collect_vec(),
         };
 
         let mut children = Vec::with_capacity(data.len() + 2);
@@ -148,7 +150,7 @@ impl VarBinViewArray {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
+        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
     }
 
     fn view_slice(&self) -> &[BinaryView] {
@@ -169,21 +171,24 @@ impl VarBinViewArray {
 
     #[inline]
     pub fn views(&self) -> Array {
-        self.array().child(0, &DType::BYTES).expect("missing views")
+        self.array()
+            .child(0, &DType::BYTES, self.len() * VIEW_SIZE)
+            .expect("missing views")
     }
 
     #[inline]
     pub fn bytes(&self, idx: usize) -> Array {
         self.array()
-            .child(idx + 1, &DType::BYTES)
+            .child(idx + 1, &DType::BYTES, self.metadata().data_lens[idx])
             .expect("Missing data buffer")
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata().validity.to_validity(
-            self.array()
-                .child(self.metadata().n_children + 1, &Validity::DTYPE),
-        )
+        self.metadata().validity.to_validity(self.array().child(
+            self.metadata().data_lens.len() + 1,
+            &Validity::DTYPE,
+            self.len(),
+        ))
     }
 
     pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
@@ -225,6 +230,8 @@ impl VarBinViewArray {
     }
 }
 
+impl ArrayTrait for VarBinViewArray {}
+
 impl IntoCanonical for VarBinViewArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
         let nullable = self.dtype().is_nullable();
@@ -251,7 +258,7 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
         .to_null_buffer()
         .expect("null buffer");
 
-    let data = (0..var_bin_view.metadata().n_children)
+    let data = (0..var_bin_view.metadata().data_lens.len())
         .map(|i| {
             var_bin_view
                 .bytes(i)
@@ -299,16 +306,10 @@ impl ArrayValidity for VarBinViewArray {
 impl AcceptArrayVisitor for VarBinViewArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("views", &self.views())?;
-        for i in 0..self.metadata().n_children {
+        for i in 0..self.metadata().data_lens.len() {
             visitor.visit_child(format!("bytes_{i}").as_str(), &self.bytes(i))?;
         }
         visitor.visit_validity(&self.validity())
-    }
-}
-
-impl ArrayTrait for VarBinViewArray {
-    fn len(&self) -> usize {
-        self.view_slice().len()
     }
 }
 
@@ -367,7 +368,7 @@ mod test {
     use crate::array::varbinview::VarBinViewArray;
     use crate::compute::slice::slice;
     use crate::compute::unary::scalar_at::scalar_at;
-    use crate::{ArrayTrait, Canonical, IntoArray, IntoCanonical};
+    use crate::{Canonical, IntoArray, IntoCanonical};
 
     #[test]
     pub fn varbin_view() {

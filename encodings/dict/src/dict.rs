@@ -14,6 +14,7 @@ impl_encoding!("vortex.dict", 20u16, Dict);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DictMetadata {
     codes_dtype: DType,
+    values_len: usize,
 }
 
 impl DictArray {
@@ -23,8 +24,10 @@ impl DictArray {
         }
         Self::try_from_parts(
             values.dtype().clone(),
+            codes.len(),
             DictMetadata {
                 codes_dtype: codes.dtype().clone(),
+                values_len: values.len(),
             },
             [values, codes].into(),
             StatsSet::new(),
@@ -33,16 +36,20 @@ impl DictArray {
 
     #[inline]
     pub fn values(&self) -> Array {
-        self.array().child(0, self.dtype()).expect("Missing values")
+        self.array()
+            .child(0, self.dtype(), self.metadata().values_len)
+            .expect("Missing values")
     }
 
     #[inline]
     pub fn codes(&self) -> Array {
         self.array()
-            .child(1, &self.metadata().codes_dtype)
+            .child(1, &self.metadata().codes_dtype, self.len())
             .expect("Missing codes")
     }
 }
+
+impl ArrayTrait for DictArray {}
 
 impl IntoCanonical for DictArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
@@ -87,11 +94,5 @@ impl AcceptArrayVisitor for DictArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("values", &self.values())?;
         visitor.visit_child("codes", &self.codes())
-    }
-}
-
-impl ArrayTrait for DictArray {
-    fn len(&self) -> usize {
-        self.codes().len()
     }
 }

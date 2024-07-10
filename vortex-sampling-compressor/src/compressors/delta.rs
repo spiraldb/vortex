@@ -47,7 +47,7 @@ impl EncodingCompressor for DeltaCompressor {
             .compress(deltas.array(), like.as_ref().and_then(|l| l.child(1)))?;
 
         Ok(CompressedArray::new(
-            DeltaArray::try_new(array.len(), bases.array, deltas.array, validity)?.into_array(),
+            DeltaArray::try_new(bases.array, deltas.array, validity)?.into_array(),
             Some(CompressionTree::new(self, vec![bases.path, deltas.path])),
         ))
     }

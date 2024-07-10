@@ -36,7 +36,7 @@ impl SliceFn for VarBinViewArray {
             slice(&self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?
                 .into_array_data()
                 .into_array(),
-            (0..self.metadata().n_children)
+            (0..self.metadata().data_lens.len())
                 .map(|i| self.bytes(i))
                 .collect::<Vec<_>>(),
             self.dtype().clone(),

@@ -26,7 +26,9 @@ mod stats;
 impl_encoding!("vortex.chunked", 11u16, Chunked);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ChunkedMetadata;
+pub struct ChunkedMetadata {
+    num_chunks: usize,
+}
 
 impl ChunkedArray {
     const ENDS_DTYPE: DType = DType::Primitive(PType::U64, Nullability::NonNullable);
@@ -38,38 +40,48 @@ impl ChunkedArray {
             }
         }
 
-        let chunk_ends = PrimitiveArray::from_vec(
-            [0u64]
-                .into_iter()
-                .chain(chunks.iter().map(|c| c.len() as u64))
-                .scan(0, |acc, c| {
-                    *acc += c;
-                    Some(*acc)
-                })
-                .collect_vec(),
-            NonNullable,
-        );
+        let chunk_ends = [0u64]
+            .into_iter()
+            .chain(chunks.iter().map(|c| c.len() as u64))
+            .scan(0, |acc, c| {
+                *acc += c;
+                Some(*acc)
+            })
+            .collect_vec();
 
-        let mut children = vec![chunk_ends.into_array()];
+        let num_chunks = chunk_ends.len() - 1;
+        let length = (*chunk_ends.last().unwrap()) as usize;
+
+        let mut children = vec![PrimitiveArray::from_vec(chunk_ends, NonNullable).into_array()];
         children.extend(chunks);
 
-        Self::try_from_parts(dtype, ChunkedMetadata, children.into(), StatsSet::new())
+        Self::try_from_parts(
+            dtype,
+            length,
+            ChunkedMetadata { num_chunks },
+            children.into(),
+            StatsSet::new(),
+        )
     }
 
     #[inline]
     pub fn chunk(&self, idx: usize) -> Option<Array> {
+        let chunk_start = usize::try_from(&scalar_at(&self.chunk_ends(), idx).unwrap()).unwrap();
+        let chunk_end = usize::try_from(&scalar_at(&self.chunk_ends(), idx + 1).unwrap()).unwrap();
+
         // Offset the index since chunk_ends is child 0.
-        self.array().child(idx + 1, self.array().dtype())
+        self.array()
+            .child(idx + 1, self.array().dtype(), chunk_end - chunk_start)
     }
 
     pub fn nchunks(&self) -> usize {
-        self.chunk_ends().len() - 1
+        self.metadata().num_chunks
     }
 
     #[inline]
     pub fn chunk_ends(&self) -> Array {
         self.array()
-            .child(0, &Self::ENDS_DTYPE)
+            .child(0, &Self::ENDS_DTYPE, self.nchunks() + 1)
             .expect("missing chunk ends")
     }
 
@@ -101,6 +113,8 @@ impl ChunkedArray {
     }
 }
 
+impl ArrayTrait for ChunkedArray {}
+
 impl FromIterator<Array> for ChunkedArray {
     fn from_iter<T: IntoIterator<Item = Array>>(iter: T) -> Self {
         let chunks: Vec<Array> = iter.into_iter().collect();
@@ -119,12 +133,6 @@ impl AcceptArrayVisitor for ChunkedArray {
             visitor.visit_child(format!("[{}]", idx).as_str(), &chunk)?;
         }
         Ok(())
-    }
-}
-
-impl ArrayTrait for ChunkedArray {
-    fn len(&self) -> usize {
-        usize::try_from(&scalar_at(&self.chunk_ends(), self.nchunks()).unwrap()).unwrap()
     }
 }
 

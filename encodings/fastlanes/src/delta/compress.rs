@@ -186,7 +186,6 @@ mod test {
         let (bases, deltas) = delta_compress(&PrimitiveArray::from(input.clone())).unwrap();
 
         let delta = DeltaArray::try_new(
-            input.len(),
             bases.into_array(),
             deltas.into_array(),
             Validity::NonNullable,

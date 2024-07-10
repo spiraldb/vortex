@@ -20,12 +20,7 @@ pub struct DeltaMetadata {
 }
 
 impl DeltaArray {
-    pub fn try_new(
-        len: usize,
-        bases: Array,
-        deltas: Array,
-        validity: Validity,
-    ) -> VortexResult<Self> {
+    pub fn try_new(bases: Array, deltas: Array, validity: Validity) -> VortexResult<Self> {
         if bases.dtype() != deltas.dtype() {
             vortex_bail!(
                 "DeltaArray: bases and deltas must have the same dtype, got {:?} and {:?}",
@@ -33,15 +28,9 @@ impl DeltaArray {
                 deltas.dtype()
             );
         }
-        if deltas.len() != len {
-            vortex_bail!(
-                "DeltaArray: provided deltas array of len {} does not match array len {}",
-                deltas.len(),
-                len
-            );
-        }
 
         let dtype = bases.dtype().clone();
+        let len = deltas.len();
         let metadata = DeltaMetadata {
             validity: validity.to_metadata(len)?,
             len,
@@ -52,33 +41,32 @@ impl DeltaArray {
             children.push(varray)
         }
 
-        let delta = Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())?;
-
-        let expected_bases_len = {
-            let num_chunks = len / 1024;
-            let remainder_base_size = if len % 1024 > 0 { 1 } else { 0 };
-            num_chunks * delta.lanes() + remainder_base_size
-        };
-        if delta.bases().len() != expected_bases_len {
+        let delta = Self::try_from_parts(dtype, len, metadata, children.into(), StatsSet::new())?;
+        if delta.bases().len() != delta.bases_len() {
             vortex_bail!(
                 "DeltaArray: bases.len() ({}) != expected_bases_len ({}), based on len ({}) and lane count ({})",
                 delta.bases().len(),
-                expected_bases_len,
+                delta.bases_len(),
                 len,
                 delta.lanes()
             );
         }
+
         Ok(delta)
     }
 
     #[inline]
     pub fn bases(&self) -> Array {
-        self.array().child(0, self.dtype()).expect("Missing bases")
+        self.array()
+            .child(0, self.dtype(), self.bases_len())
+            .expect("Missing bases")
     }
 
     #[inline]
     pub fn deltas(&self) -> Array {
-        self.array().child(1, self.dtype()).expect("Missing deltas")
+        self.array()
+            .child(1, self.dtype(), self.len())
+            .expect("Missing deltas")
     }
 
     #[inline]
@@ -92,9 +80,17 @@ impl DeltaArray {
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(2, &Validity::DTYPE))
+            .to_validity(self.array().child(2, &Validity::DTYPE, self.len()))
+    }
+
+    fn bases_len(&self) -> usize {
+        let num_chunks = self.len() / 1024;
+        let remainder_base_size = if self.len() % 1024 > 0 { 1 } else { 0 };
+        num_chunks * self.lanes() + remainder_base_size
     }
 }
+
+impl ArrayTrait for DeltaArray {}
 
 impl IntoCanonical for DeltaArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
@@ -120,9 +116,3 @@ impl AcceptArrayVisitor for DeltaArray {
 }
 
 impl ArrayStatisticsCompute for DeltaArray {}
-
-impl ArrayTrait for DeltaArray {
-    fn len(&self) -> usize {
-        self.metadata().len
-    }
-}

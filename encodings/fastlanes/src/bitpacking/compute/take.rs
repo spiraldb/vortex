@@ -7,7 +7,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
 use vortex::compute::slice::slice;
 use vortex::compute::take::{take, TakeFn};
-use vortex::{Array, ArrayDType, ArrayTrait, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };

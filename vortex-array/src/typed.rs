@@ -16,6 +16,7 @@ pub struct TypedArray<D: ArrayDef> {
 impl<D: ArrayDef> TypedArray<D> {
     pub fn try_from_parts(
         dtype: DType,
+        len: usize,
         metadata: D::Metadata,
         buffer: Option<Buffer>,
         children: Arc<[Array]>,
@@ -24,6 +25,7 @@ impl<D: ArrayDef> TypedArray<D> {
         let array = Array::Data(ArrayData::try_new(
             D::ENCODING,
             dtype,
+            len,
             Arc::new(metadata.clone()),
             buffer,
             children,

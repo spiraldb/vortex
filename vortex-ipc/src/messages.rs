@@ -70,6 +70,8 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
         let array_data = self.0;
         let array = Some(IPCArray(array_data).write_flatbuffer(fbb));
 
+        let length = array_data.len() as u64;
+
         // Walk the ColumnData depth-first to compute the buffer offsets.
         let mut buffers = vec![];
         let mut offset = 0;
@@ -90,6 +92,7 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
             fbb,
             &fb::ChunkArgs {
                 array,
+                length,
                 buffers,
                 buffer_size: offset as u64,
             },
