@@ -1,21 +1,28 @@
-use std::env;
 use std::sync::Arc;
+
+use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use mimalloc::MiMalloc;
+use object_store::aws::AmazonS3Builder;
+use object_store::local::LocalFileSystem;
+use tokio::runtime::Runtime;
 
 use bench_vortex::reader::{
     take_parquet, take_parquet_object_store, take_vortex_object_store, take_vortex_tokio,
 };
 use bench_vortex::taxi_data::{taxi_data_parquet, taxi_data_vortex};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mimalloc::MiMalloc;
-use object_store::aws::AmazonS3Builder;
-use object_store::local::LocalFileSystem;
-use tokio::runtime::Runtime;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
 const INDICES: [u64; 6] = [10, 11, 12, 13, 100_000, 3_000_000];
 
+/// Benchmarks against object stores require setting
+/// * AWS_ACCESS_KEY_ID
+/// * AWS_SECRET_ACCESS_KEY
+/// * AWS_BUCKET
+/// * AWS_ENDPOINT
+///
+/// environment variables and assume files to read are already present
 fn random_access_vortex(c: &mut Criterion) {
     let mut group = c.benchmark_group("vortex");
 
@@ -37,13 +44,7 @@ fn random_access_vortex(c: &mut Criterion) {
         })
     });
 
-    let r2_fs = AmazonS3Builder::new()
-        .with_access_key_id(env::var("ACCESS_KEY_ID").unwrap())
-        .with_secret_access_key(env::var("SECRET_ACCESS_KEY").unwrap())
-        .with_endpoint("https://01e9655179bbec953276890b183039bc.r2.cloudflarestorage.com")
-        .with_bucket_name("vortex-test")
-        .build()
-        .unwrap();
+    let r2_fs = AmazonS3Builder::from_env().build().unwrap();
     let r2_path =
         object_store::path::Path::from_url_path(taxi_vortex.file_name().unwrap().to_str().unwrap())
             .unwrap();
@@ -62,16 +63,7 @@ fn random_access_parquet(c: &mut Criterion) {
     let mut group = c.benchmark_group("parquet");
     group.sample_size(10);
 
-    let r2_fs = Arc::new(
-        AmazonS3Builder::new()
-            .with_access_key_id(env::var("ACCESS_KEY_ID").unwrap())
-            .with_secret_access_key(env::var("SECRET_ACCESS_KEY").unwrap())
-            .with_endpoint("https://01e9655179bbec953276890b183039bc.r2.cloudflarestorage.com")
-            .with_bucket_name("vortex-test")
-            .build()
-            .unwrap(),
-    );
-
+    let r2_fs = Arc::new(AmazonS3Builder::from_env().build().unwrap());
     let taxi_parquet = taxi_data_parquet();
     group.bench_function("tokio local disk", |b| {
         b.to_async(Runtime::new().unwrap())
