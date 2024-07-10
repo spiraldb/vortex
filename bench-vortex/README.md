@@ -14,7 +14,7 @@ This binary compresses a file using vortex compression and writes the compressed
 This binary compresses a dataset using vortex compression and parquet, taking some stats on the compression performance of each run, and writes out these stats to a csv.
     * This csv can then be loaded into duckdb and analyzed with the included comparison.sql script.
 
-## `tpch_benchmark.rs`
+### `tpch_benchmark.rs`
 
 This binary will run TPC-H query 1 using DataFusion, comparing the Vortex in-memory provider against Arrow and CSV.
 
