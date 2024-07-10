@@ -25,7 +25,7 @@ impl ByteBoolArray {
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(0, &Validity::DTYPE))
+            .to_validity(self.array().child(0, &Validity::DTYPE, self.len()))
     }
 
     pub fn try_new(buffer: Buffer, validity: Validity) -> VortexResult<Self> {
@@ -33,6 +33,7 @@ impl ByteBoolArray {
 
         let typed = TypedArray::try_from_parts(
             DType::Bool(validity.nullability()),
+            length,
             ByteBoolMetadata {
                 validity: validity.to_metadata(length)?,
             },
@@ -70,6 +71,8 @@ impl ByteBoolArray {
     }
 }
 
+impl ArrayTrait for ByteBoolArray {}
+
 impl From<Vec<bool>> for ByteBoolArray {
     fn from(value: Vec<bool>) -> Self {
         Self::try_from_vec(value, Validity::AllValid).unwrap()
@@ -84,12 +87,6 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
         let data = value.into_iter().map(|b| b.unwrap_or_default()).collect();
 
         Self::try_from_vec(data, validity).unwrap()
-    }
-}
-
-impl ArrayTrait for ByteBoolArray {
-    fn len(&self) -> usize {
-        self.buffer().len()
     }
 }
 

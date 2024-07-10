@@ -11,7 +11,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::scalar_subtract::SubtractScalarFn;
 use crate::stats::{ArrayStatistics, Stat};
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, ArrayTrait, IntoArray};
+use crate::{Array, ArrayDType, IntoArray};
 
 impl SubtractScalarFn for PrimitiveArray {
     fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array> {

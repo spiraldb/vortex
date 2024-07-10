@@ -13,6 +13,7 @@ use crate::{Array, ArrayDType, ArrayMetadata, IntoArray, ToArray};
 pub struct ArrayData {
     encoding: EncodingRef,
     dtype: DType, // FIXME(ngates): Arc?
+    len: usize,
     metadata: Arc<dyn ArrayMetadata>,
     buffer: Option<Buffer>,
     children: Arc<[Array]>,
@@ -23,6 +24,7 @@ impl ArrayData {
     pub fn try_new(
         encoding: EncodingRef,
         dtype: DType,
+        len: usize,
         metadata: Arc<dyn ArrayMetadata>,
         buffer: Option<Buffer>,
         children: Arc<[Array]>,
@@ -31,6 +33,7 @@ impl ArrayData {
         let data = Self {
             encoding,
             dtype,
+            len,
             metadata,
             buffer,
             children,
@@ -53,6 +56,14 @@ impl ArrayData {
         &self.dtype
     }
 
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     pub fn metadata(&self) -> &Arc<dyn ArrayMetadata> {
         &self.metadata
     }
@@ -65,11 +76,12 @@ impl ArrayData {
         self.buffer
     }
 
-    pub fn child(&self, index: usize, dtype: &DType) -> Option<&Array> {
+    pub fn child(&self, index: usize, dtype: &DType, len: usize) -> Option<&Array> {
         match self.children.get(index) {
             None => None,
             Some(child) => {
                 assert_eq!(child.dtype(), dtype, "Child requested with incorrect dtype");
+                assert_eq!(child.len(), len, "Child requested with incorrect length");
                 Some(child)
             }
         }

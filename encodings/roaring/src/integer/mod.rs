@@ -19,9 +19,6 @@ impl_encoding!("vortex.roaring_int", 18u16, RoaringInt);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoaringIntMetadata {
     ptype: PType,
-    // NB: this is stored because we want to avoid the overhead of deserializing the bitmap
-    // on every len() call. It's CRITICAL that this is kept up-to date.
-    length: usize,
 }
 
 impl RoaringIntArray {
@@ -29,13 +26,12 @@ impl RoaringIntArray {
         if !ptype.is_unsigned_int() {
             vortex_bail!("RoaringInt expected unsigned int");
         }
+        let length = bitmap.statistics().cardinality as usize;
         Ok(Self {
             typed: TypedArray::try_from_parts(
                 DType::Bool(NonNullable),
-                RoaringIntMetadata {
-                    ptype,
-                    length: bitmap.statistics().cardinality as usize,
-                },
+                length,
+                RoaringIntMetadata { ptype },
                 Some(Buffer::from(bitmap.serialize::<Portable>())),
                 vec![].into(),
                 StatsSet::new(),
@@ -66,6 +62,8 @@ impl RoaringIntArray {
     }
 }
 
+impl ArrayTrait for RoaringIntArray {}
+
 impl ArrayValidity for RoaringIntArray {
     fn is_valid(&self, _index: usize) -> bool {
         true
@@ -89,12 +87,6 @@ impl AcceptArrayVisitor for RoaringIntArray {
 }
 
 impl ArrayStatisticsCompute for RoaringIntArray {}
-
-impl ArrayTrait for RoaringIntArray {
-    fn len(&self) -> usize {
-        self.metadata().length
-    }
-}
 
 #[cfg(test)]
 mod test {

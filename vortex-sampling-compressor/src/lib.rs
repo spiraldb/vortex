@@ -8,7 +8,7 @@ use vortex::array::struct_::{Struct, StructArray};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice::slice;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoCanonical};
 use vortex_error::VortexResult;
 
 use crate::compressors::alp::ALPCompressor;

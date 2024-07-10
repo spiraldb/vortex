@@ -12,7 +12,7 @@ impl ArrayAccessor<[u8]> for VarBinViewArray {
         f: F,
     ) -> VortexResult<R> {
         let views = self.view_slice();
-        let bytes: Vec<PrimitiveArray> = (0..self.metadata().n_children)
+        let bytes: Vec<PrimitiveArray> = (0..self.metadata().data_lens.len())
             .map(|i| {
                 self.bytes(i)
                     .into_canonical()

@@ -47,6 +47,7 @@ impl DateTimePartsArray {
 
         Self::try_from_parts(
             dtype,
+            length,
             DateTimePartsMetadata {
                 days_dtype: days.dtype().clone(),
                 seconds_dtype: seconds.dtype().clone(),
@@ -59,22 +60,24 @@ impl DateTimePartsArray {
 
     pub fn days(&self) -> Array {
         self.array()
-            .child(0, &self.metadata().days_dtype)
+            .child(0, &self.metadata().days_dtype, self.len())
             .expect("Missing days array")
     }
 
     pub fn seconds(&self) -> Array {
         self.array()
-            .child(1, &self.metadata().seconds_dtype)
+            .child(1, &self.metadata().seconds_dtype, self.len())
             .expect("Missing seconds array")
     }
 
     pub fn subsecond(&self) -> Array {
         self.array()
-            .child(2, &self.metadata().subseconds_dtype)
+            .child(2, &self.metadata().subseconds_dtype, self.len())
             .expect("Missing subsecond array")
     }
 }
+
+impl ArrayTrait for DateTimePartsArray {}
 
 impl IntoCanonical for DateTimePartsArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
@@ -103,9 +106,3 @@ impl AcceptArrayVisitor for DateTimePartsArray {
 }
 
 impl ArrayStatisticsCompute for DateTimePartsArray {}
-
-impl ArrayTrait for DateTimePartsArray {
-    fn len(&self) -> usize {
-        self.days().len()
-    }
-}

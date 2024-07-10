@@ -5,7 +5,7 @@ use vortex_expr::Operator;
 
 use crate::array::bool::BoolArray;
 use crate::compute::compare::CompareFn;
-use crate::{Array, ArrayTrait, IntoArray, IntoArrayVariant};
+use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for BoolArray {
     // TODO(aduffy): replace these with Arrow compute kernels.

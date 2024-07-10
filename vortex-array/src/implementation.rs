@@ -77,14 +77,23 @@ macro_rules! impl_encoding {
                     self.typed.metadata()
                 }
 
+                pub fn len(&self) -> usize {
+                    self.typed.array().len()
+                }
+
+                pub fn is_empty(&self) -> bool {
+                    self.typed.array().is_empty()
+                }
+
                 #[allow(dead_code)]
                 fn try_from_parts(
                     dtype: DType,
+                    len: usize,
                     metadata: [<$Name Metadata>],
                     children: Arc<[Array]>,
                     stats: StatsSet,
                 ) -> VortexResult<Self> {
-                    Ok(Self { typed: TypedArray::try_from_parts(dtype, metadata, None, children, stats)? })
+                    Ok(Self { typed: TypedArray::try_from_parts(dtype, len, metadata, None, children, stats)? })
                 }
             }
             impl GetArrayMetadata for [<$Name Array>] {
@@ -237,6 +246,7 @@ impl<T: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoA
                 ArrayData::try_new(
                     encoding,
                     array.dtype().clone(),
+                    array.len(),
                     metadata,
                     visitor.buffer,
                     visitor.children.into(),

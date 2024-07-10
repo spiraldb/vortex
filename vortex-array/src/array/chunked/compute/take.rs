@@ -5,8 +5,8 @@ use crate::array::chunked::ChunkedArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::take::{take, TakeFn};
 use crate::compute::unary::cast::try_cast;
+use crate::ArrayDType;
 use crate::{Array, IntoArray, ToArray};
-use crate::{ArrayDType, ArrayTrait};
 
 impl TakeFn for ChunkedArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {

@@ -92,21 +92,27 @@ impl Array {
     }
 
     pub fn len(&self) -> usize {
-        self.with_dyn(|a| a.len())
+        match self {
+            Self::Data(d) => d.len(),
+            Self::View(v) => v.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Data(d) => d.is_empty(),
+            Self::View(v) => v.is_empty(),
+        }
     }
 
     pub fn nbytes(&self) -> usize {
         self.with_dyn(|a| a.nbytes())
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.with_dyn(|a| a.is_empty())
-    }
-
-    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType) -> Option<Self> {
+    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType, len: usize) -> Option<Self> {
         match self {
-            Self::Data(d) => d.child(idx, dtype).cloned(),
-            Self::View(v) => v.child(idx, dtype).map(Array::View),
+            Self::Data(d) => d.child(idx, dtype, len).cloned(),
+            Self::View(v) => v.child(idx, dtype, len).map(Array::View),
         }
     }
 
@@ -229,13 +235,6 @@ pub trait ArrayTrait:
     + ArrayStatisticsCompute
     + ToArrayData
 {
-    fn len(&self) -> usize;
-
-    fn is_empty(&self) -> bool {
-        // TODO(ngates): remove this default impl to encourage explicit implementation
-        self.len() == 0
-    }
-
     fn nbytes(&self) -> usize {
         let mut visitor = NBytesVisitor(0);
         self.accept(&mut visitor).unwrap();

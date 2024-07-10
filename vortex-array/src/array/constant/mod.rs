@@ -37,6 +37,7 @@ impl ConstantArray {
         ]));
         Self::try_from_parts(
             scalar.dtype().clone(),
+            length,
             ConstantMetadata { scalar, length },
             [].into(),
             stats,
@@ -48,6 +49,8 @@ impl ConstantArray {
         &self.metadata().scalar
     }
 }
+
+impl ArrayTrait for ConstantArray {}
 
 impl ArrayValidity for ConstantArray {
     fn is_valid(&self, _index: usize) -> bool {
@@ -68,11 +71,5 @@ impl ArrayValidity for ConstantArray {
 impl AcceptArrayVisitor for ConstantArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         Ok(())
-    }
-}
-
-impl ArrayTrait for ConstantArray {
-    fn len(&self) -> usize {
-        self.metadata().length
     }
 }

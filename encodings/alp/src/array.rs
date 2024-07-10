@@ -17,6 +17,7 @@ pub struct ALPMetadata {
     exponents: Exponents,
     encoded_dtype: DType,
     patches_dtype: Option<DType>,
+    patches_len: usize,
 }
 
 impl ALPArray {
@@ -32,7 +33,10 @@ impl ALPArray {
             d => vortex_bail!(MismatchedTypes: "int32 or int64", d),
         };
 
+        let length = encoded.len();
+
         let patches_dtype = patches.as_ref().map(|a| a.dtype().as_nullable());
+        let patches_len = patches.as_ref().map(|a| a.len()).unwrap_or(0);
         let mut children = Vec::with_capacity(2);
         children.push(encoded);
         if let Some(patch) = patches {
@@ -41,10 +45,12 @@ impl ALPArray {
 
         Self::try_from_parts(
             dtype,
+            length,
             ALPMetadata {
                 exponents,
                 encoded_dtype,
                 patches_dtype,
+                patches_len,
             },
             children.into(),
             Default::default(),
@@ -61,7 +67,7 @@ impl ALPArray {
 
     pub fn encoded(&self) -> Array {
         self.array()
-            .child(0, &self.metadata().encoded_dtype)
+            .child(0, &self.metadata().encoded_dtype, self.len())
             .expect("Missing encoded array")
     }
 
@@ -73,7 +79,7 @@ impl ALPArray {
     pub fn patches(&self) -> Option<Array> {
         self.metadata().patches_dtype.as_ref().map(|dt| {
             self.array()
-                .child(1, dt)
+                .child(1, dt, self.metadata().patches_len)
                 .expect("Missing patches with present metadata flag")
         })
     }
@@ -83,6 +89,8 @@ impl ALPArray {
         self.dtype().try_into().unwrap()
     }
 }
+
+impl ArrayTrait for ALPArray {}
 
 impl ArrayValidity for ALPArray {
     fn is_valid(&self, index: usize) -> bool {
@@ -114,9 +122,3 @@ impl AcceptArrayVisitor for ALPArray {
 }
 
 impl ArrayStatisticsCompute for ALPArray {}
-
-impl ArrayTrait for ALPArray {
-    fn len(&self) -> usize {
-        self.encoded().len()
-    }
-}

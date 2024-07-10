@@ -23,6 +23,7 @@ struct Buffer {
 
 table Chunk {
     array: vortex.array.Array;
+    length: uint64;
     buffers: [Buffer];
     buffer_size: uint64;
 }

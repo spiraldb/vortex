@@ -1,6 +1,6 @@
 use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::ArrayStatistics;
-use vortex::{Array, ArrayDef, ArrayTrait, IntoArray};
+use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_fastlanes::{
     bitpack, bitpack_patches, count_exceptions, find_best_bit_width, BitPacked, BitPackedArray,

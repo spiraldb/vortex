@@ -31,6 +31,7 @@ impl FoRArray {
         )?;
         Self::try_from_parts(
             reference.dtype().clone(),
+            child.len(),
             FoRMetadata { reference, shift },
             [child].into(),
             StatsSet::new(),
@@ -44,7 +45,9 @@ impl FoRArray {
         } else {
             self.dtype()
         };
-        self.array().child(0, dtype).expect("Missing FoR child")
+        self.array()
+            .child(0, dtype, self.len())
+            .expect("Missing FoR child")
     }
 
     #[inline]
@@ -88,10 +91,6 @@ impl AcceptArrayVisitor for FoRArray {
 impl ArrayStatisticsCompute for FoRArray {}
 
 impl ArrayTrait for FoRArray {
-    fn len(&self) -> usize {
-        self.encoded().len()
-    }
-
     fn nbytes(&self) -> usize {
         self.encoded().nbytes()
     }

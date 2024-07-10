@@ -17,7 +17,7 @@ impl_encoding!("fastlanes.bitpacked", 14u16, BitPacked);
 pub struct BitPackedMetadata {
     // TODO(ngates): serialize into compact form
     validity: ValidityMetadata,
-    patches: bool,
+    patches_len: usize,
     bit_width: usize,
     offset: usize, // Know to be <1024
     length: usize, // Store end padding instead <1024
@@ -70,7 +70,7 @@ impl BitPackedArray {
 
         let metadata = BitPackedMetadata {
             validity: validity.to_metadata(length)?,
-            patches: patches.is_some(),
+            patches_len: patches.as_ref().map(|a| a.len()).unwrap_or(0),
             offset,
             length,
             bit_width,
@@ -85,13 +85,17 @@ impl BitPackedArray {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
+        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
     }
 
     #[inline]
     pub fn packed(&self) -> Array {
         self.array()
-            .child(0, &self.dtype().with_nullability(Nullability::NonNullable))
+            .child(
+                0,
+                &self.dtype().with_nullability(Nullability::NonNullable),
+                self.len(),
+            )
             .expect("Missing packed array")
     }
 
@@ -102,11 +106,19 @@ impl BitPackedArray {
 
     #[inline]
     pub fn patches(&self) -> Option<Array> {
-        self.metadata().patches.then(|| {
-            self.array()
-                .child(1, &self.dtype().with_nullability(Nullability::Nullable))
-                .expect("Missing patches array")
-        })
+        if self.metadata().patches_len > 0 {
+            Some(
+                self.array()
+                    .child(
+                        1,
+                        &self.dtype().with_nullability(Nullability::Nullable),
+                        self.metadata().patches_len,
+                    )
+                    .expect("Missing patches array"),
+            )
+        } else {
+            None
+        }
     }
 
     #[inline]
@@ -116,8 +128,13 @@ impl BitPackedArray {
 
     pub fn validity(&self) -> Validity {
         self.metadata().validity.to_validity(self.array().child(
-            if self.metadata().patches { 2 } else { 1 },
+            if self.metadata().patches_len > 0 {
+                2
+            } else {
+                1
+            },
             &Validity::DTYPE,
+            self.len(),
         ))
     }
 
@@ -159,7 +176,7 @@ impl ArrayValidity for BitPackedArray {
 impl AcceptArrayVisitor for BitPackedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("packed", &self.packed())?;
-        if self.metadata().patches {
+        if self.metadata().patches_len > 0 {
             visitor.visit_child(
                 "patches",
                 &self.patches().expect("Expected patches to be present "),
@@ -172,10 +189,6 @@ impl AcceptArrayVisitor for BitPackedArray {
 impl ArrayStatisticsCompute for BitPackedArray {}
 
 impl ArrayTrait for BitPackedArray {
-    fn len(&self) -> usize {
-        self.metadata().length
-    }
-
     fn nbytes(&self) -> usize {
         // Ignore any overheads like padding or the bit-width flag.
         let packed_size = ((self.bit_width() * self.len()) + 7) / 8;

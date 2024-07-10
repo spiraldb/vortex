@@ -5,7 +5,6 @@ use vortex_scalar::BoolScalar;
 
 use crate::array::constant::ConstantArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
-use crate::ArrayTrait;
 
 impl ArrayStatisticsCompute for ConstantArray {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {

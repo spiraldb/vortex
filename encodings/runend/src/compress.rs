@@ -5,7 +5,7 @@ use num_traits::{AsPrimitive, FromPrimitive};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
-use vortex::{ArrayDType, ArrayTrait};
+use vortex::ArrayDType;
 use vortex_dtype::Nullability;
 use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;

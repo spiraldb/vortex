@@ -21,6 +21,7 @@ pub struct SparseMetadata {
     indices_dtype: DType,
     // Offset value for patch indices as a result of slicing
     indices_offset: usize,
+    indices_len: usize,
     len: usize,
     fill_value: Scalar,
 }
@@ -55,9 +56,11 @@ impl SparseArray {
 
         Self::try_from_parts(
             values.dtype().clone(),
+            len,
             SparseMetadata {
                 indices_dtype: indices.dtype().clone(),
                 indices_offset,
+                indices_len: indices.len(),
                 len,
                 fill_value,
             },
@@ -76,14 +79,18 @@ impl SparseArray {
     #[inline]
     pub fn values(&self) -> Array {
         self.array()
-            .child(1, self.dtype())
+            .child(1, self.dtype(), self.indices().len())
             .expect("missing child array")
     }
 
     #[inline]
     pub fn indices(&self) -> Array {
         self.array()
-            .child(0, &self.metadata().indices_dtype)
+            .child(
+                0,
+                &self.metadata().indices_dtype,
+                self.metadata().indices_len,
+            )
             .expect("missing indices array")
     }
 
@@ -129,11 +136,7 @@ impl SparseArray {
     }
 }
 
-impl ArrayTrait for SparseArray {
-    fn len(&self) -> usize {
-        self.metadata().len
-    }
-}
+impl ArrayTrait for SparseArray {}
 
 impl AcceptArrayVisitor for SparseArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {

@@ -24,7 +24,7 @@ impl StructArray {
             unreachable!()
         };
         let dtype = st.dtypes().get(idx)?;
-        self.array().child(idx, dtype)
+        self.array().child(idx, dtype, self.len())
     }
 
     pub fn field_by_name(&self, name: &str) -> Option<Array> {
@@ -55,9 +55,11 @@ impl StructArray {
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata()
-            .validity
-            .to_validity(self.array().child(self.nfields(), &Validity::DTYPE))
+        self.metadata().validity.to_validity(self.array().child(
+            self.nfields(),
+            &Validity::DTYPE,
+            self.len(),
+        ))
     }
 }
 
@@ -78,7 +80,7 @@ impl StructArray {
             vortex_bail!("Got {} names and {} fields", names.len(), fields.len());
         }
 
-        if fields.iter().any(|a| a.with_dyn(|a| a.len()) != length) {
+        if fields.iter().any(|a| a.len() != length) {
             vortex_bail!("Expected all struct fields to have length {}", length);
         }
 
@@ -97,6 +99,7 @@ impl StructArray {
                 StructDType::new(names, field_dtypes),
                 Nullability::NonNullable,
             ),
+            length,
             StructMetadata {
                 length,
                 validity: validity_metadata,
@@ -153,16 +156,12 @@ impl StructArray {
     }
 }
 
+impl ArrayTrait for StructArray {}
+
 impl IntoCanonical for StructArray {
     /// StructEncoding is the canonical form for a [DType::Struct] array, so return self.
     fn into_canonical(self) -> VortexResult<Canonical> {
         Ok(Canonical::Struct(self))
-    }
-}
-
-impl ArrayTrait for StructArray {
-    fn len(&self) -> usize {
-        self.metadata().length
     }
 }
 

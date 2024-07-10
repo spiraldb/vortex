@@ -7,7 +7,7 @@ use vortex::array::sparse::SparseArray;
 use vortex::compute::search_sorted::{
     search_sorted, IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide,
 };
-use vortex::{ArrayDType, ArrayTrait, IntoArrayVariant};
+use vortex::{ArrayDType, IntoArrayVariant};
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;

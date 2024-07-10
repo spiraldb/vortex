@@ -8,7 +8,7 @@ use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
 use crate::validity::Validity;
-use crate::{ArrayDType, ArrayTrait, Canonical, IntoArrayVariant, IntoCanonical};
+use crate::{ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
 
 impl IntoCanonical for SparseArray {
     fn into_canonical(self) -> VortexResult<Canonical> {

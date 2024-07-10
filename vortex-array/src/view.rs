@@ -20,6 +20,7 @@ use crate::{Array, IntoArray, ToArray};
 pub struct ArrayView {
     encoding: EncodingRef,
     dtype: DType,
+    len: usize,
     flatbuffer: Buffer,
     flatbuffer_loc: usize,
     // TODO(ngates): create an RC'd vector that can be lazily sliced.
@@ -45,6 +46,7 @@ impl ArrayView {
     pub fn try_new<F>(
         ctx: Arc<Context>,
         dtype: DType,
+        len: usize,
         flatbuffer: Buffer,
         flatbuffer_init: F,
         buffers: Vec<Buffer>,
@@ -69,6 +71,7 @@ impl ArrayView {
         let view = Self {
             encoding,
             dtype,
+            len,
             flatbuffer,
             flatbuffer_loc,
             buffers,
@@ -98,12 +101,20 @@ impl ArrayView {
         &self.dtype
     }
 
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     pub fn metadata(&self) -> Option<&[u8]> {
         self.flatbuffer().metadata().map(|m| m.bytes())
     }
 
     // TODO(ngates): should we separate self and DType lifetimes? Should DType be cloned?
-    pub fn child(&self, idx: usize, dtype: &DType) -> Option<Self> {
+    pub fn child(&self, idx: usize, dtype: &DType, len: usize) -> Option<Self> {
         let child = self.array_child(idx)?;
         let flatbuffer_loc = child._tab.loc();
 
@@ -123,6 +134,7 @@ impl ArrayView {
         Some(Self {
             encoding,
             dtype: dtype.clone(),
+            len,
             flatbuffer: self.flatbuffer.clone(),
             flatbuffer_loc,
             buffers: self.buffers[buffer_offset..][0..buffer_count].to_vec(),

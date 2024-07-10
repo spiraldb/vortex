@@ -9,7 +9,7 @@ use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
-use crate::{Array, ArrayTrait, IntoArray};
+use crate::{Array, IntoArray};
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {

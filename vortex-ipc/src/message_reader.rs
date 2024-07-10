@@ -159,9 +159,10 @@ impl<R: VortexRead> MessageReader<R> {
         ctx: Arc<Context>,
         dtype: DType,
     ) -> VortexResult<Option<Array>> {
-        if self.peek().and_then(|m| m.header_as_chunk()).is_none() {
-            return Ok(None);
-        }
+        let length = match self.peek().and_then(|m| m.header_as_chunk()) {
+            None => return Ok(None),
+            Some(chunk) => chunk.length() as usize,
+        };
 
         let buffers = self.read_buffers().await?;
         let flatbuffer = self.next_raw().await?;
@@ -169,6 +170,7 @@ impl<R: VortexRead> MessageReader<R> {
         let view = ArrayView::try_new(
             ctx,
             dtype,
+            length,
             flatbuffer,
             |flatbuffer| {
                 unsafe { root_unchecked::<fb::Message>(flatbuffer) }

@@ -1,6 +1,6 @@
 use vortex::{
     stats::{ArrayStatisticsCompute, Stat, StatsSet},
-    ArrayTrait, AsArray, IntoCanonical,
+    AsArray, IntoCanonical,
 };
 use vortex_error::VortexResult;
 

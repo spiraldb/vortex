@@ -16,6 +16,7 @@ impl_encoding!("vortex.runend", 19u16, RunEnd);
 pub struct RunEndMetadata {
     validity: ValidityMetadata,
     ends_dtype: DType,
+    num_runs: usize,
     offset: usize,
     length: usize,
 }
@@ -48,6 +49,7 @@ impl RunEndArray {
         let metadata = RunEndMetadata {
             validity: validity.to_metadata(length)?,
             ends_dtype: ends.dtype().clone(),
+            num_runs: ends.len(),
             offset,
             length,
         };
@@ -59,7 +61,7 @@ impl RunEndArray {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, metadata, children.into(), StatsSet::new())
+        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
@@ -80,7 +82,7 @@ impl RunEndArray {
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(2, &Validity::DTYPE))
+            .to_validity(self.array().child(2, &Validity::DTYPE, self.len()))
     }
 
     #[inline]
@@ -91,15 +93,19 @@ impl RunEndArray {
     #[inline]
     pub fn ends(&self) -> Array {
         self.array()
-            .child(0, &self.metadata().ends_dtype)
+            .child(0, &self.metadata().ends_dtype, self.metadata().num_runs)
             .expect("missing ends")
     }
 
     #[inline]
     pub fn values(&self) -> Array {
-        self.array().child(1, self.dtype()).expect("missing values")
+        self.array()
+            .child(1, self.dtype(), self.metadata().num_runs)
+            .expect("missing values")
     }
 }
+
+impl ArrayTrait for RunEndArray {}
 
 impl ArrayValidity for RunEndArray {
     fn is_valid(&self, index: usize) -> bool {
@@ -129,12 +135,6 @@ impl AcceptArrayVisitor for RunEndArray {
 }
 
 impl ArrayStatisticsCompute for RunEndArray {}
-
-impl ArrayTrait for RunEndArray {
-    fn len(&self) -> usize {
-        self.metadata().length
-    }
-}
 
 #[cfg(test)]
 mod test {

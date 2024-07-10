@@ -7,7 +7,7 @@ use vortex_error::VortexResult;
 use crate::accessor::ArrayAccessor;
 use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
-use crate::{ArrayDType, ArrayTrait};
+use crate::ArrayDType;
 
 impl ArrayStatisticsCompute for VarBinArray {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
