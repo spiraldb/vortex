@@ -83,7 +83,7 @@ lazy_static! {
         Field::new("l_tax", DataType::Float64, false),
         Field::new("l_returnflag", DataType::Utf8, false),
         Field::new("l_linestatus", DataType::Utf8, false),
-        // NOTE: Arrow doesn't have a DATE type, but YYYY-MM-DD is lexicographically ordered
+        // NOTE: We don't support Arrow DATE type, but YYYY-MM-DD is lexicographically ordered
         //  so we can just use Utf8 and adjust any queries that rely on date functions.
         Field::new("l_shipdate", DataType::Utf8, false),
         Field::new("l_commitdate", DataType::Utf8, false),
