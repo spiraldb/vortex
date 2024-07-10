@@ -20,8 +20,8 @@ use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit};
 use itertools::Itertools;
-use vortex_dtype::DType;
 use vortex_dtype::NativePType;
+use vortex_dtype::{DType, PType};
 
 use crate::array::bool::BoolArray;
 use crate::array::datetime::LocalDateTimeArray;
@@ -37,13 +37,7 @@ use crate::{ArrayData, IntoArray, IntoArrayData};
 
 impl IntoArrayData for Buffer {
     fn into_array_data(self) -> ArrayData {
-        let length = self.len();
-        PrimitiveArray::try_new(
-            ScalarBuffer::<u8>::new(self, 0, length),
-            Validity::NonNullable,
-        )
-        .unwrap()
-        .into_array_data()
+        PrimitiveArray::new(self.into(), PType::U8, Validity::NonNullable).into_array_data()
     }
 }
 
@@ -57,24 +51,18 @@ impl IntoArrayData for NullBuffer {
 
 impl<T: ArrowNativeType + NativePType> IntoArrayData for ScalarBuffer<T> {
     fn into_array_data(self) -> ArrayData {
-        let length = self.len();
-        PrimitiveArray::try_new(
-            Self::new(self.into_inner(), 0, length),
-            Validity::NonNullable,
-        )
-        .unwrap()
-        .into_array_data()
+        PrimitiveArray::new(self.into_inner().into(), T::PTYPE, Validity::NonNullable)
+            .into_array_data()
     }
 }
 
 impl<O: NativePType + OffsetSizeTrait> IntoArrayData for OffsetBuffer<O> {
     fn into_array_data(self) -> ArrayData {
-        let length = self.len();
-        let array = PrimitiveArray::try_new(
-            ScalarBuffer::<O>::new(self.into_inner().into_inner(), 0, length),
+        let array = PrimitiveArray::new(
+            self.into_inner().into_inner().into(),
+            O::PTYPE,
             Validity::NonNullable,
         )
-        .unwrap()
         .into_array_data();
         array.set(Stat::IsSorted, true.into());
         array.set(Stat::IsStrictSorted, true.into());
@@ -87,9 +75,12 @@ where
     <T as ArrowPrimitiveType>::Native: NativePType,
 {
     fn from_arrow(value: &ArrowPrimitiveArray<T>, nullable: bool) -> Self {
-        let arr = PrimitiveArray::try_new(value.values().clone(), nulls(value.nulls(), nullable))
-            .unwrap()
-            .into_array_data();
+        let arr = PrimitiveArray::new(
+            value.values().clone().into_inner().into(),
+            T::Native::PTYPE,
+            nulls(value.nulls(), nullable),
+        )
+        .into_array_data();
 
         if T::DATA_TYPE.is_numeric() {
             return arr;

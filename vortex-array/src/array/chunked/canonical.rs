@@ -1,6 +1,6 @@
-use arrow_buffer::{BooleanBuffer, MutableBuffer, ScalarBuffer};
+use arrow_buffer::{BooleanBuffer, Buffer, MutableBuffer};
 use itertools::Itertools;
-use vortex_dtype::{match_each_native_ptype, DType, Nullability, PType, StructDType};
+use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_bail, ErrString, VortexResult};
 
 use crate::accessor::ArrayAccessor;
@@ -152,12 +152,11 @@ fn pack_primitives(
         buffer.extend_from_slice(chunk.buffer());
     }
 
-    match_each_native_ptype!(ptype, |$T| {
-        Ok(PrimitiveArray::try_new(
-            ScalarBuffer::<$T>::from(buffer),
-            validity,
-        )?)
-    })
+    Ok(PrimitiveArray::new(
+        Buffer::from(buffer).into(),
+        ptype,
+        validity,
+    ))
 }
 
 /// Builds a new [VarBinArray] by repacking the values from the chunks into a single

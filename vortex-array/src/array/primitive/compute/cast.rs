@@ -14,12 +14,12 @@ impl CastFn for PrimitiveArray {
 
         // Short-cut if we can just change the nullability
         if self.ptype() == ptype && !self.dtype().is_nullable() && dtype.is_nullable() {
-            match_each_native_ptype!(self.ptype(), |$T| {
-                return Ok(
-                    PrimitiveArray::try_new(self.scalar_buffer::<$T>(), Validity::AllValid)?
-                        .into_array(),
-                );
-            })
+            return Ok(PrimitiveArray::new(
+                self.buffer().clone(),
+                self.ptype(),
+                Validity::AllValid,
+            )
+            .into_array());
         }
 
         // FIXME(ngates): #260 - check validity and nullability
