@@ -56,6 +56,13 @@ impl Buffer {
             Self::Bytes(_) => Err(self),
         }
     }
+
+    pub fn from_vec<T>(values: Vec<T>) -> Self
+    where
+        T: ArrowNativeType,
+    {
+        Self::Arrow(ArrowBuffer::from_vec(values))
+    }
 }
 
 impl Deref for Buffer {

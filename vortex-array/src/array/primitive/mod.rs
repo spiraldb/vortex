@@ -1,4 +1,4 @@
-use arrow_buffer::{ArrowNativeType, ScalarBuffer};
+use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer, ScalarBuffer};
 use itertools::Itertools;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -23,30 +23,38 @@ pub struct PrimitiveMetadata {
 }
 
 impl PrimitiveArray {
-    // TODO(ngates): remove the Arrow types from this API.
-    pub fn try_new<T: NativePType + ArrowNativeType>(
-        buffer: ScalarBuffer<T>,
-        validity: Validity,
-    ) -> VortexResult<Self> {
-        Ok(Self {
+    pub fn new(buffer: Buffer, ptype: PType, validity: Validity) -> Self {
+        let length = match_each_native_ptype!(ptype, |$P| {
+            let (prefix, values, suffix) = unsafe { buffer.align_to::<$P>() };
+            assert!(
+                prefix.is_empty() && suffix.is_empty(),
+                "buffer is not aligned"
+            );
+            values.len()
+        });
+
+        Self {
             typed: TypedArray::try_from_parts(
-                DType::from(T::PTYPE).with_nullability(validity.nullability()),
-                buffer.len(),
+                DType::from(ptype).with_nullability(validity.nullability()),
+                length,
                 PrimitiveMetadata {
-                    validity: validity.to_metadata(buffer.len())?,
+                    validity: validity.to_metadata(length).expect("invalid validity"),
                 },
-                Some(Buffer::from(buffer.into_inner())),
+                Some(buffer),
                 validity.into_array().into_iter().collect_vec().into(),
                 StatsSet::new(),
-            )?,
-        })
+            )
+            .expect("should be valid"),
+        }
     }
 
     pub fn from_vec<T: NativePType>(values: Vec<T>, validity: Validity) -> Self {
         match_each_native_ptype!(T::PTYPE, |$P| {
-            Self::try_new(ScalarBuffer::<$P>::from(
-                unsafe { std::mem::transmute::<Vec<T>, Vec<$P>>(values) }
-            ), validity).unwrap()
+            PrimitiveArray::new(
+                ArrowBuffer::from(MutableBuffer::from(unsafe { std::mem::transmute::<Vec<T>, Vec<$P>>(values) })).into(),
+                T::PTYPE,
+                validity,
+            )
         })
     }
 
@@ -131,13 +139,7 @@ impl PrimitiveArray {
             "can't reinterpret cast between integers of two different widths"
         );
 
-        match_each_native_ptype!(ptype, |$P| {
-            PrimitiveArray::try_new(
-                ScalarBuffer::<$P>::new(self.buffer().clone().into(), 0, self.len()),
-                self.validity(),
-            )
-            .unwrap()
-        })
+        PrimitiveArray::new(self.buffer().clone(), ptype, self.validity())
     }
 
     pub fn patch<P: AsPrimitive<usize>, T: NativePType + ArrowNativeType>(
