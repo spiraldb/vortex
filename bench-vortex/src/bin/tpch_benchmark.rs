@@ -1,6 +1,13 @@
+#![allow(dead_code)]
+
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use arrow_array::StructArray;
+use arrow_schema::Schema;
+use bench_vortex::tpch;
+use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use datafusion::datasource::MemTable;
 use datafusion::prelude::{CsvReadOptions, SessionContext};
 use vortex::array::chunked::ChunkedArray;
@@ -8,205 +15,185 @@ use vortex::arrow::FromArrowArray;
 use vortex::{Array, ArrayDType, ArrayData, IntoArray, IntoCanonical};
 use vortex_datafusion::SessionContextExt;
 
-/// Create a new TPC-H benchmark.
+enum Format {
+    Csv,
+    Arrow,
+    VortexUncompressed,
+}
 
-mod tpch {
-    pub mod schemas {
-        use arrow_schema::{DataType, Field, Schema};
-        use lazy_static::lazy_static;
+// Generate table dataset.
+async fn load_datasets<P: AsRef<Path>>(
+    base_dir: P,
+    format: Format,
+) -> anyhow::Result<SessionContext> {
+    let context = SessionContext::new();
+    let base_dir = base_dir.as_ref();
 
-        lazy_static! {
-            pub static ref CUSTOMER: Schema = Schema::new(vec![
-                Field::new("c_custkey", DataType::Int64, false),
-                Field::new("c_name", DataType::Utf8, false),
-                Field::new("c_address", DataType::Int64, false),
-                Field::new("c_nationkey", DataType::Int64, false),
-                Field::new("c_phone", DataType::Utf8, false),
-                Field::new("c_acctbal", DataType::Float64, false),
-                Field::new("c_mktsegment", DataType::Utf8, false),
-                Field::new("c_comment", DataType::Utf8, false),
-            ]);
+    let customer = base_dir.join("customer.tbl");
+    let lineitem = base_dir.join("lineitem.tbl");
+    let nation = base_dir.join("nation.tbl");
+    let orders = base_dir.join("orders.tbl");
+    let part = base_dir.join("part.tbl");
+    let partsupp = base_dir.join("partsupp.tbl");
+    let region = base_dir.join("region.tbl");
+    let supplier = base_dir.join("supplier.tbl");
 
-            pub static ref LINEITEM: Schema = Schema::new(vec![
-                Field::new("l_orderkey", DataType::Int64, false),
-                Field::new("l_partkey", DataType::Int64, false),
-                Field::new("l_suppkey", DataType::Int64, false),
-                Field::new("l_linenumber", DataType::Int64, false),
-                Field::new("l_quantity", DataType::Float64, false),
-                Field::new("l_extendedprice", DataType::Float64, false),
-                Field::new("l_discount", DataType::Float64, false),
-                Field::new("l_tax", DataType::Float64, false),
-                Field::new("l_returnflag", DataType::Utf8, false),
-                Field::new("l_linestatus", DataType::Utf8, false),
-                // NOTE: Arrow doesn't have a DATE type, but YYYY-MM-DD is lexicographically ordered
-                //  so we can just use Utf8 and adjust any queries that rely on date functions.
-                Field::new("l_shipdate", DataType::Utf8, false),
-                Field::new("l_commitdate", DataType::Utf8, false),
-                Field::new("l_receiptdate", DataType::Utf8, false),
-                Field::new("l_shipinstruct", DataType::Utf8, false),
-                Field::new("l_shipmode", DataType::Utf8, false),
-                Field::new("l_comment", DataType::Utf8, false),
-            ]);
-
-            pub static ref NATION_SCHEMA: Schema = Schema::new(vec![
-                Field::new("n_nationkey", DataType::Int64, false),
-                Field::new("n_name", DataType::Utf8, false),
-                Field::new("n_regionkey", DataType::Int64, false),
-                Field::new("n_comment", DataType::Utf8, true),
-            ]);
-        }
+    macro_rules! register_table {
+        ($name:ident, $schema:expr) => {
+            match format {
+                Format::Csv => register_csv(&context, stringify!($name), &$name, $schema).await,
+                Format::Arrow => register_arrow(&context, stringify!($name), &$name, $schema).await,
+                Format::VortexUncompressed => {
+                    register_vortex(&context, stringify!($name), &$name, $schema).await
+                }
+            }
+        };
     }
 
-    pub mod queries {
-        pub const Q1: &'static str = r#"
-            select
-                l_returnflag,
-                l_linestatus,
-                sum(l_quantity) as sum_qty,
-                sum(l_extendedprice) as sum_base_price,
-                sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
-                sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
-                avg(l_quantity) as avg_qty,
-                avg(l_extendedprice) as avg_price,
-                avg(l_discount) as avg_disc,
-                count(*) as count_order
-            from
-                lineitem
-            where
-                l_shipdate <= '1998-11-30'
-            group by
-                l_returnflag,
-                l_linestatus
-            order by
-                l_returnflag,
-                l_linestatus
-            LIMIT 1;
-            "#;
-    }
+    register_table!(customer, &tpch::schema::CUSTOMER)?;
+    register_table!(lineitem, &tpch::schema::LINEITEM)?;
+    register_table!(nation, &tpch::schema::NATION)?;
+    register_table!(orders, &tpch::schema::ORDERS)?;
+    register_table!(part, &tpch::schema::PART)?;
+    register_table!(partsupp, &tpch::schema::PARTSUPP)?;
+    register_table!(region, &tpch::schema::REGION)?;
+    register_table!(supplier, &tpch::schema::SUPPLIER)?;
+
+    Ok(context)
 }
 
-async fn q1_csv() {
-    let ctx = SessionContext::new();
-
-    println!("loading CSV");
-    ctx.register_csv(
-        "lineitem",
-        "bench-vortex/data/tpch/lineitem.tbl",
-        CsvReadOptions::default()
-            .file_extension("tbl")
-            .has_header(false)
-            .delimiter(b'|')
-            .schema(&tpch::schemas::LINEITEM),
-    )
-    .await
-    .unwrap();
-
-    println!("BEGIN: Q1(CSV)");
-    ctx.sql(tpch::queries::Q1)
-        .await
-        .unwrap()
-        .show()
-        .await
-        .unwrap();
-}
-
-async fn q1_arrow() {
-    let ctx = SessionContext::new();
-
-    println!("reading CSV");
-    let batches = ctx
-        .read_csv(
-            "bench-vortex/data/tpch/lineitem.tbl",
+async fn register_csv(
+    session: &SessionContext,
+    name: &str,
+    file: &PathBuf,
+    schema: &Schema,
+) -> anyhow::Result<()> {
+    session
+        .register_csv(
+            name,
+            file.to_str().unwrap(),
             CsvReadOptions::default()
-                .file_extension("tbl")
-                .has_header(false)
                 .delimiter(b'|')
-                .schema(&tpch::schemas::LINEITEM),
+                .has_header(false)
+                .file_extension("tbl")
+                .schema(schema),
         )
-        .await
-        .unwrap()
-        .collect()
-        .await
-        .unwrap();
+        .await?;
 
-    println!("loading from CSV to arrow batches");
-
-    let arrow_table =
-        MemTable::try_new(Arc::new(tpch::schemas::LINEITEM.clone()), vec![batches]).unwrap();
-
-    println!("registering table");
-    // Read the lineitem table directly into memory here.
-    ctx.register_table("lineitem", Arc::new(arrow_table))
-        .unwrap();
-
-    println!("BEGIN: Q1(VORTEX)");
-    ctx.sql(tpch::queries::Q1)
-        .await
-        .unwrap()
-        .show()
-        .await
-        .unwrap();
+    Ok(())
 }
 
-async fn q1_vortex() {
-    let ctx = SessionContext::new();
-
-    println!("reading CSV");
-    let batches = ctx
+async fn register_arrow(
+    session: &SessionContext,
+    name: &str,
+    file: &PathBuf,
+    schema: &Schema,
+) -> anyhow::Result<()> {
+    // Read CSV file into a set of Arrow RecordBatch.
+    let record_batches = session
         .read_csv(
-            "bench-vortex/data/tpch/lineitem.tbl",
+            file.to_str().unwrap(),
             CsvReadOptions::default()
-                .file_extension("tbl")
-                .has_header(false)
                 .delimiter(b'|')
-                .schema(&tpch::schemas::LINEITEM),
+                .has_header(false)
+                .file_extension("tbl")
+                .schema(schema),
         )
-        .await
-        .unwrap()
+        .await?
         .collect()
-        .await
-        .unwrap();
+        .await?;
 
-    println!("loading from CSV to arrow batches");
-    let arrays = batches
+    let mem_table = MemTable::try_new(Arc::new(schema.clone()), vec![record_batches])?;
+    session.register_table(name, Arc::new(mem_table))?;
+
+    Ok(())
+}
+
+async fn register_vortex(
+    session: &SessionContext,
+    name: &str,
+    file: &PathBuf,
+    schema: &Schema,
+    // TODO(aduffy): add compression option
+) -> anyhow::Result<()> {
+    let record_batches = session
+        .read_csv(
+            file.to_str().unwrap(),
+            CsvReadOptions::default()
+                .delimiter(b'|')
+                .has_header(false)
+                .file_extension("tbl")
+                .schema(schema),
+        )
+        .await?
+        .collect()
+        .await?;
+
+    // Create a ChunkedArray from the set of chunks.
+    let chunks: Vec<Array> = record_batches
         .iter()
-        .map(|batch| ArrayData::from_arrow(&StructArray::from(batch.clone()), false).into_array())
-        .collect::<Vec<Array>>();
+        .cloned()
+        .map(|record| StructArray::from(record))
+        .map(|struct_array| ArrayData::from_arrow(&struct_array, false).into_array())
+        .collect();
 
-    let dtype = arrays[0].dtype().clone();
-    let array = ChunkedArray::try_new(arrays, dtype)
-        .unwrap()
-        .into_canonical()
-        .unwrap()
+    let dtype = chunks[0].dtype().clone();
+    let chunked_array = ChunkedArray::try_new(chunks, dtype)?
+        .into_canonical()?
         .into_array();
 
-    println!("registering table");
-    // Read the lineitem table directly into memory here.
-    ctx.register_vortex("lineitem", array).unwrap();
+    session.register_vortex(name, chunked_array)?;
+
+    Ok(())
+}
+
+async fn q1_csv(base_dir: &PathBuf) -> anyhow::Result<()> {
+    let ctx = load_datasets(base_dir, Format::Csv).await?;
+
+    println!("BEGIN: Q1(CSV)");
+
+    let start = SystemTime::now();
+    ctx.sql(tpch::query::Q1).await?.show().await?;
+    let elapsed = start.elapsed()?.as_millis();
+    println!("END CSV: {elapsed}ms");
+
+    Ok(())
+}
+
+async fn q1_arrow(base_dir: &PathBuf) -> anyhow::Result<()> {
+    let ctx = load_datasets(base_dir, Format::Arrow).await?;
+
+    println!("BEGIN: Q1(ARROW)");
+    let start = SystemTime::now();
+
+    ctx.sql(tpch::query::Q1).await?.show().await?;
+    let elapsed = start.elapsed()?.as_millis();
+
+    println!("END ARROW: {elapsed}ms");
+
+    Ok(())
+}
+
+async fn q1_vortex(base_dir: &PathBuf) -> anyhow::Result<()> {
+    let ctx = load_datasets(base_dir, Format::VortexUncompressed).await?;
 
     println!("BEGIN: Q1(VORTEX)");
-    ctx.sql(tpch::queries::Q1)
-        .await
-        .unwrap()
-        .show()
-        .await
-        .unwrap();
+    let start = SystemTime::now();
+
+    ctx.sql(tpch::query::Q1).await?.show().await?;
+
+    let elapsed = start.elapsed()?.as_millis();
+    println!("END VORTEX: {elapsed}ms");
+
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() {
-    let csv_start = std::time::SystemTime::now();
-    q1_csv().await;
-    let csv_duration = csv_start.elapsed().unwrap().as_secs();
-    println!("CSV: {csv_duration}s");
+    // Run TPC-H data gen.
+    let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
 
-    let arrow_start = std::time::SystemTime::now();
-    q1_arrow().await;
-    let arrow_duration = arrow_start.elapsed().unwrap().as_secs();
-    println!("ARROW: {arrow_duration}s");
-
-    let vortex_start = std::time::SystemTime::now();
-    q1_vortex().await;
-    let vortex_duration = vortex_start.elapsed().unwrap().as_secs();
-    println!("VORTEX: {vortex_duration}s");
+    q1_csv(&data_dir).await.unwrap();
+    q1_arrow(&data_dir).await.unwrap();
+    q1_vortex(&data_dir).await.unwrap();
 }
