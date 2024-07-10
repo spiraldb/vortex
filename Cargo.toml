@@ -12,7 +12,7 @@ members = [
     "vortex-expr",
     "vortex-flatbuffers",
     "vortex-ipc",
-    "vortex-sampling-compressor",
+    "vortex-sampling-compressor", "xtask",
 ]
 resolver = "2"
 

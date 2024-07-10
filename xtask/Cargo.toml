@@ -1,0 +1,20 @@
+[package]
+name = "xtask"
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+include.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = "1.0.86"
+clap = { version = "4.5.9", features = ["derive"] }
+xshell = "0.2.6"
+
+
+[lints]
+workspace = true
