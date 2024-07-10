@@ -10,7 +10,7 @@ use vortex_error::vortex_bail;
 
 use crate::compress::{runend_decode, runend_encode};
 
-impl_encoding!("vortex.runend", RunEnd);
+impl_encoding!("vortex.runend", 19u16, RunEnd);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEndMetadata {

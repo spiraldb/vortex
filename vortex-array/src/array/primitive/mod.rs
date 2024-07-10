@@ -15,7 +15,7 @@ mod accessor;
 mod compute;
 mod stats;
 
-impl_encoding!("vortex.primitive", Primitive);
+impl_encoding!("vortex.primitive", 3u16, Primitive);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrimitiveMetadata {

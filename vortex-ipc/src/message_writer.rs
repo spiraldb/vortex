@@ -2,14 +2,14 @@ use std::io;
 
 use flatbuffers::FlatBufferBuilder;
 use itertools::Itertools;
-use vortex::{Array, ViewContext};
+use vortex::Array;
 use vortex_buffer::io_buf::IoBuf;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_flatbuffers::WriteFlatBuffer;
 
 use crate::io::VortexWrite;
-use crate::messages::{IPCChunk, IPCContext, IPCMessage, IPCPage, IPCSchema};
+use crate::messages::{IPCChunk, IPCMessage, IPCPage, IPCSchema};
 use crate::ALIGNMENT;
 
 const ZEROS: [u8; 512] = [0u8; 512];
@@ -43,21 +43,16 @@ impl<W: VortexWrite> MessageWriter<W> {
         self.pos
     }
 
-    pub async fn write_view_context(&mut self, view_ctx: &ViewContext) -> io::Result<()> {
-        self.write_message(IPCMessage::Context(IPCContext(view_ctx)))
-            .await
-    }
-
     pub async fn write_dtype(&mut self, dtype: &DType) -> io::Result<()> {
         self.write_message(IPCMessage::Schema(IPCSchema(dtype)))
             .await
     }
 
-    pub async fn write_chunk(&mut self, view_ctx: &ViewContext, chunk: Array) -> io::Result<()> {
+    pub async fn write_chunk(&mut self, chunk: Array) -> io::Result<()> {
         let buffer_offsets = chunk.all_buffer_offsets(self.alignment);
 
         // Serialize the Chunk message.
-        self.write_message(IPCMessage::Chunk(IPCChunk(view_ctx, &chunk)))
+        self.write_message(IPCMessage::Chunk(IPCChunk(&chunk)))
             .await?;
 
         // Keep track of the offset to add padding after each buffer.

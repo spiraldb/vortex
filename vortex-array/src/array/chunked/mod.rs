@@ -23,7 +23,7 @@ mod canonical;
 mod compute;
 mod stats;
 
-impl_encoding!("vortex.chunked", Chunked);
+impl_encoding!("vortex.chunked", 11u16, Chunked);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChunkedMetadata;

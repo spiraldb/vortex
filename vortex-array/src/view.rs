@@ -9,7 +9,7 @@ use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
-use crate::encoding::{EncodingId, EncodingRef};
+use crate::encoding::EncodingRef;
 use crate::flatbuffers as fb;
 use crate::stats::{Stat, Statistics, StatsSet};
 use crate::visitor::ArrayVisitor;
@@ -24,7 +24,7 @@ pub struct ArrayView {
     flatbuffer_loc: usize,
     // TODO(ngates): create an RC'd vector that can be lazily sliced.
     buffers: Vec<Buffer>,
-    ctx: Arc<ViewContext>,
+    ctx: Arc<Context>,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
     //  which fb:Array children to skip when calculating how to slice into buffers.
@@ -43,7 +43,7 @@ impl Debug for ArrayView {
 
 impl ArrayView {
     pub fn try_new<F>(
-        ctx: Arc<ViewContext>,
+        ctx: Arc<Context>,
         dtype: DType,
         flatbuffer: Buffer,
         flatbuffer_init: F,
@@ -56,7 +56,7 @@ impl ArrayView {
         let flatbuffer_loc = array._tab.loc();
 
         let encoding = ctx
-            .find_encoding(array.encoding())
+            .lookup_encoding(array.encoding())
             .ok_or_else(|| vortex_err!(InvalidSerde: "Encoding ID out of bounds"))?;
 
         if buffers.len() != Self::cumulative_nbuffers(array) {
@@ -107,7 +107,7 @@ impl ArrayView {
         let child = self.array_child(idx)?;
         let flatbuffer_loc = child._tab.loc();
 
-        let encoding = self.ctx.find_encoding(child.encoding())?;
+        let encoding = self.ctx.lookup_encoding(child.encoding())?;
 
         // Figure out how many buffers to skip...
         // We store them depth-first.
@@ -275,43 +275,5 @@ impl ToArray for ArrayView {
 impl IntoArray for ArrayView {
     fn into_array(self) -> Array {
         Array::View(self)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ViewContext {
-    encodings: Vec<EncodingRef>,
-}
-
-impl ViewContext {
-    pub fn new(encodings: Vec<EncodingRef>) -> Self {
-        Self { encodings }
-    }
-
-    pub fn encodings(&self) -> &[EncodingRef] {
-        self.encodings.as_ref()
-    }
-
-    pub fn find_encoding(&self, encoding_id: u16) -> Option<EncodingRef> {
-        self.encodings.get(encoding_id as usize).cloned()
-    }
-
-    pub fn encoding_idx(&self, encoding_id: EncodingId) -> Option<u16> {
-        self.encodings
-            .iter()
-            .position(|e| e.id() == encoding_id)
-            .map(|i| i as u16)
-    }
-}
-
-impl Default for ViewContext {
-    fn default() -> Self {
-        Self::from(&Context::default())
-    }
-}
-
-impl From<&Context> for ViewContext {
-    fn from(value: &Context) -> Self {
-        Self::new(value.encodings().collect_vec())
     }
 }

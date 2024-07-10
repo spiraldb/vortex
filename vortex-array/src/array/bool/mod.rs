@@ -12,7 +12,7 @@ mod accessors;
 mod compute;
 mod stats;
 
-impl_encoding!("vortex.bool", Bool);
+impl_encoding!("vortex.bool", 2u16, Bool);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BoolMetadata {

@@ -11,7 +11,7 @@ use vortex_scalar::Scalar;
 mod compress;
 mod compute;
 
-impl_encoding!("fastlanes.for", FoR);
+impl_encoding!("fastlanes.for", 15u16, FoR);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FoRMetadata {

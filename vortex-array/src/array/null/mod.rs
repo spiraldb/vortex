@@ -7,7 +7,7 @@ use crate::{impl_encoding, Canonical, IntoCanonical};
 
 mod compute;
 
-impl_encoding!("vortex.null", Null);
+impl_encoding!("vortex.null", 1u16, Null);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NullMetadata {

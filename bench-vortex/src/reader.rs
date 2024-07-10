@@ -27,7 +27,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
 use vortex::stream::ArrayStreamExt;
-use vortex::{Array, IntoArray, IntoCanonical, ToArrayData, ViewContext};
+use vortex::{Array, IntoArray, IntoCanonical, ToArrayData};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
@@ -46,13 +46,13 @@ pub const BATCH_SIZE: usize = 65_536;
 pub struct VortexFooter {
     pub byte_offsets: Vec<u64>,
     pub row_offsets: Vec<u64>,
-    pub view_context_dtype_range: Range<u64>,
+    pub dtype_range: Range<u64>,
 }
 
 pub async fn open_vortex(path: &Path) -> VortexResult<Array> {
     let file = tokio::fs::File::open(path).await.unwrap();
     let mut msgs = MessageReader::try_new(TokioAdapter(file)).await.unwrap();
-    msgs.array_stream_from_messages(&CTX)
+    msgs.array_stream_from_messages(CTX.clone())
         .await
         .unwrap()
         .collect_chunked()
@@ -66,20 +66,17 @@ pub async fn rewrite_parquet_as_vortex<W: VortexWrite>(
 ) -> VortexResult<()> {
     let chunked = compress_parquet_to_vortex(parquet_path.as_path())?;
 
-    let written = ArrayWriter::new(write, ViewContext::from(&CTX.clone()))
-        .write_context()
-        .await?
+    let written = ArrayWriter::new(write)
         .write_array_stream(chunked.array_stream())
         .await?;
 
-    let view_ctx_range = written.view_context_range().unwrap();
     let layout = written.array_layouts()[0].clone();
     let mut w = written.into_inner();
     let mut s = flexbuffers::FlexbufferSerializer::new();
     VortexFooter {
         byte_offsets: layout.chunks.byte_offsets,
         row_offsets: layout.chunks.row_offsets,
-        view_context_dtype_range: view_ctx_range.begin..layout.dtype.end,
+        dtype_range: layout.dtype.begin..layout.dtype.end,
     }
     .serialize(&mut s)?;
     let footer_bytes = Buffer::Bytes(Bytes::from(s.take_buffer()));
@@ -147,20 +144,16 @@ pub async fn read_vortex_footer_format<R: VortexReadAt>(
         flexbuffers::Reader::get_root(buf.as_ref()).map_err(|e| vortex_err!("{}", e))?,
     )?;
 
-    let header_len =
-        (footer.view_context_dtype_range.end - footer.view_context_dtype_range.start) as usize;
+    let header_len = (footer.dtype_range.end - footer.dtype_range.start) as usize;
     buf.reserve(header_len - buf.len());
     unsafe { buf.set_len(header_len) }
-    buf = reader
-        .read_at_into(footer.view_context_dtype_range.start, buf)
-        .await?;
+    buf = reader.read_at_into(footer.dtype_range.start, buf).await?;
     let mut header_reader = MessageReader::try_new(buf).await?;
-    let view_ctx = header_reader.read_view_context(&CTX).await?;
     let dtype = header_reader.read_dtype().await?;
 
     ChunkedArrayReader::try_new(
         reader,
-        view_ctx,
+        CTX.clone(),
         dtype,
         PrimitiveArray::from(footer.byte_offsets).into_array(),
         PrimitiveArray::from(footer.row_offsets).into_array(),

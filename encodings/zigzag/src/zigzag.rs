@@ -9,7 +9,7 @@ use vortex_error::{vortex_bail, vortex_err};
 
 use crate::compress::zigzag_encode;
 
-impl_encoding!("vortex.zigzag", ZigZag);
+impl_encoding!("vortex.zigzag", 21u16, ZigZag);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZigZagMetadata;

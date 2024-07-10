@@ -7,11 +7,12 @@ use crate::impl_encoding;
 use crate::stats::Stat;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+
 mod canonical;
 mod compute;
 mod stats;
 
-impl_encoding!("vortex.constant", Constant);
+impl_encoding!("vortex.constant", 10u16, Constant);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConstantMetadata {

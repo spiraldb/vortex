@@ -7,7 +7,7 @@ use vortex_error::vortex_bail;
 
 use crate::compute::decode_to_localdatetime;
 
-impl_encoding!("vortex.datetimeparts", DateTimeParts);
+impl_encoding!("vortex.datetimeparts", 20u16, DateTimeParts);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DateTimePartsMetadata {

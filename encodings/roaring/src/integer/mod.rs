@@ -14,7 +14,7 @@ use vortex_error::{vortex_bail, vortex_err};
 mod compress;
 mod compute;
 
-impl_encoding!("vortex.roaring_int", RoaringInt);
+impl_encoding!("vortex.roaring_int", 18u16, RoaringInt);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoaringIntMetadata {

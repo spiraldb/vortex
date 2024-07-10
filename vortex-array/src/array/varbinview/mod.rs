@@ -103,7 +103,7 @@ impl Debug for BinaryView {
 
 pub const VIEW_SIZE: usize = mem::size_of::<BinaryView>();
 
-impl_encoding!("vortex.varbinview", VarBinView);
+impl_encoding!("vortex.varbinview", 5u16, VarBinView);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VarBinViewMetadata {

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use criterion::async_executor::FuturesExecutor;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use futures_executor::block_on;
@@ -7,7 +9,7 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::stream::ArrayStreamExt;
 use vortex::validity::Validity;
-use vortex::{Context, IntoArray, ViewContext};
+use vortex::{Context, IntoArray};
 use vortex_ipc::io::FuturesAdapter;
 use vortex_ipc::writer::ArrayWriter;
 use vortex_ipc::MessageReader;
@@ -16,7 +18,7 @@ use vortex_ipc::MessageReader;
 // take from the first 20 batches and last batch
 // compare with arrow
 fn ipc_array_reader_take(c: &mut Criterion) {
-    let ctx = Context::default();
+    let ctx = Arc::new(Context::default());
 
     let indices = (0..20)
         .map(|i| i * 100_000 + 1)
@@ -32,15 +34,9 @@ fn ipc_array_reader_take(c: &mut Criterion) {
         )
         .into_array();
 
-        let buffer = block_on(async {
-            ArrayWriter::new(vec![], ViewContext::from(&ctx))
-                .write_context()
-                .await?
-                .write_array(array)
-                .await
-        })
-        .unwrap()
-        .into_inner();
+        let buffer = block_on(async { ArrayWriter::new(vec![]).write_array(array).await })
+            .unwrap()
+            .into_inner();
 
         let indices = indices.clone().into_array();
 
@@ -50,7 +46,7 @@ fn ipc_array_reader_take(c: &mut Criterion) {
                 .await
                 .unwrap();
             let stream = msgs
-                .array_stream_from_messages(&ctx)
+                .array_stream_from_messages(ctx.clone())
                 .await
                 .unwrap()
                 .take_rows(indices.clone())

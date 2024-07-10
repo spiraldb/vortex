@@ -7,14 +7,6 @@ enum Version: uint8 {
   V0 = 0,
 }
 
-table Context {
-    encodings: [Encoding];
-}
-
-table Encoding {
-    id: string;
-}
-
 table Schema {
     dtype: vortex.dtype.DType;
 }
@@ -41,7 +33,6 @@ table Page {
 }
 
 union MessageHeader {
-  Context,
   Schema,
   Chunk,
   Page,

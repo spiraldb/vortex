@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::env::temp_dir;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use arrow_array::RecordBatchReader;
 use humansize::DECIMAL;
@@ -48,7 +49,7 @@ pub mod taxi_data;
 pub mod vortex_utils;
 
 lazy_static! {
-    pub static ref CTX: Context = Context::default().with_encodings([
+    pub static ref CTX: Arc<Context> = Arc::new(Context::default().with_encodings([
         &ALPEncoding as EncodingRef,
         &DictEncoding,
         &BitPackedEncoding,
@@ -60,7 +61,7 @@ lazy_static! {
         // &RoaringIntEncoding,
         // Doesn't offer anything more than FoR really
         // &ZigZagEncoding,
-    ]);
+    ]));
 }
 
 lazy_static! {

@@ -11,14 +11,14 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
-use vortex::{IntoArray, ToArrayData, ViewContext};
+use vortex::{IntoArray, ToArrayData};
 use vortex_dtype::DType;
 use vortex_error::{VortexError, VortexResult};
 use vortex_ipc::io::TokioAdapter;
 use vortex_ipc::writer::ArrayWriter;
 
+use crate::idempotent;
 use crate::reader::BATCH_SIZE;
-use crate::{idempotent, CTX};
 
 pub fn download_data(fname: PathBuf, data_url: &str) -> PathBuf {
     idempotent(&fname, |path| {
@@ -57,10 +57,7 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
             .unwrap()
             .block_on(async move {
                 let write = tokio::fs::File::create(path).await.unwrap();
-                ArrayWriter::new(TokioAdapter(write), ViewContext::from(&CTX.clone()))
-                    .write_context()
-                    .await
-                    .unwrap()
+                ArrayWriter::new(TokioAdapter(write))
                     .write_array(array)
                     .await
                     .unwrap();

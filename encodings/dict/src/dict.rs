@@ -9,7 +9,7 @@ use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::vortex_bail;
 
-impl_encoding!("vortex.dict", Dict);
+impl_encoding!("vortex.dict", 20u16, Dict);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DictMetadata {
