@@ -1,4 +1,4 @@
-use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer, ScalarBuffer};
+use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer};
 use itertools::Itertools;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -77,18 +77,6 @@ impl PrimitiveArray {
 
     pub fn buffer(&self) -> &Buffer {
         self.array().buffer().expect("missing buffer")
-    }
-
-    // TODO(ngates): deprecated, remove this.
-    pub fn scalar_buffer<T: NativePType + ArrowNativeType>(&self) -> ScalarBuffer<T> {
-        assert_eq!(
-            T::PTYPE,
-            self.ptype(),
-            "Attempted to get scalar buffer of type {} from array of type {}",
-            T::PTYPE,
-            self.ptype(),
-        );
-        ScalarBuffer::new(self.buffer().clone().into(), 0, self.len())
     }
 
     pub fn maybe_null_slice<T: NativePType>(&self) -> &[T] {
