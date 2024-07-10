@@ -106,7 +106,7 @@ mod test {
 
     use crate::array::primitive::PrimitiveArray;
     use crate::compute::unary::scalar_subtract::subtract_scalar;
-    use crate::{ArrayTrait, IntoArray, IntoCanonical};
+    use crate::{IntoArray, IntoCanonical};
 
     #[test]
     fn test_scalar_subtract_unsigned() {

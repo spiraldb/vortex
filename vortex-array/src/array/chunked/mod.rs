@@ -26,7 +26,9 @@ mod stats;
 impl_encoding!("vortex.chunked", 11u16, Chunked);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ChunkedMetadata;
+pub struct ChunkedMetadata {
+    num_chunks: usize,
+}
 
 impl ChunkedArray {
     const ENDS_DTYPE: DType = DType::Primitive(PType::U64, Nullability::NonNullable);
@@ -47,6 +49,7 @@ impl ChunkedArray {
             })
             .collect_vec();
 
+        let num_chunks = chunk_ends.len() - 1;
         let length = (*chunk_ends.last().unwrap()) as usize;
 
         let mut children = vec![PrimitiveArray::from_vec(chunk_ends, NonNullable).into_array()];
@@ -55,7 +58,7 @@ impl ChunkedArray {
         Self::try_from_parts(
             dtype,
             length,
-            ChunkedMetadata,
+            ChunkedMetadata { num_chunks },
             children.into(),
             StatsSet::new(),
         )
@@ -72,7 +75,7 @@ impl ChunkedArray {
     }
 
     pub fn nchunks(&self) -> usize {
-        self.chunk_ends().len() - 1
+        self.metadata().num_chunks
     }
 
     #[inline]

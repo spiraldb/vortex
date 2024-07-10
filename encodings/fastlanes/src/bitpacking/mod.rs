@@ -88,13 +88,18 @@ impl BitPackedArray {
         Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
     }
 
+    fn packed_len(&self) -> usize {
+        ((self.len() + self.offset() + 1023) / 1024)
+            * (128 * self.bit_width() / self.ptype().byte_width())
+    }
+
     #[inline]
     pub fn packed(&self) -> Array {
         self.array()
             .child(
                 0,
                 &self.dtype().with_nullability(Nullability::NonNullable),
-                self.len(),
+                self.packed_len(),
             )
             .expect("Missing packed array")
     }

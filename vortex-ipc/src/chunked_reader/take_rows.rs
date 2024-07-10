@@ -222,7 +222,7 @@ mod test {
     use itertools::Itertools;
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::{ArrayTrait, Context, IntoArray, IntoCanonical};
+    use vortex::{Context, IntoArray, IntoCanonical};
     use vortex_buffer::Buffer;
     use vortex_dtype::PType;
     use vortex_error::VortexResult;

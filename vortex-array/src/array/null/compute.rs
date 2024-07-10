@@ -62,7 +62,7 @@ mod test {
     use crate::compute::take::take;
     use crate::compute::unary::scalar_at::scalar_at;
     use crate::validity::{ArrayValidity, LogicalValidity};
-    use crate::{ArrayTrait, IntoArray};
+    use crate::IntoArray;
 
     #[test]
     fn test_slice_nulls() {

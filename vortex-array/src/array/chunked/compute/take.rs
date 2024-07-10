@@ -55,7 +55,7 @@ impl TakeFn for ChunkedArray {
 mod test {
     use crate::array::chunked::ChunkedArray;
     use crate::compute::take::take;
-    use crate::{ArrayDType, ArrayTrait, AsArray, IntoArray, IntoCanonical};
+    use crate::{ArrayDType, AsArray, IntoArray, IntoCanonical};
 
     #[test]
     fn test_take() {

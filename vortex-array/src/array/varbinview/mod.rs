@@ -368,7 +368,7 @@ mod test {
     use crate::array::varbinview::VarBinViewArray;
     use crate::compute::slice::slice;
     use crate::compute::unary::scalar_at::scalar_at;
-    use crate::{ArrayTrait, Canonical, IntoArray, IntoCanonical};
+    use crate::{Canonical, IntoArray, IntoCanonical};
 
     #[test]
     pub fn varbin_view() {

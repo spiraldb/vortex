@@ -111,7 +111,7 @@ pub fn runend_decode_primitive<
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::validity::{ArrayValidity, Validity};
-    use vortex::{ArrayTrait, IntoArray};
+    use vortex::IntoArray;
 
     use crate::compress::{runend_decode, runend_encode};
     use crate::RunEndArray;

@@ -141,7 +141,7 @@ mod test {
     use vortex::compute::slice::slice;
     use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::validity::Validity;
-    use vortex::{ArrayDType, ArrayTrait, IntoArray, IntoCanonical};
+    use vortex::{ArrayDType, IntoArray, IntoCanonical};
     use vortex_dtype::{DType, Nullability, PType};
 
     use crate::RunEndArray;

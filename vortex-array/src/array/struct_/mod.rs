@@ -196,7 +196,7 @@ mod test {
     use crate::array::struct_::StructArray;
     use crate::array::varbin::VarBinArray;
     use crate::validity::Validity;
-    use crate::{ArrayTrait, IntoArray};
+    use crate::IntoArray;
 
     #[test]
     fn test_project() {
