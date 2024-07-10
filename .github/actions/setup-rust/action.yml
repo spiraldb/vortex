@@ -19,14 +19,8 @@ runs:
     - name: Rust Dependency Cache
       uses: Swatinem/rust-cache@v2
       with:
-        save-if: ${{ github.ref == 'refs/heads/develop' }}
+        save-if: ${{ github.ref_name == 'develop' }}
         shared-key: "shared" # To allow reuse across jobs
-        cache-targets: false
-
-    - name: Cargo clean
-      shell: bash
-      run: |
-        cargo clean
 
     - name: Rust Compile Cache
       uses: mozilla-actions/sccache-action@v0.0.5
