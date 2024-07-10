@@ -1,4 +1,4 @@
-pub const Q1: &'static str = r#"
+pub const Q1: &str = r#"
             select
                 l_returnflag,
                 l_linestatus,

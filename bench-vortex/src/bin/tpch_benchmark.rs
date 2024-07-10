@@ -65,7 +65,7 @@ async fn load_datasets<P: AsRef<Path>>(
 async fn register_csv(
     session: &SessionContext,
     name: &str,
-    file: &PathBuf,
+    file: &Path,
     schema: &Schema,
 ) -> anyhow::Result<()> {
     session
@@ -86,7 +86,7 @@ async fn register_csv(
 async fn register_arrow(
     session: &SessionContext,
     name: &str,
-    file: &PathBuf,
+    file: &Path,
     schema: &Schema,
 ) -> anyhow::Result<()> {
     // Read CSV file into a set of Arrow RecordBatch.
@@ -112,7 +112,7 @@ async fn register_arrow(
 async fn register_vortex(
     session: &SessionContext,
     name: &str,
-    file: &PathBuf,
+    file: &Path,
     schema: &Schema,
     // TODO(aduffy): add compression option
 ) -> anyhow::Result<()> {
@@ -133,7 +133,7 @@ async fn register_vortex(
     let chunks: Vec<Array> = record_batches
         .iter()
         .cloned()
-        .map(|record| StructArray::from(record))
+        .map(StructArray::from)
         .map(|struct_array| ArrayData::from_arrow(&struct_array, false).into_array())
         .collect();
 
