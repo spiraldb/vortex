@@ -1,12 +1,12 @@
-mod flexbuffers;
-pub mod io_buf;
-mod string;
-
 use std::cmp::Ordering;
 use std::ops::{Deref, Range};
 
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer};
 pub use string::*;
+
+mod flexbuffers;
+pub mod io_buf;
+mod string;
 
 #[derive(Debug, Clone)]
 pub enum Buffer {
@@ -54,6 +54,18 @@ impl Buffer {
             Self::Arrow(buffer) => buffer.into_vec::<T>().map_err(Buffer::Arrow),
             // Cannot convert bytes into a mutable vec
             Self::Bytes(_) => Err(self),
+        }
+    }
+
+    /// Convert a Buffer into an ArrowBuffer with no copying.
+    pub fn into_arrow(self) -> ArrowBuffer {
+        match self {
+            Buffer::Arrow(a) => a,
+            Buffer::Bytes(b) => {
+                let v: Vec<u8> = b.into();
+
+                ArrowBuffer::from_vec(v)
+            }
         }
     }
 }

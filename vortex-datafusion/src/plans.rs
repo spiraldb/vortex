@@ -139,7 +139,7 @@ impl ExecutionPlan for RowSelectorExec {
 /// [RecordBatchStream] of row indices, emitted by the [RowSelectorExec] physical plan node.
 #[pin_project::pin_project]
 pub(crate) struct RowIndicesStream<F> {
-    /// The inner future that returns `DFResult<RecordBatch>`.
+    /// The inner future that returns `DFResult<Array>`.
     /// This future should only poll one time.
     #[pin]
     one_shot: F,
