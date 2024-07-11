@@ -5,13 +5,14 @@ use bytes::{Buf, BytesMut};
 use flatbuffers::{root, root_unchecked};
 use futures_util::stream::try_unfold;
 use itertools::Itertools;
-use vortex::stream::{ArrayStream, ArrayStreamAdapter};
+
 use vortex::{Array, ArrayView, Context, IntoArray, ToArray};
+use vortex::stream::{ArrayStream, ArrayStreamAdapter};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::flatbuffers::ipc as fb;
+use crate::flatbuffers::serde as fb;
 use crate::io::VortexRead;
 
 pub struct MessageReader<R> {
@@ -194,7 +195,7 @@ impl<R: VortexRead> MessageReader<R> {
         Ok(Some(view.into_array()))
     }
 
-    /// Construct an ArrayStream pulling the ViewContext and DType from the stream.
+    /// Construct an ArrayStream pulling the DType from the stream.
     pub async fn array_stream_from_messages(
         &mut self,
         ctx: Arc<Context>,
@@ -282,24 +283,29 @@ mod test {
     use std::io::Cursor;
 
     use bytes::Bytes;
+    use futures_executor::block_on;
+
     use vortex_buffer::Buffer;
 
     use crate::{MessageReader, MessageWriter};
 
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
-    async fn read_write_page() {
+    #[test]
+    fn read_write_page() {
         let write = Vec::new();
         let mut writer = MessageWriter::new(write);
-        writer
-            .write_page(Buffer::Bytes(Bytes::from("somevalue")))
-            .await
-            .unwrap();
+        block_on(async {
+            writer
+                .write_page(Buffer::Bytes(Bytes::from("somevalue")))
+                .await
+        })
+        .unwrap();
         let written = writer.into_inner();
-        let mut reader = MessageReader::try_new(Cursor::new(written.as_slice()))
-            .await
+        let mut reader =
+            block_on(async { MessageReader::try_new(Cursor::new(written.as_slice())).await })
+                .unwrap();
+        let read_page = block_on(async { reader.maybe_read_page().await })
+            .unwrap()
             .unwrap();
-        let read_page = reader.maybe_read_page().await.unwrap().unwrap();
         assert_eq!(read_page, Buffer::Bytes(Bytes::from("somevalue")));
     }
 }

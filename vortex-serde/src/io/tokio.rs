@@ -25,6 +25,10 @@ impl VortexReadAt for TokioAdapter<File> {
         std_file.read_exact_at(buffer.as_mut(), pos)?;
         Ok(buffer)
     }
+
+    async fn len(&self) -> u64 {
+        self.0.metadata().await.unwrap().len()
+    }
 }
 
 impl<W: AsyncWrite + Unpin> VortexWrite for TokioAdapter<W> {

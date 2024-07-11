@@ -14,8 +14,8 @@ use vortex::arrow::FromArrowType;
 use vortex::{IntoArray, ToArrayData};
 use vortex_dtype::DType;
 use vortex_error::{VortexError, VortexResult};
-use vortex_ipc::io::TokioAdapter;
-use vortex_ipc::writer::ArrayWriter;
+use vortex_serde::io::TokioAdapter;
+use vortex_serde::writer::ArrayWriter;
 
 use crate::idempotent;
 use crate::reader::BATCH_SIZE;

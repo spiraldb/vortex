@@ -4,13 +4,15 @@ use std::ops::Range;
 use bytes::BytesMut;
 use futures_util::{stream, StreamExt, TryStreamExt};
 use itertools::Itertools;
+
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compute::unary::{subtract_scalar, try_cast};
-use vortex::compute::{search_sorted, slice, take, SearchSortedSide};
+use vortex::compute::{search_sorted, SearchResult, SearchSortedSide, slice, take};
+use vortex::compute::unary::cast::try_cast;
+use vortex::compute::unary::scalar_subtract::subtract_scalar;
 use vortex::stats::ArrayStatistics;
 use vortex::stream::{ArrayStream, ArrayStreamExt};
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -94,7 +96,7 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
             .try_collect()
             .await?;
 
-        Ok(ChunkedArray::try_new(chunks, self.dtype.clone())?.into_array())
+        Ok(ChunkedArray::try_new(chunks, (*self.dtype).clone())?.into_array())
     }
 
     /// Coalesce reads for the given chunks.
@@ -167,9 +169,11 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIn
 
     let mut chunks = HashMap::new();
 
-    let row_offsets_ref = row_offsets.maybe_null_slice::<u64>();
     for (pos, idx) in indices.maybe_null_slice::<u64>().iter().enumerate() {
-        let chunk_idx = row_offsets_ref.binary_search(idx).unwrap_or_else(|x| x - 1);
+        let chunk_idx = match search_sorted(row_offsets.array(), *idx, SearchSortedSide::Left)? {
+            SearchResult::Found(i) => i,
+            SearchResult::NotFound(i) => i - 1,
+        };
         chunks
             .entry(chunk_idx as u32)
             .and_modify(|chunk_indices: &mut ChunkIndices| {
@@ -204,41 +208,43 @@ mod test {
     use std::io::Cursor;
     use std::sync::Arc;
 
+    use futures_executor::block_on;
     use itertools::Itertools;
+
+    use vortex::{Context, IntoArray, IntoArrayVariant};
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::{Context, IntoArray, IntoCanonical};
     use vortex_buffer::Buffer;
     use vortex_dtype::PType;
     use vortex_error::VortexResult;
 
     use crate::chunked_reader::ChunkedArrayReader;
-    use crate::writer::ArrayWriter;
     use crate::MessageReader;
+    use crate::writer::ArrayWriter;
 
-    async fn chunked_array() -> VortexResult<ArrayWriter<Vec<u8>>> {
+    fn chunked_array() -> VortexResult<ArrayWriter<Vec<u8>>> {
         let c = ChunkedArray::try_new(
             vec![PrimitiveArray::from((0i32..1000).collect_vec()).into_array(); 10],
             PType::I32.into(),
         )?
         .into_array();
 
-        ArrayWriter::new(vec![]).write_array(c).await
+        block_on(async { ArrayWriter::new(vec![]).write_array(c).await })
     }
 
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
-    async fn test_take_rows() -> VortexResult<()> {
-        let writer = chunked_array().await?;
+    #[test]
+    fn test_take_rows() -> VortexResult<()> {
+        let writer = chunked_array()?;
 
         let array_layout = writer.array_layouts()[0].clone();
-        let row_offsets = PrimitiveArray::from(array_layout.chunks.row_offsets.clone());
         let byte_offsets = PrimitiveArray::from(array_layout.chunks.byte_offsets.clone());
+        let row_offsets = PrimitiveArray::from(array_layout.chunks.row_offsets.clone());
 
         let buffer = Buffer::from(writer.into_inner());
 
-        let mut msgs = MessageReader::try_new(Cursor::new(buffer.clone())).await?;
-        let dtype = msgs.read_dtype().await?;
+        let mut msgs =
+            block_on(async { MessageReader::try_new(Cursor::new(buffer.clone())).await })?;
+        let dtype = Arc::new(block_on(async { msgs.read_dtype().await })?);
 
         let mut reader = ChunkedArrayReader::try_new(
             buffer,
@@ -249,11 +255,12 @@ mod test {
         )
         .unwrap();
 
-        let result = reader
-            .take_rows(&PrimitiveArray::from(vec![0u64, 10, 10_000 - 1]).into_array())
-            .await?
-            .into_canonical()?
-            .into_primitive()?;
+        let result = block_on(async {
+            reader
+                .take_rows(&PrimitiveArray::from(vec![0u64, 10, 10_000 - 1]).into_array())
+                .await
+        })?
+        .into_primitive()?;
 
         assert_eq!(result.len(), 3);
         assert_eq!(result.maybe_null_slice::<i32>(), &[0, 10, 999]);

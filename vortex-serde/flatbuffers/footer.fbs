@@ -1,0 +1,25 @@
+namespace vortex.serde;
+
+table OpaqueLayout {
+    byte_offset: uint64;
+}
+
+table ArrayLayout {
+    children: [Layout];
+    encoding: uint16;
+}
+
+union LayoutVariant {
+    OpaqueLayout,
+    ArrayLayout,
+}
+
+table Layout {
+    layout: LayoutVariant;
+}
+
+table Footer {
+    layout: ArrayLayout;
+}
+
+root_type Footer;

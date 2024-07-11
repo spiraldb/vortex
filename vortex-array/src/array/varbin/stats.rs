@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
@@ -101,8 +102,8 @@ impl<'a> VarBinAccumulator<'a> {
 
     pub fn finish(&self, dtype: &DType) -> StatsSet {
         StatsSet::from(HashMap::from([
-            (Stat::Min, varbin_scalar(self.min.to_vec(), dtype)),
-            (Stat::Max, varbin_scalar(self.max.to_vec(), dtype)),
+            (Stat::Min, varbin_scalar(Buffer::from(self.min), dtype)),
+            (Stat::Max, varbin_scalar(Buffer::from(self.max), dtype)),
             (Stat::RunCount, self.runs.into()),
             (Stat::IsSorted, self.is_sorted.into()),
             (Stat::IsStrictSorted, self.is_strict_sorted.into()),

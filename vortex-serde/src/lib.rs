@@ -2,6 +2,7 @@ pub use message_reader::*;
 pub use message_writer::*;
 
 pub mod chunked_reader;
+pub mod file;
 pub mod io;
 mod message_reader;
 mod message_writer;
@@ -39,9 +40,10 @@ pub mod flatbuffers {
 }
 
 #[cfg(test)]
-pub mod test {
+mod test {
     use std::sync::Arc;
 
+    use futures_executor::block_on;
     use futures_util::io::Cursor;
     use futures_util::{pin_mut, StreamExt, TryStreamExt};
     use itertools::Itertools;
@@ -56,23 +58,17 @@ pub mod test {
     use crate::writer::ArrayWriter;
     use crate::MessageReader;
 
-    pub async fn create_stream() -> Vec<u8> {
-        let array = PrimitiveArray::from(vec![0, 1, 2]).into_array();
-        let chunked_array =
-            ChunkedArray::try_new(vec![array.clone(), array.clone()], array.dtype().clone())
+    fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
+        block_on(async {
+            ArrayWriter::new(vec![])
+                .write_array(array.into_array())
+                .await
                 .unwrap()
-                .into_array();
-
-        ArrayWriter::new(vec![])
-            .write_array(array)
-            .await
-            .unwrap()
-            .write_array(chunked_array)
-            .await
-            .unwrap()
-            .into_inner()
+                .into_inner()
+        })
     }
 
+<<<<<<< HEAD:vortex-ipc/src/lib.rs
     async fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
         ArrayWriter::new(vec![])
             .write_array(array.into_array())
@@ -84,28 +80,33 @@ pub mod test {
     #[tokio::test]
     #[cfg_attr(miri, ignore)]
     async fn test_empty_index() -> VortexResult<()> {
+=======
+    #[test]
+    fn test_empty_index() -> VortexResult<()> {
+>>>>>>> 7a239b3c (Add vortex file format):vortex-serde/src/lib.rs
         let data = PrimitiveArray::from((0i32..3_000_000).collect_vec());
-        let buffer = write_ipc(data).await;
+        let buffer = write_ipc(data);
 
         let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
 
         let ctx = Arc::new(Context::default());
-        let mut messages = MessageReader::try_new(FuturesAdapter(Cursor::new(buffer)))
-            .await
-            .unwrap();
-        let reader = messages.array_stream_from_messages(ctx).await?;
+        let mut messages = block_on(async {
+            MessageReader::try_new(FuturesAdapter(Cursor::new(buffer)))
+                .await
+                .unwrap()
+        });
+        let reader = block_on(async { messages.array_stream_from_messages(ctx).await })?;
 
         let result_iter = reader.take_rows(indices).unwrap();
         pin_mut!(result_iter);
 
-        let result = result_iter.next().await.unwrap().unwrap();
+        let result = block_on(async { result_iter.next().await.unwrap().unwrap() });
         println!("Taken {:?}", result);
         Ok(())
     }
 
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
-    async fn test_write_read_chunked() -> VortexResult<()> {
+    #[test]
+    fn test_write_read_chunked() -> VortexResult<()> {
         let indices = PrimitiveArray::from(vec![
             10u32, 11, 12, 13, 100_000, 2_999_999, 2_999_999, 3_000_000,
         ])
@@ -116,18 +117,17 @@ pub mod test {
         let data2 =
             PrimitiveArray::from((3_000_000i32..6_000_000).rev().collect_vec()).into_array();
         let chunked = ChunkedArray::try_new(vec![data.clone(), data2], data.dtype().clone())?;
-        let buffer = write_ipc(chunked).await;
+        let buffer = write_ipc(chunked);
 
-        let mut messages = MessageReader::try_new(FuturesAdapter(Cursor::new(buffer))).await?;
+        let mut messages =
+            block_on(async { MessageReader::try_new(FuturesAdapter(Cursor::new(buffer))).await })?;
 
         let ctx = Arc::new(Context::default());
-        let take_iter = messages
-            .array_stream_from_messages(ctx)
-            .await?
+        let take_iter = block_on(async { messages.array_stream_from_messages(ctx).await })?
             .take_rows(indices)?;
         pin_mut!(take_iter);
 
-        let next = take_iter.try_next().await?.expect("Expected a chunk");
+        let next = block_on(async { take_iter.try_next().await })?.expect("Expected a chunk");
         assert_eq!(next.encoding().id(), PrimitiveEncoding.id());
 
         assert_eq!(
@@ -135,9 +135,7 @@ pub mod test {
             vec![2999989, 2999988, 2999987, 2999986, 2899999, 0, 0]
         );
         assert_eq!(
-            take_iter
-                .try_next()
-                .await?
+            block_on(async { take_iter.try_next().await })?
                 .expect("Expected a chunk")
                 .as_primitive()
                 .maybe_null_slice::<i32>(),

@@ -27,10 +27,10 @@ impl<R: VortexRead> StreamArrayReader<R> {
         })
     }
 
-    pub fn with_dtype(self, dtype: DType) -> Self {
+    pub fn with_dtype(self, dtype: Arc<DType>) -> Self {
         assert!(self.dtype.is_none(), "DType already set");
         Self {
-            dtype: Some(Arc::new(dtype)),
+            dtype: Some(dtype),
             ..self
         }
     }

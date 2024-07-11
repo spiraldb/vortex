@@ -10,9 +10,9 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::stream::ArrayStreamExt;
 use vortex::validity::Validity;
 use vortex::{Context, IntoArray};
-use vortex_ipc::io::FuturesAdapter;
-use vortex_ipc::writer::ArrayWriter;
-use vortex_ipc::MessageReader;
+use vortex_serde::io::FuturesAdapter;
+use vortex_serde::writer::ArrayWriter;
+use vortex_serde::MessageReader;
 
 // 100 record batches, 100k rows each
 // take from the first 20 batches and last batch

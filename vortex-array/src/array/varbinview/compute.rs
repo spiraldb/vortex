@@ -1,3 +1,4 @@
+use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -22,7 +23,7 @@ impl ScalarAtFn for VarBinViewArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
             self.bytes_at(index)
-                .map(|bytes| varbin_scalar(bytes, self.dtype()))
+                .map(|bytes| varbin_scalar(Buffer::from(bytes), self.dtype()))
         } else {
             Ok(Scalar::null(self.dtype().clone()))
         }

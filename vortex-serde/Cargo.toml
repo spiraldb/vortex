@@ -1,7 +1,7 @@
 [package]
-name = "vortex-ipc"
+name = "vortex-serde"
 version = { workspace = true }
-description = "Vortex IPC"
+description = "Vortex Serialisation"
 homepage = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
@@ -14,6 +14,7 @@ rust-version = { workspace = true }
 [dependencies]
 bytes = { workspace = true }
 flatbuffers = { workspace = true }
+futures = { workspace = true }
 futures-util = { workspace = true }
 itertools = { workspace = true }
 monoio = { workspace = true, optional = true, features = ["bytes"] }
@@ -52,6 +53,7 @@ workspace = true
 default = ["futures", "monoio", "tokio"]
 futures = ["futures-util/io"]
 monoio = ["dep:monoio"]
+tokio = ["dep:tokio"]
 
 [[bench]]
 name = "ipc_take"

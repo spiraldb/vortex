@@ -6,8 +6,8 @@ use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 
-use crate::flatbuffers::ipc as fb;
-use crate::flatbuffers::ipc::Compression;
+use crate::flatbuffers::serde as fb;
+use crate::flatbuffers::serde::Compression;
 use crate::ALIGNMENT;
 
 pub enum IPCMessage<'a> {
