@@ -68,3 +68,7 @@ harness = false
 [[bench]]
 name = "datafusion_benchmark"
 harness = false
+
+[[bench]]
+name = "tpch_benchmark"
+harness = false

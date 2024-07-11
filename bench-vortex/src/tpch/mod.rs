@@ -1,3 +1,147 @@
+use std::path::Path;
+use std::sync::Arc;
+
+use arrow_array::StructArray;
+use arrow_schema::Schema;
+use datafusion::datasource::MemTable;
+use datafusion::prelude::{CsvReadOptions, SessionContext};
+use vortex::array::chunked::ChunkedArray;
+use vortex::arrow::FromArrowArray;
+use vortex::{Array, ArrayDType, ArrayData, IntoArray, IntoCanonical};
+use vortex_datafusion::SessionContextExt;
+
 pub mod dbgen;
 pub mod query;
 pub mod schema;
+
+pub enum Format {
+    Csv,
+    Arrow,
+    VortexUncompressed,
+}
+
+// Generate table dataset.
+pub async fn load_datasets<P: AsRef<Path>>(
+    base_dir: P,
+    format: Format,
+) -> anyhow::Result<SessionContext> {
+    let context = SessionContext::new();
+    let base_dir = base_dir.as_ref();
+
+    let customer = base_dir.join("customer.tbl");
+    let lineitem = base_dir.join("lineitem.tbl");
+    let nation = base_dir.join("nation.tbl");
+    let orders = base_dir.join("orders.tbl");
+    let part = base_dir.join("part.tbl");
+    let partsupp = base_dir.join("partsupp.tbl");
+    let region = base_dir.join("region.tbl");
+    let supplier = base_dir.join("supplier.tbl");
+
+    macro_rules! register_table {
+        ($name:ident, $schema:expr) => {
+            match format {
+                Format::Csv => register_csv(&context, stringify!($name), &$name, $schema).await,
+                Format::Arrow => register_arrow(&context, stringify!($name), &$name, $schema).await,
+                Format::VortexUncompressed => {
+                    register_vortex(&context, stringify!($name), &$name, $schema).await
+                }
+            }
+        };
+    }
+
+    register_table!(customer, &schema::CUSTOMER)?;
+    register_table!(lineitem, &schema::LINEITEM)?;
+    register_table!(nation, &schema::NATION)?;
+    register_table!(orders, &schema::ORDERS)?;
+    register_table!(part, &schema::PART)?;
+    register_table!(partsupp, &schema::PARTSUPP)?;
+    register_table!(region, &schema::REGION)?;
+    register_table!(supplier, &schema::SUPPLIER)?;
+
+    Ok(context)
+}
+
+async fn register_csv(
+    session: &SessionContext,
+    name: &str,
+    file: &Path,
+    schema: &Schema,
+) -> anyhow::Result<()> {
+    session
+        .register_csv(
+            name,
+            file.to_str().unwrap(),
+            CsvReadOptions::default()
+                .delimiter(b'|')
+                .has_header(false)
+                .file_extension("tbl")
+                .schema(schema),
+        )
+        .await?;
+
+    Ok(())
+}
+
+async fn register_arrow(
+    session: &SessionContext,
+    name: &str,
+    file: &Path,
+    schema: &Schema,
+) -> anyhow::Result<()> {
+    // Read CSV file into a set of Arrow RecordBatch.
+    let record_batches = session
+        .read_csv(
+            file.to_str().unwrap(),
+            CsvReadOptions::default()
+                .delimiter(b'|')
+                .has_header(false)
+                .file_extension("tbl")
+                .schema(schema),
+        )
+        .await?
+        .collect()
+        .await?;
+
+    let mem_table = MemTable::try_new(Arc::new(schema.clone()), vec![record_batches])?;
+    session.register_table(name, Arc::new(mem_table))?;
+
+    Ok(())
+}
+
+async fn register_vortex(
+    session: &SessionContext,
+    name: &str,
+    file: &Path,
+    schema: &Schema,
+    // TODO(aduffy): add compression option
+) -> anyhow::Result<()> {
+    let record_batches = session
+        .read_csv(
+            file.to_str().unwrap(),
+            CsvReadOptions::default()
+                .delimiter(b'|')
+                .has_header(false)
+                .file_extension("tbl")
+                .schema(schema),
+        )
+        .await?
+        .collect()
+        .await?;
+
+    // Create a ChunkedArray from the set of chunks.
+    let chunks: Vec<Array> = record_batches
+        .iter()
+        .cloned()
+        .map(StructArray::from)
+        .map(|struct_array| ArrayData::from_arrow(&struct_array, false).into_array())
+        .collect();
+
+    let dtype = chunks[0].dtype().clone();
+    let chunked_array = ChunkedArray::try_new(chunks, dtype)?
+        .into_canonical()?
+        .into_array();
+
+    session.register_vortex(name, chunked_array)?;
+
+    Ok(())
+}
