@@ -152,7 +152,7 @@ fn primitive_to_arrow(primitive_array: PrimitiveArray) -> ArrayRef {
         array: &PrimitiveArray,
     ) -> ArrowPrimitiveArray<T> {
         ArrowPrimitiveArray::new(
-            ScalarBuffer::<T::Native>::new(array.buffer().clone().into(), 0, array.len()),
+            ScalarBuffer::<T::Native>::new(array.buffer().clone().into_arrow(), 0, array.len()),
             array
                 .logical_validity()
                 .to_null_buffer()
@@ -242,29 +242,37 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
     // Switch on Arrow DType.
     match varbin_array.dtype() {
         DType::Binary(_) => match offsets.ptype() {
-            PType::I32 => Arc::new(BinaryArray::new(
-                as_offset_buffer::<i32>(offsets),
-                data.into(),
-                nulls,
-            )),
-            PType::I64 => Arc::new(LargeBinaryArray::new(
-                as_offset_buffer::<i64>(offsets),
-                data.into(),
-                nulls,
-            )),
+            PType::I32 => Arc::new(unsafe {
+                BinaryArray::new_unchecked(
+                    as_offset_buffer::<i32>(offsets),
+                    data.clone().into_arrow(),
+                    nulls,
+                )
+            }),
+            PType::I64 => Arc::new(unsafe {
+                LargeBinaryArray::new_unchecked(
+                    as_offset_buffer::<i64>(offsets),
+                    data.clone().into_arrow(),
+                    nulls,
+                )
+            }),
             _ => panic!("Invalid offsets type"),
         },
         DType::Utf8(_) => match offsets.ptype() {
-            PType::I32 => Arc::new(StringArray::new(
-                as_offset_buffer::<i32>(offsets),
-                data.into(),
-                nulls,
-            )),
-            PType::I64 => Arc::new(LargeStringArray::new(
-                as_offset_buffer::<i64>(offsets),
-                data.into(),
-                nulls,
-            )),
+            PType::I32 => Arc::new(unsafe {
+                StringArray::new_unchecked(
+                    as_offset_buffer::<i32>(offsets),
+                    data.clone().into_arrow(),
+                    nulls,
+                )
+            }),
+            PType::I64 => Arc::new(unsafe {
+                LargeStringArray::new_unchecked(
+                    as_offset_buffer::<i64>(offsets),
+                    data.clone().into_arrow(),
+                    nulls,
+                )
+            }),
             _ => panic!("Invalid offsets type"),
         },
         _ => panic!(
@@ -286,7 +294,7 @@ fn local_date_time_to_arrow(local_date_time_array: LocalDateTimeArray) -> ArrayR
         .to_null_buffer()
         .expect("null buffer");
     let timestamps_len = timestamps.len();
-    let buffer = ScalarBuffer::<i64>::new(timestamps.into_buffer().into(), 0, timestamps_len);
+    let buffer = ScalarBuffer::<i64>::new(timestamps.into_buffer().into_arrow(), 0, timestamps_len);
 
     match local_date_time_array.time_unit() {
         TimeUnit::Ns => Arc::new(TimestampNanosecondArray::new(buffer, validity)),

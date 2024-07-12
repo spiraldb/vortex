@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::path::PathBuf;
 use std::time::SystemTime;
 
@@ -33,7 +34,13 @@ async fn q1_arrow(base_dir: &PathBuf) -> anyhow::Result<()> {
 }
 
 async fn q1_vortex(base_dir: &PathBuf) -> anyhow::Result<()> {
-    let ctx = load_datasets(base_dir, Format::VortexUncompressed).await?;
+    let ctx = load_datasets(
+        base_dir,
+        Format::Vortex {
+            disable_pushdown: true,
+        },
+    )
+    .await?;
 
     println!("BEGIN: Q1(VORTEX)");
     let start = SystemTime::now();
@@ -46,8 +53,11 @@ async fn q1_vortex(base_dir: &PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
+    // uncomment the below to enable trace logging of datafusion execution
+    // setup_logger(LevelFilter::Trace);
+
     // Run TPC-H data gen.
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
 

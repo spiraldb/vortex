@@ -7,8 +7,8 @@ use datafusion::datasource::MemTable;
 use datafusion::prelude::{CsvReadOptions, SessionContext};
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowArray;
-use vortex::{Array, ArrayDType, ArrayData, IntoArray, IntoCanonical};
-use vortex_datafusion::SessionContextExt;
+use vortex::{Array, ArrayDType, ArrayData, IntoArray};
+use vortex_datafusion::{SessionContextExt, VortexMemTableOptions};
 
 pub mod dbgen;
 pub mod query;
@@ -17,7 +17,7 @@ pub mod schema;
 pub enum Format {
     Csv,
     Arrow,
-    VortexUncompressed,
+    Vortex { disable_pushdown: bool },
 }
 
 // Generate table dataset.
@@ -42,8 +42,17 @@ pub async fn load_datasets<P: AsRef<Path>>(
             match format {
                 Format::Csv => register_csv(&context, stringify!($name), &$name, $schema).await,
                 Format::Arrow => register_arrow(&context, stringify!($name), &$name, $schema).await,
-                Format::VortexUncompressed => {
-                    register_vortex(&context, stringify!($name), &$name, $schema).await
+                Format::Vortex {
+                    disable_pushdown, ..
+                } => {
+                    register_vortex(
+                        &context,
+                        stringify!($name),
+                        &$name,
+                        $schema,
+                        disable_pushdown,
+                    )
+                    .await
                 }
             }
         };
@@ -113,7 +122,7 @@ async fn register_vortex(
     name: &str,
     file: &Path,
     schema: &Schema,
-    // TODO(aduffy): add compression option
+    disable_pushdown: bool,
 ) -> anyhow::Result<()> {
     let record_batches = session
         .read_csv(
@@ -137,11 +146,13 @@ async fn register_vortex(
         .collect();
 
     let dtype = chunks[0].dtype().clone();
-    let chunked_array = ChunkedArray::try_new(chunks, dtype)?
-        .into_canonical()?
-        .into_array();
+    let chunked_array = ChunkedArray::try_new(chunks, dtype)?.into_array();
 
-    session.register_vortex(name, chunked_array)?;
+    session.register_vortex_opts(
+        name,
+        chunked_array,
+        VortexMemTableOptions::default().with_disable_pushdown(disable_pushdown),
+    )?;
 
     Ok(())
 }
