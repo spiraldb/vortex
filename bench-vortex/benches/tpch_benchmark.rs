@@ -5,16 +5,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use tokio::runtime::Builder;
 
 fn benchmark(c: &mut Criterion) {
-    let runtime = Builder::new_current_thread()
-        .thread_name("bench-worker")
-        .enable_all()
-        .build()
-        .unwrap();
-    let prework_runtime = Builder::new_current_thread()
-        .thread_name("prework")
-        .enable_all()
-        .build()
-        .unwrap();
+    let runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
     // Run TPC-H data gen.
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
@@ -22,7 +13,7 @@ fn benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("tpch q1");
     group.sample_size(10);
 
-    let ctx = prework_runtime
+    let ctx = runtime
         .block_on(load_datasets(
             &data_dir,
             Format::Vortex {
@@ -35,7 +26,7 @@ fn benchmark(c: &mut Criterion) {
             .iter(|| async { ctx.sql(Q1).await.unwrap().collect().await.unwrap() })
     });
 
-    let ctx = prework_runtime
+    let ctx = runtime
         .block_on(load_datasets(
             &data_dir,
             Format::Vortex {
@@ -48,7 +39,7 @@ fn benchmark(c: &mut Criterion) {
             .iter(|| async { ctx.sql(Q1).await.unwrap().collect().await.unwrap() })
     });
 
-    let ctx = prework_runtime
+    let ctx = runtime
         .block_on(load_datasets(&data_dir, Format::Csv))
         .unwrap();
     group.bench_function("csv", |b| {
@@ -56,7 +47,7 @@ fn benchmark(c: &mut Criterion) {
             .iter(|| async { ctx.sql(Q1).await.unwrap().collect().await.unwrap() })
     });
 
-    let ctx = prework_runtime
+    let ctx = runtime
         .block_on(load_datasets(&data_dir, Format::Arrow))
         .unwrap();
     group.bench_function("arrow", |b| {
