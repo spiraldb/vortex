@@ -294,7 +294,7 @@ fn local_date_time_to_arrow(local_date_time_array: LocalDateTimeArray) -> ArrayR
         .to_null_buffer()
         .expect("null buffer");
     let timestamps_len = timestamps.len();
-    let buffer = ScalarBuffer::<i64>::new(timestamps.into_buffer().into(), 0, timestamps_len);
+    let buffer = ScalarBuffer::<i64>::new(timestamps.into_buffer().into_arrow(), 0, timestamps_len);
 
     match local_date_time_array.time_unit() {
         TimeUnit::Ns => Arc::new(TimestampNanosecondArray::new(buffer, validity)),

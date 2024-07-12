@@ -2,7 +2,6 @@
 
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
-use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -21,10 +20,10 @@ use datafusion_physical_plan::{
 use futures::{ready, Stream};
 use lazy_static::lazy_static;
 use pin_project::pin_project;
-use vortex::array::struct_::StructArray;
+use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take::take;
-use vortex::{Array, ArrayDType, ArrayData, IntoArray, IntoCanonical};
+use vortex::{ArrayDType, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
 
 use crate::datatype::infer_schema;
 use crate::expr::{make_conjunction, simplify_expr};
@@ -35,12 +34,13 @@ use crate::expr::{make_conjunction, simplify_expr};
 pub(crate) struct RowSelectorExec {
     filter_exprs: Vec<Expr>,
 
+    filter_projection: Vec<usize>,
+
     // cached PlanProperties object. We do not make use of this.
     cached_plan_props: PlanProperties,
 
-    // A Vortex struct array that contains all columns necessary for executing the filter
-    // expressions.
-    filter_struct: StructArray,
+    // Full array. We only access partitions of this data.
+    chunked_array: ChunkedArray,
 }
 
 lazy_static! {
@@ -52,16 +52,21 @@ lazy_static! {
 }
 
 impl RowSelectorExec {
-    pub(crate) fn new(filter_exprs: &[Expr], filter_struct: &StructArray) -> Self {
+    pub(crate) fn new(
+        filter_exprs: &[Expr],
+        filter_projection: Vec<usize>,
+        chunked_array: &ChunkedArray,
+    ) -> Self {
         let cached_plan_props = PlanProperties::new(
             EquivalenceProperties::new(ROW_SELECTOR_SCHEMA_REF.clone()),
-            Partitioning::RoundRobinBatch(1),
+            Partitioning::UnknownPartitioning(1),
             ExecutionMode::Bounded,
         );
 
         Self {
             filter_exprs: filter_exprs.to_owned(),
-            filter_struct: filter_struct.clone(),
+            filter_projection: filter_projection.clone(),
+            chunked_array: chunked_array.clone(),
             cached_plan_props,
         }
     }
@@ -109,68 +114,69 @@ impl ExecutionPlan for RowSelectorExec {
     fn execute(
         &self,
         partition: usize,
-        context: Arc<TaskContext>,
+        _context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
         assert_eq!(
             partition, 0,
-            "single partitioning only supported by TakeOperator"
+            "single partitioning only supported by RowSelectorExec"
         );
 
-        let stream_schema = Arc::new(infer_schema(self.filter_struct.dtype()));
+        // Derive a schema using the provided set of fields.
 
-        let filter_struct = self.filter_struct.clone();
-        let one_shot = Box::pin(async move { filter_struct.into_array() });
+        let filter_schema = Arc::new(
+            infer_schema(self.chunked_array.dtype())
+                .project(self.filter_projection.as_slice())
+                .unwrap(),
+        );
 
         let conjunction_expr = simplify_expr(
             &make_conjunction(&self.filter_exprs)?,
-            stream_schema.clone(),
+            filter_schema.clone(),
         )?;
 
         Ok(Box::pin(RowIndicesStream {
-            one_shot,
-            polled_inner: false,
+            chunked_array: self.chunked_array.clone(),
+            chunk_idx: 0,
+            filter_projection: self.filter_projection.clone(),
             conjunction_expr,
-            schema_ref: stream_schema,
-            context: context.clone(),
+            filter_schema,
         }))
     }
 }
 
 /// [RecordBatchStream] of row indices, emitted by the [RowSelectorExec] physical plan node.
-#[pin_project::pin_project]
-pub(crate) struct RowIndicesStream<F> {
-    /// The inner future that returns `DFResult<Array>`.
-    /// This future should only poll one time.
-    #[pin]
-    one_shot: F,
-
-    polled_inner: bool,
-
+pub(crate) struct RowIndicesStream {
+    chunked_array: ChunkedArray,
+    chunk_idx: usize,
     conjunction_expr: Expr,
-    schema_ref: SchemaRef,
-    context: Arc<TaskContext>,
+    filter_projection: Vec<usize>,
+    filter_schema: SchemaRef,
 }
 
-impl<F> Stream for RowIndicesStream<F>
-where
-    F: Future<Output = Array>,
-{
+impl Stream for RowIndicesStream {
     type Item = DFResult<RecordBatch>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.project();
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
 
-        // If we have already polled the one-shot future of filter records, indicate
-        // that the stream has finished.
-        if *this.polled_inner {
+        if this.chunk_idx >= this.chunked_array.nchunks() {
             return Poll::Ready(None);
         }
+
+        let next_chunk = this
+            .chunked_array
+            .chunk(this.chunk_idx)
+            .expect("chunk index in-bounds");
+        this.chunk_idx += 1;
 
         // Get the unfiltered record batch.
         // Since this is a one-shot, we only want to poll the inner future once, to create the
         // initial batch for us to process.
-        let vortex_struct = ready!(this.one_shot.poll(cx));
-        *this.polled_inner = true;
+        let vortex_struct = next_chunk
+            .into_struct()
+            .expect("chunks must be StructArray")
+            .project(this.filter_projection.as_slice())
+            .expect("projection should succeed");
 
         // Immediately convert to Arrow RecordBatch for processing.
         // TODO(aduffy): attempt to pushdown the filter to Vortex without decoding.
@@ -186,9 +192,9 @@ where
         //
         // The result of a conjunction expression is a BooleanArray containing `true` for rows
         // where the conjunction was satisfied, and `false` otherwise.
-        let df_schema = DFSchema::try_from(this.schema_ref.clone())?;
+        let df_schema = DFSchema::try_from(this.filter_schema.clone())?;
         let physical_expr =
-            create_physical_expr(this.conjunction_expr, &df_schema, &Default::default())?;
+            create_physical_expr(&this.conjunction_expr, &df_schema, &Default::default())?;
         let selection = physical_expr
             .evaluate(&record_batch)?
             .into_array(record_batch.num_rows())?;
@@ -209,12 +215,9 @@ where
     }
 }
 
-impl<F> RecordBatchStream for RowIndicesStream<F>
-where
-    F: Future<Output = Array>,
-{
+impl RecordBatchStream for RowIndicesStream {
     fn schema(&self) -> SchemaRef {
-        self.schema_ref.clone()
+        ROW_SELECTOR_SCHEMA_REF.clone()
     }
 }
 
@@ -232,7 +235,7 @@ pub(crate) struct TakeRowsExec {
     output_schema: SchemaRef,
 
     // The original Vortex array holding the fields we have not decoded yet.
-    table: StructArray,
+    table: ChunkedArray,
 }
 
 impl TakeRowsExec {
@@ -240,12 +243,12 @@ impl TakeRowsExec {
         schema_ref: SchemaRef,
         projection: &[usize],
         row_indices: Arc<dyn ExecutionPlan>,
-        table: &StructArray,
+        table: &ChunkedArray,
     ) -> Self {
         let output_schema = Arc::new(schema_ref.project(projection).unwrap());
         let plan_properties = PlanProperties::new(
             EquivalenceProperties::new(output_schema.clone()),
-            Partitioning::RoundRobinBatch(1),
+            Partitioning::UnknownPartitioning(1),
             ExecutionMode::Bounded,
         );
 
@@ -299,16 +302,12 @@ impl ExecutionPlan for TakeRowsExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
-        assert_eq!(
-            partition, 0,
-            "single partitioning only supported by TakeOperator"
-        );
-
+        // Get the row indices for the given chunk.
         let row_indices_stream = self.input.execute(partition, context)?;
 
         Ok(Box::pin(TakeRowsStream {
             row_indices_stream,
-            completed: false,
+            chunk_idx: 0,
             output_projection: self.projection.clone(),
             output_schema: self.output_schema.clone(),
             vortex_array: self.table.clone(),
@@ -323,14 +322,17 @@ pub(crate) struct TakeRowsStream<F> {
     #[pin]
     row_indices_stream: F,
 
-    completed: bool,
+    // The current chunk. Every time we receive a new RecordBatch from the upstream operator
+    // we treat it as a set of row-indices that are zero-indexed relative to this chunk number
+    // in the `vortex_array`.
+    chunk_idx: usize,
 
     // Projection based on the schema here
     output_projection: Vec<usize>,
     output_schema: SchemaRef,
 
     // The original Vortex array we're taking from
-    vortex_array: StructArray,
+    vortex_array: ChunkedArray,
 }
 
 impl<F> Stream for TakeRowsStream<F>
@@ -342,23 +344,19 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
-        // If `poll_next` has already fired, return None indicating end of the stream.
-        if *this.completed {
-            return Poll::Ready(None);
-        }
-
         // Get the indices provided by the upstream operator.
         let record_batch = match ready!(this.row_indices_stream.poll_next(cx)) {
             None => {
                 // Row indices stream is complete, we are also complete.
-                // This should never happen right now given we only emit one recordbatch upstream.
                 return Poll::Ready(None);
             }
-            Some(result) => {
-                *this.completed = true;
-                result?
-            }
+            Some(result) => result?,
         };
+
+        assert!(
+            *this.chunk_idx <= this.vortex_array.nchunks(),
+            "input yielded too many RecordBatches"
+        );
 
         let row_indices =
             ArrayData::from_arrow(record_batch.column(0).as_primitive::<UInt64Type>(), false)
@@ -376,10 +374,19 @@ where
             .unwrap())));
         }
 
+        let chunk = this
+            .vortex_array
+            .chunk(*this.chunk_idx)
+            .expect("streamed too many chunks")
+            .into_struct()
+            .expect("chunks must be struct-encoded");
+
+        *this.chunk_idx += 1;
+
         // TODO(aduffy): this re-decodes the fields from the filter schema, which is wasteful.
         //  We should find a way to avoid decoding the filter columns and only decode the other
         //  columns, then stitch the StructArray back together from those.
-        let projected_for_output = this.vortex_array.project(this.output_projection).unwrap();
+        let projected_for_output = chunk.project(this.output_projection).unwrap();
         let decoded = take(&projected_for_output.into_array(), &row_indices)
             .expect("take")
             .into_canonical()
@@ -411,10 +418,11 @@ mod test {
     use datafusion_expr::{and, col, lit};
     use itertools::Itertools;
     use vortex::array::bool::BoolArray;
+    use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::validity::Validity;
-    use vortex::IntoArray;
+    use vortex::{ArrayDType, IntoArray};
     use vortex_dtype::FieldName;
 
     use crate::plans::{RowIndicesStream, ROW_SELECTOR_SCHEMA_REF};
@@ -426,40 +434,50 @@ mod test {
             Field::new("b", DataType::Boolean, false),
         ]));
 
-        let _schema = schema.clone();
-        let one_shot = Box::pin(async move {
-            StructArray::try_new(
-                Arc::new([FieldName::from("a"), FieldName::from("b")]),
-                vec![
-                    PrimitiveArray::from(vec![0u64, 1, 2]).into_array(),
-                    BoolArray::from(vec![false, false, true]).into_array(),
-                ],
-                3,
-                Validity::NonNullable,
-            )
-            .unwrap()
-            .into_array()
-        });
+        let chunk = StructArray::try_new(
+            Arc::new([FieldName::from("a"), FieldName::from("b")]),
+            vec![
+                PrimitiveArray::from(vec![0u64, 1, 2]).into_array(),
+                BoolArray::from(vec![false, false, true]).into_array(),
+            ],
+            3,
+            Validity::NonNullable,
+        )
+        .unwrap()
+        .into_array();
+
+        let dtype = chunk.dtype().clone();
+        let chunked_array =
+            ChunkedArray::try_new(vec![chunk.clone(), chunk.clone()], dtype).unwrap();
 
         let _schema = schema.clone();
         let filtering_stream = RowIndicesStream {
-            one_shot,
-            polled_inner: false,
+            chunked_array: chunked_array.clone(),
+            chunk_idx: 0,
             conjunction_expr: and((col("a") % lit(2u64)).eq(lit(0u64)), col("b").is_true()),
-            schema_ref: _schema,
-            context: Arc::new(Default::default()),
+            filter_projection: vec![0, 1],
+            filter_schema: _schema,
         };
 
         let rows: Vec<RecordBatch> = futures::executor::block_on_stream(filtering_stream)
             .try_collect()
             .unwrap();
 
-        assert_eq!(rows.len(), 1);
+        assert_eq!(rows.len(), 2);
 
         // The output of row selection is a RecordBatch of indices that can be used as selectors
         // against the original RecordBatch.
         assert_eq!(
             rows[0],
+            RecordBatch::try_new(
+                ROW_SELECTOR_SCHEMA_REF.clone(),
+                vec![Arc::new(UInt64Array::from(vec![2u64])),]
+            )
+            .unwrap()
+        );
+
+        assert_eq!(
+            rows[1],
             RecordBatch::try_new(
                 ROW_SELECTOR_SCHEMA_REF.clone(),
                 vec![Arc::new(UInt64Array::from(vec![2u64])),]

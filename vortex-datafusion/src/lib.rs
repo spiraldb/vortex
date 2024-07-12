@@ -22,11 +22,9 @@ use datafusion_physical_expr::EquivalenceProperties;
 use datafusion_physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, Partitioning, PlanProperties,
 };
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use itertools::Itertools;
-use pin_project::pin_project;
 use vortex::array::chunked::ChunkedArray;
-use vortex::array::struct_::StructArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::DType;
 
@@ -109,7 +107,7 @@ impl SessionContextExt for SessionContext {
 /// a table to DataFusion.
 #[derive(Debug, Clone)]
 pub struct VortexMemTable {
-    array: Array,
+    array: ChunkedArray,
     schema_ref: SchemaRef,
     options: VortexMemTableOptions,
 }
@@ -123,6 +121,14 @@ impl VortexMemTable {
     pub fn new(array: Array, options: VortexMemTableOptions) -> Self {
         let arrow_schema = infer_schema(array.dtype());
         let schema_ref = SchemaRef::new(arrow_schema);
+
+        let array = match ChunkedArray::try_from(&array) {
+            Ok(a) => a,
+            _ => {
+                let dtype = array.dtype().clone();
+                ChunkedArray::try_new(vec![array], dtype).unwrap()
+            }
+        };
 
         Self {
             array,
@@ -176,12 +182,6 @@ impl TableProvider for VortexMemTable {
             Some(filters)
         };
 
-        let partitioning = if let Ok(chunked_array) = ChunkedArray::try_from(&self.array) {
-            Partitioning::RoundRobinBatch(chunked_array.nchunks())
-        } else {
-            Partitioning::UnknownPartitioning(1)
-        };
-
         let output_projection: Vec<usize> = match projection {
             None => (0..self.schema_ref.fields().len()).collect(),
             Some(proj) => proj.clone(),
@@ -215,7 +215,9 @@ impl TableProvider for VortexMemTable {
                 );
                 let plan_properties = PlanProperties::new(
                     EquivalenceProperties::new(output_schema),
-                    partitioning,
+                    // non-pushdown scans execute in single partition, where the partition
+                    // yields one RecordBatch per chunk in the input ChunkedArray
+                    Partitioning::UnknownPartitioning(1),
                     ExecutionMode::Bounded,
                 );
 
@@ -265,23 +267,21 @@ fn make_filter_then_take_plan(
     schema: SchemaRef,
     filter_exprs: &[Expr],
     filter_projection: Vec<usize>,
-    array: Array,
+    chunked_array: ChunkedArray,
     output_projection: Vec<usize>,
     _session_state: &SessionState,
 ) -> Arc<dyn ExecutionPlan> {
-    let struct_array = StructArray::try_from(array).unwrap();
-
-    let filter_struct = struct_array
-        .project(filter_projection.as_slice())
-        .expect("projecting filter struct");
-
-    let row_selector_op = Arc::new(RowSelectorExec::new(filter_exprs, &filter_struct));
+    let row_selector_op = Arc::new(RowSelectorExec::new(
+        filter_exprs,
+        filter_projection,
+        &chunked_array,
+    ));
 
     Arc::new(TakeRowsExec::new(
         schema.clone(),
         &output_projection,
         row_selector_op.clone(),
-        &struct_array,
+        &chunked_array,
     ))
 }
 
@@ -372,11 +372,22 @@ fn get_column_references(expr: &Expr) -> HashSet<String> {
 }
 
 /// Physical plan node for scans against an in-memory, possibly chunked Vortex Array.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct VortexScanExec {
-    array: Array,
+    array: ChunkedArray,
     scan_projection: Vec<usize>,
     plan_properties: PlanProperties,
+}
+
+impl Debug for VortexScanExec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VortexScanExec")
+            .field("array_length", &self.array.len())
+            .field("array_dtype", &self.array.dtype())
+            .field("scan_projection", &self.scan_projection)
+            .field("plan_properties", &self.plan_properties)
+            .finish_non_exhaustive()
+    }
 }
 
 impl DisplayAs for VortexScanExec {
@@ -385,73 +396,59 @@ impl DisplayAs for VortexScanExec {
     }
 }
 
-/// Read a single array chunk from the source as a RecordBatch.
-///
-/// # Errors
-/// This function will return an Error if `array` is not struct-typed. It will also return an
-/// error if the projection references columns
-fn execute_unfiltered(
-    array: Array,
-    projection: &Vec<usize>,
-) -> DFResult<SendableRecordBatchStream> {
-    // Construct the RecordBatch by flattening each struct field and transmuting to an ArrayRef.
-    let struct_array = array
-        .clone()
-        .into_struct()
-        .map_err(|vortex_error| DataFusionError::Execution(format!("{}", vortex_error)))?;
-
-    let projected_struct = struct_array
-        .project(projection.as_slice())
-        .map_err(|vortex_err| {
-            exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
-        })?;
-    let batch = RecordBatch::from(
-        projected_struct
-            .into_canonical()
-            .expect("struct arrays must canonicalize")
-            .into_arrow()
-            .as_any()
-            .downcast_ref::<ArrowStructArray>()
-            .expect("vortex StructArray must convert to arrow StructArray"),
-    );
-    Ok(Box::pin(VortexRecordBatchStream {
-        schema_ref: batch.schema(),
-        inner: futures::stream::iter(vec![batch]),
-    }))
-}
-
-// Row selector stream.
-// I.e., send a stream of RowSelector which allows us to pass in a bunch of binary arrays
-// back down to the other systems here instead.
-
-#[pin_project]
-pub(crate) struct VortexRecordBatchStream<I> {
+pub(crate) struct VortexRecordBatchStream {
     schema_ref: SchemaRef,
 
-    #[pin]
-    inner: I,
+    idx: usize,
+    num_chunks: usize,
+    chunks: ChunkedArray,
+
+    projection: Vec<usize>,
 }
 
-impl<I> Stream for VortexRecordBatchStream<I>
-where
-    I: Stream<Item = RecordBatch>,
-{
+impl Stream for VortexRecordBatchStream {
     type Item = DFResult<RecordBatch>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut this = self.project();
-        match this.inner.poll_next_unpin(cx) {
-            Poll::Ready(Some(batch)) => Poll::Ready(Some(Ok(batch))),
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        if this.idx >= this.num_chunks {
+            return Poll::Ready(None);
         }
+
+        // Grab next chunk, project and convert to Arrow.
+        let chunk = this
+            .chunks
+            .chunk(this.idx)
+            .expect("nchunks should match precomputed");
+        this.idx += 1;
+
+        let struct_array = chunk
+            .clone()
+            .into_struct()
+            .map_err(|vortex_error| DataFusionError::Execution(format!("{}", vortex_error)))?;
+
+        let projected_struct =
+            struct_array
+                .project(this.projection.as_slice())
+                .map_err(|vortex_err| {
+                    exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
+                })?;
+
+        let batch = RecordBatch::from(
+            projected_struct
+                .into_canonical()
+                .expect("struct arrays must canonicalize")
+                .into_arrow()
+                .as_any()
+                .downcast_ref::<ArrowStructArray>()
+                .expect("vortex StructArray must convert to arrow StructArray"),
+        );
+
+        Poll::Ready(Some(Ok(batch)))
     }
 }
 
-impl<I> RecordBatchStream for VortexRecordBatchStream<I>
-where
-    I: Stream<Item = RecordBatch>,
-{
+impl RecordBatchStream for VortexRecordBatchStream {
     fn schema(&self) -> SchemaRef {
         Arc::clone(&self.schema_ref)
     }
@@ -480,18 +477,17 @@ impl ExecutionPlan for VortexScanExec {
 
     fn execute(
         &self,
-        partition: usize,
+        _partition: usize,
         _context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
-        let chunk = if let Ok(chunked_array) = ChunkedArray::try_from(&self.array) {
-            chunked_array
-                .chunk(partition)
-                .ok_or_else(|| exec_datafusion_err!("partition not found"))?
-        } else {
-            self.array.clone()
-        };
-
-        execute_unfiltered(chunk, &self.scan_projection)
+        // Send back a stream of RecordBatch that returns the next element of the chunk each time.
+        Ok(Box::pin(VortexRecordBatchStream {
+            schema_ref: self.schema().clone(),
+            idx: 0,
+            num_chunks: self.array.nchunks(),
+            chunks: self.array.clone(),
+            projection: self.scan_projection.clone(),
+        }))
     }
 }
 

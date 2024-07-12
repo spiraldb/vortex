@@ -7,7 +7,7 @@ use datafusion::datasource::MemTable;
 use datafusion::prelude::{CsvReadOptions, SessionContext};
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowArray;
-use vortex::{Array, ArrayDType, ArrayData, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, ArrayData, IntoArray};
 use vortex_datafusion::{SessionContextExt, VortexMemTableOptions};
 
 pub mod dbgen;
@@ -146,17 +146,11 @@ async fn register_vortex(
         .collect();
 
     let dtype = chunks[0].dtype().clone();
-    let chunked_array = ChunkedArray::try_new(chunks, dtype)?
-        .into_canonical()?
-        .into_array();
-
-    // Convert to Arrow to concat all chunks, then flip back to Vortex for processing.
-    let arrow = chunked_array.into_canonical()?.into_arrow();
-    let array = ArrayData::from_arrow(arrow, false).into_array();
+    let chunked_array = ChunkedArray::try_new(chunks, dtype)?.into_array();
 
     session.register_vortex_opts(
         name,
-        array,
+        chunked_array,
         VortexMemTableOptions::default().with_disable_pushdown(disable_pushdown),
     )?;
 

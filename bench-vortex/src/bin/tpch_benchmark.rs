@@ -55,10 +55,13 @@ async fn q1_vortex(base_dir: &PathBuf) -> anyhow::Result<()> {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    // uncomment the below to enable trace logging of datafusion execution
+    // setup_logger(LevelFilter::Trace);
+
     // Run TPC-H data gen.
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
 
-    // q1_csv(&data_dir).await.unwrap();
+    q1_csv(&data_dir).await.unwrap();
     q1_arrow(&data_dir).await.unwrap();
-    // q1_vortex(&data_dir).await.unwrap();
+    q1_vortex(&data_dir).await.unwrap();
 }
