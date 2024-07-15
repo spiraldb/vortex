@@ -59,7 +59,6 @@ pub trait ArrayCompute {
 
     /// Filter indices based on a disjunctive normal form relational expression.
     /// TODO(aduffy): remove this function and push implementation into vortex-datafusion.
-    #[deprecated]
     fn filter_indices(&self) -> Option<&dyn FilterIndicesFn> {
         None
     }

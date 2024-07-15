@@ -33,7 +33,7 @@ pub fn filter(array: &Array, predicate: &Array) -> VortexResult<Array> {
     );
 
     array.with_dyn(|a| {
-        if let Some(ref filter_fn) = a.filter() {
+        if let Some(filter_fn) = a.filter() {
             Ok(filter_fn.filter(array))
         } else {
             // Fallback: implement using Arrow kernels.
