@@ -1,4 +1,3 @@
-use std::ops::Div;
 use std::sync;
 use std::time::SystemTime;
 
@@ -84,8 +83,9 @@ async fn main() {
                             .unwrap();
                     })
                 }
-                let start = SystemTime::now();
-                for _ in 0..50 {
+                let mut measure = Vec::new();
+                for _ in 0..20 {
+                    let start = SystemTime::now();
                     rt.block_on(async {
                         ctx.sql(&query)
                             .await
@@ -96,10 +96,12 @@ async fn main() {
                             .map_err(|e| println!("Failed to collect {} {:?}: {}", i, format, e))
                             .unwrap();
                     });
+                    let elapsed = start.elapsed().unwrap();
+                    measure.push(elapsed);
                 }
+                let fastest = measure.iter().cloned().min().unwrap();
+                elapsed_us.push(fastest);
 
-                let elapsed = start.elapsed().unwrap();
-                elapsed_us.push(elapsed.div(50));
                 _progress.inc(1);
             }
 
