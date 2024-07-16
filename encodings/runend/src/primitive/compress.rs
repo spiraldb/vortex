@@ -18,7 +18,7 @@ pub fn runend_primitive_encode(array: &PrimitiveArray) -> (PrimitiveArray, Primi
     };
 
     match_each_native_ptype!(array.ptype(), |$P| {
-        let (ends, values) = runend_encode_primitive(array.maybe_null_slice::<$P>());
+        let (ends, values) = runend_primitive_encode_slice(array.maybe_null_slice::<$P>());
 
         let mut compressed_values = PrimitiveArray::from_vec(values, validity);
         compressed_values.statistics().set(Stat::IsConstant, false.into());
@@ -74,7 +74,7 @@ pub fn runend_primitive_decode(
 ) -> VortexResult<PrimitiveArray> {
     match_each_native_ptype!(values.ptype(), |$P| {
         match_each_integer_ptype!(ends.ptype(), |$E| {
-            Ok(PrimitiveArray::from_vec(runend_decode_primitive(
+            Ok(PrimitiveArray::from_vec(runend_primitive_decode_slice(
                 ends.maybe_null_slice::<$E>(),
                 values.maybe_null_slice::<$P>(),
                 offset,
