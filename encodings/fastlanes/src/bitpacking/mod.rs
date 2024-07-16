@@ -204,7 +204,7 @@ impl ArrayTrait for BitPackedArray {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::{IntoArray, IntoCanonical};
+    use vortex::{IntoArray, IntoArrayVariant};
 
     use crate::BitPackedArray;
 
@@ -216,8 +216,6 @@ mod test {
         let expected = &[1, 0, 1, 0, 1, 0, u64::MAX];
         let results = packed
             .into_array()
-            .into_canonical()
-            .unwrap()
             .into_primitive()
             .unwrap()
             .maybe_null_slice::<u64>()

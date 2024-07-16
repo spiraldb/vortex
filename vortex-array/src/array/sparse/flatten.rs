@@ -19,11 +19,7 @@ impl IntoCanonical for SparseArray {
         validity.append_n(self.len(), false);
 
         if matches!(self.dtype(), DType::Bool(_)) {
-            let values = self
-                .values()
-                .into_canonical()?
-                .into_bool()?
-                .boolean_buffer();
+            let values = self.values().into_bool()?.boolean_buffer();
             canonicalize_sparse_bools(values, &indices, self.len(), self.fill_value(), validity)
         } else {
             let values = self.values().into_primitive()?;

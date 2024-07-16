@@ -13,7 +13,7 @@ use vortex::compute::unary::cast::try_cast;
 use vortex::compute::unary::scalar_subtract::subtract_scalar;
 use vortex::stats::ArrayStatistics;
 use vortex::stream::{ArrayStream, ArrayStreamExt};
-use vortex::{Array, ArrayDType, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -66,12 +66,8 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
                 .collect_vec(),
         )
         .into_array();
-        let start_rows = take(&self.row_offsets, &start_chunks)?
-            .into_canonical()?
-            .into_primitive()?;
-        let start_bytes = take(&self.byte_offsets, &start_chunks)?
-            .into_canonical()?
-            .into_primitive()?;
+        let start_rows = take(&self.row_offsets, &start_chunks)?.into_primitive()?;
+        let start_bytes = take(&self.byte_offsets, &start_chunks)?.into_primitive()?;
 
         let stop_chunks = PrimitiveArray::from(
             coalesced_chunks
@@ -80,12 +76,8 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
                 .collect_vec(),
         )
         .into_array();
-        let stop_rows = take(&self.row_offsets, &stop_chunks)?
-            .into_canonical()?
-            .into_primitive()?;
-        let stop_bytes = take(&self.byte_offsets, &stop_chunks)?
-            .into_canonical()?
-            .into_primitive()?;
+        let stop_rows = take(&self.row_offsets, &stop_chunks)?.into_primitive()?;
+        let stop_bytes = take(&self.byte_offsets, &stop_chunks)?.into_primitive()?;
 
         // For each chunk-range, read the data as an ArrayStream and call take on it.
         let chunks = stream::iter(0..coalesced_chunks.len())
@@ -162,13 +154,9 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
 fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIndices>> {
     // TODO(ngates): lots of optimizations to be had here, potentially lots of push-down.
     //  For now, we just flatten everything into primitive arrays and iterate.
-    let row_offsets = try_cast(row_offsets, PType::U64.into())?
-        .into_canonical()?
-        .into_primitive()?;
+    let row_offsets = try_cast(row_offsets, PType::U64.into())?.into_primitive()?;
     let _rows = format!("{:?}", row_offsets.maybe_null_slice::<u64>());
-    let indices = try_cast(indices, PType::U64.into())?
-        .into_canonical()?
-        .into_primitive()?;
+    let indices = try_cast(indices, PType::U64.into())?.into_primitive()?;
     let _indices = format!("{:?}", indices.maybe_null_slice::<u64>());
 
     if let (Some(last_idx), Some(num_rows)) = (
