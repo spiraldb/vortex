@@ -27,13 +27,16 @@ enum-iterator = { workspace = true }
 flexbuffers = { workspace = true }
 futures = { workspace = true, features = ["executor"] }
 humansize = { workspace = true }
+indicatif = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
 mimalloc = { workspace = true }
 object_store = { workspace = true, features = ["aws"] }
 parquet = { workspace = true, features = [] }
+prettytable-rs = { workspace = true }
 rand = { workspace = true }
+rayon = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 simplelog = { workspace = true }

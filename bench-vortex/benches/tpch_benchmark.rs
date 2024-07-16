@@ -33,6 +33,10 @@ fn benchmark(c: &mut Criterion) {
         .unwrap();
 
     for q in 1..=22 {
+        if q == 15 {
+            // DataFusion does not support query 15 since it has multiple SQL statements.
+        }
+
         let query = bench_vortex::tpch::tpch_query(q);
 
         let mut group = c.benchmark_group(format!("tpch_q{q}"));

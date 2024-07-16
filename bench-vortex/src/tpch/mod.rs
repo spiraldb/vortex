@@ -14,6 +14,7 @@ use vortex_datafusion::{SessionContextExt, VortexMemTableOptions};
 pub mod dbgen;
 pub mod schema;
 
+#[derive(Clone, Copy, Debug)]
 pub enum Format {
     Csv,
     Arrow,
