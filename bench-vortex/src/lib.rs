@@ -25,7 +25,7 @@ use vortex_dict::DictEncoding;
 use vortex_dtype::DType;
 use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
 use vortex_roaring::RoaringBoolEncoding;
-use vortex_runend::RunEndEncoding;
+use vortex_runend::RunEndPrimitiveEncoding;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
@@ -57,7 +57,7 @@ lazy_static! {
         &FoREncoding,
         &DateTimePartsEncoding,
         // &DeltaEncoding,  Blows up the search space too much.
-        &RunEndEncoding,
+        &RunEndPrimitiveEncoding,
         &RoaringBoolEncoding,
         // &RoaringIntEncoding,
         // Doesn't offer anything more than FoR really

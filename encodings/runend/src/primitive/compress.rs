@@ -10,7 +10,7 @@ use vortex_dtype::Nullability;
 use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
 
-pub fn runend_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
+pub fn runend_primitive_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     let validity = if array.dtype().nullability() == Nullability::NonNullable {
         Validity::NonNullable
     } else {
@@ -40,7 +40,7 @@ pub fn runend_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray)
     })
 }
 
-fn runend_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
+fn runend_primitive_encode_slice<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>) {
     let mut ends = Vec::new();
     let mut values = Vec::new();
 
@@ -65,7 +65,7 @@ fn runend_encode_primitive<T: NativePType>(elements: &[T]) -> (Vec<u64>, Vec<T>)
     (ends, values)
 }
 
-pub fn runend_decode(
+pub fn runend_primitive_decode(
     ends: &PrimitiveArray,
     values: &PrimitiveArray,
     validity: Validity,
@@ -84,7 +84,7 @@ pub fn runend_decode(
     })
 }
 
-pub fn runend_decode_primitive<
+pub fn runend_primitive_decode_slice<
     E: NativePType + AsPrimitive<usize> + FromPrimitive + Ord,
     T: NativePType,
 >(
@@ -113,13 +113,13 @@ mod test {
     use vortex::validity::{ArrayValidity, Validity};
     use vortex::IntoArray;
 
-    use crate::compress::{runend_decode, runend_encode};
-    use crate::RunEndArray;
+    use crate::primitive::compress::{runend_primitive_decode, runend_primitive_encode};
+    use crate::primitive::RunEndPrimitiveArray;
 
     #[test]
     fn encode() {
         let arr = PrimitiveArray::from(vec![1i32, 1, 2, 2, 2, 3, 3, 3, 3, 3]);
-        let (ends, values) = runend_encode(&arr);
+        let (ends, values) = runend_primitive_encode(&arr);
 
         assert_eq!(ends.maybe_null_slice::<u64>(), vec![2, 5, 10]);
         assert_eq!(values.maybe_null_slice::<i32>(), vec![1, 2, 3]);
@@ -129,7 +129,7 @@ mod test {
     fn decode() {
         let ends = PrimitiveArray::from(vec![2, 5, 10]);
         let values = PrimitiveArray::from(vec![1i32, 2, 3]);
-        let decoded = runend_decode(&ends, &values, Validity::NonNullable, 0, 10).unwrap();
+        let decoded = runend_primitive_decode(&ends, &values, Validity::NonNullable, 0, 10).unwrap();
 
         assert_eq!(
             decoded.maybe_null_slice::<i32>(),
@@ -145,14 +145,14 @@ mod test {
             validity[7] = false;
             Validity::from(validity)
         };
-        let arr = RunEndArray::try_new(
+        let arr = RunEndPrimitiveArray::try_new(
             vec![2u32, 5, 10].into_array(),
             PrimitiveArray::from_vec(vec![1i32, 2, 3], Validity::AllValid).into_array(),
             validity,
         )
         .unwrap();
 
-        let decoded = runend_decode(
+        let decoded = runend_primitive_decode(
             &arr.ends().as_primitive(),
             &arr.values().as_primitive(),
             arr.validity(),

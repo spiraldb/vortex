@@ -1,5 +1,2 @@
-pub use runend::*;
-
-pub mod compress;
-mod compute;
-pub mod runend;
+pub use primitive::*;
+mod primitive;

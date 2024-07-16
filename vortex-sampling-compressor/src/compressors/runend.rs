@@ -2,8 +2,8 @@ use vortex::array::primitive::Primitive;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
-use vortex_runend::compress::runend_encode;
-use vortex_runend::{RunEnd, RunEndArray};
+use vortex_runend::compress::runend_primitive_encode;
+use vortex_runend::{RunEndPrimitive, RunEndPrimitiveArray};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
@@ -17,7 +17,7 @@ pub struct RunEndCompressor {
 
 impl EncodingCompressor for RunEndCompressor {
     fn id(&self) -> &str {
-        RunEnd::ID.as_ref()
+        RunEndPrimitive::ID.as_ref()
     }
 
     fn cost(&self) -> u8 {
@@ -49,7 +49,7 @@ impl EncodingCompressor for RunEndCompressor {
     ) -> VortexResult<CompressedArray<'a>> {
         let primitive_array = array.as_primitive();
 
-        let (ends, values) = runend_encode(&primitive_array);
+        let (ends, values) = runend_primitive_encode(&primitive_array);
         let compressed_ends = ctx
             .auxiliary("ends")
             .compress(&ends.into_array(), like.as_ref().and_then(|l| l.child(0)))?;
@@ -59,7 +59,7 @@ impl EncodingCompressor for RunEndCompressor {
             .compress(&values.into_array(), like.as_ref().and_then(|l| l.child(1)))?;
 
         Ok(CompressedArray::new(
-            RunEndArray::try_new(
+            RunEndPrimitiveArray::try_new(
                 compressed_ends.array,
                 compressed_values.array,
                 ctx.compress_validity(primitive_array.validity())?,
