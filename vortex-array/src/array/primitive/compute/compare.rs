@@ -7,7 +7,7 @@ use vortex_expr::Operator;
 
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::compare::CompareFn;
+use crate::compute::CompareFn;
 use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for PrimitiveArray {
@@ -48,7 +48,7 @@ mod test {
     use itertools::Itertools;
 
     use super::*;
-    use crate::compute::compare::compare;
+    use crate::compute::compare;
     use crate::IntoArrayVariant;
 
     fn to_int_indices(indices_bits: BoolArray) -> Vec<u64> {

@@ -9,9 +9,9 @@ use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
 use crate::compute::unary::scalar_at::scalar_at;
 use crate::compute::unary::scalar_subtract::{subtract_scalar, SubtractScalarFn};
+use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
@@ -165,7 +165,7 @@ mod test {
     use vortex_dtype::{NativePType, PType};
 
     use crate::array::chunked::ChunkedArray;
-    use crate::compute::slice::slice;
+    use crate::compute::slice;
     use crate::compute::unary::scalar_subtract::subtract_scalar;
     use crate::{Array, IntoArray, IntoArrayVariant, IntoCanonical, ToArray};
 

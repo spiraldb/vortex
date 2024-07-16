@@ -7,24 +7,24 @@
 //! implementations of these operators, else we will decode, and perform the equivalent operator
 //! from Arrow.
 
-use compare::CompareFn;
-use search_sorted::SearchSortedFn;
-use slice::SliceFn;
-use take::TakeFn;
+pub use compare::{compare, CompareFn};
+pub use filter::{filter, FilterFn};
+pub use filter_indices::{filter_indices, FilterIndicesFn};
+pub use search_sorted::*;
+pub use slice::{slice, SliceFn};
+pub use take::{take, TakeFn};
+use unary::cast::CastFn;
+use unary::fill_forward::FillForwardFn;
+use unary::scalar_at::ScalarAtFn;
+use unary::scalar_subtract::SubtractScalarFn;
 
-use self::filter_indices::FilterIndicesFn;
-use self::unary::cast::CastFn;
-use self::unary::fill_forward::FillForwardFn;
-use self::unary::scalar_at::ScalarAtFn;
-use self::unary::scalar_subtract::SubtractScalarFn;
-use crate::compute::filter::FilterFn;
+mod compare;
+mod filter;
+mod filter_indices;
+mod slice;
+mod take;
 
-pub mod compare;
-pub mod filter;
-pub mod filter_indices;
-pub mod search_sorted;
-pub mod slice;
-pub mod take;
+mod search_sorted;
 pub mod unary;
 
 /// Trait providing compute functions on top of Vortex arrays.

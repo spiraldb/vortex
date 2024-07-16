@@ -14,7 +14,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::builder::VarBinViewBuilder;
 use crate::arrow::FromArrowArray;
-use crate::compute::slice::slice;
+use crate::compute::slice;
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -366,7 +366,7 @@ mod test {
     use vortex_scalar::Scalar;
 
     use crate::array::varbinview::VarBinViewArray;
-    use crate::compute::slice::slice;
+    use crate::compute::slice;
     use crate::compute::unary::scalar_at::scalar_at;
     use crate::{Canonical, IntoArray, IntoCanonical};
 

@@ -1,7 +1,5 @@
-use vortex::compute::slice::{slice, SliceFn};
-use vortex::compute::take::{take, TakeFn};
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
-use vortex::compute::ArrayCompute;
+use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;

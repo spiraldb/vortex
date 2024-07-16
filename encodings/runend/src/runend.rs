@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
-use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::unary::scalar_at::scalar_at;
+use vortex::compute::{search_sorted, SearchSortedSide};
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -138,7 +138,7 @@ impl ArrayStatisticsCompute for RunEndArray {}
 
 #[cfg(test)]
 mod test {
-    use vortex::compute::slice::slice;
+    use vortex::compute::slice;
     use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::validity::Validity;
     use vortex::{ArrayDType, IntoArray, IntoCanonical};
