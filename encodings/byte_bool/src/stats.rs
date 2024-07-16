@@ -1,6 +1,6 @@
 use vortex::{
     stats::{ArrayStatisticsCompute, Stat, StatsSet},
-    AsArray, IntoCanonical,
+    AsArray, IntoArrayVariant,
 };
 use vortex_error::VortexResult;
 
@@ -13,7 +13,7 @@ impl ArrayStatisticsCompute for ByteBoolArray {
         }
 
         // TODO(adamgs): This is slightly wasteful and could be optimized in the future
-        let bools = self.as_array_ref().clone().into_canonical()?.into_bool()?;
+        let bools = self.as_array_ref().clone().into_bool()?;
         bools.compute_statistics(stat)
     }
 }

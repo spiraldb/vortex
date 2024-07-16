@@ -399,6 +399,10 @@ impl Stream for VortexRecordBatchStream {
 
         Poll::Ready(Some(Ok(batch)))
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.num_chunks, Some(self.num_chunks))
+    }
 }
 
 impl RecordBatchStream for VortexRecordBatchStream {

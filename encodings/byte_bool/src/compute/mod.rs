@@ -4,7 +4,7 @@ use std::sync::Arc;
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
 use vortex::validity::Validity;
-use vortex::ToArrayData;
+use vortex::Array;
 use vortex::{
     compute::{
         compare::CompareFn, slice::SliceFn, take::TakeFn, unary::fill_forward::FillForwardFn,
@@ -15,7 +15,7 @@ use vortex::{
     validity::ArrayValidity,
     ArrayDType, ArrayData, IntoArray,
 };
-use vortex::{Array, IntoCanonical};
+use vortex::{IntoArrayVariant, ToArrayData};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::Operator;
@@ -130,7 +130,7 @@ impl TakeFn for ByteBoolArray {
 
 impl CompareFn for ByteBoolArray {
     fn compare(&self, other: &Array, op: Operator) -> VortexResult<Array> {
-        let canonical = other.clone().into_canonical()?.into_bool()?;
+        let canonical = other.clone().into_bool()?;
         let lhs = BooleanBuffer::from(self.maybe_null_slice());
         let rhs = canonical.boolean_buffer();
 
