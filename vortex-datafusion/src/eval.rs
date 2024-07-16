@@ -14,7 +14,7 @@ impl ExperssionEvaluator {
     pub fn eval(data: StructArray, expr: &Expr) -> VortexResult<Array> {
         match expr {
             Expr::BinaryExpr(expr) => {
-                println!("supported - {expr:?}");
+                // println!("supported - {expr:?}");
                 let lhs = expr.left.as_ref();
                 let rhs = expr.right.as_ref();
 
