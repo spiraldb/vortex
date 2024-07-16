@@ -9,8 +9,9 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkGroup, Crit
 use datafusion::common::Result as DFResult;
 use datafusion::datasource::{MemTable, TableProvider};
 use datafusion::execution::memory_pool::human_readable_size;
+use datafusion::functions_aggregate::count::count_distinct;
 use datafusion::logical_expr::lit;
-use datafusion::prelude::{col, count_distinct, DataFrame, SessionContext};
+use datafusion::prelude::{col, DataFrame, SessionContext};
 use lazy_static::lazy_static;
 use vortex::compress::CompressionStrategy;
 use vortex::encoding::EncodingRef;

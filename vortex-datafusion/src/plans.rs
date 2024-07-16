@@ -91,6 +91,10 @@ impl DisplayAs for RowSelectorExec {
 }
 
 impl ExecutionPlan for RowSelectorExec {
+    fn name(&self) -> &str {
+        RowSelectorExec::static_name()
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -278,6 +282,10 @@ impl DisplayAs for TakeRowsExec {
 }
 
 impl ExecutionPlan for TakeRowsExec {
+    fn name(&self) -> &str {
+        TakeRowsExec::static_name()
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }

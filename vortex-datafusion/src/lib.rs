@@ -455,6 +455,10 @@ impl RecordBatchStream for VortexRecordBatchStream {
 }
 
 impl ExecutionPlan for VortexScanExec {
+    fn name(&self) -> &str {
+        VortexScanExec::static_name()
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -495,8 +499,9 @@ impl ExecutionPlan for VortexScanExec {
 mod test {
     use arrow_array::types::Int64Type;
     use datafusion::arrow::array::AsArray;
+    use datafusion::functions_aggregate::count::count_distinct;
     use datafusion::prelude::SessionContext;
-    use datafusion_expr::{col, count_distinct, lit};
+    use datafusion_expr::{col, lit};
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
