@@ -23,7 +23,7 @@ pub struct ConstantMetadata {
 impl ConstantArray {
     pub fn new<S>(scalar: S, length: usize) -> Self
     where
-       S: Into<Scalar>
+        S: Into<Scalar>,
     {
         let scalar = scalar.into();
         // TODO(aduffy): add stats for bools, ideally there should be a

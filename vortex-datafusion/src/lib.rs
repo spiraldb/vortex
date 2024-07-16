@@ -32,9 +32,9 @@ use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
 
 mod datatype;
+mod eval;
 mod expr;
 mod plans;
-mod eval;
 
 /// Optional configurations to pass when loading a [VortexMemTable].
 #[derive(Default, Debug, Clone)]
@@ -295,8 +295,13 @@ fn can_be_pushed_down(expr: &Expr) -> DFResult<bool> {
                 let lhs = expr.left.as_ref();
                 let rhs = expr.right.as_ref();
 
-                matches!((lhs, rhs), (Expr::Column(_), Expr::Column(_)) | (Expr::Column(_), Expr::Literal(_)) | (Expr::Literal(_), Expr::Column(_)) )
-            },
+                matches!(
+                    (lhs, rhs),
+                    (Expr::Column(_), Expr::Column(_))
+                        | (Expr::Column(_), Expr::Literal(_))
+                        | (Expr::Literal(_), Expr::Column(_))
+                )
+            }
 
             _ => false,
         }

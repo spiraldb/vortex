@@ -10,10 +10,10 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::UInt64Type;
 use arrow_array::{ArrayRef, RecordBatch, RecordBatchOptions, UInt64Array};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
-use datafusion_common::{DFSchema, Result as DFResult};
+use datafusion_common::Result as DFResult;
 use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion_expr::Expr;
-use datafusion_physical_expr::{create_physical_expr, EquivalenceProperties, Partitioning};
+use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
 use datafusion_physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, PlanProperties,
 };
@@ -26,6 +26,7 @@ use vortex::compute::take::take;
 use vortex::{ArrayDType, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
 
 use crate::datatype::infer_schema;
+use crate::eval::ExperssionEvaluator;
 use crate::expr::{make_conjunction, simplify_expr};
 
 /// Physical plan operator that applies a set of [filters][Expr] against the input, producing a
@@ -143,7 +144,7 @@ impl ExecutionPlan for RowSelectorExec {
             chunk_idx: 0,
             filter_projection: self.filter_projection.clone(),
             conjunction_expr,
-            filter_schema,
+            _filter_schema: filter_schema,
         }))
     }
 }
@@ -154,7 +155,7 @@ pub(crate) struct RowIndicesStream {
     chunk_idx: usize,
     conjunction_expr: Expr,
     filter_projection: Vec<usize>,
-    filter_schema: SchemaRef,
+    _filter_schema: SchemaRef,
 }
 
 impl Stream for RowIndicesStream {
@@ -184,38 +185,44 @@ impl Stream for RowIndicesStream {
 
         // TODO(adamg): Filter on vortex arrays
         // let filtered_resultd = ExperssionEvaluator::eval(vortex_struct, filters, ...)
+        let r = ExperssionEvaluator::eval(vortex_struct, &this.conjunction_expr).unwrap();
+
+        let temp = r
+            .into_bool()
+            .unwrap()
+            .into_canonical()
+            .unwrap()
+            .into_arrow();
 
         // Immediately convert to Arrow RecordBatch for processing.
         // TODO(aduffy): attempt to pushdown the filter to Vortex without decoding.
-        let record_batch = RecordBatch::from(
-            vortex_struct
-                .into_canonical()
-                .unwrap()
-                .into_arrow()
-                .as_struct(),
-        );
+        // let record_batch = RecordBatch::from(
+        //     vortex_struct
+        //         .into_canonical()
+        //         .unwrap()
+        //         .into_arrow()
+        //         .as_struct(),
+        // );
 
         // Generate a physical plan to execute the conjunction query against the filter columns.
         //
         // The result of a conjunction expression is a BooleanArray containing `true` for rows
         // where the conjunction was satisfied, and `false` otherwise.
-        let df_schema = DFSchema::try_from(this.filter_schema.clone())?;
-        let physical_expr =
-            create_physical_expr(&this.conjunction_expr, &df_schema, &Default::default())?;
-        let selection = physical_expr
-            .evaluate(&record_batch)?
-            .into_array(record_batch.num_rows())?;
+        // let df_schema = DFSchema::try_from(this.filter_schema.clone())?;
+        // let physical_expr =
+        //     create_physical_expr(&this.conjunction_expr, &df_schema, &Default::default())?;
+        // let selection = physical_expr
+        //     .evaluate(&record_batch)?
+        //     .into_array(record_batch.num_rows())?;
 
         // Convert the `selection` BooleanArray into a UInt64Array of indices.
-        let selection_indices: Vec<u64> = selection
+        let selection_indices = temp
             .as_boolean()
-            .clone()
             .values()
             .set_indices()
-            .map(|idx| idx as u64)
-            .collect();
+            .map(|idx| idx as u64);
 
-        let indices: ArrayRef = Arc::new(UInt64Array::from(selection_indices));
+        let indices = Arc::new(UInt64Array::from_iter_values(selection_indices)) as ArrayRef;
         let indices_batch = RecordBatch::try_new(ROW_SELECTOR_SCHEMA_REF.clone(), vec![indices])?;
 
         Poll::Ready(Some(Ok(indices_batch)))
@@ -467,7 +474,7 @@ mod test {
             chunk_idx: 0,
             conjunction_expr: and((col("a") % lit(2u64)).eq(lit(0u64)), col("b").is_true()),
             filter_projection: vec![0, 1],
-            filter_schema: _schema,
+            _filter_schema: _schema,
         };
 
         let rows: Vec<RecordBatch> = futures::executor::block_on_stream(filtering_stream)
