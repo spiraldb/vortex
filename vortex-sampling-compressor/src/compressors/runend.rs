@@ -3,7 +3,7 @@ use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
 use vortex_runend::compress::runend_primitive_encode;
-use vortex_runend::{RunEndPrimitive, RunEndPrimitiveArray};
+use vortex_runend::{RunEnd, RunEndArray};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
@@ -17,7 +17,7 @@ pub struct RunEndCompressor {
 
 impl EncodingCompressor for RunEndCompressor {
     fn id(&self) -> &str {
-        RunEndPrimitive::ID.as_ref()
+        RunEnd::ID.as_ref()
     }
 
     fn cost(&self) -> u8 {
@@ -59,7 +59,7 @@ impl EncodingCompressor for RunEndCompressor {
             .compress(&values.into_array(), like.as_ref().and_then(|l| l.child(1)))?;
 
         Ok(CompressedArray::new(
-            RunEndPrimitiveArray::try_new(
+            RunEndArray::try_new(
                 compressed_ends.array,
                 compressed_values.array,
                 ctx.compress_validity(primitive_array.validity())?,

@@ -113,8 +113,8 @@ mod test {
     use vortex::validity::{ArrayValidity, Validity};
     use vortex::IntoArray;
 
-    use crate::primitive::compress::{runend_primitive_decode, runend_primitive_encode};
-    use crate::primitive::RunEndPrimitiveArray;
+    use crate::default::compress::{runend_primitive_decode, runend_primitive_encode};
+    use crate::default::RunEndArray;
 
     #[test]
     fn encode() {
@@ -146,7 +146,7 @@ mod test {
             validity[7] = false;
             Validity::from(validity)
         };
-        let arr = RunEndPrimitiveArray::try_new(
+        let arr = RunEndArray::try_new(
             vec![2u32, 5, 10].into_array(),
             PrimitiveArray::from_vec(vec![1i32, 2, 3], Validity::AllValid).into_array(),
             validity,
