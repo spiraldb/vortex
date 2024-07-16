@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -11,9 +12,9 @@ use vortex::{Array, ArrayDType, ArrayData, IntoArray};
 use vortex_datafusion::{SessionContextExt, VortexMemTableOptions};
 
 pub mod dbgen;
-pub mod query;
 pub mod schema;
 
+#[derive(Clone, Copy, Debug)]
 pub enum Format {
     Csv,
     Arrow,
@@ -155,4 +156,11 @@ async fn register_vortex(
     )?;
 
     Ok(())
+}
+
+pub fn tpch_query(query_idx: usize) -> String {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tpch")
+        .join(format!("q{}.sql", query_idx));
+    fs::read_to_string(manifest_dir).unwrap()
 }
