@@ -84,7 +84,7 @@ async fn main() {
                     })
                 }
                 let mut measure = Vec::new();
-                for _ in 0..20 {
+                for _ in 0..10 {
                     let start = SystemTime::now();
                     rt.block_on(async {
                         ctx.sql(&query)
@@ -119,8 +119,14 @@ async fn main() {
                 } else {
                     "bFdBG"
                 };
-                cells
-                    .push(Cell::new(&format!("{} us", measure.as_micros())).style_spec(style_spec));
+                cells.push(
+                    Cell::new(&format!(
+                        "{} us ({:.2})",
+                        measure.as_micros(),
+                        measure.as_micros() as f64 / baseline.as_micros() as f64
+                    ))
+                    .style_spec(style_spec),
+                );
             }
 
             _tx.send((i, Row::new(cells))).unwrap();
