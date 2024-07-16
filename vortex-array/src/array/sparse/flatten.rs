@@ -1,14 +1,15 @@
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder};
 use itertools::Itertools;
-use vortex_dtype::{match_each_native_ptype, DType, NativePType};
+
+use vortex_dtype::{DType, match_each_native_ptype, NativePType};
 use vortex_error::{VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
+use crate::{ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
 use crate::validity::Validity;
-use crate::{ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
 
 impl IntoCanonical for SparseArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
@@ -19,11 +20,7 @@ impl IntoCanonical for SparseArray {
         validity.append_n(self.len(), false);
 
         if matches!(self.dtype(), DType::Bool(_)) {
-            let values = self
-                .values()
-                .into_canonical()?
-                .into_bool()?
-                .boolean_buffer();
+            let values = self.values().into_bool()?.boolean_buffer();
             canonicalize_sparse_bools(values, &indices, self.len(), self.fill_value(), validity)
         } else {
             let values = self.values().into_primitive()?;
@@ -98,10 +95,10 @@ fn canonicalize_sparse_primitives<
 mod test {
     use vortex_dtype::{DType, Nullability};
 
+    use crate::{ArrayDType, Canonical, IntoArray, IntoCanonical};
     use crate::array::bool::BoolArray;
     use crate::array::sparse::SparseArray;
     use crate::validity::Validity;
-    use crate::{ArrayDType, Canonical, IntoArray, IntoCanonical};
 
     #[test]
     fn test_sparse_bool() {

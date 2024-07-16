@@ -1,20 +1,22 @@
 use std::sync::Arc;
 
-use arrow_array::types::{
-    Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
-    UInt32Type, UInt64Type, UInt8Type,
-};
 use arrow_array::{
     ArrayRef, ArrowPrimitiveType, BinaryArray, BooleanArray as ArrowBoolArray, LargeBinaryArray,
     LargeStringArray, NullArray as ArrowNullArray, PrimitiveArray as ArrowPrimitiveArray,
     StringArray, StructArray as ArrowStructArray, TimestampMicrosecondArray,
     TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
 };
+use arrow_array::types::{
+    Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
+    UInt32Type, UInt64Type, UInt8Type,
+};
 use arrow_buffer::ScalarBuffer;
 use arrow_schema::{Field, Fields};
+
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
+use crate::{Array, ArrayDType, IntoArray, ToArray};
 use crate::array::bool::BoolArray;
 use crate::array::datetime::{LocalDateTimeArray, TimeUnit};
 use crate::array::extension::ExtensionArray;
@@ -26,7 +28,6 @@ use crate::arrow::wrappers::as_offset_buffer;
 use crate::compute::unary::cast::try_cast;
 use crate::encoding::ArrayEncoding;
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, IntoArray, ToArray};
 
 /// The set of canonical array encodings, also the set of encodings that can be transferred to
 /// Arrow with zero-copy.
@@ -216,13 +217,11 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
         // FIXME(ngates): do not copy offsets again
         PType::U64 => try_cast(&offsets.to_array(), PType::I64.into())
             .expect("cast to i64")
-            .into_canonical()
-            .and_then(Canonical::into_primitive)
+            .into_primitive()
             .expect("flatten_primitive"),
         _ => try_cast(&offsets.to_array(), PType::I32.into())
             .expect("cast to i32")
-            .into_canonical()
-            .and_then(Canonical::into_primitive)
+            .into_primitive()
             .expect("flatten_primitive"),
     };
     let nulls = varbin_array
@@ -232,8 +231,7 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
 
     let data = varbin_array
         .bytes()
-        .into_canonical()
-        .and_then(Canonical::into_primitive)
+        .into_primitive()
         .expect("flatten_primitive");
     assert_eq!(data.ptype(), PType::U8);
     let data = data.buffer();
@@ -285,8 +283,7 @@ fn local_date_time_to_arrow(local_date_time_array: LocalDateTimeArray) -> ArrayR
     // A LocalDateTime maps to an Arrow Timestamp array with no timezone.
     let timestamps = try_cast(&local_date_time_array.timestamps(), PType::I64.into())
         .expect("timestamps must cast to i64")
-        .into_canonical()
-        .and_then(Canonical::into_primitive)
+        .into_primitive()
         .expect("must be i64 array");
     let validity = timestamps
         .logical_validity()
@@ -395,18 +392,19 @@ impl IntoArray for Canonical {
 
 #[cfg(test)]
 mod test {
-    use arrow_array::types::{Int64Type, UInt64Type};
     use arrow_array::{
         Array, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
     };
+    use arrow_array::types::{Int64Type, UInt64Type};
+
     use vortex_dtype::Nullability;
     use vortex_scalar::Scalar;
 
+    use crate::{IntoArray, IntoCanonical};
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::SparseArray;
     use crate::array::struct_::StructArray;
     use crate::validity::Validity;
-    use crate::{IntoArray, IntoCanonical};
 
     #[test]
     fn test_canonicalize_nested_struct() {

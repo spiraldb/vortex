@@ -1,15 +1,16 @@
 use ::serde::{Deserialize, Serialize};
+
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
+use crate::{ArrayDType, impl_encoding, IntoArrayVariant};
 use crate::array::constant::ConstantArray;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::unary::scalar_at::scalar_at;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, IntoCanonical};
 
 mod compute;
 mod flatten;
@@ -111,12 +112,7 @@ impl SparseArray {
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        let flat_indices = self
-            .indices()
-            .into_canonical()
-            .unwrap()
-            .into_primitive()
-            .unwrap();
+        let flat_indices = self.indices().into_primitive().unwrap();
         match_each_integer_ptype!(flat_indices.ptype(), |$P| {
             flat_indices
                 .maybe_null_slice::<$P>()
@@ -187,17 +183,18 @@ impl ArrayValidity for SparseArray {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_dtype::Nullability::Nullable;
+
     use vortex_dtype::{DType, PType};
+    use vortex_dtype::Nullability::Nullable;
     use vortex_error::VortexError;
     use vortex_scalar::Scalar;
 
+    use crate::{Array, IntoArray, IntoArrayVariant};
     use crate::accessor::ArrayAccessor;
     use crate::array::sparse::SparseArray;
     use crate::compute::slice::slice;
     use crate::compute::unary::cast::try_cast;
     use crate::compute::unary::scalar_at::scalar_at;
-    use crate::{Array, IntoArray, IntoCanonical};
 
     fn nullable_fill() -> Scalar {
         Scalar::null(DType::Primitive(PType::I32, Nullable))
@@ -220,12 +217,7 @@ mod test {
 
     fn assert_sparse_array(sparse: &Array, values: &[Option<i32>]) {
         let sparse_arrow = ArrayAccessor::<i32>::with_iterator(
-            &sparse
-                .clone()
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap(),
+            &sparse.clone().into_primitive().unwrap(),
             |iter| iter.map(|v| v.cloned()).collect_vec(),
         )
         .unwrap();

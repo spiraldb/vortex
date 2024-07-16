@@ -3,18 +3,19 @@ use std::task::{Context, Poll};
 
 use futures_util::{ready, Stream};
 use pin_project::pin_project;
+
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
+use crate::{Array, ArrayDType, IntoArrayVariant};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::slice::slice;
 use crate::compute::take::take;
 use crate::compute::unary::scalar_subtract::subtract_scalar;
+use crate::IntoArray;
 use crate::stats::{ArrayStatistics, Stat};
 use crate::stream::ArrayStream;
-use crate::{Array, ArrayDType};
-use crate::{IntoArray, IntoCanonical};
 
 #[pin_project]
 pub struct TakeRows<R: ArrayStream> {
@@ -91,9 +92,7 @@ impl<R: ArrayStream> Stream for TakeRows<R> {
 
             // TODO(ngates): this is probably too heavy to run on the event loop. We should spawn
             //  onto a worker pool.
-            let indices_for_batch = slice(this.indices, left, right)?
-                .into_canonical()?
-                .into_primitive()?;
+            let indices_for_batch = slice(this.indices, left, right)?.into_primitive()?;
             let shifted_arr = match_each_integer_ptype!(indices_for_batch.ptype(), |$T| {
                 subtract_scalar(&indices_for_batch.into_array(), &Scalar::from(curr_offset as $T))?
             });

@@ -1,9 +1,9 @@
+use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex::array::primitive::PrimitiveArray;
+use vortex::compute::ArrayCompute;
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
-use vortex::compute::ArrayCompute;
-use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
@@ -67,9 +67,9 @@ impl SliceFn for RunEndArray {
 
 #[cfg(test)]
 mod test {
+    use vortex::{IntoArrayVariant, ToArray};
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::take::take;
-    use vortex::{IntoCanonical, ToArray};
 
     use crate::RunEndArray;
 
@@ -81,12 +81,7 @@ mod test {
         .unwrap();
         let taken = take(ree.array(), PrimitiveArray::from(vec![9, 8, 1, 3]).array()).unwrap();
         assert_eq!(
-            taken
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap()
-                .maybe_null_slice::<i32>(),
+            taken.into_primitive().unwrap().maybe_null_slice::<i32>(),
             &[5, 5, 1, 4]
         );
     }

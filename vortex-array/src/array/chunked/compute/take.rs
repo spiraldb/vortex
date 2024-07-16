@@ -1,9 +1,12 @@
 use itertools::Itertools;
+
 use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
+use crate::{Array, IntoArray, ToArray};
 use crate::array::chunked::ChunkedArray;
 use crate::array::primitive::PrimitiveArray;
+use crate::ArrayDType;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::slice::slice;
 use crate::compute::take::{take, TakeFn};
@@ -11,8 +14,6 @@ use crate::compute::unary::cast::try_cast;
 use crate::compute::unary::scalar_at::scalar_at;
 use crate::compute::unary::scalar_subtract::subtract_scalar;
 use crate::stats::ArrayStatistics;
-use crate::ArrayDType;
-use crate::{Array, IntoArray, ToArray};
 
 impl TakeFn for ChunkedArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
@@ -113,9 +114,9 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
 
 #[cfg(test)]
 mod test {
+    use crate::{ArrayDType, AsArray, IntoArray, IntoArrayVariant};
     use crate::array::chunked::ChunkedArray;
     use crate::compute::take::take;
-    use crate::{ArrayDType, AsArray, IntoArray, IntoCanonical};
 
     #[test]
     fn test_take() {
@@ -129,8 +130,6 @@ mod test {
         let result = &ChunkedArray::try_from(take(arr.as_array_ref(), &indices).unwrap())
             .unwrap()
             .into_array()
-            .into_canonical()
-            .unwrap()
             .into_primitive()
             .unwrap();
         assert_eq!(result.maybe_null_slice::<i32>(), &[1, 1, 1, 2]);

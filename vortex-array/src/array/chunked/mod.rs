@@ -4,20 +4,21 @@
 use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+
 use vortex_dtype::{Nullability, PType};
 use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
+use crate::{ArrayDType, impl_encoding};
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
 use crate::compute::unary::scalar_at::scalar_at;
 use crate::compute::unary::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
-use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
+use crate::validity::Validity::NonNullable;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType};
 
 mod canonical;
 mod compute;
@@ -164,10 +165,10 @@ mod test {
     use vortex_dtype::{DType, Nullability};
     use vortex_dtype::{NativePType, PType};
 
+    use crate::{Array, IntoArray, IntoArrayVariant, ToArray};
     use crate::array::chunked::ChunkedArray;
     use crate::compute::slice::slice;
     use crate::compute::unary::scalar_subtract::subtract_scalar;
-    use crate::{Array, IntoArray, IntoArrayVariant, IntoCanonical, ToArray};
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(
@@ -231,8 +232,6 @@ mod test {
         let results = chunks_out
             .next()
             .unwrap()
-            .into_canonical()
-            .unwrap()
             .into_primitive()
             .unwrap()
             .maybe_null_slice::<u64>()
@@ -241,8 +240,6 @@ mod test {
         let results = chunks_out
             .next()
             .unwrap()
-            .into_canonical()
-            .unwrap()
             .into_primitive()
             .unwrap()
             .maybe_null_slice::<u64>()
@@ -250,8 +247,6 @@ mod test {
         assert_eq!(results, &[3u64, 4, 5]);
         let results = chunks_out
             .next()
-            .unwrap()
-            .into_canonical()
             .unwrap()
             .into_primitive()
             .unwrap()
