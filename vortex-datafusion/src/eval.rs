@@ -52,47 +52,47 @@ fn df_scalar_to_const_array(scalar: &ScalarValue, len: usize) -> VortexResult<Ar
         ScalarValue::Null => None,
         ScalarValue::Boolean(b) => {
             b.map(|b| {
-                ConstantArray::new(b, len)
+                ConstantArray::new(b, len).into_array()
             })
         },
         ScalarValue::Float16(f) => {
             f.map(|f| {
-                ConstantArray::new(f, len)
+                ConstantArray::new(f, len).into_array()
             })
         },
         ScalarValue::Float32(f) => {
             f.map(|f| {
-                ConstantArray::new(f, len)
+                ConstantArray::new(f, len).into_array()
             })
         },
         ScalarValue::Float64(f) => {
             f.map(|f| {
-                ConstantArray::new(f, len)
+                ConstantArray::new(f, len).into_array()
             })
         },
         ScalarValue::Int8(i) =>            { i.map(|i| {
-            ConstantArray::new(i, len)
+            ConstantArray::new(i, len).into_array()
         })},
         ScalarValue::Int16(i) => { i.map(|i| {
-            ConstantArray::new(i, len)
+            ConstantArray::new(i, len).into_array()
         })},
         ScalarValue::Int32(i) => { i.map(|i| {
-            ConstantArray::new(i, len)
+            ConstantArray::new(i, len).into_array()
         })},
         ScalarValue::Int64(i) => { i.map(|i| {
-            ConstantArray::new(i, len)
+            ConstantArray::new(i, len).into_array()
         })},
         ScalarValue::UInt8(i) => { i.map(|i| {
-            ConstantArray::new(i, len)
+            ConstantArray::new(i, len).into_array()
         })},
         ScalarValue::UInt16(i) => { i.map(|i| {
-            ConstantArray::new(i, len)
+            ConstantArray::new(i, len).into_array()
         })},
         ScalarValue::UInt32(i) => { i.map(|i| {
-            ConstantArray::new(i, len)
+            ConstantArray::new(i, len).into_array()
         })},
         ScalarValue::UInt64(i) => { i.map(|i| {
-            ConstantArray::new(i, len)
+            ConstantArray::new(i, len).into_array()
         })},
         ScalarValue::Utf8(_s) => todo!(),
         ScalarValue::Utf8View(_s) => todo!(),
@@ -129,6 +129,6 @@ fn df_scalar_to_const_array(scalar: &ScalarValue, len: usize) -> VortexResult<Ar
         ScalarValue::Dictionary(_, _) => todo!(),
     };
 
-    let r = constant_array.map(|a| a.into_array()).unwrap_or_else(|| NullArray::new(len).into_array());
+    let r = constant_array.unwrap_or_else(|| NullArray::new(len).into_array());
     Ok(r)
 }
