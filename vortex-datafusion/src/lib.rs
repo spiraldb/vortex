@@ -34,6 +34,7 @@ use crate::plans::{RowSelectorExec, TakeRowsExec};
 mod datatype;
 mod expr;
 mod plans;
+mod eval;
 
 /// Optional configurations to pass when loading a [VortexMemTable].
 #[derive(Default, Debug, Clone)]
@@ -290,35 +291,13 @@ fn can_be_pushed_down(expr: &Expr) -> DFResult<bool> {
     // If the filter references a column not known to our schema, we reject the filter for pushdown.
     fn is_supported(expr: &Expr) -> bool {
         match expr {
-            Expr::BinaryExpr(binary_expr) => {
-                // Both the left and right sides must be column expressions, scalars, or casts.
+            Expr::BinaryExpr(expr) if expr.op == Operator::Eq => {
+                let lhs = expr.left.as_ref();
+                let rhs = expr.right.as_ref();
 
-                match binary_expr.op {
-                    // Initially, we will only support pushdown for basic boolean operators
-                    Operator::Eq
-                    | Operator::NotEq
-                    | Operator::Lt
-                    | Operator::LtEq
-                    | Operator::Gt
-                    | Operator::GtEq => true,
+                matches!((lhs, rhs), (Expr::Column(_), Expr::Column(_)) | (Expr::Column(_), Expr::Literal(_)) | (Expr::Literal(_), Expr::Column(_)) )
+            },
 
-                    // TODO(aduffy): add support for LIKE
-                    // TODO(aduffy): add support for basic mathematical ops +-*/
-                    // TODO(aduffy): add support for conjunctions, assuming all of the
-                    //  left and right are valid expressions.
-                    _ => false,
-                }
-            }
-            Expr::IsNotNull(_)
-            | Expr::IsNull(_)
-            | Expr::IsTrue(_)
-            | Expr::IsFalse(_)
-            | Expr::IsNotTrue(_)
-            | Expr::IsNotFalse(_)
-            | Expr::Column(_)
-            | Expr::Literal(_)
-            // TODO(aduffy): ensure that cast can be pushed down.
-            | Expr::Cast(_) => true,
             _ => false,
         }
     }

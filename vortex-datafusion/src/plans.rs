@@ -182,6 +182,9 @@ impl Stream for RowIndicesStream {
             .project(this.filter_projection.as_slice())
             .expect("projection should succeed");
 
+        // TODO(adamg): Filter on vortex arrays
+        // let filtered_resultd = ExperssionEvaluator::eval(vortex_struct, filters, ...)
+
         // Immediately convert to Arrow RecordBatch for processing.
         // TODO(aduffy): attempt to pushdown the filter to Vortex without decoding.
         let record_batch = RecordBatch::from(
