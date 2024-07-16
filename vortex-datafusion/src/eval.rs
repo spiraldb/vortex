@@ -1,16 +1,11 @@
 use datafusion_common::ScalarValue;
 use datafusion_expr::{Expr, Operator};
-use itertools::repeat_n;
 use vortex::{
-    array::{
-        bool::BoolArray, constant::ConstantArray, null::NullArray, struct_::StructArray,
-        varbinview::VarBinViewArray,
-    },
+    array::{bool::BoolArray, constant::ConstantArray, null::NullArray, struct_::StructArray},
     compute::compare::compare,
     validity::Validity,
     Array, IntoArray,
 };
-use vortex_dtype::Nullability;
 use vortex_error::VortexResult;
 
 pub struct ExperssionEvaluator {}
@@ -19,7 +14,7 @@ impl ExperssionEvaluator {
     pub fn eval(data: StructArray, expr: &Expr) -> VortexResult<Array> {
         match expr {
             Expr::BinaryExpr(expr) => {
-                dbg!(expr);
+                println!("supported - {expr:?}");
                 let lhs = expr.left.as_ref();
                 let rhs = expr.right.as_ref();
 
@@ -73,15 +68,15 @@ fn df_scalar_to_const_array(scalar: &ScalarValue, len: usize) -> VortexResult<Ar
         ScalarValue::UInt16(i) => i.map(|i| ConstantArray::new(i, len).into_array()),
         ScalarValue::UInt32(i) => i.map(|i| ConstantArray::new(i, len).into_array()),
         ScalarValue::UInt64(i) => i.map(|i| ConstantArray::new(i, len).into_array()),
-        ScalarValue::Utf8(s) => s.as_ref().map(|s| {
-            VarBinViewArray::from_iter(
-                repeat_n(Some(s), len),
-                vortex_dtype::DType::Utf8(Nullability::NonNullable),
-            )
-            .into_array()
-        }),
-        ScalarValue::Utf8View(_s) => todo!(),
-        ScalarValue::LargeUtf8(_s) => todo!(),
+        ScalarValue::Utf8(s) => s
+            .as_ref()
+            .map(|s| ConstantArray::new(s.as_str(), len).into_array()),
+        ScalarValue::Utf8View(s) => s
+            .as_ref()
+            .map(|s| ConstantArray::new(s.as_str(), len).into_array()),
+        ScalarValue::LargeUtf8(s) => s
+            .as_ref()
+            .map(|s| ConstantArray::new(s.as_str(), len).into_array()),
         ScalarValue::Binary(_b) => todo!(),
         ScalarValue::BinaryView(_b) => todo!(),
         ScalarValue::Decimal128(..) => todo!(),

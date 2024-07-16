@@ -183,6 +183,8 @@ impl Stream for RowIndicesStream {
             .project(this.filter_projection.as_slice())
             .expect("projection should succeed");
 
+        // println!("{:?}", vortex_struct.)
+
         // TODO(adamg): Filter on vortex arrays
         // let filtered_resultd = ExperssionEvaluator::eval(vortex_struct, filters, ...)
         let r = ExperssionEvaluator::eval(vortex_struct, &this.conjunction_expr).unwrap();

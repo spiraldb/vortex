@@ -248,7 +248,6 @@ impl TableProvider for VortexMemTable {
             .iter()
             .map(|expr| {
                 if can_be_pushed_down(expr)? {
-                    println!("supported - {expr:?}");
                     Ok(TableProviderFilterPushDown::Exact)
                 } else {
                     Ok(TableProviderFilterPushDown::Unsupported)

@@ -5,7 +5,7 @@ use vortex_expr::Operator;
 use crate::{Array, ArrayDType, IntoArrayVariant};
 
 pub trait CompareFn {
-    fn compare(&self, array: &Array, predicate: Operator) -> VortexResult<Array>;
+    fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array>;
 }
 
 pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<Array> {

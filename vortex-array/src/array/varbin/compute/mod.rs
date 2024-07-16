@@ -1,13 +1,18 @@
+use arrow_array::Array as _;
+use arrow_ord::cmp::{eq, gt, gt_eq, lt, lt_eq, neq};
 use vortex_error::VortexResult;
+use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
 use crate::array::varbin::{varbin_scalar, VarBinArray};
+use crate::arrow::FromArrowArray;
+use crate::compute::compare::CompareFn;
 use crate::compute::slice::SliceFn;
 use crate::compute::take::TakeFn;
 use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::validity::ArrayValidity;
-use crate::ArrayDType;
+use crate::{Array, ArrayDType, ArrayData, IntoCanonical, ToArray as _};
 
 mod slice;
 mod take;
@@ -22,6 +27,10 @@ impl ArrayCompute for VarBinArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn compare(&self) -> Option<&dyn CompareFn> {
         Some(self)
     }
 }
@@ -39,5 +48,24 @@ impl ScalarAtFn for VarBinArray {
         } else {
             Ok(Scalar::null(self.dtype().clone()))
         }
+    }
+}
+
+impl CompareFn for VarBinArray {
+    fn compare(&self, other: &Array, operator: Operator) -> VortexResult<Array> {
+        let lhs = self.clone().into_canonical()?.into_arrow();
+        let rhs = other.clone().into_canonical()?.into_arrow();
+
+        let r = match operator {
+            Operator::Eq => eq(&lhs.as_ref(), &rhs.as_ref())?,
+            Operator::NotEq => neq(&lhs.as_ref(), &rhs.as_ref())?,
+            Operator::Gt => gt(&lhs.as_ref(), &rhs.as_ref())?,
+            Operator::Gte => gt_eq(&lhs.as_ref(), &rhs.as_ref())?,
+            Operator::Lt => lt(&lhs.as_ref(), &rhs.as_ref())?,
+            Operator::Lte => lt_eq(&lhs.as_ref(), &rhs.as_ref())?,
+        };
+
+        let data = ArrayData::from_arrow(&r, r.null_count() > 0);
+        Ok(data.to_array())
     }
 }

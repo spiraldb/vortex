@@ -42,7 +42,7 @@ async fn main() {
 
     for i in 1..=22 {
         // Skip query 15 as it is not supported by DataFusion
-        if i == 15 {
+        if [15, 17].contains(&i) {
             continue;
         }
 

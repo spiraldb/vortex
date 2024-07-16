@@ -1,14 +1,18 @@
+use arrow_array::Array as ArrowArray;
+use arrow_ord::cmp::{eq, gt, gt_eq, lt, lt_eq, neq};
 use vortex_error::VortexResult;
+use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
+use crate::arrow::FromArrowArray;
 use crate::compute::compare::CompareFn;
 use crate::compute::slice::{slice, SliceFn};
-use crate::compute::unary::scalar_at::{self, ScalarAtFn};
+use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::ArrayCompute;
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, IntoArray, IntoArrayData};
+use crate::{Array, ArrayDType, ArrayData, IntoArray, IntoArrayData, IntoCanonical, ToArray};
 
 impl ArrayCompute for VarBinViewArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -52,14 +56,20 @@ impl SliceFn for VarBinViewArray {
 }
 
 impl CompareFn for VarBinViewArray {
-    fn compare(&self, other: &Array, predicate: vortex_expr::Operator) -> VortexResult<Array> {
-        if self.len() == other.len() {
-            for idx in 0..self.len() {
-                let lhs = self.scalar_at(index)?;
-                let rhs = scalar_at(other, idx)?;
-            }
+    fn compare(&self, other: &Array, operator: Operator) -> VortexResult<Array> {
+        let lhs = self.clone().into_canonical()?.into_arrow();
+        let rhs = other.clone().into_canonical()?.into_arrow();
 
-        }
-        let lhs = self.scalar_at(index)
+        let r = match operator {
+            Operator::Eq => eq(&lhs.as_ref(), &rhs.as_ref())?,
+            Operator::NotEq => neq(&lhs.as_ref(), &rhs.as_ref())?,
+            Operator::Gt => gt(&lhs.as_ref(), &rhs.as_ref())?,
+            Operator::Gte => gt_eq(&lhs.as_ref(), &rhs.as_ref())?,
+            Operator::Lt => lt(&lhs.as_ref(), &rhs.as_ref())?,
+            Operator::Lte => lt_eq(&lhs.as_ref(), &rhs.as_ref())?,
+        };
+
+        let data = ArrayData::from_arrow(&r, r.null_count() > 0);
+        Ok(data.to_array())
     }
 }
