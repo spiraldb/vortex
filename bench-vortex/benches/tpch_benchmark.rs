@@ -9,15 +9,7 @@ fn benchmark(c: &mut Criterion) {
     // Run TPC-H data gen.
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
 
-    let vortex_no_pushdown_ctx = runtime
-        .block_on(load_datasets(
-            &data_dir,
-            Format::Vortex {
-                disable_pushdown: false,
-            },
-        ))
-        .unwrap();
-    let vortex_ctx = runtime
+    let vortex_pushdown_disabled_ctx = runtime
         .block_on(load_datasets(
             &data_dir,
             Format::Vortex {
@@ -25,8 +17,13 @@ fn benchmark(c: &mut Criterion) {
             },
         ))
         .unwrap();
-    let csv_ctx = runtime
-        .block_on(load_datasets(&data_dir, Format::Csv))
+    let vortex_ctx = runtime
+        .block_on(load_datasets(
+            &data_dir,
+            Format::Vortex {
+                disable_pushdown: false,
+            },
+        ))
         .unwrap();
     let arrow_ctx = runtime
         .block_on(load_datasets(&data_dir, Format::Arrow))
@@ -35,6 +32,7 @@ fn benchmark(c: &mut Criterion) {
     for q in 1..=22 {
         if q == 15 {
             // DataFusion does not support query 15 since it has multiple SQL statements.
+            continue;
         }
 
         let query = bench_vortex::tpch::tpch_query(q);
@@ -42,7 +40,19 @@ fn benchmark(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("tpch_q{q}"));
         group.sample_size(10);
 
-        group.bench_function("vortex-pushdown", |b| {
+        group.bench_function("vortex-pushdown-disabled", |b| {
+            b.to_async(&runtime).iter(|| async {
+                vortex_pushdown_disabled_ctx
+                    .sql(&query)
+                    .await
+                    .unwrap()
+                    .collect()
+                    .await
+                    .unwrap()
+            })
+        });
+
+        group.bench_function("vortex-pushdown-enabled", |b| {
             b.to_async(&runtime).iter(|| async {
                 vortex_ctx
                     .sql(&query)
@@ -52,23 +62,6 @@ fn benchmark(c: &mut Criterion) {
                     .await
                     .unwrap()
             })
-        });
-
-        group.bench_function("vortex-nopushdown", |b| {
-            b.to_async(&runtime).iter(|| async {
-                vortex_no_pushdown_ctx
-                    .sql(&query)
-                    .await
-                    .unwrap()
-                    .collect()
-                    .await
-                    .unwrap()
-            })
-        });
-
-        group.bench_function("csv", |b| {
-            b.to_async(&runtime)
-                .iter(|| async { csv_ctx.sql(&query).await.unwrap().collect().await.unwrap() })
         });
 
         group.bench_function("arrow", |b| {
