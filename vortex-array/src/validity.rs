@@ -1,15 +1,14 @@
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
 use serde::{Deserialize, Serialize};
-
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::{Array, IntoArray, IntoArrayVariant};
 use crate::array::bool::BoolArray;
 use crate::compute::slice::slice;
 use crate::compute::take::take;
 use crate::compute::unary::scalar_at::scalar_at;
 use crate::stats::ArrayStatistics;
+use crate::{Array, IntoArray, IntoArrayVariant};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;

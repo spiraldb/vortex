@@ -1,15 +1,14 @@
 use std::ops::{BitAnd, BitOr};
 
 use arrow_buffer::BooleanBuffer;
-
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::{Disjunction, Predicate, Value};
 
-use crate::{Array, IntoArray};
 use crate::array::bool::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::filter_indices::FilterIndicesFn;
+use crate::{Array, IntoArray};
 
 impl FilterIndicesFn for PrimitiveArray {
     fn filter_indices(&self, disjunction: &Disjunction) -> VortexResult<Array> {
@@ -70,12 +69,11 @@ fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
 #[cfg(test)]
 mod test {
     use vortex_dtype::field::FieldPath;
-    use vortex_expr::{Conjunction, FieldPathOperations, lit};
-
-    use crate::IntoArrayVariant;
-    use crate::validity::Validity;
+    use vortex_expr::{lit, Conjunction, FieldPathOperations};
 
     use super::*;
+    use crate::validity::Validity;
+    use crate::IntoArrayVariant;
 
     fn apply_conjunctive_filter(arr: &PrimitiveArray, conj: Conjunction) -> VortexResult<Array> {
         arr.filter_indices(&Disjunction::from_iter([conj]))

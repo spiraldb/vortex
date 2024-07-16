@@ -1,16 +1,15 @@
 use ::serde::{Deserialize, Serialize};
-
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::vortex_bail;
 use vortex_scalar::Scalar;
 
-use crate::{ArrayDType, impl_encoding, IntoArrayVariant};
 use crate::array::constant::ConstantArray;
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::unary::scalar_at::scalar_at;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::{impl_encoding, ArrayDType, IntoArrayVariant};
 
 mod compute;
 mod flatten;
@@ -183,18 +182,17 @@ impl ArrayValidity for SparseArray {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-
-    use vortex_dtype::{DType, PType};
     use vortex_dtype::Nullability::Nullable;
+    use vortex_dtype::{DType, PType};
     use vortex_error::VortexError;
     use vortex_scalar::Scalar;
 
-    use crate::{Array, IntoArray, IntoArrayVariant};
     use crate::accessor::ArrayAccessor;
     use crate::array::sparse::SparseArray;
     use crate::compute::slice::slice;
     use crate::compute::unary::cast::try_cast;
     use crate::compute::unary::scalar_at::scalar_at;
+    use crate::{Array, IntoArray, IntoArrayVariant};
 
     fn nullable_fill() -> Scalar {
         Scalar::null(DType::Primitive(PType::I32, Nullable))

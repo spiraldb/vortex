@@ -1,25 +1,24 @@
-use std::{mem, slice};
 use std::fmt::Formatter;
 use std::ops::Deref;
+use std::{mem, slice};
 
 use ::serde::{Deserialize, Serialize};
 use arrow_array::{ArrayRef, BinaryViewArray, StringViewArray};
 use arrow_buffer::{Buffer, ScalarBuffer};
 use arrow_schema::DataType;
 use itertools::Itertools;
-
 use vortex_dtype::{Nullability, PType};
 use vortex_error::vortex_bail;
 
-use crate::{ArrayData, ArrayDType, Canonical, impl_encoding, IntoArrayVariant, IntoCanonical};
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::builder::VarBinViewBuilder;
 use crate::arrow::FromArrowArray;
 use crate::compute::slice::slice;
-use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::validity::Validity;
+use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::{impl_encoding, ArrayDType, ArrayData, Canonical, IntoArrayVariant, IntoCanonical};
 
 mod accessor;
 mod builder;
@@ -358,10 +357,10 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray {
 mod test {
     use vortex_scalar::Scalar;
 
-    use crate::{Canonical, IntoArray, IntoCanonical};
     use crate::array::varbinview::VarBinViewArray;
     use crate::compute::slice::slice;
     use crate::compute::unary::scalar_at::scalar_at;
+    use crate::{Canonical, IntoArray, IntoCanonical};
 
     #[test]
     pub fn varbin_view() {

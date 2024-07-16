@@ -4,8 +4,6 @@ use std::ops::Range;
 use bytes::BytesMut;
 use futures_util::{stream, StreamExt, TryStreamExt};
 use itertools::Itertools;
-
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
@@ -15,6 +13,7 @@ use vortex::compute::unary::cast::try_cast;
 use vortex::compute::unary::scalar_subtract::subtract_scalar;
 use vortex::stats::ArrayStatistics;
 use vortex::stream::{ArrayStream, ArrayStreamExt};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -209,17 +208,16 @@ mod test {
     use std::sync::Arc;
 
     use itertools::Itertools;
-
-    use vortex::{Context, IntoArray, IntoCanonical};
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
+    use vortex::{Context, IntoArray, IntoCanonical};
     use vortex_buffer::Buffer;
     use vortex_dtype::PType;
     use vortex_error::VortexResult;
 
     use crate::chunked_reader::ChunkedArrayReader;
-    use crate::MessageReader;
     use crate::writer::ArrayWriter;
+    use crate::MessageReader;
 
     async fn chunked_array() -> VortexResult<ArrayWriter<Vec<u8>>> {
         let c = ChunkedArray::try_new(

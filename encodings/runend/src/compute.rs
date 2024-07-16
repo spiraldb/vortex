@@ -1,9 +1,9 @@
-use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compute::ArrayCompute;
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
+use vortex::compute::ArrayCompute;
+use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
@@ -67,9 +67,9 @@ impl SliceFn for RunEndArray {
 
 #[cfg(test)]
 mod test {
-    use vortex::{IntoArrayVariant, ToArray};
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::take::take;
+    use vortex::{IntoArrayVariant, ToArray};
 
     use crate::RunEndArray;
 

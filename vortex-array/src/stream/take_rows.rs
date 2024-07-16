@@ -3,19 +3,18 @@ use std::task::{Context, Poll};
 
 use futures_util::{ready, Stream};
 use pin_project::pin_project;
-
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::{Array, ArrayDType, IntoArrayVariant};
 use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
 use crate::compute::slice::slice;
 use crate::compute::take::take;
 use crate::compute::unary::scalar_subtract::subtract_scalar;
-use crate::IntoArray;
 use crate::stats::{ArrayStatistics, Stat};
 use crate::stream::ArrayStream;
+use crate::IntoArray;
+use crate::{Array, ArrayDType, IntoArrayVariant};
 
 #[pin_project]
 pub struct TakeRows<R: ArrayStream> {

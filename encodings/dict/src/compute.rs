@@ -1,8 +1,8 @@
-use vortex::{Array, IntoArray};
-use vortex::compute::ArrayCompute;
 use vortex::compute::slice::{slice, SliceFn};
 use vortex::compute::take::{take, TakeFn};
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
+use vortex::compute::ArrayCompute;
+use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -48,9 +48,9 @@ impl SliceFn for DictArray {
 
 #[cfg(test)]
 mod test {
-    use vortex::{IntoArray, IntoArrayVariant, ToArray};
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
+    use vortex::{IntoArray, IntoArrayVariant, ToArray};
     use vortex_dtype::{DType, Nullability};
 
     use crate::{dict_encode_typed_primitive, dict_encode_varbin, DictArray};

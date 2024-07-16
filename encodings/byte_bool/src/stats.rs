@@ -1,4 +1,7 @@
-use vortex::{stats::{ArrayStatisticsCompute, Stat, StatsSet}, AsArray, IntoArrayVariant};
+use vortex::{
+    stats::{ArrayStatisticsCompute, Stat, StatsSet},
+    AsArray, IntoArrayVariant,
+};
 use vortex_error::VortexResult;
 
 use super::ByteBoolArray;

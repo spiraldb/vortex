@@ -1,12 +1,11 @@
 use serde::{Deserialize, Serialize};
-
-use vortex::{ArrayDType, Canonical, impl_encoding, IntoArrayVariant, IntoCanonical};
 use vortex::accessor::ArrayAccessor;
 use vortex::array::bool::BoolArray;
 use vortex::compute::take::take;
 use vortex::compute::unary::scalar_at::scalar_at;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::vortex_bail;
 

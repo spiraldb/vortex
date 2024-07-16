@@ -3,8 +3,8 @@ use vortex_error::VortexResult;
 use crate::accessor::ArrayAccessor;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbinview::VarBinViewArray;
-use crate::IntoArrayVariant;
 use crate::validity::ArrayValidity;
+use crate::IntoArrayVariant;
 
 impl ArrayAccessor<[u8]> for VarBinViewArray {
     fn with_iterator<F: for<'a> FnOnce(&mut dyn Iterator<Item = Option<&'a [u8]>>) -> R, R>(

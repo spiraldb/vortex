@@ -1,11 +1,10 @@
 use ::serde::{Deserialize, Serialize};
-
 pub use compress::*;
-use vortex::{ArrayDType, Canonical, impl_encoding, IntoCanonical};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::{Nullability, PType};
 use vortex_error::{vortex_bail, vortex_err};
 
@@ -204,8 +203,8 @@ impl ArrayTrait for BitPackedArray {
 
 #[cfg(test)]
 mod test {
-    use vortex::{IntoArray, IntoArrayVariant};
     use vortex::array::primitive::PrimitiveArray;
+    use vortex::{IntoArray, IntoArrayVariant};
 
     use crate::BitPackedArray;
 

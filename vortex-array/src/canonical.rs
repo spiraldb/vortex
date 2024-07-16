@@ -1,22 +1,20 @@
 use std::sync::Arc;
 
+use arrow_array::types::{
+    Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
+    UInt32Type, UInt64Type, UInt8Type,
+};
 use arrow_array::{
     ArrayRef, ArrowPrimitiveType, BinaryArray, BooleanArray as ArrowBoolArray, LargeBinaryArray,
     LargeStringArray, NullArray as ArrowNullArray, PrimitiveArray as ArrowPrimitiveArray,
     StringArray, StructArray as ArrowStructArray, TimestampMicrosecondArray,
     TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
 };
-use arrow_array::types::{
-    Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
-    UInt32Type, UInt64Type, UInt8Type,
-};
 use arrow_buffer::ScalarBuffer;
 use arrow_schema::{Field, Fields};
-
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::{Array, ArrayDType, IntoArray, ToArray};
 use crate::array::bool::BoolArray;
 use crate::array::datetime::{LocalDateTimeArray, TimeUnit};
 use crate::array::extension::ExtensionArray;
@@ -28,6 +26,7 @@ use crate::arrow::wrappers::as_offset_buffer;
 use crate::compute::unary::cast::try_cast;
 use crate::encoding::ArrayEncoding;
 use crate::validity::ArrayValidity;
+use crate::{Array, ArrayDType, IntoArray, ToArray};
 
 /// The set of canonical array encodings, also the set of encodings that can be transferred to
 /// Arrow with zero-copy.
@@ -392,19 +391,18 @@ impl IntoArray for Canonical {
 
 #[cfg(test)]
 mod test {
+    use arrow_array::types::{Int64Type, UInt64Type};
     use arrow_array::{
         Array, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
     };
-    use arrow_array::types::{Int64Type, UInt64Type};
-
     use vortex_dtype::Nullability;
     use vortex_scalar::Scalar;
 
-    use crate::{IntoArray, IntoCanonical};
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::SparseArray;
     use crate::array::struct_::StructArray;
     use crate::validity::Validity;
+    use crate::{IntoArray, IntoCanonical};
 
     #[test]
     fn test_canonicalize_nested_struct() {

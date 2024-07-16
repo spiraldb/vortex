@@ -1,7 +1,7 @@
-use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex::array::datetime::{LocalDateTimeArray, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compute::unary::cast::try_cast;
+use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
