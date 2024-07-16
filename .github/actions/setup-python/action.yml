@@ -17,7 +17,7 @@ runs:
 
     - name: Rye Install
       shell: bash
-      run: curl -sSf https://rye-up.com/get | bash
+      run: curl -sSf https://rye.astral.sh/get | bash
       if: steps.rye-cache.outputs.cache-hit != 'true'
       env:
         RYE_VERSION: "${{ inputs.rye-version }}"

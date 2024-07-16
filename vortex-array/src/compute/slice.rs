@@ -2,11 +2,22 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::Array;
 
-/// Limit array to start..stop range
+/// Limit array to start...stop range
 pub trait SliceFn {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array>;
 }
 
+/// Return a zero-copy slice of an array, between `start` (inclusive) and `end` (exclusive).
+///
+/// # Panics
+///
+/// Slicing will panic if you attempt to slice a range that exceeds the bounds of the
+/// underlying array.
+///
+/// # Errors
+///
+/// Slicing returns an error if the underlying codec's [slice](SliceFn::slice()) implementation
+/// returns an error.
 pub fn slice(array: &Array, start: usize, stop: usize) -> VortexResult<Array> {
     check_slice_bounds(array, start, stop)?;
 

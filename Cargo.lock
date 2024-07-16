@@ -3883,6 +3883,7 @@ dependencies = [
  "arrow-buffer",
  "arrow-cast",
  "arrow-schema",
+ "arrow-select",
  "build-vortex",
  "criterion",
  "enum-iterator",

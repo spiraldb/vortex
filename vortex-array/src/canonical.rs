@@ -48,11 +48,10 @@ use crate::{Array, ArrayDType, IntoArray, ToArray};
 ///
 /// Binary and String views are a new, better encoding format for nearly all use-cases. For now,
 /// because DataFusion does not include pervasive support for compute over StringView, we opt to use
-/// the [`VarBinArray`] as the canonical encoding (which corresponds to the Arrow
-/// [`BinaryViewArray`]).
+/// the [`VarBinArray`] as the canonical encoding (which corresponds to the Arrow `BinaryViewArray`).
 ///
 /// We expect to change this soon once DataFusion is able to finish up some initial support, which
-/// is tracked in https://github.com/apache/datafusion/issues/10918.
+/// is tracked in <https://github.com/apache/datafusion/issues/10918>.
 #[derive(Debug, Clone)]
 pub enum Canonical {
     Null(NullArray),
