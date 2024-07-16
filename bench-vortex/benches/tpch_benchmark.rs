@@ -9,7 +9,7 @@ fn benchmark(c: &mut Criterion) {
     // Run TPC-H data gen.
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
 
-    let vortex_no_pushdown_ctx = runtime
+    let vortex_pushdown_disabled_ctx = runtime
         .block_on(load_datasets(
             &data_dir,
             Format::Vortex {
@@ -40,9 +40,9 @@ fn benchmark(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("tpch_q{q}"));
         group.sample_size(10);
 
-        group.bench_function("vortex-nopushdown", |b| {
+        group.bench_function("vortex-pushdown-disabled", |b| {
             b.to_async(&runtime).iter(|| async {
-                vortex_no_pushdown_ctx
+                vortex_pushdown_disabled_ctx
                     .sql(&query)
                     .await
                     .unwrap()
@@ -52,7 +52,7 @@ fn benchmark(c: &mut Criterion) {
             })
         });
 
-        group.bench_function("vortex-pushdown", |b| {
+        group.bench_function("vortex-pushdown-enabled", |b| {
             b.to_async(&runtime).iter(|| async {
                 vortex_ctx
                     .sql(&query)
