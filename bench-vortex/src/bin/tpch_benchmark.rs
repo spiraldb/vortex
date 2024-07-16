@@ -17,8 +17,8 @@ async fn main() {
 
     // The formats to run against (vs the baseline)
     let formats = [
-        Format::Csv,
         Format::Arrow,
+        Format::Csv,
         Format::Vortex {
             disable_pushdown: false,
         },
@@ -56,6 +56,8 @@ async fn main() {
         let query = tpch_query(i);
         let mut cells = Vec::with_capacity(formats.len());
         cells.push(Cell::new(&format!("Q{}", i)));
+
+        let mut elapsed_us = Vec::new();
         for (ctx, format) in ctxs.iter().zip(formats.iter()) {
             let start = SystemTime::now();
             ctx.sql(&query)
@@ -67,8 +69,25 @@ async fn main() {
                 .map_err(|e| println!("Failed to collect {} {:?}: {}", i, format, e))
                 .unwrap();
             let elapsed = start.elapsed().unwrap();
+            elapsed_us.push(elapsed);
             progress.inc(1);
-            cells.push(Cell::new(&format!("{} us", elapsed.as_micros())));
+        }
+
+        let baseline = elapsed_us.first().unwrap();
+        // yellow: 10% slower than baseline
+        let yellow = baseline.as_micros() + (baseline.as_micros() / 10);
+        // red: 50% slower than baseline
+        let red = baseline.as_micros() + (baseline.as_micros() / 50);
+        cells.push(Cell::new(&format!("{} us", baseline.as_micros())).style_spec("b"));
+        for measure in elapsed_us.iter().skip(1) {
+            let style_spec = if measure.as_micros() > red {
+                "bBr"
+            } else if measure.as_micros() > yellow {
+                "bFdBy"
+            } else {
+                "bFdBG"
+            };
+            cells.push(Cell::new(&format!("{} us", measure.as_micros())).style_spec(style_spec));
         }
         table.add_row(Row::new(cells));
     }
