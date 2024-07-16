@@ -2,7 +2,9 @@ use std::time::SystemTime;
 
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::tpch::{load_datasets, tpch_query, Format};
+use futures::future::join_all;
 use indicatif::ProgressBar;
+use itertools::Itertools;
 use prettytable::{Cell, Row, Table};
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
@@ -13,6 +15,7 @@ async fn main() {
     // Run TPC-H data gen.
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
 
+    // The formats to run against (vs the baseline)
     let formats = [
         Format::Csv,
         Format::Arrow,
@@ -23,6 +26,17 @@ async fn main() {
             disable_pushdown: true,
         },
     ];
+
+    // Load datasets
+    let ctxs = join_all(
+        formats
+            .iter()
+            .map(|format| load_datasets(&data_dir, *format)),
+    )
+    .await
+    .into_iter()
+    .map(|r| r.unwrap())
+    .collect_vec();
 
     // Set up a results table
     let mut table = Table::new();
@@ -42,8 +56,7 @@ async fn main() {
         let query = tpch_query(i);
         let mut cells = Vec::with_capacity(formats.len());
         cells.push(Cell::new(&format!("Q{}", i)));
-        for format in formats.iter() {
-            let ctx = load_datasets(&data_dir, *format).await.unwrap();
+        for (ctx, format) in ctxs.iter().zip(formats.iter()) {
             let start = SystemTime::now();
             ctx.sql(&query)
                 .await
