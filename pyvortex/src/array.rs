@@ -130,7 +130,8 @@ impl PyArray {
             .extract(py),
             RunEndPrimitive::ID => PyRunEndPrimitiveArray::wrap(
                 py,
-                RunEndPrimitiveArray::try_from(inner.into_array()).map_err(PyVortexError::map_err)?,
+                RunEndPrimitiveArray::try_from(inner.into_array())
+                    .map_err(PyVortexError::map_err)?,
             )?
             .extract(py),
             Delta::ID => PyDeltaArray::wrap(

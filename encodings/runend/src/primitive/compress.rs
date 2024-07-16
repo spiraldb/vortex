@@ -129,7 +129,8 @@ mod test {
     fn decode() {
         let ends = PrimitiveArray::from(vec![2, 5, 10]);
         let values = PrimitiveArray::from(vec![1i32, 2, 3]);
-        let decoded = runend_primitive_decode(&ends, &values, Validity::NonNullable, 0, 10).unwrap();
+        let decoded =
+            runend_primitive_decode(&ends, &values, Validity::NonNullable, 0, 10).unwrap();
 
         assert_eq!(
             decoded.maybe_null_slice::<i32>(),
