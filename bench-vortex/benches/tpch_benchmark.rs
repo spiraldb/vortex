@@ -9,11 +9,11 @@ fn benchmark(c: &mut Criterion) {
     // Run TPC-H data gen.
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
 
-    let vortex_no_pushdown_ctx = runtime
+    let vortex_pushdown_disabled_ctx = runtime
         .block_on(load_datasets(
             &data_dir,
             Format::Vortex {
-                disable_pushdown: false,
+                disable_pushdown: true,
             },
         ))
         .unwrap();
@@ -21,7 +21,7 @@ fn benchmark(c: &mut Criterion) {
         .block_on(load_datasets(
             &data_dir,
             Format::Vortex {
-                disable_pushdown: true,
+                disable_pushdown: false,
             },
         ))
         .unwrap();
@@ -35,6 +35,7 @@ fn benchmark(c: &mut Criterion) {
     for q in 1..=22 {
         if q == 15 {
             // DataFusion does not support query 15 since it has multiple SQL statements.
+            continue;
         }
 
         let query = bench_vortex::tpch::tpch_query(q);
@@ -42,9 +43,9 @@ fn benchmark(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("tpch_q{q}"));
         group.sample_size(10);
 
-        group.bench_function("vortex-pushdown", |b| {
+        group.bench_function("vortex-pushdown-disabled", |b| {
             b.to_async(&runtime).iter(|| async {
-                vortex_ctx
+                vortex_pushdown_disabled_ctx
                     .sql(&query)
                     .await
                     .unwrap()
@@ -54,9 +55,9 @@ fn benchmark(c: &mut Criterion) {
             })
         });
 
-        group.bench_function("vortex-nopushdown", |b| {
+        group.bench_function("vortex-pushdown-enabled", |b| {
             b.to_async(&runtime).iter(|| async {
-                vortex_no_pushdown_ctx
+                vortex_ctx
                     .sql(&query)
                     .await
                     .unwrap()
