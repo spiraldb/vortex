@@ -64,30 +64,3 @@ impl SliceFn for RunEndArray {
         .into_array())
     }
 }
-
-#[cfg(test)]
-mod test {
-    use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::take::take;
-    use vortex::{IntoCanonical, ToArray};
-
-    use crate::default::RunEndArray;
-
-    #[test]
-    fn ree_take() {
-        let ree = RunEndArray::encode(
-            PrimitiveArray::from(vec![1, 1, 1, 4, 4, 4, 2, 2, 5, 5, 5, 5]).to_array(),
-        )
-        .unwrap();
-        let taken = take(ree.array(), PrimitiveArray::from(vec![9, 8, 1, 3]).array()).unwrap();
-        assert_eq!(
-            taken
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap()
-                .maybe_null_slice::<i32>(),
-            &[5, 5, 1, 4]
-        );
-    }
-}

@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::compute::search_sorted::{search_sorted, SearchSortedSide};
 use vortex::compute::unary::scalar_at::scalar_at;
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute};
@@ -8,7 +7,7 @@ use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
 use vortex_error::vortex_bail;
 
-use crate::default::compress::{runend_primitive_decode, runend_primitive_encode};
+use crate::default::compress::runend_primitive_decode;
 
 impl_encoding!("vortex.runend", 19u16, RunEnd);
 
@@ -67,16 +66,6 @@ impl RunEndArray {
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
         search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
             .map(|s| s.to_index())
-    }
-
-    pub fn encode(array: Array) -> VortexResult<Self> {
-        if array.encoding().id() == Primitive::ID {
-            let primitive = PrimitiveArray::try_from(array)?;
-            let (ends, values) = runend_primitive_encode(&primitive);
-            Self::try_new(ends.into_array(), values.into_array(), primitive.validity())
-        } else {
-            vortex_bail!("REE can only encode primitive arrays")
-        }
     }
 
     pub fn validity(&self) -> Validity {
