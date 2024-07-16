@@ -2,9 +2,8 @@ use std::time::SystemTime;
 
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::tpch::{load_datasets, tpch_query, Format};
-use futures::future::join_all;
+use futures::future::try_join_all;
 use indicatif::ProgressBar;
-use itertools::Itertools;
 use prettytable::{Cell, Row, Table};
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
@@ -18,25 +17,19 @@ async fn main() {
     // The formats to run against (vs the baseline)
     let formats = [
         Format::Arrow,
-        Format::Csv,
         Format::Vortex {
             disable_pushdown: false,
-        },
-        Format::Vortex {
-            disable_pushdown: true,
         },
     ];
 
     // Load datasets
-    let ctxs = join_all(
+    let ctxs = try_join_all(
         formats
             .iter()
             .map(|format| load_datasets(&data_dir, *format)),
     )
     .await
-    .into_iter()
-    .map(|r| r.unwrap())
-    .collect_vec();
+    .unwrap();
 
     // Set up a results table
     let mut table = Table::new();

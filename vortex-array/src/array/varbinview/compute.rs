@@ -3,8 +3,9 @@ use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
+use crate::compute::compare::CompareFn;
 use crate::compute::slice::{slice, SliceFn};
-use crate::compute::unary::scalar_at::ScalarAtFn;
+use crate::compute::unary::scalar_at::{self, ScalarAtFn};
 use crate::compute::ArrayCompute;
 use crate::validity::ArrayValidity;
 use crate::{Array, ArrayDType, IntoArray, IntoArrayData};
@@ -15,6 +16,10 @@ impl ArrayCompute for VarBinViewArray {
     }
 
     fn slice(&self) -> Option<&dyn SliceFn> {
+        Some(self)
+    }
+
+    fn compare(&self) -> Option<&dyn CompareFn> {
         Some(self)
     }
 }
@@ -43,5 +48,18 @@ impl SliceFn for VarBinViewArray {
             self.validity().slice(start, stop)?,
         )?
         .into_array())
+    }
+}
+
+impl CompareFn for VarBinViewArray {
+    fn compare(&self, other: &Array, predicate: vortex_expr::Operator) -> VortexResult<Array> {
+        if self.len() == other.len() {
+            for idx in 0..self.len() {
+                let lhs = self.scalar_at(index)?;
+                let rhs = scalar_at(other, idx)?;
+            }
+
+        }
+        let lhs = self.scalar_at(index)
     }
 }
