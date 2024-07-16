@@ -13,7 +13,7 @@ fn benchmark(c: &mut Criterion) {
         .block_on(load_datasets(
             &data_dir,
             Format::Vortex {
-                disable_pushdown: false,
+                disable_pushdown: true,
             },
         ))
         .unwrap();
@@ -21,12 +21,9 @@ fn benchmark(c: &mut Criterion) {
         .block_on(load_datasets(
             &data_dir,
             Format::Vortex {
-                disable_pushdown: true,
+                disable_pushdown: false,
             },
         ))
-        .unwrap();
-    let csv_ctx = runtime
-        .block_on(load_datasets(&data_dir, Format::Csv))
         .unwrap();
     let arrow_ctx = runtime
         .block_on(load_datasets(&data_dir, Format::Arrow))
@@ -35,24 +32,13 @@ fn benchmark(c: &mut Criterion) {
     for q in 1..=22 {
         if q == 15 {
             // DataFusion does not support query 15 since it has multiple SQL statements.
+            continue;
         }
 
         let query = bench_vortex::tpch::tpch_query(q);
 
         let mut group = c.benchmark_group(format!("tpch_q{q}"));
         group.sample_size(10);
-
-        group.bench_function("vortex-pushdown", |b| {
-            b.to_async(&runtime).iter(|| async {
-                vortex_ctx
-                    .sql(&query)
-                    .await
-                    .unwrap()
-                    .collect()
-                    .await
-                    .unwrap()
-            })
-        });
 
         group.bench_function("vortex-nopushdown", |b| {
             b.to_async(&runtime).iter(|| async {
@@ -66,9 +52,16 @@ fn benchmark(c: &mut Criterion) {
             })
         });
 
-        group.bench_function("csv", |b| {
-            b.to_async(&runtime)
-                .iter(|| async { csv_ctx.sql(&query).await.unwrap().collect().await.unwrap() })
+        group.bench_function("vortex-pushdown", |b| {
+            b.to_async(&runtime).iter(|| async {
+                vortex_ctx
+                    .sql(&query)
+                    .await
+                    .unwrap()
+                    .collect()
+                    .await
+                    .unwrap()
+            })
         });
 
         group.bench_function("arrow", |b| {

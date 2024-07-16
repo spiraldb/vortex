@@ -1,3 +1,4 @@
+use std::ops::Div;
 use std::sync;
 use std::time::SystemTime;
 
@@ -19,7 +20,7 @@ async fn main() {
     // The formats to run against (vs the baseline)
     let formats = [
         Format::Arrow,
-        Format::Csv,
+        // Format::Csv,
         Format::Vortex {
             disable_pushdown: false,
         },
@@ -48,7 +49,7 @@ async fn main() {
     }
 
     // Setup a progress bar
-    let progress = ProgressBar::new(22 * formats.len() as u64);
+    let progress = ProgressBar::new(21 * formats.len() as u64);
 
     // Send back a channel with the results of Row.
     let (rows_tx, rows_rx) = sync::mpsc::channel();
@@ -57,7 +58,6 @@ async fn main() {
             continue;
         }
         let _ctxs = ctxs.clone();
-        let _formats = formats.clone();
         let _tx = rows_tx.clone();
         let _progress = progress.clone();
         rayon::spawn_fifo(move || {
@@ -70,20 +70,36 @@ async fn main() {
                 .enable_all()
                 .build()
                 .unwrap();
-            for (ctx, format) in _ctxs.iter().zip(_formats.iter()) {
+            for (ctx, format) in _ctxs.iter().zip(formats.iter()) {
+                for _ in 0..3 {
+                    // warmup
+                    rt.block_on(async {
+                        ctx.sql(&query)
+                            .await
+                            .map_err(|e| println!("Failed to run {} {:?}: {}", i, format, e))
+                            .unwrap()
+                            .collect()
+                            .await
+                            .map_err(|e| println!("Failed to collect {} {:?}: {}", i, format, e))
+                            .unwrap();
+                    })
+                }
                 let start = SystemTime::now();
-                rt.block_on(async {
-                    ctx.sql(&query)
-                        .await
-                        .map_err(|e| println!("Failed to run {} {:?}: {}", i, format, e))
-                        .unwrap()
-                        .collect()
-                        .await
-                        .map_err(|e| println!("Failed to collect {} {:?}: {}", i, format, e))
-                        .unwrap();
-                });
+                for _ in 0..50 {
+                    rt.block_on(async {
+                        ctx.sql(&query)
+                            .await
+                            .map_err(|e| println!("Failed to run {} {:?}: {}", i, format, e))
+                            .unwrap()
+                            .collect()
+                            .await
+                            .map_err(|e| println!("Failed to collect {} {:?}: {}", i, format, e))
+                            .unwrap();
+                    });
+                }
+
                 let elapsed = start.elapsed().unwrap();
-                elapsed_us.push(elapsed);
+                elapsed_us.push(elapsed.div(50));
                 _progress.inc(1);
             }
 
@@ -91,7 +107,7 @@ async fn main() {
             // yellow: 10% slower than baseline
             let yellow = baseline.as_micros() + (baseline.as_micros() / 10);
             // red: 50% slower than baseline
-            let red = baseline.as_micros() + (baseline.as_micros() / 50);
+            let red = baseline.as_micros() + (baseline.as_micros() / 2);
             cells.push(Cell::new(&format!("{} us", baseline.as_micros())).style_spec("b"));
             for measure in elapsed_us.iter().skip(1) {
                 let style_spec = if measure.as_micros() > red {
