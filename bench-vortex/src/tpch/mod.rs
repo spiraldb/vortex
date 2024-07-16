@@ -4,12 +4,16 @@ use std::sync::Arc;
 
 use arrow_array::StructArray;
 use arrow_schema::Schema;
+use datafusion::dataframe::DataFrameWriteOptions;
 use datafusion::datasource::MemTable;
-use datafusion::prelude::{CsvReadOptions, SessionContext};
+use datafusion::prelude::{CsvReadOptions, ParquetReadOptions, SessionContext};
+use futures::executor::block_on;
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::{Array, ArrayDType, ArrayData, IntoArray};
 use vortex_datafusion::{SessionContextExt, VortexMemTableOptions};
+
+use crate::idempotent;
 
 pub mod dbgen;
 pub mod schema;
@@ -18,6 +22,7 @@ pub mod schema;
 pub enum Format {
     Csv,
     Arrow,
+    Parquet,
     Vortex { disable_pushdown: bool },
 }
 
@@ -43,6 +48,9 @@ pub async fn load_datasets<P: AsRef<Path>>(
             match format {
                 Format::Csv => register_csv(&context, stringify!($name), &$name, $schema).await,
                 Format::Arrow => register_arrow(&context, stringify!($name), &$name, $schema).await,
+                Format::Parquet => {
+                    register_parquet(&context, stringify!($name), &$name, $schema).await
+                }
                 Format::Vortex {
                     disable_pushdown, ..
                 } => {
@@ -116,6 +124,46 @@ async fn register_arrow(
     session.register_table(name, Arc::new(mem_table))?;
 
     Ok(())
+}
+
+async fn register_parquet(
+    session: &SessionContext,
+    name: &str,
+    file: &Path,
+    schema: &Schema,
+) -> anyhow::Result<()> {
+    // Idempotent conversion from TPCH CSV to Parquet.
+    let pq_file = idempotent(
+        &file.with_extension("").with_extension("parquet"),
+        |pq_file| {
+            let df = block_on(
+                session.read_csv(
+                    file.to_str().unwrap(),
+                    CsvReadOptions::default()
+                        .delimiter(b'|')
+                        .has_header(false)
+                        .file_extension("tbl")
+                        .schema(schema),
+                ),
+            )
+            .unwrap();
+
+            block_on(df.write_parquet(
+                pq_file.as_os_str().to_str().unwrap(),
+                DataFrameWriteOptions::default(),
+                None,
+            ))
+        },
+    )
+    .unwrap();
+
+    Ok(session
+        .register_parquet(
+            name,
+            pq_file.as_os_str().to_str().unwrap(),
+            ParquetReadOptions::default(),
+        )
+        .await?)
 }
 
 async fn register_vortex(

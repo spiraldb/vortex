@@ -25,11 +25,11 @@ fn benchmark(c: &mut Criterion) {
             },
         ))
         .unwrap();
-    let csv_ctx = runtime
-        .block_on(load_datasets(&data_dir, Format::Csv))
-        .unwrap();
     let arrow_ctx = runtime
         .block_on(load_datasets(&data_dir, Format::Arrow))
+        .unwrap();
+    let parquet_ctx = runtime
+        .block_on(load_datasets(&data_dir, Format::Parquet))
         .unwrap();
 
     for q in 1..=22 {
@@ -66,14 +66,21 @@ fn benchmark(c: &mut Criterion) {
             })
         });
 
-        group.bench_function("csv", |b| {
-            b.to_async(&runtime)
-                .iter(|| async { csv_ctx.sql(&query).await.unwrap().collect().await.unwrap() })
-        });
-
         group.bench_function("arrow", |b| {
             b.to_async(&runtime).iter(|| async {
                 arrow_ctx
+                    .sql(&query)
+                    .await
+                    .unwrap()
+                    .collect()
+                    .await
+                    .unwrap()
+            })
+        });
+
+        group.bench_function("parquet", |b| {
+            b.to_async(&runtime).iter(|| async {
+                parquet_ctx
                     .sql(&query)
                     .await
                     .unwrap()

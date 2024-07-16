@@ -18,7 +18,7 @@ async fn main() {
     // The formats to run against (vs the baseline)
     let formats = [
         Format::Arrow,
-        Format::Csv,
+        Format::Parquet,
         Format::Vortex {
             disable_pushdown: false,
         },
