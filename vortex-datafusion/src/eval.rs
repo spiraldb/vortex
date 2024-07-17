@@ -39,6 +39,7 @@ impl ExpressionEvaluator {
                 }
             }
             Expr::Column(col) => {
+                // TODO(adamg): Use variant trait once its merged
                 let array = array.clone().into_struct()?;
                 let name = col.name();
                 array

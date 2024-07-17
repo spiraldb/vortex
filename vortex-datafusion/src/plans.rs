@@ -134,17 +134,14 @@ impl ExecutionPlan for RowSelectorExec {
                 .unwrap(),
         );
 
-        let conjunction_expr = simplify_expr(
-            &make_conjunction(&self.filter_exprs)?,
-            filter_schema.clone(),
-        )?;
+        let conjunction_expr =
+            simplify_expr(&make_conjunction(&self.filter_exprs)?, filter_schema)?;
 
         Ok(Box::pin(RowIndicesStream {
             chunked_array: self.chunked_array.clone(),
             chunk_idx: 0,
             filter_projection: self.filter_projection.clone(),
             conjunction_expr,
-            filter_schema,
         }))
     }
 }
@@ -155,7 +152,6 @@ pub(crate) struct RowIndicesStream {
     chunk_idx: usize,
     conjunction_expr: Expr,
     filter_projection: Vec<usize>,
-    filter_schema: SchemaRef,
 }
 
 impl Stream for RowIndicesStream {
@@ -405,7 +401,6 @@ mod test {
     use std::sync::Arc;
 
     use arrow_array::{RecordBatch, UInt64Array};
-    use arrow_schema::{DataType, Field, Schema};
     use datafusion_expr::{and, col, lit};
     use itertools::Itertools;
     use vortex::array::bool::BoolArray;
@@ -420,11 +415,6 @@ mod test {
 
     #[tokio::test]
     async fn test_filtering_stream() {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("a", DataType::UInt64, false),
-            Field::new("b", DataType::Boolean, false),
-        ]));
-
         let chunk = StructArray::try_new(
             Arc::new([FieldName::from("a"), FieldName::from("b")]),
             vec![
@@ -441,13 +431,11 @@ mod test {
         let chunked_array =
             ChunkedArray::try_new(vec![chunk.clone(), chunk.clone()], dtype).unwrap();
 
-        let filter_schema = schema.clone();
         let filtering_stream = RowIndicesStream {
             chunked_array: chunked_array.clone(),
             chunk_idx: 0,
             conjunction_expr: and((col("a")).eq(lit(2u64)), col("b").eq(lit(true))),
             filter_projection: vec![0, 1],
-            filter_schema,
         };
 
         let rows: Vec<RecordBatch> = futures::executor::block_on_stream(filtering_stream)

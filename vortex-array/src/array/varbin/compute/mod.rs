@@ -1,4 +1,3 @@
-use arrow_array::Array as _;
 use arrow_ord::cmp::{eq, gt, gt_eq, lt, lt_eq, neq};
 use vortex_error::VortexResult;
 use vortex_expr::Operator;
@@ -62,7 +61,7 @@ impl CompareFn for VarBinArray {
             Operator::Lte => lt_eq(&lhs.as_ref(), &rhs.as_ref())?,
         };
 
-        let data = ArrayData::from_arrow(&r, r.null_count() > 0);
+        let data = ArrayData::from_arrow(&r, true);
         Ok(data.into_array())
     }
 }
