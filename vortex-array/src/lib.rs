@@ -30,10 +30,7 @@ use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::ArrayValidity;
-use crate::variants::{
-    BinaryArrayTrait, BoolArrayTrait, ExtensionArrayTrait, ListArrayTrait, NullArrayTrait,
-    PrimitiveArrayTrait, StructArrayTrait, Utf8ArrayTrait,
-};
+use crate::variants::ArrayVariants;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
 pub mod accessor;
@@ -53,7 +50,7 @@ pub mod stream;
 mod tree;
 mod typed;
 pub mod validity;
-mod variants;
+pub mod variants;
 pub mod vendored;
 mod view;
 pub mod visitor;
@@ -233,6 +230,7 @@ pub trait ArrayTrait:
     ArrayEncodingRef
     + ArrayCompute
     + ArrayDType
+    + ArrayVariants
     + IntoCanonical
     + ArrayValidity
     + AcceptArrayVisitor
@@ -244,38 +242,6 @@ pub trait ArrayTrait:
         let mut visitor = NBytesVisitor(0);
         self.accept(&mut visitor).unwrap();
         visitor.0
-    }
-
-    fn as_null_array(&self) -> Option<&dyn NullArrayTrait> {
-        None
-    }
-
-    fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
-        None
-    }
-
-    fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
-        None
-    }
-
-    fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
-        None
-    }
-
-    fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
-        None
-    }
-
-    fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
-        None
-    }
-
-    fn as_list_array(&self) -> Option<&dyn ListArrayTrait> {
-        None
-    }
-
-    fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {
-        None
     }
 }
 
@@ -320,8 +286,9 @@ impl Array {
                         DType::List(..) => array.as_list_array().is_some(),
                         DType::Extension(..) => array.as_extension_array().is_some(),
                     },
-                    "Encoding {} does not implement the correct array variant trait",
-                    self.encoding().id()
+                    "Encoding {} does not implement the variant trait for {}",
+                    self.encoding().id(),
+                    array.dtype()
                 );
 
                 result = Some(f(array));

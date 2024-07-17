@@ -4,7 +4,7 @@ use vortex_error::vortex_bail;
 
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
-use crate::variants::StructArrayTrait;
+use crate::variants::{ArrayVariants, StructArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayDType};
 use crate::{Canonical, IntoCanonical};
@@ -122,42 +122,17 @@ impl StructArray {
     }
 }
 
-impl ArrayTrait for StructArray {
+impl ArrayTrait for StructArray {}
+
+impl ArrayVariants for StructArray {
     fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
         Some(self)
     }
 }
 
 impl StructArrayTrait for StructArray {
-    fn names(&self) -> &FieldNames {
-        let DType::Struct(st, _) = self.dtype() else {
-            unreachable!()
-        };
-        st.names()
-    }
-
-    fn dtypes(&self) -> &[DType] {
-        let DType::Struct(st, _) = self.dtype() else {
-            unreachable!()
-        };
-        st.dtypes()
-    }
-
     fn field(&self, idx: usize) -> Option<Array> {
-        let DType::Struct(st, _) = self.dtype() else {
-            unreachable!()
-        };
-        let dtype = st.dtypes().get(idx)?;
-        self.array().child(idx, dtype, self.len())
-    }
-
-    fn field_by_name(&self, name: &str) -> Option<Array> {
-        let field_idx = self
-            .names()
-            .iter()
-            .position(|field_name| field_name.as_ref() == name);
-
-        field_idx.and_then(|field_idx| self.field(field_idx))
+        self.array().child(idx, &self.dtypes()[idx], self.len())
     }
 }
 

@@ -2,6 +2,7 @@ pub use compress::*;
 use serde::{Deserialize, Serialize};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::PType;
@@ -95,3 +96,11 @@ impl ArrayTrait for FoRArray {
         self.encoded().nbytes()
     }
 }
+
+impl ArrayVariants for FoRArray {
+    fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
+        Some(self)
+    }
+}
+
+impl PrimitiveArrayTrait for FoRArray {}

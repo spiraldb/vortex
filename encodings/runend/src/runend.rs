@@ -4,6 +4,7 @@ use vortex::compute::unary::scalar_at::scalar_at;
 use vortex::compute::{search_sorted, SearchSortedSide};
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
+use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
 use vortex_error::vortex_bail;
@@ -106,6 +107,14 @@ impl RunEndArray {
 }
 
 impl ArrayTrait for RunEndArray {}
+
+impl ArrayVariants for RunEndArray {
+    fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
+        Some(self)
+    }
+}
+
+impl PrimitiveArrayTrait for RunEndArray {}
 
 impl ArrayValidity for RunEndArray {
     fn is_valid(&self, index: usize) -> bool {

@@ -13,6 +13,7 @@ use crate::{impl_encoding, ArrayDType, IntoArrayVariant};
 
 mod compute;
 mod flatten;
+mod variants;
 
 impl_encoding!("vortex.sparse", 9u16, Sparse);
 

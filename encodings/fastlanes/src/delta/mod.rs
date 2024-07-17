@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::ValidityMetadata;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
+use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::match_each_unsigned_integer_ptype;
@@ -91,6 +92,14 @@ impl DeltaArray {
 }
 
 impl ArrayTrait for DeltaArray {}
+
+impl ArrayVariants for DeltaArray {
+    fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
+        Some(self)
+    }
+}
+
+impl PrimitiveArrayTrait for DeltaArray {}
 
 impl IntoCanonical for DeltaArray {
     fn into_canonical(self) -> VortexResult<Canonical> {

@@ -24,6 +24,7 @@ mod accessor;
 mod builder;
 mod compute;
 mod stats;
+mod variants;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(8))]

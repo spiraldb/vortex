@@ -5,8 +5,9 @@ use vortex_buffer::Buffer;
 
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
+use crate::variants::{ArrayVariants, BoolArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, BoolArrayTrait, Canonical, IntoCanonical};
+use crate::{impl_encoding, Canonical, IntoCanonical};
 
 mod accessors;
 mod compute;
@@ -72,7 +73,9 @@ impl BoolArray {
     }
 }
 
-impl ArrayTrait for BoolArray {
+impl ArrayTrait for BoolArray {}
+
+impl ArrayVariants for BoolArray {
     fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
         Some(self)
     }

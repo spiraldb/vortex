@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, Canonical, IntoCanonical};
 use vortex_buffer::Buffer;
@@ -63,6 +64,14 @@ impl RoaringIntArray {
 }
 
 impl ArrayTrait for RoaringIntArray {}
+
+impl ArrayVariants for RoaringIntArray {
+    fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
+        Some(self)
+    }
+}
+
+impl PrimitiveArrayTrait for RoaringIntArray {}
 
 impl ArrayValidity for RoaringIntArray {
     fn is_valid(&self, _index: usize) -> bool {

@@ -3,6 +3,7 @@ use vortex_dtype::{ExtDType, ExtID};
 
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
+use crate::variants::{ArrayVariants, ExtensionArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 
@@ -51,6 +52,14 @@ impl ExtensionArray {
 }
 
 impl ArrayTrait for ExtensionArray {}
+
+impl ArrayVariants for ExtensionArray {
+    fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {
+        Some(self)
+    }
+}
+
+impl ExtensionArrayTrait for ExtensionArray {}
 
 impl IntoCanonical for ExtensionArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
