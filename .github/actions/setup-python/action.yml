@@ -15,12 +15,18 @@ runs:
         path: ~/.rye
         key: "rye-${{ runner.os }}-${{ inputs.rye-version }}"
 
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11.9'
+
     - name: Rye Install
       shell: bash
       run: curl -sSf https://rye.astral.sh/get | bash
       if: steps.rye-cache.outputs.cache-hit != 'true'
       env:
         RYE_VERSION: "${{ inputs.rye-version }}"
+        RYE_TOOLCHAIN_VERSION: "3.11.9"
         RYE_INSTALL_OPTION: "--yes"
 
     - name: Rye Shims
