@@ -89,7 +89,8 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
         // Now we can say the slice of indices belonging to this chunk is [pos, chunk_end_pos)
         let chunk_indices = slice(indices, pos, chunk_end_pos)?;
 
-        // Indices might not have a dtype big enough to fit chunk_begin after cast,
+        // Adjust the indices so they're relative to the chunk
+        // Note. Indices might not have a dtype big enough to fit chunk_begin after cast,
         // if it does cast the scalar otherwise upcast the indices.
         let chunk_indices = if chunk_begin < PType::try_from(chunk_indices.dtype())?.max_value() {
             subtract_scalar(
@@ -97,11 +98,11 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
                 &Scalar::from(chunk_begin).cast(chunk_indices.dtype())?,
             )?
         } else {
-            // TODO: this is unnecessary, could instead upcast in the subtract.
+            // Note. this try_cast (memory copy) is unnecessary, could instead upcast in the subtract fn.
+            //  and avoid an extra
             let u64_chunk_indices = try_cast(&chunk_indices, PType::U64.into())
                 .expect("safe to upcast since all indices are positive");
 
-            // Adjust the indices so they're relative to the chunk
             subtract_scalar(&u64_chunk_indices, &chunk_begin.into())?
         };
 
