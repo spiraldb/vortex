@@ -6,13 +6,10 @@ use vortex_scalar::Scalar;
 
 use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::arrow::FromArrowArray;
-use crate::compute::compare::CompareFn;
-use crate::compute::slice::SliceFn;
-use crate::compute::take::TakeFn;
 use crate::compute::unary::scalar_at::ScalarAtFn;
-use crate::compute::ArrayCompute;
+use crate::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, ArrayData, IntoCanonical, ToArray as _};
+use crate::{Array, ArrayDType, ArrayData, IntoArray, IntoCanonical};
 
 mod slice;
 mod take;
@@ -66,6 +63,6 @@ impl CompareFn for VarBinArray {
         };
 
         let data = ArrayData::from_arrow(&r, r.null_count() > 0);
-        Ok(data.to_array())
+        Ok(data.into_array())
     }
 }

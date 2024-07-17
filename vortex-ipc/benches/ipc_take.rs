@@ -13,7 +13,7 @@ use futures_util::{pin_mut, TryStreamExt};
 use itertools::Itertools;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compress::CompressionStrategy;
-use vortex::compute::take::take;
+use vortex::compute::take;
 use vortex::{Context, IntoArray};
 use vortex_ipc::io::FuturesAdapter;
 use vortex_ipc::writer::ArrayWriter;

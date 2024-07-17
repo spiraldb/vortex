@@ -4,7 +4,7 @@ use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype};
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::take::TakeFn;
+use crate::compute::TakeFn;
 use crate::Array;
 use crate::{IntoArray, IntoArrayVariant};
 

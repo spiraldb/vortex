@@ -2,7 +2,7 @@ use datafusion_common::ScalarValue;
 use datafusion_expr::{Expr, Operator};
 use vortex::{
     array::{bool::BoolArray, constant::ConstantArray, null::NullArray, struct_::StructArray},
-    compute::compare::compare,
+    compute::compare,
     validity::Validity,
     Array, IntoArray,
 };

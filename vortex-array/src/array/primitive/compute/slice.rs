@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::slice::SliceFn;
+use crate::compute::SliceFn;
 use crate::Array;
 use crate::IntoArray;
 

@@ -7,12 +7,10 @@ use vortex_scalar::Scalar;
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
 use crate::arrow::FromArrowArray;
-use crate::compute::compare::CompareFn;
-use crate::compute::slice::{slice, SliceFn};
 use crate::compute::unary::scalar_at::ScalarAtFn;
-use crate::compute::ArrayCompute;
+use crate::compute::{slice, ArrayCompute, CompareFn, SliceFn};
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, ArrayData, IntoArray, IntoArrayData, IntoCanonical, ToArray};
+use crate::{Array, ArrayDType, ArrayData, IntoArray, IntoArrayData, IntoCanonical};
 
 impl ArrayCompute for VarBinViewArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -70,6 +68,6 @@ impl CompareFn for VarBinViewArray {
         };
 
         let data = ArrayData::from_arrow(&r, r.null_count() > 0);
-        Ok(data.to_array())
+        Ok(data.into_array())
     }
 }

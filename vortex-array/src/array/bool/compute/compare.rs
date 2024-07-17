@@ -4,7 +4,7 @@ use vortex_error::VortexResult;
 use vortex_expr::Operator;
 
 use crate::array::bool::BoolArray;
-use crate::compute::compare::CompareFn;
+use crate::compute::CompareFn;
 use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for BoolArray {
@@ -38,7 +38,7 @@ mod test {
     use itertools::Itertools;
 
     use super::*;
-    use crate::compute::compare::compare;
+    use crate::compute::compare;
     use crate::validity::Validity;
     use crate::IntoArrayVariant;
 
