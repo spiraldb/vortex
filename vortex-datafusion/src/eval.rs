@@ -1,4 +1,5 @@
 use datafusion_expr::{Expr, Operator as DFOperator};
+use vortex::variants::StructArrayTrait;
 use vortex::{
     array::{bool::BoolArray, constant::ConstantArray},
     compute::compare,
