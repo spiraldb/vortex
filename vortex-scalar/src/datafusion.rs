@@ -66,3 +66,32 @@ impl From<Scalar> for ScalarValue {
         }
     }
 }
+
+impl From<ScalarValue> for Scalar {
+    fn from(value: ScalarValue) -> Scalar {
+        match value {
+            ScalarValue::Null => Some(Scalar::null(DType::Null)),
+            ScalarValue::Boolean(b) => b.map(|b| Scalar::from(b)),
+            ScalarValue::Float16(f) => f.map(|f| Scalar::from(f)),
+            ScalarValue::Float32(f) => f.map(|f| Scalar::from(f)),
+            ScalarValue::Float64(f) => f.map(|f| Scalar::from(f)),
+            ScalarValue::Int8(i) => i.map(|i| Scalar::from(i)),
+            ScalarValue::Int16(i) => i.map(|i| Scalar::from(i)),
+            ScalarValue::Int32(i) => i.map(|i| Scalar::from(i)),
+            ScalarValue::Int64(i) => i.map(|i| Scalar::from(i)),
+            ScalarValue::UInt8(i) => i.map(|i| Scalar::from(i)),
+            ScalarValue::UInt16(i) => i.map(|i| Scalar::from(i)),
+            ScalarValue::UInt32(i) => i.map(|i| Scalar::from(i)),
+            ScalarValue::UInt64(i) => i.map(|i| Scalar::from(i)),
+            ScalarValue::Utf8(s) => s.as_ref().map(|s| Scalar::from(s.as_str())),
+            ScalarValue::Utf8View(s) => s.as_ref().map(|s| Scalar::from(s.as_str())),
+            ScalarValue::LargeUtf8(s) => s.as_ref().map(|s| Scalar::from(s.as_str())),
+            ScalarValue::Binary(b) => b.as_ref().map(|b| Scalar::from(b.clone())),
+            ScalarValue::BinaryView(b) => b.as_ref().map(|b| Scalar::from(b.clone())),
+            ScalarValue::LargeBinary(b) => b.as_ref().map(|b| Scalar::from(b.clone())),
+            ScalarValue::FixedSizeBinary(_, b) => b.map(|b| Scalar::from(b.clone())),
+            _ => unimplemented!(),
+        }
+        .unwrap_or(Scalar::null(DType::Null))
+    }
+}
