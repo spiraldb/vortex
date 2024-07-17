@@ -10,7 +10,7 @@ pub trait CompareFn {
 
 pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<Array> {
     if let Some(matching_indices) =
-        left.with_dyn(|lhs| lhs.compare().map(|rhs| rhs.compare(right, operator)))
+        left.with_dyn(|lhs| lhs.compare().map(|lhs| lhs.compare(right, operator)))
     {
         return matching_indices;
     }
