@@ -8,9 +8,9 @@ use vortex::{
 };
 use vortex_error::{vortex_bail, VortexResult};
 
-pub struct ExperssionEvaluator;
+pub struct ExpressionEvaluator;
 
-impl ExperssionEvaluator {
+impl ExpressionEvaluator {
     pub fn eval(input: StructArray, expr: &Expr) -> VortexResult<Array> {
         match expr {
             Expr::BinaryExpr(expr) => {
@@ -19,14 +19,14 @@ impl ExperssionEvaluator {
 
                 match expr.op {
                     Operator::And => {
-                        let lhs = ExperssionEvaluator::eval(input.clone(), lhs)?.into_bool()?;
-                        let rhs = ExperssionEvaluator::eval(input, rhs)?.into_bool()?;
+                        let lhs = ExpressionEvaluator::eval(input.clone(), lhs)?.into_bool()?;
+                        let rhs = ExpressionEvaluator::eval(input, rhs)?.into_bool()?;
                         let buffer = &lhs.boolean_buffer() & &rhs.boolean_buffer();
                         Ok(BoolArray::from(buffer).into_array())
                     }
                     Operator::Or => {
-                        let lhs = ExperssionEvaluator::eval(input.clone(), lhs)?.into_bool()?;
-                        let rhs = ExperssionEvaluator::eval(input, rhs)?.into_bool()?;
+                        let lhs = ExpressionEvaluator::eval(input.clone(), lhs)?.into_bool()?;
+                        let rhs = ExpressionEvaluator::eval(input, rhs)?.into_bool()?;
                         let buffer = &lhs.boolean_buffer() | &rhs.boolean_buffer();
                         Ok(BoolArray::from(buffer).into_array())
                     }

@@ -26,7 +26,7 @@ use vortex::compute::take;
 use vortex::{ArrayDType, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
 
 use crate::datatype::infer_schema;
-use crate::eval::ExperssionEvaluator;
+use crate::eval::ExpressionEvaluator;
 use crate::expr::{make_conjunction, simplify_expr};
 
 /// Physical plan operator that applies a set of [filters][Expr] against the input, producing a
@@ -184,7 +184,7 @@ impl Stream for RowIndicesStream {
             .expect("projection should succeed");
 
         // TODO(adamg): Filter on vortex arrays
-        let array = ExperssionEvaluator::eval(vortex_struct, &this.conjunction_expr).unwrap();
+        let array = ExpressionEvaluator::eval(vortex_struct, &this.conjunction_expr).unwrap();
         let selection = array
             .into_bool()
             .unwrap()
