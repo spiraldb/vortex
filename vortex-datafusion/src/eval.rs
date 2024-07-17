@@ -6,7 +6,7 @@ use vortex::{
     validity::Validity,
     Array, IntoArray, IntoArrayVariant,
 };
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 pub struct ExpressionEvaluator;
 
@@ -65,7 +65,7 @@ fn eval_eq_impl(input: &StructArray, lhs: &Expr, rhs: &Expr) -> VortexResult<Arr
 
 fn df_scalar_to_const_array(scalar: &ScalarValue, len: usize) -> VortexResult<Array> {
     let array = match scalar {
-        ScalarValue::Null => None,
+        ScalarValue::Null => Some(NullArray::new(len).into_array()),
         ScalarValue::Boolean(b) => b.map(|b| ConstantArray::new(b, len).into_array()),
         ScalarValue::Float16(f) => f.map(|f| ConstantArray::new(f, len).into_array()),
         ScalarValue::Float32(f) => f.map(|f| ConstantArray::new(f, len).into_array()),
@@ -87,37 +87,23 @@ fn df_scalar_to_const_array(scalar: &ScalarValue, len: usize) -> VortexResult<Ar
         ScalarValue::LargeUtf8(s) => s
             .as_ref()
             .map(|s| ConstantArray::new(s.as_str(), len).into_array()),
-        ScalarValue::Binary(_b) => todo!(),
-        ScalarValue::BinaryView(_b) => todo!(),
-        ScalarValue::Decimal128(..) => todo!(),
-        ScalarValue::Decimal256(..) => todo!(),
-        ScalarValue::FixedSizeBinary(..) => todo!(),
-        ScalarValue::LargeBinary(_b) => todo!(),
-        ScalarValue::FixedSizeList(_) => todo!(),
-        ScalarValue::List(_) => todo!(),
-        ScalarValue::LargeList(_) => todo!(),
-        ScalarValue::Struct(_) => todo!(),
-        ScalarValue::Map(_) => todo!(),
-        ScalarValue::Date32(_) => todo!(),
-        ScalarValue::Date64(_) => todo!(),
-        ScalarValue::Time32Second(_) => todo!(),
-        ScalarValue::Time32Millisecond(_) => todo!(),
-        ScalarValue::Time64Microsecond(_) => todo!(),
-        ScalarValue::Time64Nanosecond(_) => todo!(),
-        ScalarValue::TimestampSecond(..) => todo!(),
-        ScalarValue::TimestampMillisecond(..) => todo!(),
-        ScalarValue::TimestampMicrosecond(..) => todo!(),
-        ScalarValue::TimestampNanosecond(..) => todo!(),
-        ScalarValue::IntervalYearMonth(_) => todo!(),
-        ScalarValue::IntervalDayTime(_) => todo!(),
-        ScalarValue::IntervalMonthDayNano(_) => todo!(),
-        ScalarValue::DurationSecond(_) => todo!(),
-        ScalarValue::DurationMillisecond(_) => todo!(),
-        ScalarValue::DurationMicrosecond(_) => todo!(),
-        ScalarValue::DurationNanosecond(_) => todo!(),
-        ScalarValue::Union(..) => todo!(),
-        ScalarValue::Dictionary(..) => todo!(),
+        ScalarValue::Binary(b) => b
+            .as_ref()
+            .map(|b| ConstantArray::new(b.clone(), len).into_array()),
+        ScalarValue::BinaryView(b) => b
+            .as_ref()
+            .map(|b| ConstantArray::new(b.clone(), len).into_array()),
+        ScalarValue::LargeBinary(b) => b
+            .as_ref()
+            .map(|b| ConstantArray::new(b.clone(), len).into_array()),
+        ScalarValue::FixedSizeBinary(_, b) => b
+            .as_ref()
+            .map(|b| ConstantArray::new(b.clone(), len).into_array()),
+        _ => None,
     };
 
-    Ok(array.unwrap_or_else(|| NullArray::new(len).into_array()))
+    array.ok_or(vortex_err!(
+        "{} scalars aren't supported",
+        scalar.data_type()
+    ))
 }
