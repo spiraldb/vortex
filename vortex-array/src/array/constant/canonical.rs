@@ -1,6 +1,6 @@
 use std::iter;
 
-use vortex_dtype::{match_each_native_ptype, Nullability, PType};
+use vortex_dtype::{match_each_native_ptype, DType, Nullability, PType};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{BoolScalar, Utf8Scalar};
 
@@ -35,7 +35,7 @@ impl IntoCanonical for ConstantArray {
 
             return Ok(Canonical::VarBin(VarBinArray::from_iter(
                 iter::repeat(Some(bytes)).take(self.len()),
-                vortex_dtype::DType::Utf8(validity.nullability()),
+                DType::Utf8(validity.nullability()),
             )));
         }
 

@@ -60,7 +60,9 @@ fn eval_eq_impl(input: &StructArray, lhs: &Expr, rhs: &Expr) -> VortexResult<Arr
                 Ok(BoolArray::from_vec(vec![false; input.len()], Validity::AllValid).into_array())
             }
         }
-        _ => vortex_bail!("Unsupported expression combination for eq. ({lhs:?}) with ({rhs:?})."),
+        _ => vortex_bail!(
+            "Unsupported expression combination for operation 'eq', ({lhs:?} with {rhs:?})"
+        ),
     }
 }
 
