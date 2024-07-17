@@ -24,7 +24,7 @@ arrow-buffer = { workspace = true }
 arrow-cast = { workspace = true }
 arrow-select = { workspace = true }
 arrow-schema = { workspace = true }
-arrow-ord = {workspace = true }
+arrow-ord = { workspace = true }
 enum-iterator = { workspace = true }
 flatbuffers = { workspace = true }
 flexbuffers = { workspace = true }

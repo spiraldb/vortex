@@ -471,7 +471,7 @@ mod test {
     use datafusion::functions_aggregate::count::count_distinct;
     use datafusion::prelude::SessionContext;
     use datafusion_common::{Column, TableReference};
-    use datafusion_expr::{col, lit, BinaryExpr, Expr};
+    use datafusion_expr::{col, lit, BinaryExpr, Expr, Operator};
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
@@ -582,7 +582,7 @@ mod test {
                 }
                 .into(),
             ),
-            op: datafusion_expr::Operator::Eq,
+            op: Operator::Eq,
             right: Box::new(lit("F")),
         };
         let e = Expr::BinaryExpr(e);

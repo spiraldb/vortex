@@ -449,7 +449,7 @@ mod test {
         let filtering_stream = RowIndicesStream {
             chunked_array: chunked_array.clone(),
             chunk_idx: 0,
-            conjunction_expr: and((col("a") % lit(2u64)).eq(lit(0u64)), col("b").is_true()),
+            conjunction_expr: and((col("a")).eq(lit(2u64)), col("b").eq(lit(true))),
             filter_projection: vec![0, 1],
             _filter_schema: _schema,
         };

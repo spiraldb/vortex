@@ -1,5 +1,5 @@
 use datafusion_common::ScalarValue;
-use datafusion_expr::{Expr, Operator};
+use datafusion_expr::{Expr, Operator as DFOperator};
 use vortex::{
     array::{bool::BoolArray, constant::ConstantArray, null::NullArray, struct_::StructArray},
     compute::compare,
@@ -7,6 +7,7 @@ use vortex::{
     Array, IntoArray, IntoArrayVariant,
 };
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_expr::Operator;
 
 pub struct ExpressionEvaluator;
 
@@ -18,19 +19,19 @@ impl ExpressionEvaluator {
                 let rhs = expr.right.as_ref();
 
                 match expr.op {
-                    Operator::And => {
+                    DFOperator::And => {
                         let lhs = ExpressionEvaluator::eval(input.clone(), lhs)?.into_bool()?;
                         let rhs = ExpressionEvaluator::eval(input, rhs)?.into_bool()?;
                         let buffer = &lhs.boolean_buffer() & &rhs.boolean_buffer();
                         Ok(BoolArray::from(buffer).into_array())
                     }
-                    Operator::Or => {
+                    DFOperator::Or => {
                         let lhs = ExpressionEvaluator::eval(input.clone(), lhs)?.into_bool()?;
                         let rhs = ExpressionEvaluator::eval(input, rhs)?.into_bool()?;
                         let buffer = &lhs.boolean_buffer() | &rhs.boolean_buffer();
                         Ok(BoolArray::from(buffer).into_array())
                     }
-                    Operator::Eq => eval_eq_impl(&input, lhs, rhs),
+                    DFOperator::Eq => eval_eq_impl(&input, lhs, rhs),
                     _ => vortex_bail!("{} is an unsupported operator", expr.op),
                 }
             }
@@ -46,7 +47,7 @@ fn eval_eq_impl(input: &StructArray, lhs: &Expr, rhs: &Expr) -> VortexResult<Arr
             let rhs = input.field_by_name(right.name());
 
             if let Some((lhs, rhs)) = lhs.zip(rhs) {
-                compare(&lhs, &rhs, vortex_expr::Operator::Eq)
+                compare(&lhs, &rhs, Operator::Eq)
             } else {
                 Ok(BoolArray::from_vec(vec![false; input.len()], Validity::AllValid).into_array())
             }
@@ -54,12 +55,12 @@ fn eval_eq_impl(input: &StructArray, lhs: &Expr, rhs: &Expr) -> VortexResult<Arr
         (Expr::Literal(l), Expr::Column(c)) | (Expr::Column(c), Expr::Literal(l)) => {
             if let Some(col) = input.field_by_name(c.name()) {
                 let const_array = df_scalar_to_const_array(l, col.len())?;
-                compare(&col, &const_array, vortex_expr::Operator::Eq)
+                compare(&col, &const_array, Operator::Eq)
             } else {
                 Ok(BoolArray::from_vec(vec![false; input.len()], Validity::AllValid).into_array())
             }
         }
-        _ => vortex_bail!("Unsupported expression combination for eq"),
+        _ => vortex_bail!("Unsupported expression combination for eq. ({lhs:?}) with ({rhs:?})."),
     }
 }
 

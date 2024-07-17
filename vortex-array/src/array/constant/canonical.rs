@@ -1,3 +1,5 @@
+use std::iter;
+
 use vortex_dtype::{match_each_native_ptype, Nullability, PType};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{BoolScalar, Utf8Scalar};
@@ -30,15 +32,9 @@ impl IntoCanonical for ConstantArray {
         if let Ok(s) = Utf8Scalar::try_from(self.scalar()) {
             let const_value = s.value().unwrap();
             let bytes = const_value.as_bytes();
-            let vec = {
-                let mut v = Vec::with_capacity(self.len());
-                for _ in 0..self.len() {
-                    v.push(bytes)
-                }
-                v
-            };
-            return Ok(Canonical::VarBin(VarBinArray::from_vec(
-                vec,
+
+            return Ok(Canonical::VarBin(VarBinArray::from_iter(
+                iter::repeat(Some(bytes)).take(self.len()),
                 vortex_dtype::DType::Utf8(validity.nullability()),
             )));
         }
