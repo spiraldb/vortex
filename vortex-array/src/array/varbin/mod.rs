@@ -20,6 +20,7 @@ pub mod builder;
 mod compute;
 mod flatten;
 mod stats;
+mod variants;
 
 impl_encoding!("vortex.varbin", 4u16, VarBin);
 

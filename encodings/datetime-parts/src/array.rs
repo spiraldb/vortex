@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::variants::{ArrayVariants, ExtensionArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_error::vortex_bail;
@@ -78,6 +79,14 @@ impl DateTimePartsArray {
 }
 
 impl ArrayTrait for DateTimePartsArray {}
+
+impl ArrayVariants for DateTimePartsArray {
+    fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {
+        Some(self)
+    }
+}
+
+impl ExtensionArrayTrait for DateTimePartsArray {}
 
 impl IntoCanonical for DateTimePartsArray {
     fn into_canonical(self) -> VortexResult<Canonical> {

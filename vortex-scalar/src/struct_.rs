@@ -17,23 +17,25 @@ impl<'a> StructScalar<'a> {
         self.dtype
     }
 
-    pub fn field_by_idx(&self, idx: usize, dtype: DType) -> Option<Scalar> {
+    pub fn field_by_idx(&self, idx: usize) -> Option<Scalar> {
+        let DType::Struct(st, _) = self.dtype() else {
+            unreachable!()
+        };
+
         self.fields
             .as_ref()
             .and_then(|fields| fields.get(idx))
             .map(|field| Scalar {
-                dtype,
+                dtype: st.dtypes()[idx].clone(),
                 value: field.clone(),
             })
     }
 
-    pub fn field(&self, name: &str, dtype: DType) -> Option<Scalar> {
-        let DType::Struct(struct_dtype, _) = self.dtype() else {
+    pub fn field(&self, name: &str) -> Option<Scalar> {
+        let DType::Struct(st, _) = self.dtype() else {
             unreachable!()
         };
-        struct_dtype
-            .find_name(name)
-            .and_then(|idx| self.field_by_idx(idx, dtype))
+        st.find_name(name).and_then(|idx| self.field_by_idx(idx))
     }
 
     pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {

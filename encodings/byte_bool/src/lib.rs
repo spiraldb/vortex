@@ -3,6 +3,7 @@ use std::mem::ManuallyDrop;
 use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
 use vortex::array::bool::BoolArray;
+use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::{
     impl_encoding,
     validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata},
@@ -72,6 +73,14 @@ impl ByteBoolArray {
 }
 
 impl ArrayTrait for ByteBoolArray {}
+
+impl ArrayVariants for ByteBoolArray {
+    fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
+        Some(self)
+    }
+}
+
+impl BoolArrayTrait for ByteBoolArray {}
 
 impl From<Vec<bool>> for ByteBoolArray {
     fn from(value: Vec<bool>) -> Self {

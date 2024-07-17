@@ -3,6 +3,7 @@ pub use compress::*;
 use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
+use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::{Nullability, PType};
@@ -200,6 +201,14 @@ impl ArrayTrait for BitPackedArray {
         packed_size + self.patches().map(|p| p.nbytes()).unwrap_or(0)
     }
 }
+
+impl ArrayVariants for BitPackedArray {
+    fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
+        Some(self)
+    }
+}
+
+impl PrimitiveArrayTrait for BitPackedArray {}
 
 #[cfg(test)]
 mod test {

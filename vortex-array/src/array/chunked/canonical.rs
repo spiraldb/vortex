@@ -13,6 +13,7 @@ use crate::array::struct_::StructArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::validity::Validity;
+use crate::variants::StructArrayTrait;
 use crate::{
     Array, ArrayDType, ArrayValidity, Canonical, IntoArray, IntoArrayVariant, IntoCanonical,
 };

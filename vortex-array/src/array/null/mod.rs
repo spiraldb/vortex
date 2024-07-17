@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::stats::{ArrayStatisticsCompute, Stat};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
+use crate::variants::{ArrayVariants, NullArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, Canonical, IntoCanonical};
 
@@ -60,3 +61,11 @@ impl ArrayTrait for NullArray {
         0
     }
 }
+
+impl ArrayVariants for NullArray {
+    fn as_null_array(&self) -> Option<&dyn NullArrayTrait> {
+        Some(self)
+    }
+}
+
+impl NullArrayTrait for NullArray {}

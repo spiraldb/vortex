@@ -22,6 +22,7 @@ use crate::{impl_encoding, ArrayDType};
 mod canonical;
 mod compute;
 mod stats;
+mod variants;
 
 impl_encoding!("vortex.chunked", 11u16, Chunked);
 

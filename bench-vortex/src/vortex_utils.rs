@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::struct_::StructArray;
+use vortex::variants::StructArrayTrait;
 use vortex::ArrayDType;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;

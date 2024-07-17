@@ -26,6 +26,7 @@ use crate::arrow::wrappers::as_offset_buffer;
 use crate::compute::unary::cast::try_cast;
 use crate::encoding::ArrayEncoding;
 use crate::validity::ArrayValidity;
+use crate::variants::StructArrayTrait;
 use crate::{Array, ArrayDType, IntoArray, ToArray};
 
 /// The set of canonical array encodings, also the set of encodings that can be transferred to

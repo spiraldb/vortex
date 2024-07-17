@@ -9,3 +9,4 @@ mod compress;
 mod compute;
 mod dict;
 mod stats;
+mod variants;

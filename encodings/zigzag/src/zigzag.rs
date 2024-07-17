@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_dtype::PType;
@@ -51,6 +52,14 @@ impl ZigZagArray {
 }
 
 impl ArrayTrait for ZigZagArray {}
+
+impl ArrayVariants for ZigZagArray {
+    fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
+        Some(self)
+    }
+}
+
+impl PrimitiveArrayTrait for ZigZagArray {}
 
 impl ArrayValidity for ZigZagArray {
     fn is_valid(&self, index: usize) -> bool {

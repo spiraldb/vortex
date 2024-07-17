@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use vortex::array::bool::{Bool, BoolArray};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
+use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_buffer::Buffer;
@@ -61,6 +62,14 @@ impl RoaringBoolArray {
 }
 
 impl ArrayTrait for RoaringBoolArray {}
+
+impl ArrayVariants for RoaringBoolArray {
+    fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
+        Some(self)
+    }
+}
+
+impl BoolArrayTrait for RoaringBoolArray {}
 
 impl AcceptArrayVisitor for RoaringBoolArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {

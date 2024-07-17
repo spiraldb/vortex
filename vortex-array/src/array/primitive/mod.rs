@@ -7,6 +7,7 @@ use vortex_dtype::{match_each_native_ptype, NativePType, PType};
 use vortex_error::vortex_bail;
 
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
+use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayDType};
 use crate::{Canonical, IntoCanonical};
@@ -157,6 +158,14 @@ impl PrimitiveArray {
 }
 
 impl ArrayTrait for PrimitiveArray {}
+
+impl ArrayVariants for PrimitiveArray {
+    fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
+        Some(self)
+    }
+}
+
+impl PrimitiveArrayTrait for PrimitiveArray {}
 
 impl<T: NativePType> From<Vec<T>> for PrimitiveArray {
     fn from(values: Vec<T>) -> Self {

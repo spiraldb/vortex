@@ -30,6 +30,7 @@ use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::ArrayValidity;
+use crate::variants::ArrayVariants;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
 pub mod accessor;
@@ -49,6 +50,7 @@ pub mod stream;
 mod tree;
 mod typed;
 pub mod validity;
+pub mod variants;
 pub mod vendored;
 mod view;
 pub mod visitor;
@@ -228,6 +230,7 @@ pub trait ArrayTrait:
     ArrayEncodingRef
     + ArrayCompute
     + ArrayDType
+    + ArrayVariants
     + IntoCanonical
     + ArrayValidity
     + AcceptArrayVisitor
@@ -271,6 +274,23 @@ impl Array {
 
         self.encoding()
             .with_dyn(self, &mut |array| {
+                // Sanity check that the encoding implements the correct array trait
+                debug_assert!(
+                    match array.dtype() {
+                        DType::Null => array.as_null_array().is_some(),
+                        DType::Bool(_) => array.as_bool_array().is_some(),
+                        DType::Primitive(..) => array.as_primitive_array().is_some(),
+                        DType::Utf8(_) => array.as_utf8_array().is_some(),
+                        DType::Binary(_) => array.as_binary_array().is_some(),
+                        DType::Struct(..) => array.as_struct_array().is_some(),
+                        DType::List(..) => array.as_list_array().is_some(),
+                        DType::Extension(..) => array.as_extension_array().is_some(),
+                    },
+                    "Encoding {} does not implement the variant trait for {}",
+                    self.encoding().id(),
+                    array.dtype()
+                );
+
                 result = Some(f(array));
                 Ok(())
             })

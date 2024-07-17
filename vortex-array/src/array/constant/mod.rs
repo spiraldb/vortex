@@ -11,6 +11,7 @@ use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 mod canonical;
 mod compute;
 mod stats;
+mod variants;
 
 impl_encoding!("vortex.constant", 10u16, Constant);
 
