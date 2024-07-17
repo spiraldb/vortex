@@ -30,6 +30,10 @@ use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::ArrayValidity;
+use crate::variants::{
+    BinaryArrayTrait, BoolArrayTrait, ExtensionArrayTrait, ListArrayTrait, NullArrayTrait,
+    PrimitiveArrayTrait, StructArrayTrait, Utf8ArrayTrait,
+};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
 pub mod accessor;
@@ -49,6 +53,7 @@ pub mod stream;
 mod tree;
 mod typed;
 pub mod validity;
+mod variants;
 pub mod vendored;
 mod view;
 pub mod visitor;
@@ -240,6 +245,38 @@ pub trait ArrayTrait:
         self.accept(&mut visitor).unwrap();
         visitor.0
     }
+
+    fn as_null_array(&self) -> Option<&dyn NullArrayTrait> {
+        None
+    }
+
+    fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
+        None
+    }
+
+    fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
+        None
+    }
+
+    fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
+        None
+    }
+
+    fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
+        None
+    }
+
+    fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
+        None
+    }
+
+    fn as_list_array(&self) -> Option<&dyn ListArrayTrait> {
+        None
+    }
+
+    fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {
+        None
+    }
 }
 
 pub trait ArrayDType {
@@ -271,6 +308,22 @@ impl Array {
 
         self.encoding()
             .with_dyn(self, &mut |array| {
+                // Sanity check that the encoding implements the correct array trait
+                debug_assert!(
+                    match array.dtype() {
+                        DType::Null => array.as_null_array().is_some(),
+                        DType::Bool(_) => array.as_bool_array().is_some(),
+                        DType::Primitive(..) => array.as_primitive_array().is_some(),
+                        DType::Utf8(_) => array.as_utf8_array().is_some(),
+                        DType::Binary(_) => array.as_binary_array().is_some(),
+                        DType::Struct(..) => array.as_struct_array().is_some(),
+                        DType::List(..) => array.as_list_array().is_some(),
+                        DType::Extension(..) => array.as_extension_array().is_some(),
+                    },
+                    "Encoding {} does not implement the correct array variant trait",
+                    self.encoding().id()
+                );
+
                 result = Some(f(array));
                 Ok(())
             })
