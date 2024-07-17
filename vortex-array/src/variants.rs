@@ -11,32 +11,64 @@ pub trait ArrayVariants {
         None
     }
 
+    fn as_null_array_unchecked(&self) -> &dyn NullArrayTrait {
+        self.as_null_array().expect("Expected NullArray")
+    }
+
     fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
         None
+    }
+
+    fn as_bool_array_unchecked(&self) -> &dyn BoolArrayTrait {
+        self.as_bool_array().expect("Expected BoolArray")
     }
 
     fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
         None
     }
 
+    fn as_primitive_array_unchecked(&self) -> &dyn PrimitiveArrayTrait {
+        self.as_primitive_array().expect("Expected PrimitiveArray")
+    }
+
     fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
         None
+    }
+
+    fn as_utf8_array_unchecked(&self) -> &dyn Utf8ArrayTrait {
+        self.as_utf8_array().expect("Expected Utf8Array")
     }
 
     fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
         None
     }
 
+    fn as_binary_array_unchecked(&self) -> &dyn BinaryArrayTrait {
+        self.as_binary_array().expect("Expected BinaryArray")
+    }
+
     fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
         None
+    }
+
+    fn as_struct_array_unchecked(&self) -> &dyn StructArrayTrait {
+        self.as_struct_array().expect("Expected StructArray")
     }
 
     fn as_list_array(&self) -> Option<&dyn ListArrayTrait> {
         None
     }
 
+    fn as_list_array_unchecked(&self) -> &dyn ListArrayTrait {
+        self.as_list_array().expect("Expected ListArray")
+    }
+
     fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {
         None
+    }
+
+    fn as_extension_array_unchecked(&self) -> &dyn ExtensionArrayTrait {
+        self.as_extension_array().expect("Expected ExtensionArray")
     }
 }
 
