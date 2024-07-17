@@ -5,8 +5,7 @@ use itertools::Itertools;
 use vortex::array::constant::ConstantArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::compute::slice::slice;
-use vortex::compute::take::{take, TakeFn};
+use vortex::compute::{slice, take, TakeFn};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
@@ -149,7 +148,7 @@ mod test {
     use rand::{thread_rng, Rng};
     use vortex::array::primitive::{Primitive, PrimitiveArray};
     use vortex::array::sparse::SparseArray;
-    use vortex::compute::take::take;
+    use vortex::compute::take;
     use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::{ArrayDef, IntoArray, IntoArrayVariant};
 

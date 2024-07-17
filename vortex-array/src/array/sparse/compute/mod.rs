@@ -2,13 +2,9 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::sparse::SparseArray;
-use crate::compute::search_sorted::{
-    search_sorted, SearchResult, SearchSortedFn, SearchSortedSide,
-};
-use crate::compute::slice::SliceFn;
-use crate::compute::take::TakeFn;
 use crate::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
-use crate::compute::ArrayCompute;
+use crate::compute::{search_sorted, SearchResult, SearchSortedFn, SearchSortedSide};
+use crate::compute::{ArrayCompute, SliceFn, TakeFn};
 use crate::ArrayDType;
 
 mod slice;
@@ -68,8 +64,8 @@ mod test {
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::SparseArray;
-    use crate::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
-    use crate::compute::slice::slice;
+    use crate::compute::slice;
+    use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
     use crate::validity::Validity;
     use crate::{Array, IntoArray};
 

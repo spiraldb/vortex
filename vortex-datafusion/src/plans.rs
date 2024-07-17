@@ -22,7 +22,7 @@ use lazy_static::lazy_static;
 use pin_project::pin_project;
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowArray;
-use vortex::compute::take::take;
+use vortex::compute::take;
 use vortex::{ArrayDType, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
 
 use crate::datatype::infer_schema;

@@ -1,10 +1,8 @@
-use vortex::compute::search_sorted::{
-    search_sorted, SearchResult, SearchSortedFn, SearchSortedSide,
-};
-use vortex::compute::slice::{slice, SliceFn};
-use vortex::compute::take::{take, TakeFn};
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
-use vortex::compute::ArrayCompute;
+use vortex::compute::{
+    search_sorted, slice, take, ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide,
+    SliceFn, TakeFn,
+};
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
@@ -96,8 +94,8 @@ impl SearchSortedFn for FoRArray {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
     use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::{search_sorted, SearchResult, SearchSortedSide};
     use vortex::IntoArray;
 
     use crate::{for_compress, FoRArray};

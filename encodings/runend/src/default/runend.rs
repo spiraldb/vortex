@@ -127,7 +127,7 @@ impl ArrayStatisticsCompute for RunEndArray {}
 
 #[cfg(test)]
 mod test {
-    use vortex::compute::slice::slice;
+    use vortex::compute::slice;
     use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::validity::Validity;
     use vortex::{ArrayDType, IntoArray, IntoArrayVariant};

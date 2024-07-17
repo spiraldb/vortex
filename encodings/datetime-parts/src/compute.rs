@@ -1,9 +1,8 @@
 use vortex::array::datetime::{try_parse_time_unit, LocalDateTimeArray, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compute::slice::{slice, SliceFn};
-use vortex::compute::take::{take, TakeFn};
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use vortex::compute::ArrayCompute;
+use vortex::compute::{slice, take, SliceFn, TakeFn};
 use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::DType;

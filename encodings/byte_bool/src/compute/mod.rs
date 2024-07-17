@@ -3,13 +3,11 @@ use std::sync::Arc;
 
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
+use vortex::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
 use vortex::validity::Validity;
 use vortex::Array;
 use vortex::{
-    compute::{
-        compare::CompareFn, slice::SliceFn, take::TakeFn, unary::fill_forward::FillForwardFn,
-        unary::scalar_at::ScalarAtFn, ArrayCompute,
-    },
+    compute::{unary::fill_forward::FillForwardFn, unary::scalar_at::ScalarAtFn},
     encoding::ArrayEncodingRef,
     stats::StatsSet,
     validity::ArrayValidity,
@@ -189,7 +187,8 @@ impl FillForwardFn for ByteBoolArray {
 #[cfg(test)]
 mod tests {
     use vortex::{
-        compute::{compare::compare, slice::slice, unary::scalar_at::scalar_at},
+        compute::unary::scalar_at::scalar_at,
+        compute::{compare, slice},
         AsArray as _,
     };
 

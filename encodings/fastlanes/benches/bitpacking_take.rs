@@ -4,7 +4,7 @@ use rand::distributions::Uniform;
 use rand::{thread_rng, Rng};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::SparseArray;
-use vortex::compute::take::take;
+use vortex::compute::take;
 use vortex_fastlanes::{find_best_bit_width, BitPackedArray};
 
 fn values(len: usize, bits: usize) -> Vec<u32> {

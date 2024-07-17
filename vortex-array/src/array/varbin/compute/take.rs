@@ -6,7 +6,7 @@ use vortex_error::VortexResult;
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
-use crate::compute::take::TakeFn;
+use crate::compute::TakeFn;
 use crate::validity::Validity;
 use crate::Array;
 use crate::IntoArray;

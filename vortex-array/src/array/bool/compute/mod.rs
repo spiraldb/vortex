@@ -1,10 +1,7 @@
 use crate::array::bool::BoolArray;
-use crate::compute::compare::CompareFn;
-use crate::compute::slice::SliceFn;
-use crate::compute::take::TakeFn;
 use crate::compute::unary::fill_forward::FillForwardFn;
 use crate::compute::unary::scalar_at::ScalarAtFn;
-use crate::compute::ArrayCompute;
+use crate::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
 
 mod compare;
 mod fill;

@@ -7,10 +7,10 @@ use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
-use crate::compute::slice::slice;
-use crate::compute::take::take;
+use crate::compute::slice;
+use crate::compute::take;
 use crate::compute::unary::scalar_subtract::subtract_scalar;
+use crate::compute::{search_sorted, SearchSortedSide};
 use crate::stats::{ArrayStatistics, Stat};
 use crate::stream::ArrayStream;
 use crate::IntoArray;
