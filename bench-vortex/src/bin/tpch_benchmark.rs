@@ -2,7 +2,7 @@ use std::sync;
 use std::time::SystemTime;
 
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
-use bench_vortex::tpch::{load_datasets, tpch_query, Format};
+use bench_vortex::tpch::{load_datasets, tpch_queries, Format};
 use futures::future::join_all;
 use indicatif::ProgressBar;
 use itertools::Itertools;
@@ -52,17 +52,13 @@ async fn main() {
 
     // Send back a channel with the results of Row.
     let (rows_tx, rows_rx) = sync::mpsc::channel();
-    for i in 1..=22 {
-        if i == 15 {
-            continue;
-        }
+    for (q, query) in tpch_queries() {
         let _ctxs = ctxs.clone();
         let _tx = rows_tx.clone();
         let _progress = progress.clone();
         rayon::spawn_fifo(move || {
-            let query = tpch_query(i);
             let mut cells = Vec::with_capacity(formats.len());
-            cells.push(Cell::new(&format!("Q{}", i)));
+            cells.push(Cell::new(&format!("Q{}", q)));
 
             let mut elapsed_us = Vec::new();
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -75,25 +71,25 @@ async fn main() {
                     rt.block_on(async {
                         ctx.sql(&query)
                             .await
-                            .map_err(|e| println!("Failed to run {} {:?}: {}", i, format, e))
+                            .map_err(|e| println!("Failed to run {} {:?}: {}", q, format, e))
                             .unwrap()
                             .collect()
                             .await
-                            .map_err(|e| println!("Failed to collect {} {:?}: {}", i, format, e))
+                            .map_err(|e| println!("Failed to collect {} {:?}: {}", q, format, e))
                             .unwrap();
                     })
                 }
                 let mut measure = Vec::new();
-                for _ in 0..20 {
+                for _ in 0..10 {
                     let start = SystemTime::now();
                     rt.block_on(async {
                         ctx.sql(&query)
                             .await
-                            .map_err(|e| println!("Failed to run {} {:?}: {}", i, format, e))
+                            .map_err(|e| println!("Failed to run {} {:?}: {}", q, format, e))
                             .unwrap()
                             .collect()
                             .await
-                            .map_err(|e| println!("Failed to collect {} {:?}: {}", i, format, e))
+                            .map_err(|e| println!("Failed to collect {} {:?}: {}", q, format, e))
                             .unwrap();
                     });
                     let elapsed = start.elapsed().unwrap();
@@ -119,11 +115,17 @@ async fn main() {
                 } else {
                     "bFdBG"
                 };
-                cells
-                    .push(Cell::new(&format!("{} us", measure.as_micros())).style_spec(style_spec));
+                cells.push(
+                    Cell::new(&format!(
+                        "{} us ({:.2})",
+                        measure.as_micros(),
+                        measure.as_micros() as f64 / baseline.as_micros() as f64
+                    ))
+                    .style_spec(style_spec),
+                );
             }
 
-            _tx.send((i, Row::new(cells))).unwrap();
+            _tx.send((q, Row::new(cells))).unwrap();
         });
     }
 
