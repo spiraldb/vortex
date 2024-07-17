@@ -4,6 +4,7 @@ use vortex_error::vortex_bail;
 
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
+use crate::variants::StructArrayTrait;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayDType};
 use crate::{Canonical, IntoCanonical};
@@ -19,41 +20,6 @@ pub struct StructMetadata {
 }
 
 impl StructArray {
-    pub fn field(&self, idx: usize) -> Option<Array> {
-        let DType::Struct(st, _) = self.dtype() else {
-            unreachable!()
-        };
-        let dtype = st.dtypes().get(idx)?;
-        self.array().child(idx, dtype, self.len())
-    }
-
-    pub fn field_by_name(&self, name: &str) -> Option<Array> {
-        let field_idx = self
-            .names()
-            .iter()
-            .position(|field_name| field_name.as_ref() == name);
-
-        field_idx.and_then(|field_idx| self.field(field_idx))
-    }
-
-    pub fn names(&self) -> &FieldNames {
-        let DType::Struct(st, _) = self.dtype() else {
-            unreachable!()
-        };
-        st.names()
-    }
-
-    pub fn dtypes(&self) -> &[DType] {
-        let DType::Struct(st, _) = self.dtype() else {
-            unreachable!()
-        };
-        st.dtypes()
-    }
-
-    pub fn nfields(&self) -> usize {
-        self.dtypes().len()
-    }
-
     pub fn validity(&self) -> Validity {
         self.metadata().validity.to_validity(self.array().child(
             self.nfields(),
@@ -156,7 +122,44 @@ impl StructArray {
     }
 }
 
-impl ArrayTrait for StructArray {}
+impl ArrayTrait for StructArray {
+    fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
+        Some(self)
+    }
+}
+
+impl StructArrayTrait for StructArray {
+    fn names(&self) -> &FieldNames {
+        let DType::Struct(st, _) = self.dtype() else {
+            unreachable!()
+        };
+        st.names()
+    }
+
+    fn dtypes(&self) -> &[DType] {
+        let DType::Struct(st, _) = self.dtype() else {
+            unreachable!()
+        };
+        st.dtypes()
+    }
+
+    fn field(&self, idx: usize) -> Option<Array> {
+        let DType::Struct(st, _) = self.dtype() else {
+            unreachable!()
+        };
+        let dtype = st.dtypes().get(idx)?;
+        self.array().child(idx, dtype, self.len())
+    }
+
+    fn field_by_name(&self, name: &str) -> Option<Array> {
+        let field_idx = self
+            .names()
+            .iter()
+            .position(|field_name| field_name.as_ref() == name);
+
+        field_idx.and_then(|field_idx| self.field(field_idx))
+    }
+}
 
 impl IntoCanonical for StructArray {
     /// StructEncoding is the canonical form for a [DType::Struct] array, so return self.
@@ -196,6 +199,7 @@ mod test {
     use crate::array::struct_::StructArray;
     use crate::array::varbin::VarBinArray;
     use crate::validity::Validity;
+    use crate::variants::StructArrayTrait;
     use crate::IntoArray;
 
     #[test]

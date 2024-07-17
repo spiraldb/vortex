@@ -1,3 +1,5 @@
+use vortex_dtype::{DType, FieldNames};
+
 /// This module defines array traits for each Vortex DType.
 ///
 /// When callers only want to make assumptions about the DType, and not about any specific
@@ -15,6 +17,14 @@ pub trait Utf8ArrayTrait: ArrayTrait {}
 pub trait BinaryArrayTrait: ArrayTrait {}
 
 pub trait StructArrayTrait: ArrayTrait {
+    fn names(&self) -> &FieldNames;
+
+    fn dtypes(&self) -> &[DType];
+
+    fn nfields(&self) -> usize {
+        self.names().len()
+    }
+
     fn field(&self, idx: usize) -> Option<Array>;
 
     fn field_by_name(&self, name: &str) -> Option<Array>;
