@@ -34,7 +34,7 @@ impl ExpressionEvaluator {
                     _ => vortex_bail!("{} is an unsupported operator", expr.op),
                 }
             }
-            _ => unimplemented!("IMO it shouldn't get to this point"),
+            _ => unreachable!(),
         }
     }
 }
