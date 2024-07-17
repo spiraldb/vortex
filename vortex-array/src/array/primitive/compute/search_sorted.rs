@@ -3,8 +3,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::search_sorted::{SearchResult, SearchSorted};
-use crate::compute::search_sorted::{SearchSortedFn, SearchSortedSide};
+use crate::compute::{SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide};
 
 impl SearchSortedFn for PrimitiveArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
@@ -18,7 +17,7 @@ impl SearchSortedFn for PrimitiveArray {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::compute::search_sorted::search_sorted;
+    use crate::compute::search_sorted;
     use crate::IntoArray;
 
     #[test]

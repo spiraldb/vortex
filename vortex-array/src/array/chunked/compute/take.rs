@@ -5,12 +5,10 @@ use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::search_sorted::{search_sorted, SearchSortedSide};
-use crate::compute::slice::slice;
-use crate::compute::take::{take, TakeFn};
 use crate::compute::unary::cast::try_cast;
 use crate::compute::unary::scalar_at::scalar_at;
 use crate::compute::unary::scalar_subtract::subtract_scalar;
+use crate::compute::{search_sorted, slice, take, SearchSortedSide, TakeFn};
 use crate::stats::ArrayStatistics;
 use crate::ArrayDType;
 use crate::{Array, IntoArray, ToArray};
@@ -130,7 +128,7 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
 #[cfg(test)]
 mod test {
     use crate::array::chunked::ChunkedArray;
-    use crate::compute::take::take;
+    use crate::compute::take;
     use crate::{ArrayDType, AsArray, IntoArray, IntoArrayVariant};
 
     #[test]

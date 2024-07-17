@@ -6,7 +6,7 @@ use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
-use crate::compute::take::{take, TakeFn};
+use crate::compute::{take, TakeFn};
 use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl TakeFn for SparseArray {
@@ -90,7 +90,7 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::compute::take::take_map;
     use crate::array::sparse::SparseArray;
-    use crate::compute::take::take;
+    use crate::compute::take;
     use crate::validity::Validity;
     use crate::{Array, IntoArray, IntoArrayVariant};
 

@@ -3,10 +3,8 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::struct_::StructArray;
-use crate::compute::slice::{slice, SliceFn};
-use crate::compute::take::{take, TakeFn};
 use crate::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
-use crate::compute::ArrayCompute;
+use crate::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for StructArray {

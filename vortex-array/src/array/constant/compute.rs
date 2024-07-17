@@ -4,11 +4,9 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
-use crate::compute::search_sorted::{SearchResult, SearchSortedFn, SearchSortedSide};
-use crate::compute::slice::SliceFn;
-use crate::compute::take::TakeFn;
 use crate::compute::unary::scalar_at::ScalarAtFn;
-use crate::compute::ArrayCompute;
+use crate::compute::{ArrayCompute, SliceFn, TakeFn};
+use crate::compute::{SearchResult, SearchSortedFn, SearchSortedSide};
 use crate::{Array, IntoArray};
 
 impl ArrayCompute for ConstantArray {
@@ -63,7 +61,7 @@ impl SearchSortedFn for ConstantArray {
 #[cfg(test)]
 mod test {
     use crate::array::constant::ConstantArray;
-    use crate::compute::search_sorted::{search_sorted, SearchResult, SearchSortedSide};
+    use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
     use crate::IntoArray;
 
     #[test]

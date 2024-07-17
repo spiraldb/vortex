@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
-use crate::compute::slice::SliceFn;
+use crate::compute::SliceFn;
 use crate::{Array, IntoArray};
 
 impl SliceFn for BoolArray {
@@ -18,7 +18,7 @@ impl SliceFn for BoolArray {
 mod tests {
 
     use super::*;
-    use crate::compute::slice::slice;
+    use crate::compute::slice;
     use crate::validity::ArrayValidity;
     use crate::{compute::unary::scalar_at::scalar_at, AsArray};
 

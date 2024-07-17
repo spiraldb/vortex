@@ -2,11 +2,10 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::extension::ExtensionArray;
-use crate::compute::slice::{slice, SliceFn};
-use crate::compute::take::{take, TakeFn};
 use crate::compute::unary::cast::CastFn;
 use crate::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
 use crate::compute::ArrayCompute;
+use crate::compute::{slice, take, SliceFn, TakeFn};
 use crate::{Array, IntoArray};
 
 impl ArrayCompute for ExtensionArray {

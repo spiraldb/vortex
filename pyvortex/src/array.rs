@@ -8,7 +8,7 @@ use vortex::array::sparse::{Sparse, SparseArray, SparseEncoding};
 use vortex::array::struct_::{Struct, StructArray, StructEncoding};
 use vortex::array::varbin::{VarBin, VarBinArray, VarBinEncoding};
 use vortex::array::varbinview::{VarBinView, VarBinViewArray, VarBinViewEncoding};
-use vortex::compute::take::take;
+use vortex::compute::take;
 use vortex::encoding::EncodingRef;
 use vortex::ToArray;
 use vortex::{Array, ArrayDType, ArrayData, IntoArray};

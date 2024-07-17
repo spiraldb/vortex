@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
-use crate::compute::slice::{slice, SliceFn};
+use crate::compute::{slice, SliceFn};
 use crate::{Array, ArrayDType, IntoArray};
 
 impl SliceFn for ChunkedArray {

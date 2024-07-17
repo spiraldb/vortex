@@ -1,7 +1,6 @@
 use croaring::Bitmap;
-use vortex::compute::slice::SliceFn;
 use vortex::compute::unary::scalar_at::ScalarAtFn;
-use vortex::compute::ArrayCompute;
+use vortex::compute::{ArrayCompute, SliceFn};
 use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
