@@ -167,7 +167,7 @@ mod test {
     use crate::array::chunked::ChunkedArray;
     use crate::compute::slice;
     use crate::compute::unary::scalar_subtract::subtract_scalar;
-    use crate::{Array, IntoArray, IntoArrayVariant, IntoCanonical, ToArray};
+    use crate::{Array, IntoArray, IntoArrayVariant, ToArray};
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(
@@ -231,8 +231,6 @@ mod test {
         let results = chunks_out
             .next()
             .unwrap()
-            .into_canonical()
-            .unwrap()
             .into_primitive()
             .unwrap()
             .maybe_null_slice::<u64>()
@@ -241,8 +239,6 @@ mod test {
         let results = chunks_out
             .next()
             .unwrap()
-            .into_canonical()
-            .unwrap()
             .into_primitive()
             .unwrap()
             .maybe_null_slice::<u64>()
@@ -250,8 +246,6 @@ mod test {
         assert_eq!(results, &[3u64, 4, 5]);
         let results = chunks_out
             .next()
-            .unwrap()
-            .into_canonical()
             .unwrap()
             .into_primitive()
             .unwrap()

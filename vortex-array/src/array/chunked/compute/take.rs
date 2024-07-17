@@ -113,7 +113,7 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
 mod test {
     use crate::array::chunked::ChunkedArray;
     use crate::compute::take;
-    use crate::{ArrayDType, AsArray, IntoArray, IntoCanonical};
+    use crate::{ArrayDType, AsArray, IntoArray, IntoArrayVariant};
 
     #[test]
     fn test_take() {
@@ -127,8 +127,6 @@ mod test {
         let result = &ChunkedArray::try_from(take(arr.as_array_ref(), &indices).unwrap())
             .unwrap()
             .into_array()
-            .into_canonical()
-            .unwrap()
             .into_primitive()
             .unwrap();
         assert_eq!(result.maybe_null_slice::<i32>(), &[1, 1, 1, 2]);

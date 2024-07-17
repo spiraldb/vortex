@@ -216,13 +216,11 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
         // FIXME(ngates): do not copy offsets again
         PType::U64 => try_cast(&offsets.to_array(), PType::I64.into())
             .expect("cast to i64")
-            .into_canonical()
-            .and_then(Canonical::into_primitive)
+            .into_primitive()
             .expect("flatten_primitive"),
         _ => try_cast(&offsets.to_array(), PType::I32.into())
             .expect("cast to i32")
-            .into_canonical()
-            .and_then(Canonical::into_primitive)
+            .into_primitive()
             .expect("flatten_primitive"),
     };
     let nulls = varbin_array
@@ -232,8 +230,7 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
 
     let data = varbin_array
         .bytes()
-        .into_canonical()
-        .and_then(Canonical::into_primitive)
+        .into_primitive()
         .expect("flatten_primitive");
     assert_eq!(data.ptype(), PType::U8);
     let data = data.buffer();
@@ -285,8 +282,7 @@ fn local_date_time_to_arrow(local_date_time_array: LocalDateTimeArray) -> ArrayR
     // A LocalDateTime maps to an Arrow Timestamp array with no timezone.
     let timestamps = try_cast(&local_date_time_array.timestamps(), PType::I64.into())
         .expect("timestamps must cast to i64")
-        .into_canonical()
-        .and_then(Canonical::into_primitive)
+        .into_primitive()
         .expect("must be i64 array");
     let validity = timestamps
         .logical_validity()

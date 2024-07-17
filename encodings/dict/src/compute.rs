@@ -48,7 +48,7 @@ impl SliceFn for DictArray {
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::{IntoArray, IntoCanonical, ToArray};
+    use vortex::{IntoArray, IntoArrayVariant, ToArray};
     use vortex_dtype::{DType, Nullability};
 
     use crate::{dict_encode_typed_primitive, dict_encode_varbin, DictArray};
@@ -65,12 +65,7 @@ mod test {
         ]);
         let (codes, values) = dict_encode_typed_primitive::<i32>(&reference);
         let dict = DictArray::try_new(codes.into_array(), values.into_array()).unwrap();
-        let flattened_dict = dict
-            .to_array()
-            .into_canonical()
-            .unwrap()
-            .into_primitive()
-            .unwrap();
+        let flattened_dict = dict.to_array().into_primitive().unwrap();
         assert_eq!(flattened_dict.buffer(), reference.buffer());
     }
 
@@ -82,43 +77,14 @@ mod test {
         );
         let (codes, values) = dict_encode_varbin(&reference);
         let dict = DictArray::try_new(codes.into_array(), values.into_array()).unwrap();
-        let flattened_dict = dict
-            .to_array()
-            .into_canonical()
-            .unwrap()
-            .into_varbin()
-            .unwrap();
+        let flattened_dict = dict.to_array().into_varbin().unwrap();
         assert_eq!(
-            flattened_dict
-                .offsets()
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap()
-                .buffer(),
-            reference
-                .offsets()
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap()
-                .buffer()
+            flattened_dict.offsets().into_primitive().unwrap().buffer(),
+            reference.offsets().into_primitive().unwrap().buffer()
         );
         assert_eq!(
-            flattened_dict
-                .bytes()
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap()
-                .buffer(),
-            reference
-                .bytes()
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap()
-                .buffer()
+            flattened_dict.bytes().into_primitive().unwrap().buffer(),
+            reference.bytes().into_primitive().unwrap().buffer()
         );
     }
 }

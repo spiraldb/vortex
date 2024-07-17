@@ -8,7 +8,7 @@ use crate::compute::slice;
 use crate::compute::take;
 use crate::compute::unary::scalar_at::scalar_at;
 use crate::stats::ArrayStatistics;
-use crate::{Array, Canonical, IntoArray, IntoArrayVariant, IntoCanonical};
+use crate::{Array, IntoArray, IntoArrayVariant};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -144,18 +144,8 @@ impl PartialEq for Validity {
             (Self::AllValid, Self::AllValid) => true,
             (Self::AllInvalid, Self::AllInvalid) => true,
             (Self::Array(a), Self::Array(b)) => {
-                a.clone()
-                    .into_canonical()
-                    .unwrap()
-                    .into_bool()
-                    .unwrap()
-                    .boolean_buffer()
-                    == b.clone()
-                        .into_canonical()
-                        .unwrap()
-                        .into_bool()
-                        .unwrap()
-                        .boolean_buffer()
+                a.clone().into_bool().unwrap().boolean_buffer()
+                    == b.clone().into_bool().unwrap().boolean_buffer()
             }
             _ => false,
         }
@@ -212,8 +202,7 @@ impl FromIterator<LogicalValidity> for Validity {
                 LogicalValidity::AllValid(count) => BooleanBuffer::new_set(count),
                 LogicalValidity::AllInvalid(count) => BooleanBuffer::new_unset(count),
                 LogicalValidity::Array(array) => array
-                    .into_canonical()
-                    .and_then(Canonical::into_bool)
+                    .into_bool()
                     .expect("validity must flatten to BoolArray")
                     .boolean_buffer(),
             };

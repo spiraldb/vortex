@@ -18,7 +18,7 @@ use crate::compute::slice;
 use crate::validity::Validity;
 use crate::validity::{ArrayValidity, LogicalValidity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayData, Canonical, IntoCanonical};
+use crate::{impl_encoding, ArrayDType, ArrayData, Canonical, IntoArrayVariant, IntoCanonical};
 
 mod accessor;
 mod builder;
@@ -220,7 +220,6 @@ impl VarBinViewArray {
                     view._ref.offset as usize,
                     (view._ref.size + view._ref.offset) as usize,
                 )?
-                .into_canonical()?
                 .into_primitive()?;
                 Ok(data_buf.maybe_null_slice::<u8>().to_vec())
             } else {
@@ -248,8 +247,6 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
     // Views should be buffer of u8
     let views = var_bin_view
         .views()
-        .into_canonical()
-        .expect("into_canonical")
         .into_primitive()
         .expect("views must be primitive");
     assert_eq!(views.ptype(), PType::U8);
@@ -259,12 +256,7 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
         .expect("null buffer");
 
     let data = (0..var_bin_view.metadata().data_lens.len())
-        .map(|i| {
-            var_bin_view
-                .bytes(i)
-                .into_canonical()
-                .and_then(Canonical::into_primitive)
-        })
+        .map(|i| var_bin_view.bytes(i).into_primitive())
         .collect::<VortexResult<Vec<_>>>()
         .expect("bytes arrays must be primitive");
     if !data.is_empty() {

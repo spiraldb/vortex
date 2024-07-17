@@ -68,7 +68,8 @@ impl SliceFn for RunEndArray {
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::take;
-    use vortex::{IntoCanonical, ToArray};
+    use vortex::{IntoArrayVariant, ToArray};
+    use vortex::{IntoArrayVariant, ToArray};
 
     use crate::RunEndArray;
 
@@ -80,12 +81,7 @@ mod test {
         .unwrap();
         let taken = take(ree.array(), PrimitiveArray::from(vec![9, 8, 1, 3]).array()).unwrap();
         assert_eq!(
-            taken
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap()
-                .maybe_null_slice::<i32>(),
+            taken.into_primitive().unwrap().maybe_null_slice::<i32>(),
             &[5, 5, 1, 4]
         );
     }

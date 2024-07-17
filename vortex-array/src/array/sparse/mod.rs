@@ -9,7 +9,7 @@ use crate::compute::{search_sorted, SearchSortedSide};
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, IntoCanonical};
+use crate::{impl_encoding, ArrayDType, IntoArrayVariant};
 
 mod compute;
 mod flatten;
@@ -111,12 +111,7 @@ impl SparseArray {
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        let flat_indices = self
-            .indices()
-            .into_canonical()
-            .unwrap()
-            .into_primitive()
-            .unwrap();
+        let flat_indices = self.indices().into_primitive().unwrap();
         match_each_integer_ptype!(flat_indices.ptype(), |$P| {
             flat_indices
                 .maybe_null_slice::<$P>()
@@ -197,7 +192,7 @@ mod test {
     use crate::compute::slice;
     use crate::compute::unary::cast::try_cast;
     use crate::compute::unary::scalar_at::scalar_at;
-    use crate::{Array, IntoArray, IntoCanonical};
+    use crate::{Array, IntoArray, IntoArrayVariant};
 
     fn nullable_fill() -> Scalar {
         Scalar::null(DType::Primitive(PType::I32, Nullable))
@@ -220,12 +215,7 @@ mod test {
 
     fn assert_sparse_array(sparse: &Array, values: &[Option<i32>]) {
         let sparse_arrow = ArrayAccessor::<i32>::with_iterator(
-            &sparse
-                .clone()
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap(),
+            &sparse.clone().into_primitive().unwrap(),
             |iter| iter.map(|v| v.cloned()).collect_vec(),
         )
         .unwrap();
