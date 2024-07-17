@@ -4,51 +4,62 @@ use vortex::{
     array::{bool::BoolArray, constant::ConstantArray, null::NullArray, struct_::StructArray},
     compute::compare,
     validity::Validity,
-    Array, IntoArray,
+    Array, IntoArray, IntoArrayVariant,
 };
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 
 pub struct ExperssionEvaluator;
 
 impl ExperssionEvaluator {
-    pub fn eval(data: StructArray, expr: &Expr) -> VortexResult<Array> {
+    pub fn eval(input: StructArray, expr: &Expr) -> VortexResult<Array> {
         match expr {
             Expr::BinaryExpr(expr) => {
                 let lhs = expr.left.as_ref();
                 let rhs = expr.right.as_ref();
 
-                assert_eq!(expr.op, Operator::Eq);
-
-                match (lhs, rhs) {
-                    (Expr::Column(left), Expr::Column(right)) => {
-                        let lhs = data.field_by_name(left.name());
-                        let rhs = data.field_by_name(right.name());
-
-                        if let Some((lhs, rhs)) = lhs.zip(rhs) {
-                            compare(&lhs, &rhs, vortex_expr::Operator::Eq)
-                        } else {
-                            Ok(
-                                BoolArray::from_vec(vec![false; data.len()], Validity::AllValid)
-                                    .into_array(),
-                            )
-                        }
+                match expr.op {
+                    Operator::And => {
+                        let lhs = ExperssionEvaluator::eval(input.clone(), lhs)?.into_bool()?;
+                        let rhs = ExperssionEvaluator::eval(input, rhs)?.into_bool()?;
+                        let buffer = &lhs.boolean_buffer() & &rhs.boolean_buffer();
+                        Ok(BoolArray::from(buffer).into_array())
                     }
-                    (Expr::Literal(l), Expr::Column(c)) | (Expr::Column(c), Expr::Literal(l)) => {
-                        if let Some(col) = data.field_by_name(c.name()) {
-                            let const_array = df_scalar_to_const_array(l, col.len())?;
-                            compare(&col, &const_array, vortex_expr::Operator::Eq)
-                        } else {
-                            Ok(
-                                BoolArray::from_vec(vec![false; data.len()], Validity::AllValid)
-                                    .into_array(),
-                            )
-                        }
+                    Operator::Or => {
+                        let lhs = ExperssionEvaluator::eval(input.clone(), lhs)?.into_bool()?;
+                        let rhs = ExperssionEvaluator::eval(input, rhs)?.into_bool()?;
+                        let buffer = &lhs.boolean_buffer() | &rhs.boolean_buffer();
+                        Ok(BoolArray::from(buffer).into_array())
                     }
-                    _ => unimplemented!(),
+                    Operator::Eq => eval_eq_impl(&input, lhs, rhs),
+                    _ => vortex_bail!("{} is an unsupported operator", expr.op),
                 }
             }
             _ => unimplemented!("IMO it shouldn't get to this point"),
         }
+    }
+}
+
+fn eval_eq_impl(input: &StructArray, lhs: &Expr, rhs: &Expr) -> VortexResult<Array> {
+    match (lhs, rhs) {
+        (Expr::Column(left), Expr::Column(right)) => {
+            let lhs = input.field_by_name(left.name());
+            let rhs = input.field_by_name(right.name());
+
+            if let Some((lhs, rhs)) = lhs.zip(rhs) {
+                compare(&lhs, &rhs, vortex_expr::Operator::Eq)
+            } else {
+                Ok(BoolArray::from_vec(vec![false; input.len()], Validity::AllValid).into_array())
+            }
+        }
+        (Expr::Literal(l), Expr::Column(c)) | (Expr::Column(c), Expr::Literal(l)) => {
+            if let Some(col) = input.field_by_name(c.name()) {
+                let const_array = df_scalar_to_const_array(l, col.len())?;
+                compare(&col, &const_array, vortex_expr::Operator::Eq)
+            } else {
+                Ok(BoolArray::from_vec(vec![false; input.len()], Validity::AllValid).into_array())
+            }
+        }
+        _ => vortex_bail!("Unsupported expression combination for eq"),
     }
 }
 

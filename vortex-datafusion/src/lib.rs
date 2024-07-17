@@ -1,5 +1,7 @@
 //! Connectors to enable DataFusion to read Vortex data.
 
+#![allow(clippy::nonminimal_bool)]
+
 use std::any::Any;
 use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
@@ -8,7 +10,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use arrow_array::{RecordBatch, StructArray as ArrowStructArray};
-use arrow_schema::SchemaRef;
+use arrow_schema::{DataType, SchemaRef};
 use async_trait::async_trait;
 use datafusion::dataframe::DataFrame;
 use datafusion::datasource::TableProvider;
@@ -293,12 +295,22 @@ fn can_be_pushed_down(expr: &Expr) -> DFResult<bool> {
             let lhs = expr.left.as_ref();
             let rhs = expr.right.as_ref();
 
-            matches!(
-                (lhs, rhs),
-                (Expr::Column(_), Expr::Column(_))
-                    | (Expr::Column(_), Expr::Literal(_))
-                    | (Expr::Literal(_), Expr::Column(_))
-            )
+            match (lhs, rhs) {
+                (Expr::Column(_), Expr::Column(_)) => true,
+                (Expr::Column(_), Expr::Literal(lit)) | (Expr::Literal(lit), Expr::Column(_)) => {
+                    let dt = lit.data_type();
+                    dt.is_integer()
+                        || dt.is_floating()
+                        || dt.is_signed_integer()
+                        || dt.is_null()
+                        || dt == DataType::Binary
+                        || dt == DataType::Utf8
+                        || dt == DataType::Binary
+                        || dt == DataType::BinaryView
+                        || dt == DataType::Utf8View
+                }
+                _ => false,
+            }
         }
 
         _ => false,

@@ -43,9 +43,6 @@ async fn main() {
     // Send back a channel with the results of Row.
     let (rows_tx, rows_rx) = sync::mpsc::channel();
     for (q, query) in tpch_queries() {
-        if q == 17 {
-            continue;
-        }
         let _ctxs = ctxs.clone();
         let _tx = rows_tx.clone();
         let _progress = progress.clone();
