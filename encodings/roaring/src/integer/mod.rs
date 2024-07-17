@@ -30,7 +30,7 @@ impl RoaringIntArray {
         let length = bitmap.statistics().cardinality as usize;
         Ok(Self {
             typed: TypedArray::try_from_parts(
-                DType::Bool(NonNullable),
+                DType::Primitive(ptype, NonNullable),
                 length,
                 RoaringIntMetadata { ptype },
                 Some(Buffer::from(bitmap.serialize::<Portable>())),
