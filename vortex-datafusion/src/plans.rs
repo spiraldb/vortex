@@ -183,42 +183,17 @@ impl Stream for RowIndicesStream {
             .project(this.filter_projection.as_slice())
             .expect("projection should succeed");
 
-        // println!("{:?}", vortex_struct.)
-
         // TODO(adamg): Filter on vortex arrays
-        // let filtered_resultd = ExperssionEvaluator::eval(vortex_struct, filters, ...)
-        let r = ExperssionEvaluator::eval(vortex_struct, &this.conjunction_expr).unwrap();
-
-        let temp = r
+        let array = ExperssionEvaluator::eval(vortex_struct, &this.conjunction_expr).unwrap();
+        let selection = array
             .into_bool()
             .unwrap()
             .into_canonical()
             .unwrap()
             .into_arrow();
 
-        // Immediately convert to Arrow RecordBatch for processing.
-        // TODO(aduffy): attempt to pushdown the filter to Vortex without decoding.
-        // let record_batch = RecordBatch::from(
-        //     vortex_struct
-        //         .into_canonical()
-        //         .unwrap()
-        //         .into_arrow()
-        //         .as_struct(),
-        // );
-
-        // Generate a physical plan to execute the conjunction query against the filter columns.
-        //
-        // The result of a conjunction expression is a BooleanArray containing `true` for rows
-        // where the conjunction was satisfied, and `false` otherwise.
-        // let df_schema = DFSchema::try_from(this.filter_schema.clone())?;
-        // let physical_expr =
-        //     create_physical_expr(&this.conjunction_expr, &df_schema, &Default::default())?;
-        // let selection = physical_expr
-        //     .evaluate(&record_batch)?
-        //     .into_array(record_batch.num_rows())?;
-
         // Convert the `selection` BooleanArray into a UInt64Array of indices.
-        let selection_indices = temp
+        let selection_indices = selection
             .as_boolean()
             .values()
             .set_indices()

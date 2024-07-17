@@ -8,7 +8,7 @@ use vortex::{
 };
 use vortex_error::VortexResult;
 
-pub struct ExperssionEvaluator {}
+pub struct ExperssionEvaluator;
 
 impl ExperssionEvaluator {
     pub fn eval(data: StructArray, expr: &Expr) -> VortexResult<Array> {
