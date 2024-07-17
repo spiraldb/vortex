@@ -206,6 +206,15 @@ async fn register_vortex(
     Ok(())
 }
 
+pub fn tpch_queries() -> impl Iterator<Item = (usize, String)> {
+    (1..=22)
+        .filter(|q| {
+            // Query 15 has multiple SQL statements so doesn't yet run in DataFusion.
+            *q != 15
+        })
+        .map(|q| (q, tpch_query(q)))
+}
+
 pub fn tpch_query(query_idx: usize) -> String {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tpch")

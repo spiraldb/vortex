@@ -1,5 +1,5 @@
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
-use bench_vortex::tpch::{load_datasets, Format};
+use bench_vortex::tpch::{load_datasets, tpch_queries, Format};
 use criterion::{criterion_group, criterion_main, Criterion};
 use tokio::runtime::Builder;
 
@@ -32,14 +32,7 @@ fn benchmark(c: &mut Criterion) {
         .block_on(load_datasets(&data_dir, Format::Parquet))
         .unwrap();
 
-    for q in 1..=22 {
-        if q == 15 {
-            // DataFusion does not support query 15 since it has multiple SQL statements.
-            continue;
-        }
-
-        let query = bench_vortex::tpch::tpch_query(q);
-
+    for (q, query) in tpch_queries() {
         let mut group = c.benchmark_group(format!("tpch_q{q}"));
         group.sample_size(10);
 
