@@ -21,6 +21,7 @@ runs:
       if: steps.rye-cache.outputs.cache-hit != 'true'
       env:
         RYE_VERSION: "${{ inputs.rye-version }}"
+        RYE_TOOLCHAIN_VERSION: "3.11.6"
         RYE_INSTALL_OPTION: "--yes"
 
     - name: Rye Shims
