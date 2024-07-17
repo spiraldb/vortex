@@ -34,17 +34,17 @@ ahash = "0.8.11"
 allocator-api2 = "0.2.16"
 anyhow = "1.0"
 arrayref = "0.3.7"
-arrow = { version = "52.0.0", features = ["pyarrow"] }
-arrow-arith = "52.0.0"
-arrow-array = "52.0.0"
-arrow-buffer = "52.0.0"
-arrow-cast = "52.0.0"
-arrow-csv = "52.0.0"
-arrow-data = "52.0.0"
-arrow-ipc = "52.0.0"
-arrow-ord = "52.0.0"
-arrow-schema = "52.0.0"
-arrow-select = "52.0.0"
+arrow = { version = "52.1.0", features = ["pyarrow"] }
+arrow-arith = "52.2.0"
+arrow-array = "52.2.0"
+arrow-buffer = "52.2.0"
+arrow-cast = "52.2.0"
+arrow-csv = "52.2.0"
+arrow-data = "52.2.0"
+arrow-ipc = "52.2.0"
+arrow-ord = "52.2.0"
+arrow-schema = "52.2.0"
+arrow-select = "52.2.0"
 async-trait = "0.1"
 bindgen = "0.69.4"
 bytes = "1.6.0"
@@ -119,3 +119,11 @@ warnings = "deny"
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 or_fun_call = "deny"
+
+[patch.crates-io]
+datafusion = { git = "https://github.com/apache/datafusion.git", rev = "2f5e73c6aa82a3c45ff348ce0d1ea4eec4fc2a0d" }
+datafusion-common = { git = "https://github.com/apache/datafusion.git", rev = "2f5e73c6aa82a3c45ff348ce0d1ea4eec4fc2a0d" }
+datafusion-execution = { git = "https://github.com/apache/datafusion.git", rev = "2f5e73c6aa82a3c45ff348ce0d1ea4eec4fc2a0d" }
+datafusion-expr = { git = "https://github.com/apache/datafusion.git", rev = "2f5e73c6aa82a3c45ff348ce0d1ea4eec4fc2a0d" }
+datafusion-physical-expr = { git = "https://github.com/apache/datafusion.git", rev = "2f5e73c6aa82a3c45ff348ce0d1ea4eec4fc2a0d" }
+datafusion-physical-plan = { git = "https://github.com/apache/datafusion.git", rev = "2f5e73c6aa82a3c45ff348ce0d1ea4eec4fc2a0d" }

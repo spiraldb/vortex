@@ -6,7 +6,7 @@ from
     (
         select
             n_name as nation,
-            extract(year from o_orderdate) as o_year,
+            extract(year from CAST(o_orderdate AS DATE)) as o_year,
             l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
         from
             part,

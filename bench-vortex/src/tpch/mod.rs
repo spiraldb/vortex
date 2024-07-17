@@ -120,6 +120,7 @@ async fn register_arrow(
         .collect()
         .await?;
 
+    // Convert to StringView for all of the relevant columns
     let mem_table = MemTable::try_new(Arc::new(schema.clone()), vec![record_batches])?;
     session.register_table(name, Arc::new(mem_table))?;
 
@@ -220,4 +221,36 @@ pub fn tpch_query(query_idx: usize) -> String {
         .join("tpch")
         .join(format!("q{}.sql", query_idx));
     fs::read_to_string(manifest_dir).unwrap()
+}
+
+#[cfg(test)]
+mod test {
+    use crate::tpch::{load_datasets, tpch_query, Format};
+
+    #[tokio::test]
+    async fn test_schema() {
+        println!("TEST START");
+        let session_ctx = load_datasets(
+            "/Volumes/Code/vortex/bench-vortex/data/tpch/1",
+            Format::Arrow,
+        )
+        .await
+        .unwrap();
+        println!("DATA LOADED");
+
+        // get access to session context
+        let logical_plan = session_ctx
+            .state()
+            .create_logical_plan(&tpch_query(7))
+            .await
+            .unwrap();
+        println!("LOGICAL PLAN: {}", logical_plan.display_indent());
+        session_ctx
+            .sql(&tpch_query(1))
+            .await
+            .unwrap()
+            .show()
+            .await
+            .unwrap();
+    }
 }
