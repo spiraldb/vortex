@@ -66,7 +66,7 @@ fn take_nullable<I: NativePType, O: NativePType>(
     indices: &[I],
     null_buffer: NullBuffer,
 ) -> VarBinArray {
-    let mut builder = VarBinBuilder::<I>::with_capacity(indices.len());
+    let mut builder = VarBinBuilder::<O>::with_capacity(indices.len());
     for &idx in indices {
         let idx = idx.to_usize().unwrap();
         if null_buffer.is_valid(idx) {

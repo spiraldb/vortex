@@ -111,7 +111,7 @@ where
     let mut lookup_dict: HashMap<u64, (), ()> = HashMap::with_hasher(());
     let mut codes: Vec<u64> = Vec::with_capacity(lower);
     let mut bytes: Vec<u8> = Vec::new();
-    let mut offsets: Vec<u64> = Vec::new();
+    let mut offsets: Vec<u32> = Vec::new();
     offsets.push(0);
 
     if dtype.is_nullable() {
@@ -133,7 +133,7 @@ where
                     RawEntryMut::Vacant(vac) => {
                         let next_code = offsets.len() as u64 - 1;
                         bytes.extend_from_slice(byte_ref);
-                        offsets.push(bytes.len() as u64);
+                        offsets.push(bytes.len() as u32);
                         vac.insert_with_hasher(value_hash, next_code, (), |idx| {
                             hasher.hash_one(lookup_bytes(
                                 offsets.as_slice(),

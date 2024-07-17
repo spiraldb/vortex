@@ -185,12 +185,7 @@ impl Stream for RowIndicesStream {
 
         // TODO(adamg): Filter on vortex arrays
         let array = ExpressionEvaluator::eval(vortex_struct, &this.conjunction_expr).unwrap();
-        let selection = array
-            .into_bool()
-            .unwrap()
-            .into_canonical()
-            .unwrap()
-            .into_arrow();
+        let selection = array.into_canonical().unwrap().into_arrow();
 
         // Convert the `selection` BooleanArray into a UInt64Array of indices.
         let selection_indices = selection

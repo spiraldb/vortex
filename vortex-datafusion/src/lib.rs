@@ -249,7 +249,7 @@ impl TableProvider for VortexMemTable {
         filters
             .iter()
             .map(|expr| {
-                if can_be_pushed_down(expr)? {
+                if can_be_pushed_down(expr) {
                     Ok(TableProviderFilterPushDown::Exact)
                 } else {
                     Ok(TableProviderFilterPushDown::Unsupported)
@@ -289,8 +289,8 @@ fn make_filter_then_take_plan(
 }
 
 /// Check if the given expression tree can be pushed down into the scan.
-fn can_be_pushed_down(expr: &Expr) -> DFResult<bool> {
-    let r = match expr {
+fn can_be_pushed_down(expr: &Expr) -> bool {
+    match expr {
         Expr::BinaryExpr(expr) if expr.op == Operator::Eq => {
             let lhs = expr.left.as_ref();
             let rhs = expr.right.as_ref();
@@ -314,9 +314,7 @@ fn can_be_pushed_down(expr: &Expr) -> DFResult<bool> {
         }
 
         _ => false,
-    };
-
-    Ok(r)
+    }
 }
 
 /// Extract out the columns from our table referenced by the expression.
@@ -586,9 +584,7 @@ mod test {
             right: Box::new(lit("F")),
         };
         let e = Expr::BinaryExpr(e);
-        println!("{e:?}");
 
-        let r = can_be_pushed_down(&e).unwrap();
-        assert!(r);
+        assert!(can_be_pushed_down(&e));
     }
 }

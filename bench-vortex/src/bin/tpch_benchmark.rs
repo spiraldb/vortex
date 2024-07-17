@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::tpch::{load_datasets, tpch_queries, Format};
 use futures::future::try_join_all;
-use indicatif::ProgressBar;
+// use indicatif::ProgressBar;
 use prettytable::{Cell, Row, Table};
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
@@ -38,14 +38,14 @@ async fn main() {
     }
 
     // Setup a progress bar
-    let progress = ProgressBar::new(21 * formats.len() as u64);
+    // let progress = ProgressBar::new(21 * formats.len() as u64);
 
     // Send back a channel with the results of Row.
     let (rows_tx, rows_rx) = sync::mpsc::channel();
     for (q, query) in tpch_queries() {
         let _ctxs = ctxs.clone();
         let _tx = rows_tx.clone();
-        let _progress = progress.clone();
+        // let _progress = progress.clone();
         rayon::spawn_fifo(move || {
             let mut cells = Vec::with_capacity(formats.len());
             cells.push(Cell::new(&format!("Q{}", q)));
@@ -88,7 +88,7 @@ async fn main() {
                 let fastest = measure.iter().cloned().min().unwrap();
                 elapsed_us.push(fastest);
 
-                _progress.inc(1);
+                // _progress.inc(1);
             }
 
             let baseline = elapsed_us.first().unwrap();
@@ -131,6 +131,6 @@ async fn main() {
         table.add_row(row);
     }
 
-    progress.finish();
+    // progress.finish();
     table.printstd();
 }
