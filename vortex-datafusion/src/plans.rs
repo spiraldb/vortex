@@ -144,7 +144,7 @@ impl ExecutionPlan for RowSelectorExec {
             chunk_idx: 0,
             filter_projection: self.filter_projection.clone(),
             conjunction_expr,
-            _filter_schema: filter_schema,
+            filter_schema,
         }))
     }
 }
@@ -155,7 +155,7 @@ pub(crate) struct RowIndicesStream {
     chunk_idx: usize,
     conjunction_expr: Expr,
     filter_projection: Vec<usize>,
-    _filter_schema: SchemaRef,
+    filter_schema: SchemaRef,
 }
 
 impl Stream for RowIndicesStream {
@@ -441,13 +441,13 @@ mod test {
         let chunked_array =
             ChunkedArray::try_new(vec![chunk.clone(), chunk.clone()], dtype).unwrap();
 
-        let _schema = schema.clone();
+        let filter_schema = schema.clone();
         let filtering_stream = RowIndicesStream {
             chunked_array: chunked_array.clone(),
             chunk_idx: 0,
             conjunction_expr: and((col("a")).eq(lit(2u64)), col("b").eq(lit(true))),
             filter_projection: vec![0, 1],
-            _filter_schema: _schema,
+            filter_schema,
         };
 
         let rows: Vec<RecordBatch> = futures::executor::block_on_stream(filtering_stream)
