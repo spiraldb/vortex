@@ -1,7 +1,7 @@
 //! Implementation of Dictionary encoding.
 //!
 //! Expose a [DictArray] which is zero-copy equivalent to Arrow's
-//! [arrow_array::array::DictionaryArray] type.
+//! [DictionaryArray](https://docs.rs/arrow/latest/arrow/array/struct.DictionaryArray.html).
 pub use compress::*;
 pub use dict::*;
 
