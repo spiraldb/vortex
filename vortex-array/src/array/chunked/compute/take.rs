@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use vortex_dtype::PType;
 use vortex_error::VortexResult;
+use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
 use crate::array::primitive::PrimitiveArray;
@@ -89,7 +90,22 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
         let chunk_indices = slice(indices, pos, chunk_end_pos)?;
 
         // Adjust the indices so they're relative to the chunk
-        let chunk_indices = subtract_scalar(&chunk_indices, &chunk_begin.into())?;
+        // Note. Indices might not have a dtype big enough to fit chunk_begin after cast,
+        // if it does cast the scalar otherwise upcast the indices.
+        let chunk_indices = if chunk_begin < PType::try_from(chunk_indices.dtype())?.max_value() {
+            subtract_scalar(
+                &chunk_indices,
+                &Scalar::from(chunk_begin).cast(chunk_indices.dtype())?,
+            )?
+        } else {
+            // Note. this try_cast (memory copy) is unnecessary, could instead upcast in the subtract fn.
+            //  and avoid an extra
+            let u64_chunk_indices = try_cast(&chunk_indices, PType::U64.into())
+                .expect("safe to upcast since all indices are positive");
+
+            subtract_scalar(&u64_chunk_indices, &chunk_begin.into())?
+        };
+
         indices_by_chunk[chunk_idx] = Some(chunk_indices);
 
         pos = chunk_end_pos;
@@ -124,7 +140,7 @@ mod test {
             .unwrap();
         assert_eq!(arr.nchunks(), 3);
         assert_eq!(arr.len(), 9);
-        let indices = vec![0, 0, 6, 4].into_array();
+        let indices = vec![0u64, 0, 6, 4].into_array();
 
         let result = &ChunkedArray::try_from(take(arr.as_array_ref(), &indices).unwrap())
             .unwrap()

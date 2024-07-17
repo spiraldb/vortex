@@ -104,7 +104,9 @@ macro_rules! match_each_integer_ptype {
             PType::U16 => __with__! { u16 },
             PType::U32 => __with__! { u32 },
             PType::U64 => __with__! { u64 },
-            _ => panic!("Unsupported ptype {}", $self),
+            PType::F16 =>  panic!("Unsupported ptype f16"),
+            PType::F32 =>  panic!("Unsupported ptype f32"),
+            PType::F64 =>  panic!("Unsupported ptype f64"),
         }
     })
 }
@@ -162,6 +164,10 @@ impl PType {
 
     pub const fn bit_width(&self) -> usize {
         self.byte_width() * 8
+    }
+
+    pub const fn max_value(&self) -> usize {
+        match_each_integer_ptype!(self, |$T| $T::MAX as usize)
     }
 
     pub fn to_signed(self) -> Self {
