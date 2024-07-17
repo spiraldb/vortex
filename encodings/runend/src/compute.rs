@@ -69,7 +69,6 @@ mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::take;
     use vortex::{IntoArrayVariant, ToArray};
-    use vortex::{IntoArrayVariant, ToArray};
 
     use crate::RunEndArray;
 
