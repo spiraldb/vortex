@@ -14,7 +14,6 @@ impl ExperssionEvaluator {
     pub fn eval(data: StructArray, expr: &Expr) -> VortexResult<Array> {
         match expr {
             Expr::BinaryExpr(expr) => {
-                // println!("supported - {expr:?}");
                 let lhs = expr.left.as_ref();
                 let rhs = expr.right.as_ref();
 
@@ -54,7 +53,7 @@ impl ExperssionEvaluator {
 }
 
 fn df_scalar_to_const_array(scalar: &ScalarValue, len: usize) -> VortexResult<Array> {
-    let constant_array = match scalar {
+    let array = match scalar {
         ScalarValue::Null => None,
         ScalarValue::Boolean(b) => b.map(|b| ConstantArray::new(b, len).into_array()),
         ScalarValue::Float16(f) => f.map(|f| ConstantArray::new(f, len).into_array()),
@@ -109,6 +108,5 @@ fn df_scalar_to_const_array(scalar: &ScalarValue, len: usize) -> VortexResult<Ar
         ScalarValue::Dictionary(..) => todo!(),
     };
 
-    let r = constant_array.unwrap_or_else(|| NullArray::new(len).into_array());
-    Ok(r)
+    Ok(array.unwrap_or_else(|| NullArray::new(len).into_array()))
 }
