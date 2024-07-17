@@ -130,7 +130,7 @@ mod test {
     use vortex::compute::slice::slice;
     use vortex::compute::unary::scalar_at::scalar_at;
     use vortex::validity::Validity;
-    use vortex::{ArrayDType, IntoArray, IntoCanonical};
+    use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
     use vortex_dtype::{DType, Nullability, PType};
 
     use crate::default::RunEndArray;
@@ -179,11 +179,7 @@ mod test {
         assert_eq!(arr.len(), 5);
 
         assert_eq!(
-            arr.into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap()
-                .maybe_null_slice::<i32>(),
+            arr.into_primitive().unwrap().maybe_null_slice::<i32>(),
             vec![2, 2, 3, 3, 3]
         );
     }
@@ -198,11 +194,7 @@ mod test {
         .unwrap();
 
         assert_eq!(
-            arr.into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap()
-                .maybe_null_slice::<i32>(),
+            arr.into_primitive().unwrap().maybe_null_slice::<i32>(),
             vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]
         );
     }

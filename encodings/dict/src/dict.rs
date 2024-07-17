@@ -5,7 +5,7 @@ use vortex::compute::take::take;
 use vortex::compute::unary::scalar_at::scalar_at;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
+use vortex::{impl_encoding, ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::vortex_bail;
 
@@ -69,12 +69,7 @@ impl ArrayValidity for DictArray {
 
     fn logical_validity(&self) -> LogicalValidity {
         if self.dtype().is_nullable() {
-            let primitive_codes = self
-                .codes()
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap();
+            let primitive_codes = self.codes().into_primitive().unwrap();
             match_each_integer_ptype!(primitive_codes.ptype(), |$P| {
                 ArrayAccessor::<$P>::with_iterator(&primitive_codes, |iter| {
                     LogicalValidity::Array(
