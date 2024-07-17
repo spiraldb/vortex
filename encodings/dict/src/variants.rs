@@ -1,18 +1,32 @@
 use vortex::variants::{ArrayVariants, BinaryArrayTrait, PrimitiveArrayTrait, Utf8ArrayTrait};
+use vortex::ArrayDType;
+use vortex_dtype::DType;
 
 use crate::DictArray;
 
 impl ArrayVariants for DictArray {
     fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::Primitive(..)) {
+            Some(self)
+        } else {
+            None
+        }
     }
 
     fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::Utf8(..)) {
+            Some(self)
+        } else {
+            None
+        }
     }
 
     fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::Binary(..)) {
+            Some(self)
+        } else {
+            None
+        }
     }
 }
 

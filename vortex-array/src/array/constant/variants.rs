@@ -1,3 +1,4 @@
+use vortex_dtype::DType;
 use vortex_scalar::StructScalar;
 
 use crate::array::constant::ConstantArray;
@@ -5,40 +6,72 @@ use crate::variants::{
     ArrayVariants, BinaryArrayTrait, BoolArrayTrait, ExtensionArrayTrait, ListArrayTrait,
     NullArrayTrait, PrimitiveArrayTrait, StructArrayTrait, Utf8ArrayTrait,
 };
-use crate::{Array, IntoArray};
+use crate::{Array, ArrayDType, IntoArray};
 
 /// Constant arrays support all DTypes
 impl ArrayVariants for ConstantArray {
     fn as_null_array(&self) -> Option<&dyn NullArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::Null) {
+            Some(self)
+        } else {
+            None
+        }
     }
 
     fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::Bool(_)) {
+            Some(self)
+        } else {
+            None
+        }
     }
 
     fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::Primitive(..)) {
+            Some(self)
+        } else {
+            None
+        }
     }
 
     fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::Utf8(_)) {
+            Some(self)
+        } else {
+            None
+        }
     }
 
     fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::Binary(_)) {
+            Some(self)
+        } else {
+            None
+        }
     }
 
     fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::Struct(..)) {
+            Some(self)
+        } else {
+            None
+        }
     }
 
     fn as_list_array(&self) -> Option<&dyn ListArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::List(..)) {
+            Some(self)
+        } else {
+            None
+        }
     }
 
     fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {
-        Some(self)
+        if matches!(self.dtype(), DType::Extension(..)) {
+            Some(self)
+        } else {
+            None
+        }
     }
 }
 
