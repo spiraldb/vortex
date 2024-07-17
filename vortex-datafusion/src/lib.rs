@@ -1,5 +1,7 @@
 //! Connectors to enable DataFusion to read Vortex data.
 
+#![allow(clippy::nonminimal_bool)]
+
 use std::any::Any;
 use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
@@ -8,14 +10,14 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use arrow_array::{RecordBatch, StructArray as ArrowStructArray};
-use arrow_schema::SchemaRef;
+use arrow_schema::{DataType, SchemaRef};
 use async_trait::async_trait;
 use datafusion::dataframe::DataFrame;
 use datafusion::datasource::TableProvider;
 use datafusion::execution::context::SessionState;
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::prelude::SessionContext;
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion, TreeNodeVisitor};
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult};
 use datafusion_expr::{Expr, Operator, TableProviderFilterPushDown, TableType};
 use datafusion_physical_expr::EquivalenceProperties;
@@ -32,6 +34,7 @@ use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
 
 mod datatype;
+mod eval;
 mod expr;
 mod plans;
 
@@ -246,7 +249,7 @@ impl TableProvider for VortexMemTable {
         filters
             .iter()
             .map(|expr| {
-                if can_be_pushed_down(expr)? {
+                if can_be_pushed_down(expr) {
                     Ok(TableProviderFilterPushDown::Exact)
                 } else {
                     Ok(TableProviderFilterPushDown::Unsupported)
@@ -286,72 +289,32 @@ fn make_filter_then_take_plan(
 }
 
 /// Check if the given expression tree can be pushed down into the scan.
-fn can_be_pushed_down(expr: &Expr) -> DFResult<bool> {
-    // If the filter references a column not known to our schema, we reject the filter for pushdown.
-    fn is_supported(expr: &Expr) -> bool {
-        match expr {
-            Expr::BinaryExpr(binary_expr) => {
-                // Both the left and right sides must be column expressions, scalars, or casts.
+fn can_be_pushed_down(expr: &Expr) -> bool {
+    match expr {
+        Expr::BinaryExpr(expr) if expr.op == Operator::Eq => {
+            let lhs = expr.left.as_ref();
+            let rhs = expr.right.as_ref();
 
-                match binary_expr.op {
-                    // Initially, we will only support pushdown for basic boolean operators
-                    Operator::Eq
-                    | Operator::NotEq
-                    | Operator::Lt
-                    | Operator::LtEq
-                    | Operator::Gt
-                    | Operator::GtEq => true,
-
-                    // TODO(aduffy): add support for LIKE
-                    // TODO(aduffy): add support for basic mathematical ops +-*/
-                    // TODO(aduffy): add support for conjunctions, assuming all of the
-                    //  left and right are valid expressions.
-                    _ => false,
+            match (lhs, rhs) {
+                (Expr::Column(_), Expr::Column(_)) => true,
+                (Expr::Column(_), Expr::Literal(lit)) | (Expr::Literal(lit), Expr::Column(_)) => {
+                    let dt = lit.data_type();
+                    dt.is_integer()
+                        || dt.is_floating()
+                        || dt.is_signed_integer()
+                        || dt.is_null()
+                        || dt == DataType::Binary
+                        || dt == DataType::Utf8
+                        || dt == DataType::Binary
+                        || dt == DataType::BinaryView
+                        || dt == DataType::Utf8View
                 }
+                _ => false,
             }
-            Expr::IsNotNull(_)
-            | Expr::IsNull(_)
-            | Expr::IsTrue(_)
-            | Expr::IsFalse(_)
-            | Expr::IsNotTrue(_)
-            | Expr::IsNotFalse(_)
-            | Expr::Column(_)
-            | Expr::Literal(_)
-            // TODO(aduffy): ensure that cast can be pushed down.
-            | Expr::Cast(_) => true,
-            _ => false,
         }
+
+        _ => false,
     }
-
-    // Visitor that traverses the expression tree and tracks if any unsupported expressions were
-    // encountered.
-    struct IsSupportedVisitor {
-        supported_expressions_only: bool,
-    }
-
-    impl TreeNodeVisitor<'_> for IsSupportedVisitor {
-        type Node = Expr;
-
-        fn f_down(&mut self, node: &Self::Node) -> DFResult<TreeNodeRecursion> {
-            if !is_supported(node) {
-                self.supported_expressions_only = false;
-                return Ok(TreeNodeRecursion::Stop);
-            }
-
-            Ok(TreeNodeRecursion::Continue)
-        }
-    }
-
-    let mut visitor = IsSupportedVisitor {
-        supported_expressions_only: true,
-    };
-
-    // Traverse the tree.
-    // At the end of the traversal, the internal state of `visitor` will indicate if there were
-    // unsupported expressions encountered.
-    expr.visit(&mut visitor)?;
-
-    Ok(visitor.supported_expressions_only)
 }
 
 /// Extract out the columns from our table referenced by the expression.
@@ -505,7 +468,8 @@ mod test {
     use datafusion::arrow::array::AsArray;
     use datafusion::functions_aggregate::count::count_distinct;
     use datafusion::prelude::SessionContext;
-    use datafusion_expr::{col, lit};
+    use datafusion_common::{Column, TableReference};
+    use datafusion_expr::{col, lit, BinaryExpr, Expr, Operator};
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
@@ -513,7 +477,7 @@ mod test {
     use vortex::{Array, IntoArray};
     use vortex_dtype::{DType, Nullability};
 
-    use crate::{SessionContextExt, VortexMemTableOptions};
+    use crate::{can_be_pushed_down, SessionContextExt, VortexMemTableOptions};
 
     fn presidents_array() -> Array {
         let names = VarBinArray::from_vec(
@@ -602,5 +566,25 @@ mod test {
                 .unwrap(),
             4i64
         );
+    }
+
+    #[test]
+    fn test_can_be_pushed_down() {
+        let e = BinaryExpr {
+            left: Box::new(
+                Column {
+                    relation: Some(TableReference::Bare {
+                        table: "orders".into(),
+                    }),
+                    name: "o_orderstatus".to_string(),
+                }
+                .into(),
+            ),
+            op: Operator::Eq,
+            right: Box::new(lit("F")),
+        };
+        let e = Expr::BinaryExpr(e);
+
+        assert!(can_be_pushed_down(&e));
     }
 }

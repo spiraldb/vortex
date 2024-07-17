@@ -1,10 +1,13 @@
-use vortex_dtype::{match_each_native_ptype, Nullability, PType};
+use std::iter;
+
+use vortex_dtype::{match_each_native_ptype, DType, Nullability, PType};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_scalar::BoolScalar;
+use vortex_scalar::{BoolScalar, Utf8Scalar};
 
 use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
+use crate::array::varbin::VarBinArray;
 use crate::validity::Validity;
 use crate::ArrayDType;
 use crate::{Canonical, IntoCanonical};
@@ -23,6 +26,16 @@ impl IntoCanonical for ConstantArray {
             return Ok(Canonical::Bool(BoolArray::from_vec(
                 vec![b.value().unwrap_or_default(); self.len()],
                 validity,
+            )));
+        }
+
+        if let Ok(s) = Utf8Scalar::try_from(self.scalar()) {
+            let const_value = s.value().unwrap();
+            let bytes = const_value.as_bytes();
+
+            return Ok(Canonical::VarBin(VarBinArray::from_iter(
+                iter::repeat(Some(bytes)).take(self.len()),
+                DType::Utf8(validity.nullability()),
             )));
         }
 

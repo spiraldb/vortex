@@ -132,7 +132,7 @@ impl VarBinArray {
         dtype: DType,
     ) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinBuilder::<u64>::with_capacity(iter.size_hint().0);
+        let mut builder = VarBinBuilder::<u32>::with_capacity(iter.size_hint().0);
         for v in iter {
             builder.push(v.as_ref().map(|o| o.as_ref()));
         }

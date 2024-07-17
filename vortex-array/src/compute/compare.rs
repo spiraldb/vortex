@@ -1,30 +1,32 @@
-use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexResult};
+use arrow_ord::cmp;
+use vortex_error::VortexResult;
 use vortex_expr::Operator;
 
-use crate::{Array, ArrayDType, IntoArrayVariant};
+use crate::{arrow::FromArrowArray, Array, ArrayData, IntoArray, IntoCanonical};
 
 pub trait CompareFn {
-    fn compare(&self, array: &Array, predicate: Operator) -> VortexResult<Array>;
+    fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array>;
 }
 
 pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<Array> {
-    if let Some(matching_indices) =
-        left.with_dyn(|lhs| lhs.compare().map(|rhs| rhs.compare(right, operator)))
+    if let Some(selection) =
+        left.with_dyn(|lhs| lhs.compare().map(|lhs| lhs.compare(right, operator)))
     {
-        return matching_indices;
+        return selection;
     }
 
-    // if compare is not implemented for the given array type, but the array has a numeric
-    // DType, we can flatten the array and apply filter to the flattened primitive array
-    match left.dtype() {
-        DType::Primitive(..) => {
-            let flat = left.clone().into_primitive()?;
-            flat.compare(right, operator)
-        }
-        _ => Err(vortex_err!(
-            NotImplemented: "compare",
-            left.encoding().id()
-        )),
-    }
+    // Fallback to arrow on canonical types
+    let lhs = left.clone().into_canonical()?.into_arrow();
+    let rhs = right.clone().into_canonical()?.into_arrow();
+
+    let array = match operator {
+        Operator::Eq => cmp::eq(&lhs.as_ref(), &rhs.as_ref())?,
+        Operator::NotEq => cmp::neq(&lhs.as_ref(), &rhs.as_ref())?,
+        Operator::Gt => cmp::gt(&lhs.as_ref(), &rhs.as_ref())?,
+        Operator::Gte => cmp::gt_eq(&lhs.as_ref(), &rhs.as_ref())?,
+        Operator::Lt => cmp::lt(&lhs.as_ref(), &rhs.as_ref())?,
+        Operator::Lte => cmp::lt_eq(&lhs.as_ref(), &rhs.as_ref())?,
+    };
+
+    Ok(ArrayData::from_arrow(&array, true).into_array())
 }

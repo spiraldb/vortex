@@ -24,9 +24,9 @@ pub struct ConstantMetadata {
 impl ConstantArray {
     pub fn new<S>(scalar: S, length: usize) -> Self
     where
-        Scalar: From<S>,
+        S: Into<Scalar>,
     {
-        let scalar: Scalar = scalar.into();
+        let scalar = scalar.into();
         // TODO(aduffy): add stats for bools, ideally there should be a
         //  StatsSet::constant(Scalar) constructor that does this for us, like StatsSet::nulls.
         let stats = StatsSet::from(HashMap::from([

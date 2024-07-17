@@ -3,9 +3,7 @@ use vortex_scalar::Scalar;
 
 use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::compute::unary::scalar_at::ScalarAtFn;
-use crate::compute::ArrayCompute;
-use crate::compute::SliceFn;
-use crate::compute::TakeFn;
+use crate::compute::{ArrayCompute, SliceFn, TakeFn};
 use crate::validity::ArrayValidity;
 use crate::ArrayDType;
 

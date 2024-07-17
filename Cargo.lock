@@ -3998,6 +3998,7 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-cast",
+ "arrow-ord",
  "arrow-schema",
  "arrow-select",
  "build-vortex",

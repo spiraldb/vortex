@@ -15,7 +15,7 @@ vortex-array = { path = "../vortex-array" }
 vortex-dtype = { path = "../vortex-dtype" }
 vortex-expr = { path = "../vortex-expr" }
 vortex-error = { path = "../vortex-error" }
-vortex-scalar = { path = "../vortex-scalar" }
+vortex-scalar = { path = "../vortex-scalar", features = ["datafusion"] }
 
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
