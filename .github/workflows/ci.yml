@@ -25,9 +25,6 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: ./.github/actions/setup-python
 
-      - name: Rust Build
-        run: cargo build --all-features --all-targets
-
       - name: Python Lint - Format
         run: rye run ruff format --check .
       - name: Python Lint - Ruff
@@ -41,6 +38,8 @@ jobs:
         run: cargo doc --no-deps
       - name: Rust Test
         run: cargo test --workspace --all-features
+      - name: Rust Build
+        run: cargo build --all-features --all-targets
 
       - name: Pytest - PyVortex
         run: rye run pytest --benchmark-disable test/
