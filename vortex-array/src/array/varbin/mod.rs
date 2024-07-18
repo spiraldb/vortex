@@ -139,6 +139,10 @@ impl VarBinArray {
         builder.finish(dtype)
     }
 
+    // pub fn from_const<B: AsRef<[u8]>>(value: B) -> VortexResult<Self> {
+    //     todo!()
+    // }
+
     pub fn offset_at(&self, index: usize) -> usize {
         PrimitiveArray::try_from(self.offsets())
             .ok()

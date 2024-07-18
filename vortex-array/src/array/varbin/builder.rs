@@ -1,6 +1,5 @@
-use std::mem;
-
 use arrow_buffer::NullBufferBuilder;
+use bytes::BytesMut;
 use vortex_dtype::DType;
 use vortex_dtype::NativePType;
 
@@ -11,7 +10,7 @@ use crate::IntoArray;
 
 pub struct VarBinBuilder<O: NativePType> {
     offsets: Vec<O>,
-    data: Vec<u8>,
+    data: BytesMut,
     validity: NullBufferBuilder,
 }
 
@@ -21,7 +20,7 @@ impl<O: NativePType> VarBinBuilder<O> {
         offsets.push(O::zero());
         Self {
             offsets,
-            data: Vec::new(),
+            data: BytesMut::new(),
             validity: NullBufferBuilder::new(len),
         }
     }
@@ -48,9 +47,9 @@ impl<O: NativePType> VarBinBuilder<O> {
         self.validity.append_null();
     }
 
-    pub fn finish(&mut self, dtype: DType) -> VarBinArray {
-        let offsets = PrimitiveArray::from(mem::take(&mut self.offsets));
-        let data = PrimitiveArray::from(mem::take(&mut self.data));
+    pub fn finish(mut self, dtype: DType) -> VarBinArray {
+        let offsets = PrimitiveArray::from(self.offsets);
+        let data = PrimitiveArray::from(Vec::from(self.data.freeze()));
 
         let nulls = self.validity.finish();
 

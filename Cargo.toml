@@ -20,14 +20,12 @@ resolver = "2"
 version = "0.1.0"
 homepage = "https://github.com/fulcrum-so/vortex"
 repository = "https://github.com/fulcrum-so/vortex"
-authors = ["Robert Kruszewski <robert@fulcrum.so>, Nicholas Gates <nick@fulcrum.so>, Will Manning <will@fulcrum.so>"]
+authors = [
+    "Robert Kruszewski <robert@fulcrum.so>, Nicholas Gates <nick@fulcrum.so>, Will Manning <will@fulcrum.so>",
+]
 license = "Apache-2.0"
 keywords = ["vortex"]
-include = [
-    "benches/*.rs",
-    "src/**/*.rs",
-    "Cargo.toml",
-]
+include = ["benches/*.rs", "src/**/*.rs", "Cargo.toml"]
 edition = "2021"
 rust-version = "1.76"
 
@@ -116,3 +114,6 @@ warnings = "deny"
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 or_fun_call = "deny"
+
+[profile.release]
+debug = true

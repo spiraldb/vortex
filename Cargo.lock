@@ -4002,6 +4002,7 @@ dependencies = [
  "arrow-schema",
  "arrow-select",
  "build-vortex",
+ "bytes",
  "criterion",
  "enum-iterator",
  "flatbuffers",
