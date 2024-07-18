@@ -1,8 +1,8 @@
 use datafusion_expr::{Expr, Operator as DFOperator};
-use vortex::variants::StructArrayTrait;
 use vortex::{
     array::{bool::BoolArray, constant::ConstantArray},
     compute::compare,
+    variants::StructArrayTrait,
     Array, IntoArray, IntoArrayVariant,
 };
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -14,34 +14,35 @@ impl ExpressionEvaluator {
     pub fn eval(array: Array, expr: &Expr) -> VortexResult<Array> {
         match expr {
             Expr::BinaryExpr(expr) => {
-                let lhs = expr.left.as_ref();
-                let rhs = expr.right.as_ref();
+                let lhs = ExpressionEvaluator::eval(array.clone(), expr.left.as_ref())?;
+                let rhs = ExpressionEvaluator::eval(array, expr.right.as_ref())?;
 
                 // TODO(adamg): turn and/or into more general compute functions
                 match expr.op {
                     DFOperator::And => {
-                        let lhs = ExpressionEvaluator::eval(array.clone(), lhs)?.into_bool()?;
-                        let rhs = ExpressionEvaluator::eval(array, rhs)?.into_bool()?;
+                        let lhs = lhs.into_bool()?;
+                        let rhs = rhs.into_bool()?;
                         let buffer = &lhs.boolean_buffer() & &rhs.boolean_buffer();
                         Ok(BoolArray::from(buffer).into_array())
                     }
                     DFOperator::Or => {
-                        let lhs = ExpressionEvaluator::eval(array.clone(), lhs)?.into_bool()?;
-                        let rhs = ExpressionEvaluator::eval(array.clone(), rhs)?.into_bool()?;
+                        let lhs = lhs.into_bool()?;
+                        let rhs = rhs.into_bool()?;
                         let buffer = &lhs.boolean_buffer() | &rhs.boolean_buffer();
                         Ok(BoolArray::from(buffer).into_array())
                     }
-                    DFOperator::Eq => {
-                        let lhs = ExpressionEvaluator::eval(array.clone(), lhs)?;
-                        let rhs = ExpressionEvaluator::eval(array.clone(), rhs)?;
-                        compare(&lhs, &rhs, Operator::Eq)
-                    }
+                    DFOperator::Eq => compare(&lhs, &rhs, Operator::Eq),
+                    DFOperator::Gt => compare(&lhs, &rhs, Operator::Gt),
+                    DFOperator::GtEq => compare(&lhs, &rhs, Operator::Gte),
+                    DFOperator::Lt => compare(&lhs, &rhs, Operator::Lt),
+                    DFOperator::LtEq => compare(&lhs, &rhs, Operator::Lte),
+                    DFOperator::NotEq => compare(&lhs, &rhs, Operator::NotEq),
                     _ => vortex_bail!("{} is an unsupported operator", expr.op),
                 }
             }
             Expr::Column(col) => {
                 // TODO(adamg): Use variant trait once its merged
-                let array = array.clone().into_struct()?;
+                let array = array.into_struct()?;
                 let name = col.name();
                 array
                     .field_by_name(name)

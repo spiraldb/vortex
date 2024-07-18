@@ -17,7 +17,7 @@ use datafusion::datasource::TableProvider;
 use datafusion::execution::context::SessionState;
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::prelude::SessionContext;
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion, TreeNodeVisitor};
 use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult};
 use datafusion_expr::{Expr, Operator, TableProviderFilterPushDown, TableType};
 use datafusion_physical_expr::EquivalenceProperties;
@@ -37,6 +37,15 @@ mod datatype;
 mod eval;
 mod expr;
 mod plans;
+
+const SUPPORTED_BINARY_OPS: &[Operator] = &[
+    Operator::Eq,
+    Operator::NotEq,
+    Operator::Gt,
+    Operator::GtEq,
+    Operator::Lt,
+    Operator::LtEq,
+];
 
 /// Optional configurations to pass when loading a [VortexMemTable].
 #[derive(Default, Debug, Clone)]
@@ -249,7 +258,7 @@ impl TableProvider for VortexMemTable {
         filters
             .iter()
             .map(|expr| {
-                if can_be_pushed_down(expr) {
+                if can_be_pushed_down(expr)? {
                     Ok(TableProviderFilterPushDown::Exact)
                 } else {
                     Ok(TableProviderFilterPushDown::Unsupported)
@@ -288,33 +297,76 @@ fn make_filter_then_take_plan(
     ))
 }
 
-/// Check if the given expression tree can be pushed down into the scan.
-fn can_be_pushed_down(expr: &Expr) -> bool {
-    match expr {
-        Expr::BinaryExpr(expr) if expr.op == Operator::Eq => {
-            let lhs = expr.left.as_ref();
-            let rhs = expr.right.as_ref();
+fn supported_data_types(dt: DataType) -> bool {
+    dt.is_integer()
+        || dt.is_floating()
+        || dt.is_signed_integer()
+        || dt.is_null()
+        || dt == DataType::Binary
+        || dt == DataType::Utf8
+        || dt == DataType::Binary
+        || dt == DataType::BinaryView
+        || dt == DataType::Utf8View
+}
 
-            match (lhs, rhs) {
-                (Expr::Column(_), Expr::Column(_)) => true,
-                (Expr::Column(_), Expr::Literal(lit)) | (Expr::Literal(lit), Expr::Column(_)) => {
-                    let dt = lit.data_type();
-                    dt.is_integer()
-                        || dt.is_floating()
-                        || dt.is_signed_integer()
-                        || dt.is_null()
-                        || dt == DataType::Binary
-                        || dt == DataType::Utf8
-                        || dt == DataType::Binary
-                        || dt == DataType::BinaryView
-                        || dt == DataType::Utf8View
-                }
-                _ => false,
+/// Check if the given expression tree can be pushed down into the scan.
+fn can_be_pushed_down(expr: &Expr) -> DFResult<bool> {
+    fn is_supported(expr: &Expr) -> bool {
+        match expr {
+            Expr::BinaryExpr(expr)
+                if expr.op.is_logic_operator() || SUPPORTED_BINARY_OPS.contains(&expr.op) =>
+            {
+                let lhs = expr.left.as_ref();
+                let rhs = expr.right.as_ref();
+
+                matches!(
+                    (lhs, rhs),
+                    (Expr::Column(_), Expr::Column(_))
+                        | (Expr::Column(_), Expr::Literal(_))
+                        | (Expr::Literal(_), Expr::Column(_))
+                )
+            }
+            Expr::Column(_) => true,
+            Expr::Literal(lit) => supported_data_types(lit.data_type()),
+            _ => false,
+        }
+    }
+
+    // Visitor that traverses the expression tree and tracks if any unsupported expressions were
+    // encountered.
+    struct IsSupportedVisitor {
+        supported_expressions_only: bool,
+    }
+
+    impl IsSupportedVisitor {
+        fn new() -> Self {
+            Self {
+                supported_expressions_only: true,
             }
         }
-
-        _ => false,
     }
+
+    impl TreeNodeVisitor<'_> for IsSupportedVisitor {
+        type Node = Expr;
+
+        fn f_down(&mut self, node: &Self::Node) -> DFResult<TreeNodeRecursion> {
+            if !is_supported(node) {
+                self.supported_expressions_only = false;
+                return Ok(TreeNodeRecursion::Stop);
+            }
+
+            Ok(TreeNodeRecursion::Continue)
+        }
+    }
+
+    let mut visitor = IsSupportedVisitor::new();
+
+    // Traverse the tree.
+    // At the end of the traversal, the internal state of `visitor` will indicate if there were
+    // unsupported expressions encountered.
+    expr.visit(&mut visitor)?;
+
+    Ok(visitor.supported_expressions_only)
 }
 
 /// Extract out the columns from our table referenced by the expression.
@@ -585,6 +637,6 @@ mod test {
         };
         let e = Expr::BinaryExpr(e);
 
-        assert!(can_be_pushed_down(&e));
+        assert!(can_be_pushed_down(&e).unwrap());
     }
 }
