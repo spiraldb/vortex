@@ -7,6 +7,7 @@
 //! implementations of these operators, else we will decode, and perform the equivalent operator
 //! from Arrow.
 
+use arrow_array::cast::AsArray;
 pub use compare::{compare, CompareFn};
 pub use filter::{filter, FilterFn};
 pub use filter_indices::{filter_indices, FilterIndicesFn};
@@ -17,6 +18,10 @@ use unary::cast::CastFn;
 use unary::fill_forward::FillForwardFn;
 use unary::scalar_at::ScalarAtFn;
 use unary::scalar_subtract::SubtractScalarFn;
+use vortex_error::VortexResult;
+
+use crate::arrow::FromArrowArray;
+use crate::{Array, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
 
 mod compare;
 mod filter;
@@ -98,4 +103,28 @@ pub trait ArrayCompute {
     fn take(&self) -> Option<&dyn TakeFn> {
         None
     }
+}
+
+pub fn and(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
+    let lhs = lhs.clone().into_bool()?.into_canonical()?.into_arrow();
+    let lhs_bool = lhs.as_boolean();
+    let rhs = rhs.clone().into_bool()?.into_canonical()?.into_arrow();
+    let rhs_bool = rhs.as_boolean();
+
+    let data =
+        ArrayData::from_arrow(&arrow_arith::boolean::and(lhs_bool, rhs_bool)?, true).into_array();
+
+    Ok(data)
+}
+
+pub fn or(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
+    let lhs = lhs.clone().into_bool()?.into_canonical()?.into_arrow();
+    let lhs_bool = lhs.as_boolean();
+    let rhs = rhs.clone().into_bool()?.into_canonical()?.into_arrow();
+    let rhs_bool = rhs.as_boolean();
+
+    let data =
+        ArrayData::from_arrow(&arrow_arith::boolean::or(lhs_bool, rhs_bool)?, true).into_array();
+
+    Ok(data)
 }

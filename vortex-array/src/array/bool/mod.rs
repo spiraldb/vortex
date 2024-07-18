@@ -72,10 +72,6 @@ impl BoolArray {
         let buffer = BooleanBuffer::from(bools);
         Self::try_new(buffer, validity).unwrap()
     }
-
-    pub fn true_count(&self) -> usize {
-        self.statistics().compute_true_count().unwrap()
-    }
 }
 
 impl ArrayTrait for BoolArray {}

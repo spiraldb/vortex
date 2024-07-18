@@ -34,6 +34,7 @@ ahash = "0.8.11"
 allocator-api2 = "0.2.16"
 arrayref = "0.3.7"
 arrow = { version = "52.0.0", features = ["pyarrow"] }
+arrow-arith = "52.0.0"
 arrow-array = "52.0.0"
 arrow-buffer = "52.0.0"
 arrow-cast = "52.0.0"
