@@ -9,8 +9,6 @@
 //! arrays can be [canonicalized](Canonical) into for ease of access in compute functions.
 //!
 
-extern crate core;
-
 use std::fmt::{Debug, Display, Formatter};
 use std::future::ready;
 
