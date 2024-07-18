@@ -41,8 +41,8 @@ impl ExpressionEvaluator {
             }
             Expr::Column(col) => array.with_dyn(|a| {
                 let name = col.name();
-                a.as_struct_array_unchecked()
-                    .field_by_name(name)
+                a.as_struct_array()
+                    .and_then(|a| a.field_by_name(name))
                     .ok_or(vortex_err!("Missing field {name} in struct array"))
             }),
             Expr::Literal(lit) => Ok(ConstantArray::new(lit.clone(), array.len()).into_array()),
