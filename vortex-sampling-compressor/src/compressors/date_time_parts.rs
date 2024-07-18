@@ -1,6 +1,7 @@
-use vortex::array::datetime::LocalDateTimeArray;
+use vortex::array::datetime::temporal::TemporalMetadata;
+use vortex::array::datetime::TemporalArray;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray};
-use vortex_datetime_parts::{compress_localdatetime, DateTimeParts, DateTimePartsArray};
+use vortex_datetime_parts::{compress_temporal, DateTimeParts, DateTimePartsArray};
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
@@ -15,16 +16,15 @@ impl EncodingCompressor for DateTimePartsCompressor {
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
-        if LocalDateTimeArray::try_from(array).is_ok() {
-            return Some(self);
+        if let Ok(temporal_array) = TemporalArray::try_from(array) {
+            match temporal_array.temporal_metadata() {
+                // We only attempt to compress Timestamp arrays.
+                TemporalMetadata::Timestamp(..) => Some(self),
+                _ => None,
+            }
+        } else {
+            None
         }
-
-        // Only attempt to compress if it's Timestamp array, all of the other ones
-        // are sort of ridiculous.
-        // Date64 can be compressed down to day count, which makes it easier, but otherwise there's
-        // going to be a lot of weirdness here instead.
-
-        None
     }
 
     fn compress<'a>(
@@ -33,8 +33,7 @@ impl EncodingCompressor for DateTimePartsCompressor {
         like: Option<CompressionTree<'a>>,
         ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
-        let (days, seconds, subseconds) =
-            compress_localdatetime(LocalDateTimeArray::try_from(array)?)?;
+        let (days, seconds, subseconds) = compress_temporal(TemporalArray::try_from(array)?)?;
 
         let days = ctx
             .named("days")

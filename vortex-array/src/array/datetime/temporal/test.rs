@@ -148,8 +148,8 @@ fn test_timestamp() {
     let ts = PrimitiveArray::from_vec(vec![100i64], Validity::NonNullable);
     let ts_array = ts.clone().into_array();
 
-    for unit in vec![TimeUnit::S, TimeUnit::Ms, TimeUnit::Us, TimeUnit::Ns] {
-        for tz in vec![Some("UTC".to_string()), None] {
+    for unit in [TimeUnit::S, TimeUnit::Ms, TimeUnit::Us, TimeUnit::Ns] {
+        for tz in [Some("UTC".to_string()), None] {
             let temporal_array = TemporalArray::new_timestamp(ts_array.clone(), unit, tz.clone());
 
             let values = temporal_array.temporal_values().into_primitive().unwrap();

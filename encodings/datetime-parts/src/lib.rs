@@ -1,3 +1,5 @@
+extern crate core;
+
 pub use array::*;
 pub use compress::*;
 

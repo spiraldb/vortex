@@ -5,7 +5,7 @@ use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_error::vortex_bail;
 
-use crate::compute::decode_to_localdatetime;
+use crate::compute::decode_to_temporal;
 
 impl_encoding!("vortex.datetimeparts", 20u16, DateTimeParts);
 
@@ -81,9 +81,7 @@ impl ArrayTrait for DateTimePartsArray {}
 
 impl IntoCanonical for DateTimePartsArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        Ok(Canonical::Extension(
-            decode_to_localdatetime(&self.into_array())?.try_into()?,
-        ))
+        Ok(Canonical::Extension(decode_to_temporal(&self)?.into()))
     }
 }
 

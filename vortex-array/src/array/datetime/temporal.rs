@@ -57,7 +57,7 @@ impl TemporalMetadata {
         match self {
             TemporalMetadata::Time32(time_unit)
             | TemporalMetadata::Time64(time_unit)
-            | TemporalMetadata::Timestamp(time_unit, _) => time_unit.clone(),
+            | TemporalMetadata::Timestamp(time_unit, _) => *time_unit,
             TemporalMetadata::Date32 => TimeUnit::D,
             TemporalMetadata::Date64 => TimeUnit::Ms,
         }
@@ -83,6 +83,7 @@ impl TemporalMetadata {
 /// * `Date64`
 /// * `Interval`: *TODO*
 /// * `Duration`: *TODO*
+#[derive(Clone, Debug)]
 pub struct TemporalArray {
     /// The underlying Vortex array holding all of the data.
     ext: ExtensionArray,
@@ -231,6 +232,11 @@ impl TemporalArray {
     /// to understand the granularity of the samples and if they have an associated timezone.
     pub fn temporal_metadata(&self) -> &TemporalMetadata {
         &self.temporal_metadata
+    }
+
+    /// Retrieve the extension DType associated with the underlying array.
+    pub fn ext_dtype(&self) -> &ExtDType {
+        self.ext.ext_dtype()
     }
 }
 

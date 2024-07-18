@@ -1,18 +1,22 @@
-use vortex::array::datetime::{LocalDateTimeArray, TimeUnit};
+use vortex::array::datetime::{TemporalArray, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compute::unary::cast::try_cast;
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 
-pub fn compress_localdatetime(array: LocalDateTimeArray) -> VortexResult<(Array, Array, Array)> {
-    let timestamps = try_cast(&array.timestamps(), PType::I64.into())?.into_primitive()?;
-
-    let divisor = match array.time_unit() {
+/// Compress a `TemporalArray` into day, second, and subsecond components.
+///
+/// Splitting the components by granularity creates more small values, which enables all of the
+/// items here instead.
+pub fn compress_temporal(array: TemporalArray) -> VortexResult<(Array, Array, Array)> {
+    let timestamps = try_cast(&array.temporal_values(), PType::I64.into())?.into_primitive()?;
+    let divisor = match array.temporal_metadata().time_unit() {
         TimeUnit::Ns => 1_000_000_000,
         TimeUnit::Us => 1_000_000,
         TimeUnit::Ms => 1_000,
         TimeUnit::S => 1,
+        TimeUnit::D => vortex_bail!(InvalidArgument: "Cannot compress day-level data"),
     };
 
     let length = timestamps.len();

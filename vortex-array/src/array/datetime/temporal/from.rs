@@ -49,12 +49,7 @@ fn decode_timestamp_metadata(ext_meta: &ExtMetadata) -> VortexResult<TemporalMet
 
     // Attempt to load from len-prefixed bytes
     let tz_bytes = &ext_meta.as_ref()[3..(3 + (tz_len as usize))];
-    let tz = String::from_utf8_lossy(
-        tz_bytes
-            .try_into()
-            .map_err(|e| vortex_err!(ComputeError: "invalid byte slice for tz: {e}"))?,
-    )
-    .to_string();
+    let tz = String::from_utf8_lossy(tz_bytes).to_string();
     Ok(TemporalMetadata::Timestamp(time_unit, Some(tz)))
 }
 
