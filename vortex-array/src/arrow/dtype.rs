@@ -68,7 +68,11 @@ impl FromArrowType<&Field> for DType {
             DataType::Boolean => Bool(nullability),
             DataType::Utf8 | DataType::LargeUtf8 => Utf8(nullability),
             DataType::Binary | DataType::LargeBinary => Binary(nullability),
-            DataType::Time32(_) | DataType::Time64(_) | DataType::Timestamp(..) => Extension(
+            DataType::Date32
+            | DataType::Date64
+            | DataType::Time32(_)
+            | DataType::Time64(_)
+            | DataType::Timestamp(..) => Extension(
                 make_temporal_ext_dtype(field.data_type()),
                 field.is_nullable().into(),
             ),

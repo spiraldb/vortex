@@ -21,8 +21,6 @@ use vortex_dtype::{DType, Nullability, PType};
 
 /// Convert a Vortex [struct DType][DType] to an Arrow [Schema].
 ///
-/// To avoid ambiguity, Vortex types are mapped to the [DataType] that
-///
 /// # Panics
 ///
 /// This function will panic if the provided `dtype` is not a StructDType, or if the struct DType
