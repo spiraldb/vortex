@@ -314,7 +314,7 @@ fn can_be_pushed_down(expr: &Expr) -> bool {
         Expr::BinaryExpr(expr)
             if expr.op.is_logic_operator() || SUPPORTED_BINARY_OPS.contains(&expr.op) =>
         {
-            can_be_pushed_down(&expr.left.as_ref()) & can_be_pushed_down(&expr.right.as_ref())
+            can_be_pushed_down(expr.left.as_ref()) & can_be_pushed_down(expr.right.as_ref())
         }
         Expr::Column(_) => true,
         Expr::Literal(lit) => supported_data_types(lit.data_type()),
