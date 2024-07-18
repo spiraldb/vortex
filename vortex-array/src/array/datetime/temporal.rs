@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use lazy_static::lazy_static;
-use vortex_dtype::{DType, ExtDType, ExtID, ExtMetadata, Nullability, PType};
+use vortex_dtype::{DType, ExtDType, ExtID};
 
 use crate::array::datetime::TimeUnit;
 use crate::array::extension::ExtensionArray;
@@ -13,23 +11,15 @@ mod from;
 mod test;
 
 lazy_static! {
-    pub static ref DATE32_ID: ExtID = ExtID::from("arrow.date32");
-    pub static ref DATE64_ID: ExtID = ExtID::from("arrow.date64");
-    pub static ref TIME32_ID: ExtID = ExtID::from("arrow.time32");
-    pub static ref TIME64_ID: ExtID = ExtID::from("arrow.time64");
-    pub static ref TIMESTAMP_ID: ExtID = ExtID::from("arrow.timestamp");
-    pub static ref DATE32_EXT_DTYPE: ExtDType =
-        ExtDType::new(DATE32_ID.clone(), Some(ExtMetadata::new(Arc::new([]))));
-    pub static ref DATE64_EXT_DTYPE: ExtDType =
-        ExtDType::new(DATE64_ID.clone(), Some(ExtMetadata::new(Arc::new([]))));
+    pub static ref DATE_ID: ExtID = ExtID::from("vortex.date");
+    pub static ref TIME_ID: ExtID = ExtID::from("vortex.time");
+    pub static ref TIMESTAMP_ID: ExtID = ExtID::from("vortex.timestamp");
 }
 
 pub fn is_temporal_ext_type(id: &ExtID) -> bool {
     match id.as_ref() {
-        x if x == DATE32_ID.as_ref() => true,
-        x if x == DATE64_ID.as_ref() => true,
-        x if x == TIME32_ID.as_ref() => true,
-        x if x == TIME64_ID.as_ref() => true,
+        x if x == DATE_ID.as_ref() => true,
+        x if x == TIME_ID.as_ref() => true,
         x if x == TIMESTAMP_ID.as_ref() => true,
         _ => false,
     }
@@ -40,11 +30,9 @@ pub fn is_temporal_ext_type(id: &ExtID) -> bool {
 /// There is one enum for each of the temporal array types we can load from Arrow.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TemporalMetadata {
-    Time32(TimeUnit),
-    Time64(TimeUnit),
+    Time(TimeUnit),
+    Date(TimeUnit),
     Timestamp(TimeUnit, Option<String>),
-    Date32,
-    Date64,
 }
 
 impl TemporalMetadata {
@@ -55,11 +43,9 @@ impl TemporalMetadata {
     /// `arrow.timestamp`, it is a parameter.
     pub fn time_unit(&self) -> TimeUnit {
         match self {
-            TemporalMetadata::Time32(time_unit)
-            | TemporalMetadata::Time64(time_unit)
+            TemporalMetadata::Time(time_unit)
+            | TemporalMetadata::Date(time_unit)
             | TemporalMetadata::Timestamp(time_unit, _) => *time_unit,
-            TemporalMetadata::Date32 => TimeUnit::D,
-            TemporalMetadata::Date64 => TimeUnit::Ms,
         }
     }
 
@@ -95,58 +81,93 @@ pub struct TemporalArray {
     temporal_metadata: TemporalMetadata,
 }
 
+macro_rules! assert_width {
+    ($width:ty, $array:expr) => {{
+        let DType::Primitive(ptype, _) = $array.dtype() else {
+            panic!("array must have primitive type");
+        };
+
+        assert_eq!(
+            <$width as vortex_dtype::NativePType>::PTYPE,
+            *ptype,
+            "invalid ptype {} for array, expected {}",
+            <$width as vortex_dtype::NativePType>::PTYPE,
+            *ptype
+        );
+    }};
+}
+
 impl TemporalArray {
-    /// Create a new `TemporalArray` holding Arrow spec compliant Time32 data.
+    /// Create a new `TemporalArray` holding either i32 day offsets, or i64 millisecond offsets
+    /// that are evenly divisible by the number of 86,400,000.
+    ///
+    /// This is equivalent to the data described by either of the `Date32` or `Date64` data types
+    /// from Arrow.
     ///
     /// # Panics
     ///
-    /// If `array` does not hold Primitive i32 data, the function will panic.
-    pub fn new_time32(array: Array, time_unit: TimeUnit) -> Self {
-        assert!(
-            array
-                .dtype()
-                .eq_ignore_nullability(&DType::Primitive(PType::I32, Nullability::NonNullable)),
-            "time32 array must contain i32 data"
-        );
+    /// If the time unit is milliseconds, and the array is not of primitive I64 type, it panics.
+    ///
+    /// If the time unit is days, and the array is not of primitive I32 type, it panics.
+    ///
+    /// If any other time unit is provided, it panics.
+    pub fn new_date(array: Array, time_unit: TimeUnit) -> Self {
+        let ext_dtype = match time_unit {
+            TimeUnit::D => {
+                assert_width!(i32, array);
 
-        assert!(
-            time_unit == TimeUnit::S || time_unit == TimeUnit::Ms,
-            "time32 must have unit of seconds or milliseconds"
-        );
+                ExtDType::new(
+                    DATE_ID.clone(),
+                    Some(TemporalMetadata::Date(time_unit).into()),
+                )
+            }
+            TimeUnit::Ms => {
+                assert_width!(i64, array);
 
-        let temporal_metadata = TemporalMetadata::Time32(time_unit);
+                ExtDType::new(
+                    DATE_ID.clone(),
+                    Some(TemporalMetadata::Date(time_unit).into()),
+                )
+            }
+            _ => panic!("invalid TimeUnit {time_unit} for vortex.date"),
+        };
+
         Self {
-            ext: ExtensionArray::new(
-                ExtDType::new(TIME32_ID.clone(), Some(temporal_metadata.clone().into())),
-                array,
-            ),
-            temporal_metadata,
+            ext: ExtensionArray::new(ext_dtype, array),
+            temporal_metadata: TemporalMetadata::Date(time_unit),
         }
     }
 
-    /// Create a new `TemporalArray` holding Arrow spec compliant Time64 data.
+    /// Create a new `TemporalArray` holding one of the following values:
+    ///
+    /// * `i32` values representing seconds from the UNIX epoch
+    /// * `i32` values representing milliseconds from the UNIX epoch
+    /// * `i64` values representing microseconds from the UNIX epoch
+    /// * `i64` values representing nanoseconds from the UNIX epoch
+    ///
+    /// Note, this is equivalent to the set of values represented by the Time32 or Time64 types
+    /// from Arrow.
     ///
     /// # Panics
     ///
-    /// If `array` does not hold Primitive i64 data, the function will panic.
-    pub fn new_time64(array: Array, time_unit: TimeUnit) -> Self {
-        assert!(
-            array
-                .dtype()
-                .eq_ignore_nullability(&DType::Primitive(PType::I64, Nullability::NonNullable)),
-            "time32 array must contain i64 data"
-        );
+    /// If the time unit is seconds, and the array is not of primitive I32 type, it panics.
+    ///
+    /// If the time unit is milliseconds, and the array is not of primitive I32 type, it panics.
+    ///
+    /// If the time unit is microseconds, and the array is not of primitive I64 type, it panics.
+    ///
+    /// If the time unit is nanoseconds, and the array is not of primitive I64 type, it panics.
+    pub fn new_time(array: Array, time_unit: TimeUnit) -> Self {
+        match time_unit {
+            TimeUnit::S | TimeUnit::Ms => assert_width!(i32, array),
+            TimeUnit::Us | TimeUnit::Ns => assert_width!(i64, array),
+            TimeUnit::D => panic!("invalid unit D for vortex.time data"),
+        }
 
-        assert!(
-            time_unit == TimeUnit::Us || time_unit == TimeUnit::Ns,
-            "time32 must have unit of microseconds or nanoseconds"
-        );
-
-        let temporal_metadata = TemporalMetadata::Time64(time_unit);
-
+        let temporal_metadata = TemporalMetadata::Time(time_unit);
         Self {
             ext: ExtensionArray::new(
-                ExtDType::new(TIME64_ID.clone(), Some(temporal_metadata.clone().into())),
+                ExtDType::new(TIME_ID.clone(), Some(temporal_metadata.clone().into())),
                 array,
             ),
             temporal_metadata,
@@ -160,12 +181,7 @@ impl TemporalArray {
     ///
     /// If `array` does not hold Primitive i64 data, the function will panic.
     pub fn new_timestamp(array: Array, time_unit: TimeUnit, time_zone: Option<String>) -> Self {
-        assert!(
-            array
-                .dtype()
-                .eq_ignore_nullability(&DType::Primitive(PType::I64, Nullability::NonNullable)),
-            "timestamp array must contain i64 data"
-        );
+        assert_width!(i64, array);
 
         let temporal_metadata = TemporalMetadata::Timestamp(time_unit, time_zone);
 
@@ -175,44 +191,6 @@ impl TemporalArray {
                 array,
             ),
             temporal_metadata,
-        }
-    }
-
-    /// Create a new `TemporalArray` holding Arrow spec compliant Date32 data.
-    ///
-    /// # Panics
-    ///
-    /// If `array` does not hold Primitive i32 data, the function will panic.
-    pub fn new_date32(array: Array) -> Self {
-        assert!(
-            array
-                .dtype()
-                .eq_ignore_nullability(&DType::Primitive(PType::I32, Nullability::NonNullable)),
-            "date32 array must contain i32 data"
-        );
-
-        Self {
-            ext: ExtensionArray::new(DATE32_EXT_DTYPE.clone(), array),
-            temporal_metadata: TemporalMetadata::Date32,
-        }
-    }
-
-    /// Create a new `TemporalArray` holding Arrow spec compliant Date64 data.
-    ///
-    /// # Panics
-    ///
-    /// If `array` does not hold Primitive i64 data, the function will panic.
-    pub fn new_date64(array: Array) -> Self {
-        assert!(
-            array
-                .dtype()
-                .eq_ignore_nullability(&DType::Primitive(PType::I64, Nullability::NonNullable)),
-            "date64 array must contain i64 data"
-        );
-
-        Self {
-            ext: ExtensionArray::new(DATE64_EXT_DTYPE.clone(), array),
-            temporal_metadata: TemporalMetadata::Date64,
         }
     }
 }

@@ -1,7 +1,7 @@
 use vortex_dtype::{ExtDType, ExtMetadata};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
-use crate::array::datetime::temporal::TemporalMetadata;
+use crate::array::datetime::temporal::{TemporalMetadata, DATE_ID, TIMESTAMP_ID, TIME_ID};
 use crate::array::datetime::{TemporalArray, TimeUnit};
 use crate::array::extension::ExtensionArray;
 use crate::Array;
@@ -11,30 +11,30 @@ impl TryFrom<&ExtDType> for TemporalMetadata {
 
     fn try_from(ext_dtype: &ExtDType) -> Result<Self, Self::Error> {
         match ext_dtype.id().as_ref() {
-            "arrow.time32" => decode_time32_metadata(ext_dtype.metadata().unwrap()),
-            "arrow.time64" => decode_time64_metadata(ext_dtype.metadata().unwrap()),
-            "arrow.date32" => Ok(TemporalMetadata::Date32),
-            "arrow.date64" => Ok(TemporalMetadata::Date64),
-            "arrow.timestamp" => decode_timestamp_metadata(ext_dtype.metadata().unwrap()),
+            x if x == TIME_ID.as_ref() => decode_time_metadata(ext_dtype.metadata().unwrap()),
+            x if x == DATE_ID.as_ref() => decode_date_metadata(ext_dtype.metadata().unwrap()),
+            x if x == TIMESTAMP_ID.as_ref() => {
+                decode_timestamp_metadata(ext_dtype.metadata().unwrap())
+            }
             _ => {
-                vortex_bail!(InvalidArgument: "ExtDType must be known of the known temporal types")
+                vortex_bail!(InvalidArgument: "ExtDType must be one of the known temporal types")
             }
         }
     }
 }
 
-fn decode_time32_metadata(ext_meta: &ExtMetadata) -> VortexResult<TemporalMetadata> {
+fn decode_date_metadata(ext_meta: &ExtMetadata) -> VortexResult<TemporalMetadata> {
     let tag = ext_meta.as_ref()[0];
     let time_unit =
         TimeUnit::try_from(tag).map_err(|e| vortex_err!(ComputeError: "invalid unit tag: {e}"))?;
-    Ok(TemporalMetadata::Time32(time_unit))
+    Ok(TemporalMetadata::Date(time_unit))
 }
 
-fn decode_time64_metadata(ext_meta: &ExtMetadata) -> VortexResult<TemporalMetadata> {
+fn decode_time_metadata(ext_meta: &ExtMetadata) -> VortexResult<TemporalMetadata> {
     let tag = ext_meta.as_ref()[0];
     let time_unit =
         TimeUnit::try_from(tag).map_err(|e| vortex_err!(ComputeError: "invalid unit tag: {e}"))?;
-    Ok(TemporalMetadata::Time64(time_unit))
+    Ok(TemporalMetadata::Time(time_unit))
 }
 
 fn decode_timestamp_metadata(ext_meta: &ExtMetadata) -> VortexResult<TemporalMetadata> {
@@ -91,8 +91,9 @@ impl From<TemporalMetadata> for ExtMetadata {
     /// an `ExtensionArray`.
     fn from(value: TemporalMetadata) -> Self {
         match value {
-            // Time32/Time64 only need to encode the unit in their metadata
-            TemporalMetadata::Time64(time_unit) | TemporalMetadata::Time32(time_unit) => {
+            // Time32/Time64 and Date32/Date64 only need to encode the unit in their metadata
+            // The unit also unambiguously maps to the integer width of the backing array for all.
+            TemporalMetadata::Time(time_unit) | TemporalMetadata::Date(time_unit) => {
                 let mut meta = Vec::new();
                 let unit_tag: u8 = time_unit.into();
                 meta.push(unit_tag);
@@ -118,11 +119,6 @@ impl From<TemporalMetadata> for ExtMetadata {
                 };
 
                 ExtMetadata::from(meta.as_slice())
-            }
-            // Date32/Date64 arrays are unambiguous in the semantic meaning of their values, so
-            // the metadata can be an empty slice.
-            TemporalMetadata::Date32 | TemporalMetadata::Date64 => {
-                ExtMetadata::from(vec![].as_slice())
             }
         }
     }

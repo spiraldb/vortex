@@ -94,15 +94,19 @@ where
                     .into_array_data()
             }
             DataType::Time32(time_unit) => {
-                TemporalArray::new_time32(arr.into_array(), from_arrow_time_unit(time_unit))
+                TemporalArray::new_time(arr.into_array(), from_arrow_time_unit(time_unit))
                     .into_array_data()
             }
             DataType::Time64(time_unit) => {
-                TemporalArray::new_time64(arr.into_array(), from_arrow_time_unit(time_unit))
+                TemporalArray::new_time(arr.into_array(), from_arrow_time_unit(time_unit))
                     .into_array_data()
             }
-            DataType::Date32 => TemporalArray::new_date32(arr.into_array()).into_array_data(),
-            DataType::Date64 => TemporalArray::new_date64(arr.into_array()).into_array_data(),
+            DataType::Date32 => {
+                TemporalArray::new_date(arr.into_array(), TimeUnit::D).into_array_data()
+            }
+            DataType::Date64 => {
+                TemporalArray::new_date(arr.into_array(), TimeUnit::Ms).into_array_data()
+            }
             DataType::Duration(_) => todo!(),
             DataType::Interval(_) => todo!(),
             _ => panic!("Invalid data type for PrimitiveArray"),

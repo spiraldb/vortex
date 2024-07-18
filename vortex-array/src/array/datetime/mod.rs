@@ -6,9 +6,7 @@ use serde::{Deserialize, Serialize};
 pub use temporal::TemporalArray;
 use vortex_dtype::ExtDType;
 
-use crate::array::datetime::temporal::{
-    TemporalMetadata, DATE32_EXT_DTYPE, DATE64_EXT_DTYPE, TIME32_ID, TIME64_ID, TIMESTAMP_ID,
-};
+use crate::array::datetime::temporal::{TemporalMetadata, DATE_ID, TIMESTAMP_ID, TIME_ID};
 
 pub mod temporal;
 
@@ -66,19 +64,25 @@ pub fn make_temporal_ext_dtype(data_type: &DataType) -> ExtDType {
         DataType::Time32(time_unit) => {
             let time_unit = TimeUnit::from(time_unit);
             ExtDType::new(
-                TIME32_ID.clone(),
-                Some(TemporalMetadata::Time32(time_unit).into()),
+                TIME_ID.clone(),
+                Some(TemporalMetadata::Time(time_unit).into()),
             )
         }
         DataType::Time64(time_unit) => {
             let time_unit = TimeUnit::from(time_unit);
             ExtDType::new(
-                TIME64_ID.clone(),
-                Some(TemporalMetadata::Time64(time_unit).into()),
+                TIME_ID.clone(),
+                Some(TemporalMetadata::Time(time_unit).into()),
             )
         }
-        DataType::Date32 => DATE32_EXT_DTYPE.clone(),
-        DataType::Date64 => DATE64_EXT_DTYPE.clone(),
+        DataType::Date32 => ExtDType::new(
+            DATE_ID.clone(),
+            Some(TemporalMetadata::Date(TimeUnit::D).into()),
+        ),
+        DataType::Date64 => ExtDType::new(
+            DATE_ID.clone(),
+            Some(TemporalMetadata::Date(TimeUnit::Ms).into()),
+        ),
         _ => unimplemented!("we should fix this"),
     }
 }

@@ -308,22 +308,42 @@ fn temporal_to_arrow(temporal_array: TemporalArray) -> ArrayRef {
     }
 
     match temporal_array.temporal_metadata() {
-        TemporalMetadata::Time32(time_unit) => {
-            let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i32);
-            match time_unit {
-                TimeUnit::Ms => Arc::new(Time32MillisecondArray::new(scalars, nulls)),
-                TimeUnit::S => Arc::new(Time32SecondArray::new(scalars, nulls)),
-                _ => panic!("invalid TimeUnit for Time32 array {time_unit}"),
+        TemporalMetadata::Date(time_unit) => match time_unit {
+            TimeUnit::D => {
+                let (scalars, nulls) =
+                    extract_temporal_values!(temporal_array.temporal_values(), i32);
+                Arc::new(Date32Array::new(scalars, nulls))
             }
-        }
-        TemporalMetadata::Time64(time_unit) => {
-            let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i64);
-            match time_unit {
-                TimeUnit::Ns => Arc::new(Time64NanosecondArray::new(scalars, nulls)),
-                TimeUnit::Us => Arc::new(Time64MicrosecondArray::new(scalars, nulls)),
-                _ => panic!("invalid TimeUnit for Time64 array {time_unit}"),
+            TimeUnit::Ms => {
+                let (scalars, nulls) =
+                    extract_temporal_values!(temporal_array.temporal_values(), i64);
+                Arc::new(Date64Array::new(scalars, nulls))
             }
-        }
+            _ => panic!("invalid time_unit {time_unit} for vortex.date"),
+        },
+        TemporalMetadata::Time(time_unit) => match time_unit {
+            TimeUnit::S => {
+                let (scalars, nulls) =
+                    extract_temporal_values!(temporal_array.temporal_values(), i32);
+                Arc::new(Time32SecondArray::new(scalars, nulls))
+            }
+            TimeUnit::Ms => {
+                let (scalars, nulls) =
+                    extract_temporal_values!(temporal_array.temporal_values(), i32);
+                Arc::new(Time32MillisecondArray::new(scalars, nulls))
+            }
+            TimeUnit::Us => {
+                let (scalars, nulls) =
+                    extract_temporal_values!(temporal_array.temporal_values(), i64);
+                Arc::new(Time64MicrosecondArray::new(scalars, nulls))
+            }
+            TimeUnit::Ns => {
+                let (scalars, nulls) =
+                    extract_temporal_values!(temporal_array.temporal_values(), i64);
+                Arc::new(Time64NanosecondArray::new(scalars, nulls))
+            }
+            _ => panic!("invalid TimeUnit for Time32 array {time_unit}"),
+        },
         TemporalMetadata::Timestamp(time_unit, _) => {
             let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i64);
             match time_unit {
@@ -333,14 +353,6 @@ fn temporal_to_arrow(temporal_array: TemporalArray) -> ArrayRef {
                 TimeUnit::S => Arc::new(TimestampSecondArray::new(scalars, nulls)),
                 _ => panic!("invalid TimeUnit for Time32 array {time_unit}"),
             }
-        }
-        TemporalMetadata::Date32 => {
-            let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i32);
-            Arc::new(Date32Array::new(scalars, nulls))
-        }
-        TemporalMetadata::Date64 => {
-            let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i64);
-            Arc::new(Date64Array::new(scalars, nulls))
         }
     }
 }

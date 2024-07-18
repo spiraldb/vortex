@@ -11,13 +11,11 @@ lazy_static! {
         Field::new("n_regionkey", DataType::Int64, false),
         Field::new("n_comment", DataType::Utf8, true),
     ]);
-
     pub static ref REGION: Schema = Schema::new(vec![
         Field::new("r_regionkey", DataType::Int64, false),
         Field::new("r_name", DataType::Utf8, false),
         Field::new("r_comment", DataType::Utf8, true),
     ]);
-
     pub static ref PART: Schema = Schema::new(vec![
         Field::new("p_partkey", DataType::Int64, false),
         Field::new("p_name", DataType::Utf8, false),
@@ -29,7 +27,6 @@ lazy_static! {
         Field::new("p_retailprice", DataType::Float64, false),
         Field::new("p_comment", DataType::Utf8, false),
     ]);
-
     pub static ref SUPPLIER: Schema = Schema::new(vec![
         Field::new("s_suppkey", DataType::Int64, false),
         Field::new("s_name", DataType::Utf8, false),
@@ -39,7 +36,6 @@ lazy_static! {
         Field::new("s_acctbal", DataType::Float64, false),
         Field::new("s_comment", DataType::Utf8, false),
     ]);
-
     pub static ref PARTSUPP: Schema = Schema::new(vec![
         Field::new("ps_partkey", DataType::Int64, false),
         Field::new("ps_suppkey", DataType::Int64, false),
@@ -47,8 +43,6 @@ lazy_static! {
         Field::new("ps_supplycost", DataType::Float64, false),
         Field::new("ps_comment", DataType::Utf8, false),
     ]);
-
-
     pub static ref CUSTOMER: Schema = Schema::new(vec![
         Field::new("c_custkey", DataType::Int64, false),
         Field::new("c_name", DataType::Utf8, false),
@@ -59,7 +53,6 @@ lazy_static! {
         Field::new("c_mktsegment", DataType::Utf8, false),
         Field::new("c_comment", DataType::Utf8, false),
     ]);
-
     pub static ref ORDERS: Schema = Schema::new(vec![
         Field::new("o_orderkey", DataType::Int64, false),
         Field::new("o_custkey", DataType::Int64, false),
@@ -71,7 +64,6 @@ lazy_static! {
         Field::new("o_shippriority", DataType::Int32, false),
         Field::new("o_comment", DataType::Utf8, false),
     ]);
-
     pub static ref LINEITEM: Schema = Schema::new(vec![
         Field::new("l_orderkey", DataType::Int64, false),
         Field::new("l_partkey", DataType::Int64, false),

@@ -99,16 +99,18 @@ pub(crate) fn infer_data_type(dtype: &DType) -> DataType {
             // Try and match against the known extension DTypes.
             if let Ok(temporal_metadata) = TemporalMetadata::try_from(ext_dtype) {
                 match temporal_metadata {
-                    TemporalMetadata::Time32(time_unit) => DataType::Time32(match time_unit {
-                        TimeUnit::S => ArrowTimeUnit::Second,
-                        TimeUnit::Ms => ArrowTimeUnit::Millisecond,
-                        _ => panic!("invalid time_unit for Time32: {time_unit}"),
-                    }),
-                    TemporalMetadata::Time64(time_unit) => DataType::Time64(match time_unit {
-                        TimeUnit::Us => ArrowTimeUnit::Microsecond,
-                        TimeUnit::Ns => ArrowTimeUnit::Nanosecond,
-                        _ => panic!("invalid time_unit for Time64: {time_unit}"),
-                    }),
+                    TemporalMetadata::Time(time_unit) => match time_unit {
+                        TimeUnit::S => DataType::Time32(ArrowTimeUnit::Second),
+                        TimeUnit::Ms => DataType::Time32(ArrowTimeUnit::Millisecond),
+                        TimeUnit::Us => DataType::Time64(ArrowTimeUnit::Microsecond),
+                        TimeUnit::Ns => DataType::Time64(ArrowTimeUnit::Nanosecond),
+                        _ => panic!("invalid time_unit for Time: {time_unit}"),
+                    },
+                    TemporalMetadata::Date(time_unit) => match time_unit {
+                        TimeUnit::D => DataType::Date32,
+                        TimeUnit::Ms => DataType::Date64,
+                        _ => panic!("invalid time_unit for Date: {time_unit}"),
+                    },
                     TemporalMetadata::Timestamp(time_unit, tz) => DataType::Timestamp(
                         match time_unit {
                             TimeUnit::S => ArrowTimeUnit::Second,
@@ -119,8 +121,6 @@ pub(crate) fn infer_data_type(dtype: &DType) -> DataType {
                         },
                         tz.map(|s| Arc::from(s.into_boxed_str())),
                     ),
-                    TemporalMetadata::Date32 => DataType::Date32,
-                    TemporalMetadata::Date64 => DataType::Date64,
                 }
             } else {
                 panic!("unsupported extension type \"{}\"", ext_dtype.id().as_ref())
