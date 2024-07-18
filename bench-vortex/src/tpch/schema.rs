@@ -65,7 +65,7 @@ lazy_static! {
         Field::new("o_custkey", DataType::Int64, false),
         Field::new("o_orderstatus", DataType::Utf8, false),
         Field::new("o_totalprice", DataType::Float64, false),
-        Field::new("o_orderdate", DataType::Utf8, false),
+        Field::new("o_orderdate", DataType::Date32, false),
         Field::new("o_orderpriority", DataType::Utf8, false),
         Field::new("o_clerk", DataType::Utf8, false),
         Field::new("o_shippriority", DataType::Int32, false),
@@ -83,11 +83,9 @@ lazy_static! {
         Field::new("l_tax", DataType::Float64, false),
         Field::new("l_returnflag", DataType::Utf8, false),
         Field::new("l_linestatus", DataType::Utf8, false),
-        // NOTE: We don't support Arrow DATE type, but YYYY-MM-DD is lexicographically ordered
-        //  so we can just use Utf8 and adjust any queries that rely on date functions.
-        Field::new("l_shipdate", DataType::Utf8, false),
-        Field::new("l_commitdate", DataType::Utf8, false),
-        Field::new("l_receiptdate", DataType::Utf8, false),
+        Field::new("l_shipdate", DataType::Date32, false),
+        Field::new("l_commitdate", DataType::Date32, false),
+        Field::new("l_receiptdate", DataType::Date32, false),
         Field::new("l_shipinstruct", DataType::Utf8, false),
         Field::new("l_shipmode", DataType::Utf8, false),
         Field::new("l_comment", DataType::Utf8, false),

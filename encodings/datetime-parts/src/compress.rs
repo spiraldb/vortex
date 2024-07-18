@@ -7,8 +7,8 @@ use vortex_error::{vortex_bail, VortexResult};
 
 /// Compress a `TemporalArray` into day, second, and subsecond components.
 ///
-/// Splitting the components by granularity creates more small values, which enables all of the
-/// items here instead.
+/// Splitting the components by granularity creates more small values, which enables better
+/// cascading compression.
 pub fn compress_temporal(array: TemporalArray) -> VortexResult<(Array, Array, Array)> {
     let timestamps = try_cast(&array.temporal_values(), PType::I64.into())?.into_primitive()?;
     let divisor = match array.temporal_metadata().time_unit() {
