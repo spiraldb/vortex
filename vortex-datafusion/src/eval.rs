@@ -2,7 +2,6 @@ use datafusion_expr::{Expr, Operator as DFOperator};
 use vortex::{
     array::{bool::BoolArray, constant::ConstantArray},
     compute::compare,
-    variants::StructArrayTrait,
     Array, IntoArray, IntoArrayVariant,
 };
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -40,14 +39,12 @@ impl ExpressionEvaluator {
                     _ => vortex_bail!("{} is an unsupported operator", expr.op),
                 }
             }
-            Expr::Column(col) => {
-                // TODO(adamg): Use variant trait once its merged
-                let array = array.into_struct()?;
+            Expr::Column(col) => array.with_dyn(|a| {
                 let name = col.name();
-                array
+                a.as_struct_array_unchecked()
                     .field_by_name(name)
-                    .ok_or(vortex_err!("Missing field {name} in struct"))
-            }
+                    .ok_or(vortex_err!("Missing field {name} in struct array"))
+            }),
             Expr::Literal(lit) => Ok(ConstantArray::new(lit.clone(), array.len()).into_array()),
             _ => unreachable!(),
         }
