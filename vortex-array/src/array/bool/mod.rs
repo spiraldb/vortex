@@ -3,11 +3,12 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
 
+use crate::stats::ArrayStatistics;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::variants::{ArrayVariants, BoolArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, Canonical, IntoArrayVariant, IntoCanonical};
+use crate::{impl_encoding, Canonical, IntoCanonical};
 
 mod accessors;
 mod compute;
@@ -73,18 +74,7 @@ impl BoolArray {
     }
 
     pub fn true_count(&self) -> usize {
-        match self.logical_validity() {
-            LogicalValidity::AllValid(_) => self.boolean_buffer().count_set_bits(),
-            LogicalValidity::AllInvalid(_) => 0,
-            LogicalValidity::Array(arr) => {
-                let validity = arr.into_bool().unwrap().boolean_buffer();
-                validity
-                    .iter()
-                    .zip(self.boolean_buffer().iter())
-                    .map(|(is_valid, bit)| (is_valid & bit) as usize)
-                    .sum::<usize>()
-            }
-        }
+        self.statistics().compute_true_count().unwrap()
     }
 }
 
