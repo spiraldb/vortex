@@ -38,9 +38,7 @@ pub enum TemporalMetadata {
 impl TemporalMetadata {
     /// Retrieve the time unit associated with the array.
     ///
-    /// All temporal arrays have some sort of time unit. For some arrays, e.g. `arrow.date32`, the
-    /// time unit is statically known based on the extension type. For others, such as
-    /// `arrow.timestamp`, it is a parameter.
+    /// All temporal arrays have a single intrinsic time unit for all of its numeric values.
     pub fn time_unit(&self) -> TimeUnit {
         match self {
             TemporalMetadata::Time(time_unit)
@@ -59,7 +57,12 @@ impl TemporalMetadata {
     }
 }
 
-/// An array containing one of Arrow's temporal values.
+/// An array wrapper for primitive values that have an associated temporal meaning.
+///
+/// This is a wrapper around ExtensionArrays containing numeric types, each of which corresponds to
+/// either a timestamp or julian date (both referenced to UNIX epoch), OR a time since midnight.
+///
+/// ## Arrow compatibility
 ///
 /// TemporalArray can be created from Arrow arrays containing the following datatypes:
 /// * `Time32`
@@ -67,11 +70,12 @@ impl TemporalMetadata {
 /// * `Timestamp`
 /// * `Date32`
 /// * `Date64`
-/// * `Interval`: *TODO*
-/// * `Duration`: *TODO*
+///
+/// Anything that can be constructed and held in a `TemporalArray` can also be zero-copy converted
+/// back to the relevant Arrow datatype.
 #[derive(Clone, Debug)]
 pub struct TemporalArray {
-    /// The underlying Vortex array holding all of the data.
+    /// The underlying Vortex extension array holding all the numeric values.
     ext: ExtensionArray,
 
     /// In-memory representation of the ExtMetadata that is held by the underlying extension array.
@@ -180,6 +184,8 @@ impl TemporalArray {
     /// # Panics
     ///
     /// If `array` does not hold Primitive i64 data, the function will panic.
+    ///
+    /// If the time_unit is days, the function will panic.
     pub fn new_timestamp(array: Array, time_unit: TimeUnit, time_zone: Option<String>) -> Self {
         assert_width!(i64, array);
 
