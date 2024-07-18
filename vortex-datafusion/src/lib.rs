@@ -17,7 +17,7 @@ use datafusion::datasource::TableProvider;
 use datafusion::execution::context::SessionState;
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::prelude::SessionContext;
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion, TreeNodeVisitor};
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult};
 use datafusion_expr::{Expr, Operator, TableProviderFilterPushDown, TableType};
 use datafusion_physical_expr::EquivalenceProperties;
@@ -258,7 +258,7 @@ impl TableProvider for VortexMemTable {
         filters
             .iter()
             .map(|expr| {
-                if can_be_pushed_down(expr)? {
+                if can_be_pushed_down(expr) {
                     Ok(TableProviderFilterPushDown::Exact)
                 } else {
                     Ok(TableProviderFilterPushDown::Unsupported)
@@ -309,64 +309,17 @@ fn supported_data_types(dt: DataType) -> bool {
         || dt == DataType::Utf8View
 }
 
-/// Check if the given expression tree can be pushed down into the scan.
-fn can_be_pushed_down(expr: &Expr) -> DFResult<bool> {
-    fn is_supported(expr: &Expr) -> bool {
-        match expr {
-            Expr::BinaryExpr(expr)
-                if expr.op.is_logic_operator() || SUPPORTED_BINARY_OPS.contains(&expr.op) =>
-            {
-                let lhs = expr.left.as_ref();
-                let rhs = expr.right.as_ref();
-
-                matches!(
-                    (lhs, rhs),
-                    (Expr::Column(_), Expr::Column(_))
-                        | (Expr::Column(_), Expr::Literal(_))
-                        | (Expr::Literal(_), Expr::Column(_))
-                )
-            }
-            Expr::Column(_) => true,
-            Expr::Literal(lit) => supported_data_types(lit.data_type()),
-            _ => false,
+fn can_be_pushed_down(expr: &Expr) -> bool {
+    match expr {
+        Expr::BinaryExpr(expr)
+            if expr.op.is_logic_operator() || SUPPORTED_BINARY_OPS.contains(&expr.op) =>
+        {
+            can_be_pushed_down(&expr.left.as_ref()) & can_be_pushed_down(&expr.right.as_ref())
         }
+        Expr::Column(_) => true,
+        Expr::Literal(lit) => supported_data_types(lit.data_type()),
+        _ => false,
     }
-
-    // Visitor that traverses the expression tree and tracks if any unsupported expressions were
-    // encountered.
-    struct IsSupportedVisitor {
-        supported_expressions_only: bool,
-    }
-
-    impl IsSupportedVisitor {
-        fn new() -> Self {
-            Self {
-                supported_expressions_only: true,
-            }
-        }
-    }
-
-    impl TreeNodeVisitor<'_> for IsSupportedVisitor {
-        type Node = Expr;
-
-        fn f_down(&mut self, node: &Self::Node) -> DFResult<TreeNodeRecursion> {
-            if !is_supported(node) {
-                self.supported_expressions_only = false;
-                return Ok(TreeNodeRecursion::Stop);
-            }
-
-            Ok(TreeNodeRecursion::Continue)
-        }
-    }
-
-    let mut visitor = IsSupportedVisitor::new();
-
-    // Traverse the tree.
-    // At the end of the traversal, the internal state of `visitor` will indicate if there were
-    // unsupported expressions encountered.
-    expr.visit(&mut visitor)?;
-
-    Ok(visitor.supported_expressions_only)
 }
 
 /// Extract out the columns from our table referenced by the expression.
@@ -621,7 +574,7 @@ mod test {
     }
 
     #[test]
-    fn test_can_be_pushed_down() {
+    fn test_can_be_pushed_down0() {
         let e = BinaryExpr {
             left: Box::new(
                 Column {
@@ -637,6 +590,32 @@ mod test {
         };
         let e = Expr::BinaryExpr(e);
 
-        assert!(can_be_pushed_down(&e).unwrap());
+        assert!(can_be_pushed_down(&e));
+    }
+
+    #[test]
+    fn test_can_be_pushed_down1() {
+        let e = lit("hello");
+
+        assert!(can_be_pushed_down(&e));
+    }
+
+    #[test]
+    fn test_can_be_pushed_down2() {
+        let e = lit(3);
+
+        assert!(can_be_pushed_down(&e));
+    }
+
+    #[test]
+    fn test_can_be_pushed_down3() {
+        let e = BinaryExpr {
+            left: Box::new(col("nums")),
+            op: Operator::Modulo,
+            right: Box::new(lit(5)),
+        };
+        let e = Expr::BinaryExpr(e);
+
+        assert!(!can_be_pushed_down(&e));
     }
 }
