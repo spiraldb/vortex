@@ -38,6 +38,15 @@ mod eval;
 mod expr;
 mod plans;
 
+const SUPPORTED_BINARY_OPS: &[Operator] = &[
+    Operator::Eq,
+    Operator::NotEq,
+    Operator::Gt,
+    Operator::GtEq,
+    Operator::Lt,
+    Operator::LtEq,
+];
+
 /// Optional configurations to pass when loading a [VortexMemTable].
 #[derive(Default, Debug, Clone)]
 pub struct VortexMemTableOptions {
@@ -288,31 +297,27 @@ fn make_filter_then_take_plan(
     ))
 }
 
-/// Check if the given expression tree can be pushed down into the scan.
+fn supported_data_types(dt: DataType) -> bool {
+    dt.is_integer()
+        || dt.is_floating()
+        || dt.is_signed_integer()
+        || dt.is_null()
+        || dt == DataType::Binary
+        || dt == DataType::Utf8
+        || dt == DataType::Binary
+        || dt == DataType::BinaryView
+        || dt == DataType::Utf8View
+}
+
 fn can_be_pushed_down(expr: &Expr) -> bool {
     match expr {
-        Expr::BinaryExpr(expr) if expr.op == Operator::Eq => {
-            let lhs = expr.left.as_ref();
-            let rhs = expr.right.as_ref();
-
-            match (lhs, rhs) {
-                (Expr::Column(_), Expr::Column(_)) => true,
-                (Expr::Column(_), Expr::Literal(lit)) | (Expr::Literal(lit), Expr::Column(_)) => {
-                    let dt = lit.data_type();
-                    dt.is_integer()
-                        || dt.is_floating()
-                        || dt.is_signed_integer()
-                        || dt.is_null()
-                        || dt == DataType::Binary
-                        || dt == DataType::Utf8
-                        || dt == DataType::Binary
-                        || dt == DataType::BinaryView
-                        || dt == DataType::Utf8View
-                }
-                _ => false,
-            }
+        Expr::BinaryExpr(expr)
+            if expr.op.is_logic_operator() || SUPPORTED_BINARY_OPS.contains(&expr.op) =>
+        {
+            can_be_pushed_down(expr.left.as_ref()) & can_be_pushed_down(expr.right.as_ref())
         }
-
+        Expr::Column(_) => true,
+        Expr::Literal(lit) => supported_data_types(lit.data_type()),
         _ => false,
     }
 }
@@ -569,7 +574,7 @@ mod test {
     }
 
     #[test]
-    fn test_can_be_pushed_down() {
+    fn test_can_be_pushed_down0() {
         let e = BinaryExpr {
             left: Box::new(
                 Column {
@@ -586,5 +591,31 @@ mod test {
         let e = Expr::BinaryExpr(e);
 
         assert!(can_be_pushed_down(&e));
+    }
+
+    #[test]
+    fn test_can_be_pushed_down1() {
+        let e = lit("hello");
+
+        assert!(can_be_pushed_down(&e));
+    }
+
+    #[test]
+    fn test_can_be_pushed_down2() {
+        let e = lit(3);
+
+        assert!(can_be_pushed_down(&e));
+    }
+
+    #[test]
+    fn test_can_be_pushed_down3() {
+        let e = BinaryExpr {
+            left: Box::new(col("nums")),
+            op: Operator::Modulo,
+            right: Box::new(lit(5)),
+        };
+        let e = Expr::BinaryExpr(e);
+
+        assert!(!can_be_pushed_down(&e));
     }
 }
