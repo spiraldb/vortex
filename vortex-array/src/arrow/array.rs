@@ -18,13 +18,14 @@ use arrow_array::types::{
 use arrow_array::{BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
-use arrow_schema::{DataType, TimeUnit};
+use arrow_schema::{DataType, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
 use vortex_dtype::NativePType;
 use vortex_dtype::{DType, PType};
 
 use crate::array::bool::BoolArray;
-use crate::array::datetime::LocalDateTimeArray;
+use crate::array::datetime::temporal::TemporalArray;
+use crate::array::datetime::TimeUnit;
 use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
@@ -87,18 +88,21 @@ where
         }
 
         match T::DATA_TYPE {
-            DataType::Timestamp(time_unit, tz) => match tz {
-                // A timestamp with no timezone is the equivalent of an "unknown" timezone.
-                // Therefore, we must treat it as a LocalDateTime and not an Instant.
-                None => LocalDateTimeArray::try_new((&time_unit).into(), arr.into_array())
-                    .expect("Invalid LocalDateTimeArray")
-                    .into_array_data(),
-                Some(_tz) => todo!(),
-            },
-            DataType::Date32 => todo!(),
-            DataType::Date64 => todo!(),
-            DataType::Time32(_) => todo!(),
-            DataType::Time64(_) => todo!(),
+            DataType::Timestamp(time_unit, tz) => {
+                let tz = tz.clone().map(|s| s.to_string());
+                TemporalArray::new_timestamp(arr.into_array(), from_arrow_time_unit(time_unit), tz)
+                    .into_array_data()
+            }
+            DataType::Time32(time_unit) => {
+                TemporalArray::new_time32(arr.into_array(), from_arrow_time_unit(time_unit))
+                    .into_array_data()
+            }
+            DataType::Time64(time_unit) => {
+                TemporalArray::new_time64(arr.into_array(), from_arrow_time_unit(time_unit))
+                    .into_array_data()
+            }
+            DataType::Date32 => TemporalArray::new_date32(arr.into_array()).into_array_data(),
+            DataType::Date64 => TemporalArray::new_date64(arr.into_array()).into_array_data(),
             DataType::Duration(_) => todo!(),
             DataType::Interval(_) => todo!(),
             _ => panic!("Invalid data type for PrimitiveArray"),
@@ -236,50 +240,50 @@ impl FromArrowArray<ArrowArrayRef> for ArrayData {
             DataType::Struct(_) => Self::from_arrow(array.as_struct(), nullable),
             DataType::Null => Self::from_arrow(as_null_array(&array), nullable),
             DataType::Timestamp(u, _) => match u {
-                TimeUnit::Second => {
+                ArrowTimeUnit::Second => {
                     Self::from_arrow(array.as_primitive::<TimestampSecondType>(), nullable)
                 }
-                TimeUnit::Millisecond => {
+                ArrowTimeUnit::Millisecond => {
                     Self::from_arrow(array.as_primitive::<TimestampMillisecondType>(), nullable)
                 }
-                TimeUnit::Microsecond => {
+                ArrowTimeUnit::Microsecond => {
                     Self::from_arrow(array.as_primitive::<TimestampMicrosecondType>(), nullable)
                 }
-                TimeUnit::Nanosecond => {
+                ArrowTimeUnit::Nanosecond => {
                     Self::from_arrow(array.as_primitive::<TimestampNanosecondType>(), nullable)
                 }
             },
             DataType::Date32 => Self::from_arrow(array.as_primitive::<Date32Type>(), nullable),
             DataType::Date64 => Self::from_arrow(array.as_primitive::<Date64Type>(), nullable),
             DataType::Time32(u) => match u {
-                TimeUnit::Second => {
+                ArrowTimeUnit::Second => {
                     Self::from_arrow(array.as_primitive::<Time32SecondType>(), nullable)
                 }
-                TimeUnit::Millisecond => {
+                ArrowTimeUnit::Millisecond => {
                     Self::from_arrow(array.as_primitive::<Time32MillisecondType>(), nullable)
                 }
                 _ => unreachable!(),
             },
             DataType::Time64(u) => match u {
-                TimeUnit::Microsecond => {
+                ArrowTimeUnit::Microsecond => {
                     Self::from_arrow(array.as_primitive::<Time64MicrosecondType>(), nullable)
                 }
-                TimeUnit::Nanosecond => {
+                ArrowTimeUnit::Nanosecond => {
                     Self::from_arrow(array.as_primitive::<Time64NanosecondType>(), nullable)
                 }
                 _ => unreachable!(),
             },
             DataType::Duration(u) => match u {
-                TimeUnit::Second => {
+                ArrowTimeUnit::Second => {
                     Self::from_arrow(array.as_primitive::<DurationSecondType>(), nullable)
                 }
-                TimeUnit::Millisecond => {
+                ArrowTimeUnit::Millisecond => {
                     Self::from_arrow(array.as_primitive::<DurationMillisecondType>(), nullable)
                 }
-                TimeUnit::Microsecond => {
+                ArrowTimeUnit::Microsecond => {
                     Self::from_arrow(array.as_primitive::<DurationMicrosecondType>(), nullable)
                 }
-                TimeUnit::Nanosecond => {
+                ArrowTimeUnit::Nanosecond => {
                     Self::from_arrow(array.as_primitive::<DurationNanosecondType>(), nullable)
                 }
             },
@@ -288,5 +292,14 @@ impl FromArrowArray<ArrowArrayRef> for ArrayData {
                 array.data_type().clone()
             ),
         }
+    }
+}
+
+fn from_arrow_time_unit(time_unit: ArrowTimeUnit) -> TimeUnit {
+    match time_unit {
+        ArrowTimeUnit::Second => TimeUnit::S,
+        ArrowTimeUnit::Millisecond => TimeUnit::Ms,
+        ArrowTimeUnit::Microsecond => TimeUnit::Us,
+        ArrowTimeUnit::Nanosecond => TimeUnit::Ns,
     }
 }

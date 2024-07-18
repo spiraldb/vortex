@@ -1,12 +1,16 @@
 use std::fmt::{Display, Formatter};
 
-use lazy_static::lazy_static;
-pub use localdatetime::*;
+use arrow_schema::DataType;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
-use vortex_dtype::ExtMetadata;
+pub use temporal::TemporalArray;
+use vortex_dtype::ExtDType;
 
-mod localdatetime;
+use crate::array::datetime::temporal::{
+    TemporalMetadata, DATE32_EXT_DTYPE, DATE64_EXT_DTYPE, TIME32_ID, TIME64_ID, TIMESTAMP_ID,
+};
+
+pub mod temporal;
 
 #[derive(
     Debug,
@@ -28,33 +32,53 @@ pub enum TimeUnit {
     Us,
     Ms,
     S,
-}
-
-lazy_static! {
-    static ref METADATA_NS: ExtMetadata = ExtMetadata::from([TimeUnit::Ns.into()].as_ref());
-    static ref METADATA_US: ExtMetadata = ExtMetadata::from([TimeUnit::Us.into()].as_ref());
-    static ref METADATA_MS: ExtMetadata = ExtMetadata::from([TimeUnit::Ms.into()].as_ref());
-    static ref METADATA_S: ExtMetadata = ExtMetadata::from([TimeUnit::S.into()].as_ref());
-}
-
-impl TimeUnit {
-    pub fn metadata(&self) -> &ExtMetadata {
-        match self {
-            Self::Ns => &METADATA_NS,
-            Self::Us => &METADATA_US,
-            Self::Ms => &METADATA_MS,
-            Self::S => &METADATA_S,
-        }
-    }
+    D,
 }
 
 impl Display for TimeUnit {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Ns => write!(f, "ns"),
-            Self::Us => write!(f, "us"),
+            Self::Us => write!(f, "µs"),
             Self::Ms => write!(f, "ms"),
             Self::S => write!(f, "s"),
+            Self::D => write!(f, "days"),
         }
+    }
+}
+
+/// Construct an extension type from the provided temporal Arrow type.
+///
+/// Supported types are Date32, Date64, Time32, Time64, Timestamp.
+pub fn make_temporal_ext_dtype(data_type: &DataType) -> ExtDType {
+    assert!(data_type.is_temporal(), "Must receive a temporal DataType");
+
+    match data_type {
+        DataType::Timestamp(time_unit, time_zone) => {
+            let time_unit = TimeUnit::from(time_unit);
+            let tz = time_zone.clone().map(|s| s.to_string());
+
+            ExtDType::new(
+                TIMESTAMP_ID.clone(),
+                Some(TemporalMetadata::Timestamp(time_unit, tz).into()),
+            )
+        }
+        DataType::Time32(time_unit) => {
+            let time_unit = TimeUnit::from(time_unit);
+            ExtDType::new(
+                TIME32_ID.clone(),
+                Some(TemporalMetadata::Time32(time_unit).into()),
+            )
+        }
+        DataType::Time64(time_unit) => {
+            let time_unit = TimeUnit::from(time_unit);
+            ExtDType::new(
+                TIME64_ID.clone(),
+                Some(TemporalMetadata::Time64(time_unit).into()),
+            )
+        }
+        DataType::Date32 => DATE32_EXT_DTYPE.clone(),
+        DataType::Date64 => DATE64_EXT_DTYPE.clone(),
+        _ => unimplemented!("we should fix this"),
     }
 }

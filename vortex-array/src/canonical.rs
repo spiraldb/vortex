@@ -5,18 +5,21 @@ use arrow_array::types::{
     UInt32Type, UInt64Type, UInt8Type,
 };
 use arrow_array::{
-    ArrayRef, ArrowPrimitiveType, BinaryArray, BooleanArray as ArrowBoolArray, LargeBinaryArray,
-    LargeStringArray, NullArray as ArrowNullArray, PrimitiveArray as ArrowPrimitiveArray,
-    StringArray, StructArray as ArrowStructArray, TimestampMicrosecondArray,
-    TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
+    ArrayRef, ArrowPrimitiveType, BinaryArray, BooleanArray as ArrowBoolArray, Date32Array,
+    Date64Array, LargeBinaryArray, LargeStringArray, NullArray as ArrowNullArray,
+    PrimitiveArray as ArrowPrimitiveArray, StringArray, StructArray as ArrowStructArray,
+    Time32MillisecondArray, Time32SecondArray, Time64MicrosecondArray, Time64NanosecondArray,
+    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
+    TimestampSecondArray,
 };
 use arrow_buffer::ScalarBuffer;
 use arrow_schema::{Field, Fields};
-use vortex_dtype::{DType, PType};
+use vortex_dtype::{DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::bool::BoolArray;
-use crate::array::datetime::{LocalDateTimeArray, TimeUnit};
+use crate::array::datetime::temporal::{is_temporal_ext_type, TemporalMetadata};
+use crate::array::datetime::{TemporalArray, TimeUnit};
 use crate::array::extension::ExtensionArray;
 use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
@@ -77,12 +80,16 @@ impl Canonical {
             Canonical::Primitive(a) => primitive_to_arrow(a),
             Canonical::Struct(a) => struct_to_arrow(a),
             Canonical::VarBin(a) => varbin_to_arrow(a),
-            Canonical::Extension(a) => match a.id().as_ref() {
-                "vortex.localdatetime" => local_date_time_to_arrow(
-                    LocalDateTimeArray::try_from(&a.into_array()).expect("localdatetime"),
-                ),
-                _ => panic!("unsupported extension dtype with ID {}", a.id().as_ref()),
-            },
+            Canonical::Extension(a) => {
+                if !is_temporal_ext_type(a.id()) {
+                    panic!("unsupported extension dtype with ID {}", a.id().as_ref())
+                }
+
+                temporal_to_arrow(
+                    TemporalArray::try_from(&a.into_array())
+                        .expect("array must be known temporal array ext type"),
+                )
+            }
         }
     }
 }
@@ -278,24 +285,63 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
     }
 }
 
-fn local_date_time_to_arrow(local_date_time_array: LocalDateTimeArray) -> ArrayRef {
-    // A LocalDateTime maps to an Arrow Timestamp array with no timezone.
-    let timestamps = try_cast(&local_date_time_array.timestamps(), PType::I64.into())
-        .expect("timestamps must cast to i64")
-        .into_primitive()
-        .expect("must be i64 array");
-    let validity = timestamps
-        .logical_validity()
-        .to_null_buffer()
-        .expect("null buffer");
-    let timestamps_len = timestamps.len();
-    let buffer = ScalarBuffer::<i64>::new(timestamps.into_buffer().into_arrow(), 0, timestamps_len);
+fn temporal_to_arrow(temporal_array: TemporalArray) -> ArrayRef {
+    macro_rules! extract_temporal_values {
+        ($values:expr, $prim:ty) => {{
+            let temporal_values = try_cast(
+                &temporal_array.temporal_values(),
+                <$prim as NativePType>::PTYPE.into(),
+            )
+            .expect("values must cast to primitive type")
+            .into_primitive()
+            .expect("must be primitive array");
+            let len = temporal_values.len();
+            let nulls = temporal_values
+                .logical_validity()
+                .to_null_buffer()
+                .expect("null buffer");
+            let scalars =
+                ScalarBuffer::<$prim>::new(temporal_values.into_buffer().into_arrow(), 0, len);
 
-    match local_date_time_array.time_unit() {
-        TimeUnit::Ns => Arc::new(TimestampNanosecondArray::new(buffer, validity)),
-        TimeUnit::Us => Arc::new(TimestampMicrosecondArray::new(buffer, validity)),
-        TimeUnit::Ms => Arc::new(TimestampMillisecondArray::new(buffer, validity)),
-        TimeUnit::S => Arc::new(TimestampSecondArray::new(buffer, validity)),
+            (scalars, nulls)
+        }};
+    }
+
+    match temporal_array.temporal_metadata() {
+        TemporalMetadata::Time32(time_unit) => {
+            let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i32);
+            match time_unit {
+                TimeUnit::Ms => Arc::new(Time32MillisecondArray::new(scalars, nulls)),
+                TimeUnit::S => Arc::new(Time32SecondArray::new(scalars, nulls)),
+                _ => panic!("invalid TimeUnit for Time32 array {time_unit}"),
+            }
+        }
+        TemporalMetadata::Time64(time_unit) => {
+            let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i64);
+            match time_unit {
+                TimeUnit::Ns => Arc::new(Time64NanosecondArray::new(scalars, nulls)),
+                TimeUnit::Us => Arc::new(Time64MicrosecondArray::new(scalars, nulls)),
+                _ => panic!("invalid TimeUnit for Time64 array {time_unit}"),
+            }
+        }
+        TemporalMetadata::Timestamp(time_unit, _) => {
+            let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i64);
+            match time_unit {
+                TimeUnit::Ns => Arc::new(TimestampNanosecondArray::new(scalars, nulls)),
+                TimeUnit::Us => Arc::new(TimestampMicrosecondArray::new(scalars, nulls)),
+                TimeUnit::Ms => Arc::new(TimestampMillisecondArray::new(scalars, nulls)),
+                TimeUnit::S => Arc::new(TimestampSecondArray::new(scalars, nulls)),
+                _ => panic!("invalid TimeUnit for Time32 array {time_unit}"),
+            }
+        }
+        TemporalMetadata::Date32 => {
+            let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i32);
+            Arc::new(Date32Array::new(scalars, nulls))
+        }
+        TemporalMetadata::Date64 => {
+            let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i64);
+            Arc::new(Date64Array::new(scalars, nulls))
+        }
     }
 }
 

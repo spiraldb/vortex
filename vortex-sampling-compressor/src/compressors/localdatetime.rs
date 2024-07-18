@@ -18,6 +18,12 @@ impl EncodingCompressor for DateTimePartsCompressor {
         if LocalDateTimeArray::try_from(array).is_ok() {
             return Some(self);
         }
+
+        // Only attempt to compress if it's Timestamp array, all of the other ones
+        // are sort of ridiculous.
+        // Date64 can be compressed down to day count, which makes it easier, but otherwise there's
+        // going to be a lot of weirdness here instead.
+
         None
     }
 
