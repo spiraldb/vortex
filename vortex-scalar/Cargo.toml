@@ -12,6 +12,7 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+arrow-array = { workspace = true, optional = true }
 datafusion-common = { workspace = true, optional = true }
 flatbuffers = { workspace = true, optional = true }
 flexbuffers = { workspace = true, optional = true }
@@ -35,22 +36,15 @@ workspace = true
 [features]
 # Uncomment for improved IntelliJ support
 # default = ["flatbuffers", "proto", "serde"]
-datafusion = ["dep:datafusion-common"]
+arrow = ["dep:arrow-array"]
+datafusion = ["dep:datafusion-common", "arrow"]
 flatbuffers = [
     "dep:flatbuffers",
     "dep:flexbuffers",
     "dep:serde",
     "vortex-buffer/flexbuffers",
     "vortex-error/flexbuffers",
-    "vortex-dtype/flatbuffers"
+    "vortex-dtype/flatbuffers",
 ]
-proto = [
-    "dep:prost",
-    "dep:prost-types",
-    "vortex-dtype/proto",
-]
-serde = [
-    "dep:serde",
-    "serde/derive",
-    "vortex-dtype/serde"
-]
+proto = ["dep:prost", "dep:prost-types", "vortex-dtype/proto"]
+serde = ["dep:serde", "serde/derive", "vortex-dtype/serde"]

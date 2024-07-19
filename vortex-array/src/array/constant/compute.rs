@@ -1,15 +1,20 @@
 use std::cmp::Ordering;
+use std::sync::Arc;
 
-use vortex_dtype::Nullability;
+use arrow_array::Datum;
+use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
+use crate::arrow::FromArrowArray;
 use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::{
-    AndFn, ArrayCompute, OrFn, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
+    AndFn, ArrayCompute, CompareFn, OrFn, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn,
+    TakeFn,
 };
-use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
+use crate::{Array, ArrayDType, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -25,6 +30,10 @@ impl ArrayCompute for ConstantArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn compare(&self) -> Option<&dyn CompareFn> {
         Some(self)
     }
 
@@ -68,6 +77,38 @@ impl SearchSortedFn for ConstantArray {
     }
 }
 
+impl CompareFn for ConstantArray {
+    fn compare(&self, rhs: &Array, operator: Operator) -> VortexResult<Array> {
+        if self.dtype().eq_ignore_nullability(rhs.dtype()) && self.len() == rhs.len() {
+            if let Ok(rhs) = ConstantArray::try_from(rhs) {
+                let lhs = self.scalar();
+                let rhs = rhs.scalar();
+
+                let scalar = scalar_cmp(lhs, rhs, operator);
+
+                return Ok(ConstantArray::new(scalar, self.len()).into_array());
+            }
+
+            let datum = Arc::<dyn Datum>::from(self.scalar().clone());
+            let rhs = rhs.clone().into_canonical()?.into_arrow();
+            let rhs = rhs.as_ref();
+
+            let boolean_array = match operator {
+                Operator::Eq => arrow_ord::cmp::eq(datum.as_ref(), &rhs)?,
+                Operator::NotEq => arrow_ord::cmp::neq(datum.as_ref(), &rhs)?,
+                Operator::Gt => arrow_ord::cmp::gt(datum.as_ref(), &rhs)?,
+                Operator::Gte => arrow_ord::cmp::gt_eq(datum.as_ref(), &rhs)?,
+                Operator::Lt => arrow_ord::cmp::lt(datum.as_ref(), &rhs)?,
+                Operator::Lte => arrow_ord::cmp::lt_eq(datum.as_ref(), &rhs)?,
+            };
+
+            Ok(ArrayData::from_arrow(&boolean_array, true).into_array())
+        } else {
+            Ok(ConstantArray::new(false, rhs.len()).into_array())
+        }
+    }
+}
+
 impl AndFn for ConstantArray {
     fn and(&self, array: &Array) -> VortexResult<Array> {
         constant_array_bool_impl(self, array, |(l, r)| l & r)
@@ -77,6 +118,23 @@ impl AndFn for ConstantArray {
 impl OrFn for ConstantArray {
     fn or(&self, array: &Array) -> VortexResult<Array> {
         constant_array_bool_impl(self, array, |(l, r)| l | r)
+    }
+}
+
+fn scalar_cmp(lhs: &Scalar, rhs: &Scalar, operator: Operator) -> Scalar {
+    if lhs.is_null() | rhs.is_null() {
+        Scalar::null(DType::Bool(Nullability::Nullable))
+    } else {
+        let b = match operator {
+            Operator::Eq => lhs == rhs,
+            Operator::NotEq => lhs != rhs,
+            Operator::Gt => lhs > rhs,
+            Operator::Gte => lhs >= rhs,
+            Operator::Lt => lhs < rhs,
+            Operator::Lte => lhs <= rhs,
+        };
+
+        Scalar::bool(b, Nullability::Nullable)
     }
 }
 
