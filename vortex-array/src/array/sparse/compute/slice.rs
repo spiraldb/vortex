@@ -1,8 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::array::sparse::SparseArray;
-use crate::compute::{search_sorted, SearchSortedSide};
-use crate::compute::{slice, SliceFn};
+use crate::compute::{search_sorted, slice, SearchSortedSide, SliceFn};
 use crate::{Array, IntoArray};
 
 impl SliceFn for SparseArray {

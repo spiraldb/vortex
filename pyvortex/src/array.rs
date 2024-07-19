@@ -10,9 +10,7 @@ use vortex::array::varbin::{VarBin, VarBinArray, VarBinEncoding};
 use vortex::array::varbinview::{VarBinView, VarBinViewArray, VarBinViewEncoding};
 use vortex::compute::take;
 use vortex::encoding::EncodingRef;
-use vortex::ToArray;
-use vortex::{Array, ArrayDType, ArrayData, IntoArray};
-use vortex::{ArrayDef, IntoArrayData};
+use vortex::{Array, ArrayDType, ArrayData, ArrayDef, IntoArray, IntoArrayData, ToArray};
 use vortex_alp::{ALPArray, ALPEncoding, ALP};
 use vortex_dict::{Dict, DictArray, DictEncoding};
 use vortex_fastlanes::{

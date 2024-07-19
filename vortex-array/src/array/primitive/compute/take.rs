@@ -1,12 +1,10 @@
 use num_traits::PrimInt;
-use vortex_dtype::NativePType;
-use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype};
+use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::TakeFn;
-use crate::Array;
-use crate::{IntoArray, IntoArrayVariant};
+use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl TakeFn for PrimitiveArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {

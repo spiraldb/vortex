@@ -9,8 +9,7 @@ use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
 use crate::validity::Validity;
-use crate::ArrayDType;
-use crate::{Canonical, IntoCanonical};
+use crate::{ArrayDType, Canonical, IntoCanonical};
 
 impl IntoCanonical for ConstantArray {
     fn into_canonical(self) -> VortexResult<Canonical> {

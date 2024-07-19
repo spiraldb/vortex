@@ -4,8 +4,7 @@ use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
-use crate::ALPFloat;
-use crate::{match_each_alp_float_ptype, ALPArray};
+use crate::{match_each_alp_float_ptype, ALPArray, ALPFloat};
 
 impl ArrayCompute for ALPArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {

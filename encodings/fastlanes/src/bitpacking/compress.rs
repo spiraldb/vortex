@@ -5,8 +5,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::sparse::{Sparse, SparseArray};
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
-use vortex::IntoArrayVariant;
-use vortex::{Array, ArrayDType, ArrayDef, IntoArray};
+use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
@@ -307,8 +306,7 @@ pub fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 
 #[cfg(test)]
 mod test {
-    use vortex::IntoArrayVariant;
-    use vortex::ToArray;
+    use vortex::{IntoArrayVariant, ToArray};
     use vortex_scalar::PrimitiveScalar;
 
     use super::*;

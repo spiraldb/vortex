@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use arrow_schema::TimeUnit as ArrowTimeUnit;
-use arrow_schema::{DataType, Field, SchemaRef};
+use arrow_schema::{DataType, Field, SchemaRef, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
-use vortex_dtype::{DType, Nullability};
-use vortex_dtype::{PType, StructDType};
+use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::datetime::{make_temporal_ext_dtype, TimeUnit};

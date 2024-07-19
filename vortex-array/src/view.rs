@@ -10,11 +10,9 @@ use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 use crate::encoding::EncodingRef;
-use crate::flatbuffers as fb;
 use crate::stats::{Stat, Statistics, StatsSet};
 use crate::visitor::ArrayVisitor;
-use crate::Context;
-use crate::{Array, IntoArray, ToArray};
+use crate::{flatbuffers as fb, Array, Context, IntoArray, ToArray};
 
 #[derive(Clone)]
 pub struct ArrayView {

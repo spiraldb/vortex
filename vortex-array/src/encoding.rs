@@ -4,8 +4,7 @@ use std::hash::{Hash, Hasher};
 use vortex_error::VortexResult;
 
 use crate::canonical::{Canonical, IntoCanonical};
-use crate::ArrayDef;
-use crate::{Array, ArrayTrait};
+use crate::{Array, ArrayDef, ArrayTrait};
 
 // TODO(robert): Outline how you create a well known encoding id
 /// EncodingId is a unique name and numerical code of the array
