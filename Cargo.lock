@@ -772,6 +772,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "const_for"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b8f6a54c8d1baf6422c062a7b8be16f47d1071989219da6a369b23a934801c8"
+
+[[package]]
 name = "constant_time_eq"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1384,11 +1390,12 @@ dependencies = [
 
 [[package]]
 name = "fastlanes"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eaa149df0f986a52ddf51797945a8c5f4ae63afdefaf58c833fd0bef2542fa0"
+checksum = "18cd67b34360f17fcb66d93f23cf466a7b3a02421e4fa82b842217255531a990"
 dependencies = [
  "arrayref",
+ "const_for",
  "num-traits",
  "paste",
  "seq-macro",
