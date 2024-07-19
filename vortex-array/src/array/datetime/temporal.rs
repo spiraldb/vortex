@@ -144,10 +144,10 @@ impl TemporalArray {
 
     /// Create a new `TemporalArray` holding one of the following values:
     ///
-    /// * `i32` values representing seconds from the UNIX epoch
-    /// * `i32` values representing milliseconds from the UNIX epoch
-    /// * `i64` values representing microseconds from the UNIX epoch
-    /// * `i64` values representing nanoseconds from the UNIX epoch
+    /// * `i32` values representing seconds since midnight
+    /// * `i32` values representing milliseconds since midnight
+    /// * `i64` values representing microseconds since midnight
+    /// * `i64` values representing nanoseconds since midnight
     ///
     /// Note, this is equivalent to the set of values represented by the Time32 or Time64 types
     /// from Arrow.
