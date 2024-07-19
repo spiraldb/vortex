@@ -16,7 +16,7 @@ use vortex_error::VortexResult;
 mod compute;
 mod stats;
 
-impl_encoding!("vortex.byte_bool", 12u16, ByteBool);
+impl_encoding!("vortex.bytebool", 12u16, ByteBool);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ByteBoolMetadata {
