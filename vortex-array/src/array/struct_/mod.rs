@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
-use vortex_dtype::{FieldName, FieldNames, Nullability, StructDType};
-use vortex_error::vortex_bail;
+use vortex_dtype::{DType, FieldName, FieldNames, Nullability, StructDType};
+use vortex_error::{vortex_bail, VortexResult};
 
-use crate::stats::ArrayStatisticsCompute;
+use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, StructArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
+use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
 
 mod compute;
 

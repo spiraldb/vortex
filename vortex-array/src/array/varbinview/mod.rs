@@ -1,5 +1,6 @@
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
+use std::sync::Arc;
 use std::{mem, slice};
 
 use ::serde::{Deserialize, Serialize};
@@ -7,17 +8,21 @@ use arrow_array::{ArrayRef, BinaryViewArray, StringViewArray};
 use arrow_buffer::{Buffer, ScalarBuffer};
 use arrow_schema::DataType;
 use itertools::Itertools;
-use vortex_dtype::{Nullability, PType};
-use vortex_error::vortex_bail;
+use vortex_dtype::{DType, Nullability, PType};
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::varbinview::builder::VarBinViewBuilder;
 use crate::arrow::FromArrowArray;
 use crate::compute::slice;
+use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayData, Canonical, IntoArrayVariant, IntoCanonical};
+use crate::{
+    impl_encoding, Array, ArrayDType, ArrayData, ArrayDef, ArrayTrait, Canonical, IntoArray,
+    IntoArrayVariant, IntoCanonical,
+};
 
 mod accessor;
 mod builder;
