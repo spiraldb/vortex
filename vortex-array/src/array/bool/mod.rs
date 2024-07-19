@@ -3,7 +3,6 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
 
-use crate::stats::ArrayStatistics;
 use crate::validity::{ArrayValidity, ValidityMetadata};
 use crate::validity::{LogicalValidity, Validity};
 use crate::variants::{ArrayVariants, BoolArrayTrait};
