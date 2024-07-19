@@ -1,16 +1,22 @@
+use std::fmt::Debug;
+
 use arrow_buffer::{BooleanBuffer, Buffer as ArrowBuffer};
 pub use compress::*;
-use croaring::{Bitmap, Portable};
+pub use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::bool::{Bool, BoolArray};
-use vortex::stats::ArrayStatisticsCompute;
+use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+    TypedArray,
+};
 use vortex_buffer::Buffer;
+use vortex_dtype::DType;
 use vortex_dtype::Nullability::{NonNullable, Nullable};
-use vortex_error::{vortex_bail, vortex_err};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 mod compress;
 mod compute;

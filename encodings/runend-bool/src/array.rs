@@ -1,17 +1,20 @@
 use serde::{Deserialize, Serialize};
 use vortex::compute::unary::scalar_at::scalar_at;
 use vortex::compute::{search_sorted, SearchSortedSide};
-use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute};
+use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
-use vortex_dtype::Nullability;
-use vortex_error::vortex_bail;
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArrayVariant,
+    IntoCanonical,
+};
+use vortex_dtype::{DType, Nullability};
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::compress::runend_bool_decode;
 
-impl_encoding!("vortex.runend_bool", 22u16, RunEndBool);
+impl_encoding!("vortex.runendbool", 22u16, RunEndBool);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEndBoolMetadata {

@@ -1,18 +1,22 @@
+use std::fmt::Debug;
 use std::mem::ManuallyDrop;
 
 use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
 use vortex::array::bool::BoolArray;
+use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, Canonical, IntoCanonical};
+use vortex::{impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TypedArray};
 use vortex_buffer::Buffer;
+use vortex_dtype::DType;
+use vortex_error::VortexResult;
 
 mod compute;
 mod stats;
 
-impl_encoding!("vortex.byte_bool", 12u16, ByteBool);
+impl_encoding!("vortex.bytebool", 12u16, ByteBool);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ByteBoolMetadata {

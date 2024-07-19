@@ -4,8 +4,8 @@
 use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use vortex_dtype::{Nullability, PType};
-use vortex_error::vortex_bail;
+use vortex_dtype::{DType, Nullability, PType};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
@@ -13,11 +13,12 @@ use crate::compute::unary::scalar_at::scalar_at;
 use crate::compute::unary::scalar_subtract::{subtract_scalar, SubtractScalarFn};
 use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
+use crate::stats::StatsSet;
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType};
+use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray};
 
 mod canonical;
 mod compute;
