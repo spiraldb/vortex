@@ -4,10 +4,12 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
+use crate::array::null::NullArray;
+use crate::compute::boolean::{and, AndFn, OrFn};
 use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::{ArrayCompute, SliceFn, TakeFn};
 use crate::compute::{SearchResult, SearchSortedFn, SearchSortedSide};
-use crate::{Array, IntoArray};
+use crate::{Array, ArrayDType, AsArray, IntoArray, IntoArrayVariant};
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -23,6 +25,14 @@ impl ArrayCompute for ConstantArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn and(&self) -> Option<&dyn AndFn> {
+        Some(self)
+    }
+
+    fn or(&self) -> Option<&dyn OrFn> {
         Some(self)
     }
 }
@@ -56,6 +66,46 @@ impl SearchSortedFn for ConstantArray {
             },
         }
     }
+}
+
+impl AndFn for ConstantArray {
+    fn and(&self, array: &Array) -> VortexResult<Array> {
+        constant_array_bool_impl(self, array, |(l, r)| l & r)
+    }
+}
+
+impl OrFn for ConstantArray {
+    fn or(&self, array: &Array) -> VortexResult<Array> {
+        constant_array_bool_impl(self, array, |(l, r)| l | r)
+    }
+}
+
+fn constant_array_bool_impl(
+    constant_array: &ConstantArray,
+    other: &Array,
+    bool_op: impl Fn((bool, bool)) -> bool,
+) -> VortexResult<Array> {
+    if constant_array.dtype().is_boolean()
+        && other.dtype().is_boolean()
+        && constant_array.len() == other.len()
+    {
+        if let Ok(array) = ConstantArray::try_from(other.clone()) {
+            let lhs = constant_array.scalar().value().as_bool()?;
+            let rhs = array.scalar().value().as_bool()?;
+
+            let r = match lhs.zip(rhs).map(bool_op) {
+                Some(b) => ConstantArray::new(b, constant_array.len()).into_array(),
+                None => NullArray::new(constant_array.len()).into_array(),
+            };
+
+            return Ok(r);
+        }
+    }
+
+    let lhs = constant_array.clone().into_bool()?;
+    let rhs = other.clone().into_bool()?;
+
+    and(lhs.as_array_ref(), rhs.as_array_ref())
 }
 
 #[cfg(test)]
