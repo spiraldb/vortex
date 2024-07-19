@@ -4241,6 +4241,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-runend-bool"
+version = "0.1.0"
+dependencies = [
+ "arrow-buffer",
+ "criterion",
+ "itertools 0.13.0",
+ "num-traits",
+ "rand",
+ "serde",
+ "vortex-array",
+ "vortex-dtype",
+ "vortex-error",
+ "vortex-scalar",
+]
+
+[[package]]
 name = "vortex-sampling-compressor"
 version = "0.1.0"
 dependencies = [
