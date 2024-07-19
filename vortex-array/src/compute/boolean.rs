@@ -1,7 +1,6 @@
-use arrow_array::cast::AsArray;
 use vortex_error::VortexResult;
 
-use crate::{arrow::FromArrowArray, Array, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
+use crate::{Array, IntoArrayVariant};
 
 pub trait AndFn {
     fn and(&self, array: &Array) -> VortexResult<Array>;
@@ -16,29 +15,25 @@ pub fn and(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
         return selection;
     }
 
-    let lhs = lhs.clone().into_bool()?.into_canonical()?.into_arrow();
-    let lhs_bool = lhs.as_boolean();
-    let rhs = rhs.clone().into_bool()?.into_canonical()?.into_arrow();
-    let rhs_bool = rhs.as_boolean();
-
-    let data =
-        ArrayData::from_arrow(&arrow_arith::boolean::and(lhs_bool, rhs_bool)?, true).into_array();
-
-    Ok(data)
-}
-
-pub fn or(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
-    if let Some(selection) = lhs.with_dyn(|lhs| lhs.and().map(|lhs| lhs.and(rhs))) {
+    if let Some(selection) = rhs.with_dyn(|rhs| rhs.and().map(|rhs| rhs.and(lhs))) {
         return selection;
     }
 
-    let lhs = lhs.clone().into_bool()?.into_canonical()?.into_arrow();
-    let lhs_bool = lhs.as_boolean();
-    let rhs = rhs.clone().into_bool()?.into_canonical()?.into_arrow();
-    let rhs_bool = rhs.as_boolean();
+    let lhs = lhs.clone().into_bool()?;
 
-    let data =
-        ArrayData::from_arrow(&arrow_arith::boolean::or(lhs_bool, rhs_bool)?, true).into_array();
+    lhs.and(rhs)
+}
 
-    Ok(data)
+pub fn or(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
+    if let Some(selection) = lhs.with_dyn(|lhs| lhs.or().map(|lhs| lhs.or(rhs))) {
+        return selection;
+    }
+
+    if let Some(selection) = rhs.with_dyn(|rhs| rhs.or().map(|rhs| rhs.or(lhs))) {
+        return selection;
+    }
+
+    let lhs = lhs.clone().into_bool()?;
+
+    lhs.or(rhs)
 }

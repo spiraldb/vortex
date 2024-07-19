@@ -5,11 +5,11 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
-use crate::compute::boolean::{and, AndFn, OrFn};
 use crate::compute::unary::scalar_at::ScalarAtFn;
+use crate::compute::{AndFn, OrFn};
 use crate::compute::{ArrayCompute, SliceFn, TakeFn};
 use crate::compute::{SearchResult, SearchSortedFn, SearchSortedSide};
-use crate::{Array, ArrayDType, AsArray, IntoArray, IntoArrayVariant};
+use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -100,10 +100,7 @@ fn constant_array_bool_impl(
 
             Ok(ConstantArray::new(scalar, constant_array.len()).into_array())
         } else {
-            let lhs = constant_array.clone().into_bool()?;
-            let rhs = other.clone().into_bool()?;
-
-            and(lhs.as_array_ref(), rhs.as_array_ref())
+            AndFn::and(&constant_array.clone().into_bool()?, other)
         }
     } else {
         vortex_bail!("Boolean operations aren't supported on arrays of different lengths")

@@ -3,6 +3,7 @@ use crate::compute::unary::fill_forward::FillForwardFn;
 use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
 
+mod boolean;
 mod compare;
 mod fill;
 mod flatten;
@@ -28,6 +29,14 @@ impl ArrayCompute for BoolArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn and(&self) -> Option<&dyn crate::compute::AndFn> {
+        Some(self)
+    }
+
+    fn or(&self) -> Option<&dyn crate::compute::OrFn> {
         Some(self)
     }
 }

@@ -1,8 +1,7 @@
 use datafusion_expr::{Expr, Operator as DFOperator};
 use vortex::{
     array::constant::ConstantArray,
-    compute::boolean::{and, or},
-    compute::compare,
+    compute::{and, compare, or},
     Array, IntoArray,
 };
 use vortex_error::{vortex_bail, vortex_err, VortexResult};

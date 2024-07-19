@@ -7,7 +7,7 @@
 //! implementations of these operators, else we will decode, and perform the equivalent operator
 //! from Arrow.
 
-use boolean::{AndFn, OrFn};
+pub use boolean::{and, or, AndFn, OrFn};
 pub use compare::{compare, CompareFn};
 pub use filter::{filter, FilterFn};
 pub use filter_indices::{filter_indices, FilterIndicesFn};
@@ -19,6 +19,7 @@ use unary::fill_forward::FillForwardFn;
 use unary::scalar_at::ScalarAtFn;
 use unary::scalar_subtract::SubtractScalarFn;
 
+mod boolean;
 mod compare;
 mod filter;
 mod filter_indices;
@@ -26,7 +27,6 @@ mod search_sorted;
 mod slice;
 mod take;
 
-pub mod boolean;
 pub mod unary;
 
 /// Trait providing compute functions on top of Vortex arrays.
