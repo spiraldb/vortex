@@ -4,7 +4,7 @@ include "vortex-dtype/flatbuffers/dtype.fbs";
 namespace vortex.ipc;
 
 enum Version: uint8 {
-  V0 = 0,
+    V0 = 0,
 }
 
 table Schema {
@@ -17,11 +17,11 @@ enum Compression: uint8 {
 
 struct Buffer {
     offset: uint64;
-    length: uint64;
+    padding: uint16;
     compression: Compression;
 }
 
-table Chunk {
+table Batch {
     array: vortex.array.Array;
     length: uint64;
     buffers: [Buffer];
@@ -34,14 +34,14 @@ table Page {
 }
 
 union MessageHeader {
-  Schema,
-  Chunk,
-  Page,
+    Schema,
+    Batch,
+    Page,
 }
 
 table Message {
-  version: Version = V0;
-  header: MessageHeader;
+    version: Version = V0;
+    header: MessageHeader;
 }
 
 root_type Message;
