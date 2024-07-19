@@ -12,7 +12,7 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-arrow-array = { workspace = true, optional = true }
+arrow-array = { workspace = true }
 datafusion-common = { workspace = true, optional = true }
 flatbuffers = { workspace = true, optional = true }
 flexbuffers = { workspace = true, optional = true }
@@ -36,8 +36,7 @@ workspace = true
 [features]
 # Uncomment for improved IntelliJ support
 # default = ["flatbuffers", "proto", "serde"]
-arrow = ["dep:arrow-array"]
-datafusion = ["dep:datafusion-common", "arrow"]
+datafusion = ["dep:datafusion-common"]
 flatbuffers = [
     "dep:flatbuffers",
     "dep:flexbuffers",

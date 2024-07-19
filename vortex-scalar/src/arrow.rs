@@ -1,5 +1,3 @@
-#![cfg(feature = "arrow")]
-
 use std::sync::Arc;
 
 use arrow_array::*;
