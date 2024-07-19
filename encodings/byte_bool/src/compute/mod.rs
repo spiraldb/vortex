@@ -3,17 +3,13 @@ use std::sync::Arc;
 
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
+use vortex::compute::unary::fill_forward::FillForwardFn;
+use vortex::compute::unary::scalar_at::ScalarAtFn;
 use vortex::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
-use vortex::validity::Validity;
-use vortex::Array;
-use vortex::{
-    compute::{unary::fill_forward::FillForwardFn, unary::scalar_at::ScalarAtFn},
-    encoding::ArrayEncodingRef,
-    stats::StatsSet,
-    validity::ArrayValidity,
-    ArrayDType, ArrayData, IntoArray,
-};
-use vortex::{IntoArrayVariant, ToArrayData};
+use vortex::encoding::ArrayEncodingRef;
+use vortex::stats::StatsSet;
+use vortex::validity::{ArrayValidity, Validity};
+use vortex::{Array, ArrayDType, ArrayData, IntoArray, IntoArrayVariant, ToArrayData};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::Operator;
@@ -186,11 +182,9 @@ impl FillForwardFn for ByteBoolArray {
 
 #[cfg(test)]
 mod tests {
-    use vortex::{
-        compute::unary::scalar_at::scalar_at,
-        compute::{compare, slice},
-        AsArray as _,
-    };
+    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::{compare, slice};
+    use vortex::AsArray as _;
 
     use super::*;
 

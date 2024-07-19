@@ -1,27 +1,23 @@
 use arrow_array::array::{
-    Array as ArrowArray, ArrayRef as ArrowArrayRef, BooleanArray as ArrowBooleanArray,
-    GenericByteArray, NullArray as ArrowNullArray, PrimitiveArray as ArrowPrimitiveArray,
-    StructArray as ArrowStructArray,
+    Array as ArrowArray, ArrayRef as ArrowArrayRef, ArrowPrimitiveType,
+    BooleanArray as ArrowBooleanArray, GenericByteArray, NullArray as ArrowNullArray,
+    OffsetSizeTrait, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
 };
-use arrow_array::array::{ArrowPrimitiveType, OffsetSizeTrait};
 use arrow_array::cast::{as_null_array, AsArray};
 use arrow_array::types::{
     ByteArrayType, ByteViewType, Date32Type, Date64Type, DurationMicrosecondType,
-    DurationMillisecondType, DurationNanosecondType, DurationSecondType, Time32MillisecondType,
+    DurationMillisecondType, DurationNanosecondType, DurationSecondType, Float16Type, Float32Type,
+    Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, Time32MillisecondType,
     Time32SecondType, Time64MicrosecondType, Time64NanosecondType, TimestampMicrosecondType,
-    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType,
-};
-use arrow_array::types::{
-    Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
-    UInt32Type, UInt64Type, UInt8Type,
+    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType, UInt16Type, UInt32Type,
+    UInt64Type, UInt8Type,
 };
 use arrow_array::{BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
-use vortex_dtype::NativePType;
-use vortex_dtype::{DType, PType};
+use vortex_dtype::{DType, NativePType, PType};
 
 use crate::array::bool::BoolArray;
 use crate::array::datetime::temporal::TemporalArray;

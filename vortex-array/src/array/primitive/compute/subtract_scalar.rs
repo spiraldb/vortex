@@ -2,8 +2,7 @@ use itertools::Itertools;
 use num_traits::WrappingSub;
 use vortex_dtype::{match_each_float_ptype, match_each_integer_ptype, NativePType};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_scalar::PrimitiveScalar;
-use vortex_scalar::Scalar;
+use vortex_scalar::{PrimitiveScalar, Scalar};
 
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;

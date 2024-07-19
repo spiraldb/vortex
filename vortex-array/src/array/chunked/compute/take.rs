@@ -10,8 +10,7 @@ use crate::compute::unary::scalar_at::scalar_at;
 use crate::compute::unary::scalar_subtract::subtract_scalar;
 use crate::compute::{search_sorted, slice, take, SearchSortedSide, TakeFn};
 use crate::stats::ArrayStatistics;
-use crate::ArrayDType;
-use crate::{Array, IntoArray, ToArray};
+use crate::{Array, ArrayDType, IntoArray, ToArray};
 
 impl TakeFn for ChunkedArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {

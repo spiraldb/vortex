@@ -5,8 +5,7 @@ use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
 use crate::stream::take_rows::TakeRows;
-use crate::stream::ArrayStream;
-use crate::stream::ArrayStreamAdapter;
+use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::Array;
 
 pub trait ArrayStreamExt: ArrayStream {

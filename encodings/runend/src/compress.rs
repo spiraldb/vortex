@@ -6,8 +6,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
 use vortex::ArrayDType;
-use vortex_dtype::Nullability;
-use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype, NativePType};
+use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype, NativePType, Nullability};
 use vortex_error::VortexResult;
 
 pub fn runend_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {

@@ -9,8 +9,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::varbin::VarBinArray;
 use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArray};
-use vortex_dtype::{match_each_native_ptype, DType};
-use vortex_dtype::{NativePType, ToBytes};
+use vortex_dtype::{match_each_native_ptype, DType, NativePType, ToBytes};
 
 #[derive(Debug)]
 struct Value<T>(T);

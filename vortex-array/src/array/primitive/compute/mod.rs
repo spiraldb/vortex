@@ -3,9 +3,7 @@ use crate::compute::unary::cast::CastFn;
 use crate::compute::unary::fill_forward::FillForwardFn;
 use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::unary::scalar_subtract::SubtractScalarFn;
-use crate::compute::FilterIndicesFn;
-use crate::compute::SearchSortedFn;
-use crate::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
+use crate::compute::{ArrayCompute, CompareFn, FilterIndicesFn, SearchSortedFn, SliceFn, TakeFn};
 
 mod cast;
 mod compare;

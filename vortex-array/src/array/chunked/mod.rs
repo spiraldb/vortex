@@ -162,8 +162,7 @@ impl SubtractScalarFn for ChunkedArray {
 
 #[cfg(test)]
 mod test {
-    use vortex_dtype::{DType, Nullability};
-    use vortex_dtype::{NativePType, PType};
+    use vortex_dtype::{DType, NativePType, Nullability, PType};
 
     use crate::array::chunked::ChunkedArray;
     use crate::compute::slice;

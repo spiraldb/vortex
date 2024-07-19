@@ -10,8 +10,7 @@ use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
-use crate::validity::ArrayValidity;
-use crate::validity::LogicalValidity;
+use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::{ArrayDType, IntoArrayVariant};
 
 trait PStatsType: NativePType + Into<Scalar> + BitWidth {}

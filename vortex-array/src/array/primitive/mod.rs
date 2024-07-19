@@ -9,8 +9,7 @@ use vortex_error::vortex_bail;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType};
-use crate::{Canonical, IntoCanonical};
+use crate::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 
 mod accessor;
 mod compute;

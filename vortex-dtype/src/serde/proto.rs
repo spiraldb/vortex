@@ -5,9 +5,10 @@ use std::sync::Arc;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
 use crate::field::{Field, FieldPath};
+use crate::proto::dtype as pb;
 use crate::proto::dtype::d_type::DtypeType;
 use crate::proto::dtype::field::FieldType;
-use crate::{proto::dtype as pb, DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
+use crate::{DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
 
 impl TryFrom<&pb::DType> for DType {
     type Error = VortexError;

@@ -1,6 +1,5 @@
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
-use vortex::compute::ArrayCompute;
-use vortex::compute::{SearchSortedFn, SliceFn, TakeFn};
+use vortex::compute::{ArrayCompute, SearchSortedFn, SliceFn, TakeFn};
 use vortex::ArrayDType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
