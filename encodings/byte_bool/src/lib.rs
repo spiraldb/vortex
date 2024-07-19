@@ -3,13 +3,10 @@ use std::mem::ManuallyDrop;
 use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
 use vortex::array::bool::BoolArray;
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
-use vortex::{
-    impl_encoding,
-    validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata},
-    visitor::{AcceptArrayVisitor, ArrayVisitor},
-};
-use vortex::{Canonical, IntoCanonical};
+use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::{impl_encoding, Canonical, IntoCanonical};
 use vortex_buffer::Buffer;
 
 mod compute;

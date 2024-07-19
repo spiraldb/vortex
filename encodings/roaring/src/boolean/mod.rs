@@ -1,5 +1,4 @@
-use arrow_buffer::BooleanBuffer;
-use arrow_buffer::Buffer as ArrowBuffer;
+use arrow_buffer::{BooleanBuffer, Buffer as ArrowBuffer};
 pub use compress::*;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
@@ -10,8 +9,7 @@ use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
 use vortex_buffer::Buffer;
-use vortex_dtype::Nullability::NonNullable;
-use vortex_dtype::Nullability::Nullable;
+use vortex_dtype::Nullability::{NonNullable, Nullable};
 use vortex_error::{vortex_bail, vortex_err};
 
 mod compress;

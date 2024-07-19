@@ -5,8 +5,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::compute::unary::fill_forward::fill_forward;
 use vortex::validity::Validity;
 use vortex::IntoArrayVariant;
-use vortex_dtype::NativePType;
-use vortex_dtype::{match_each_unsigned_integer_ptype, Nullability};
+use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType, Nullability};
 use vortex_error::VortexResult;
 
 use crate::DeltaArray;

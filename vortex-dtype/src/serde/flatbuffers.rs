@@ -7,8 +7,7 @@ use itertools::Itertools;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 
-use crate::{flatbuffers as fb, ExtDType, ExtID, ExtMetadata, PType};
-use crate::{DType, StructDType};
+use crate::{flatbuffers as fb, DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
 
 impl TryFrom<fb::DType<'_>> for DType {
     type Error = VortexError;
@@ -228,8 +227,7 @@ mod test {
     use vortex_flatbuffers::FlatBufferToBytes;
 
     use crate::nullability::Nullability;
-    use crate::DType;
-    use crate::{flatbuffers as fb, PType, StructDType};
+    use crate::{flatbuffers as fb, DType, PType, StructDType};
 
     fn roundtrip_dtype(dtype: DType) {
         let bytes = dtype.with_flatbuffer_bytes(|bytes| bytes.to_vec());

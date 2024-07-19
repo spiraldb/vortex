@@ -1,8 +1,8 @@
-use vortex::array::datetime::{try_parse_time_unit, LocalDateTimeArray, TimeUnit};
+use vortex::array::datetime::temporal::TemporalMetadata;
+use vortex::array::datetime::{TemporalArray, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
-use vortex::compute::ArrayCompute;
-use vortex::compute::{slice, take, SliceFn, TakeFn};
+use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::DType;
@@ -55,59 +55,54 @@ impl ScalarAtFn for DateTimePartsArray {
             panic!("DateTimePartsArray must have extension dtype");
         };
 
-        match ext.id().as_ref() {
-            LocalDateTimeArray::ID => {
-                let time_unit = try_parse_time_unit(&ext)?;
-                let divisor = match time_unit {
-                    TimeUnit::Ns => 1_000_000_000,
-                    TimeUnit::Us => 1_000_000,
-                    TimeUnit::Ms => 1_000,
-                    TimeUnit::S => 1,
-                };
+        let TemporalMetadata::Timestamp(time_unit, _) = TemporalMetadata::try_from(&ext)
+            .expect("extension metadata must decode to TemporalMetadata")
+        else {
+            panic!("metadata must be Timestamp");
+        };
 
-                let days: i64 = scalar_at(&self.days(), index)?.try_into()?;
-                let seconds: i64 = scalar_at(&self.seconds(), index)?.try_into()?;
-                let subseconds: i64 = scalar_at(&self.subsecond(), index)?.try_into()?;
+        let divisor = match time_unit {
+            TimeUnit::Ns => 1_000_000_000,
+            TimeUnit::Us => 1_000_000,
+            TimeUnit::Ms => 1_000,
+            TimeUnit::S => 1,
+            TimeUnit::D => panic!("invalid time unit D"),
+        };
 
-                let scalar = days * 86_400 * divisor + seconds * divisor + subseconds;
+        let days: i64 = scalar_at(&self.days(), index)?.try_into()?;
+        let seconds: i64 = scalar_at(&self.seconds(), index)?.try_into()?;
+        let subseconds: i64 = scalar_at(&self.subsecond(), index)?.try_into()?;
 
-                Ok(Scalar::primitive(scalar, nullability))
-            }
-            _ => {
-                vortex_bail!(MismatchedTypes: LocalDateTimeArray::ID.to_string(), ext.id().as_ref().to_string())
-            }
-        }
+        let scalar = days * 86_400 * divisor + seconds * divisor + subseconds;
+
+        Ok(Scalar::primitive(scalar, nullability))
     }
 }
 
-/// Decode an [Array] to a [LocalDateTimeArray].
+/// Decode an [Array] into a [TemporalArray].
 ///
 /// Enforces that the passed array is actually a [DateTimePartsArray] with proper metadata.
-pub fn decode_to_localdatetime(array: &Array) -> VortexResult<LocalDateTimeArray> {
-    // Ensure we can process it
-    let array = DateTimePartsArray::try_from(array)?;
-
+pub fn decode_to_temporal(array: &DateTimePartsArray) -> VortexResult<TemporalArray> {
     let DType::Extension(ext, _) = array.dtype().clone() else {
         vortex_bail!(ComputeError: "expected dtype to be DType::Extension variant")
     };
 
-    if ext.id().as_ref() != LocalDateTimeArray::ID {
-        vortex_bail!(ComputeError: "DateTimeParts extension type must be vortex.localdatetime")
-    }
+    let Ok(temporal_metadata) = TemporalMetadata::try_from(&ext) else {
+        vortex_bail!(ComputeError: "must decode TemporalMetadata from extension metadata");
+    };
 
-    let time_unit = try_parse_time_unit(&ext)?;
-    let divisor = match time_unit {
+    let divisor = match temporal_metadata.time_unit() {
         TimeUnit::Ns => 1_000_000_000,
         TimeUnit::Us => 1_000_000,
         TimeUnit::Ms => 1_000,
         TimeUnit::S => 1,
+        TimeUnit::D => vortex_bail!(InvalidArgument: "cannot decode into TimeUnit::D"),
     };
 
     let days_buf = array.days().into_primitive()?;
     let seconds_buf = array.seconds().into_primitive()?;
     let subsecond_buf = array.subsecond().into_primitive()?;
 
-    // TODO(aduffy): replace with vectorized implementation?
     let values = days_buf
         .maybe_null_slice::<i64>()
         .iter()
@@ -116,68 +111,55 @@ pub fn decode_to_localdatetime(array: &Array) -> VortexResult<LocalDateTimeArray
         .map(|((d, s), ss)| d * 86_400 * divisor + s * divisor + ss)
         .collect::<Vec<_>>();
 
-    LocalDateTimeArray::try_new(
-        time_unit,
+    Ok(TemporalArray::new_timestamp(
         PrimitiveArray::from_vec(values, array.logical_validity().into_validity()).into_array(),
-    )
+        temporal_metadata.time_unit(),
+        temporal_metadata.time_zone().map(|s| s.to_string()),
+    ))
 }
 
 #[cfg(test)]
 mod test {
-    use vortex::array::datetime::{LocalDateTimeArray, TimeUnit};
+    use vortex::array::datetime::{TemporalArray, TimeUnit};
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::unary::scalar_at::scalar_at;
-    use vortex::validity::Validity;
-    use vortex::IntoArray;
-    use vortex_dtype::{DType, ExtDType, ExtID, Nullability};
+    use vortex::{IntoArray, IntoArrayVariant};
+    use vortex_dtype::{DType, Nullability};
 
-    use crate::compute::decode_to_localdatetime;
-    use crate::DateTimePartsArray;
+    use crate::compute::decode_to_temporal;
+    use crate::{compress_temporal, DateTimePartsArray};
 
     #[test]
-    fn test_decode_to_localdatetime() {
-        let nanos = TimeUnit::Ns;
+    fn test_roundtrip_datetimeparts() {
+        let raw_values = vec![
+            86_400i64,            // element with only day component
+            86_400i64 + 1000,     // element with day + second components
+            86_400i64 + 1000 + 1, // element with day + second + sub-second components
+        ];
 
-        let days = PrimitiveArray::from_vec(vec![2i64, 3], Validity::NonNullable).into_array();
-        let seconds = PrimitiveArray::from_vec(vec![2i64, 3], Validity::NonNullable).into_array();
-        let subsecond = PrimitiveArray::from_vec(vec![2i64, 3], Validity::NonNullable).into_array();
+        let raw_millis = PrimitiveArray::from(raw_values.clone()).into_array();
+
+        let temporal_array =
+            TemporalArray::new_timestamp(raw_millis, TimeUnit::Ms, Some("UTC".to_string()));
+
+        let (days, seconds, subseconds) = compress_temporal(temporal_array.clone()).unwrap();
 
         let date_times = DateTimePartsArray::try_new(
-            DType::Extension(
-                ExtDType::new(
-                    ExtID::from(LocalDateTimeArray::ID),
-                    Some(nanos.metadata().clone()),
-                ),
-                Nullability::NonNullable,
-            ),
+            DType::Extension(temporal_array.ext_dtype().clone(), Nullability::NonNullable),
             days,
             seconds,
-            subsecond,
+            subseconds,
         )
         .unwrap();
 
-        let local = decode_to_localdatetime(&date_times.into_array()).unwrap();
-
-        let elem0: i64 = scalar_at(&local.timestamps(), 0)
+        let primitive_values = decode_to_temporal(&date_times)
             .unwrap()
-            .try_into()
-            .unwrap();
-        let elem1: i64 = scalar_at(&local.timestamps(), 1)
-            .unwrap()
-            .try_into()
+            .temporal_values()
+            .into_primitive()
             .unwrap();
 
         assert_eq!(
-            elem0,
-            vec![(2i64 * 86_400 * 1_000_000_000), 2i64 * 1_000_000_000, 2i64]
-                .into_iter()
-                .sum::<i64>(),
-        );
-        assert_eq!(
-            elem1,
-            vec![(3i64 * 86_400 * 1_000_000_000), 3i64 * 1_000_000_000, 3i64]
-                .into_iter()
-                .sum::<i64>(),
+            primitive_values.maybe_null_slice::<i64>(),
+            raw_values.as_slice()
         );
     }
 }

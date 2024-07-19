@@ -2,7 +2,8 @@ use arrow_ord::cmp;
 use vortex_error::VortexResult;
 use vortex_expr::Operator;
 
-use crate::{arrow::FromArrowArray, Array, ArrayData, IntoArray, IntoCanonical};
+use crate::arrow::FromArrowArray;
+use crate::{Array, ArrayData, IntoArray, IntoCanonical};
 
 pub trait CompareFn {
     fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array>;

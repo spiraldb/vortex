@@ -1,16 +1,12 @@
 use arrow_buffer::NullBuffer;
-use vortex_dtype::match_each_integer_ptype;
-use vortex_dtype::DType;
-use vortex_dtype::NativePType;
+use vortex_dtype::{match_each_integer_ptype, DType, NativePType};
 use vortex_error::VortexResult;
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::compute::TakeFn;
 use crate::validity::Validity;
-use crate::Array;
-use crate::IntoArray;
-use crate::{ArrayDType, IntoArrayVariant};
+use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 
 impl TakeFn for VarBinArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {

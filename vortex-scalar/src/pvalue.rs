@@ -3,8 +3,7 @@ use std::mem;
 use num_traits::NumCast;
 use vortex_dtype::half::f16;
 use vortex_dtype::PType;
-use vortex_error::vortex_err;
-use vortex_error::VortexError;
+use vortex_error::{vortex_err, VortexError};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum PValue {

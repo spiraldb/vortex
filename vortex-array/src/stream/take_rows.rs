@@ -7,14 +7,11 @@ use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::compute::slice;
-use crate::compute::take;
 use crate::compute::unary::scalar_subtract::subtract_scalar;
-use crate::compute::{search_sorted, SearchSortedSide};
+use crate::compute::{search_sorted, slice, take, SearchSortedSide};
 use crate::stats::{ArrayStatistics, Stat};
 use crate::stream::ArrayStream;
-use crate::IntoArray;
-use crate::{Array, ArrayDType, IntoArrayVariant};
+use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 
 #[pin_project]
 pub struct TakeRows<R: ArrayStream> {

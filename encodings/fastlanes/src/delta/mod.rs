@@ -1,8 +1,7 @@
 pub use compress::*;
 use serde::{Deserialize, Serialize};
 use vortex::stats::ArrayStatisticsCompute;
-use vortex::validity::ValidityMetadata;
-use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};

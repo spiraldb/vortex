@@ -1,12 +1,10 @@
-use vortex_dtype::{match_each_native_ptype, DType};
-use vortex_dtype::{NativePType, PType};
+use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::cast::CastFn;
 use crate::validity::Validity;
-use crate::IntoArray;
-use crate::{Array, ArrayDType};
+use crate::{Array, ArrayDType, IntoArray};
 
 impl CastFn for PrimitiveArray {
     fn cast(&self, dtype: &DType) -> VortexResult<Array> {

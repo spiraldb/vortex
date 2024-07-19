@@ -4,10 +4,11 @@ use vortex_buffer::{Buffer, BufferString};
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};
 
+use crate::proto::scalar as pb;
 use crate::proto::scalar::scalar_value::Kind;
 use crate::proto::scalar::ListValue;
 use crate::pvalue::PValue;
-use crate::{proto::scalar as pb, Scalar, ScalarValue};
+use crate::{Scalar, ScalarValue};
 
 impl From<&Scalar> for pb::Scalar {
     fn from(value: &Scalar) -> Self {
@@ -148,8 +149,7 @@ mod test {
     use vortex_dtype::PType::I32;
     use vortex_dtype::{DType, Nullability};
 
-    use crate::Scalar;
-    use crate::{proto as pb, ScalarValue};
+    use crate::{proto as pb, Scalar, ScalarValue};
 
     fn round_trip(scalar: Scalar) {
         Scalar::try_from(&pb::scalar::Scalar::from(&scalar)).unwrap();

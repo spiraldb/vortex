@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
-use arrow_schema::TimeUnit as ArrowTimeUnit;
-use arrow_schema::{DataType, Field, SchemaRef};
+use arrow_schema::{DataType, Field, SchemaRef, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
-use vortex_dtype::{DType, Nullability};
-use vortex_dtype::{PType, StructDType};
+use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::array::datetime::{LocalDateTimeArray, TimeUnit};
+use crate::array::datetime::{make_temporal_ext_dtype, TimeUnit};
 use crate::arrow::{FromArrowType, TryFromArrowType};
 
 impl TryFromArrowType<&DataType> for PType {
@@ -68,14 +66,14 @@ impl FromArrowType<&Field> for DType {
             DataType::Boolean => Bool(nullability),
             DataType::Utf8 | DataType::LargeUtf8 => Utf8(nullability),
             DataType::Binary | DataType::LargeBinary => Binary(nullability),
-            DataType::Timestamp(time_unit, tz) => match tz {
-                None => Extension(LocalDateTimeArray::ext_dtype(time_unit.into()), nullability),
-                Some(_) => unimplemented!("Timezone not yet supported"),
-            },
-            // DataType::Date32 => localdate(IntWidth::_32, nullability),
-            // DataType::Date64 => localdate(IntWidth::_64, nullability),
-            // DataType::Time32(u) => localtime(u.into(), IntWidth::_32, nullability),
-            // DataType::Time64(u) => localtime(u.into(), IntWidth::_64, nullability),
+            DataType::Date32
+            | DataType::Date64
+            | DataType::Time32(_)
+            | DataType::Time64(_)
+            | DataType::Timestamp(..) => Extension(
+                make_temporal_ext_dtype(field.data_type()),
+                field.is_nullable().into(),
+            ),
             DataType::List(e) | DataType::LargeList(e) => {
                 List(Arc::new(Self::from_arrow(e.as_ref())), nullability)
             }
@@ -112,6 +110,7 @@ impl From<TimeUnit> for ArrowTimeUnit {
             TimeUnit::Ms => Self::Millisecond,
             TimeUnit::Us => Self::Microsecond,
             TimeUnit::Ns => Self::Nanosecond,
+            _ => panic!("cannot convert {value} to Arrow TimeUnit"),
         }
     }
 }

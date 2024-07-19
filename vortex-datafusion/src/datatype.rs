@@ -10,12 +10,16 @@
 //! For this reason, it's recommended to do as much computation as possible within Vortex, and then
 //! materialize an Arrow ArrayRef at the very end of the processing chain.
 
-use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaBuilder};
+use std::sync::Arc;
+
+use arrow_schema::{
+    DataType, Field, FieldRef, Fields, Schema, SchemaBuilder, TimeUnit as ArrowTimeUnit,
+};
+use vortex::array::datetime::temporal::TemporalMetadata;
+use vortex::array::datetime::TimeUnit;
 use vortex_dtype::{DType, Nullability, PType};
 
 /// Convert a Vortex [struct DType][DType] to an Arrow [Schema].
-///
-/// To avoid ambiguity, Vortex types are mapped to the [DataType] that
 ///
 /// # Panics
 ///
@@ -89,8 +93,36 @@ pub(crate) fn infer_data_type(dtype: &DType) -> DataType {
                 dtype.is_nullable(),
             )))
         }
-        DType::Extension(..) => {
-            panic!("Extension DType conversion to Arrow not supported")
+        DType::Extension(ext_dtype, _) => {
+            // Try and match against the known extension DTypes.
+            if let Ok(temporal_metadata) = TemporalMetadata::try_from(ext_dtype) {
+                match temporal_metadata {
+                    TemporalMetadata::Time(time_unit) => match time_unit {
+                        TimeUnit::S => DataType::Time32(ArrowTimeUnit::Second),
+                        TimeUnit::Ms => DataType::Time32(ArrowTimeUnit::Millisecond),
+                        TimeUnit::Us => DataType::Time64(ArrowTimeUnit::Microsecond),
+                        TimeUnit::Ns => DataType::Time64(ArrowTimeUnit::Nanosecond),
+                        _ => panic!("invalid time_unit for Time: {time_unit}"),
+                    },
+                    TemporalMetadata::Date(time_unit) => match time_unit {
+                        TimeUnit::D => DataType::Date32,
+                        TimeUnit::Ms => DataType::Date64,
+                        _ => panic!("invalid time_unit for Date: {time_unit}"),
+                    },
+                    TemporalMetadata::Timestamp(time_unit, tz) => DataType::Timestamp(
+                        match time_unit {
+                            TimeUnit::S => ArrowTimeUnit::Second,
+                            TimeUnit::Ms => ArrowTimeUnit::Millisecond,
+                            TimeUnit::Us => ArrowTimeUnit::Microsecond,
+                            TimeUnit::Ns => ArrowTimeUnit::Nanosecond,
+                            _ => panic!("invalid time_unit for Timestamp: {time_unit}"),
+                        },
+                        tz.map(|s| Arc::from(s.into_boxed_str())),
+                    ),
+                }
+            } else {
+                panic!("unsupported extension type \"{}\"", ext_dtype.id().as_ref())
+            }
         }
     }
 }

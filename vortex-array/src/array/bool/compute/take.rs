@@ -5,9 +5,7 @@ use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
 use crate::compute::TakeFn;
-use crate::Array;
-use crate::IntoArray;
-use crate::{AsArray, IntoArrayVariant};
+use crate::{Array, AsArray, IntoArray, IntoArrayVariant};
 
 impl TakeFn for BoolArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
