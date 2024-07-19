@@ -1,15 +1,14 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-
-use vortex::{Array, flatbuffers as fba};
 use vortex::stats::ArrayStatistics;
+use vortex::{flatbuffers as fba, Array};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 
-use crate::ALIGNMENT;
 use crate::flatbuffers::ipc as fb;
 use crate::flatbuffers::ipc::Compression;
+use crate::ALIGNMENT;
 
 pub enum IPCMessage<'a> {
     Schema(IPCSchema<'a>),
