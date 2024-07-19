@@ -2,12 +2,10 @@ use arrow_arith::boolean;
 use arrow_array::cast::AsArray;
 use vortex_error::VortexResult;
 
-use crate::{
-    array::bool::BoolArray,
-    arrow::FromArrowArray,
-    compute::{AndFn, OrFn},
-    Array, ArrayData, IntoArray, IntoCanonical,
-};
+use crate::array::bool::BoolArray;
+use crate::arrow::FromArrowArray;
+use crate::compute::{AndFn, OrFn};
+use crate::{Array, ArrayData, IntoArray, IntoCanonical};
 
 impl OrFn for BoolArray {
     fn or(&self, array: &Array) -> VortexResult<Array> {

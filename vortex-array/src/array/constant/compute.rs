@@ -6,9 +6,9 @@ use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::compute::unary::scalar_at::ScalarAtFn;
-use crate::compute::{AndFn, OrFn};
-use crate::compute::{ArrayCompute, SliceFn, TakeFn};
-use crate::compute::{SearchResult, SearchSortedFn, SearchSortedSide};
+use crate::compute::{
+    AndFn, ArrayCompute, OrFn, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
+};
 use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 
 impl ArrayCompute for ConstantArray {

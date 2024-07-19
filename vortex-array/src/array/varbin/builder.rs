@@ -1,7 +1,6 @@
 use arrow_buffer::NullBufferBuilder;
 use bytes::BytesMut;
-use vortex_dtype::DType;
-use vortex_dtype::NativePType;
+use vortex_dtype::{DType, NativePType};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;

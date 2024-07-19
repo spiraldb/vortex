@@ -1,9 +1,7 @@
 use datafusion_expr::{Expr, Operator as DFOperator};
-use vortex::{
-    array::constant::ConstantArray,
-    compute::{and, compare, or},
-    Array, IntoArray,
-};
+use vortex::array::constant::ConstantArray;
+use vortex::compute::{and, compare, or};
+use vortex::{Array, IntoArray};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_expr::Operator;
 
