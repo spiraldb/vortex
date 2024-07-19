@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
 
-use vortex_error::VortexResult;
+use vortex_dtype::Nullability;
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
-use crate::array::null::NullArray;
 use crate::compute::boolean::{and, AndFn, OrFn};
 use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::{ArrayCompute, SliceFn, TakeFn};
@@ -93,19 +93,21 @@ fn constant_array_bool_impl(
             let lhs = constant_array.scalar().value().as_bool()?;
             let rhs = array.scalar().value().as_bool()?;
 
-            let r = match lhs.zip(rhs).map(bool_op) {
-                Some(b) => ConstantArray::new(b, constant_array.len()).into_array(),
-                None => NullArray::new(constant_array.len()).into_array(),
+            let scalar = match lhs.zip(rhs).map(bool_op) {
+                Some(b) => Scalar::bool(b, Nullability::Nullable),
+                None => Scalar::null(constant_array.dtype().as_nullable()),
             };
 
-            return Ok(r);
+            Ok(ConstantArray::new(scalar, constant_array.len()).into_array())
+        } else {
+            let lhs = constant_array.clone().into_bool()?;
+            let rhs = other.clone().into_bool()?;
+
+            and(lhs.as_array_ref(), rhs.as_array_ref())
         }
+    } else {
+        vortex_bail!("Boolean operations aren't supported on arrays of different lengths")
     }
-
-    let lhs = constant_array.clone().into_bool()?;
-    let rhs = other.clone().into_bool()?;
-
-    and(lhs.as_array_ref(), rhs.as_array_ref())
 }
 
 #[cfg(test)]
