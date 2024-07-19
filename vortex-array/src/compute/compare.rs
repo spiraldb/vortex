@@ -1,6 +1,8 @@
 use arrow_ord::cmp;
+use vortex_dtype::{DType, Nullability};
 use vortex_error::VortexResult;
 use vortex_expr::Operator;
+use vortex_scalar::Scalar;
 
 use crate::arrow::FromArrowArray;
 use crate::{Array, ArrayData, IntoArray, IntoCanonical};
@@ -36,4 +38,21 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
     };
 
     Ok(ArrayData::from_arrow(&array, true).into_array())
+}
+
+pub fn scalar_cmp(lhs: &Scalar, rhs: &Scalar, operator: Operator) -> Scalar {
+    if lhs.is_null() | rhs.is_null() {
+        Scalar::null(DType::Bool(Nullability::Nullable))
+    } else {
+        let b = match operator {
+            Operator::Eq => lhs == rhs,
+            Operator::NotEq => lhs != rhs,
+            Operator::Gt => lhs > rhs,
+            Operator::Gte => lhs >= rhs,
+            Operator::Lt => lhs < rhs,
+            Operator::Lte => lhs <= rhs,
+        };
+
+        Scalar::bool(b, Nullability::Nullable)
+    }
 }

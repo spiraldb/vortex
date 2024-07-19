@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 use arrow_array::Datum;
-use vortex_dtype::{DType, Nullability};
+use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::Operator;
 use vortex_scalar::Scalar;
@@ -11,8 +11,8 @@ use crate::array::constant::ConstantArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::unary::scalar_at::ScalarAtFn;
 use crate::compute::{
-    AndFn, ArrayCompute, CompareFn, OrFn, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn,
-    TakeFn,
+    scalar_cmp, AndFn, ArrayCompute, CompareFn, OrFn, SearchResult, SearchSortedFn,
+    SearchSortedSide, SliceFn, TakeFn,
 };
 use crate::{Array, ArrayDType, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
 
@@ -118,23 +118,6 @@ impl AndFn for ConstantArray {
 impl OrFn for ConstantArray {
     fn or(&self, array: &Array) -> VortexResult<Array> {
         constant_array_bool_impl(self, array, |(l, r)| l | r)
-    }
-}
-
-fn scalar_cmp(lhs: &Scalar, rhs: &Scalar, operator: Operator) -> Scalar {
-    if lhs.is_null() | rhs.is_null() {
-        Scalar::null(DType::Bool(Nullability::Nullable))
-    } else {
-        let b = match operator {
-            Operator::Eq => lhs == rhs,
-            Operator::NotEq => lhs != rhs,
-            Operator::Gt => lhs > rhs,
-            Operator::Gte => lhs >= rhs,
-            Operator::Lt => lhs < rhs,
-            Operator::Lte => lhs <= rhs,
-        };
-
-        Scalar::bool(b, Nullability::Nullable)
     }
 }
 

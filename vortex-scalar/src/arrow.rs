@@ -52,7 +52,7 @@ impl From<Scalar> for Arc<dyn Datum> {
                     .as_buffer_string()
                     .expect("should be buffer string")
                 {
-                    Some(s) => Arc::new(StringArray::new_scalar(s.as_str().to_string())),
+                    Some(s) => Arc::new(StringArray::new_scalar(s.as_str())),
                     None => Arc::new(StringArray::new_null(1)),
                 }
             }
