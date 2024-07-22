@@ -7,7 +7,8 @@ members = [
     "vortex-array",
     "vortex-buffer",
     "vortex-datafusion",
-    "vortex-dtype",
+    "vortex-dtype", 
+    "vortex-duckdb",
     "vortex-error",
     "vortex-expr",
     "vortex-flatbuffers",
@@ -61,7 +62,9 @@ datafusion-expr = "40.0.0"
 datafusion-physical-expr = "40.0.0"
 datafusion-physical-plan = "40.0.0"
 divan = "0.1.14"
-duckdb = "1.0.0"
+# Pull in DuckDB with unreleased changes for VTab
+duckdb = { git = "https://github.com/duckdb/duckdb-rs.git", rev = "1c73aef679d0a33f380861c8061c82bf6edbda07", default-features = false }
+duckdb-loadable-macros = { git = "https://github.com/duckdb/duckdb-rs.git", rev = "1c73aef679d0a33f380861c8061c82bf6edbda07", default-features = false }
 enum-iterator = "2.0.0"
 enum_dispatch = "0.3.13"
 fallible-iterator = "0.3.0"
