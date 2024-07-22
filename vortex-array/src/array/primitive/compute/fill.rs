@@ -2,7 +2,7 @@ use vortex_dtype::match_each_native_ptype;
 use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::unary::fill_forward::FillForwardFn;
+use crate::compute::unary::FillForwardFn;
 use crate::validity::ArrayValidity;
 use crate::{Array, IntoArray, ToArrayData};
 
@@ -34,7 +34,7 @@ impl FillForwardFn for PrimitiveArray {
 mod test {
     use crate::array::bool::BoolArray;
     use crate::array::primitive::PrimitiveArray;
-    use crate::compute::unary::fill_forward::fill_forward;
+    use crate::compute::unary::fill_forward;
     use crate::validity::{ArrayValidity, Validity};
     use crate::IntoArray;
 

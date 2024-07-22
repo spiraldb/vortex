@@ -140,7 +140,7 @@ impl AcceptArrayVisitor for BoolArray {
 #[cfg(test)]
 mod tests {
     use crate::array::bool::BoolArray;
-    use crate::compute::unary::scalar_at::scalar_at;
+    use crate::compute::unary::scalar_at;
     use crate::IntoArray;
 
     #[test]

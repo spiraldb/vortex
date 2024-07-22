@@ -1,8 +1,5 @@
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::unary::cast::CastFn;
-use crate::compute::unary::fill_forward::FillForwardFn;
-use crate::compute::unary::scalar_at::ScalarAtFn;
-use crate::compute::unary::scalar_subtract::SubtractScalarFn;
+use crate::compute::unary::{CastFn, FillForwardFn, ScalarAtFn, SubtractScalarFn};
 use crate::compute::{ArrayCompute, CompareFn, FilterIndicesFn, SearchSortedFn, SliceFn, TakeFn};
 
 mod cast;

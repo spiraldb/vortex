@@ -9,8 +9,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::unary::scalar_at::scalar_at;
-use crate::compute::unary::scalar_subtract::{subtract_scalar, SubtractScalarFn};
+use crate::compute::unary::{scalar_at, subtract_scalar, SubtractScalarFn};
 use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::StatsSet;
@@ -167,7 +166,7 @@ mod test {
 
     use crate::array::chunked::ChunkedArray;
     use crate::compute::slice;
-    use crate::compute::unary::scalar_subtract::subtract_scalar;
+    use crate::compute::unary::subtract_scalar;
     use crate::{Array, IntoArray, IntoArrayVariant, ToArray};
 
     fn chunked_array() -> ChunkedArray {

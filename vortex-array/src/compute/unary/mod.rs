@@ -1,4 +1,9 @@
-pub mod cast;
-pub mod fill_forward;
-pub mod scalar_at;
-pub mod scalar_subtract;
+mod cast;
+mod fill_forward;
+mod scalar_at;
+mod scalar_subtract;
+
+pub use cast::{try_cast, CastFn};
+pub use fill_forward::{fill_forward, FillForwardFn};
+pub use scalar_at::{scalar_at, ScalarAtFn};
+pub use scalar_subtract::{subtract_scalar, SubtractScalarFn};

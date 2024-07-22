@@ -1,5 +1,5 @@
 use vortex::array::bool::BoolArray;
-use vortex::compute::unary::scalar_at::ScalarAtFn;
+use vortex::compute::unary::ScalarAtFn;
 use vortex::compute::{slice, ArrayCompute, SliceFn, TakeFn};
 use vortex::{Array, IntoArray, IntoArrayVariant, ToArray};
 use vortex_dtype::match_each_integer_ptype;

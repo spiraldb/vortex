@@ -2,7 +2,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::bool::BoolArray;
-use crate::compute::unary::scalar_at::ScalarAtFn;
+use crate::compute::unary::ScalarAtFn;
 use crate::validity::ArrayValidity;
 use crate::ArrayDType;
 
