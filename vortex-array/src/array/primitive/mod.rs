@@ -70,10 +70,10 @@ impl PrimitiveArray {
     }
 
     /// Creates a new array of type U8
-    pub fn from_bytes(bytes: Bytes) -> Self {
+    pub fn from_bytes(bytes: Bytes, validity: Validity) -> Self {
         let buffer = Buffer::Bytes(bytes);
 
-        PrimitiveArray::new(buffer, PType::U8, Validity::NonNullable)
+        PrimitiveArray::new(buffer, PType::U8, validity)
     }
 
     pub fn validity(&self) -> Validity {
