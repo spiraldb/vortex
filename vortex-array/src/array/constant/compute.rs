@@ -1,17 +1,21 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
 
+use arrow_array::Datum;
 use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
+use crate::arrow::FromArrowArray;
 use crate::compute::unary::{scalar_at, ScalarAtFn};
 use crate::compute::{
-    AndFn, ArrayCompute, OrFn, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
+    scalar_cmp, AndFn, ArrayCompute, CompareFn, OrFn, SearchResult, SearchSortedFn,
+    SearchSortedSide, SliceFn, TakeFn,
 };
 use crate::stats::{ArrayStatistics, Stat};
-use crate::{Array, ArrayDType, AsArray, IntoArray};
+use crate::{Array, ArrayDType, ArrayData, AsArray, IntoArray, IntoCanonical};
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -84,7 +88,7 @@ impl CompareFn for ConstantArray {
 
             Ok(ConstantArray::new(scalar, self.len()).into_array())
         } else {
-            let datum = Arc::<dyn Datum>::from(self.scalar().clone());
+            let datum = Arc::<dyn Datum>::from(self.scalar());
             let rhs = rhs.clone().into_canonical()?.into_arrow();
             let rhs = rhs.as_ref();
 
@@ -101,7 +105,6 @@ impl CompareFn for ConstantArray {
         }
     }
 }
-
 
 impl AndFn for ConstantArray {
     fn and(&self, array: &Array) -> VortexResult<Array> {

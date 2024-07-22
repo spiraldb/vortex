@@ -5,8 +5,8 @@ use vortex_dtype::{DType, PType};
 
 use crate::{PValue, Scalar};
 
-impl From<Scalar> for Arc<dyn Datum> {
-    fn from(value: Scalar) -> Arc<dyn Datum> {
+impl From<&Scalar> for Arc<dyn Datum> {
+    fn from(value: &Scalar) -> Arc<dyn Datum> {
         match value.dtype {
             DType::Null => Arc::new(NullArray::new(1)),
             DType::Bool(_) => match value.value.as_bool().expect("should be bool") {
