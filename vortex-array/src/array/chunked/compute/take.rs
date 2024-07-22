@@ -8,10 +8,12 @@ use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::{scalar_at, subtract_scalar, try_cast};
 use crate::compute::{search_sorted, slice, take, SearchSortedSide, TakeFn};
 use crate::stats::ArrayStatistics;
-use crate::{Array, ArrayDType, IntoArray, ToArray};
+use crate::{Array, ArrayDType, IntoArray, IntoCanonical, ToArray};
 
 impl TakeFn for ChunkedArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
+        let indices = indices.clone().into_canonical()?.into_array();
+
         // Fast path for strict sorted indices.
         if indices
             .statistics()
@@ -22,11 +24,10 @@ impl TakeFn for ChunkedArray {
                 return Ok(self.to_array());
             }
 
-            return take_strict_sorted(self, indices);
+            return take_strict_sorted(self, &indices);
         }
 
-        // FIXME(ngates): this is wrong, need to canonicalise
-        let indices = PrimitiveArray::try_from(try_cast(indices, PType::U64.into())?)?;
+        let indices = PrimitiveArray::try_from(try_cast(&indices, PType::U64.into())?)?;
 
         // While the chunk idx remains the same, accumulate a list of chunk indices.
         let mut chunks = Vec::new();

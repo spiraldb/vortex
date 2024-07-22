@@ -51,7 +51,11 @@ pub(crate) fn try_canonicalize_chunks(
         DType::Extension(ext_dtype, _) => {
             let storage_chunks: Vec<Array> = chunks
                 .iter()
-                .map(|chunk| ExtensionArray::try_from(chunk).unwrap().storage())
+                .map(|chunk| {
+                    ExtensionArray::try_from(chunk.clone().into_canonical())
+                        .unwrap()
+                        .storage()
+                })
                 .collect();
             let storage_dtype = storage_chunks.first().unwrap().dtype().clone();
             let ext_array = ExtensionArray::new(
