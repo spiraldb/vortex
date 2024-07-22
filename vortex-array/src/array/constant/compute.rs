@@ -80,7 +80,7 @@ impl SearchSortedFn for ConstantArray {
 
 impl CompareFn for ConstantArray {
     fn compare(&self, rhs: &Array, operator: Operator) -> VortexResult<Array> {
-        if let Some(true) = rhs.statistics().compute_is_constant() {
+        if let Some(true) = rhs.statistics().get_as::<bool>(Stat::IsConstant) {
             let lhs = self.scalar();
             let rhs = scalar_at(rhs, 0)?;
 
