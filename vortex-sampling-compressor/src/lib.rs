@@ -4,7 +4,6 @@ use std::fmt::{Debug, Display, Formatter};
 use log::{debug, info, warn};
 use vortex::array::chunked::{Chunked, ChunkedArray};
 use vortex::array::constant::Constant;
-use vortex::array::extension::{Extension, ExtensionArray};
 use vortex::array::struct_::{Struct, StructArray};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice;
@@ -216,18 +215,6 @@ impl<'a> SamplingCompressor<'a> {
                         strct.len(),
                         validity,
                     )?
-                    .into_array(),
-                ))
-            }
-            Extension::ID => {
-                // For extension arrays, compress the internal storage array.
-                let ext = ExtensionArray::try_from(arr)?;
-
-                Ok(CompressedArray::uncompressed(
-                    ExtensionArray::new(
-                        ext.ext_dtype().clone(),
-                        self.compress_array(&ext.storage())?.into_array(),
-                    )
                     .into_array(),
                 ))
             }
