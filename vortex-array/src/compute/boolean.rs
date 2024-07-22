@@ -50,7 +50,7 @@ pub fn or(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
         return selection;
     }
 
-    // If neither side implements `Or`, we try to expand the left-hand side into a `BoolArray`, which we know does implement it, and call into that implementation.
+    // If neither side implements `OrFn`, we try to expand the left-hand side into a `BoolArray`, which we know does implement it, and call into that implementation.
     let lhs = lhs.clone().into_bool()?;
 
     lhs.or(rhs)
