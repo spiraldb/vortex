@@ -1,16 +1,21 @@
 use std::cmp::Ordering;
+use std::sync::Arc;
 
+use arrow_array::Datum;
 use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
+use crate::arrow::FromArrowArray;
 use crate::compute::unary::{scalar_at, ScalarAtFn};
 use crate::compute::{
-    AndFn, ArrayCompute, OrFn, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
+    scalar_cmp, AndFn, ArrayCompute, CompareFn, OrFn, SearchResult, SearchSortedFn,
+    SearchSortedSide, SliceFn, TakeFn,
 };
 use crate::stats::{ArrayStatistics, Stat};
-use crate::{Array, ArrayDType, AsArray, IntoArray};
+use crate::{Array, ArrayDType, ArrayData, AsArray, IntoArray, IntoCanonical};
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -26,6 +31,10 @@ impl ArrayCompute for ConstantArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn compare(&self) -> Option<&dyn CompareFn> {
         Some(self)
     }
 
@@ -65,6 +74,34 @@ impl SearchSortedFn for ConstantArray {
                 SearchSortedSide::Left => Ok(SearchResult::Found(0)),
                 SearchSortedSide::Right => Ok(SearchResult::Found(self.len())),
             },
+        }
+    }
+}
+
+impl CompareFn for ConstantArray {
+    fn compare(&self, rhs: &Array, operator: Operator) -> VortexResult<Array> {
+        if let Some(true) = rhs.statistics().get_as::<bool>(Stat::IsConstant) {
+            let lhs = self.scalar();
+            let rhs = scalar_at(rhs, 0)?;
+
+            let scalar = scalar_cmp(lhs, &rhs, operator);
+
+            Ok(ConstantArray::new(scalar, self.len()).into_array())
+        } else {
+            let datum = Arc::<dyn Datum>::from(self.scalar());
+            let rhs = rhs.clone().into_canonical()?.into_arrow();
+            let rhs = rhs.as_ref();
+
+            let boolean_array = match operator {
+                Operator::Eq => arrow_ord::cmp::eq(datum.as_ref(), &rhs)?,
+                Operator::NotEq => arrow_ord::cmp::neq(datum.as_ref(), &rhs)?,
+                Operator::Gt => arrow_ord::cmp::gt(datum.as_ref(), &rhs)?,
+                Operator::Gte => arrow_ord::cmp::gt_eq(datum.as_ref(), &rhs)?,
+                Operator::Lt => arrow_ord::cmp::lt(datum.as_ref(), &rhs)?,
+                Operator::Lte => arrow_ord::cmp::lt_eq(datum.as_ref(), &rhs)?,
+            };
+
+            Ok(ArrayData::from_arrow(&boolean_array, true).into_array())
         }
     }
 }

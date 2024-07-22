@@ -8,7 +8,7 @@
 //! from Arrow.
 
 pub use boolean::{and, or, AndFn, OrFn};
-pub use compare::{compare, CompareFn};
+pub use compare::{compare, scalar_cmp, CompareFn};
 pub use filter::{filter, FilterFn};
 pub use filter_indices::{filter_indices, FilterIndicesFn};
 pub use search_sorted::*;

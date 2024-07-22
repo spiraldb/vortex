@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 
 use vortex_dtype::DType;
 
+mod arrow;
 mod binary;
 mod bool;
 mod datafusion;

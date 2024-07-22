@@ -1,18 +1,36 @@
 use arrow_ord::cmp;
-use vortex_error::VortexResult;
+use vortex_dtype::{DType, Nullability};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::Operator;
+use vortex_scalar::Scalar;
 
 use crate::arrow::FromArrowArray;
-use crate::{Array, ArrayData, IntoArray, IntoCanonical};
+use crate::{Array, ArrayDType, ArrayData, IntoArray, IntoCanonical};
 
 pub trait CompareFn {
     fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array>;
 }
 
 pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<Array> {
+    if left.len() != right.len() {
+        vortex_bail!("Compare operations only support arrays of the same length");
+    }
+
+    // TODO(adamg): This is a placeholder until we figure out type coercion and casting
+    if !left.dtype().eq_ignore_nullability(right.dtype()) {
+        vortex_bail!("Compare operations only support arrays of the same type");
+    }
+
     if let Some(selection) =
         left.with_dyn(|lhs| lhs.compare().map(|lhs| lhs.compare(right, operator)))
     {
+        return selection;
+    }
+
+    if let Some(selection) = right.with_dyn(|rhs| {
+        rhs.compare()
+            .map(|rhs| rhs.compare(left, operator.inverse()))
+    }) {
         return selection;
     }
 
@@ -30,4 +48,21 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
     };
 
     Ok(ArrayData::from_arrow(&array, true).into_array())
+}
+
+pub fn scalar_cmp(lhs: &Scalar, rhs: &Scalar, operator: Operator) -> Scalar {
+    if lhs.is_null() | rhs.is_null() {
+        Scalar::null(DType::Bool(Nullability::Nullable))
+    } else {
+        let b = match operator {
+            Operator::Eq => lhs == rhs,
+            Operator::NotEq => lhs != rhs,
+            Operator::Gt => lhs > rhs,
+            Operator::Gte => lhs >= rhs,
+            Operator::Lt => lhs < rhs,
+            Operator::Lte => lhs <= rhs,
+        };
+
+        Scalar::bool(b, Nullability::Nullable)
+    }
 }

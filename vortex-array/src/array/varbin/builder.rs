@@ -49,7 +49,6 @@ impl<O: NativePType> VarBinBuilder<O> {
     pub fn finish(mut self, dtype: DType) -> VarBinArray {
         let offsets = PrimitiveArray::from(self.offsets);
         let data = PrimitiveArray::from_bytes(self.data.freeze(), Validity::NonNullable);
-
         let nulls = self.validity.finish();
 
         let validity = if dtype.is_nullable() {

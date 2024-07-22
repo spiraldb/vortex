@@ -4330,6 +4330,7 @@ dependencies = [
 name = "vortex-scalar"
 version = "0.1.0"
 dependencies = [
+ "arrow-array",
  "build-vortex",
  "datafusion-common",
  "flatbuffers",
