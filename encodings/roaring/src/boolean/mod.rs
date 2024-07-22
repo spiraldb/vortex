@@ -121,7 +121,7 @@ impl IntoCanonical for RoaringBoolArray {
 #[cfg(test)]
 mod test {
     use vortex::array::bool::BoolArray;
-    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at;
     use vortex::IntoArray;
     use vortex_error::VortexResult;
     use vortex_scalar::Scalar;

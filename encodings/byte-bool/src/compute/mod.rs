@@ -3,8 +3,7 @@ use std::sync::Arc;
 
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
-use vortex::compute::unary::fill_forward::FillForwardFn;
-use vortex::compute::unary::scalar_at::ScalarAtFn;
+use vortex::compute::unary::{FillForwardFn, ScalarAtFn};
 use vortex::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
 use vortex::encoding::ArrayEncodingRef;
 use vortex::stats::StatsSet;
@@ -182,7 +181,7 @@ impl FillForwardFn for ByteBoolArray {
 
 #[cfg(test)]
 mod tests {
-    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at;
     use vortex::compute::{compare, slice};
     use vortex::AsArray as _;
 

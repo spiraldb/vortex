@@ -104,7 +104,7 @@ impl ArrayStatisticsCompute for RoaringIntArray {}
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at;
     use vortex::IntoArray;
     use vortex_error::VortexResult;
 

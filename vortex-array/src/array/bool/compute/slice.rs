@@ -19,7 +19,7 @@ mod tests {
 
     use super::*;
     use crate::compute::slice;
-    use crate::compute::unary::scalar_at::scalar_at;
+    use crate::compute::unary::scalar_at;
     use crate::validity::ArrayValidity;
     use crate::AsArray;
 

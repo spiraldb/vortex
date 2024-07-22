@@ -3,7 +3,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::null::NullArray;
-use crate::compute::unary::scalar_at::ScalarAtFn;
+use crate::compute::unary::ScalarAtFn;
 use crate::compute::{ArrayCompute, SliceFn, TakeFn};
 use crate::{Array, IntoArray, IntoArrayVariant};
 
@@ -56,7 +56,7 @@ mod test {
     use vortex_dtype::DType;
 
     use crate::array::null::NullArray;
-    use crate::compute::unary::scalar_at::scalar_at;
+    use crate::compute::unary::scalar_at;
     use crate::compute::{slice, take};
     use crate::validity::{ArrayValidity, LogicalValidity};
     use crate::IntoArray;

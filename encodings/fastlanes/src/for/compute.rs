@@ -1,4 +1,4 @@
-use vortex::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
+use vortex::compute::unary::{scalar_at, ScalarAtFn};
 use vortex::compute::{
     search_sorted, slice, take, ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide,
     SliceFn, TakeFn,
@@ -94,7 +94,7 @@ impl SearchSortedFn for FoRArray {
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at;
     use vortex::compute::{search_sorted, SearchResult, SearchSortedSide};
     use vortex::IntoArray;
 

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use vortex::compute::unary::scalar_at::scalar_at;
+use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, SearchSortedSide};
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
@@ -144,7 +144,7 @@ impl ArrayStatisticsCompute for RunEndBoolArray {}
 #[cfg(test)]
 mod test {
     use vortex::array::bool::BoolArray;
-    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at;
     use vortex::compute::{slice, take};
     use vortex::validity::Validity;
     use vortex::{Array, ArrayDType, IntoArray, IntoCanonical, ToArray};

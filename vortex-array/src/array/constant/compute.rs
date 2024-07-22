@@ -4,7 +4,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
-use crate::compute::unary::scalar_at::ScalarAtFn;
+use crate::compute::unary::ScalarAtFn;
 use crate::compute::{
     ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
 };
