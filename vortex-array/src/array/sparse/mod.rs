@@ -54,6 +54,13 @@ impl SparseArray {
                 values.dtype(),
             );
         }
+        if indices.len() != values.len() {
+            vortex_bail!(
+                "Mismatched indices {} and values {} length",
+                indices.len(),
+                values.len()
+            );
+        }
 
         Self::try_from_parts(
             values.dtype().clone(),
@@ -80,7 +87,7 @@ impl SparseArray {
     #[inline]
     pub fn values(&self) -> Array {
         self.array()
-            .child(1, self.dtype(), self.indices().len())
+            .child(1, self.dtype(), self.metadata().indices_len)
             .expect("missing child array")
     }
 
@@ -157,10 +164,10 @@ impl ArrayValidity for SparseArray {
             // of true, and patch values of false.
             Self::try_new_with_offset(
                 self.indices(),
-                ConstantArray::new(false, self.len()).into_array(),
+                ConstantArray::new(true, self.indices().len()).into_array(),
                 self.len(),
                 self.indices_offset(),
-                true.into(),
+                false.into(),
             )
         } else {
             // If the fill_value is non-null, then the validity is based on the validity of the
@@ -171,7 +178,7 @@ impl ArrayValidity for SparseArray {
                     .with_dyn(|a| a.logical_validity().into_array()),
                 self.len(),
                 self.indices_offset(),
-                true.into(),
+                false.into(),
             )
         }
         .unwrap();
