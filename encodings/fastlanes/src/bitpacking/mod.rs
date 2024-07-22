@@ -1,13 +1,13 @@
 use ::serde::{Deserialize, Serialize};
 pub use compress::*;
 use vortex::array::primitive::{Primitive, PrimitiveArray};
-use vortex::stats::ArrayStatisticsCompute;
+use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
+use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
 use vortex_dtype::{Nullability, PType};
-use vortex_error::{vortex_bail, vortex_err};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 mod compress;
 mod compute;

@@ -2,8 +2,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::extension::ExtensionArray;
-use crate::compute::unary::cast::CastFn;
-use crate::compute::unary::scalar_at::{scalar_at, ScalarAtFn};
+use crate::compute::unary::{scalar_at, CastFn, ScalarAtFn};
 use crate::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use crate::{Array, IntoArray};
 

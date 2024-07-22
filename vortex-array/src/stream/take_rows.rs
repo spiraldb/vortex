@@ -7,7 +7,7 @@ use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::compute::unary::scalar_subtract::subtract_scalar;
+use crate::compute::unary::subtract_scalar;
 use crate::compute::{search_sorted, slice, take, SearchSortedSide};
 use crate::stats::{ArrayStatistics, Stat};
 use crate::stream::ArrayStream;

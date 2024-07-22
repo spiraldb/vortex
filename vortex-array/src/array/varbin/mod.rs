@@ -1,17 +1,20 @@
+use std::fmt::Debug;
+
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 pub use stats::compute_stats;
 use vortex_buffer::Buffer;
-use vortex_dtype::{match_each_native_ptype, NativePType, Nullability};
-use vortex_error::vortex_bail;
+use vortex_dtype::{match_each_native_ptype, DType, NativePType, Nullability};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::slice;
-use crate::compute::unary::scalar_at::scalar_at;
+use crate::compute::unary::scalar_at;
+use crate::stats::StatsSet;
 use crate::validity::{Validity, ValidityMetadata};
-use crate::{impl_encoding, ArrayDType, IntoArrayVariant};
+use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArrayVariant};
 
 mod accessor;
 mod array;
@@ -229,7 +232,7 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::VarBinArray;
     use crate::compute::slice;
-    use crate::compute::unary::scalar_at::scalar_at;
+    use crate::compute::unary::scalar_at;
     use crate::validity::Validity;
     use crate::{Array, IntoArray};
 

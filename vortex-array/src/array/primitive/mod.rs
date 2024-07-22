@@ -3,13 +3,17 @@ use itertools::Itertools;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
-use vortex_dtype::{match_each_native_ptype, NativePType, PType};
-use vortex_error::vortex_bail;
+use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
+use vortex_error::{vortex_bail, VortexResult};
 
+use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
+use crate::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+    TypedArray,
+};
 
 mod accessor;
 mod compute;

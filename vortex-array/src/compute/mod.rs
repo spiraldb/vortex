@@ -14,10 +14,7 @@ pub use filter_indices::{filter_indices, FilterIndicesFn};
 pub use search_sorted::*;
 pub use slice::{slice, SliceFn};
 pub use take::{take, TakeFn};
-use unary::cast::CastFn;
-use unary::fill_forward::FillForwardFn;
-use unary::scalar_at::ScalarAtFn;
-use unary::scalar_subtract::SubtractScalarFn;
+use unary::{CastFn, FillForwardFn, ScalarAtFn, SubtractScalarFn};
 
 mod boolean;
 mod compare;

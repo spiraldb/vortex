@@ -9,7 +9,7 @@ use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::arrow::FromArrowArray;
-use crate::compute::unary::scalar_at::ScalarAtFn;
+use crate::compute::unary::ScalarAtFn;
 use crate::compute::{
     scalar_cmp, AndFn, ArrayCompute, CompareFn, OrFn, SearchResult, SearchSortedFn,
     SearchSortedSide, SliceFn, TakeFn,
@@ -111,13 +111,13 @@ impl CompareFn for ConstantArray {
 
 impl AndFn for ConstantArray {
     fn and(&self, array: &Array) -> VortexResult<Array> {
-        constant_array_bool_impl(self, array, |(l, r)| l & r)
+        constant_array_bool_impl(self, array, |(l, r)| l & r, and)
     }
 }
 
 impl OrFn for ConstantArray {
     fn or(&self, array: &Array) -> VortexResult<Array> {
-        constant_array_bool_impl(self, array, |(l, r)| l | r)
+        constant_array_bool_impl(self, array, |(l, r)| l | r, or)
     }
 }
 
@@ -125,26 +125,31 @@ fn constant_array_bool_impl(
     constant_array: &ConstantArray,
     other: &Array,
     bool_op: impl Fn((bool, bool)) -> bool,
+    fallback_fn: impl Fn(&Array, &Array) -> VortexResult<Array>,
 ) -> VortexResult<Array> {
-    if constant_array.dtype().is_boolean()
-        && other.dtype().is_boolean()
-        && constant_array.len() == other.len()
-    {
-        if let Ok(array) = ConstantArray::try_from(other.clone()) {
-            let lhs = constant_array.scalar().value().as_bool()?;
-            let rhs = array.scalar().value().as_bool()?;
-
-            let scalar = match lhs.zip(rhs).map(bool_op) {
-                Some(b) => Scalar::bool(b, Nullability::Nullable),
-                None => Scalar::null(constant_array.dtype().as_nullable()),
-            };
-
-            Ok(ConstantArray::new(scalar, constant_array.len()).into_array())
-        } else {
-            AndFn::and(&constant_array.clone().into_bool()?, other)
-        }
-    } else {
+    if constant_array.len() != other.len() {
         vortex_bail!("Boolean operations aren't supported on arrays of different lengths")
+    }
+
+    if !constant_array.dtype().is_boolean() || !other.dtype().is_boolean() {
+        vortex_bail!("Boolean operations are only supported on boolean arrays")
+    }
+
+    // If the right side is constant
+    if let Some(true) = other.statistics().compute_is_constant() {
+        println!("Got Const!");
+        let lhs = constant_array.scalar().value().as_bool()?;
+        let rhs = scalar_at(other, 0)?.value().as_bool()?;
+
+        let scalar = match lhs.zip(rhs).map(bool_op) {
+            Some(b) => Scalar::bool(b, Nullability::Nullable),
+            None => Scalar::null(constant_array.dtype().as_nullable()),
+        };
+
+        Ok(ConstantArray::new(scalar, constant_array.len()).into_array())
+    } else {
+        // Expand the const array and try and use a the rhs specialized implementation if it exists
+        fallback_fn(other, constant_array.as_array_ref())
     }
 }
 

@@ -2,11 +2,14 @@ use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
+use vortex_dtype::DType;
+use vortex_error::VortexResult;
 
+use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, BoolArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, Canonical, IntoCanonical};
+use crate::{impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TypedArray};
 
 mod accessors;
 mod compute;
@@ -137,7 +140,7 @@ impl AcceptArrayVisitor for BoolArray {
 #[cfg(test)]
 mod tests {
     use crate::array::bool::BoolArray;
-    use crate::compute::unary::scalar_at::scalar_at;
+    use crate::compute::unary::scalar_at;
     use crate::IntoArray;
 
     #[test]

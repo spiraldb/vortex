@@ -1,12 +1,14 @@
+use std::fmt::Debug;
+
 pub use compress::*;
 use serde::{Deserialize, Serialize};
-use vortex::stats::ArrayStatisticsCompute;
+use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
-use vortex_dtype::PType;
-use vortex_error::vortex_bail;
+use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
+use vortex_dtype::{DType, PType};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 mod compress;

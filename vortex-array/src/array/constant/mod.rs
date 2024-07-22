@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
-use crate::impl_encoding;
-use crate::stats::Stat;
+use crate::stats::{Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::{impl_encoding, ArrayDef, ArrayTrait};
 
 mod canonical;
 mod compute;
