@@ -7,10 +7,9 @@ use vortex_scalar::Scalar;
 use crate::array::constant::ConstantArray;
 use crate::compute::unary::{scalar_at, ScalarAtFn};
 use crate::compute::{
-    and, or, AndFn, ArrayCompute, OrFn, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn,
-    TakeFn,
+    AndFn, ArrayCompute, OrFn, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
 };
-use crate::stats::ArrayStatistics;
+use crate::stats::{ArrayStatistics, Stat};
 use crate::{Array, ArrayDType, AsArray, IntoArray};
 
 impl ArrayCompute for ConstantArray {
@@ -72,13 +71,23 @@ impl SearchSortedFn for ConstantArray {
 
 impl AndFn for ConstantArray {
     fn and(&self, array: &Array) -> VortexResult<Array> {
-        constant_array_bool_impl(self, array, |(l, r)| l & r, and)
+        constant_array_bool_impl(
+            self,
+            array,
+            |(l, r)| l & r,
+            |lhs, rhs| rhs.with_dyn(|rhs| rhs.and().map(|rhs| rhs.and(lhs))),
+        )
     }
 }
 
 impl OrFn for ConstantArray {
     fn or(&self, array: &Array) -> VortexResult<Array> {
-        constant_array_bool_impl(self, array, |(l, r)| l | r, or)
+        constant_array_bool_impl(
+            self,
+            array,
+            |(l, r)| l | r,
+            |lhs, rhs| rhs.with_dyn(|rhs| rhs.or().map(|rhs| rhs.or(lhs))),
+        )
     }
 }
 
@@ -86,18 +95,10 @@ fn constant_array_bool_impl(
     constant_array: &ConstantArray,
     other: &Array,
     bool_op: impl Fn((bool, bool)) -> bool,
-    fallback_fn: impl Fn(&Array, &Array) -> VortexResult<Array>,
+    fallback_fn: impl Fn(&Array, &Array) -> Option<VortexResult<Array>>,
 ) -> VortexResult<Array> {
-    if constant_array.len() != other.len() {
-        vortex_bail!("Boolean operations aren't supported on arrays of different lengths")
-    }
-
-    if !constant_array.dtype().is_boolean() || !other.dtype().is_boolean() {
-        vortex_bail!("Boolean operations are only supported on boolean arrays")
-    }
-
     // If the right side is constant
-    if let Some(true) = other.statistics().compute_is_constant() {
+    if let Some(true) = other.statistics().get_as::<bool>(Stat::IsConstant) {
         let lhs = constant_array.scalar().value().as_bool()?;
         let rhs = scalar_at(other, 0)?.value().as_bool()?;
 
@@ -109,7 +110,10 @@ fn constant_array_bool_impl(
         Ok(ConstantArray::new(scalar, constant_array.len()).into_array())
     } else {
         // try and use a the rhs specialized implementation if it exists
-        fallback_fn(other, constant_array.as_array_ref())
+        match fallback_fn(other, constant_array.as_array_ref()) {
+            Some(r) => r,
+            None => vortex_bail!("Operation is not supported"),
+        }
     }
 }
 
@@ -117,12 +121,11 @@ fn constant_array_bool_impl(
 mod test {
     use rstest::rstest;
 
-    use crate::Array;
     use crate::array::bool::BoolArray;
     use crate::array::constant::ConstantArray;
     use crate::compute::unary::scalar_at;
     use crate::compute::{and, or, search_sorted, SearchResult, SearchSortedSide};
-    use crate::{IntoArray, IntoArrayVariant};
+    use crate::{Array, IntoArray, IntoArrayVariant};
 
     #[test]
     pub fn search() {
@@ -169,7 +172,7 @@ mod test {
 
     #[rstest]
     #[case(ConstantArray::new(true, 4).into_array(), BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array())]
-    #[case(BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array(), 
+    #[case(BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array(),
         ConstantArray::new(true, 4).into_array())]
     fn test_and(#[case] lhs: Array, #[case] rhs: Array) {
         let r = and(&lhs, &rhs).unwrap().into_bool().unwrap().into_array();

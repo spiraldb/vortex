@@ -1,6 +1,6 @@
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 
-use crate::{Array, IntoArrayVariant};
+use crate::{Array, ArrayDType, IntoArrayVariant};
 
 pub trait AndFn {
     fn and(&self, array: &Array) -> VortexResult<Array>;
@@ -11,6 +11,14 @@ pub trait OrFn {
 }
 
 pub fn and(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
+    if lhs.len() != rhs.len() {
+        vortex_bail!("Boolean operations aren't supported on arrays of different lengths")
+    }
+
+    if !lhs.dtype().is_boolean() || !rhs.dtype().is_boolean() {
+        vortex_bail!("Boolean operations are only supported on boolean arrays")
+    }
+
     if let Some(selection) = lhs.with_dyn(|lhs| lhs.and().map(|lhs| lhs.and(rhs))) {
         return selection;
     }
@@ -25,6 +33,14 @@ pub fn and(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
 }
 
 pub fn or(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
+    if lhs.len() != rhs.len() {
+        vortex_bail!("Boolean operations aren't supported on arrays of different lengths")
+    }
+
+    if !lhs.dtype().is_boolean() || !rhs.dtype().is_boolean() {
+        vortex_bail!("Boolean operations are only supported on boolean arrays")
+    }
+
     if let Some(selection) = lhs.with_dyn(|lhs| lhs.or().map(|lhs| lhs.or(rhs))) {
         return selection;
     }
@@ -51,7 +67,7 @@ mod tests {
     #[case(BoolArray::from_iter([Some(true), Some(true), Some(false), Some(false)].into_iter())
     .into_array(), BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter())
     .into_array())]
-    #[case(BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array(), 
+    #[case(BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array(),
         BoolArray::from_iter([Some(true), Some(true), Some(false), Some(false)].into_iter()).into_array())]
     fn test_or(#[case] lhs: Array, #[case] rhs: Array) {
         let r = or(&lhs, &rhs).unwrap();
@@ -73,7 +89,7 @@ mod tests {
     #[case(BoolArray::from_iter([Some(true), Some(true), Some(false), Some(false)].into_iter())
     .into_array(), BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter())
     .into_array())]
-    #[case(BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array(), 
+    #[case(BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array(),
         BoolArray::from_iter([Some(true), Some(true), Some(false), Some(false)].into_iter()).into_array())]
     fn test_and(#[case] lhs: Array, #[case] rhs: Array) {
         let r = and(&lhs, &rhs).unwrap().into_bool().unwrap().into_array();
