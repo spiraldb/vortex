@@ -193,3 +193,6 @@ benchmarks/.out
 
 # TPC-H benchmarking data
 data/
+
+# vscode
+.vscode/

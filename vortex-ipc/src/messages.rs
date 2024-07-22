@@ -12,12 +12,12 @@ use crate::ALIGNMENT;
 
 pub enum IPCMessage<'a> {
     Schema(IPCSchema<'a>),
-    Chunk(IPCChunk<'a>),
+    Batch(IPCBatch<'a>),
     Page(IPCPage<'a>),
 }
 
 pub struct IPCSchema<'a>(pub &'a DType);
-pub struct IPCChunk<'a>(pub &'a Array);
+pub struct IPCBatch<'a>(pub &'a Array);
 pub struct IPCArray<'a>(pub &'a Array);
 pub struct IPCPage<'a>(pub &'a Buffer);
 
@@ -32,7 +32,7 @@ impl WriteFlatBuffer for IPCMessage<'_> {
     ) -> WIPOffset<Self::Target<'fb>> {
         let header = match self {
             Self::Schema(f) => f.write_flatbuffer(fbb).as_union_value(),
-            Self::Chunk(f) => f.write_flatbuffer(fbb).as_union_value(),
+            Self::Batch(f) => f.write_flatbuffer(fbb).as_union_value(),
             Self::Page(f) => f.write_flatbuffer(fbb).as_union_value(),
         };
 
@@ -40,7 +40,7 @@ impl WriteFlatBuffer for IPCMessage<'_> {
         msg.add_version(Default::default());
         msg.add_header_type(match self {
             Self::Schema(_) => fb::MessageHeader::Schema,
-            Self::Chunk(_) => fb::MessageHeader::Chunk,
+            Self::Batch(_) => fb::MessageHeader::Batch,
             Self::Page(_) => fb::MessageHeader::Page,
         });
         msg.add_header(header);
@@ -60,8 +60,8 @@ impl<'a> WriteFlatBuffer for IPCSchema<'a> {
     }
 }
 
-impl<'a> WriteFlatBuffer for IPCChunk<'a> {
-    type Target<'t> = fb::Chunk<'t>;
+impl<'a> WriteFlatBuffer for IPCBatch<'a> {
+    type Target<'t> = fb::Batch<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
@@ -77,20 +77,20 @@ impl<'a> WriteFlatBuffer for IPCChunk<'a> {
         let mut offset = 0;
         for array_data in array_data.depth_first_traversal() {
             if let Some(buffer) = array_data.buffer() {
+                let aligned_size = (buffer.len() + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
                 buffers.push(fb::Buffer::new(
                     offset as u64,
-                    buffer.len() as u64,
+                    (aligned_size - buffer.len()) as u16,
                     Compression::None,
                 ));
-                let aligned_size = (buffer.len() + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);
                 offset += aligned_size;
             }
         }
         let buffers = Some(fbb.create_vector(&buffers));
 
-        fb::Chunk::create(
+        fb::Batch::create(
             fbb,
-            &fb::ChunkArgs {
+            &fb::BatchArgs {
                 array,
                 length,
                 buffers,
