@@ -107,6 +107,10 @@ impl DType {
             .map(|ptype| ptype.is_float())
             .unwrap_or_default()
     }
+
+    pub fn is_boolean(&self) -> bool {
+        matches!(self, Bool(_))
+    }
 }
 
 impl Display for DType {

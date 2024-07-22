@@ -12,6 +12,7 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+arrow-array = { workspace = true }
 datafusion-common = { workspace = true, optional = true }
 flatbuffers = { workspace = true, optional = true }
 flexbuffers = { workspace = true, optional = true }
@@ -42,15 +43,7 @@ flatbuffers = [
     "dep:serde",
     "vortex-buffer/flexbuffers",
     "vortex-error/flexbuffers",
-    "vortex-dtype/flatbuffers"
+    "vortex-dtype/flatbuffers",
 ]
-proto = [
-    "dep:prost",
-    "dep:prost-types",
-    "vortex-dtype/proto",
-]
-serde = [
-    "dep:serde",
-    "serde/derive",
-    "vortex-dtype/serde"
-]
+proto = ["dep:prost", "dep:prost-types", "vortex-dtype/proto"]
+serde = ["dep:serde", "serde/derive", "vortex-dtype/serde"]

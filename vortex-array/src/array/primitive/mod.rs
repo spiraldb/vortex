@@ -1,4 +1,5 @@
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer};
+use bytes::Bytes;
 use itertools::Itertools;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -66,6 +67,13 @@ impl PrimitiveArray {
         let elems: Vec<T> = values.iter().map(|v| v.unwrap_or_default()).collect();
         let validity = Validity::from(values.iter().map(|v| v.is_some()).collect::<Vec<_>>());
         Self::from_vec(elems, validity)
+    }
+
+    /// Creates a new array of type U8
+    pub fn from_bytes(bytes: Bytes, validity: Validity) -> Self {
+        let buffer = Buffer::Bytes(bytes);
+
+        PrimitiveArray::new(buffer, PType::U8, validity)
     }
 
     pub fn validity(&self) -> Validity {

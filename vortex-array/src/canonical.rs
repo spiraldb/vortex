@@ -222,10 +222,8 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
         PType::I32 | PType::I64 => offsets,
         // Unless it's u64, everything else can be converted into an i32.
         // FIXME(ngates): do not copy offsets again
-        PType::U64 => try_cast(&offsets.to_array(), PType::I64.into())
-            .expect("cast to i64")
-            .into_primitive()
-            .expect("flatten_primitive"),
+        PType::U64 => offsets.reinterpret_cast(PType::I64),
+        PType::U32 => offsets.reinterpret_cast(PType::I32),
         _ => try_cast(&offsets.to_array(), PType::I32.into())
             .expect("cast to i32")
             .into_primitive()
@@ -289,13 +287,10 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
 fn temporal_to_arrow(temporal_array: TemporalArray) -> ArrayRef {
     macro_rules! extract_temporal_values {
         ($values:expr, $prim:ty) => {{
-            let temporal_values = try_cast(
-                &temporal_array.temporal_values(),
-                <$prim as NativePType>::PTYPE.into(),
-            )
-            .expect("values must cast to primitive type")
-            .into_primitive()
-            .expect("must be primitive array");
+            let temporal_values = try_cast($values, <$prim as NativePType>::PTYPE.into())
+                .expect("values must cast to primitive type")
+                .into_primitive()
+                .expect("must be primitive array");
             let len = temporal_values.len();
             let nulls = temporal_values
                 .logical_validity()
@@ -312,12 +307,12 @@ fn temporal_to_arrow(temporal_array: TemporalArray) -> ArrayRef {
         TemporalMetadata::Date(time_unit) => match time_unit {
             TimeUnit::D => {
                 let (scalars, nulls) =
-                    extract_temporal_values!(temporal_array.temporal_values(), i32);
+                    extract_temporal_values!(&temporal_array.temporal_values(), i32);
                 Arc::new(Date32Array::new(scalars, nulls))
             }
             TimeUnit::Ms => {
                 let (scalars, nulls) =
-                    extract_temporal_values!(temporal_array.temporal_values(), i64);
+                    extract_temporal_values!(&temporal_array.temporal_values(), i64);
                 Arc::new(Date64Array::new(scalars, nulls))
             }
             _ => panic!("invalid time_unit {time_unit} for vortex.date"),
@@ -325,28 +320,28 @@ fn temporal_to_arrow(temporal_array: TemporalArray) -> ArrayRef {
         TemporalMetadata::Time(time_unit) => match time_unit {
             TimeUnit::S => {
                 let (scalars, nulls) =
-                    extract_temporal_values!(temporal_array.temporal_values(), i32);
+                    extract_temporal_values!(&temporal_array.temporal_values(), i32);
                 Arc::new(Time32SecondArray::new(scalars, nulls))
             }
             TimeUnit::Ms => {
                 let (scalars, nulls) =
-                    extract_temporal_values!(temporal_array.temporal_values(), i32);
+                    extract_temporal_values!(&temporal_array.temporal_values(), i32);
                 Arc::new(Time32MillisecondArray::new(scalars, nulls))
             }
             TimeUnit::Us => {
                 let (scalars, nulls) =
-                    extract_temporal_values!(temporal_array.temporal_values(), i64);
+                    extract_temporal_values!(&temporal_array.temporal_values(), i64);
                 Arc::new(Time64MicrosecondArray::new(scalars, nulls))
             }
             TimeUnit::Ns => {
                 let (scalars, nulls) =
-                    extract_temporal_values!(temporal_array.temporal_values(), i64);
+                    extract_temporal_values!(&temporal_array.temporal_values(), i64);
                 Arc::new(Time64NanosecondArray::new(scalars, nulls))
             }
             _ => panic!("invalid TimeUnit for Time32 array {time_unit}"),
         },
         TemporalMetadata::Timestamp(time_unit, _) => {
-            let (scalars, nulls) = extract_temporal_values!(temporal_array.temporal_values(), i64);
+            let (scalars, nulls) = extract_temporal_values!(&temporal_array.temporal_values(), i64);
             match time_unit {
                 TimeUnit::Ns => Arc::new(TimestampNanosecondArray::new(scalars, nulls)),
                 TimeUnit::Us => Arc::new(TimestampMicrosecondArray::new(scalars, nulls)),

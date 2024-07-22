@@ -49,8 +49,8 @@ fn canonicalize_sparse_bools(
         fill_value.try_into()?
     };
     let mut flat_bools = vec![fill_bool; len];
-    for idx in indices {
-        flat_bools[*idx] = values.value(*idx);
+    for (i, idx) in indices.iter().enumerate() {
+        flat_bools[*idx] = values.value(i);
         validity.set_bit(*idx, true);
     }
 

@@ -1,34 +1,26 @@
 use datafusion_expr::{Expr, Operator as DFOperator};
-use vortex::array::bool::BoolArray;
 use vortex::array::constant::ConstantArray;
-use vortex::compute::compare;
-use vortex::{Array, IntoArray, IntoArrayVariant};
+use vortex::compute::{and, compare, or};
+use vortex::{Array, IntoArray};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_expr::Operator;
+
+use crate::can_be_pushed_down;
 
 pub struct ExpressionEvaluator;
 
 impl ExpressionEvaluator {
     pub fn eval(array: Array, expr: &Expr) -> VortexResult<Array> {
+        debug_assert!(can_be_pushed_down(expr));
+
         match expr {
             Expr::BinaryExpr(expr) => {
                 let lhs = ExpressionEvaluator::eval(array.clone(), expr.left.as_ref())?;
                 let rhs = ExpressionEvaluator::eval(array, expr.right.as_ref())?;
-
                 // TODO(adamg): turn and/or into more general compute functions
                 match expr.op {
-                    DFOperator::And => {
-                        let lhs = lhs.into_bool()?;
-                        let rhs = rhs.into_bool()?;
-                        let buffer = &lhs.boolean_buffer() & &rhs.boolean_buffer();
-                        Ok(BoolArray::from(buffer).into_array())
-                    }
-                    DFOperator::Or => {
-                        let lhs = lhs.into_bool()?;
-                        let rhs = rhs.into_bool()?;
-                        let buffer = &lhs.boolean_buffer() | &rhs.boolean_buffer();
-                        Ok(BoolArray::from(buffer).into_array())
-                    }
+                    DFOperator::And => and(&lhs, &rhs),
+                    DFOperator::Or => or(&lhs, &rhs),
                     DFOperator::Eq => compare(&lhs, &rhs, Operator::Eq),
                     DFOperator::Gt => compare(&lhs, &rhs, Operator::Gt),
                     DFOperator::GtEq => compare(&lhs, &rhs, Operator::Gte),

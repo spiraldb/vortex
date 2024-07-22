@@ -14,7 +14,7 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use crate::compress::runend_bool_decode;
 
-impl_encoding!("vortex.runendbool", 22u16, RunEndBool);
+impl_encoding!("vortex.runendbool", 23u16, RunEndBool);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEndBoolMetadata {
