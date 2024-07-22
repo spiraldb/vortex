@@ -10,7 +10,7 @@ use crate::{Array, ArrayData, ArrayDef, AsArray, IntoArray, ToArray, TryDeserial
 #[derive(Debug, Clone)]
 pub struct TypedArray<D: ArrayDef> {
     array: Array,
-    meta_cell: OnceLock<D::Metadata>,
+    lazy_metadata: OnceLock<D::Metadata>,
 }
 
 impl<D: ArrayDef> TypedArray<D> {
@@ -33,7 +33,7 @@ impl<D: ArrayDef> TypedArray<D> {
         )?);
         Ok(Self {
             array,
-            meta_cell: OnceLock::new(),
+            lazy_metadata: OnceLock::new(),
         })
     }
 
@@ -41,7 +41,7 @@ impl<D: ArrayDef> TypedArray<D> {
         match &self.array {
             Array::Data(d) => d.metadata().as_any().downcast_ref::<D::Metadata>().unwrap(),
             Array::View(v) => self
-                .meta_cell
+                .lazy_metadata
                 .get_or_init(|| D::Metadata::try_deserialize_metadata(v.metadata()).unwrap()),
         }
     }
@@ -66,7 +66,7 @@ impl<D: ArrayDef> TryFrom<Array> for TypedArray<D> {
         }
         Ok(Self {
             array,
-            meta_cell: OnceLock::new(),
+            lazy_metadata: OnceLock::new(),
         })
     }
 }
