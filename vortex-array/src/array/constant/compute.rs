@@ -98,7 +98,6 @@ fn constant_array_bool_impl(
 
     // If the right side is constant
     if let Some(true) = other.statistics().compute_is_constant() {
-        println!("Got Const!");
         let lhs = constant_array.scalar().value().as_bool()?;
         let rhs = scalar_at(other, 0)?.value().as_bool()?;
 
