@@ -299,9 +299,10 @@ fn make_filter_then_take_plan(
 
 fn supported_data_types(dt: DataType) -> bool {
     dt.is_integer()
-        || dt.is_floating()
         || dt.is_signed_integer()
+        || dt.is_floating()
         || dt.is_null()
+        || dt == DataType::Boolean
         || dt == DataType::Binary
         || dt == DataType::Utf8
         || dt == DataType::Binary
@@ -474,7 +475,7 @@ mod test {
     use datafusion::functions_aggregate::count::count_distinct;
     use datafusion::prelude::SessionContext;
     use datafusion_common::{Column, TableReference};
-    use datafusion_expr::{col, lit, BinaryExpr, Expr, Operator};
+    use datafusion_expr::{and, col, lit, BinaryExpr, Expr, Operator};
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
@@ -617,5 +618,11 @@ mod test {
         let e = Expr::BinaryExpr(e);
 
         assert!(!can_be_pushed_down(&e));
+    }
+
+    #[test]
+    fn test_can_be_pushed_down4() {
+        let e = and((col("a")).eq(lit(2u64)), col("b").eq(lit(true)));
+        assert!(can_be_pushed_down(&e));
     }
 }

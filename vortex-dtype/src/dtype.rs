@@ -83,6 +83,10 @@ impl DType {
     pub fn is_struct(&self) -> bool {
         matches!(self, Struct(_, _))
     }
+
+    pub fn is_boolean(&self) -> bool {
+        matches!(self, Bool(_))
+    }
 }
 
 impl Display for DType {

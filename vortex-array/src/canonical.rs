@@ -222,10 +222,8 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
         PType::I32 | PType::I64 => offsets,
         // Unless it's u64, everything else can be converted into an i32.
         // FIXME(ngates): do not copy offsets again
-        PType::U64 => try_cast(&offsets.to_array(), PType::I64.into())
-            .expect("cast to i64")
-            .into_primitive()
-            .expect("flatten_primitive"),
+        PType::U64 => offsets.reinterpret_cast(PType::I64),
+        PType::U32 => offsets.reinterpret_cast(PType::I32),
         _ => try_cast(&offsets.to_array(), PType::I32.into())
             .expect("cast to i32")
             .into_primitive()
