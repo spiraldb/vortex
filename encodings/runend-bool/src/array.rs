@@ -71,7 +71,7 @@ impl RunEndBoolArray {
             vortex_bail!("Index must be in array slice",);
         }
         search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
-            .map(|s| s.to_index())
+            .map(|s| s.to_non_zero_offset_index())
     }
 
     pub fn validity(&self) -> Validity {
