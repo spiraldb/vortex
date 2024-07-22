@@ -108,7 +108,7 @@ fn constant_array_bool_impl(
 
         Ok(ConstantArray::new(scalar, constant_array.len()).into_array())
     } else {
-        // Expand the const array and try and use a the rhs specialized implementation if it exists
+        // try and use a the rhs specialized implementation if it exists
         fallback_fn(other, constant_array.as_array_ref())
     }
 }
