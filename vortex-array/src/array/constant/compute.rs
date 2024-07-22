@@ -9,12 +9,13 @@ use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::arrow::FromArrowArray;
-use crate::compute::unary::ScalarAtFn;
+use crate::compute::unary::{scalar_at, ScalarAtFn};
 use crate::compute::{
-    scalar_cmp, AndFn, ArrayCompute, CompareFn, OrFn, SearchResult, SearchSortedFn,
+    and, or, scalar_cmp, AndFn, ArrayCompute, CompareFn, OrFn, SearchResult, SearchSortedFn,
     SearchSortedSide, SliceFn, TakeFn,
 };
-use crate::{Array, ArrayDType, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
+use crate::stats::ArrayStatistics;
+use crate::{Array, ArrayDType, ArrayData, AsArray, IntoArray, IntoCanonical};
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
