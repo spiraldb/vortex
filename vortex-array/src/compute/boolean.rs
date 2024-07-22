@@ -11,6 +11,7 @@ pub trait OrFn {
 }
 
 pub fn and(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
+    // We first want to check if either side implements `AndFn`
     if let Some(selection) = lhs.with_dyn(|lhs| lhs.and().map(|lhs| lhs.and(rhs))) {
         return selection;
     }
@@ -19,12 +20,13 @@ pub fn and(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
         return selection;
     }
 
+    // If neither side implements `AndFn`, we try to expand the left-hand side into a `BoolArray`, which we know does implement it, and call into that implementation.
     let lhs = lhs.clone().into_bool()?;
-
     lhs.and(rhs)
 }
 
 pub fn or(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
+    // We first want to check if either side implements `OrFn`
     if let Some(selection) = lhs.with_dyn(|lhs| lhs.or().map(|lhs| lhs.or(rhs))) {
         return selection;
     }
@@ -33,7 +35,7 @@ pub fn or(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
         return selection;
     }
 
+    // If neither side implements `Or`, we try to expand the left-hand side into a `BoolArray`, which we know does implement it, and call into that implementation.
     let lhs = lhs.clone().into_bool()?;
-
     lhs.or(rhs)
 }
