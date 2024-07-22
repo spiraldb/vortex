@@ -47,9 +47,17 @@ pub(crate) fn try_canonicalize_chunks(
         // Extension arrays wrap an internal storage array, which can hold a ChunkedArray until
         // it is safe to unpack them.
         DType::Extension(ext_dtype, _) => {
+            if chunks.is_empty() {
+                panic!("Can't canonicalize empty extension array")
+            }
+            let ext_chunk = ExtensionArray::try_from(chunks.first().unwrap()).unwrap();
+            let storage_chunks = chunks
+                .into_iter()
+                .map(|c| ExtensionArray::try_from(c).unwrap().storage())
+                .collect::<Vec<_>>();
             let ext_array = ExtensionArray::new(
                 ext_dtype.clone(),
-                ChunkedArray::try_new(chunks, dtype.clone())?.into_array(),
+                try_canonicalize_chunks(storage_chunks, ext_chunk.storage_dtype())?.into_array(),
             );
 
             Ok(Canonical::Extension(ext_array))

@@ -33,7 +33,7 @@ impl ExtensionArray {
 
     pub fn storage(&self) -> Array {
         self.array()
-            .child(0, &self.metadata().storage_dtype, self.len())
+            .child(0, self.storage_dtype(), self.len())
             .expect("Missing storage array")
     }
 
@@ -49,6 +49,11 @@ impl ExtensionArray {
             unreachable!();
         };
         ext
+    }
+
+    #[inline]
+    pub(crate) fn storage_dtype(&self) -> &DType {
+        &self.metadata().storage_dtype
     }
 }
 
