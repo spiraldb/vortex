@@ -27,14 +27,14 @@ impl SearchResult {
         }
     }
 
-    pub fn to_non_zero_offset_index(self) -> usize {
+    pub fn to_non_zero_offset_index(self, len: usize) -> usize {
         match self {
             SearchResult::Found(i) => i,
             SearchResult::NotFound(i) => {
-                if i == 0 {
-                    0
-                } else {
+                if i == len {
                     i - 1
+                } else {
+                    i
                 }
             }
         }
