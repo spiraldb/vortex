@@ -52,7 +52,7 @@ pub(crate) fn try_canonicalize_chunks(
             let storage_chunks: Vec<Array> = chunks
                 .iter()
                 .map(|chunk| {
-                    ExtensionArray::try_from(chunk.clone().into_canonical())
+                    ExtensionArray::try_from(chunk.clone().into_extension().unwrap())
                         .unwrap()
                         .storage()
                 })
