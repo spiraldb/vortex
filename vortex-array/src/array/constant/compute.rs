@@ -75,7 +75,7 @@ impl AndFn for ConstantArray {
             self,
             array,
             |(l, r)| l & r,
-            |lhs, rhs| rhs.with_dyn(|rhs| rhs.and().map(|rhs| rhs.and(lhs))),
+            |other, this| other.with_dyn(|other| other.and().map(|other| other.and(this))),
         )
     }
 }
@@ -86,7 +86,7 @@ impl OrFn for ConstantArray {
             self,
             array,
             |(l, r)| l | r,
-            |lhs, rhs| rhs.with_dyn(|rhs| rhs.or().map(|rhs| rhs.or(lhs))),
+            |other, this| other.with_dyn(|other| other.or().map(|other| other.or(this))),
         )
     }
 }

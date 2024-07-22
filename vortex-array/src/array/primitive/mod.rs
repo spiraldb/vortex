@@ -73,7 +73,7 @@ impl PrimitiveArray {
     pub fn from_bytes(bytes: Bytes) -> Self {
         let buffer = Buffer::Bytes(bytes);
 
-        PrimitiveArray::new(buffer, PType::U8, Validity::AllValid)
+        PrimitiveArray::new(buffer, PType::U8, Validity::NonNullable)
     }
 
     pub fn validity(&self) -> Validity {

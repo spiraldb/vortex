@@ -1,5 +1,5 @@
 use arrow_arith::boolean;
-use arrow_array::cast::AsArray;
+use arrow_array::cast::AsArray as _;
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
