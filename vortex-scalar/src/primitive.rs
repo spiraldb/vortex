@@ -25,6 +25,7 @@ impl<'a> PrimitiveScalar<'a> {
         self.ptype
     }
 
+    #[allow(clippy::unwrap_in_result)]
     pub fn typed_value<T: NativePType + TryFrom<PValue, Error = VortexError>>(&self) -> Option<T> {
         if self.ptype != T::PTYPE {
             panic!("Attempting to read {} scalar as {}", self.ptype, T::PTYPE);

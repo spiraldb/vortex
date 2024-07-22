@@ -40,10 +40,11 @@ pub mod proto {
 pub mod flatbuffers {
     pub use generated::vortex::scalar::*;
 
-    #[allow(unused_imports)]
+    #[allow(clippy::all)]
     #[allow(dead_code)]
     #[allow(non_camel_case_types)]
-    #[allow(clippy::all)]
+    #[allow(unsafe_op_in_unsafe_fn)]
+    #[allow(unused_imports)]
     pub mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/scalar.rs"));
     }

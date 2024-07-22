@@ -12,10 +12,16 @@ use crate::{flatbuffers as fb, DType, ExtDType, ExtID, ExtMetadata, PType, Struc
 impl TryFrom<fb::DType<'_>> for DType {
     type Error = VortexError;
 
+    #[allow(clippy::unwrap_in_result)]
     fn try_from(fb: fb::DType<'_>) -> Result<Self, Self::Error> {
         match fb.type_type() {
             fb::Type::Null => Ok(Self::Null),
-            fb::Type::Bool => Ok(Self::Bool(fb.type__as_bool().unwrap().nullable().into())),
+            fb::Type::Bool => Ok(Self::Bool(
+                fb.type__as_bool()
+                    .ok_or_else(|| vortex_err!("failed to parse bool from flatbuffer"))?
+                    .nullable()
+                    .into(),
+            )),
             fb::Type::Primitive => {
                 let fb_primitive = fb.type__as_primitive().unwrap();
                 Ok(Self::Primitive(

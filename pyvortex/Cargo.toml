@@ -11,8 +11,23 @@ include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 
-[lints]
-workspace = true
+[lints.rust]
+warnings = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+if_then_some_else_none = { level = "deny" }
+mem_forget = { level = "deny" }
+multiple_inherent_impl = { level = "deny" }
+or_fun_call = "deny"
+# panic = { level = "deny" }
+panic_in_result_fn = { level = "deny" }
+# same_name_method = { level = "deny" }
+tests_outside_test_module = { level = "deny" }
+# unreachable = { level = "deny" }
+# unwrap_used = { level = "deny" }
+unwrap_in_result = { level = "deny" }
+use_debug = { level = "deny" }
 
 [lib]
 name = "pyvortex"

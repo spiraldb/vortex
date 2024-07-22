@@ -14,10 +14,11 @@ pub const ALIGNMENT: usize = 64;
 pub mod flatbuffers {
     pub use generated::vortex::*;
 
-    #[allow(unused_imports)]
+    #[allow(clippy::all)]
     #[allow(dead_code)]
     #[allow(non_camel_case_types)]
-    #[allow(clippy::all)]
+    #[allow(unsafe_op_in_unsafe_fn)]
+    #[allow(unused_imports)]
     mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/message.rs"));
     }

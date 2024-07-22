@@ -22,11 +22,11 @@ pub mod proto {
 
 #[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
-    #[allow(unused_imports)]
-    #[allow(dead_code)]
-    #[allow(dead_code)]
     #[allow(clippy::all)]
+    #[allow(dead_code)]
     #[allow(non_camel_case_types)]
+    #[allow(unsafe_op_in_unsafe_fn)]
+    #[allow(unused_imports)]
     mod generated {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/dtype.rs"));
     }

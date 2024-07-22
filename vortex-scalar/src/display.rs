@@ -7,6 +7,7 @@ use crate::primitive::PrimitiveScalar;
 use crate::Scalar;
 
 impl Display for Scalar {
+    #[allow(clippy::unwrap_in_result)]
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.dtype() {
             DType::Null => write!(f, "null"),
