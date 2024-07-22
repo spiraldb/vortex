@@ -115,6 +115,3 @@ warnings = "deny"
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 or_fun_call = "deny"
-
-[profile.release]
-debug = true
