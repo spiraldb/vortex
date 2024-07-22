@@ -80,33 +80,29 @@ impl SearchSortedFn for ConstantArray {
 
 impl CompareFn for ConstantArray {
     fn compare(&self, rhs: &Array, operator: Operator) -> VortexResult<Array> {
-        if self.dtype().eq_ignore_nullability(rhs.dtype()) && self.len() == rhs.len() {
-            if let Ok(rhs) = ConstantArray::try_from(rhs) {
-                let lhs = self.scalar();
-                let rhs = rhs.scalar();
+        if let Some(true) = rhs.statistics().compute_is_constant() {
+            let lhs = self.scalar();
+            let rhs = scalar_at(rhs, 0)?;
 
-                let scalar = scalar_cmp(lhs, rhs, operator);
+            let scalar = scalar_cmp(lhs, &rhs, operator);
 
-                return Ok(ConstantArray::new(scalar, self.len()).into_array());
-            }
-
-            let datum = Arc::<dyn Datum>::from(self.scalar().clone());
-            let rhs = rhs.clone().into_canonical()?.into_arrow();
-            let rhs = rhs.as_ref();
-
-            let boolean_array = match operator {
-                Operator::Eq => arrow_ord::cmp::eq(datum.as_ref(), &rhs)?,
-                Operator::NotEq => arrow_ord::cmp::neq(datum.as_ref(), &rhs)?,
-                Operator::Gt => arrow_ord::cmp::gt(datum.as_ref(), &rhs)?,
-                Operator::Gte => arrow_ord::cmp::gt_eq(datum.as_ref(), &rhs)?,
-                Operator::Lt => arrow_ord::cmp::lt(datum.as_ref(), &rhs)?,
-                Operator::Lte => arrow_ord::cmp::lt_eq(datum.as_ref(), &rhs)?,
-            };
-
-            Ok(ArrayData::from_arrow(&boolean_array, true).into_array())
-        } else {
-            Ok(ConstantArray::new(false, rhs.len()).into_array())
+            return Ok(ConstantArray::new(scalar, self.len()).into_array());
         }
+
+        let datum = Arc::<dyn Datum>::from(self.scalar().clone());
+        let rhs = rhs.clone().into_canonical()?.into_arrow();
+        let rhs = rhs.as_ref();
+
+        let boolean_array = match operator {
+            Operator::Eq => arrow_ord::cmp::eq(datum.as_ref(), &rhs)?,
+            Operator::NotEq => arrow_ord::cmp::neq(datum.as_ref(), &rhs)?,
+            Operator::Gt => arrow_ord::cmp::gt(datum.as_ref(), &rhs)?,
+            Operator::Gte => arrow_ord::cmp::gt_eq(datum.as_ref(), &rhs)?,
+            Operator::Lt => arrow_ord::cmp::lt(datum.as_ref(), &rhs)?,
+            Operator::Lte => arrow_ord::cmp::lt_eq(datum.as_ref(), &rhs)?,
+        };
+
+        Ok(ArrayData::from_arrow(&boolean_array, true).into_array())
     }
 }
 
