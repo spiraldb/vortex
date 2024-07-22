@@ -1,16 +1,15 @@
 use ::serde::{Deserialize, Serialize};
-
-use vortex_dtype::{DType, match_each_integer_ptype};
+use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::{Array, ArrayDef, ArrayDType, ArrayTrait, impl_encoding, IntoArray, IntoArrayVariant};
 use crate::array::constant::ConstantArray;
-use crate::compute::{search_sorted, SearchSortedSide};
 use crate::compute::unary::scalar_at;
+use crate::compute::{search_sorted, SearchSortedSide};
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, IntoArrayVariant};
 
 mod compute;
 mod flatten;
@@ -191,17 +190,16 @@ impl ArrayValidity for SparseArray {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-
-    use vortex_dtype::{DType, PType};
     use vortex_dtype::Nullability::Nullable;
+    use vortex_dtype::{DType, PType};
     use vortex_error::VortexError;
     use vortex_scalar::Scalar;
 
-    use crate::{Array, IntoArray, IntoArrayVariant};
     use crate::accessor::ArrayAccessor;
     use crate::array::sparse::SparseArray;
     use crate::compute::slice;
     use crate::compute::unary::{scalar_at, try_cast};
+    use crate::{Array, IntoArray, IntoArrayVariant};
 
     fn nullable_fill() -> Scalar {
         Scalar::null(DType::Primitive(PType::I32, Nullable))
