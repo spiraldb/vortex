@@ -28,6 +28,8 @@ pub(crate) fn try_canonicalize_chunks(
     chunks: Vec<Array>,
     dtype: &DType,
 ) -> VortexResult<Canonical> {
+    assert!(!chunks.is_empty(), "chunks must be non-empty");
+
     let mismatched = chunks
         .iter()
         .filter(|chunk| !chunk.dtype().eq(dtype))
@@ -47,9 +49,14 @@ pub(crate) fn try_canonicalize_chunks(
         // Extension arrays wrap an internal storage array, which can hold a ChunkedArray until
         // it is safe to unpack them.
         DType::Extension(ext_dtype, _) => {
+            let storage_chunks: Vec<Array> = chunks
+                .iter()
+                .map(|chunk| ExtensionArray::try_from(chunk).unwrap().storage())
+                .collect();
+            let storage_dtype = storage_chunks.first().unwrap().dtype().clone();
             let ext_array = ExtensionArray::new(
                 ext_dtype.clone(),
-                ChunkedArray::try_new(chunks, dtype.clone())?.into_array(),
+                ChunkedArray::try_new(storage_chunks, storage_dtype)?.into_array(),
             );
 
             Ok(Canonical::Extension(ext_array))

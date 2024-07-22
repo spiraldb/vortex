@@ -4,6 +4,7 @@ use std::fmt::{Debug, Display, Formatter};
 use log::{debug, info, warn};
 use vortex::array::chunked::{Chunked, ChunkedArray};
 use vortex::array::constant::Constant;
+use vortex::array::extension::{Extension, ExtensionArray};
 use vortex::array::struct_::{Struct, StructArray};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice;
@@ -216,6 +217,27 @@ impl<'a> SamplingCompressor<'a> {
                         validity,
                     )?
                     .into_array(),
+                ))
+            }
+
+            // For internally-chunked extension arrays, we recursively compress every chunk.
+            Extension::ID
+                if ExtensionArray::try_from(arr)?.storage().encoding().id() == Chunked::ID =>
+            {
+                println!("compressing Extension type with chunked storage");
+                let ext = ExtensionArray::try_from(arr).unwrap();
+                let ext_dtype = ext.ext_dtype().clone();
+
+                let chunked_array = ChunkedArray::try_from(ext.storage()).unwrap();
+                // Compress each chunk as an ExtensionArray.
+                let mut compressed_chunks = Vec::with_capacity(chunked_array.nchunks());
+                for chunk in chunked_array.chunks() {
+                    let ext_chunk = ExtensionArray::new(ext_dtype.clone(), chunk);
+                    compressed_chunks
+                        .push(self.compress_array(&ext_chunk.into_array())?.into_array());
+                }
+                Ok(CompressedArray::uncompressed(
+                    ChunkedArray::try_new(compressed_chunks, ext.dtype().clone())?.into_array(),
                 ))
             }
             _ => {

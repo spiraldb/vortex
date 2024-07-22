@@ -75,7 +75,7 @@ mod test {
         // Two levels of chunking, just to be fancy.
         let root = ChunkedArray::try_new(
             vec![chunked],
-            DType::Primitive(PType::U32, Nullability::NonNullable),
+            DType::Primitive(PType::U32, Nullability::Nullable),
         )
         .unwrap()
         .into_array();
