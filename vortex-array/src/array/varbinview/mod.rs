@@ -9,7 +9,7 @@ use arrow_buffer::{Buffer, ScalarBuffer};
 use arrow_schema::DataType;
 use itertools::Itertools;
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
@@ -241,7 +241,7 @@ impl IntoCanonical for VarBinViewArray {
         let nullable = self.dtype().is_nullable();
         let arrow_self = as_arrow(self);
         let arrow_varbin = arrow_cast::cast(arrow_self.deref(), &DataType::Utf8)
-            .expect("Utf8View must cast to Ut8f");
+            .map_err(VortexError::ArrowError)?;
         let vortex_array = ArrayData::from_arrow(arrow_varbin, nullable).into_array();
 
         Ok(Canonical::VarBin(VarBinArray::try_from(&vortex_array)?))

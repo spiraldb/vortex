@@ -114,7 +114,7 @@ impl IntoArray for ArrayData {
 
 impl Statistics for ArrayData {
     fn get(&self, stat: Stat) -> Option<Scalar> {
-        self.stats_map.read().unwrap().get(stat).cloned()
+        self.stats_map.read().ok()?.get(stat).cloned()
     }
 
     fn to_set(&self) -> StatsSet {

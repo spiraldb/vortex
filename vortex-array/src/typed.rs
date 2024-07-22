@@ -48,6 +48,7 @@ impl<D: ArrayDef> TypedArray<D> {
 impl<D: ArrayDef> TryFrom<Array> for TypedArray<D> {
     type Error = VortexError;
 
+    #[allow(clippy::unwrap_in_result)]
     fn try_from(array: Array) -> Result<Self, Self::Error> {
         if array.encoding().id() != D::ENCODING.id() {
             vortex_bail!(
