@@ -1,4 +1,3 @@
-
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::{Array, ArrayDType, IntoArrayVariant};
