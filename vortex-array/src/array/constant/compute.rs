@@ -115,9 +115,14 @@ fn constant_array_bool_impl(
 
 #[cfg(test)]
 mod test {
+    use rstest::rstest;
+
+    use crate::Array;
+    use crate::array::bool::BoolArray;
     use crate::array::constant::ConstantArray;
-    use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
-    use crate::IntoArray;
+    use crate::compute::unary::scalar_at;
+    use crate::compute::{and, or, search_sorted, SearchResult, SearchSortedSide};
+    use crate::{IntoArray, IntoArrayVariant};
 
     #[test]
     pub fn search() {
@@ -143,5 +148,40 @@ mod test {
             search_sorted(&cst, 42, SearchSortedSide::Right).unwrap(),
             SearchResult::Found(5000)
         );
+    }
+
+    #[rstest]
+    #[case(ConstantArray::new(true, 4).into_array(), BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array())]
+    #[case(BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array(), ConstantArray::new(true, 4).into_array())]
+    fn test_or(#[case] lhs: Array, #[case] rhs: Array) {
+        let r = or(&lhs, &rhs).unwrap().into_bool().unwrap().into_array();
+
+        let v0 = scalar_at(&r, 0).unwrap().value().as_bool().unwrap();
+        let v1 = scalar_at(&r, 1).unwrap().value().as_bool().unwrap();
+        let v2 = scalar_at(&r, 2).unwrap().value().as_bool().unwrap();
+        let v3 = scalar_at(&r, 3).unwrap().value().as_bool().unwrap();
+
+        assert!(v0.unwrap());
+        assert!(v1.unwrap());
+        assert!(v2.unwrap());
+        assert!(v3.unwrap());
+    }
+
+    #[rstest]
+    #[case(ConstantArray::new(true, 4).into_array(), BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array())]
+    #[case(BoolArray::from_iter([Some(true), Some(false), Some(true), Some(false)].into_iter()).into_array(), 
+        ConstantArray::new(true, 4).into_array())]
+    fn test_and(#[case] lhs: Array, #[case] rhs: Array) {
+        let r = and(&lhs, &rhs).unwrap().into_bool().unwrap().into_array();
+
+        let v0 = scalar_at(&r, 0).unwrap().value().as_bool().unwrap();
+        let v1 = scalar_at(&r, 1).unwrap().value().as_bool().unwrap();
+        let v2 = scalar_at(&r, 2).unwrap().value().as_bool().unwrap();
+        let v3 = scalar_at(&r, 3).unwrap().value().as_bool().unwrap();
+
+        assert!(v0.unwrap());
+        assert!(!v1.unwrap());
+        assert!(v2.unwrap());
+        assert!(!v3.unwrap());
     }
 }
