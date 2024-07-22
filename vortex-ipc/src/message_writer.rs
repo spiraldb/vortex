@@ -9,7 +9,7 @@ use vortex_dtype::DType;
 use vortex_flatbuffers::WriteFlatBuffer;
 
 use crate::io::VortexWrite;
-use crate::messages::{IPCChunk, IPCMessage, IPCPage, IPCSchema};
+use crate::messages::{IPCBatch, IPCMessage, IPCPage, IPCSchema};
 use crate::ALIGNMENT;
 
 const ZEROS: [u8; 512] = [0u8; 512];
@@ -52,7 +52,7 @@ impl<W: VortexWrite> MessageWriter<W> {
         let buffer_offsets = chunk.all_buffer_offsets(self.alignment);
 
         // Serialize the Chunk message.
-        self.write_message(IPCMessage::Chunk(IPCChunk(&chunk)))
+        self.write_message(IPCMessage::Batch(IPCBatch(&chunk)))
             .await?;
 
         // Keep track of the offset to add padding after each buffer.

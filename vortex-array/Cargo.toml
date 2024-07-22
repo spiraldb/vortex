@@ -60,6 +60,7 @@ build-vortex = { path = "../build-vortex" }
 
 [dev-dependencies]
 criterion = { workspace = true }
+rstest = { workspace = true }
 tokio = { workspace = true }
 
 [[bench]]

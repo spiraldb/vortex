@@ -98,39 +98,45 @@ impl<R: VortexRead> MessageReader<R> {
 
     /// Fetch the buffers associated with this message.
     async fn read_buffers(&mut self) -> VortexResult<Vec<Buffer>> {
-        let Some(chunk_msg) = self.peek().and_then(|m| m.header_as_chunk()) else {
+        let Some(chunk_msg) = self.peek().and_then(|m| m.header_as_batch()) else {
             // We could return an error here?
             return Ok(Vec::new());
         };
 
         // Issue a single read to grab all buffers
-        let mut all_buffers = BytesMut::with_capacity(chunk_msg.buffer_size() as usize);
-        unsafe { all_buffers.set_len(chunk_msg.buffer_size() as usize) };
+        let all_buffers_size = chunk_msg.buffer_size();
+        let mut all_buffers = BytesMut::with_capacity(all_buffers_size as usize);
+        unsafe { all_buffers.set_len(all_buffers_size as usize) };
         let mut all_buffers = self.read.read_into(all_buffers).await?;
 
         // Split out into individual buffers
         // Initialize the column's buffers for a vectored read.
         // To start with, we include the padding and then truncate the buffers after.
-        // TODO(ngates): improve the flatbuffer format instead of storing offset/len per buffer.
-        let buffers = self
+        let ipc_buffers = self
             .peek()
             .expect("Checked above in peek")
-            .header_as_chunk()
+            .header_as_batch()
             .expect("Checked above in peek")
             .buffers()
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let buffers = ipc_buffers
             .iter()
-            .scan(0, |offset, buffer| {
-                let len = buffer.length() as usize;
-                let padding_len = buffer.offset() as usize - *offset;
+            .zip(
+                ipc_buffers
+                    .iter()
+                    .map(|b| b.offset())
+                    .skip(1)
+                    .chain([all_buffers_size]),
+            )
+            .map(|(buffer, next_offset)| {
+                let len = next_offset - buffer.offset() - buffer.padding() as u64;
 
-                // Strip off any padding from the previous buffer
-                all_buffers.advance(padding_len);
                 // Grab the buffer
-                let buffer = all_buffers.split_to(len);
+                let data_buffer = all_buffers.split_to(len as usize);
+                // Strip off any padding from the previous buffer
+                all_buffers.advance(buffer.padding() as usize);
 
-                *offset += padding_len + len;
-                Some(Buffer::from(buffer.freeze()))
+                Buffer::from(data_buffer.freeze())
             })
             .collect_vec();
 
@@ -159,7 +165,7 @@ impl<R: VortexRead> MessageReader<R> {
         ctx: Arc<Context>,
         dtype: DType,
     ) -> VortexResult<Option<Array>> {
-        let length = match self.peek().and_then(|m| m.header_as_chunk()) {
+        let length = match self.peek().and_then(|m| m.header_as_batch()) {
             None => return Ok(None),
             Some(chunk) => chunk.length() as usize,
         };
@@ -174,7 +180,7 @@ impl<R: VortexRead> MessageReader<R> {
             flatbuffer,
             |flatbuffer| {
                 unsafe { root_unchecked::<fb::Message>(flatbuffer) }
-                    .header_as_chunk()
+                    .header_as_batch()
                     .unwrap()
                     .array()
                     .ok_or_else(|| vortex_err!("Chunk missing Array"))

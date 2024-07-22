@@ -1,5 +1,5 @@
 use arrow_arith::boolean;
-use arrow_array::cast::AsArray;
+use arrow_array::cast::AsArray as _;
 use vortex_error::VortexResult;
 
 use crate::array::bool::BoolArray;
@@ -22,7 +22,7 @@ impl OrFn for BoolArray {
 }
 
 impl AndFn for BoolArray {
-    fn and(&self, array: &crate::Array) -> vortex_error::VortexResult<crate::Array> {
+    fn and(&self, array: &Array) -> VortexResult<Array> {
         let lhs = self.clone().into_canonical()?.into_arrow();
         let lhs = lhs.as_boolean();
 
