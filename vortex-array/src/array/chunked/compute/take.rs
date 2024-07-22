@@ -5,9 +5,7 @@ use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::unary::cast::try_cast;
-use crate::compute::unary::scalar_at::scalar_at;
-use crate::compute::unary::scalar_subtract::subtract_scalar;
+use crate::compute::unary::{scalar_at, subtract_scalar, try_cast};
 use crate::compute::{search_sorted, slice, take, SearchSortedSide, TakeFn};
 use crate::stats::ArrayStatistics;
 use crate::{Array, ArrayDType, IntoArray, ToArray};

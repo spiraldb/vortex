@@ -1,15 +1,15 @@
 use ::serde::{Deserialize, Serialize};
-use vortex_dtype::match_each_integer_ptype;
-use vortex_error::vortex_bail;
+use vortex_dtype::{match_each_integer_ptype, DType};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
-use crate::compute::unary::scalar_at::scalar_at;
+use crate::compute::unary::scalar_at;
 use crate::compute::{search_sorted, SearchSortedSide};
-use crate::stats::ArrayStatisticsCompute;
+use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, IntoArrayVariant};
+use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, IntoArrayVariant};
 
 mod compute;
 mod flatten;
@@ -191,8 +191,7 @@ mod test {
     use crate::accessor::ArrayAccessor;
     use crate::array::sparse::SparseArray;
     use crate::compute::slice;
-    use crate::compute::unary::cast::try_cast;
-    use crate::compute::unary::scalar_at::scalar_at;
+    use crate::compute::unary::{scalar_at, try_cast};
     use crate::{Array, IntoArray, IntoArrayVariant};
 
     fn nullable_fill() -> Scalar {

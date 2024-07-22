@@ -1,16 +1,20 @@
+use std::fmt::Debug;
+
 pub use compress::*;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
-use vortex::stats::ArrayStatisticsCompute;
+use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, Canonical, IntoCanonical};
+use vortex::{
+    impl_encoding, Array, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray,
+};
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
-use vortex_dtype::PType;
-use vortex_error::{vortex_bail, vortex_err};
+use vortex_dtype::{DType, PType};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 mod compress;
 mod compute;
@@ -100,7 +104,7 @@ impl ArrayStatisticsCompute for RoaringIntArray {}
 #[cfg(test)]
 mod test {
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at;
     use vortex::IntoArray;
     use vortex_error::VortexResult;
 

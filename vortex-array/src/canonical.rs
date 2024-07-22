@@ -26,7 +26,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::arrow::wrappers::as_offset_buffer;
-use crate::compute::unary::cast::try_cast;
+use crate::compute::unary::try_cast;
 use crate::encoding::ArrayEncoding;
 use crate::validity::ArrayValidity;
 use crate::variants::StructArrayTrait;

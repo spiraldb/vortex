@@ -30,7 +30,7 @@ impl SliceFn for BitPackedArray {
 mod test {
     use vortex::array::primitive::PrimitiveArray;
     use vortex::compute::slice;
-    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at;
     use vortex::IntoArray;
 
     use crate::BitPackedArray;

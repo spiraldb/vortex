@@ -1,13 +1,19 @@
+use std::fmt::Debug;
+
 use serde::{Deserialize, Serialize};
 use vortex::array::primitive::{Primitive, PrimitiveArray};
-use vortex::compute::unary::scalar_at::scalar_at;
+use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, SearchSortedSide};
-use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute};
+use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
-use vortex_error::vortex_bail;
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
+    IntoCanonical,
+};
+use vortex_dtype::DType;
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::compress::{runend_decode, runend_encode};
 
@@ -148,7 +154,7 @@ impl ArrayStatisticsCompute for RunEndArray {}
 #[cfg(test)]
 mod test {
     use vortex::compute::slice;
-    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at;
     use vortex::validity::Validity;
     use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
     use vortex_dtype::{DType, Nullability, PType};

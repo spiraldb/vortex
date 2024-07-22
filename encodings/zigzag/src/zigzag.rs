@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::stats::ArrayStatisticsCompute;
+use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
-use vortex_dtype::PType;
-use vortex_error::{vortex_bail, vortex_err};
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+};
+use vortex_dtype::{DType, PType};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::compress::zigzag_encode;
 

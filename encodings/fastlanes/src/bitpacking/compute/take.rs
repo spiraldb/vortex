@@ -149,7 +149,7 @@ mod test {
     use vortex::array::primitive::{Primitive, PrimitiveArray};
     use vortex::array::sparse::SparseArray;
     use vortex::compute::take;
-    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at;
     use vortex::{ArrayDef, IntoArray, IntoArrayVariant};
 
     use crate::BitPackedArray;

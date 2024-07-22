@@ -1,10 +1,13 @@
+use std::fmt::Debug;
+
 use serde::{Deserialize, Serialize};
-use vortex::stats::ArrayStatisticsCompute;
+use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, ExtensionArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, Canonical, IntoCanonical};
-use vortex_error::vortex_bail;
+use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
+use vortex_dtype::DType;
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::compute::decode_to_temporal;
 

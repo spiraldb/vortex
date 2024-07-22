@@ -1,13 +1,19 @@
+use std::fmt::Debug;
+
 use serde::{Deserialize, Serialize};
 use vortex::accessor::ArrayAccessor;
 use vortex::array::bool::BoolArray;
 use vortex::compute::take;
-use vortex::compute::unary::scalar_at::scalar_at;
+use vortex::compute::unary::scalar_at;
+use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
-use vortex_dtype::match_each_integer_ptype;
-use vortex_error::vortex_bail;
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
+    IntoCanonical,
+};
+use vortex_dtype::{match_each_integer_ptype, DType};
+use vortex_error::{vortex_bail, VortexResult};
 
 impl_encoding!("vortex.dict", 20u16, Dict);
 

@@ -177,7 +177,7 @@ mod test {
     use vortex::accessor::ArrayAccessor;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::compute::unary::scalar_at::scalar_at;
+    use vortex::compute::unary::scalar_at;
     use vortex::ToArray;
     use vortex_dtype::Nullability::Nullable;
     use vortex_dtype::{DType, PType};

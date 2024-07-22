@@ -24,51 +24,24 @@ pub trait ArrayDef {
 #[macro_export]
 macro_rules! impl_encoding {
     ($id:literal, $code:literal, $Name:ident) => {
-        use $crate::vendored::paste::paste;
-
-        paste! {
-            use $crate::{
-                Array,
-                ArrayDef,
-                ArrayMetadata,
-                ArrayTrait,
-                AsArray,
-                GetArrayMetadata,
-                IntoArray,
-                ToArray,
-                TypedArray,
-            };
-            use $crate::encoding::{
-                ArrayEncoding,
-                ArrayEncodingExt,
-                EncodingId,
-                EncodingRef,
-            };
-            use $crate::stats::StatsSet;
-            use std::any::Any;
-            use std::fmt::Debug;
-            use std::marker::{Send, Sync};
-            use std::sync::Arc;
-            use vortex_error::{VortexError, VortexResult};
-            use vortex_dtype::DType;
-
+        $crate::vendored::paste::paste! {
             /// The array definition trait
-            #[derive(Debug, Clone)]
+            #[derive(std::fmt::Debug, Clone)]
             pub struct $Name;
-            impl ArrayDef for $Name {
-                const ID: EncodingId = EncodingId::new($id, $code);
-                const ENCODING: EncodingRef = &[<$Name Encoding>];
+            impl $crate::ArrayDef for $Name {
+                const ID: $crate::encoding::EncodingId = $crate::encoding::EncodingId::new($id, $code);
+                const ENCODING: $crate::encoding::EncodingRef = &[<$Name Encoding>];
                 type Array = [<$Name Array>];
                 type Metadata = [<$Name Metadata>];
                 type Encoding = [<$Name Encoding>];
             }
 
-            #[derive(Debug, Clone)]
+            #[derive(std::fmt::Debug, Clone)]
             pub struct [<$Name Array>] {
-                typed: TypedArray<$Name>
+                typed: $crate::TypedArray<$Name>
             }
             impl [<$Name Array>] {
-                pub fn array(&self) -> &Array {
+                pub fn array(&self) -> &$crate::Array {
                     self.typed.array()
                 }
                 fn metadata(&self) -> &[<$Name Metadata>] {
@@ -85,93 +58,93 @@ macro_rules! impl_encoding {
 
                 #[allow(dead_code)]
                 fn try_from_parts(
-                    dtype: DType,
+                    dtype: vortex_dtype::DType,
                     len: usize,
                     metadata: [<$Name Metadata>],
-                    children: Arc<[Array]>,
-                    stats: StatsSet,
+                    children: std::sync::Arc<[$crate::Array]>,
+                    stats: $crate::stats::StatsSet,
                 ) -> VortexResult<Self> {
-                    Ok(Self { typed: TypedArray::try_from_parts(dtype, len, metadata, None, children, stats)? })
+                    Ok(Self { typed: $crate::TypedArray::try_from_parts(dtype, len, metadata, None, children, stats)? })
                 }
             }
-            impl GetArrayMetadata for [<$Name Array>] {
-                fn metadata(&self) -> Arc<dyn ArrayMetadata> {
-                    Arc::new(self.metadata().clone())
+            impl $crate::GetArrayMetadata for [<$Name Array>] {
+                fn metadata(&self) -> std::sync::Arc<dyn $crate::ArrayMetadata> {
+                    std::sync::Arc::new(self.metadata().clone())
                 }
             }
-            impl AsArray for [<$Name Array>] {
-                fn as_array_ref(&self) -> &Array {
+            impl $crate::AsArray for [<$Name Array>] {
+                fn as_array_ref(&self) -> &$crate::Array {
                     self.typed.array()
                 }
             }
-            impl ToArray for [<$Name Array>] {
-                fn to_array(&self) -> Array {
+            impl $crate::ToArray for [<$Name Array>] {
+                fn to_array(&self) -> $crate::Array {
                     self.typed.to_array()
                 }
             }
-            impl<'a> IntoArray for [<$Name Array>] {
-                fn into_array(self) -> Array {
+            impl<'a> $crate::IntoArray for [<$Name Array>] {
+                fn into_array(self) -> $crate::Array {
                     self.typed.into_array()
                 }
             }
-            impl From<TypedArray<$Name>> for [<$Name Array>] {
-                fn from(typed: TypedArray<$Name>) -> Self {
+            impl From<$crate::TypedArray<$Name>> for [<$Name Array>] {
+                fn from(typed: $crate::TypedArray<$Name>) -> Self {
                     Self { typed }
                 }
             }
-            impl TryFrom<Array> for [<$Name Array>] {
-                type Error = VortexError;
+            impl TryFrom<$crate::Array> for [<$Name Array>] {
+                type Error = vortex_error::VortexError;
 
                 #[inline]
-                fn try_from(array: Array) -> Result<Self, Self::Error> {
-                    TypedArray::<$Name>::try_from(array).map(Self::from)
+                fn try_from(array: $crate::Array) -> Result<Self, Self::Error> {
+                    $crate::TypedArray::<$Name>::try_from(array).map(Self::from)
                 }
             }
-            impl TryFrom<&Array> for [<$Name Array>] {
-                type Error = VortexError;
+            impl TryFrom<&$crate::Array> for [<$Name Array>] {
+                type Error = vortex_error::VortexError;
 
                 #[inline]
-                fn try_from(array: &Array) -> Result<Self, Self::Error> {
-                    TypedArray::<$Name>::try_from(array).map(Self::from)
+                fn try_from(array: &$crate::Array) -> Result<Self, Self::Error> {
+                    $crate::TypedArray::<$Name>::try_from(array).map(Self::from)
                 }
             }
 
             /// The array encoding
-            #[derive(Debug)]
+            #[derive(std::fmt::Debug)]
             pub struct [<$Name Encoding>];
-            impl ArrayEncoding for [<$Name Encoding>] {
+            impl $crate::encoding::ArrayEncoding for [<$Name Encoding>] {
                 #[inline]
-                fn id(&self) -> EncodingId {
+                fn id(&self) -> $crate::encoding::EncodingId {
                     $Name::ID
                 }
 
                 #[inline]
-                fn canonicalize(&self, array: Array) -> VortexResult<$crate::Canonical> {
-                    <Self as ArrayEncodingExt>::into_canonical(array)
+                fn canonicalize(&self, array: $crate::Array) -> vortex_error::VortexResult<$crate::Canonical> {
+                    <Self as $crate::encoding::ArrayEncodingExt>::into_canonical(array)
                 }
 
                 #[inline]
                 fn with_dyn(
                     &self,
-                    array: &Array,
-                    f: &mut dyn for<'b> FnMut(&'b (dyn ArrayTrait + 'b)) -> VortexResult<()>,
-                ) -> VortexResult<()> {
-                    <Self as ArrayEncodingExt>::with_dyn(array, f)
+                    array: &$crate::Array,
+                    f: &mut dyn for<'b> FnMut(&'b (dyn $crate::ArrayTrait + 'b)) -> vortex_error::VortexResult<()>,
+                ) -> vortex_error::VortexResult<()> {
+                    <Self as $crate::encoding::ArrayEncodingExt>::with_dyn(array, f)
                 }
             }
-            impl ArrayEncodingExt for [<$Name Encoding>] {
+            impl $crate::encoding::ArrayEncodingExt for [<$Name Encoding>] {
                 type D = $Name;
             }
 
             /// Implement ArrayMetadata
-            impl ArrayMetadata for [<$Name Metadata>] {
+            impl $crate::ArrayMetadata for [<$Name Metadata>] {
                 #[inline]
-                fn as_any(&self) -> &dyn Any {
+                fn as_any(&self) -> &dyn std::any::Any {
                     self
                 }
 
                 #[inline]
-                fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+                fn as_any_arc(self: std::sync::Arc<Self>) -> std::sync::Arc<dyn std::any::Any + std::marker::Send + std::marker::Sync> {
                     self
                 }
             }

@@ -2,7 +2,7 @@ use arrayref::{array_mut_ref, array_ref};
 use fastlanes::{Delta, Transpose};
 use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::compute::unary::fill_forward::fill_forward;
+use vortex::compute::unary::fill_forward;
 use vortex::validity::Validity;
 use vortex::IntoArrayVariant;
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType, Nullability};
