@@ -98,7 +98,15 @@ impl RunEndBoolArray {
     }
 }
 
-impl BoolArrayTrait for RunEndBoolArray {}
+impl BoolArrayTrait for RunEndBoolArray {
+    fn indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a> {
+        todo!()
+    }
+
+    fn slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
+        todo!()
+    }
+}
 
 impl ArrayVariants for RunEndBoolArray {
     fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {

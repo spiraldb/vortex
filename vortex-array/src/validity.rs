@@ -5,7 +5,7 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::bool::BoolArray;
 use crate::compute::unary::scalar_at;
-use crate::compute::{slice, take};
+use crate::compute::{filter, slice, take};
 use crate::stats::ArrayStatistics;
 use crate::{Array, IntoArray, IntoArrayVariant};
 
@@ -286,5 +286,12 @@ impl IntoArray for LogicalValidity {
             Self::AllInvalid(len) => BoolArray::from(vec![false; len]).into_array(),
             Self::Array(a) => a,
         }
+    }
+}
+
+pub fn filter_validity(validity: Validity, predicate: &Array) -> Validity {
+    match validity {
+        v @ (Validity::NonNullable | Validity::AllValid | Validity::AllInvalid) => v,
+        Validity::Array(a) => Validity::Array(filter(&a, predicate).unwrap()),
     }
 }

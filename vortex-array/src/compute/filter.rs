@@ -34,7 +34,7 @@ pub fn filter(array: &Array, predicate: &Array) -> VortexResult<Array> {
 
     array.with_dyn(|a| {
         if let Some(filter_fn) = a.filter() {
-            Ok(filter_fn.filter(array))
+            Ok(filter_fn.filter(predicate))
         } else {
             // Fallback: implement using Arrow kernels.
             let array_ref = array.clone().into_canonical()?.into_arrow();

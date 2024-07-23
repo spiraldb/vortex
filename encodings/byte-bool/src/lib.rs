@@ -81,7 +81,15 @@ impl ArrayVariants for ByteBoolArray {
     }
 }
 
-impl BoolArrayTrait for ByteBoolArray {}
+impl BoolArrayTrait for ByteBoolArray {
+    fn indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a> {
+        todo!()
+    }
+
+    fn slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
+        todo!()
+    }
+}
 
 impl From<Vec<bool>> for ByteBoolArray {
     fn from(value: Vec<bool>) -> Self {

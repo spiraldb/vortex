@@ -76,7 +76,15 @@ impl ArrayVariants for ChunkedArray {
 
 impl NullArrayTrait for ChunkedArray {}
 
-impl BoolArrayTrait for ChunkedArray {}
+impl BoolArrayTrait for ChunkedArray {
+    fn indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
+        todo!()
+    }
+
+    fn slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
+        todo!()
+    }
+}
 
 impl PrimitiveArrayTrait for ChunkedArray {}
 

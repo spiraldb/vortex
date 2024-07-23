@@ -77,7 +77,15 @@ impl ArrayVariants for SparseArray {
 
 impl NullArrayTrait for SparseArray {}
 
-impl BoolArrayTrait for SparseArray {}
+impl BoolArrayTrait for SparseArray {
+    fn indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
+        Box::new(self.resolved_indices().into_iter())
+    }
+
+    fn slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
+        todo!()
+    }
+}
 
 impl PrimitiveArrayTrait for SparseArray {}
 

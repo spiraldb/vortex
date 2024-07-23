@@ -1,3 +1,5 @@
+use std::iter;
+
 use vortex_dtype::DType;
 use vortex_scalar::StructScalar;
 
@@ -77,7 +79,27 @@ impl ArrayVariants for ConstantArray {
 
 impl NullArrayTrait for ConstantArray {}
 
-impl BoolArrayTrait for ConstantArray {}
+impl BoolArrayTrait for ConstantArray {
+    fn indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
+        let value = self.scalar().value().as_bool().unwrap().unwrap();
+        if value {
+            Box::new(iter::successors(Some(0), |x| Some(*x + 1)).take(self.len()))
+        } else {
+            Box::new(iter::empty())
+        }
+    }
+
+    fn slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
+        // Must be a non-nullable boolean scalar
+        let value = self.scalar().value().as_bool().unwrap().unwrap();
+
+        if value {
+            Box::new(iter::once((0, self.len())))
+        } else {
+            Box::new(iter::empty())
+        }
+    }
+}
 
 impl PrimitiveArrayTrait for ConstantArray {}
 
@@ -97,3 +119,27 @@ impl StructArrayTrait for ConstantArray {
 impl ListArrayTrait for ConstantArray {}
 
 impl ExtensionArrayTrait for ConstantArray {}
+
+#[cfg(test)]
+mod test {
+    use itertools::Itertools;
+    use vortex_dtype::Nullability;
+    use vortex_scalar::Scalar;
+
+    use crate::array::constant::ConstantArray;
+    use crate::variants::BoolArrayTrait;
+
+    #[test]
+    fn constant_iter_true_test() {
+        let arr = ConstantArray::new(Scalar::bool(true, Nullability::NonNullable), 3);
+        assert_eq!(vec![0, 1, 2], arr.indices_iter().collect_vec());
+        assert_eq!(vec![(0, 3)], arr.slices_iter().collect_vec());
+    }
+
+    #[test]
+    fn constant_iter_false_test() {
+        let arr = ConstantArray::new(Scalar::bool(false, Nullability::NonNullable), 3);
+        assert_eq!(0, arr.indices_iter().collect_vec().len());
+        assert_eq!(0, arr.slices_iter().collect_vec().len());
+    }
+}
