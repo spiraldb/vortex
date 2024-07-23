@@ -2,13 +2,13 @@ use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
-use crate::{
-    Array, ArrayData, ArrayDType, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata, IntoArray,
-    IntoArrayData, ToArrayData, TryDeserializeArrayMetadata,
-};
 use crate::encoding::{ArrayEncoding, ArrayEncodingExt, ArrayEncodingRef, EncodingId, EncodingRef};
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::visitor::ArrayVisitor;
+use crate::{
+    Array, ArrayDType, ArrayData, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata, IntoArray,
+    IntoArrayData, ToArrayData, TryDeserializeArrayMetadata,
+};
 
 /// Trait the defines the set of types relating to an array.
 /// Because it has associated types it can't be used as a trait object.
