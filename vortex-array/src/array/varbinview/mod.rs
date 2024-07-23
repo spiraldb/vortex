@@ -5,7 +5,7 @@ use std::{mem, slice};
 
 use ::serde::{Deserialize, Serialize};
 use arrow_array::{ArrayRef, BinaryViewArray, StringViewArray};
-use arrow_buffer::{Buffer, ScalarBuffer};
+use arrow_buffer::ScalarBuffer;
 use arrow_schema::DataType;
 use itertools::Itertools;
 use vortex_dtype::{DType, Nullability, PType};
@@ -271,18 +271,18 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
 
     let data = data
         .iter()
-        .map(|p| Buffer::from(p.buffer()))
+        .map(|p| p.buffer().clone().into_arrow())
         .collect::<Vec<_>>();
 
     // Switch on Arrow DType.
     match var_bin_view.dtype() {
         DType::Binary(_) => Arc::new(BinaryViewArray::new(
-            ScalarBuffer::<u128>::from(Buffer::from(views.buffer())),
+            ScalarBuffer::<u128>::from(views.buffer().clone().into_arrow()),
             data,
             nulls,
         )),
         DType::Utf8(_) => Arc::new(StringViewArray::new(
-            ScalarBuffer::<u128>::from(Buffer::from(views.buffer())),
+            ScalarBuffer::<u128>::from(views.buffer().clone().into_arrow()),
             data,
             nulls,
         )),
