@@ -67,7 +67,7 @@ mod test {
             filter
                 .iter()
                 .enumerate()
-                .filter(|p| *(*p).1)
+                .filter(|(_idx, b)| **b)
                 .map(|m| rust_arr[m.0])
                 .collect_vec()
         )
