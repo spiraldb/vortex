@@ -46,24 +46,26 @@ pub(crate) fn try_canonicalize_chunks(
             Ok(Canonical::Struct(struct_array))
         }
 
-        // Extension arrays wrap an internal storage array, which can hold a ChunkedArray until
-        // it is safe to unpack them.
+        // Extension arrays should be treated as "value arrays" rather than "structural" for the
+        // purposes of canonical encoding.
+        // We delegate to the canonical format of the internal storage array for every chunk.
         DType::Extension(ext_dtype, _) => {
+            // Recursively apply canonicalization and packing to the storage array backing
+            // each chunk of the extension array.
             let storage_chunks: Vec<Array> = chunks
                 .iter()
-                .map(|chunk| {
-                    ExtensionArray::try_from(chunk.clone().into_extension().unwrap())
-                        .unwrap()
-                        .storage()
-                })
+                // Extension-typed arrays can be compressed into something that is not an
+                // ExtensionArray, so we should canonicalize each chunk into ExtensionArray first.
+                .map(|chunk| chunk.clone().into_extension().unwrap().storage())
                 .collect();
             let storage_dtype = storage_chunks.first().unwrap().dtype().clone();
-            let ext_array = ExtensionArray::new(
-                ext_dtype.clone(),
-                ChunkedArray::try_new(storage_chunks, storage_dtype)?.into_array(),
-            );
+            let canonical_storage =
+                try_canonicalize_chunks(storage_chunks, &storage_dtype)?.into_array();
 
-            Ok(Canonical::Extension(ext_array))
+            Ok(Canonical::Extension(ExtensionArray::new(
+                ext_dtype.clone(),
+                canonical_storage,
+            )))
         }
 
         // TODO(aduffy): better list support
