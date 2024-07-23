@@ -1,4 +1,5 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
+use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::WriteFlatBuffer;
 
 use crate::flatbuffers::footer as fb;
@@ -140,6 +141,50 @@ impl StructLayout {
     pub fn new(child_ranges: Vec<Layout>) -> Self {
         Self {
             children: child_ranges,
+        }
+    }
+}
+
+impl TryFrom<fb::NestedLayout<'_>> for Layout {
+    type Error = VortexError;
+
+    fn try_from(value: fb::NestedLayout<'_>) -> Result<Self, Self::Error> {
+        let children = value
+            .children()
+            .unwrap()
+            .iter()
+            .map(|l| Layout::try_from(l))
+            .collect::<VortexResult<Vec<_>>>()?;
+        match value.encoding() {
+            1 => Ok(Layout::Chunked(ChunkedLayout::new(children))),
+            2 => Ok(Layout::Struct(StructLayout::new(children))),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl From<fb::FlatLayout<'_>> for FlatLayout {
+    fn from(value: fb::FlatLayout<'_>) -> Self {
+        FlatLayout::new(value.begin(), value.end())
+    }
+}
+
+impl TryFrom<fb::FlatLayout<'_>> for Layout {
+    type Error = VortexError;
+
+    fn try_from(value: fb::FlatLayout<'_>) -> Result<Self, Self::Error> {
+        Ok(Layout::Flat(value.into()))
+    }
+}
+
+impl TryFrom<fb::Layout<'_>> for Layout {
+    type Error = VortexError;
+
+    fn try_from(value: fb::Layout<'_>) -> Result<Self, Self::Error> {
+        match value.layout_type() {
+            fb::LayoutVariant::FlatLayout => value.layout_as_flat_layout().unwrap().try_into(),
+            fb::LayoutVariant::NestedLayout => value.layout_as_nested_layout().unwrap().try_into(),
+            _ => unreachable!(),
         }
     }
 }

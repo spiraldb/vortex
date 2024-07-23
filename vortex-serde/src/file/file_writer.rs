@@ -219,7 +219,8 @@ impl<W: VortexWrite> FileWriter<W> {
         let mut w = self.msgs.into_inner();
 
         let mut fbb = FlatBufferBuilder::new();
-        footer.write_flatbuffer(&mut fbb);
+        let footer_fbb_offset = footer.write_flatbuffer(&mut fbb);
+        fbb.finish_minimal(footer_fbb_offset);
         let (buffer, buffer_begin) = fbb.collapse();
         let buffer_end = buffer.len();
 
