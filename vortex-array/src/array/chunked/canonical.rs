@@ -28,7 +28,9 @@ pub(crate) fn try_canonicalize_chunks(
     chunks: Vec<Array>,
     dtype: &DType,
 ) -> VortexResult<Canonical> {
-    assert!(!chunks.is_empty(), "chunks must be non-empty");
+    if chunks.is_empty() {
+        vortex_bail!(InvalidArgument: "chunks must be non-empty")
+    }
 
     let mismatched = chunks
         .iter()
